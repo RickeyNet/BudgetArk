@@ -1,4 +1,11 @@
-# BudgetBuddy — Windows 11 Development Setup Guide
+# BudgetBuddy — Development Setup Guide
+
+- [Windows 11 Setup](#windows-11-setup)
+- [Linux Setup](#linux-setup)
+
+---
+
+## Windows 11 Setup
 
 ## Prerequisites & Installation (in order)
 
@@ -207,6 +214,146 @@ BudgetBuddy/
 | Module not found errors  | Run `npm install` again, then restart with `npx expo start --clear` |
 | Reanimated errors        | Make sure the babel plugin is added, then restart with `--clear`    |
 | Slow first load          | Normal — subsequent loads are faster due to caching                 |
+
+---
+
+## Ready to Go! (Windows)
+
+---
+
+## Linux Setup
+
+These instructions cover Ubuntu/Debian-based distros. For Fedora/RHEL, swap `apt` for `dnf`.
+
+---
+
+### Step 1: Install Node.js via nvm
+
+Using nvm is the recommended way to manage Node on Linux.
+
+```bash
+# Install nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+
+# Reload your shell
+source ~/.bashrc   # or ~/.zshrc if you use zsh
+
+# Install and use the LTS version
+nvm install --lts
+nvm use --lts
+
+# Verify
+node --version
+npm --version
+```
+
+---
+
+### Step 2: Install Git
+
+Git is usually pre-installed. If not:
+
+```bash
+sudo apt update && sudo apt install -y git
+
+# Verify
+git --version
+```
+
+---
+
+### Step 3: Install a Code Editor — VS Code
+
+```bash
+# Install via snap (simplest)
+sudo snap install --classic code
+
+# Or download the .deb from https://code.visualstudio.com and run:
+sudo dpkg -i code_*.deb
+```
+
+Recommended extensions (same as Windows):
+- **ES7+ React/Redux/React-Native snippets**
+- **Prettier - Code formatter**
+- **TypeScript Importer**
+- **React Native Tools**
+- **Error Lens**
+
+---
+
+### Step 4: Install Expo CLI
+
+```bash
+npm install -g expo-cli
+npm install -g eas-cli
+
+# Verify
+npx expo --version
+```
+
+---
+
+### Step 5: Install Expo Go on Your Phone
+
+Same as Windows — search "Expo Go" in the App Store or Google Play Store.
+
+---
+
+### Step 6: Clone the BudgetBuddy Project
+
+```bash
+git clone <your-repo-url> BudgetBuddy
+cd BudgetBuddy
+npm install
+```
+
+---
+
+### Step 7: Start the Development Server
+
+```bash
+npx expo start
+```
+
+Scan the QR code with your phone (Camera app on iPhone, Expo Go on Android). Make sure your phone and computer are on the same Wi-Fi network.
+
+---
+
+### Step 8 (Optional): Install Android Emulator
+
+1. Download Android Studio from: **https://developer.android.com/studio**
+2. Extract and run the installer:
+   ```bash
+   tar -xzf android-studio-*.tar.gz
+   cd android-studio/bin
+   ./studio.sh
+   ```
+3. During setup, install the **Android Virtual Device** component
+4. Open **Virtual Device Manager**, create a device (Pixel 7 or similar)
+5. Start the emulator, then press **`a`** in your Expo terminal
+
+**Required environment variables** — add to your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$PATH:$ANDROID_HOME/emulator
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+```
+
+Then reload: `source ~/.bashrc`
+
+---
+
+## Troubleshooting Common Issues (Linux)
+
+| Problem                  | Fix                                                                                      |
+|--------------------------|------------------------------------------------------------------------------------------|
+| `nvm: command not found` | Run `source ~/.bashrc` or open a new terminal                                            |
+| QR code won't scan       | Ensure phone and PC are on the same Wi-Fi network                                        |
+| Module not found errors  | Run `npm install`, then `npx expo start --clear`                                         |
+| Reanimated errors        | Confirm `react-native-reanimated/plugin` is in `babel.config.js`, restart with `--clear` |
+| Watchman errors          | Install watchman: `sudo apt install watchman`                                            |
+| Port 19000 blocked       | Allow it: `sudo ufw allow 19000`                                                         |
 
 ---
 
