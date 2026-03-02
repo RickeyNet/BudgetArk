@@ -23,7 +23,7 @@ import {
   StatusBar,
   StyleSheet,
 } from "react-native";
-import { v4 as uuidv4 } from "uuid";
+import { generateUUID } from "../utils/uuid";
 import { Debt, NewDebtInput } from "../types";
 import { formatCurrency } from "../utils/calculations";
 import { getDebts, saveDebts, recordPayment } from "../storage/debtStorage";
@@ -45,8 +45,26 @@ const DebtTrackerScreen: React.FC = () => {
   /** Load debts from device storage on mount */
   useEffect(() => {
     const loadDebts = async () => {
-      const stored = await getDebts();
-      setDebts(stored);
+      try {
+        const stored = await getDebts();
+        // Filter out any corrupted entries from earlier sessions
+        const valid = stored.filter(
+          (d) =>
+            d &&
+            typeof d.id === "string" &&
+            typeof d.balance === "number" &&
+            typeof d.originalBalance === "number" &&
+            d.originalBalance > 0
+        );
+        if (valid.length !== stored.length) {
+          // Clean up corrupted data
+          await saveDebts(valid);
+        }
+        setDebts(valid);
+      } catch (error) {
+        console.error("Failed to load debts:", error);
+        setDebts([]);
+      }
       setIsLoading(false);
     };
     loadDebts();
@@ -56,13 +74,13 @@ const DebtTrackerScreen: React.FC = () => {
   const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
   const totalOriginal = debts.reduce((sum, d) => sum + d.originalBalance, 0);
   const totalPaid = totalOriginal - totalDebt;
-  const overallPercent = totalOriginal > 0 ? (totalPaid / totalOriginal) * 100 : 0;
+  const overallPercent = totalOriginal > 0 ? Math.round((totalPaid / totalOriginal) * 100) : 0;
 
   /** Add a new debt */
   const handleAddDebt = useCallback(async (input: NewDebtInput) => {
     const newDebt: Debt = {
       ...input,
-      id: uuidv4(),
+      id: generateUUID(),
       createdAt: new Date().toISOString(),
     };
     setDebts((prev) => {
@@ -83,7 +101,7 @@ const DebtTrackerScreen: React.FC = () => {
       return updated;
     });
     await recordPayment({
-      id: uuidv4(),
+      id: generateUUID(),
       debtId,
       amount,
       date: new Date().toISOString(),
@@ -109,7 +127,7 @@ const DebtTrackerScreen: React.FC = () => {
   );
 
   /** Summary + section header rendered above the debt list */
-  const ListHeader = () => (
+  const listHeader = (
     <View>
       <View style={styles.titleSection}>
         <Text style={styles.appLabel}>BUDGETBUDDY</Text>
@@ -139,7 +157,7 @@ const DebtTrackerScreen: React.FC = () => {
                 { color: overallPercent >= 60 ? colors.success : colors.accent },
               ]}
             >
-              {overallPercent.toFixed(0)}%
+              {overallPercent}%
             </Text>
           </View>
         </View>
@@ -168,7 +186,7 @@ const DebtTrackerScreen: React.FC = () => {
   );
 
   /** Empty state when user has no debts */
-  const EmptyState = () => (
+  const emptyState = (
     <View style={styles.emptyWrap}>
       <Text style={styles.emptyEmoji}>🎉</Text>
       <Text style={styles.emptyTitle}>Debt Free!</Text>
@@ -185,8 +203,8 @@ const DebtTrackerScreen: React.FC = () => {
         data={debts}
         keyExtractor={keyExtractor}
         renderItem={renderDebtCard}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={EmptyState}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={emptyState}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />

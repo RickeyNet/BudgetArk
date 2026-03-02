@@ -25,9 +25,10 @@ const ProgressRing: React.FC<ProgressRingProps> = ({
   color = "#323233",
   trackColor = "#504c35",
 }) => {
+  const safePercent = Number.isFinite(percent) ? percent : 0;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percent / 100) * circumference;
+  const offset = circumference - (safePercent / 100) * circumference;
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>

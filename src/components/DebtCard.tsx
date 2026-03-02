@@ -56,8 +56,9 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete }) => {
   const [payAmount, setPayAmount] = useState("");
 
   /** Derived calculations */
-  const percentPaid =
-    ((debt.originalBalance - debt.balance) / debt.originalBalance) * 100;
+  const percentPaid = debt.originalBalance > 0
+    ? ((debt.originalBalance - debt.balance) / debt.originalBalance) * 100
+    : 0;
 
   const monthsLeft = calcMonthsToPayoff(
     debt.balance,
@@ -123,7 +124,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete }) => {
         <View style={styles.ringContainer}>
           <ProgressRing percent={percentPaid} color={ringColor} />
           <Text style={[styles.ringLabel, { color: ringColor }]}>
-            {percentPaid.toFixed(0)}%
+            {Math.round(percentPaid)}%
           </Text>
         </View>
       </View>

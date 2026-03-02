@@ -144,5 +144,7 @@ export const clearAllData = async (): Promise<void> => {
   await AsyncStorage.multiRemove([
     STORAGE_KEYS.DEBTS,
     STORAGE_KEYS.PAYMENTS,
+    "@budgetbuddy_budget_entries",
+    "@budgetbuddy_budget_limits",
   ]);
 };

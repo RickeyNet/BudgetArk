@@ -109,7 +109,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.overlay}
       >
         <TouchableOpacity
@@ -236,7 +236,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
-      maxHeight: "80%",
+      maxHeight: "92%",
     },
     modalScroll: {
       padding: 24,

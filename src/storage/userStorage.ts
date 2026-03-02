@@ -19,7 +19,7 @@
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { v4 as uuidv4 } from "uuid";
+import { generateUUID } from "../utils/uuid";
 import { UserAccount } from "../types";
 
 /** Storage key for the user account */
@@ -41,7 +41,7 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
 
   /* First launch — create anonymous account */
   const newUser: UserAccount = {
-    id: uuidv4(),
+    id: generateUUID(),
     displayName: "Buddy",
     createdAt: new Date().toISOString(),
     onboardingComplete: false,

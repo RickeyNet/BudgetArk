@@ -65,6 +65,45 @@ export interface Payment {
   date: string;
 }
 
+/* ─── Budget Types ─── */
+
+export const BUDGET_CATEGORIES = [
+  "Salary",
+  "Freelance",
+  "Housing",
+  "Food",
+  "Transportation",
+  "Utilities",
+  "Healthcare",
+  "Insurance",
+  "Debt Payments",
+  "Savings",
+  "Entertainment",
+  "Shopping",
+  "Travel",
+  "Other",
+] as const;
+
+export type BudgetCategory = (typeof BUDGET_CATEGORIES)[number];
+
+export type BudgetEntryType = "income" | "expense";
+
+export interface BudgetEntry {
+  id: string;
+  type: BudgetEntryType;
+  category: BudgetCategory;
+  amount: number;
+  date: string;
+  createdAt: string;
+}
+
+export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt">;
+
+export interface CategoryBudgetLimit {
+  category: BudgetCategory;
+  monthlyLimit: number;
+}
+
 /* ─── User Account Types ─── */
 
 /**

@@ -34,6 +34,8 @@ import { completeOnboarding } from "../storage/userStorage";
 
 const { width } = Dimensions.get("window");
 
+type OnboardingStyles = ReturnType<typeof makeStyles>;
+
 /** Onboarding step enum for type safety */
 type OnboardingStep = "theme" | "welcome" | "name";
 
@@ -49,7 +51,8 @@ const ThemePreviewCard = React.memo<{
   preset: ThemePreset;
   isSelected: boolean;
   onSelect: (id: string) => void;
-}>(({ preset, isSelected, onSelect }) => {
+  styles: OnboardingStyles;
+}>(({ preset, isSelected, onSelect, styles }) => {
   const handlePress = useCallback(() => {
     onSelect(preset.id);
   }, [preset.id, onSelect]);
@@ -184,6 +187,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
             preset={preset}
             isSelected={themeId === preset.id}
             onSelect={handleThemeSelect}
+            styles={styles}
           />
         ))}
       </ScrollView>

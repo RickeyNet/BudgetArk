@@ -1,5 +1,6 @@
 // File: App.tsx
 
+import "react-native-reanimated";
 import React, { useState, useEffect, useCallback } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
@@ -27,8 +28,13 @@ const AppContent: React.FC = () => {
   /** Check onboarding status on mount */
   useEffect(() => {
     const checkOnboarding = async () => {
-      const user = await getOrCreateUser();
-      setIsOnboardingComplete(user.onboardingComplete);
+      try {
+        const user = await getOrCreateUser();
+        setIsOnboardingComplete(user.onboardingComplete);
+      } catch (error) {
+        console.error("Failed to load user:", error);
+        setIsOnboardingComplete(false);
+      }
     };
     checkOnboarding();
   }, []);

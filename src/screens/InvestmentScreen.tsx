@@ -85,6 +85,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: 16,
+    backgroundColor: colors.bg,
   },
   titleSection: {
     paddingTop: 56,
