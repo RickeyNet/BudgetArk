@@ -19,12 +19,12 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ## Phase 2 — Investment Screen
 
-- [ ] Design UI for contribution calculator (inputs: monthly amount, annual return %, years)
+- [x] Design UI for contribution calculator (inputs: monthly amount, annual return %, years)
 - [x] Wire up `calcInvestmentGrowth()` from `src/utils/calculations.ts` (already implemented)
-- [ ] Add interactive sliders for "what if" exploration
-- [ ] Add a line chart showing growth over time using Victory Native (already installed)
-- [ ] Show contribution vs. interest earned breakdown
-- [ ] Add timeline presets (10yr, 20yr, 30yr buttons)
+- [x] Add interactive sliders for "what if" exploration
+- [x] Add a line chart showing growth over time (SVG area chart)
+- [x] Show contribution vs. interest earned breakdown
+- [x] Add timeline presets (10yr, 20yr, 30yr buttons)
 
 ---
 

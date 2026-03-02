@@ -150,6 +150,32 @@ export const calcInvestmentGrowth = (
 };
 
 /**
+ * Generates year-by-year investment growth data for charting.
+ * Returns an array with one entry per year showing total value,
+ * total contributions, and interest earned.
+ */
+export const calcInvestmentTimeline = (
+  monthlyContribution: number,
+  annualReturn: number,
+  years: number
+): { year: number; total: number; contributed: number; interest: number }[] => {
+  const timeline: { year: number; total: number; contributed: number; interest: number }[] = [];
+
+  for (let y = 0; y <= years; y++) {
+    const total = calcInvestmentGrowth(monthlyContribution, annualReturn, y);
+    const contributed = monthlyContribution * 12 * y;
+    timeline.push({
+      year: y,
+      total: Math.round(total),
+      contributed: Math.round(contributed),
+      interest: Math.round(total - contributed),
+    });
+  }
+
+  return timeline;
+};
+
+/**
  * Formats a number as a USD currency string.
  * Uses manual formatting for speed (avoids Intl.NumberFormat overhead).
  *
