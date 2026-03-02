@@ -9,8 +9,10 @@
  * - Contribution vs interest earned breakdown
  */
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  GestureResponderEvent,
+  LayoutChangeEvent,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -197,6 +199,29 @@ const InvestmentScreen: React.FC = () => {
     []
   );
 
+  const trackWidths = useRef<Record<string, number>>({});
+
+  const handleTrackLayout = useCallback((key: string, e: LayoutChangeEvent) => {
+    trackWidths.current[key] = e.nativeEvent.layout.width;
+  }, []);
+
+  const handleTrackTouch = useCallback(
+    (key: "contribution" | "returnRate" | "years", e: GestureResponderEvent) => {
+      const w = trackWidths.current[key];
+      if (!w) return;
+      const cfg = SLIDERS[key];
+      const x = e.nativeEvent.locationX;
+      const pct = Math.max(0, Math.min(1, x / w));
+      const raw = cfg.min + pct * (cfg.max - cfg.min);
+      const snapped = Math.round(raw / cfg.step) * cfg.step;
+      const clamped = Math.max(cfg.min, Math.min(cfg.max, Math.round(snapped * 100) / 100));
+      const setter =
+        key === "contribution" ? setContribution : key === "returnRate" ? setReturnRate : setYears;
+      setter(clamped);
+    },
+    []
+  );
+
   const renderSlider = (key: "contribution" | "returnRate" | "years", value: number) => {
     const cfg = SLIDERS[key];
     const displayValue =
@@ -221,8 +246,18 @@ const InvestmentScreen: React.FC = () => {
           >
             <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
           </TouchableOpacity>
-          <View style={styles.sliderTrack}>
-            <View style={[styles.sliderFill, { width: `${pct}%` }]} />
+          <View
+            style={styles.sliderTrackTouch}
+            onLayout={(e) => handleTrackLayout(key, e)}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(e) => handleTrackTouch(key, e)}
+            onResponderMove={(e) => handleTrackTouch(key, e)}
+          >
+            <View style={styles.sliderTrack}>
+              <View style={[styles.sliderFill, { width: `${pct}%` }]} />
+            </View>
+            <View style={[styles.sliderThumb, { left: `${pct}%` }]} />
           </View>
           <TouchableOpacity
             style={styles.sliderBtn}
@@ -462,8 +497,13 @@ const makeStyles = (colors: ThemeColors) =>
     sliderBtnDisabled: {
       opacity: 0.2,
     },
-    sliderTrack: {
+    sliderTrackTouch: {
       flex: 1,
+      height: 32,
+      justifyContent: "center",
+      position: "relative",
+    },
+    sliderTrack: {
       height: 8,
       backgroundColor: colors.bg,
       borderRadius: 999,
@@ -474,6 +514,17 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.accent,
       borderRadius: 999,
       minWidth: 4,
+    },
+    sliderThumb: {
+      position: "absolute",
+      top: 8,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: colors.accent,
+      borderWidth: 2,
+      borderColor: colors.card,
+      marginLeft: -9,
     },
     presetRow: {
       flexDirection: "row",
