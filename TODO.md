@@ -6,21 +6,21 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ## Phase 1 — Budget Screen
 
-- [ ] Design data model for income/expense entries (category, amount, date, type)
-- [ ] Create `budgetStorage.ts` following the same AsyncStorage pattern as `debtStorage.ts`
-- [ ] Add new types to `src/types/index.ts` (e.g., `BudgetEntry`, `BudgetCategory`)
-- [ ] Implement income & expense entry form (modal, similar to `AddDebtModal`)
-- [ ] Implement category list with monthly totals
-- [ ] Add budget limit per category with warning when approaching limit
-- [ ] Add pie/donut chart breakdown using Victory Native (already installed)
-- [ ] Add spending alert logic (warning color when >80% of limit reached)
+- [x] Design data model for income/expense entries (category, amount, date, type)
+- [x] Create `budgetStorage.ts` following the same AsyncStorage pattern as `debtStorage.ts`
+- [x] Add new types to `src/types/index.ts` (e.g., `BudgetEntry`, `BudgetCategory`)
+- [x] Implement income & expense entry form (modal, similar to `AddDebtModal`)
+- [x] Implement category list with monthly totals
+- [x] Add budget limit per category with warning when approaching limit
+- [x] Add pie/donut chart breakdown using Victory Native (already installed)
+- [x] Add spending alert logic (warning color when >80% of limit reached)
 
 ---
 
 ## Phase 2 — Investment Screen
 
 - [ ] Design UI for contribution calculator (inputs: monthly amount, annual return %, years)
-- [ ] Wire up `calcInvestmentGrowth()` from `src/utils/calculations.ts` (already implemented)
+- [x] Wire up `calcInvestmentGrowth()` from `src/utils/calculations.ts` (already implemented)
 - [ ] Add interactive sliders for "what if" exploration
 - [ ] Add a line chart showing growth over time using Victory Native (already installed)
 - [ ] Show contribution vs. interest earned breakdown
@@ -31,27 +31,27 @@ Work through phases in order: finish the features first, then handle store prep 
 ## Pre-Launch (Required Before Any Submission)
 
 ### App Configuration
-- [ ] Add `bundleIdentifier` to `app.json` under `expo.ios` (e.g., `com.yourname.budgetbuddy`) — required by Apple
-- [ ] Add `package` to `app.json` under `expo.android` (e.g., `com.yourname.budgetbuddy`) — required by Google
-- [ ] Change `userInterfaceStyle` in `app.json` from `"light"` to `"dark"` (the app uses a dark theme)
-- [ ] Add `expo.ios.buildNumber` and `expo.android.versionCode` fields to `app.json`
+- [x] Add `bundleIdentifier` to `app.json` under `expo.ios` (e.g., `com.yourname.budgetbuddy`) — required by Apple
+- [x] Add `package` to `app.json` under `expo.android` (e.g., `com.yourname.budgetbuddy`) — required by Google
+- [x] Change `userInterfaceStyle` in `app.json` from `"light"` to `"dark"` (the app uses a dark theme)
+- [x] Add `expo.ios.buildNumber` and `expo.android.versionCode` fields to `app.json`
 
 ### EAS Build Setup
-- [ ] Create an Expo account at https://expo.dev if you don't have one
-- [ ] Run `eas login` and `eas build:configure` to generate `eas.json`
-- [ ] Configure `eas.json` with `development`, `preview`, and `production` build profiles
+- [x] Create an Expo account at https://expo.dev if you don't have one
+- [x] Run `eas login` and `eas build:configure` to generate `eas.json`
+- [x] Configure `eas.json` with `development`, `preview`, and `production` build profiles
 - [ ] Run a production build for iOS: `eas build --platform ios --profile production`
 - [ ] Run a production build for Android: `eas build --platform android --profile production`
 
 ### App Icons & Splash Screen
 - [ ] Verify `icon.png` is exactly 1024×1024px (required by Apple)
 - [ ] Verify `adaptive-icon.png` meets Android requirements (foreground should be ~66% of frame)
-- [ ] Update splash screen `backgroundColor` in `app.json` from `"#ffffff"` to match the app's dark background (e.g., `"#232424"`)
+- [x] Update splash screen `backgroundColor` in `app.json` from `"#ffffff"` to match the app's dark background (e.g., `"#232424"`)
 - [ ] Consider adding a proper splash icon that fits the dark background
 
 ### Missing Feature: Export Data
-- [ ] Implement the "Export My Data" button in `ProfileScreen.tsx` — currently wired up but does nothing
-  - Export debts + payment history as a JSON or CSV file using `expo-sharing` + `expo-file-system`
+- [x] Implement the "Export My Data" button in `ProfileScreen.tsx`
+  - Exports all data (debts, payments, budget entries, limits, user) as JSON via `expo-sharing` + `expo-file-system`
 
 ### Privacy Policy
 - [ ] Write a privacy policy (required by both Apple and Google)
@@ -96,6 +96,6 @@ Work through phases in order: finish the features first, then handle store prep 
 - [ ] Edit existing debts (currently debts can only be added or deleted, not edited)
 - [ ] Debt payoff order strategies (avalanche vs. snowball method)
 - [ ] Push notifications for payment reminders (requires `expo-notifications`)
-- [ ] Additional themes beyond Forest Gold and Neon Purple
+- [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
 - [ ] Localization / currency format options beyond USD

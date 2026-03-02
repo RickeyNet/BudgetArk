@@ -34,6 +34,7 @@ import {
   deleteAccount,
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
+import { exportAllData } from "../utils/exportData";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemePreset } from "../theme/themes";
 
@@ -108,6 +109,17 @@ const ProfileScreen: React.FC = () => {
         },
       ]
     );
+  }, []);
+
+  const handleExportData = useCallback(async () => {
+    try {
+      await exportAllData();
+    } catch (error: any) {
+      Alert.alert(
+        "Export Failed",
+        error?.message || "Something went wrong while exporting your data."
+      );
+    }
   }, []);
 
   if (!user) return null;
@@ -250,6 +262,7 @@ const ProfileScreen: React.FC = () => {
               styles.settingsRow,
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
+            onPress={handleExportData}
           >
             <Text style={[styles.settingsRowText, { color: colors.text }]}>
               Export My Data

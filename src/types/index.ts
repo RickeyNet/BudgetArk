@@ -93,6 +93,8 @@ export interface BudgetEntry {
   type: BudgetEntryType;
   category: BudgetCategory;
   amount: number;
+  /** Optional user-provided note describing the entry */
+  description?: string;
   date: string;
   createdAt: string;
 }

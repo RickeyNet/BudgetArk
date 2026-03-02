@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -12,34 +12,46 @@ import {
 } from "react-native";
 import {
   BUDGET_CATEGORIES,
+  BudgetEntry,
   BudgetEntryType,
   BudgetCategory,
-  NewBudgetEntryInput,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 
-interface AddBudgetEntryModalProps {
-  visible: boolean;
+interface EditBudgetEntryModalProps {
+  entry: BudgetEntry | null;
   onClose: () => void;
-  onAdd: (entry: NewBudgetEntryInput) => void;
+  onSave: (updated: BudgetEntry) => void;
+  onDelete: (id: string) => void;
 }
 
-const todayISODate = () => new Date().toISOString().slice(0, 10);
+const toDateString = (iso: string) => new Date(iso).toISOString().slice(0, 10);
 
-const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
-  visible,
+const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
+  entry,
   onClose,
-  onAdd,
+  onSave,
+  onDelete,
 }) => {
   const { colors } = useTheme();
-  const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [type, setType] = useState<BudgetEntryType>("expense");
   const [category, setCategory] = useState<BudgetCategory>("Food");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(todayISODate());
+  const [date, setDate] = useState("");
+
+  useEffect(() => {
+    if (entry) {
+      setType(entry.type);
+      setCategory(entry.category);
+      setAmount(String(entry.amount));
+      setDescription(entry.description ?? "");
+      setDate(toDateString(entry.date));
+    }
+  }, [entry]);
 
   const isValidDate = useMemo(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
@@ -49,49 +61,42 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
 
   const isValid = parseFloat(amount) > 0 && isValidDate;
 
-  const reset = useCallback(() => {
-    setType("expense");
-    setCategory("Food");
-    setAmount("");
-    setDescription("");
-    setDate(todayISODate());
-  }, []);
-
-  const handleSubmit = useCallback(() => {
+  const handleSave = useCallback(() => {
+    if (!entry || !isValid) return;
     const amountNum = parseFloat(amount);
-    if (amountNum <= 0 || !isValidDate) return;
 
-    onAdd({
+    onSave({
+      ...entry,
       type,
       category,
       amount: amountNum,
       description: description.trim() || undefined,
       date: new Date(`${date}T12:00:00`).toISOString(),
     });
+  }, [entry, isValid, amount, type, category, description, date, onSave]);
 
-    reset();
-  }, [amount, description, isValidDate, onAdd, type, category, date, reset]);
+  const handleDelete = useCallback(() => {
+    if (!entry) return;
+    onDelete(entry.id);
+  }, [entry, onDelete]);
 
-  const handleClose = useCallback(() => {
-    reset();
-    onClose();
-  }, [onClose, reset]);
+  if (!entry) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+    <Modal visible={!!entry} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.overlay}
       >
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
             <ScrollView
               style={styles.modalContent}
               contentContainerStyle={styles.modalScroll}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.title}>Add Budget Entry</Text>
-              <Text style={styles.subtitle}>Track income and expenses by category.</Text>
+              <Text style={styles.title}>Edit Entry</Text>
+              <Text style={styles.subtitle}>Update or delete this budget entry.</Text>
 
               <View style={styles.field}>
                 <Text style={styles.label}>ENTRY TYPE</Text>
@@ -177,7 +182,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
                 <Text style={styles.label}>DATE (YYYY-MM-DD)</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="2026-02-27"
+                  placeholder="2026-03-01"
                   placeholderTextColor={colors.textMuted}
                   value={date}
                   onChangeText={setDate}
@@ -190,15 +195,18 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
               </View>
 
               <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+                <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+                  <Text style={styles.deleteText}>Delete</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
                   <Text style={styles.cancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.addButton, !isValid && styles.addButtonDisabled]}
-                  onPress={handleSubmit}
+                  style={[styles.saveButton, !isValid && styles.saveButtonDisabled]}
+                  onPress={handleSave}
                   disabled={!isValid}
                 >
-                  <Text style={styles.addButtonText}>Add Entry</Text>
+                  <Text style={styles.saveButtonText}>Save</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -316,9 +324,22 @@ const makeStyles = (colors: ThemeColors) =>
     },
     buttonRow: {
       flexDirection: "row",
-      gap: 12,
+      gap: 10,
       marginTop: 8,
       marginBottom: 16,
+    },
+    deleteButton: {
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      alignItems: "center",
+    },
+    deleteText: {
+      color: colors.danger,
+      fontSize: 15,
+      fontWeight: "600",
     },
     cancelButton: {
       flex: 1,
@@ -333,21 +354,21 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 15,
       fontWeight: "600",
     },
-    addButton: {
+    saveButton: {
       flex: 1,
       paddingVertical: 14,
       borderRadius: 12,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
-    addButtonDisabled: {
+    saveButtonDisabled: {
       opacity: 0.4,
     },
-    addButtonText: {
+    saveButtonText: {
       color: colors.white,
       fontSize: 15,
       fontWeight: "700",
     },
   });
 
-export default React.memo(AddBudgetEntryModal);
+export default React.memo(EditBudgetEntryModal);

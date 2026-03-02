@@ -12,6 +12,7 @@ import {
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
+import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import {
   BUDGET_CATEGORIES,
   BudgetCategory,
@@ -29,11 +30,19 @@ import { formatCurrency } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 
+type ExpenseCategoryEntry = {
+  id: string;
+  amount: number;
+  description?: string;
+  date: string;
+};
+
 type ExpenseCategoryRow = {
   category: BudgetCategory;
   spent: number;
   limit: number | null;
   ratio: number | null;
+  entries: ExpenseCategoryEntry[];
 };
 
 const isSameMonth = (dateISO: string, now: Date): boolean => {
@@ -52,6 +61,7 @@ const BudgetScreen: React.FC = () => {
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
   const [limitModalCategory, setLimitModalCategory] = useState<BudgetCategory | null>(null);
   const [limitInput, setLimitInput] = useState("");
 
@@ -126,6 +136,14 @@ const BudgetScreen: React.FC = () => {
     return map;
   }, [monthlyEntries]);
 
+  const incomeEntries = useMemo(
+    () =>
+      monthlyEntries
+        .filter((e) => e.type === "income")
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [monthlyEntries]
+  );
+
   const expenseRows = useMemo<ExpenseCategoryRow[]>(() => {
     const categoriesInPlay = new Set<BudgetCategory>();
 
@@ -140,10 +158,14 @@ const BudgetScreen: React.FC = () => {
         const spent = expensesByCategory[category] ?? 0;
         const limit = limitByCategory[category] ?? null;
         const ratio = limit ? spent / limit : null;
-        return { category, spent, limit, ratio };
+        const entries = monthlyEntries
+          .filter((e) => e.type === "expense" && e.category === category)
+          .map((e) => ({ id: e.id, amount: e.amount, description: e.description, date: e.date }))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return { category, spent, limit, ratio, entries };
       })
       .sort((a, b) => b.spent - a.spent);
-  }, [expensesByCategory, limitByCategory]);
+  }, [expensesByCategory, limitByCategory, monthlyEntries]);
 
   const chartData = useMemo(
     () =>
@@ -191,6 +213,29 @@ const BudgetScreen: React.FC = () => {
     });
 
     setShowAddModal(false);
+  }, []);
+
+  const handleEditEntry = useCallback((entryId: string) => {
+    const found = entries.find((e) => e.id === entryId) ?? null;
+    setEditingEntry(found);
+  }, [entries]);
+
+  const handleSaveEntry = useCallback((updated: BudgetEntry) => {
+    setEntries((prev) => {
+      const next = prev.map((e) => (e.id === updated.id ? updated : e));
+      saveBudgetEntries(next);
+      return next;
+    });
+    setEditingEntry(null);
+  }, []);
+
+  const handleDeleteEntry = useCallback((id: string) => {
+    setEntries((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      saveBudgetEntries(next);
+      return next;
+    });
+    setEditingEntry(null);
   }, []);
 
   const openLimitModal = useCallback(
@@ -295,18 +340,45 @@ const BudgetScreen: React.FC = () => {
         )}
       </View>
 
-      {!!Object.keys(incomeByCategory).length && (
+      {incomeEntries.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Income Categories</Text>
-          <View style={styles.incomeWrap}>
-            {Object.entries(incomeByCategory)
-              .sort((a, b) => b[1] - a[1])
-              .map(([category, amount]) => (
-                <View key={category} style={styles.incomePill}>
-                  <Text style={styles.incomePillCategory}>{category}</Text>
-                  <Text style={styles.incomePillAmount}>{formatCurrency(amount)}</Text>
-                </View>
+          <Text style={styles.sectionTitle}>Income</Text>
+          <View style={styles.incomeCard}>
+            <View style={styles.incomeWrap}>
+              {Object.entries(incomeByCategory)
+                .sort((a, b) => b[1] - a[1])
+                .map(([category, amount]) => (
+                  <View key={category} style={styles.incomePill}>
+                    <Text style={styles.incomePillCategory}>{category}</Text>
+                    <Text style={styles.incomePillAmount}>{formatCurrency(amount)}</Text>
+                  </View>
+                ))}
+            </View>
+            <View style={styles.incomeEntryList}>
+              {incomeEntries.map((entry) => (
+                <TouchableOpacity
+                  key={entry.id}
+                  style={styles.entryRow}
+                  onPress={() => handleEditEntry(entry.id)}
+                  activeOpacity={0.6}
+                >
+                  <View style={styles.entryInfo}>
+                    <Text style={[styles.entryAmount, { color: colors.success }]}>
+                      {formatCurrency(entry.amount)}
+                    </Text>
+                    <Text style={styles.entryDesc} numberOfLines={1}>
+                      {entry.description || entry.category}
+                    </Text>
+                  </View>
+                  <View style={styles.entryRight}>
+                    <Text style={styles.entryDate}>
+                      {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </Text>
+                    <Text style={styles.entryEditHint}>Edit</Text>
+                  </View>
+                </TouchableOpacity>
               ))}
+            </View>
           </View>
         </View>
       )}
@@ -370,6 +442,32 @@ const BudgetScreen: React.FC = () => {
         ) : (
           <Text style={styles.noLimitText}>No monthly limit set yet.</Text>
         )}
+
+        {item.entries.length > 0 && (
+          <View style={styles.entryList}>
+            {item.entries.map((entry) => (
+              <TouchableOpacity
+                key={entry.id}
+                style={styles.entryRow}
+                onPress={() => handleEditEntry(entry.id)}
+                activeOpacity={0.6}
+              >
+                <View style={styles.entryInfo}>
+                  <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
+                  {entry.description ? (
+                    <Text style={styles.entryDesc} numberOfLines={1}>{entry.description}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.entryRight}>
+                  <Text style={styles.entryDate}>
+                    {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </Text>
+                  <Text style={styles.entryEditHint}>Edit</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -398,6 +496,13 @@ const BudgetScreen: React.FC = () => {
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddEntry}
+      />
+
+      <EditBudgetEntryModal
+        entry={editingEntry}
+        onClose={() => setEditingEntry(null)}
+        onSave={handleSaveEntry}
+        onDelete={handleDeleteEntry}
       />
 
       <Modal
@@ -508,7 +613,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     addBtnText: {
-      color: colors.white,
+      color: "#000000",
       fontSize: 14,
       fontWeight: "700",
     },
@@ -573,10 +678,24 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
       textAlign: "center",
     },
+    incomeCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 14,
+      padding: 14,
+    },
     incomeWrap: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
+    },
+    incomeEntryList: {
+      marginTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: 8,
+      gap: 6,
     },
     incomePill: {
       backgroundColor: colors.successDim,
@@ -753,6 +872,49 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.white,
       fontSize: 14,
       fontWeight: "700",
+    },
+    entryList: {
+      marginTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: 8,
+      gap: 6,
+    },
+    entryRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 8,
+    },
+    entryInfo: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    entryAmount: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: "600",
+      fontVariant: ["tabular-nums"],
+    },
+    entryDesc: {
+      flex: 1,
+      color: colors.textDim,
+      fontSize: 12,
+    },
+    entryRight: {
+      alignItems: "flex-end",
+      gap: 2,
+    },
+    entryDate: {
+      color: colors.textMuted,
+      fontSize: 11,
+    },
+    entryEditHint: {
+      color: colors.accent,
+      fontSize: 10,
+      fontWeight: "600",
     },
   });
 

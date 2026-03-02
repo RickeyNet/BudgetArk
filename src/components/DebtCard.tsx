@@ -171,7 +171,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete }) => {
             style={[styles.payButton, { backgroundColor: colors.accent }]}
             onPress={() => setShowPayInput(!showPayInput)}
           >
-            <Text style={[styles.payButtonText, { color: colors.white }]}>
+            <Text style={[styles.payButtonText, { color: "#000000" }]}>
               Pay
             </Text>
           </TouchableOpacity>

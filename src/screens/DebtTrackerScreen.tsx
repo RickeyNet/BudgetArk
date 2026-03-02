@@ -260,7 +260,7 @@ const makeStyles = (colors: ThemeColors) =>
     shadowRadius: 8,
     elevation: 4,
   },
-  addBtnText: { color: colors.white, fontSize: 13, fontWeight: "600" },
+  addBtnText: { color: "#000000", fontSize: 13, fontWeight: "600" },
 
   emptyWrap: { alignItems: "center", paddingVertical: 48 },
   emptyEmoji: { fontSize: 40, marginBottom: 12 },

@@ -6,6 +6,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
+import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 
@@ -22,7 +23,7 @@ import { getOrCreateUser } from "./src/storage/userStorage";
  * Inner app component that has access to theme context
  */
 const AppContent: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, themeId } = useTheme();
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
 
   /** Check onboarding status on mount */
@@ -58,11 +59,16 @@ const AppContent: React.FC = () => {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
 
+  const isSynthwave = themeId === "synthwave";
+
   /** Show main app navigation */
   return (
-    <NavigationContainer>
-      <AppNavigator />
-    </NavigationContainer>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>
+      {isSynthwave && <SynthwaveGrid color={colors.accent} />}
+    </View>
   );
 };
 
