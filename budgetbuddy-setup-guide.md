@@ -631,3 +631,7 @@ This uploads the .ipa to App Store Connect.
 
 Step 4: Enable TestFlight
 In App Store Connect (https://appstoreconnect.apple.com), go to your app > TestFlight tab, add testers (internal or external groups), and distribute.
+
+
+npx expo start --dev-client
+npx expo run:android

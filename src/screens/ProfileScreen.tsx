@@ -35,6 +35,7 @@ import {
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
+import { importData } from "../utils/importData";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemePreset } from "../theme/themes";
 
@@ -120,6 +121,53 @@ const ProfileScreen: React.FC = () => {
         error?.message || "Something went wrong while exporting your data."
       );
     }
+  }, []);
+
+  const handleImportData = useCallback(() => {
+    Alert.alert(
+      "Import Data",
+      "How would you like to import? Merge keeps your existing data and adds the imported data. Replace wipes your current data first.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Merge",
+          onPress: async () => {
+            try {
+              const result = await importData("merge");
+              if (!result) return; // user cancelled picker
+              Alert.alert(
+                "Import Complete",
+                `Merged ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
+              );
+            } catch (error: any) {
+              Alert.alert(
+                "Import Failed",
+                error?.message || "Something went wrong while importing your data."
+              );
+            }
+          },
+        },
+        {
+          text: "Replace",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const result = await importData("replace");
+              if (!result) return;
+              Alert.alert(
+                "Import Complete",
+                `Imported ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
+              );
+            } catch (error: any) {
+              Alert.alert(
+                "Import Failed",
+                error?.message || "Something went wrong while importing your data."
+              );
+            }
+          },
+        },
+      ]
+    );
   }, []);
 
   if (!user) return null;
@@ -266,6 +314,21 @@ const ProfileScreen: React.FC = () => {
           >
             <Text style={[styles.settingsRowText, { color: colors.text }]}>
               Export My Data
+            </Text>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={handleImportData}
+          >
+            <Text style={[styles.settingsRowText, { color: colors.text }]}>
+              Import My Data
             </Text>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
               →

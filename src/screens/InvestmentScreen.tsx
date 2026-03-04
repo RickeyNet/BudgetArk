@@ -17,10 +17,11 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { Defs, LinearGradient, Stop, Path } from "react-native-svg";
+import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import {
@@ -39,9 +40,9 @@ type SliderConfig = {
 };
 
 const SLIDERS: Record<"contribution" | "returnRate" | "years", SliderConfig> = {
-  contribution: { label: "Monthly Contribution", unit: "$", min: 50, max: 5000, step: 50 },
-  returnRate: { label: "Annual Return", unit: "%", min: 1, max: 15, step: 0.5 },
-  years: { label: "Time Horizon", unit: "yr", min: 1, max: 40, step: 1 },
+  contribution: { label: "Monthly Contribution", unit: "$", min: 50, max: 50000, step: 50 },
+  returnRate: { label: "Annual Return", unit: "%", min: 1, max: 30, step: 0.5 },
+  years: { label: "Time Horizon", unit: "yr", min: 1, max: 50, step: 1 },
 };
 
 const YEAR_PRESETS = [10, 20, 30] as const;
@@ -163,9 +164,6 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
   }
 );
 
-/* Need SvgText import */
-import { Text as SvgText } from "react-native-svg";
-
 /* ── Main Screen ── */
 
 const InvestmentScreen: React.FC = () => {
@@ -175,6 +173,10 @@ const InvestmentScreen: React.FC = () => {
   const [contribution, setContribution] = useState(500);
   const [returnRate, setReturnRate] = useState(7);
   const [years, setYears] = useState(20);
+
+  /* Text-input editing state (shared across all sliders) */
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   const timeline = useMemo(
     () => calcInvestmentTimeline(contribution, returnRate, years),
@@ -222,6 +224,47 @@ const InvestmentScreen: React.FC = () => {
     []
   );
 
+  const handleValueFocus = useCallback(
+    (key: "contribution" | "returnRate" | "years", value: number) => {
+      setEditingKey(key);
+      setEditingText(String(value));
+    },
+    []
+  );
+
+  const handleValueChange = useCallback(
+    (key: "contribution" | "returnRate" | "years", text: string) => {
+      if (key === "returnRate") {
+        // Allow decimal point for return rate
+        setEditingText(text.replace(/[^0-9.]/g, ""));
+      } else {
+        setEditingText(text.replace(/[^0-9]/g, ""));
+      }
+    },
+    []
+  );
+
+  const handleValueSubmit = useCallback(
+    (key: "contribution" | "returnRate" | "years") => {
+      const cfg = SLIDERS[key];
+      const parsed = parseFloat(editingText);
+      if (!isNaN(parsed) && parsed >= cfg.min) {
+        const setter =
+          key === "contribution" ? setContribution : key === "returnRate" ? setReturnRate : setYears;
+        if (key === "years") {
+          setter(Math.max(cfg.min, Math.round(parsed)));
+        } else if (key === "returnRate") {
+          const snapped = Math.round(parsed / cfg.step) * cfg.step;
+          setter(Math.max(cfg.min, Math.round(snapped * 100) / 100));
+        } else {
+          setter(Math.max(cfg.min, parsed));
+        }
+      }
+      setEditingKey(null);
+    },
+    [editingText]
+  );
+
   const renderSlider = (key: "contribution" | "returnRate" | "years", value: number) => {
     const cfg = SLIDERS[key];
     const displayValue =
@@ -230,13 +273,28 @@ const InvestmentScreen: React.FC = () => {
         : key === "returnRate"
           ? `${value}%`
           : `${value} yr`;
-    const pct = ((value - cfg.min) / (cfg.max - cfg.min)) * 100;
+    const pct = Math.min(100, ((value - cfg.min) / (cfg.max - cfg.min)) * 100);
 
     return (
       <View key={key} style={styles.sliderGroup}>
         <View style={styles.sliderHeader}>
           <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          <Text style={styles.sliderValue}>{displayValue}</Text>
+          <TextInput
+            style={[
+              styles.sliderValue,
+              styles.sliderValueInput,
+              editingKey === key && styles.sliderValueInputActive,
+            ]}
+            value={editingKey === key ? editingText : displayValue}
+            onFocus={() => handleValueFocus(key, value)}
+            onChangeText={(text) => handleValueChange(key, text)}
+            onBlur={() => handleValueSubmit(key)}
+            onSubmitEditing={() => handleValueSubmit(key)}
+            keyboardType={key === "returnRate" ? "decimal-pad" : "numeric"}
+            returnKeyType="done"
+            selectTextOnFocus
+            placeholderTextColor={colors.textMuted}
+          />
         </View>
         <View style={styles.sliderRow}>
           <TouchableOpacity
@@ -472,6 +530,20 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontWeight: "700",
       fontVariant: ["tabular-nums"],
+    },
+    sliderValueInput: {
+      borderWidth: 1,
+      borderColor: "transparent",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      minWidth: 90,
+      height: 34,
+      textAlign: "right",
+    },
+    sliderValueInputActive: {
+      borderColor: colors.accent,
+      backgroundColor: colors.bg,
     },
     sliderRow: {
       flexDirection: "row",
