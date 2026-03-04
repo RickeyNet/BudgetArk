@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BudgetArc",
-    "slug": "BudgetArc",
+    "slug": "BudgetBuddy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -37,6 +37,12 @@
       "eas": {
         "projectId": "05d891a0-ab13-4efb-8bac-ae68032fa58e"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/05d891a0-ab13-4efb-8bac-ae68032fa58e"
     }
   }
 }
