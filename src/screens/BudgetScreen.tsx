@@ -279,7 +279,7 @@ const BudgetScreen: React.FC = () => {
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
-        <Text style={styles.appLabel}>BUDGETBUDDY</Text>
+        <Text style={styles.appLabel}>BUDGETARC</Text>
         <Text style={styles.screenTitle}>Budget</Text>
         <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
       </View>

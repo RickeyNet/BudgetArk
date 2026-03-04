@@ -184,7 +184,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── Header ── */}
         <View style={styles.titleSection}>
           <Text style={[styles.appLabel, { color: colors.textDim }]}>
-            BUDGETBUDDY
+            BUDGETARC
           </Text>
           <Text style={[styles.screenTitle, { color: colors.text }]}>Profile</Text>
           <Text style={[styles.screenSubtitle, { color: colors.textMuted }]}>
@@ -355,7 +355,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            BudgetBuddy v1.0.0
+            BudgetArc v1.0.0
           </Text>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
             Built with React Native + Expo

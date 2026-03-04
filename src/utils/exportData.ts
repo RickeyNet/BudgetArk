@@ -45,7 +45,7 @@ export const exportAllData = async (): Promise<void> => {
   const json = JSON.stringify(exportPayload, null, 2);
 
   await Share.share({
-    title: "BudgetBuddy Data Export",
+    title: "BudgetArc Data Export",
     message: json,
   });
 };

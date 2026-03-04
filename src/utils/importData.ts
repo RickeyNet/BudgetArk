@@ -96,14 +96,14 @@ export const importData = async (
     data = JSON.parse(raw);
   } catch {
     throw new Error(
-      "The selected file is not valid JSON. Please choose a BudgetBuddy export file."
+      "The selected file is not valid JSON. Please choose a BudgetArc export file."
     );
   }
 
   /* 3. Validate structure */
   if (!validatePayload(data)) {
     throw new Error(
-      "The file does not appear to be a BudgetBuddy export. Expected debts, payments, or budget data."
+      "The file does not appear to be a BudgetArc export. Expected debts, payments, or budget data."
     );
   }
 

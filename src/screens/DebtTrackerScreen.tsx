@@ -130,7 +130,7 @@ const DebtTrackerScreen: React.FC = () => {
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
-        <Text style={styles.appLabel}>BUDGETBUDDY</Text>
+        <Text style={styles.appLabel}>BUDGETARC</Text>
         <Text style={styles.screenTitle}>Debt Tracker</Text>
         <Text style={styles.screenSubtitle}>
           Track your progress. Crush your debt.

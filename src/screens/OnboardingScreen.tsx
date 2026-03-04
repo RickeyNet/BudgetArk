@@ -213,7 +213,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     <View style={styles.stepContainer}>
       <Text style={styles.stepNumber}>STEP 2 OF 3</Text>
       <Text style={styles.heroEmoji}>💸</Text>
-      <Text style={styles.stepTitle}>Welcome to BudgetBuddy</Text>
+      <Text style={styles.stepTitle}>Welcome to BudgetArc</Text>
       <Text style={styles.stepSubtitle}>
         Your personal finance companion for tracking debt, managing budgets, and
         planning investments.
