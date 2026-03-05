@@ -36,7 +36,7 @@ import {
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
-import { importData } from "../utils/importData";
+import { importData, importFromString } from "../utils/importData";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemePreset } from "../theme/themes";
 
@@ -55,6 +55,21 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether theme selector modal is visible */
   const [showThemeModal, setShowThemeModal] = useState(false);
+
+  /** Whether the paste-import modal is visible */
+  const [showPasteModal, setShowPasteModal] = useState(false);
+
+  /** Raw JSON text entered in the paste-import modal */
+  const [pasteText, setPasteText] = useState("");
+
+  /** Whether the reset confirmation modal is visible */
+  const [showResetModal, setShowResetModal] = useState(false);
+
+  /** Whether the import source-choice modal is visible */
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  /** Whether the import merge/replace modal is visible (file path) */
+  const [showImportModeModal, setShowImportModeModal] = useState(false);
 
   /** Load user on mount */
   useEffect(() => {
@@ -93,27 +108,18 @@ const ProfileScreen: React.FC = () => {
    * Creates a fresh anonymous account immediately after.
    */
   const handleResetData = useCallback(() => {
-    Alert.alert(
-      "Reset All Data",
-      "This will permanently delete all your debts, payments, and account data. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset Everything",
-          style: "destructive",
-          onPress: async () => {
-            await clearAllData();
-            await deleteAccount();
-            await getOrCreateUser();
-            // Mark onboarding complete so user isn't forced through it again
-            const freshUser = await completeOnboarding();
-            setUser(freshUser);
-            setEditName(freshUser.displayName);
-            Alert.alert("Done", "All data has been reset successfully.");
-          },
-        },
-      ]
-    );
+    setShowResetModal(true);
+  }, []);
+
+  const confirmReset = useCallback(async () => {
+    setShowResetModal(false);
+    await clearAllData();
+    await deleteAccount();
+    await getOrCreateUser();
+    const freshUser = await completeOnboarding();
+    setUser(freshUser);
+    setEditName(freshUser.displayName);
+    Alert.alert("Done", "All data has been reset successfully.");
   }, []);
 
   const handleExportData = useCallback(async () => {
@@ -127,52 +133,73 @@ const ProfileScreen: React.FC = () => {
     }
   }, []);
 
+  /**
+   * First step: show a themed modal to choose import source.
+   */
   const handleImportData = useCallback(() => {
-    Alert.alert(
-      "Import Data",
-      "How would you like to import? Merge keeps your existing data and adds the imported data. Replace wipes your current data first.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Merge",
-          onPress: async () => {
-            try {
-              const result = await importData("merge");
-              if (!result) return; // user cancelled picker
-              Alert.alert(
-                "Import Complete",
-                `Merged ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
-              );
-            } catch (error: any) {
-              Alert.alert(
-                "Import Failed",
-                error?.message || "Something went wrong while importing your data."
-              );
-            }
-          },
-        },
-        {
-          text: "Replace",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const result = await importData("replace");
-              if (!result) return;
-              Alert.alert(
-                "Import Complete",
-                `Imported ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
-              );
-            } catch (error: any) {
-              Alert.alert(
-                "Import Failed",
-                error?.message || "Something went wrong while importing your data."
-              );
-            }
-          },
-        },
-      ]
-    );
+    setShowImportModal(true);
   }, []);
+
+  /**
+   * File-picker path: show a themed merge/replace modal.
+   */
+  const handleImportFromFile = useCallback(() => {
+    setShowImportModal(false);
+    setShowImportModeModal(true);
+  }, []);
+
+  /**
+   * File-picker: run the document picker with the chosen mode.
+   */
+  const confirmFileImport = useCallback(async (mode: "merge" | "replace") => {
+    setShowImportModeModal(false);
+    try {
+      const result = await importData(mode);
+      if (!result) return;
+      const label = mode === "merge" ? "Merged" : "Imported";
+      Alert.alert(
+        "Import Complete",
+        `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
+      );
+    } catch (error: any) {
+      Alert.alert(
+        "Import Failed",
+        error?.message || "Something went wrong while importing your data."
+      );
+    }
+  }, []);
+
+  /**
+   * Paste-text path: parse the pasted JSON and write to storage.
+   */
+  const handlePasteImport = useCallback(
+    (mode: "merge" | "replace") => {
+      const text = pasteText.trim();
+      if (!text) {
+        Alert.alert("Empty", "Please paste your exported JSON data first.");
+        return;
+      }
+      const run = async () => {
+        try {
+          const result = await importFromString(text, mode);
+          setShowPasteModal(false);
+          setPasteText("");
+          const label = mode === "merge" ? "Merged" : "Imported";
+          Alert.alert(
+            "Import Complete",
+            `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
+          );
+        } catch (error: any) {
+          Alert.alert(
+            "Import Failed",
+            error?.message || "Something went wrong while importing your data."
+          );
+        }
+      };
+      run();
+    },
+    [pasteText]
+  );
 
   if (!user) return null;
 
@@ -492,6 +519,228 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Reset Confirmation Modal ── */}
+      <Modal
+        visible={showResetModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowResetModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Reset All Data
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              This will permanently delete all your debts, payments, and account
+              data. This cannot be undone.
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowResetModal(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
+                onPress={confirmReset}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Reset Everything
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Import Source Modal ── */}
+      <Modal
+        visible={showImportModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowImportModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Import Data
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              Choose an import source.
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowImportModal(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={handleImportFromFile}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Pick File
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={() => {
+                  setShowImportModal(false);
+                  setPasteText("");
+                  setShowPasteModal(true);
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Paste Text
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Import Mode Modal (file path) ── */}
+      <Modal
+        visible={showImportModeModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowImportModeModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Import from File
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              Merge keeps your existing data and adds the imported data. Replace
+              wipes your current data first.
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowImportModeModal(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.success }]}
+                onPress={() => confirmFileImport("merge")}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  Merge
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
+                onPress={() => confirmFileImport("replace")}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  Replace
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Paste Import Modal ── */}
+      <Modal
+        visible={showPasteModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowPasteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Paste Export Data
+            </Text>
+            <Text style={[styles.pasteHint, { color: colors.textDim }]}>
+              Paste the JSON text you copied from Export My Data.
+            </Text>
+
+            <TextInput
+              style={[
+                styles.pasteInput,
+                {
+                  backgroundColor: colors.bg,
+                  borderColor: colors.cardBorder,
+                  color: colors.text,
+                },
+              ]}
+              value={pasteText}
+              onChangeText={setPasteText}
+              placeholder='Paste JSON here...'
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <View style={styles.pasteActions}>
+              <TouchableOpacity
+                style={[styles.pasteBtn, { backgroundColor: colors.success }]}
+                onPress={() => handlePasteImport("merge")}
+              >
+                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
+                  Merge
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.pasteBtn, { backgroundColor: colors.danger }]}
+                onPress={() => handlePasteImport("replace")}
+              >
+                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
+                  Replace
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.cardBorder }]}
+              onPress={() => {
+                setShowPasteModal(false);
+                setPasteText("");
+              }}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.text }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };
@@ -753,6 +1002,78 @@ const styles = StyleSheet.create({
   },
   closeBtnText: {
     fontSize: 16,
+    fontWeight: "700",
+  },
+
+  /* Paste Import Modal */
+  pasteHint: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  pasteInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 13,
+    fontFamily: "monospace",
+    minHeight: 160,
+    maxHeight: 260,
+    marginBottom: 16,
+  },
+  pasteActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  pasteBtn: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  pasteBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  /* Themed Dialog (replaces Alert.alert) */
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+  },
+  dialogBox: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 24,
+  },
+  dialogTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  dialogMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  dialogActions: {
+    gap: 10,
+  },
+  dialogBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  dialogBtnText: {
+    fontSize: 15,
     fontWeight: "700",
   },
 });

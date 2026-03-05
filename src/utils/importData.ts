@@ -2,9 +2,11 @@
  * BudgetBuddy — Data Import Utility
  * File: src/utils/importData.ts
  *
- * Opens a document picker for the user to select a previously exported
- * BudgetBuddy JSON file, validates its structure, and writes the data
- * back into AsyncStorage — enabling device-to-device transfer.
+ * Two import paths:
+ *   1. importData()       — opens a document picker to select a JSON file
+ *   2. importFromString() — accepts a raw JSON string (e.g. pasted text)
+ *
+ * Both validate the payload and write into AsyncStorage.
  */
 
 import * as DocumentPicker from "expo-document-picker";
@@ -64,50 +66,37 @@ export interface ImportResult {
   budgetLimits: number;
 }
 
+/* ── Core import logic (shared by file-picker and paste paths) ── */
+
 /**
- * Opens the document picker, reads and validates the selected JSON file,
- * and writes the data into AsyncStorage.
+ * Parses, validates, and writes an import payload into AsyncStorage.
  *
- * Data is **merged** with existing data by default — duplicates (same id)
- * are replaced, new items are appended.
- *
- * @param mode - "merge" keeps existing data and adds imported data,
- *               "replace" wipes existing data first.
- * @returns ImportResult with counts of imported items, or null if cancelled.
+ * @param raw  — the raw JSON string to import
+ * @param mode — "merge" keeps existing data, "replace" wipes first
+ * @returns ImportResult with counts of imported items
  */
-export const importData = async (
+export const importFromString = async (
+  raw: string,
   mode: "merge" | "replace" = "merge"
-): Promise<ImportResult | null> => {
-  /* 1. Pick a file */
-  const result = await DocumentPicker.getDocumentAsync({
-    type: "application/json",
-  });
-
-  if (result.canceled) return null;
-
-  const file = result.assets[0];
-  if (!file?.uri) throw new Error("No file selected.");
-
-  /* 2. Read file contents */
-  const raw = await FileSystem.readAsStringAsync(file.uri);
-
+): Promise<ImportResult> => {
+  /* 1. Parse */
   let data: unknown;
   try {
     data = JSON.parse(raw);
   } catch {
     throw new Error(
-      "The selected file is not valid JSON. Please choose a BudgetArc export file."
+      "The text is not valid JSON. Please paste a BudgetArc export."
     );
   }
 
-  /* 3. Validate structure */
+  /* 2. Validate structure */
   if (!validatePayload(data)) {
     throw new Error(
-      "The file does not appear to be a BudgetArc export. Expected debts, payments, or budget data."
+      "The data does not appear to be a BudgetArc export. Expected debts, payments, or budget data."
     );
   }
 
-  /* 4. Write to AsyncStorage */
+  /* 3. Write to AsyncStorage */
   const counts: ImportResult = {
     debts: 0,
     payments: 0,
@@ -116,7 +105,6 @@ export const importData = async (
   };
 
   if (mode === "replace") {
-    // Wipe existing data first
     await AsyncStorage.multiRemove([
       KEYS.DEBTS,
       KEYS.PAYMENTS,
@@ -151,7 +139,6 @@ export const importData = async (
     for (const item of incoming) {
       const id = (item as any)?.id;
       if (id && existingIds.has(id)) {
-        // Replace existing item with imported version
         const idx = existing.findIndex((e) => (e as any).id === id);
         if (idx >= 0) existing[idx] = item as Record<string, unknown>;
       } else {
@@ -204,4 +191,29 @@ export const importData = async (
   counts.budgetLimits = await mergeLimits(data.budgetLimits);
 
   return counts;
+};
+
+/* ── File-picker import (original path) ── */
+
+/**
+ * Opens the document picker, reads the selected JSON file, and delegates
+ * to importFromString for validation and storage.
+ *
+ * @param mode - "merge" or "replace"
+ * @returns ImportResult with counts, or null if the user cancelled the picker.
+ */
+export const importData = async (
+  mode: "merge" | "replace" = "merge"
+): Promise<ImportResult | null> => {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: "application/json",
+  });
+
+  if (result.canceled) return null;
+
+  const file = result.assets[0];
+  if (!file?.uri) throw new Error("No file selected.");
+
+  const raw = await FileSystem.readAsStringAsync(file.uri);
+  return importFromString(raw, mode);
 };
