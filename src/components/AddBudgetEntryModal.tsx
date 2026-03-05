@@ -80,130 +80,131 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         style={styles.overlay}
       >
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <ScrollView
-              style={styles.modalContent}
-              contentContainerStyle={styles.modalScroll}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text style={styles.title}>Add Budget Entry</Text>
-              <Text style={styles.subtitle}>Track income and expenses by category.</Text>
+        {/* Modal sheet — fills from near top to bottom */}
+        <View style={styles.modalSheet}>
+          {/* Scrollable form content */}
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.title}>Add Budget Entry</Text>
+            <Text style={styles.subtitle}>Track income and expenses by category.</Text>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>ENTRY TYPE</Text>
-                <View style={styles.typeRow}>
-                  {(["expense", "income"] as const).map((entryType) => (
-                    <TouchableOpacity
-                      key={entryType}
+            <View style={styles.field}>
+              <Text style={styles.label}>ENTRY TYPE</Text>
+              <View style={styles.typeRow}>
+                {(["expense", "income"] as const).map((entryType) => (
+                  <TouchableOpacity
+                    key={entryType}
+                    style={[
+                      styles.typeButton,
+                      type === entryType && styles.typeButtonActive,
+                      type === entryType && {
+                        borderColor:
+                          entryType === "expense" ? colors.warning : colors.success,
+                      },
+                    ]}
+                    onPress={() => setType(entryType)}
+                  >
+                    <Text
                       style={[
-                        styles.typeButton,
-                        type === entryType && styles.typeButtonActive,
+                        styles.typeText,
                         type === entryType && {
-                          borderColor:
-                            entryType === "expense" ? colors.warning : colors.success,
+                          color: entryType === "expense" ? colors.warning : colors.success,
                         },
                       ]}
-                      onPress={() => setType(entryType)}
                     >
-                      <Text
-                        style={[
-                          styles.typeText,
-                          type === entryType && {
-                            color: entryType === "expense" ? colors.warning : colors.success,
-                          },
-                        ]}
-                      >
-                        {entryType === "expense" ? "Expense" : "Income"}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                      {entryType === "expense" ? "Expense" : "Income"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
+            </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>CATEGORY</Text>
-                <View style={styles.categoryWrap}>
-                  {BUDGET_CATEGORIES.map((item) => (
-                    <TouchableOpacity
-                      key={item}
+            <View style={styles.field}>
+              <Text style={styles.label}>CATEGORY</Text>
+              <View style={styles.categoryWrap}>
+                {BUDGET_CATEGORIES.map((item) => (
+                  <TouchableOpacity
+                    key={item}
+                    style={[
+                      styles.categoryPill,
+                      category === item && styles.categoryPillActive,
+                    ]}
+                    onPress={() => setCategory(item)}
+                  >
+                    <Text
                       style={[
-                        styles.categoryPill,
-                        category === item && styles.categoryPillActive,
+                        styles.categoryPillText,
+                        category === item && styles.categoryPillTextActive,
                       ]}
-                      onPress={() => setCategory(item)}
                     >
-                      <Text
-                        style={[
-                          styles.categoryPillText,
-                          category === item && styles.categoryPillTextActive,
-                        ]}
-                      >
-                        {item}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                      {item}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
+            </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>AMOUNT</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textMuted}
-                  value={amount}
-                  onChangeText={setAmount}
-                  keyboardType="decimal-pad"
-                />
-              </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>AMOUNT</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0.00"
+                placeholderTextColor={colors.textMuted}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="decimal-pad"
+              />
+            </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>DESCRIPTION (OPTIONAL)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Grocery run, Netflix, etc."
-                  placeholderTextColor={colors.textMuted}
-                  value={description}
-                  onChangeText={setDescription}
-                  maxLength={100}
-                />
-              </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>DESCRIPTION (OPTIONAL)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Grocery run, Netflix, etc."
+                placeholderTextColor={colors.textMuted}
+                value={description}
+                onChangeText={setDescription}
+                maxLength={100}
+              />
+            </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>DATE (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="2026-02-27"
-                  placeholderTextColor={colors.textMuted}
-                  value={date}
-                  onChangeText={setDate}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {!isValidDate && (
-                  <Text style={[styles.helperText, { color: colors.warning }]}>Use YYYY-MM-DD.</Text>
-                )}
-              </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>DATE (YYYY-MM-DD)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="2026-02-27"
+                placeholderTextColor={colors.textMuted}
+                value={date}
+                onChangeText={setDate}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {!isValidDate && (
+                <Text style={[styles.helperText, { color: colors.warning }]}>Use YYYY-MM-DD.</Text>
+              )}
+            </View>
+          </ScrollView>
 
-              <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.addButton, !isValid && styles.addButtonDisabled]}
-                  onPress={handleSubmit}
-                  disabled={!isValid}
-                >
-                  <Text style={styles.addButtonText}>Add Entry</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          {/* ── Action Buttons — pinned at bottom, always visible above keyboard ── */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addButton, !isValid && styles.addButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={!isValid}
+            >
+              <Text style={styles.addButtonText}>Add Entry</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -216,20 +217,21 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: "rgba(0, 0, 0, 0.85)",
       justifyContent: "flex-end",
     },
-    backdrop: {
+    modalSheet: {
       flex: 1,
-      justifyContent: "flex-end",
-    },
-    modalContent: {
+      marginTop: Platform.OS === "ios" ? 44 : 32,
       backgroundColor: colors.card,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
-      maxHeight: "85%",
+      overflow: "hidden",
     },
-    modalScroll: {
+    scrollArea: {
+      flex: 1,
+    },
+    scrollContent: {
       padding: 24,
       gap: 14,
     },
@@ -314,11 +316,16 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 12,
       fontWeight: "500",
     },
+
+    /* Buttons — outside ScrollView so they stay above keyboard */
     buttonRow: {
       flexDirection: "row",
       gap: 12,
-      marginTop: 8,
-      marginBottom: 16,
+      paddingHorizontal: 24,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === "ios" ? 32 : 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
     },
     cancelButton: {
       flex: 1,

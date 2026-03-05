@@ -352,6 +352,34 @@ const ProfileScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* ── What's New ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            WHAT'S NEW
+          </Text>
+          <View style={[styles.newsCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View style={styles.newsItem}>
+              <View style={[styles.newsBadge, { backgroundColor: `${colors.accent}20` }]}>
+                <Text style={[styles.newsBadgeText, { color: colors.accent }]}>v1.0.0</Text>
+              </View>
+              <Text style={[styles.newsTitle, { color: colors.text }]}>Initial Release</Text>
+              <Text style={[styles.newsBody, { color: colors.textDim }]}>
+                Debt tracking, budget management, investment projections, and multiple themes. More features coming soon.
+              </Text>
+            </View>
+            <View style={[styles.newsDivider, { backgroundColor: colors.cardBorder }]} />
+            <View style={styles.newsItem}>
+              <View style={[styles.newsBadge, { backgroundColor: `${colors.teal}20` }]}>
+                <Text style={[styles.newsBadgeText, { color: colors.teal }]}>Coming</Text>
+              </View>
+              <Text style={[styles.newsTitle, { color: colors.text }]}>Up Next</Text>
+              <Text style={[styles.newsBody, { color: colors.textDim }]}>
+                More to come — stay tuned.
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
@@ -609,6 +637,41 @@ const styles = StyleSheet.create({
   },
   dangerRow: {
     borderColor: "#ff525220",
+  },
+
+  /* What's New */
+  newsCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  newsItem: {
+    padding: 16,
+  },
+  newsBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 8,
+  },
+  newsBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  newsTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  newsBody: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  newsDivider: {
+    height: 1,
+    marginHorizontal: 16,
   },
 
   /* App Info */

@@ -6,8 +6,8 @@
  * Collects: debt name, total balance, APR, and minimum monthly payment.
  *
  * Design notes:
- * - Uses a dark overlay with blur-style backdrop
- * - Form validates all fields before enabling the submit button
+ * - Slides up from bottom, filling screen to near the top
+ * - Buttons are pinned outside the ScrollView so they remain visible when the keyboard is open
  * - Keyboard-aware: uses decimal-pad for number fields
  * - Calls onAdd callback with a complete NewDebtInput object
  * - Dynamic theming support
@@ -109,107 +109,102 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         style={styles.overlay}
       >
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        >
-          {/* Prevents modal from closing when tapping inside content */}
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <ScrollView
-              style={styles.modalContent}
-              contentContainerStyle={styles.modalScroll}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* ── Header ── */}
-              <Text style={styles.title}>Add New Debt</Text>
-              <Text style={styles.subtitle}>
-                Enter the details of the debt you want to track
-              </Text>
+        {/* Modal sheet — fills from near top to bottom */}
+        <View style={styles.modalSheet}>
+          {/* Scrollable form content */}
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* ── Header ── */}
+            <Text style={styles.title}>Add New Debt</Text>
+            <Text style={styles.subtitle}>
+              Enter the details of the debt you want to track
+            </Text>
 
-              {/* ── Form Fields ── */}
-              <View style={styles.fieldGroup}>
-                {/* Debt Name */}
-                <View style={styles.field}>
-                  <Text style={styles.label}>DEBT NAME</Text>
+            {/* ── Form Fields ── */}
+            <View style={styles.fieldGroup}>
+              {/* Debt Name */}
+              <View style={styles.field}>
+                <Text style={styles.label}>DEBT NAME</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Chase Visa, Student Loan"
+                  placeholderTextColor={colors.textMuted}
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus
+                  maxLength={50}
+                />
+              </View>
+
+              {/* Total Balance */}
+              <View style={styles.field}>
+                <Text style={styles.label}>TOTAL BALANCE</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.textMuted}
+                  value={balance}
+                  onChangeText={setBalance}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              {/* APR and Min Payment (side-by-side) */}
+              <View style={styles.row}>
+                <View style={[styles.field, { flex: 1 }]}>
+                  <Text style={styles.label}>APR (%)</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="e.g., Chase Visa, Student Loan"
+                    placeholder="0.0"
                     placeholderTextColor={colors.textMuted}
-                    value={name}
-                    onChangeText={setName}
-                    autoFocus
-                    maxLength={50}
-                  />
-                </View>
-
-                {/* Total Balance */}
-                <View style={styles.field}>
-                  <Text style={styles.label}>TOTAL BALANCE</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="0.00"
-                    placeholderTextColor={colors.textMuted}
-                    value={balance}
-                    onChangeText={setBalance}
+                    value={rate}
+                    onChangeText={setRate}
                     keyboardType="decimal-pad"
                   />
                 </View>
 
-                {/* APR and Min Payment (side-by-side) */}
-                <View style={styles.row}>
-                  <View style={[styles.field, { flex: 1 }]}>
-                    <Text style={styles.label}>APR (%)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="0.0"
-                      placeholderTextColor={colors.textMuted}
-                      value={rate}
-                      onChangeText={setRate}
-                      keyboardType="decimal-pad"
-                    />
-                  </View>
-
-                  <View style={[styles.field, { flex: 1 }]}>
-                    <Text style={styles.label}>MIN PAYMENT</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="0.00"
-                      placeholderTextColor={colors.textMuted}
-                      value={minPayment}
-                      onChangeText={setMinPayment}
-                      keyboardType="decimal-pad"
-                    />
-                  </View>
+                <View style={[styles.field, { flex: 1 }]}>
+                  <Text style={styles.label}>MIN PAYMENT</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textMuted}
+                    value={minPayment}
+                    onChangeText={setMinPayment}
+                    keyboardType="decimal-pad"
+                  />
                 </View>
               </View>
+            </View>
+          </ScrollView>
 
-              {/* ── Action Buttons ── */}
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={onClose}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
+          {/* ── Action Buttons — pinned at bottom, always visible above keyboard ── */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={onClose}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.addButton,
-                    !isValid && styles.addButtonDisabled,
-                  ]}
-                  onPress={handleSubmit}
-                  disabled={!isValid}
-                >
-                  <Text style={styles.addButtonText}>Add Debt</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.addButton,
+                !isValid && styles.addButtonDisabled,
+              ]}
+              onPress={handleSubmit}
+              disabled={!isValid}
+            >
+              <Text style={styles.addButtonText}>Add Debt</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -225,20 +220,21 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: "rgba(0, 0, 0, 0.85)",
       justifyContent: "flex-end",
     },
-    backdrop: {
+    modalSheet: {
       flex: 1,
-      justifyContent: "flex-end",
-    },
-    modalContent: {
+      marginTop: Platform.OS === "ios" ? 44 : 32,
       backgroundColor: colors.card,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
-      maxHeight: "92%",
+      overflow: "hidden",
     },
-    modalScroll: {
+    scrollArea: {
+      flex: 1,
+    },
+    scrollContent: {
       padding: 24,
     },
 
@@ -283,11 +279,15 @@ const makeStyles = (colors: ThemeColors) =>
       gap: 12,
     },
 
-    /* Buttons */
+    /* Buttons — outside ScrollView so they stay above keyboard */
     buttonRow: {
       flexDirection: "row",
       gap: 12,
-      marginTop: 24,
+      paddingHorizontal: 24,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === "ios" ? 32 : 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
     },
     cancelButton: {
       flex: 1,
