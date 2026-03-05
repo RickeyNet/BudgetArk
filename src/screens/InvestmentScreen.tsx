@@ -9,10 +9,8 @@
  * - Contribution vs interest earned breakdown
  */
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-  GestureResponderEvent,
-  LayoutChangeEvent,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -28,6 +26,7 @@ import {
   calcInvestmentTimeline,
   formatCurrency,
 } from "../utils/calculations";
+import SmoothSlider from "../components/SmoothSlider";
 
 /* ── Slider Config ── */
 
@@ -201,29 +200,6 @@ const InvestmentScreen: React.FC = () => {
     []
   );
 
-  const trackWidths = useRef<Record<string, number>>({});
-
-  const handleTrackLayout = useCallback((key: string, e: LayoutChangeEvent) => {
-    trackWidths.current[key] = e.nativeEvent.layout.width;
-  }, []);
-
-  const handleTrackTouch = useCallback(
-    (key: "contribution" | "returnRate" | "years", e: GestureResponderEvent) => {
-      const w = trackWidths.current[key];
-      if (!w) return;
-      const cfg = SLIDERS[key];
-      const x = e.nativeEvent.locationX;
-      const pct = Math.max(0, Math.min(1, x / w));
-      const raw = cfg.min + pct * (cfg.max - cfg.min);
-      const snapped = Math.round(raw / cfg.step) * cfg.step;
-      const clamped = Math.max(cfg.min, Math.min(cfg.max, Math.round(snapped * 100) / 100));
-      const setter =
-        key === "contribution" ? setContribution : key === "returnRate" ? setReturnRate : setYears;
-      setter(clamped);
-    },
-    []
-  );
-
   const handleValueFocus = useCallback(
     (key: "contribution" | "returnRate" | "years", value: number) => {
       setEditingKey(key);
@@ -265,6 +241,15 @@ const InvestmentScreen: React.FC = () => {
     [editingText]
   );
 
+  const handleSliderChange = useCallback(
+    (key: "contribution" | "returnRate" | "years", val: number) => {
+      const setter =
+        key === "contribution" ? setContribution : key === "returnRate" ? setReturnRate : setYears;
+      setter(val);
+    },
+    []
+  );
+
   const renderSlider = (key: "contribution" | "returnRate" | "years", value: number) => {
     const cfg = SLIDERS[key];
     const displayValue =
@@ -273,28 +258,32 @@ const InvestmentScreen: React.FC = () => {
         : key === "returnRate"
           ? `${value}%`
           : `${value} yr`;
-    const pct = Math.min(100, ((value - cfg.min) / (cfg.max - cfg.min)) * 100);
 
     return (
       <View key={key} style={styles.sliderGroup}>
         <View style={styles.sliderHeader}>
           <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          <TextInput
-            style={[
-              styles.sliderValue,
-              styles.sliderValueInput,
-              editingKey === key && styles.sliderValueInputActive,
-            ]}
-            value={editingKey === key ? editingText : displayValue}
-            onFocus={() => handleValueFocus(key, value)}
-            onChangeText={(text) => handleValueChange(key, text)}
-            onBlur={() => handleValueSubmit(key)}
-            onSubmitEditing={() => handleValueSubmit(key)}
-            keyboardType={key === "returnRate" ? "decimal-pad" : "numeric"}
-            returnKeyType="done"
-            selectTextOnFocus
-            placeholderTextColor={colors.textMuted}
-          />
+          {editingKey === key ? (
+            <TextInput
+              style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
+              value={editingText}
+              onChangeText={(text) => handleValueChange(key, text)}
+              onBlur={() => handleValueSubmit(key)}
+              onSubmitEditing={() => handleValueSubmit(key)}
+              keyboardType={key === "returnRate" ? "decimal-pad" : "numeric"}
+              returnKeyType="done"
+              selectTextOnFocus
+              autoFocus
+              placeholderTextColor={colors.textMuted}
+            />
+          ) : (
+            <TouchableOpacity
+              style={styles.sliderValueDisplay}
+              onPress={() => handleValueFocus(key, value)}
+            >
+              <Text style={styles.sliderValue}>{displayValue}</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.sliderRow}>
           <TouchableOpacity
@@ -304,19 +293,17 @@ const InvestmentScreen: React.FC = () => {
           >
             <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
           </TouchableOpacity>
-          <View
-            style={styles.sliderTrackTouch}
-            onLayout={(e) => handleTrackLayout(key, e)}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={(e) => handleTrackTouch(key, e)}
-            onResponderMove={(e) => handleTrackTouch(key, e)}
-          >
-            <View style={styles.sliderTrack}>
-              <View style={[styles.sliderFill, { width: `${pct}%` }]} />
-            </View>
-            <View style={[styles.sliderThumb, { left: `${pct}%` }]} />
-          </View>
+          <SmoothSlider
+            value={value}
+            min={cfg.min}
+            max={cfg.max}
+            step={cfg.step}
+            onValueChange={(val) => handleSliderChange(key, val)}
+            trackColor={colors.bg}
+            fillColor={colors.accent}
+            thumbColor={colors.accent}
+            thumbBorderColor={colors.card}
+          />
           <TouchableOpacity
             style={styles.sliderBtn}
             onPress={() => adjust(key, 1)}
@@ -531,17 +518,26 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "700",
       fontVariant: ["tabular-nums"],
     },
-    sliderValueInput: {
+    sliderValueDisplay: {
       borderWidth: 1,
       borderColor: "transparent",
       borderRadius: 8,
       paddingHorizontal: 8,
       paddingVertical: 6,
       minWidth: 90,
-      height: 34,
+      alignItems: "flex-end",
+      justifyContent: "center",
+    },
+    sliderValueInput: {
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      minWidth: 90,
       textAlign: "right",
+      textAlignVertical: "center",
     },
     sliderValueInputActive: {
+      borderWidth: 1,
       borderColor: colors.accent,
       backgroundColor: colors.bg,
     },
@@ -569,35 +565,7 @@ const makeStyles = (colors: ThemeColors) =>
     sliderBtnDisabled: {
       opacity: 0.2,
     },
-    sliderTrackTouch: {
-      flex: 1,
-      height: 32,
-      justifyContent: "center",
-      position: "relative",
-    },
-    sliderTrack: {
-      height: 8,
-      backgroundColor: colors.bg,
-      borderRadius: 999,
-      overflow: "hidden",
-    },
-    sliderFill: {
-      height: "100%",
-      backgroundColor: colors.accent,
-      borderRadius: 999,
-      minWidth: 4,
-    },
-    sliderThumb: {
-      position: "absolute",
-      top: 8,
-      width: 18,
-      height: 18,
-      borderRadius: 9,
-      backgroundColor: colors.accent,
-      borderWidth: 2,
-      borderColor: colors.card,
-      marginLeft: -9,
-    },
+    
     presetRow: {
       flexDirection: "row",
       gap: 10,
