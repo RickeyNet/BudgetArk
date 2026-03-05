@@ -30,7 +30,7 @@ export const exportAllData = async (): Promise<void> => {
 
   const exportPayload = {
     exportedAt: new Date().toISOString(),
-    appVersion: "1.0.0",
+    appVersion: "1.0.1",
     user: {
       id: user.id,
       displayName: user.displayName,

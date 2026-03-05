@@ -23,7 +23,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ScrollView,
   Modal,
 } from "react-native";
@@ -70,6 +69,9 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether the import merge/replace modal is visible (file path) */
   const [showImportModeModal, setShowImportModeModal] = useState(false);
+
+  /** Generic themed info/alert modal (replaces all Alert.alert) */
+  const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
 
   /** Load user on mount */
   useEffect(() => {
@@ -119,17 +121,17 @@ const ProfileScreen: React.FC = () => {
     const freshUser = await completeOnboarding();
     setUser(freshUser);
     setEditName(freshUser.displayName);
-    Alert.alert("Done", "All data has been reset successfully.");
+    setInfoModal({ title: "Done", message: "All data has been reset successfully." });
   }, []);
 
   const handleExportData = useCallback(async () => {
     try {
       await exportAllData();
     } catch (error: any) {
-      Alert.alert(
-        "Export Failed",
-        error?.message || "Something went wrong while exporting your data."
-      );
+      setInfoModal({
+        title: "Export Failed",
+        message: error?.message || "Something went wrong while exporting your data.",
+      });
     }
   }, []);
 
@@ -157,15 +159,15 @@ const ProfileScreen: React.FC = () => {
       const result = await importData(mode);
       if (!result) return;
       const label = mode === "merge" ? "Merged" : "Imported";
-      Alert.alert(
-        "Import Complete",
-        `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
-      );
+      setInfoModal({
+        title: "Import Complete",
+        message: `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`,
+      });
     } catch (error: any) {
-      Alert.alert(
-        "Import Failed",
-        error?.message || "Something went wrong while importing your data."
-      );
+      setInfoModal({
+        title: "Import Failed",
+        message: error?.message || "Something went wrong while importing your data.",
+      });
     }
   }, []);
 
@@ -176,7 +178,7 @@ const ProfileScreen: React.FC = () => {
     (mode: "merge" | "replace") => {
       const text = pasteText.trim();
       if (!text) {
-        Alert.alert("Empty", "Please paste your exported JSON data first.");
+        setInfoModal({ title: "Empty", message: "Please paste your exported JSON data first." });
         return;
       }
       const run = async () => {
@@ -185,15 +187,15 @@ const ProfileScreen: React.FC = () => {
           setShowPasteModal(false);
           setPasteText("");
           const label = mode === "merge" ? "Merged" : "Imported";
-          Alert.alert(
-            "Import Complete",
-            `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`
-          );
+          setInfoModal({
+            title: "Import Complete",
+            message: `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`,
+          });
         } catch (error: any) {
-          Alert.alert(
-            "Import Failed",
-            error?.message || "Something went wrong while importing your data."
-          );
+          setInfoModal({
+            title: "Import Failed",
+            message: error?.message || "Something went wrong while importing your data.",
+          });
         }
       };
       run();
@@ -414,7 +416,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            BudgetArc v1.0.0
+            BudgetArc v1.0.1
           </Text>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
             Built with React Native + Expo
@@ -738,6 +740,40 @@ const ProfileScreen: React.FC = () => {
                 Cancel
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Generic Info/Alert Modal ── */}
+      <Modal
+        visible={infoModal !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setInfoModal(null)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              {infoModal?.title}
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {infoModal?.message}
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={() => setInfoModal(null)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  OK
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
