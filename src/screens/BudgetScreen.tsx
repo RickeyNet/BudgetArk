@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
@@ -65,19 +66,21 @@ const BudgetScreen: React.FC = () => {
   const [limitModalCategory, setLimitModalCategory] = useState<BudgetCategory | null>(null);
   const [limitInput, setLimitInput] = useState("");
 
-  useEffect(() => {
-    const loadBudgetData = async () => {
-      const [storedEntries, storedLimits] = await Promise.all([
-        getBudgetEntries(),
-        getCategoryBudgetLimits(),
-      ]);
-      setEntries(storedEntries);
-      setLimits(storedLimits);
-      setIsLoaded(true);
-    };
+  useFocusEffect(
+    useCallback(() => {
+      const loadBudgetData = async () => {
+        const [storedEntries, storedLimits] = await Promise.all([
+          getBudgetEntries(),
+          getCategoryBudgetLimits(),
+        ]);
+        setEntries(storedEntries);
+        setLimits(storedLimits);
+        setIsLoaded(true);
+      };
 
-    loadBudgetData();
-  }, []);
+      loadBudgetData();
+    }, [])
+  );
 
   const now = new Date();
 

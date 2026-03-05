@@ -32,6 +32,7 @@ import {
   getOrCreateUser,
   updateDisplayName,
   deleteAccount,
+  completeOnboarding,
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
@@ -103,9 +104,12 @@ const ProfileScreen: React.FC = () => {
           onPress: async () => {
             await clearAllData();
             await deleteAccount();
-            const freshUser = await getOrCreateUser();
+            await getOrCreateUser();
+            // Mark onboarding complete so user isn't forced through it again
+            const freshUser = await completeOnboarding();
             setUser(freshUser);
             setEditName(freshUser.displayName);
+            Alert.alert("Done", "All data has been reset successfully.");
           },
         },
       ]

@@ -14,7 +14,7 @@
  * - Uses useCallback extensively to prevent unnecessary child re-renders
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import {
   StatusBar,
   StyleSheet,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import { Debt, NewDebtInput } from "../types";
 import { formatCurrency } from "../utils/calculations";
@@ -42,33 +43,35 @@ const DebtTrackerScreen: React.FC = () => {
   const { colors } = useTheme();
 
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
-  /** Load debts from device storage on mount */
-  useEffect(() => {
-    const loadDebts = async () => {
-      try {
-        const stored = await getDebts();
-        // Filter out any corrupted entries from earlier sessions
-        const valid = stored.filter(
-          (d) =>
-            d &&
-            typeof d.id === "string" &&
-            typeof d.balance === "number" &&
-            typeof d.originalBalance === "number" &&
-            d.originalBalance > 0
-        );
-        if (valid.length !== stored.length) {
-          // Clean up corrupted data
-          await saveDebts(valid);
+  /** Load debts from device storage whenever this tab is focused */
+  useFocusEffect(
+    useCallback(() => {
+      const loadDebts = async () => {
+        try {
+          const stored = await getDebts();
+          // Filter out any corrupted entries from earlier sessions
+          const valid = stored.filter(
+            (d) =>
+              d &&
+              typeof d.id === "string" &&
+              typeof d.balance === "number" &&
+              typeof d.originalBalance === "number" &&
+              d.originalBalance > 0
+          );
+          if (valid.length !== stored.length) {
+            // Clean up corrupted data
+            await saveDebts(valid);
+          }
+          setDebts(valid);
+        } catch (error) {
+          console.error("Failed to load debts:", error);
+          setDebts([]);
         }
-        setDebts(valid);
-      } catch (error) {
-        console.error("Failed to load debts:", error);
-        setDebts([]);
-      }
-      setIsLoading(false);
-    };
-    loadDebts();
-  }, []);
+        setIsLoading(false);
+      };
+      loadDebts();
+    }, [])
+  );
 
   /** Derived summary values */
   const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
