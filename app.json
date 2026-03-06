@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BudgetArk",
-    "slug": "BudgetArk",
+    "slug": "BudgetBuddy",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -41,7 +41,13 @@
     "runtimeVersion": "1.0.0",
     "updates": {
       "checkAutomatically": "NEVER",
+      "codeSigningCertificate": "./certs/updates-code-signing-cert.pem",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      },
       "url": "https://u.expo.dev/05d891a0-ab13-4efb-8bac-ae68032fa58e"
-    }
+    },
+    "owner": "rickeynet"
   }
 }

@@ -12,6 +12,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BUDGET_CATEGORIES } from "../types";
 
 /* ── Storage keys (must match the rest of the app) ── */
 const KEYS = {
@@ -59,12 +60,173 @@ interface ImportPayload {
   [key: string]: unknown;
 }
 
+interface SanitizedImportPayload {
+  debts: Record<string, unknown>[];
+  payments: Record<string, unknown>[];
+  budgetEntries: Record<string, unknown>[];
+  budgetLimits: Record<string, unknown>[];
+  user?: Record<string, unknown>;
+}
+
 export interface ImportResult {
   debts: number;
   payments: number;
   budgetEntries: number;
   budgetLimits: number;
 }
+
+const LIMITS = {
+  MAX_RAW_CHARS: 2_000_000,
+  MAX_COLLECTION_ITEMS: 2_000,
+  MAX_TOTAL_ITEMS: 6_000,
+  MAX_TEXT_LENGTH: 120,
+  MAX_DESCRIPTION_LENGTH: 220,
+  MAX_MONEY: 1_000_000_000,
+  MAX_RATE: 200,
+} as const;
+
+const VALID_CATEGORIES = new Set<string>(BUDGET_CATEGORIES);
+
+const isValidDateValue = (value: unknown): value is string =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value));
+
+const isSafeText = (
+  value: unknown,
+  maxLength: number = LIMITS.MAX_TEXT_LENGTH
+): value is string =>
+  typeof value === "string" && value.trim().length > 0 && value.length <= maxLength;
+
+const isSafeNumber = (
+  value: unknown,
+  { min = 0, max = LIMITS.MAX_MONEY }: { min?: number; max?: number } = {}
+): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+
+const isDebtItem = (item: unknown): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    isSafeText(item.name, 80) &&
+    isSafeNumber(item.balance) &&
+    isSafeNumber(item.originalBalance, { min: 0.01 }) &&
+    isSafeNumber(item.rate, { min: 0, max: LIMITS.MAX_RATE }) &&
+    isSafeNumber(item.minPayment) &&
+    isValidDateValue(item.createdAt)
+  );
+};
+
+const isPaymentItem = (item: unknown): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    isSafeText(item.debtId) &&
+    isSafeNumber(item.amount, { min: 0.01 }) &&
+    isValidDateValue(item.date)
+  );
+};
+
+const isBudgetEntryItem = (item: unknown): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  const typeValid = item.type === "income" || item.type === "expense";
+  const categoryValid =
+    typeof item.category === "string" && VALID_CATEGORIES.has(item.category);
+  const descriptionValid =
+    item.description === undefined ||
+    (typeof item.description === "string" &&
+      item.description.length <= LIMITS.MAX_DESCRIPTION_LENGTH);
+
+  return (
+    isSafeText(item.id) &&
+    typeValid &&
+    categoryValid &&
+    isSafeNumber(item.amount, { min: 0.01 }) &&
+    descriptionValid &&
+    isValidDateValue(item.date) &&
+    isValidDateValue(item.createdAt)
+  );
+};
+
+const isBudgetLimitItem = (item: unknown): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    typeof item.category === "string" &&
+    VALID_CATEGORIES.has(item.category) &&
+    isSafeNumber(item.monthlyLimit, { min: 0.01 })
+  );
+};
+
+const sanitizeCollection = (
+  collection: unknown[] | undefined,
+  label: string,
+  validator: (item: unknown) => item is Record<string, unknown>
+): Record<string, unknown>[] => {
+  if (!collection) return [];
+  if (!Array.isArray(collection)) {
+    throw new Error(`Invalid ${label} format. Expected an array.`);
+  }
+  if (collection.length > LIMITS.MAX_COLLECTION_ITEMS) {
+    throw new Error(
+      `Too many ${label} items. Maximum allowed is ${LIMITS.MAX_COLLECTION_ITEMS}.`
+    );
+  }
+
+  const valid = collection.filter(validator);
+  if (valid.length !== collection.length) {
+    throw new Error(`Import rejected: ${label} contains invalid records.`);
+  }
+  return valid;
+};
+
+const sanitizeUser = (user: unknown): Record<string, unknown> | undefined => {
+  if (user === undefined) return undefined;
+  if (!isObject(user)) {
+    throw new Error("Import rejected: user profile format is invalid.");
+  }
+
+  const normalized: Record<string, unknown> = {
+    id: isSafeText(user.id) ? user.id : "",
+    displayName: isSafeText(user.displayName, 40) ? user.displayName : "Buddy",
+    createdAt: isValidDateValue(user.createdAt)
+      ? user.createdAt
+      : new Date().toISOString(),
+  };
+
+  if (typeof user.onboardingComplete === "boolean") {
+    normalized.onboardingComplete = user.onboardingComplete;
+  }
+
+  if (!normalized.id) {
+    throw new Error("Import rejected: user profile is missing a valid id.");
+  }
+
+  return normalized;
+};
+
+const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
+  const debts = sanitizeCollection(data.debts, "debts", isDebtItem);
+  const payments = sanitizeCollection(data.payments, "payments", isPaymentItem);
+  const budgetEntries = sanitizeCollection(
+    data.budgetEntries,
+    "budget entries",
+    isBudgetEntryItem
+  );
+  const budgetLimits = sanitizeCollection(
+    data.budgetLimits,
+    "budget limits",
+    isBudgetLimitItem
+  );
+  const user = sanitizeUser(data.user);
+
+  const totalItems =
+    debts.length + payments.length + budgetEntries.length + budgetLimits.length;
+  if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
+    throw new Error(
+      `Import rejected: payload is too large. Maximum total records is ${LIMITS.MAX_TOTAL_ITEMS}.`
+    );
+  }
+
+  return { debts, payments, budgetEntries, budgetLimits, user };
+};
 
 /* ── Core import logic (shared by file-picker and paste paths) ── */
 
@@ -79,6 +241,12 @@ export const importFromString = async (
   raw: string,
   mode: "merge" | "replace" = "merge"
 ): Promise<ImportResult> => {
+  if (raw.length > LIMITS.MAX_RAW_CHARS) {
+    throw new Error(
+      "Import file is too large. Please use an export under 2 MB."
+    );
+  }
+
   /* 1. Parse */
   let data: unknown;
   try {
@@ -95,6 +263,8 @@ export const importFromString = async (
       "The data does not appear to be a BudgetArk export. Expected debts, payments, or budget data."
     );
   }
+
+  const sanitized = sanitizePayload(data);
 
   /* 3. Write to AsyncStorage */
   const counts: ImportResult = {
@@ -185,10 +355,14 @@ export const importFromString = async (
     return incoming.length;
   };
 
-  counts.debts = await mergeById(KEYS.DEBTS, data.debts);
-  counts.payments = await mergeById(KEYS.PAYMENTS, data.payments);
-  counts.budgetEntries = await mergeById(KEYS.BUDGET_ENTRIES, data.budgetEntries);
-  counts.budgetLimits = await mergeLimits(data.budgetLimits);
+  counts.debts = await mergeById(KEYS.DEBTS, sanitized.debts);
+  counts.payments = await mergeById(KEYS.PAYMENTS, sanitized.payments);
+  counts.budgetEntries = await mergeById(KEYS.BUDGET_ENTRIES, sanitized.budgetEntries);
+  counts.budgetLimits = await mergeLimits(sanitized.budgetLimits);
+
+  if (sanitized.user && mode === "replace") {
+    await AsyncStorage.setItem(KEYS.USER, JSON.stringify(sanitized.user));
+  }
 
   return counts;
 };

@@ -28,6 +28,8 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+!certs/
+!certs/updates-code-signing-cert.pem
 
 # environment variables (IMPORTANT)
 .env
@@ -42,3 +44,6 @@ yarn-error.*
 # generated native folders (Expo managed)
 ios/
 android/
+
+# Expo updates code signing private key (never commit)
+certs/updates-code-signing-private-key.pem
