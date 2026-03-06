@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Debt Storage Utility
+ * BudgetArk — Debt Storage Utility
  * File: src/storage/debtStorage.ts
  *
  * Handles all persistent storage operations for debt data.

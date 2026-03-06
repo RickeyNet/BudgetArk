@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — AddDebtModal Component
+ * BudgetArk — AddDebtModal Component
  * File: src/components/AddDebtModal.tsx
  *
  * A full-screen modal that presents a form for adding a new debt.

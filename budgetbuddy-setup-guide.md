@@ -1,4 +1,4 @@
-# BudgetBuddy — Development Setup Guide
+# BudgetArk — Development Setup Guide
 
 - [Windows 11 Setup](#windows-11-setup)
 - [WSL (Windows Subsystem for Linux) Setup](#wsl-setup)
@@ -93,7 +93,7 @@ This lets you preview the app live on your actual phone (with some limitations �
 
 ---
 
-### Step 6: Create the BudgetBuddy Project
+### Step 6: Create the BudgetArk Project
 
 Open PowerShell, navigate to where you want your project, and run:
 
@@ -102,10 +102,10 @@ Open PowerShell, navigate to where you want your project, and run:
 cd C:\Users\YourName\Documents
 
 # Create the project
-npx create-expo-app BudgetBuddy --template blank-typescript
+npx create-expo-app BudgetArk --template blank-typescript
 
 # Enter the project folder
-cd BudgetBuddy
+cd BudgetArk
 ```
 
 ---
@@ -354,8 +354,8 @@ Add bundle identifiers and version fields:
 ```json
 {
   "expo": {
-    "name": "BudgetBuddy",
-    "slug": "BudgetBuddy",
+    "name": "BudgetArk",
+    "slug": "BudgetArk",
     "version": "1.0.0",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -484,7 +484,7 @@ adb install 'C:\Users\<YourUser>\budgetbuddy-dev.apk'
 ANDROID_HOME=/mnt/c/Users/<YourUser>/AppData/Local/Android/Sdk npx expo start --dev-client --clear
 ```
 
-Open the BudgetBuddy app on the device/emulator. It will show a dev client screen that auto-discovers your dev server, or you can enter the URL manually.
+Open the BudgetArk app on the device/emulator. It will show a dev client screen that auto-discovers your dev server, or you can enter the URL manually.
 
 **For Android emulator:** use `http://10.0.2.2:8081` (special alias for host localhost).
 
@@ -582,7 +582,7 @@ Are you submitting to app stores?
 ## Project Folder Structure
 
 ```
-BudgetBuddy/
+BudgetArk/
 ├── App.tsx                    # Entry point — sets up navigation
 ├── app.json                   # Expo configuration (bundle IDs, splash, etc.)
 ├── babel.config.js            # Babel config with reanimated plugin

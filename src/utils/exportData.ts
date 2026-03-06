@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Data Export Utility
+ * BudgetArk — Data Export Utility
  * File: src/utils/exportData.ts
  *
  * Collects all user data from AsyncStorage and exports it
@@ -45,7 +45,7 @@ export const exportAllData = async (): Promise<void> => {
   const json = JSON.stringify(exportPayload, null, 2);
 
   await Share.share({
-    title: "BudgetArc Data Export",
+    title: "BudgetArk Data Export",
     message: json,
   });
 };

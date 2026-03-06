@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — ProgressRing Component (Static Version)
+ * BudgetArk — ProgressRing Component (Static Version)
  * File: src/components/ProgressRing.tsx
  *
  * Renders a circular progress indicator using SVG.

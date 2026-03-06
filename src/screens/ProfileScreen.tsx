@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Profile Screen
+ * BudgetArk — Profile Screen
  * File: src/screens/ProfileScreen.tsx
  *
  * Displays the anonymous user's profile and app settings.
@@ -26,6 +26,7 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
+import * as Updates from "expo-updates";
 import { UserAccount } from "../types";
 import {
   getOrCreateUser,
@@ -36,8 +37,20 @@ import {
 import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
 import { importData, importFromString } from "../utils/importData";
+import {
+  getUpdatePreferences,
+  setLastUpdateCheckAt,
+  setManualUpdateMode,
+} from "../storage/updatePreferencesStorage";
 import { useTheme } from "../theme/ThemeProvider";
-import type { ThemePreset } from "../theme/themes";
+import type { UpdatePreferences } from "../types";
+
+type UpdateMetadata = {
+  id: string;
+  message: string;
+  createdAt?: string;
+  runtimeVersion?: string;
+};
 
 const ProfileScreen: React.FC = () => {
   /** Current theme context */
@@ -73,12 +86,23 @@ const ProfileScreen: React.FC = () => {
   /** Generic themed info/alert modal (replaces all Alert.alert) */
   const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
 
+  /** OTA update preferences and status */
+  const [updatePrefs, setUpdatePrefs] = useState<UpdatePreferences>({
+    manualUpdateMode: false,
+  });
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(null);
+
   /** Load user on mount */
   useEffect(() => {
     const load = async () => {
-      const u = await getOrCreateUser();
+      const [u, prefs] = await Promise.all([
+        getOrCreateUser(),
+        getUpdatePreferences(),
+      ]);
       setUser(u);
       setEditName(u.displayName);
+      setUpdatePrefs(prefs);
     };
     load();
   }, []);
@@ -103,6 +127,113 @@ const ProfileScreen: React.FC = () => {
     },
     [setThemeId]
   );
+
+  const formatDateTime = useCallback((iso?: string) => {
+    if (!iso) return "Unknown";
+    const parsed = Date.parse(iso);
+    if (Number.isNaN(parsed)) return "Unknown";
+    return new Date(parsed).toLocaleString();
+  }, []);
+
+  const extractUpdateMetadata = useCallback((manifest: unknown): UpdateMetadata => {
+    const data = (manifest ?? {}) as any;
+    const metadata = (data.metadata ?? {}) as any;
+    const extras = (data.extra ?? {}) as any;
+
+    const id = typeof data.id === "string" ? data.id : "unknown";
+    const createdAt = typeof data.createdAt === "string" ? data.createdAt : undefined;
+    const runtimeVersion =
+      typeof data.runtimeVersion === "string" ? data.runtimeVersion : undefined;
+
+    const messageCandidates = [
+      metadata.message,
+      metadata.updateMessage,
+      extras?.eas?.message,
+      data.description,
+      data.message,
+    ];
+    const message =
+      messageCandidates.find((candidate) => typeof candidate === "string") ||
+      "A new update is ready to install.";
+
+    return { id, createdAt, runtimeVersion, message };
+  }, []);
+
+  const checkForUpdates = useCallback(
+    async (source: "auto" | "manual") => {
+      if (isCheckingUpdates) return;
+      if (!Updates.isEnabled) {
+        if (source === "manual") {
+          setInfoModal({
+            title: "Updates Unavailable",
+            message:
+              "OTA updates are not enabled in this build. Install an EAS production build to use this feature.",
+          });
+        }
+        return;
+      }
+      setIsCheckingUpdates(true);
+
+      try {
+        const checkedAt = new Date().toISOString();
+        const checkResult = await Updates.checkForUpdateAsync();
+        const prefs = await setLastUpdateCheckAt(checkedAt);
+        setUpdatePrefs(prefs);
+
+        if (!checkResult.isAvailable) {
+          if (source === "manual") {
+            setInfoModal({
+              title: "Up to Date",
+              message: `No update is currently available. Last checked ${formatDateTime(checkedAt)}.`,
+            });
+          }
+          return;
+        }
+
+        const fetchResult = await Updates.fetchUpdateAsync();
+        const manifest =
+          (fetchResult as any).manifest || (checkResult as any).manifest || null;
+        setPendingUpdate(extractUpdateMetadata(manifest));
+      } catch (error: any) {
+        if (source === "manual") {
+          setInfoModal({
+            title: "Update Check Failed",
+            message:
+              error?.message ||
+              "Unable to check for updates right now. Please try again shortly.",
+          });
+        }
+      } finally {
+        setIsCheckingUpdates(false);
+      }
+    },
+    [extractUpdateMetadata, formatDateTime, isCheckingUpdates]
+  );
+
+  const toggleManualMode = useCallback(async () => {
+    const updated = await setManualUpdateMode(!updatePrefs.manualUpdateMode);
+    setUpdatePrefs(updated);
+    setInfoModal({
+      title: "Update Mode Saved",
+      message: updated.manualUpdateMode
+        ? "Manual mode is on. The app will only check for updates when you tap Check for Updates."
+        : "Automatic update checks are enabled.",
+    });
+  }, [updatePrefs.manualUpdateMode]);
+
+  const installPendingUpdate = useCallback(async () => {
+    try {
+      setPendingUpdate(null);
+      await Updates.reloadAsync();
+    } catch (error: any) {
+      setInfoModal({
+        title: "Install Failed",
+        message:
+          error?.message ||
+          "The update could not be applied right now. Please try again.",
+      });
+    }
+  }, []);
 
   /**
    * Resets all app data after user confirmation.
@@ -334,6 +465,74 @@ const ProfileScreen: React.FC = () => {
         </View>
 
         <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>APP UPDATES</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={toggleManualMode}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Manual update mode (advanced)</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                {updatePrefs.manualUpdateMode
+                  ? "Checks happen only when requested"
+                  : "Automatic checks are enabled"}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {updatePrefs.manualUpdateMode ? "On" : "Off"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              isCheckingUpdates && { opacity: 0.7 },
+            ]}
+            onPress={() => checkForUpdates("manual")}
+            disabled={isCheckingUpdates}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Check for Updates</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>View metadata before installation</Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {isCheckingUpdates ? "..." : "->"}
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Last Checked</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                {formatDateTime(updatePrefs.lastCheckedAt)}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>OTA Integrity</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Enable Expo code signing in your EAS project settings</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
             DATA MANAGEMENT
           </Text>
@@ -416,7 +615,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            BudgetArc v1.0.1
+            BudgetArk v1.0.1
           </Text>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
             Built with React Native + Expo
@@ -740,6 +939,43 @@ const ProfileScreen: React.FC = () => {
                 Cancel
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Update Ready Modal ── */}
+      <Modal
+        visible={pendingUpdate !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPendingUpdate(null)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Update ID: {pendingUpdate?.id}</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Message: {pendingUpdate?.message}</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Published: {formatDateTime(pendingUpdate?.createdAt)}</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Runtime: {pendingUpdate?.runtimeVersion || "Unknown"}</Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setPendingUpdate(null)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>Later</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={installPendingUpdate}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>Install Now</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

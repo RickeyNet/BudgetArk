@@ -15,7 +15,7 @@ There are no lint, test, or build scripts configured. TypeScript type-checking r
 
 ## Architecture
 
-BudgetBuddy is a **React Native + Expo** mobile app for personal finance (debt tracking, budgeting, investment projections). It is fully offline-first — no backend, no authentication, no external API. All data lives on-device via AsyncStorage.
+BudgetArk is a **React Native + Expo** mobile app for personal finance (debt tracking, budgeting, investment projections). It is fully offline-first — no backend, no authentication, no external API. All data lives on-device via AsyncStorage.
 
 ### Tech Stack
 - **React Native 0.81.5** with **Expo 54** (New Architecture enabled)
