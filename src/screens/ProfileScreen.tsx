@@ -585,6 +585,34 @@ const ProfileScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>HOW TO DOCS</Text>
+
+          <View
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Export your data</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Data Management {">"} Export My Data, then save or share the JSON backup.</Text>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Import your data</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Data Management {">"} Import My Data, then choose Pick File or Paste Text.</Text>
+            </View>
+          </View>
+        </View>
+
         {/* ── What's New ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>

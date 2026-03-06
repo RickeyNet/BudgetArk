@@ -23,6 +23,7 @@
 import React from "react";
 import { Text, StyleSheet } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RootTabParamList } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -61,7 +62,8 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
 
 const AppNavigator: React.FC = () => {
   const { colors } = useTheme();
-  const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = React.useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
 
   return (
     <Tab.Navigator
@@ -100,15 +102,15 @@ const AppNavigator: React.FC = () => {
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
+const makeStyles = (colors: ThemeColors, bottomInset: number) =>
   StyleSheet.create({
     tabBar: {
       backgroundColor: `${colors.card}ee`,
       borderTopColor: colors.cardBorder,
       borderTopWidth: 1,
-      height: 70,
+      height: 58 + bottomInset,
       paddingTop: 8,
-      paddingBottom: 12,
+      paddingBottom: Math.max(8, bottomInset),
       position: "absolute",
       elevation: 0,
     },
