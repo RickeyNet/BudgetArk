@@ -92,6 +92,7 @@ const ProfileScreen: React.FC = () => {
   });
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(null);
+  const canCheckUpdates = !__DEV__ && Updates.isEnabled;
 
   /** Load user on mount */
   useEffect(() => {
@@ -162,12 +163,12 @@ const ProfileScreen: React.FC = () => {
   const checkForUpdates = useCallback(
     async (source: "auto" | "manual") => {
       if (isCheckingUpdates) return;
-      if (!Updates.isEnabled) {
+      if (!canCheckUpdates) {
         if (source === "manual") {
           setInfoModal({
             title: "Updates Unavailable",
             message:
-              "OTA updates are not enabled in this build. Install an EAS production build to use this feature.",
+              "Update checks are unavailable in development builds. Install an EAS preview/production build to use this feature.",
           });
         }
         return;
@@ -207,7 +208,7 @@ const ProfileScreen: React.FC = () => {
         setIsCheckingUpdates(false);
       }
     },
-    [extractUpdateMetadata, formatDateTime, isCheckingUpdates]
+    [canCheckUpdates, extractUpdateMetadata, formatDateTime, isCheckingUpdates]
   );
 
   const toggleManualMode = useCallback(async () => {

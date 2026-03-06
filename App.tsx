@@ -48,6 +48,7 @@ const AppContent: React.FC = () => {
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const canCheckUpdates = !__DEV__ && Updates.isEnabled;
 
   /** Check onboarding status on mount */
   useEffect(() => {
@@ -99,7 +100,7 @@ const AppContent: React.FC = () => {
   }, []);
 
   const runAutoUpdateCheck = useCallback(async () => {
-    if (isCheckingUpdates || !Updates.isEnabled || isOnboardingComplete !== true) return;
+    if (isCheckingUpdates || !canCheckUpdates || isOnboardingComplete !== true) return;
     setIsCheckingUpdates(true);
 
     try {
@@ -120,14 +121,17 @@ const AppContent: React.FC = () => {
       const manifest = (fetchResult as any).manifest || (checkResult as any).manifest || null;
       setPendingUpdate(extractUpdatePrompt(manifest));
     } catch (error) {
-      console.error("Auto update check failed:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("not supported in development builds")) {
+        console.error("Auto update check failed:", error);
+      }
     } finally {
       setIsCheckingUpdates(false);
     }
-  }, [extractUpdatePrompt, isCheckingUpdates, isOnboardingComplete]);
+  }, [canCheckUpdates, extractUpdatePrompt, isCheckingUpdates, isOnboardingComplete]);
 
   useEffect(() => {
-    if (isOnboardingComplete !== true) return;
+    if (isOnboardingComplete !== true || !canCheckUpdates) return;
 
     void runAutoUpdateCheck();
     const subscription = AppState.addEventListener("change", (state) => {
@@ -139,7 +143,7 @@ const AppContent: React.FC = () => {
     return () => {
       subscription.remove();
     };
-  }, [isOnboardingComplete, runAutoUpdateCheck]);
+  }, [canCheckUpdates, isOnboardingComplete, runAutoUpdateCheck]);
 
   const handleInstallUpdate = useCallback(async () => {
     try {
