@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   StatusBar,
   StyleSheet,
+  Modal,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
@@ -39,6 +40,7 @@ const DebtTrackerScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
 
   const { colors } = useTheme();
 
@@ -113,12 +115,20 @@ const DebtTrackerScreen: React.FC = () => {
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
+    const target = debts.find((d) => d.id === debtId) ?? null;
+    setPendingDeleteDebt(target);
+  }, [debts]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDeleteDebt) return;
+    const debtId = pendingDeleteDebt.id;
     setDebts((prev) => {
       const updated = prev.filter((d) => d.id !== debtId);
       saveDebts(updated);
       return updated;
     });
-  }, []);
+    setPendingDeleteDebt(null);
+  }, [pendingDeleteDebt]);
 
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
@@ -216,6 +226,36 @@ const DebtTrackerScreen: React.FC = () => {
         onClose={() => setShowModal(false)}
         onAdd={handleAddDebt}
       />
+
+      <Modal
+        visible={pendingDeleteDebt !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPendingDeleteDebt(null)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialogBox}>
+            <Text style={styles.dialogTitle}>Delete Debt</Text>
+            <Text style={styles.dialogMessage}>
+              Delete {pendingDeleteDebt?.name}? This cannot be undone.
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogButton, styles.dialogCancelButton]}
+                onPress={() => setPendingDeleteDebt(null)}
+              >
+                <Text style={styles.dialogCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogButton, styles.dialogDeleteButton]}
+                onPress={confirmDelete}
+              >
+                <Text style={styles.dialogDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -269,6 +309,60 @@ const makeStyles = (colors: ThemeColors) =>
   emptyEmoji: { fontSize: 40, marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: "600", color: colors.text, marginBottom: 4 },
   emptySub: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
+
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+  },
+  dialogBox: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 20,
+    padding: 24,
+    backgroundColor: colors.card,
+  },
+  dialogTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  dialogMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textDim,
+    textAlign: "center",
+    marginBottom: 18,
+  },
+  dialogActions: {
+    gap: 10,
+  },
+  dialogButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  dialogCancelButton: {
+    backgroundColor: colors.bg,
+  },
+  dialogDeleteButton: {
+    backgroundColor: colors.danger,
+  },
+  dialogCancelText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  dialogDeleteText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
 });
 
 export default DebtTrackerScreen;
