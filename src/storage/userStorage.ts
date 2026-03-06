@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — User Storage Utility
+ * BudgetArk — User Storage Utility
  * File: src/storage/userStorage.ts
  *
  * Manages anonymous user accounts.

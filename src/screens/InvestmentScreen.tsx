@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Investment Screen
+ * BudgetArk — Investment Screen
  * File: src/screens/InvestmentScreen.tsx
  *
  * Interactive investment growth calculator with:

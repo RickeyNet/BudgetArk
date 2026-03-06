@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Debt Tracker Screen
+ * BudgetArk — Debt Tracker Screen
  * File: src/screens/DebtTrackerScreen.tsx
  *
  * The primary screen of the app. Displays:

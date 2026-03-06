@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Data Import Utility
+ * BudgetArk — Data Import Utility
  * File: src/utils/importData.ts
  *
  * Two import paths:
@@ -29,7 +29,7 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
- * Validates that the parsed JSON looks like a BudgetBuddy export.
+ * Validates that the parsed JSON looks like a BudgetArk export.
  * We intentionally keep this loose — we check top-level keys and that
  * arrays are arrays, but we don't deep-validate every field so that
  * older/newer export versions still work.
@@ -85,14 +85,14 @@ export const importFromString = async (
     data = JSON.parse(raw);
   } catch {
     throw new Error(
-      "The text is not valid JSON. Please paste a BudgetArc export."
+      "The text is not valid JSON. Please paste a BudgetArk export."
     );
   }
 
   /* 2. Validate structure */
   if (!validatePayload(data)) {
     throw new Error(
-      "The data does not appear to be a BudgetArc export. Expected debts, payments, or budget data."
+      "The data does not appear to be a BudgetArk export. Expected debts, payments, or budget data."
     );
   }
 

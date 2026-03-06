@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Financial Calculations
+ * BudgetArk — Financial Calculations
  * File: src/utils/calculations.ts
  *
  * Pure math functions for debt payoff and investment projections.

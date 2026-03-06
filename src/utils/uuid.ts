@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — UUID Utility
+ * BudgetArk — UUID Utility
  * File: src/utils/uuid.ts
  *
  * Pure JavaScript UUID v4 generator.

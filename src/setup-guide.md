@@ -1,4 +1,4 @@
-# BudgetBuddy — Windows 11 Development Setup Guide
+# BudgetArk — Windows 11 Development Setup Guide
 
 ## Prerequisites & Installation (in order)
 
@@ -80,7 +80,7 @@ This lets you preview the app live on your actual phone.
 
 ---
 
-### Step 6: Create the BudgetBuddy Project
+### Step 6: Create the BudgetArk Project
 
 Open PowerShell, navigate to where you want your project, and run:
 
@@ -89,10 +89,10 @@ Open PowerShell, navigate to where you want your project, and run:
 cd C:\Users\YourName\Documents
 
 # Create the project
-npx create-expo-app BudgetBuddy --template blank-typescript
+npx create-expo-app BudgetArk --template blank-typescript
 
 # Enter the project folder
-cd BudgetBuddy
+cd BudgetArk
 ```
 
 ---
@@ -171,7 +171,7 @@ If you want to test without a physical phone:
 ## Project Folder Structure (what we'll build)
 
 ```
-BudgetBuddy/
+BudgetArk/
 ├── App.tsx                    # Entry point — sets up navigation
 ├── babel.config.js            # Babel config with reanimated plugin
 ├── src/

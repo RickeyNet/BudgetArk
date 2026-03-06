@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Theme Provider
+ * BudgetArk — Theme Provider
  * File: src/theme/ThemeProvider.tsx
  *
  * Provides runtime theme selection + persistence.

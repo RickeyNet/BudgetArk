@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — DebtCard Component
+ * BudgetArk — DebtCard Component
  * File: src/components/DebtCard.tsx
  *
  * Displays a single debt entry as an interactive card.

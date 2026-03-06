@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Type Definitions
+ * BudgetArk — Type Definitions
  * File: src/types/index.ts
  *
  * Central type definitions for the entire app.
@@ -125,6 +125,14 @@ export interface UserAccount {
 
   /** Whether the user has completed the onboarding flow */
   onboardingComplete: boolean;
+}
+
+export interface UpdatePreferences {
+  /** When true, update checks happen only when the user requests them. */
+  manualUpdateMode: boolean;
+
+  /** ISO timestamp of the most recent OTA check. */
+  lastCheckedAt?: string;
 }
 
 /* ─── Navigation Types ─── */

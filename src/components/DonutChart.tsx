@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — DonutChart Component
+ * BudgetArk — DonutChart Component
  * File: src/components/DonutChart.tsx
  *
  * Simple SVG-based donut chart that works in Expo Go.

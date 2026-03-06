@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Theme Constants
+ * BudgetArk — Theme Constants
  * File: src/theme/colors.ts
  *
  * Single source of truth for all colors used throughout the app.

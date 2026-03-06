@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — Smooth Slider Component
+ * BudgetArk — Smooth Slider Component
  * File: src/components/SmoothSlider.tsx
  *
  * A performant slider built on react-native-gesture-handler (Pan gesture)

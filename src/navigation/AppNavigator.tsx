@@ -1,5 +1,5 @@
 /**
- * BudgetBuddy — App Navigator
+ * BudgetArk — App Navigator
  * File: src/navigation/AppNavigator.tsx
  *
  * Sets up the bottom tab navigation for the app.
