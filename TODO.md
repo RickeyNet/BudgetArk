@@ -77,24 +77,117 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ## Google Play Submission
 
+### 1. Developer Account
 - [ ] Create a Google Play Developer account ($25 one-time fee) at https://play.google.com/console
-- [ ] Create a new app in Play Console
-- [ ] Prepare store listing assets:
-  - [ ] Short description (80 characters max)
-  - [ ] Full description (4,000 characters max)
-  - [ ] Screenshots (at least 2, phone screenshots required)
-  - [ ] Feature graphic (1024×500px banner)
-  - [ ] Hi-res icon (512×512px)
-- [ ] Complete the Data Safety form (answers: no data collected, no data shared)
-- [ ] Submit via `eas submit --platform android`
+
+### 2. Build Production AAB
+- [ ] Run `eas build --platform android --profile production`
+- [ ] Download the `.aab` file from EAS when the build finishes
+
+### 3. Prepare Store Assets
+- [ ] App icon: 512×512 PNG
+- [ ] Feature graphic: 1024×500 PNG
+- [ ] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
+- [ ] Short description (80 characters max)
+- [ ] Full description (4,000 characters max)
+- [ ] Privacy policy URL (required — host on GitHub Pages for free, state no data leaves the device)
+
+### 4. App Content Questionnaire (in Play Console)
+- [ ] Complete content rating (IARC questionnaire — should be "Everyone")
+- [ ] Set target audience / age group
+- [ ] Complete Data Safety form (no data collected, no data shared, all data stays on device)
+- [ ] Ads declaration (no ads)
+
+### 5. Create App & Upload
+- [ ] Go to Play Console > Create app
+- [ ] Fill in app name, default language, app/game, free/paid
+- [ ] Complete all Setup checklist items
+- [ ] Go to Production > Create new release
+- [ ] Upload the `.aab` file
+- [ ] Add release notes
+- [ ] Review and roll out
+
+### 6. Wait for Review
+- [ ] Google review typically takes a few hours to a few days for first submission
+- [ ] Note: `android.package` is `com.budgetark.app` — this is your permanent Play Store identity
+- [ ] Google Play App Signing manages your keys by default — no risk of losing your keystore
+
+---
+
+## F-Droid Submission
+
+F-Droid is a free, open-source Android app store. Apps must be open source and built from source by F-Droid's servers.
+
+### 1. Prerequisites
+- [ ] Make your GitHub repo public (F-Droid requires open source code)
+- [ ] Add an open-source license to the repo (e.g., GPL-3.0, MIT, Apache-2.0) — add a `LICENSE` file
+- [ ] Remove any proprietary dependencies if possible (F-Droid prefers fully free software)
+  - Note: `expo-updates` and EAS-related code may need to be optional since F-Droid builds won't use EAS
+- [ ] Ensure the app can build with standard open-source tooling (Gradle)
+
+### 2. Prepare the Build
+- [ ] Run `npx expo prebuild` to generate the native `android/` folder
+- [ ] Verify the app builds locally: `cd android && ./gradlew assembleRelease`
+- [ ] Make sure `android/` is committed to the repo (F-Droid builds from source)
+- [ ] Tag your release in git (e.g., `git tag v1.0.0`) — F-Droid uses tags to detect new versions
+
+### 3. Create F-Droid Metadata
+- [ ] Fork the F-Droid Data repo: https://gitlab.com/fdroid/fdroiddata
+- [ ] Create metadata file at `metadata/com.budgetark.app.yml` with:
+  - App name, summary, description
+  - License type
+  - Source code URL (your GitHub repo)
+  - Build instructions (Gradle commands)
+  - Auto-update mode (git tags)
+- [ ] Example metadata structure:
+  ```yaml
+  Categories:
+    - Money
+  License: MIT
+  AuthorName: RickeyNet
+  SourceCode: https://github.com/RickeyNet/BudgetArk
+  IssueTracker: https://github.com/RickeyNet/BudgetArk/issues
+
+  AutoName: BudgetArk
+  Description: |
+    Offline-first personal finance app for debt tracking, budgeting,
+    and investment projections. All data stays on your device.
+
+  RepoType: git
+  Repo: https://github.com/RickeyNet/BudgetArk.git
+
+  Builds:
+    - versionName: 1.0.0
+      versionCode: 1
+      commit: v1.0.0
+      subdir: android/app
+      gradle:
+        - release
+
+  AutoUpdateMode: Version
+  UpdateCheckMode: Tags
+  CurrentVersion: 1.0.0
+  CurrentVersionCode: 1
+  ```
+
+### 4. Submit
+- [ ] Submit a merge request to the fdroiddata repo with your metadata file
+- [ ] F-Droid team reviews the app (can take weeks to months for first submission)
+- [ ] They will build the app from source on their servers and sign it with their key
+
+### 5. Things to Know
+- [ ] F-Droid signs the APK with their own key — it will NOT be the same signature as your Play Store/EAS builds
+- [ ] Users cannot switch between Play Store and F-Droid versions without reinstalling
+- [ ] Updates go through F-Droid's build cycle — not instant like EAS OTA
+- [ ] No analytics, tracking, or proprietary push services allowed (BudgetArk should be fine since it's fully offline)
 
 ---
 
 ## Nice-to-Have (Post-Launch)
 
 - [ ] Payment history screen — the data is already being recorded, just needs a UI
-- [ ] Edit existing debts (currently debts can only be added or deleted, not edited)
-- [ ] Debt payoff order strategies (avalanche vs. snowball method)
+- [x] Edit existing debts (currently debts can only be added or deleted, not edited)
+- [x] Debt payoff order strategies (avalanche vs. snowball method)
 - [ ] Push notifications for payment reminders (requires `expo-notifications`)
 - [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)

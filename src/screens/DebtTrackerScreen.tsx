@@ -28,7 +28,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import { Debt, NewDebtInput } from "../types";
 import { formatCurrency } from "../utils/calculations";
-import { getDebts, saveDebts, recordPayment } from "../storage/debtStorage";
+import { getDebts, saveDebts, recordPayment, updateDebt } from "../storage/debtStorage";
 import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
@@ -36,11 +36,15 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 
 
+type PayoffStrategy = "custom" | "avalanche" | "snowball";
+
 const DebtTrackerScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
+  const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
 
   const { colors } = useTheme();
 
@@ -113,6 +117,22 @@ const DebtTrackerScreen: React.FC = () => {
     });
   }, []);
 
+  /** Open edit modal for a debt */
+  const handleEdit = useCallback((debt: Debt) => {
+    setEditingDebt(debt);
+    setShowModal(true);
+  }, []);
+
+  /** Save edits to an existing debt */
+  const handleSaveEdit = useCallback(async (debtId: string, updates: Partial<Debt>) => {
+    const updated = await updateDebt(debtId, updates);
+    if (updated) {
+      setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, ...updates } : d)));
+    }
+    setShowModal(false);
+    setEditingDebt(null);
+  }, []);
+
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
     const target = debts.find((d) => d.id === debtId) ?? null;
@@ -130,13 +150,25 @@ const DebtTrackerScreen: React.FC = () => {
     setPendingDeleteDebt(null);
   }, [pendingDeleteDebt]);
 
+  /** Sort debts based on payoff strategy */
+  const sortedDebts = React.useMemo(() => {
+    const active = debts.filter((d) => d.balance > 0);
+    const paidOff = debts.filter((d) => d.balance <= 0);
+    if (strategy === "avalanche") {
+      active.sort((a, b) => b.rate - a.rate);
+    } else if (strategy === "snowball") {
+      active.sort((a, b) => a.balance - b.balance);
+    }
+    return [...active, ...paidOff];
+  }, [debts, strategy]);
+
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
   const renderDebtCard = useCallback(
     ({ item }: { item: Debt }) => (
-      <DebtCard debt={item} onPayment={handlePayment} onDelete={handleDelete} />
+      <DebtCard debt={item} onPayment={handlePayment} onDelete={handleDelete} onEdit={handleEdit} />
     ),
-    [handlePayment, handleDelete]
+    [handlePayment, handleDelete, handleEdit]
   );
 
   /** Summary + section header rendered above the debt list */
@@ -195,6 +227,45 @@ const DebtTrackerScreen: React.FC = () => {
           <Text style={styles.addBtnText}>+ Add Debt</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Payoff Strategy Picker */}
+      {debts.filter((d) => d.balance > 0).length > 1 && (
+        <View style={styles.strategyRow}>
+          <Text style={styles.strategyLabel}>PAYOFF ORDER</Text>
+          <View style={styles.strategyButtons}>
+            {([
+              ["custom", "Custom"],
+              ["avalanche", "Avalanche"],
+              ["snowball", "Snowball"],
+            ] as const).map(([key, label]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.strategyButton,
+                  strategy === key && styles.strategyButtonActive,
+                ]}
+                onPress={() => setStrategy(key)}
+              >
+                <Text
+                  style={[
+                    styles.strategyButtonText,
+                    strategy === key && styles.strategyButtonTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.strategyHint}>
+            {strategy === "avalanche"
+              ? "Highest interest rate first — saves the most money"
+              : strategy === "snowball"
+              ? "Smallest balance first — quick wins for motivation"
+              : "Your original order"}
+          </Text>
+        </View>
+      )}
     </View>
   );
 
@@ -213,7 +284,7 @@ const DebtTrackerScreen: React.FC = () => {
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <FlatList
-        data={debts}
+        data={sortedDebts}
         keyExtractor={keyExtractor}
         renderItem={renderDebtCard}
         ListHeaderComponent={listHeader}
@@ -223,8 +294,10 @@ const DebtTrackerScreen: React.FC = () => {
       />
       <AddDebtModal
         visible={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setEditingDebt(null); }}
         onAdd={handleAddDebt}
+        editDebt={editingDebt}
+        onEdit={handleSaveEdit}
       />
 
       <Modal
@@ -304,6 +377,46 @@ const makeStyles = (colors: ThemeColors) =>
     elevation: 4,
   },
   addBtnText: { color: "#000000", fontSize: 13, fontWeight: "600" },
+
+  strategyRow: {
+    marginBottom: 14,
+  },
+  strategyLabel: {
+    fontSize: 11,
+    color: colors.textDim,
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  strategyButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  strategyButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    alignItems: "center",
+    backgroundColor: colors.card,
+  },
+  strategyButtonActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  strategyButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textDim,
+  },
+  strategyButtonTextActive: {
+    color: "#000000",
+  },
+  strategyHint: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 6,
+  },
 
   emptyWrap: { alignItems: "center", paddingVertical: 48 },
   emptyEmoji: { fontSize: 40, marginBottom: 12 },

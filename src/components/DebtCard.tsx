@@ -26,7 +26,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Debt } from "../types";
-import { calcMonthsToPayoff, formatCurrency } from "../utils/calculations";
+import { calcMonthsToPayoff, calcMonthsUntilDate, calcPaymentForGoalDate, formatCurrency } from "../utils/calculations";
 import ProgressRing from "./ProgressRing";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -41,10 +41,13 @@ interface DebtCardProps {
 
   /** Callback when user deletes this debt — receives debtId */
   onDelete: (debtId: string) => void;
+
+  /** Callback when user wants to edit this debt */
+  onEdit: (debt: Debt) => void;
 }
 
 /* ─── Component ─── */
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
 
@@ -65,6 +68,16 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete }) => {
     debt.rate,
     debt.minPayment
   );
+
+  /** Goal date calculations */
+  const goalInfo = React.useMemo(() => {
+    if (!debt.goalDate || debt.balance <= 0) return null;
+    const monthsUntilGoal = calcMonthsUntilDate(debt.goalDate);
+    if (monthsUntilGoal <= 0) return { expired: true, monthsUntilGoal: 0, requiredPayment: 0 };
+    const requiredPayment = calcPaymentForGoalDate(debt.balance, debt.rate, monthsUntilGoal);
+    const onTrack = monthsLeft <= monthsUntilGoal;
+    return { expired: false, monthsUntilGoal, requiredPayment, onTrack };
+  }, [debt.goalDate, debt.balance, debt.rate, monthsLeft]);
 
   /** Color coding based on progress */
   const ringColor =
@@ -158,6 +171,28 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete }) => {
         />
       </View>
 
+      {/* ── Goal Date Info ── */}
+      {goalInfo && (
+        <View style={[styles.goalRow, { backgroundColor: goalInfo.expired ? (colors.dangerDim || "#ff525220") : goalInfo.onTrack ? colors.successDim : `${colors.accent}20` }]}>
+          {goalInfo.expired ? (
+            <Text style={[styles.goalText, { color: colors.danger || "#ff5252" }]}>
+              Goal date has passed
+            </Text>
+          ) : (
+            <>
+              <Text style={[styles.goalText, { color: goalInfo.onTrack ? colors.success : colors.accent }]}>
+                Goal: {new Date(debt.goalDate!).toLocaleDateString()} ({goalInfo.monthsUntilGoal} mo left)
+              </Text>
+              {isFinite(goalInfo.requiredPayment) && (
+                <Text style={[styles.goalText, { color: goalInfo.onTrack ? colors.success : colors.accent }]}>
+                  {goalInfo.onTrack ? "On track" : `Need ${formatCurrency(goalInfo.requiredPayment)}/mo`}
+                </Text>
+              )}
+            </>
+          )}
+        </View>
+      )}
+
       {/* ── Footer: Timeline + Action Buttons ── */}
       <View style={styles.footerRow}>
         <Text style={styles.timelineText}>
@@ -173,6 +208,15 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete }) => {
           >
             <Text style={[styles.payButtonText, { color: "#000000" }]}>
               Pay
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.editButton, { backgroundColor: `${colors.accent}20` }]}
+            onPress={() => onEdit(debt)}
+          >
+            <Text style={[styles.editButtonText, { color: colors.accent }]}>
+              Edit
             </Text>
           </TouchableOpacity>
 
@@ -318,6 +362,20 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: 3,
     },
 
+    /* Goal */
+    goalRow: {
+      borderRadius: 10,
+      padding: 10,
+      marginTop: 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    goalText: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+
     /* Footer */
     footerRow: {
       flexDirection: "row",
@@ -339,6 +397,15 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 6,
     },
     payButtonText: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    editButton: {
+      borderRadius: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+    },
+    editButtonText: {
       fontSize: 12,
       fontWeight: "600",
     },

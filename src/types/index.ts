@@ -37,6 +37,9 @@ export interface Debt {
 
   /** ISO timestamp of when this debt was created */
   createdAt: string;
+
+  /** Optional ISO date string for payoff goal date */
+  goalDate?: string;
 }
 
 /**

@@ -614,21 +614,27 @@ const ProfileScreen: React.FC = () => {
           <View style={[styles.newsCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <View style={styles.newsItem}>
               <View style={[styles.newsBadge, { backgroundColor: `${colors.accent}20` }]}>
-                <Text style={[styles.newsBadgeText, { color: colors.accent }]}>v1.0.0</Text>
+                <Text style={[styles.newsBadgeText, { color: colors.accent }]}>v1.0.1</Text>
               </View>
-              <Text style={[styles.newsTitle, { color: colors.text }]}>Initial Release</Text>
+              <Text style={[styles.newsTitle, { color: colors.text }]}>Debt Payoff Tools</Text>
               <Text style={[styles.newsBody, { color: colors.textDim }]}>
-                Debt tracking, budget management, investment projections, and multiple themes. More features coming soon.
+                Edit existing debts — tap the Edit button on any debt card to update name, balance, APR, or minimum payment.
+              </Text>
+              <Text style={[styles.newsBody, { color: colors.textDim, marginTop: 4 }]}>
+                Payoff strategies — choose Avalanche (highest rate first) or Snowball (smallest balance first) to prioritize your debts.
+              </Text>
+              <Text style={[styles.newsBody, { color: colors.textDim, marginTop: 4 }]}>
+                Goal dates — set a target payoff date on any debt and see exactly how much you need to pay each month to hit it.
               </Text>
             </View>
             <View style={[styles.newsDivider, { backgroundColor: colors.cardBorder }]} />
             <View style={styles.newsItem}>
               <View style={[styles.newsBadge, { backgroundColor: `${colors.teal}20` }]}>
-                <Text style={[styles.newsBadgeText, { color: colors.teal }]}>Coming</Text>
+                <Text style={[styles.newsBadgeText, { color: colors.teal }]}>v1.0.0</Text>
               </View>
-              <Text style={[styles.newsTitle, { color: colors.text }]}>Up Next</Text>
+              <Text style={[styles.newsTitle, { color: colors.text }]}>Initial Release</Text>
               <Text style={[styles.newsBody, { color: colors.textDim }]}>
-                More to come — stay tuned.
+                Debt tracking, budget management, investment projections, and multiple themes.
               </Text>
             </View>
           </View>

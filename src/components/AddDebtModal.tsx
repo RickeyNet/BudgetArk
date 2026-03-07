@@ -29,7 +29,8 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { NewDebtInput } from "../types";
+import { Debt, NewDebtInput } from "../types";
+import { calcPaymentForGoalDate, calcMonthsUntilDate, formatCurrency } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 
@@ -43,6 +44,12 @@ interface AddDebtModalProps {
 
   /** Callback when user submits a valid debt — receives the form data */
   onAdd: (debt: NewDebtInput) => void;
+
+  /** Optional existing debt to edit — when set, modal acts as an editor */
+  editDebt?: Debt | null;
+
+  /** Callback when user saves edits to an existing debt */
+  onEdit?: (debtId: string, updates: Partial<Debt>) => void;
 }
 
 /* ─── Component ─── */
@@ -50,6 +57,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   visible,
   onClose,
   onAdd,
+  editDebt,
+  onEdit,
 }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
@@ -57,16 +66,48 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   /** Memoized styles */
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
+  const isEditing = !!editDebt;
+
   /** Form field state */
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
   const [rate, setRate] = useState("");
   const [minPayment, setMinPayment] = useState("");
+  const [goalDate, setGoalDate] = useState("");
+
+  /** Pre-fill form when editing */
+  React.useEffect(() => {
+    if (editDebt) {
+      setName(editDebt.name);
+      setBalance(String(editDebt.balance));
+      setRate(String(editDebt.rate));
+      setMinPayment(String(editDebt.minPayment));
+      setGoalDate(editDebt.goalDate ?? "");
+    } else {
+      setName("");
+      setBalance("");
+      setRate("");
+      setMinPayment("");
+      setGoalDate("");
+    }
+  }, [editDebt]);
+
+  /** Calculate required payment for goal date */
+  const goalPaymentInfo = React.useMemo(() => {
+    if (!goalDate) return null;
+    const balanceNum = parseFloat(balance);
+    const rateNum = parseFloat(rate);
+    if (isNaN(balanceNum) || balanceNum <= 0 || isNaN(rateNum) || rateNum < 0) return null;
+    const months = calcMonthsUntilDate(goalDate);
+    if (months <= 0) return null;
+    const required = calcPaymentForGoalDate(balanceNum, rateNum, months);
+    return { months, required };
+  }, [goalDate, balance, rate]);
 
   /**
    * Validates and submits the form.
    * Parses string inputs to numbers, checks all are valid,
-   * then calls onAdd and resets the form.
+   * then calls onAdd/onEdit and resets the form.
    */
   const handleSubmit = useCallback(() => {
     const balanceNum = parseFloat(balance);
@@ -79,20 +120,34 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     if (isNaN(rateNum) || rateNum < 0) return;
     if (isNaN(paymentNum) || paymentNum <= 0) return;
 
-    onAdd({
-      name: name.trim(),
-      balance: balanceNum,
-      originalBalance: balanceNum,
-      rate: rateNum,
-      minPayment: paymentNum,
-    });
+    const parsedGoalDate = goalDate.trim() || undefined;
+
+    if (isEditing && onEdit && editDebt) {
+      onEdit(editDebt.id, {
+        name: name.trim(),
+        balance: balanceNum,
+        rate: rateNum,
+        minPayment: paymentNum,
+        goalDate: parsedGoalDate,
+      });
+    } else {
+      onAdd({
+        name: name.trim(),
+        balance: balanceNum,
+        originalBalance: balanceNum,
+        rate: rateNum,
+        minPayment: paymentNum,
+        goalDate: parsedGoalDate,
+      });
+    }
 
     /* Reset form fields */
     setName("");
     setBalance("");
     setRate("");
     setMinPayment("");
-  }, [name, balance, rate, minPayment, onAdd]);
+    setGoalDate("");
+  }, [name, balance, rate, minPayment, goalDate, onAdd, isEditing, onEdit, editDebt]);
 
   /** Check if form is valid (for button state) */
   const isValid =
@@ -121,9 +176,11 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
             keyboardShouldPersistTaps="handled"
           >
             {/* ── Header ── */}
-            <Text style={styles.title}>Add New Debt</Text>
+            <Text style={styles.title}>{isEditing ? "Edit Debt" : "Add New Debt"}</Text>
             <Text style={styles.subtitle}>
-              Enter the details of the debt you want to track
+              {isEditing
+                ? "Update the details of this debt"
+                : "Enter the details of the debt you want to track"}
             </Text>
 
             {/* ── Form Fields ── */}
@@ -181,6 +238,29 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                   />
                 </View>
               </View>
+
+              {/* Goal Date (optional) */}
+              <View style={styles.field}>
+                <Text style={styles.label}>PAYOFF GOAL DATE (OPTIONAL)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.textMuted}
+                  value={goalDate}
+                  onChangeText={setGoalDate}
+                  maxLength={10}
+                />
+                {goalPaymentInfo && isFinite(goalPaymentInfo.required) && (
+                  <Text style={[styles.goalHint, { color: colors.accent }]}>
+                    Pay {formatCurrency(goalPaymentInfo.required)}/mo to be debt-free in {goalPaymentInfo.months} months
+                  </Text>
+                )}
+                {goalPaymentInfo && !isFinite(goalPaymentInfo.required) && (
+                  <Text style={[styles.goalHint, { color: colors.danger || "#ff5252" }]}>
+                    Goal date is too soon — not achievable
+                  </Text>
+                )}
+              </View>
             </View>
           </ScrollView>
 
@@ -201,7 +281,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               onPress={handleSubmit}
               disabled={!isValid}
             >
-              <Text style={styles.addButtonText}>Add Debt</Text>
+              <Text style={styles.addButtonText}>{isEditing ? "Save Changes" : "Add Debt"}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -277,6 +357,11 @@ const makeStyles = (colors: ThemeColors) =>
     row: {
       flexDirection: "row",
       gap: 12,
+    },
+    goalHint: {
+      fontSize: 12,
+      fontWeight: "600",
+      marginTop: 6,
     },
 
     /* Buttons — outside ScrollView so they stay above keyboard */

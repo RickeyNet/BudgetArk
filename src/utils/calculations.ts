@@ -176,6 +176,51 @@ export const calcInvestmentTimeline = (
 };
 
 /**
+ * Calculates the required monthly payment to pay off a debt by a target date.
+ *
+ * Uses the annuity payment formula:
+ *   P = B * r / (1 - (1 + r)^(-n))
+ * where B = balance, r = monthly rate, n = months remaining
+ *
+ * @param balance — current remaining balance ($)
+ * @param annualRate — APR as a percentage (e.g. 19.9 for 19.9%)
+ * @param monthsRemaining — number of months until goal date
+ * @returns required monthly payment in dollars, or Infinity if impossible
+ */
+export const calcPaymentForGoalDate = (
+  balance: number,
+  annualRate: number,
+  monthsRemaining: number
+): number => {
+  if (balance <= 0) return 0;
+  if (monthsRemaining <= 0) return Infinity;
+
+  const monthlyRate = annualRate / 100 / 12;
+
+  if (monthlyRate === 0) return balance / monthsRemaining;
+
+  const payment =
+    (balance * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -monthsRemaining));
+
+  return isFinite(payment) && payment > 0 ? payment : Infinity;
+};
+
+/**
+ * Calculates the number of months between now and a target date.
+ *
+ * @param goalDateISO — ISO date string for the target date
+ * @returns number of months remaining (minimum 0)
+ */
+export const calcMonthsUntilDate = (goalDateISO: string): number => {
+  const now = new Date();
+  const goal = new Date(goalDateISO);
+  const months =
+    (goal.getFullYear() - now.getFullYear()) * 12 +
+    (goal.getMonth() - now.getMonth());
+  return Math.max(0, months);
+};
+
+/**
  * Formats a number as a USD currency string.
  * Uses manual formatting for speed (avoids Intl.NumberFormat overhead).
  *
