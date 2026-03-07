@@ -48,13 +48,38 @@ type ExpenseCategoryRow = {
   entries: ExpenseCategoryEntry[];
 };
 
-const isSameMonth = (dateISO: string, now: Date): boolean => {
-  const date = new Date(dateISO);
-  return (
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear()
-  );
+const getMonthKey = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${date.getFullYear()}-${month}`;
 };
+
+const getMonthDateFromKey = (monthKey: string): Date =>
+  new Date(`${monthKey}-01T00:00:00`);
+
+const formatMonthLabel = (monthKey: string): string =>
+  getMonthDateFromKey(monthKey).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+const getMonthKeyOffset = (offset: number, fromDate: Date = new Date()): string => {
+  const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+  cursor.setMonth(cursor.getMonth() + offset);
+  return getMonthKey(cursor);
+};
+
+const getBudgetMonthKeys = (): string[] => [
+  getMonthKeyOffset(1),
+  getMonthKeyOffset(0),
+  getMonthKeyOffset(-1),
+  getMonthKeyOffset(-2),
+  getMonthKeyOffset(-3),
+  getMonthKeyOffset(-4),
+  getMonthKeyOffset(-5),
+];
+
+const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
+  getMonthKey(new Date(dateISO)) === monthKey;
 
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -68,13 +93,19 @@ const BudgetScreen: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
   const [limitModalCategory, setLimitModalCategory] = useState<BudgetCategory | null>(null);
   const [limitInput, setLimitInput] = useState("");
+  const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
+
+  const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
+  const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
+  const nextMonthKey = monthKeys[0];
+  const selectedMonthIndex = Math.max(0, monthKeys.indexOf(selectedMonthKey));
 
   useFocusEffect(
     useCallback(() => {
       const loadBudgetData = async () => {
         const [storedEntries, storedLimits, storedDebts] = await Promise.all([
           getBudgetEntries(),
-          getCategoryBudgetLimits(),
+          getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
         ]);
         setEntries(storedEntries);
@@ -84,14 +115,17 @@ const BudgetScreen: React.FC = () => {
       };
 
       loadBudgetData();
-    }, [])
+    }, [selectedMonthKey])
   );
 
-  const now = new Date();
+  const selectedMonthDate = useMemo(
+    () => getMonthDateFromKey(selectedMonthKey),
+    [selectedMonthKey]
+  );
 
   const monthlyEntries = useMemo(
-    () => entries.filter((entry) => isSameMonth(entry.date, now)),
-    [entries, now]
+    () => entries.filter((entry) => isDateInMonthKey(entry.date, selectedMonthKey)),
+    [entries, selectedMonthKey]
   );
 
   const monthlyIncome = useMemo(
@@ -107,10 +141,12 @@ const BudgetScreen: React.FC = () => {
     [debts]
   );
 
-  const automaticDebtMonthlyCost = useMemo(
-    () => activeDebts.reduce((sum, debt) => sum + debt.minPayment, 0),
-    [activeDebts]
-  );
+  const automaticDebtMonthlyCost = useMemo(() => {
+    if (selectedMonthKey !== currentMonthKey && selectedMonthKey !== nextMonthKey) {
+      return 0;
+    }
+    return activeDebts.reduce((sum, debt) => sum + debt.minPayment, 0);
+  }, [activeDebts, currentMonthKey, nextMonthKey, selectedMonthKey]);
 
   const monthlyExpenses = useMemo(
     () => {
@@ -198,7 +234,7 @@ const BudgetScreen: React.FC = () => {
             id: `auto-debt-${debt.id}`,
             amount: debt.minPayment,
             description: `${debt.name} minimum payment`,
-            date: now.toISOString(),
+            date: selectedMonthDate.toISOString(),
           }));
           entries.push(...debtPaymentRows);
         }
@@ -206,7 +242,7 @@ const BudgetScreen: React.FC = () => {
         return { category, spent, limit, ratio, entries };
       })
       .sort((a, b) => b.spent - a.spent);
-  }, [activeDebts, expensesByCategory, limitByCategory, monthlyEntries, now]);
+  }, [activeDebts, expensesByCategory, limitByCategory, monthlyEntries, selectedMonthDate]);
 
   const chartData = useMemo(
     () =>
@@ -302,7 +338,7 @@ const BudgetScreen: React.FC = () => {
       const withoutCategory = prev.filter((item) => item.category !== limitModalCategory);
 
       if (Number.isNaN(parsedLimit) || parsedLimit <= 0) {
-        saveCategoryBudgetLimits(withoutCategory);
+        saveCategoryBudgetLimits(withoutCategory, selectedMonthKey);
         return withoutCategory;
       }
 
@@ -310,12 +346,12 @@ const BudgetScreen: React.FC = () => {
         ...withoutCategory,
         { category: limitModalCategory, monthlyLimit: parsedLimit },
       ];
-      saveCategoryBudgetLimits(updated);
+      saveCategoryBudgetLimits(updated, selectedMonthKey);
       return updated;
     });
 
     closeLimitModal();
-  }, [closeLimitModal, limitInput, limitModalCategory]);
+  }, [closeLimitModal, limitInput, limitModalCategory, selectedMonthKey]);
 
   const listHeader = (
     <View>
@@ -325,8 +361,36 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
       </View>
 
+      <View style={styles.monthSwitchRow}>
+        <TouchableOpacity
+          style={[styles.monthSwitchBtn, selectedMonthIndex >= monthKeys.length - 1 && styles.monthSwitchBtnDisabled]}
+          onPress={() => {
+            if (selectedMonthIndex < monthKeys.length - 1) {
+              setSelectedMonthKey(monthKeys[selectedMonthIndex + 1]);
+            }
+          }}
+          disabled={selectedMonthIndex >= monthKeys.length - 1}
+        >
+          <Text style={styles.monthSwitchBtnText}>← Older</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.monthSwitchLabel}>{formatMonthLabel(selectedMonthKey)}</Text>
+
+        <TouchableOpacity
+          style={[styles.monthSwitchBtn, selectedMonthIndex <= 0 && styles.monthSwitchBtnDisabled]}
+          onPress={() => {
+            if (selectedMonthIndex > 0) {
+              setSelectedMonthKey(monthKeys[selectedMonthIndex - 1]);
+            }
+          }}
+          disabled={selectedMonthIndex <= 0}
+        >
+          <Text style={styles.monthSwitchBtnText}>Newer →</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.summaryCard}>
-        <Text style={styles.summaryLabel}>THIS MONTH</Text>
+        <Text style={styles.summaryLabel}>{formatMonthLabel(selectedMonthKey).toUpperCase()}</Text>
         <View style={styles.summaryTopRow}>
           <View style={styles.summaryStat}>
             <Text style={styles.summaryStatLabel}>Income</Text>
@@ -356,6 +420,9 @@ const BudgetScreen: React.FC = () => {
         <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddModal(true)}>
           <Text style={styles.addBtnText}>+ Add Income / Expense</Text>
         </TouchableOpacity>
+        {automaticDebtMonthlyCost > 0 && (
+          <Text style={styles.autoDebtHint}>Includes auto debt minimums: {formatCurrency(automaticDebtMonthlyCost)}</Text>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -620,6 +687,38 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 14,
       color: colors.textMuted,
     },
+    monthSwitchRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+      gap: 8,
+    },
+    monthSwitchBtn: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      minWidth: 84,
+      alignItems: "center",
+      backgroundColor: colors.card,
+    },
+    monthSwitchBtnDisabled: {
+      opacity: 0.45,
+    },
+    monthSwitchBtnText: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    monthSwitchLabel: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+      flex: 1,
+      textAlign: "center",
+    },
     summaryCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
@@ -664,6 +763,12 @@ const makeStyles = (colors: ThemeColors) =>
       color: "#000000",
       fontSize: 14,
       fontWeight: "700",
+    },
+    autoDebtHint: {
+      color: colors.textDim,
+      fontSize: 12,
+      marginTop: 10,
+      textAlign: "center",
     },
     section: {
       marginBottom: 20,

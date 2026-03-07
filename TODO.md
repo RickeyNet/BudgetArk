@@ -110,7 +110,7 @@ Work through phases in order: finish the features first, then handle store prep 
 
 - [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
 
-- [ ] create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
+- [x] create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
 
 - [ ] create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
 

@@ -145,6 +145,6 @@ export const clearAllData = async (): Promise<void> => {
     STORAGE_KEYS.DEBTS,
     STORAGE_KEYS.PAYMENTS,
     "@budgetark_budget_entries",
-    "@budgetark_budget_limits",
+    "@budgetark_budget_limits_by_month",
   ]);
 };

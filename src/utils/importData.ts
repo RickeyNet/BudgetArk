@@ -19,9 +19,15 @@ const KEYS = {
   DEBTS: "@budgetark_debts",
   PAYMENTS: "@budgetark_payments",
   BUDGET_ENTRIES: "@budgetark_budget_entries",
-  BUDGET_LIMITS: "@budgetark_budget_limits",
+  BUDGET_LIMITS: "@budgetark_budget_limits_by_month",
   USER: "@budgetark_user",
 } as const;
+
+const getCurrentMonthKey = (): string => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${now.getFullYear()}-${month}`;
+};
 
 /* ── Minimal shape checks ── */
 
@@ -327,31 +333,43 @@ export const importFromString = async (
   ): Promise<number> => {
     if (!incoming || incoming.length === 0) return 0;
 
+    const monthKey = getCurrentMonthKey();
+
     if (mode === "replace") {
-      await AsyncStorage.setItem(KEYS.BUDGET_LIMITS, JSON.stringify(incoming));
+      await AsyncStorage.setItem(
+        KEYS.BUDGET_LIMITS,
+        JSON.stringify({ [monthKey]: incoming })
+      );
       return incoming.length;
     }
 
     const existingRaw = await AsyncStorage.getItem(KEYS.BUDGET_LIMITS);
-    const existing: Record<string, unknown>[] = existingRaw
-      ? JSON.parse(existingRaw)
+    const parsed = existingRaw ? JSON.parse(existingRaw) : {};
+    const history =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+
+    const existingForMonth = Array.isArray(history[monthKey])
+      ? (history[monthKey] as Record<string, unknown>[])
       : [];
 
     const existingCategories = new Set(
-      existing.map((item) => (item as any).category as string).filter(Boolean)
+      existingForMonth.map((item) => (item as any).category as string).filter(Boolean)
     );
 
     for (const item of incoming) {
       const cat = (item as any)?.category;
       if (cat && existingCategories.has(cat)) {
-        const idx = existing.findIndex((e) => (e as any).category === cat);
-        if (idx >= 0) existing[idx] = item as Record<string, unknown>;
+        const idx = existingForMonth.findIndex((e) => (e as any).category === cat);
+        if (idx >= 0) existingForMonth[idx] = item as Record<string, unknown>;
       } else {
-        existing.push(item as Record<string, unknown>);
+        existingForMonth.push(item as Record<string, unknown>);
       }
     }
 
-    await AsyncStorage.setItem(KEYS.BUDGET_LIMITS, JSON.stringify(existing));
+    history[monthKey] = existingForMonth;
+    await AsyncStorage.setItem(KEYS.BUDGET_LIMITS, JSON.stringify(history));
     return incoming.length;
   };
 

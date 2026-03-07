@@ -3,8 +3,42 @@ import { BudgetEntry, CategoryBudgetLimit } from "../types";
 
 export const BUDGET_STORAGE_KEYS = {
   ENTRIES: "@budgetark_budget_entries",
-  LIMITS: "@budgetark_budget_limits",
+  LIMITS_BY_MONTH: "@budgetark_budget_limits_by_month",
 } as const;
+
+type BudgetLimitHistory = Record<string, CategoryBudgetLimit[]>;
+
+const getMonthKey = (date: Date): string => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${date.getFullYear()}-${month}`;
+};
+
+const cloneLimits = (limits: CategoryBudgetLimit[]): CategoryBudgetLimit[] =>
+  limits.map((limit) => ({ ...limit }));
+
+const getLimitHistory = async (): Promise<BudgetLimitHistory> => {
+  const raw = await AsyncStorage.getItem(BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as BudgetLimitHistory;
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+};
+
+const pruneLimitHistory = (history: BudgetLimitHistory): BudgetLimitHistory => {
+  const keys = Object.keys(history).sort();
+  const keep = keys.slice(-6);
+  const next: BudgetLimitHistory = {};
+  keep.forEach((key) => {
+    next[key] = history[key];
+  });
+  return next;
+};
 
 export const getBudgetEntries = async (): Promise<BudgetEntry[]> => {
   const raw = await AsyncStorage.getItem(BUDGET_STORAGE_KEYS.ENTRIES);
@@ -29,21 +63,45 @@ export const deleteBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
   return filtered;
 };
 
-export const getCategoryBudgetLimits = async (): Promise<CategoryBudgetLimit[]> => {
-  const raw = await AsyncStorage.getItem(BUDGET_STORAGE_KEYS.LIMITS);
-  return raw ? JSON.parse(raw) : [];
+export const getCategoryBudgetLimits = async (
+  monthKey: string = getMonthKey(new Date())
+): Promise<CategoryBudgetLimit[]> => {
+  const history = await getLimitHistory();
+  const exact = history[monthKey];
+  if (exact) {
+    return cloneLimits(exact);
+  }
+
+  const fallbackKey = Object.keys(history)
+    .filter((key) => key < monthKey)
+    .sort()
+    .pop();
+
+  if (!fallbackKey) {
+    return [];
+  }
+
+  return cloneLimits(history[fallbackKey]);
 };
 
 export const saveCategoryBudgetLimits = async (
-  limits: CategoryBudgetLimit[]
+  limits: CategoryBudgetLimit[],
+  monthKey: string = getMonthKey(new Date())
 ): Promise<void> => {
-  await AsyncStorage.setItem(BUDGET_STORAGE_KEYS.LIMITS, JSON.stringify(limits));
+  const history = await getLimitHistory();
+  history[monthKey] = cloneLimits(limits);
+  const pruned = pruneLimitHistory(history);
+  await AsyncStorage.setItem(
+    BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH,
+    JSON.stringify(pruned)
+  );
 };
 
 export const upsertCategoryBudgetLimit = async (
-  nextLimit: CategoryBudgetLimit
+  nextLimit: CategoryBudgetLimit,
+  monthKey: string = getMonthKey(new Date())
 ): Promise<CategoryBudgetLimit[]> => {
-  const limits = await getCategoryBudgetLimits();
+  const limits = await getCategoryBudgetLimits(monthKey);
   const existingIndex = limits.findIndex(
     (limit) => limit.category === nextLimit.category
   );
@@ -54,6 +112,6 @@ export const upsertCategoryBudgetLimit = async (
     limits.push(nextLimit);
   }
 
-  await saveCategoryBudgetLimits(limits);
+  await saveCategoryBudgetLimits(limits, monthKey);
   return limits;
 };
