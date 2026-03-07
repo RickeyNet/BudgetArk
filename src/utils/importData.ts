@@ -16,11 +16,11 @@ import { BUDGET_CATEGORIES } from "../types";
 
 /* ── Storage keys (must match the rest of the app) ── */
 const KEYS = {
-  DEBTS: "@budgetbuddy_debts",
-  PAYMENTS: "@budgetbuddy_payments",
-  BUDGET_ENTRIES: "@budgetbuddy_budget_entries",
-  BUDGET_LIMITS: "@budgetbuddy_budget_limits",
-  USER: "@budgetbuddy_user",
+  DEBTS: "@budgetark_debts",
+  PAYMENTS: "@budgetark_payments",
+  BUDGET_ENTRIES: "@budgetark_budget_entries",
+  BUDGET_LIMITS: "@budgetark_budget_limits",
+  USER: "@budgetark_user",
 } as const;
 
 /* ── Minimal shape checks ── */

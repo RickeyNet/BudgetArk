@@ -154,9 +154,9 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    * Complete onboarding and mark as done
    */
   const handleComplete = useCallback(async () => {
-    await completeOnboarding();
+    await completeOnboarding(displayName);
     onComplete();
-  }, [onComplete]);
+  }, [displayName, onComplete]);
 
   /**
    * Skip to the end (keeps current theme, default name)

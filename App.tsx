@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
@@ -222,9 +223,11 @@ const AppContent: React.FC = () => {
 export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <AppContent />
-      </ThemeProvider>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AppContent />
+        </ThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

@@ -360,11 +360,11 @@ Add bundle identifiers and version fields:
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.budgetbuddy.app",
+      "bundleIdentifier": "com.budgetark.app",
       "buildNumber": "1"
     },
     "android": {
-      "package": "com.budgetbuddy.app",
+      "package": "com.budgetark.app",
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -466,10 +466,10 @@ EAS_NO_VCS=1 eas build --profile development --platform ios
 find /tmp -name "*.apk" -mmin -30
 
 # 2. Copy to Windows filesystem (adb.exe can't see Linux paths)
-cp /tmp/.../your-build.apk /mnt/c/Users/<YourUser>/budgetbuddy-dev.apk
+cp /tmp/.../your-build.apk /mnt/c/Users/<YourUser>/budgetark-dev.apk
 
 # 3. Install using Windows path format
-adb install 'C:\Users\<YourUser>\budgetbuddy-dev.apk'
+adb install 'C:\Users\<YourUser>\budgetark-dev.apk'
 ```
 
 **On physical Android device:**

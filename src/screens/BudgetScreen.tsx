@@ -19,6 +19,7 @@ import {
   BudgetCategory,
   BudgetEntry,
   CategoryBudgetLimit,
+  Debt,
   NewBudgetEntryInput,
 } from "../types";
 import {
@@ -27,6 +28,7 @@ import {
   saveBudgetEntries,
   saveCategoryBudgetLimits,
 } from "../storage/budgetStorage";
+import { getDebts } from "../storage/debtStorage";
 import { formatCurrency } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -59,6 +61,7 @@ const BudgetScreen: React.FC = () => {
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -69,12 +72,14 @@ const BudgetScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       const loadBudgetData = async () => {
-        const [storedEntries, storedLimits] = await Promise.all([
+        const [storedEntries, storedLimits, storedDebts] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(),
+          getDebts(),
         ]);
         setEntries(storedEntries);
         setLimits(storedLimits);
+        setDebts(storedDebts);
         setIsLoaded(true);
       };
 
@@ -97,12 +102,25 @@ const BudgetScreen: React.FC = () => {
     [monthlyEntries]
   );
 
+  const activeDebts = useMemo(
+    () => debts.filter((debt) => debt.balance > 0),
+    [debts]
+  );
+
+  const automaticDebtMonthlyCost = useMemo(
+    () => activeDebts.reduce((sum, debt) => sum + debt.minPayment, 0),
+    [activeDebts]
+  );
+
   const monthlyExpenses = useMemo(
-    () =>
-      monthlyEntries
+    () => {
+      const manualExpenses = monthlyEntries
         .filter((entry) => entry.type === "expense")
-        .reduce((sum, entry) => sum + entry.amount, 0),
-    [monthlyEntries]
+        .reduce((sum, entry) => sum + entry.amount, 0);
+
+      return manualExpenses + automaticDebtMonthlyCost;
+    },
+    [automaticDebtMonthlyCost, monthlyEntries]
   );
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
@@ -124,8 +142,12 @@ const BudgetScreen: React.FC = () => {
         map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
       });
 
+    if (automaticDebtMonthlyCost > 0) {
+      map["Debt Payments"] = (map["Debt Payments"] ?? 0) + automaticDebtMonthlyCost;
+    }
+
     return map;
-  }, [monthlyEntries]);
+  }, [automaticDebtMonthlyCost, monthlyEntries]);
 
   const incomeByCategory = useMemo(() => {
     const map: Partial<Record<BudgetCategory, number>> = {};
@@ -161,14 +183,30 @@ const BudgetScreen: React.FC = () => {
         const spent = expensesByCategory[category] ?? 0;
         const limit = limitByCategory[category] ?? null;
         const ratio = limit ? spent / limit : null;
-        const entries = monthlyEntries
+        const entries: ExpenseCategoryEntry[] = monthlyEntries
           .filter((e) => e.type === "expense" && e.category === category)
-          .map((e) => ({ id: e.id, amount: e.amount, description: e.description, date: e.date }))
+          .map((e) => ({
+            id: e.id,
+            amount: e.amount,
+            description: e.description,
+            date: e.date,
+          }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        if (category === "Debt Payments") {
+          const debtPaymentRows: ExpenseCategoryEntry[] = activeDebts.map((debt) => ({
+            id: `auto-debt-${debt.id}`,
+            amount: debt.minPayment,
+            description: `${debt.name} minimum payment`,
+            date: now.toISOString(),
+          }));
+          entries.push(...debtPaymentRows);
+        }
+
         return { category, spent, limit, ratio, entries };
       })
       .sort((a, b) => b.spent - a.spent);
-  }, [expensesByCategory, limitByCategory, monthlyEntries]);
+  }, [activeDebts, expensesByCategory, limitByCategory, monthlyEntries, now]);
 
   const chartData = useMemo(
     () =>
@@ -282,7 +320,7 @@ const BudgetScreen: React.FC = () => {
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
-        <Text style={styles.appLabel}>BUDGETARC</Text>
+        <Text style={styles.appLabel}>BudgetArk</Text>
         <Text style={styles.screenTitle}>Budget</Text>
         <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
       </View>
@@ -448,27 +486,34 @@ const BudgetScreen: React.FC = () => {
 
         {item.entries.length > 0 && (
           <View style={styles.entryList}>
-            {item.entries.map((entry) => (
-              <TouchableOpacity
-                key={entry.id}
-                style={styles.entryRow}
-                onPress={() => handleEditEntry(entry.id)}
-                activeOpacity={0.6}
-              >
-                <View style={styles.entryInfo}>
-                  <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
-                  {entry.description ? (
-                    <Text style={styles.entryDesc} numberOfLines={1}>{entry.description}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.entryRight}>
-                  <Text style={styles.entryDate}>
-                    {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                  </Text>
-                  <Text style={styles.entryEditHint}>Edit</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {item.entries.map((entry) => {
+              const isAutoDebtPayment = entry.id.startsWith("auto-debt-");
+              return (
+                <TouchableOpacity
+                  key={entry.id}
+                  style={styles.entryRow}
+                  onPress={() => {
+                    if (!isAutoDebtPayment) {
+                      handleEditEntry(entry.id);
+                    }
+                  }}
+                  activeOpacity={isAutoDebtPayment ? 1 : 0.6}
+                >
+                  <View style={styles.entryInfo}>
+                    <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
+                    {entry.description ? (
+                      <Text style={styles.entryDesc} numberOfLines={1}>{entry.description}</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.entryRight}>
+                    <Text style={styles.entryDate}>
+                      {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </Text>
+                    <Text style={styles.entryEditHint}>{isAutoDebtPayment ? "Auto" : "Edit"}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
       </View>

@@ -31,8 +31,8 @@ Work through phases in order: finish the features first, then handle store prep 
 ## Pre-Launch (Required Before Any Submission)
 
 ### App Configuration
-- [x] Add `bundleIdentifier` to `app.json` under `expo.ios` (e.g., `com.yourname.budgetbuddy`) — required by Apple
-- [x] Add `package` to `app.json` under `expo.android` (e.g., `com.yourname.budgetbuddy`) — required by Google
+- [x] Add `bundleIdentifier` to `app.json` under `expo.ios` (e.g., `com.yourname.budgetark`) — required by Apple
+- [x] Add `package` to `app.json` under `expo.android` (e.g., `com.yourname.budgetark`) — required by Google
 - [x] Change `userInterfaceStyle` in `app.json` from `"light"` to `"dark"` (the app uses a dark theme)
 - [x] Add `expo.ios.buildNumber` and `expo.android.versionCode` fields to `app.json`
 
@@ -99,3 +99,19 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
 - [ ] Localization / currency format options beyond USD
+
+
+
+
+
+- fix theme selection so it doesn't close option window until you hit done
+
+- fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
+
+- make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
+
+- create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
+
+- create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
+
+

@@ -23,7 +23,7 @@ import { generateUUID } from "../utils/uuid";
 import { UserAccount } from "../types";
 
 /** Storage key for the user account */
-const USER_KEY = "@budgetbuddy_user" as const;
+const USER_KEY = "@budgetark_user" as const;
 
 /**
  * Retrieves the existing user account, or creates a new anonymous one.
@@ -84,9 +84,16 @@ export const updateDisplayName = async (
  *
  * @returns Promise<UserAccount> — the updated user
  */
-export const completeOnboarding = async (): Promise<UserAccount> => {
+export const completeOnboarding = async (
+  displayName?: string
+): Promise<UserAccount> => {
   const user = await getOrCreateUser();
-  const updated = { ...user, onboardingComplete: true };
+  const nextDisplayName = displayName?.trim();
+  const updated = {
+    ...user,
+    displayName: nextDisplayName ? nextDisplayName : user.displayName,
+    onboardingComplete: true,
+  };
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
   return updated;
 };

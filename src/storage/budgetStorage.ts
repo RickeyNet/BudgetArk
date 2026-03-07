@@ -2,8 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BudgetEntry, CategoryBudgetLimit } from "../types";
 
 export const BUDGET_STORAGE_KEYS = {
-  ENTRIES: "@budgetbuddy_budget_entries",
-  LIMITS: "@budgetbuddy_budget_limits",
+  ENTRIES: "@budgetark_budget_entries",
+  LIMITS: "@budgetark_budget_limits",
 } as const;
 
 export const getBudgetEntries = async (): Promise<BudgetEntry[]> => {

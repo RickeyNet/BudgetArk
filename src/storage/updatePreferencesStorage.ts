@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { UpdatePreferences } from "../types";
 
-const UPDATE_PREFERENCES_KEY = "@budgetbuddy_update_preferences" as const;
+const UPDATE_PREFERENCES_KEY = "@budgetark_update_preferences" as const;
 
 const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
   manualUpdateMode: false,

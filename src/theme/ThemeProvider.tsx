@@ -10,7 +10,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEFAULT_THEME_ID, THEME_BY_ID, THEME_PRESETS, ThemeColors, ThemePreset } from "./themes";
 
-const THEME_KEY = "@budgetbuddy_theme_id" as const;
+const THEME_KEY = "@budgetark_theme_id" as const;
 
 type ThemeContextValue = Readonly<{
   themeId: ThemePreset["id"];

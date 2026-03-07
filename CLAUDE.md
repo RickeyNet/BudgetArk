@@ -43,9 +43,9 @@ src/
 All types are centralized in `src/types/index.ts`. Key types: `Debt`, `Payment`, `UserAccount`, `RootTabParamList`.
 
 Storage keys:
-- `@budgetbuddy_debts` — JSON array of debts
-- `@budgetbuddy_payments` — JSON array of payments
-- `@budgetbuddy_user` — single user object (anonymous, UUID-based)
+- `@budgetark_debts` — JSON array of debts
+- `@budgetark_payments` — JSON array of payments
+- `@budgetark_user` — single user object (anonymous, UUID-based)
 
 User identity is anonymous (UUID, no sign-up). The onboarding flow gates the main app via `UserAccount.onboardingComplete`.
 

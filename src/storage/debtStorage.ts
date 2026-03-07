@@ -16,8 +16,8 @@ import { Debt, Payment } from "../types";
 
 /** Storage keys — centralized to prevent typos */
 const STORAGE_KEYS = {
-  DEBTS: "@budgetbuddy_debts",
-  PAYMENTS: "@budgetbuddy_payments",
+  DEBTS: "@budgetark_debts",
+  PAYMENTS: "@budgetark_payments",
 } as const;
 
 /* ─── Debt CRUD Operations ─── */
@@ -144,7 +144,7 @@ export const clearAllData = async (): Promise<void> => {
   await AsyncStorage.multiRemove([
     STORAGE_KEYS.DEBTS,
     STORAGE_KEYS.PAYMENTS,
-    "@budgetbuddy_budget_entries",
-    "@budgetbuddy_budget_limits",
+    "@budgetark_budget_entries",
+    "@budgetark_budget_limits",
   ]);
 };

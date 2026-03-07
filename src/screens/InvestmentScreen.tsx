@@ -322,7 +322,7 @@ const InvestmentScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.titleSection}>
-          <Text style={styles.appLabel}>BUDGETARC</Text>
+          <Text style={styles.appLabel}>BudgetArk</Text>
           <Text style={styles.screenTitle}>Investments</Text>
           <Text style={styles.screenSubtitle}>
             Project your wealth growth over time.

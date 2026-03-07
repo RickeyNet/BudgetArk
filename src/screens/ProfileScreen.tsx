@@ -25,6 +25,8 @@ import {
   StyleSheet,
   ScrollView,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
 import { UserAccount } from "../types";
@@ -349,7 +351,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── Header ── */}
         <View style={styles.titleSection}>
           <Text style={[styles.appLabel, { color: colors.textDim }]}>
-            BUDGETARC
+            BudgetArk
           </Text>
           <Text style={[styles.screenTitle, { color: colors.text }]}>Profile</Text>
           <Text style={[styles.screenSubtitle, { color: colors.textMuted }]}>
@@ -520,17 +522,6 @@ const ProfileScreen: React.FC = () => {
             </View>
           </View>
 
-          <View
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>OTA Integrity</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Enable Expo code signing in your EAS project settings</Text>
-            </View>
-          </View>
         </View>
 
         <View style={styles.settingsSection}>
@@ -905,19 +896,19 @@ const ProfileScreen: React.FC = () => {
         transparent
         onRequestClose={() => setShowPasteModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.pasteModalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+        >
           <View
             style={[
-              styles.modalContent,
+              styles.pasteModalContent,
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Paste Export Data
-            </Text>
-            <Text style={[styles.pasteHint, { color: colors.textDim }]}>
-              Paste the JSON text you copied from Export My Data.
-            </Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Paste Export Data</Text>
+            <Text style={[styles.pasteHint, { color: colors.textDim }]}>Paste the JSON text you copied from Export My Data.</Text>
 
             <TextInput
               style={[
@@ -930,7 +921,7 @@ const ProfileScreen: React.FC = () => {
               ]}
               value={pasteText}
               onChangeText={setPasteText}
-              placeholder='Paste JSON here...'
+              placeholder="Paste JSON here..."
               placeholderTextColor={colors.textMuted}
               multiline
               textAlignVertical="top"
@@ -943,17 +934,13 @@ const ProfileScreen: React.FC = () => {
                 style={[styles.pasteBtn, { backgroundColor: colors.success }]}
                 onPress={() => handlePasteImport("merge")}
               >
-                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
-                  Merge
-                </Text>
+                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>Merge</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.pasteBtn, { backgroundColor: colors.danger }]}
                 onPress={() => handlePasteImport("replace")}
               >
-                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
-                  Replace
-                </Text>
+                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>Replace</Text>
               </TouchableOpacity>
             </View>
 
@@ -964,12 +951,10 @@ const ProfileScreen: React.FC = () => {
                 setPasteText("");
               }}
             >
-              <Text style={[styles.closeBtnText, { color: colors.text }]}>
-                Cancel
-              </Text>
+              <Text style={[styles.closeBtnText, { color: colors.text }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Update Ready Modal ── */}
@@ -1307,20 +1292,32 @@ const styles = StyleSheet.create({
   },
 
   /* Paste Import Modal */
+  pasteModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "flex-start",
+  },
+  pasteModalContent: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 0,
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 16,
+  },
   pasteHint: {
     fontSize: 13,
     lineHeight: 19,
-    textAlign: "center",
+    textAlign: "left",
     marginBottom: 16,
   },
   pasteInput: {
+    flex: 1,
     borderWidth: 1,
     borderRadius: 12,
     padding: 14,
     fontSize: 13,
     fontFamily: "monospace",
-    minHeight: 160,
-    maxHeight: 260,
     marginBottom: 16,
   },
   pasteActions: {
