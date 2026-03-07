@@ -2,7 +2,7 @@
 
 import "react-native-gesture-handler";
 import "react-native-reanimated";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import {
   View,
@@ -48,7 +48,7 @@ const AppContent: React.FC = () => {
   const { colors, themeId } = useTheme();
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const isCheckingUpdatesRef = useRef(false);
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
 
   /** Check onboarding status on mount */
@@ -101,8 +101,8 @@ const AppContent: React.FC = () => {
   }, []);
 
   const runAutoUpdateCheck = useCallback(async () => {
-    if (isCheckingUpdates || !canCheckUpdates || isOnboardingComplete !== true) return;
-    setIsCheckingUpdates(true);
+    if (isCheckingUpdatesRef.current || !canCheckUpdates || isOnboardingComplete !== true) return;
+    isCheckingUpdatesRef.current = true;
 
     try {
       const prefs = await getUpdatePreferences();
@@ -127,9 +127,9 @@ const AppContent: React.FC = () => {
         console.error("Auto update check failed:", error);
       }
     } finally {
-      setIsCheckingUpdates(false);
+      isCheckingUpdatesRef.current = false;
     }
-  }, [canCheckUpdates, extractUpdatePrompt, isCheckingUpdates, isOnboardingComplete]);
+  }, [canCheckUpdates, extractUpdatePrompt, isOnboardingComplete]);
 
   useEffect(() => {
     if (isOnboardingComplete !== true || !canCheckUpdates) return;
