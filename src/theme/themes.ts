@@ -105,9 +105,9 @@ const ROSE_LIGHT: ThemePreset = {
   name: "Rose",
   colors: {
     bg: "#faf5f7",
-    card: "#ffffff",
-    cardBorder: "#f0d4e0",
-    accent: "#d4618c",
+    card: "#fff9f6",
+    cardBorder: "#e9d3c8",
+    accent: "#d29a80",
     success: "#6abf8a",
     successDim: "rgba(106, 191, 138, 0.15)",
     warning: "#e8a44a",

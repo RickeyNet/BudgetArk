@@ -104,14 +104,14 @@ Work through phases in order: finish the features first, then handle store prep 
 
 
 
-- fix theme selection so it doesn't close option window until you hit done
+- [x] fix theme selection so it doesn't close option window until you hit done
 
-- fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
+- [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
 
-- make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
+- [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
 
-- create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
+- [ ] create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
 
-- create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
+- [ ] create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
 
 

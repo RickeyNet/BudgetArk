@@ -54,6 +54,8 @@ type UpdateMetadata = {
   runtimeVersion?: string;
 };
 
+type HowToDocKey = "export" | "import";
+
 const ProfileScreen: React.FC = () => {
   /** Current theme context */
   const { colors, presets, themeId, setThemeId } = useTheme();
@@ -84,6 +86,10 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether the import merge/replace modal is visible (file path) */
   const [showImportModeModal, setShowImportModeModal] = useState(false);
+
+  /** How-to docs modal and accordion state */
+  const [showHowToDocsModal, setShowHowToDocsModal] = useState(false);
+  const [expandedHowToDoc, setExpandedHowToDoc] = useState<HowToDocKey | null>(null);
 
   /** Generic themed info/alert modal (replaces all Alert.alert) */
   const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
@@ -126,7 +132,6 @@ const ProfileScreen: React.FC = () => {
   const handleThemeSelect = useCallback(
     async (id: string) => {
       await setThemeId(id);
-      setShowThemeModal(false);
     },
     [setThemeId]
   );
@@ -236,6 +241,10 @@ const ProfileScreen: React.FC = () => {
           "The update could not be applied right now. Please try again.",
       });
     }
+  }, []);
+
+  const toggleHowToDoc = useCallback((key: HowToDocKey) => {
+    setExpandedHowToDoc((current) => (current === key ? null : key));
   }, []);
 
   /**
@@ -579,29 +588,22 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>HOW TO DOCS</Text>
 
-          <View
+          <TouchableOpacity
             style={[
               styles.settingsRow,
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
+            onPress={() => {
+              setShowHowToDocsModal(true);
+              setExpandedHowToDoc("export");
+            }}
           >
             <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Export your data</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Data Management {">"} Export My Data, then save or share the JSON backup.</Text>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Open How to Docs</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Step-by-step instructions for import/export.</Text>
             </View>
-          </View>
-
-          <View
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Import your data</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Data Management {">"} Import My Data, then choose Pick File or Paste Text.</Text>
-            </View>
-          </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── What's New ── */}
@@ -635,7 +637,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            BudgetArk v1.0.1
+            BudgetArk v1.0.0
           </Text>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
             Built with React Native + Expo
@@ -736,6 +738,71 @@ const ProfileScreen: React.FC = () => {
               <Text style={[styles.closeBtnText, { color: colors.white }]}>
                 Done
               </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── How To Docs Modal ── */}
+      <Modal
+        visible={showHowToDocsModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowHowToDocsModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>How to Docs</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Tap a topic to expand instructions.</Text>
+
+            <View style={styles.faqList}>
+              <TouchableOpacity
+                style={[
+                  styles.faqItem,
+                  { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                ]}
+                onPress={() => toggleHowToDoc("export")}
+              >
+                <View style={styles.faqHeader}>
+                  <Text style={[styles.faqQuestion, { color: colors.text }]}>How do I export my data?</Text>
+                  <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                    {expandedHowToDoc === "export" ? "v" : ">"}
+                  </Text>
+                </View>
+                {expandedHowToDoc === "export" ? (
+                  <Text style={[styles.faqAnswer, { color: colors.textDim }]}>Go to Data Management {">"} Export My Data, then save or share the JSON backup.</Text>
+                ) : null}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.faqItem,
+                  { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                ]}
+                onPress={() => toggleHowToDoc("import")}
+              >
+                <View style={styles.faqHeader}>
+                  <Text style={[styles.faqQuestion, { color: colors.text }]}>How do I import my data?</Text>
+                  <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                    {expandedHowToDoc === "import" ? "v" : ">"}
+                  </Text>
+                </View>
+                {expandedHowToDoc === "import" ? (
+                  <Text style={[styles.faqAnswer, { color: colors.textDim }]}>Go to Data Management {">"} Import My Data, then choose Pick File or Paste Text.</Text>
+                ) : null}
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowHowToDocsModal(false)}
+            >
+              <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1176,6 +1243,37 @@ const styles = StyleSheet.create({
   },
   dangerRow: {
     borderColor: "#ff525220",
+  },
+
+  /* How To Docs */
+  faqList: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  faqItem: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  faqHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  faqQuestion: {
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+  },
+  faqArrow: {
+    fontSize: 16,
+  },
+  faqAnswer: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
   },
 
   /* What's New */
