@@ -43,6 +43,11 @@
       },
       "url": "https://u.expo.dev/05d891a0-ab13-4efb-8bac-ae68032fa58e"
     },
-    "owner": "rickeynet"
+    "owner": "rickeynet",
+    "extra": {
+      "eas": {
+        "projectId": "08046ba8-b8f4-46ef-b98b-c31fe698c65b"
+      }
+    }
   }
 }
