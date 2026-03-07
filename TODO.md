@@ -113,5 +113,13 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
 
 - [ ] create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
-
-
+Tech options:
+1. On-device OCR library (more private, no backend)
+2. Cloud OCR/API (better accuracy, adds cost/privacy implications)
+3. Hybrid: on-device first, manual fallback (best practical start)
+Recommended first version:
+1. Add “Scan Receipt” button in Budget.
+2. Take/select photo.
+3. OCR text -> extract best amount/date/merchant.
+4. Open prefilled expense modal for confirmation.
+5. Save only after user taps confirm.
