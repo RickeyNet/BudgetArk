@@ -30,16 +30,45 @@ type CurrencyContextValue = Readonly<{
 
 const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
+const createCurrencyFormatter = (
+  locale: string,
+  currencyCode: string,
+  compact: boolean
+): Intl.NumberFormat => {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: currencyCode,
+      notation: compact ? "compact" : "standard",
+      maximumFractionDigits: compact ? 1 : 2,
+    });
+  } catch {
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: compact ? 1 : 2,
+      });
+    } catch {
+      return new Intl.NumberFormat();
+    }
+  }
+};
+
 export const CurrencyProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [preferenceId, setPreferenceIdState] =
     useState<CurrencyPreferenceId>(DEFAULT_CURRENCY_PREFERENCE_ID);
 
   useEffect(() => {
     const load = async () => {
-      const user = await getOrCreateUser();
-      setPreferenceIdState(user.currencyPreferenceId);
+      try {
+        const user = await getOrCreateUser();
+        setPreferenceIdState(user.currencyPreferenceId);
+      } catch (error) {
+        console.error("Failed to load currency preference:", error);
+      }
     };
-    load();
+    void load();
   }, []);
 
   const setPreferenceId = useCallback(async (id: CurrencyPreferenceId) => {
@@ -53,31 +82,27 @@ export const CurrencyProvider: React.FC<React.PropsWithChildren> = ({ children }
   );
 
   const standardFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat(preference.locale, {
-        style: "currency",
-        currency: preference.currencyCode,
-        maximumFractionDigits: 2,
-      }),
+    () => createCurrencyFormatter(preference.locale, preference.currencyCode, false),
     [preference.currencyCode, preference.locale]
   );
 
   const compactFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat(preference.locale, {
-        style: "currency",
-        currency: preference.currencyCode,
-        notation: "compact",
-        maximumFractionDigits: 1,
-      }),
+    () => createCurrencyFormatter(preference.locale, preference.currencyCode, true),
     [preference.currencyCode, preference.locale]
   );
 
   const currencySymbol = useMemo(() => {
-    const part = standardFormatter
-      .formatToParts(0)
-      .find((item) => item.type === "currency");
-    return part?.value || preference.currencyCode;
+    try {
+      if (typeof standardFormatter.formatToParts === "function") {
+        const part = standardFormatter
+          .formatToParts(0)
+          .find((item) => item.type === "currency");
+        if (part?.value) return part.value;
+      }
+    } catch {
+      // Fall through to currency code.
+    }
+    return preference.currencyCode;
   }, [preference.currencyCode, standardFormatter]);
 
   const formatCurrency = useCallback(
