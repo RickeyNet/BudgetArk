@@ -109,6 +109,53 @@ export interface CategoryBudgetLimit {
   monthlyLimit: number;
 }
 
+/* ─── Currency + Localization Types ─── */
+
+export interface CurrencyPreferenceOption {
+  id: string;
+  label: string;
+  locale: string;
+  currencyCode: string;
+}
+
+export const CURRENCY_PREFERENCE_OPTIONS = [
+  {
+    id: "usd_us",
+    label: "US Dollar (United States)",
+    locale: "en-US",
+    currencyCode: "USD",
+  },
+  {
+    id: "eur_de",
+    label: "Euro (Germany)",
+    locale: "de-DE",
+    currencyCode: "EUR",
+  },
+  {
+    id: "gbp_gb",
+    label: "British Pound (United Kingdom)",
+    locale: "en-GB",
+    currencyCode: "GBP",
+  },
+  {
+    id: "cad_ca",
+    label: "Canadian Dollar (Canada)",
+    locale: "en-CA",
+    currencyCode: "CAD",
+  },
+  {
+    id: "jpy_jp",
+    label: "Japanese Yen (Japan)",
+    locale: "ja-JP",
+    currencyCode: "JPY",
+  },
+] as const satisfies readonly CurrencyPreferenceOption[];
+
+export type CurrencyPreferenceId =
+  (typeof CURRENCY_PREFERENCE_OPTIONS)[number]["id"];
+
+export const DEFAULT_CURRENCY_PREFERENCE_ID: CurrencyPreferenceId = "usd_us";
+
 /* ─── User Account Types ─── */
 
 /**
@@ -128,6 +175,9 @@ export interface UserAccount {
 
   /** Whether the user has completed the onboarding flow */
   onboardingComplete: boolean;
+
+  /** Preferred localization + currency formatting preset */
+  currencyPreferenceId: CurrencyPreferenceId;
 }
 
 export interface UpdatePreferences {

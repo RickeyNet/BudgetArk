@@ -20,7 +20,12 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { generateUUID } from "../utils/uuid";
-import { UserAccount } from "../types";
+import {
+  DEFAULT_CURRENCY_PREFERENCE_ID,
+  CurrencyPreferenceId,
+  UserAccount,
+} from "../types";
+import { isCurrencyPreferenceId } from "../utils/currencyPreferences";
 
 /** Storage key for the user account */
 const USER_KEY = "@budgetark_user" as const;
@@ -36,7 +41,22 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
 
   /* If user already exists, return it */
   if (raw) {
-    return JSON.parse(raw) as UserAccount;
+    const parsed = JSON.parse(raw) as Partial<UserAccount>;
+    const normalized: UserAccount = {
+      id: parsed.id || generateUUID(),
+      displayName: parsed.displayName || "Buddy",
+      createdAt: parsed.createdAt || new Date().toISOString(),
+      onboardingComplete: !!parsed.onboardingComplete,
+      currencyPreferenceId: isCurrencyPreferenceId(parsed.currencyPreferenceId)
+        ? parsed.currencyPreferenceId
+        : DEFAULT_CURRENCY_PREFERENCE_ID,
+    };
+
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized));
+    }
+
+    return normalized;
   }
 
   /* First launch — create anonymous account */
@@ -45,6 +65,7 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
     displayName: "Buddy",
     createdAt: new Date().toISOString(),
     onboardingComplete: false,
+    currencyPreferenceId: DEFAULT_CURRENCY_PREFERENCE_ID,
   };
 
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(newUser));
@@ -93,6 +114,18 @@ export const completeOnboarding = async (
     ...user,
     displayName: nextDisplayName ? nextDisplayName : user.displayName,
     onboardingComplete: true,
+  };
+  await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
+  return updated;
+};
+
+export const updateCurrencyPreference = async (
+  currencyPreferenceId: CurrencyPreferenceId
+): Promise<UserAccount> => {
+  const user = await getOrCreateUser();
+  const updated = {
+    ...user,
+    currencyPreferenceId,
   };
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
   return updated;

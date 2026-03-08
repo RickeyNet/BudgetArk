@@ -27,12 +27,13 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import { Debt, NewDebtInput } from "../types";
-import { formatCurrency } from "../utils/calculations";
 import { getDebts, saveDebts, recordPayment, updateDebt } from "../storage/debtStorage";
 import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
+import PaymentHistoryModal from "../components/PaymentHistoryModal";
 import { useTheme } from "../theme/ThemeProvider";
+import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 
 
@@ -45,8 +46,10 @@ const DebtTrackerScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
+  const [showHistory, setShowHistory] = useState(false);
 
   const { colors } = useTheme();
+  const { formatCurrency } = useCurrency();
 
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   /** Load debts from device storage whenever this tab is focused */
@@ -218,6 +221,12 @@ const DebtTrackerScreen: React.FC = () => {
               {debts.filter((d) => d.balance === 0).length} paid off
             </Text>
           </View>
+          <TouchableOpacity
+            style={[styles.badge, { backgroundColor: colors.tealDim }]}
+            onPress={() => setShowHistory(true)}
+          >
+            <Text style={[styles.badgeText, { color: colors.teal }]}>History</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -298,6 +307,12 @@ const DebtTrackerScreen: React.FC = () => {
         onAdd={handleAddDebt}
         editDebt={editingDebt}
         onEdit={handleSaveEdit}
+      />
+
+      <PaymentHistoryModal
+        visible={showHistory}
+        onClose={() => setShowHistory(false)}
+        debts={debts}
       />
 
       <Modal

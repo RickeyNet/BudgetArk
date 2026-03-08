@@ -29,7 +29,11 @@ import {
   Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
-import { UserAccount } from "../types";
+import {
+  CurrencyPreferenceId,
+  DEFAULT_CURRENCY_PREFERENCE_ID,
+  UserAccount,
+} from "../types";
 import {
   getOrCreateUser,
   updateDisplayName,
@@ -46,6 +50,7 @@ import {
 } from "../storage/updatePreferencesStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import type { UpdatePreferences } from "../types";
+import { useCurrency } from "../currency/CurrencyProvider";
 
 type UpdateMetadata = {
   id: string;
@@ -59,6 +64,11 @@ type HowToDocKey = "export" | "import";
 const ProfileScreen: React.FC = () => {
   /** Current theme context */
   const { colors, presets, themeId, setThemeId } = useTheme();
+  const {
+    preference,
+    options: currencyOptions,
+    setPreferenceId,
+  } = useCurrency();
 
   /** Current user account state */
   const [user, setUser] = useState<UserAccount | null>(null);
@@ -71,6 +81,7 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether theme selector modal is visible */
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
 
   /** Whether the paste-import modal is visible */
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -134,6 +145,16 @@ const ProfileScreen: React.FC = () => {
       await setThemeId(id);
     },
     [setThemeId]
+  );
+
+  const handleCurrencySelect = useCallback(
+    async (id: CurrencyPreferenceId) => {
+      await setPreferenceId(id);
+      setUser((current) =>
+        current ? { ...current, currencyPreferenceId: id } : current
+      );
+    },
+    [setPreferenceId]
   );
 
   const formatDateTime = useCallback((iso?: string) => {
@@ -262,10 +283,11 @@ const ProfileScreen: React.FC = () => {
     await deleteAccount();
     await getOrCreateUser();
     const freshUser = await completeOnboarding();
+    await setPreferenceId(DEFAULT_CURRENCY_PREFERENCE_ID);
     setUser(freshUser);
     setEditName(freshUser.displayName);
     setInfoModal({ title: "Done", message: "All data has been reset successfully." });
-  }, []);
+  }, [setPreferenceId]);
 
   const handleExportData = useCallback(async () => {
     try {
@@ -470,9 +492,25 @@ const ProfileScreen: React.FC = () => {
                 {currentTheme?.name || "Forest Gold"}
               </Text>
             </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}> 
               →
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={() => setShowCurrencyModal(true)}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Currency & Locale</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                {preference.label}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
           </TouchableOpacity>
         </View>
 
@@ -744,6 +782,70 @@ const ProfileScreen: React.FC = () => {
               <Text style={[styles.closeBtnText, { color: colors.white }]}>
                 Done
               </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showCurrencyModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCurrencyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Currency & Locale</Text>
+
+            <ScrollView style={styles.themeList}>
+              {currencyOptions.map((option) => {
+                const isSelected = option.id === preference.id;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: isSelected ? colors.accent : colors.cardBorder,
+                        backgroundColor: isSelected ? `${colors.accent}10` : "transparent",
+                      },
+                    ]}
+                    onPress={() =>
+                      handleCurrencySelect(option.id as CurrencyPreferenceId)
+                    }
+                  >
+                    <View style={styles.currencyOptionTextWrap}>
+                      <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                        {option.label}
+                      </Text>
+                      <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}> 
+                        {new Intl.NumberFormat(option.locale, {
+                          style: "currency",
+                          currency: option.currencyCode,
+                        }).format(1234.56)}
+                      </Text>
+                    </View>
+
+                    {isSelected && (
+                      <View style={[styles.checkMark, { backgroundColor: colors.accent }]}> 
+                        <Text style={[styles.checkMarkText, { color: colors.white }]}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowCurrencyModal(false)}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1373,6 +1475,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     flex: 1,
+  },
+  currencyOptionTextWrap: {
+    flex: 1,
+    gap: 4,
   },
   checkMark: {
     width: 24,

@@ -169,7 +169,30 @@ const DEEPFOREST: ThemePreset = {
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST] as const;
+const ARK_PARCHMENT: ThemePreset = {
+  id: "ark_parchment",
+  name: "The Ark",
+  colors: {
+    bg: "#F2E6D0",
+    card: "#FAF3E8",
+    cardBorder: "#D4B896",
+    accent: "#6B3A1F",
+    success: "#5A7A3A",
+    successDim: "rgba(90, 122, 58, 0.15)",
+    warning: "#C48A2A",
+    warningDim: "rgba(196, 138, 42, 0.15)",
+    danger: "#A0392A",
+    dangerDim: "rgba(160, 57, 42, 0.15)",
+    text: "#3E2010",
+    textDim: "#8A6A50",
+    textMuted: "#C4A888",
+    white: "#3E2010",
+    teal: "#5A8A7A",
+    tealDim: "rgba(90, 138, 122, 0.15)",
+  },
+};
+
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";

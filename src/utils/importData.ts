@@ -12,7 +12,11 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BUDGET_CATEGORIES } from "../types";
+import {
+  BUDGET_CATEGORIES,
+  DEFAULT_CURRENCY_PREFERENCE_ID,
+} from "../types";
+import { isCurrencyPreferenceId } from "./currencyPreferences";
 
 /* ── Storage keys (must match the rest of the app) ── */
 const KEYS = {
@@ -199,6 +203,12 @@ const sanitizeUser = (user: unknown): Record<string, unknown> | undefined => {
 
   if (typeof user.onboardingComplete === "boolean") {
     normalized.onboardingComplete = user.onboardingComplete;
+  }
+
+  if (isCurrencyPreferenceId(user.currencyPreferenceId)) {
+    normalized.currencyPreferenceId = user.currencyPreferenceId;
+  } else {
+    normalized.currencyPreferenceId = DEFAULT_CURRENCY_PREFERENCE_ID;
   }
 
   if (!normalized.id) {

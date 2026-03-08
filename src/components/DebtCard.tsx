@@ -26,9 +26,14 @@ import {
   StyleSheet,
 } from "react-native";
 import { Debt } from "../types";
-import { calcMonthsToPayoff, calcMonthsUntilDate, calcPaymentForGoalDate, formatCurrency } from "../utils/calculations";
+import {
+  calcMonthsToPayoff,
+  calcMonthsUntilDate,
+  calcPaymentForGoalDate,
+} from "../utils/calculations";
 import ProgressRing from "./ProgressRing";
 import { useTheme } from "../theme/ThemeProvider";
+import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 
 /* ─── Props Interface ─── */
@@ -50,6 +55,7 @@ interface DebtCardProps {
 const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
+  const { formatCurrency } = useCurrency();
 
   /** Memoized styles - only recreate when colors change */
   const styles = React.useMemo(() => makeStyles(colors), [colors]);

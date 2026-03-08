@@ -30,8 +30,9 @@ import {
   ScrollView,
 } from "react-native";
 import { Debt, NewDebtInput } from "../types";
-import { calcPaymentForGoalDate, calcMonthsUntilDate, formatCurrency } from "../utils/calculations";
+import { calcPaymentForGoalDate, calcMonthsUntilDate } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
+import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 
 /* ─── Props Interface ─── */
@@ -62,6 +63,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
+  const { formatCurrency } = useCurrency();
 
   /** Memoized styles */
   const styles = React.useMemo(() => makeStyles(colors), [colors]);

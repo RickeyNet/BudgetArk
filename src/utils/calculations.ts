@@ -221,17 +221,20 @@ export const calcMonthsUntilDate = (goalDateISO: string): number => {
 };
 
 /**
- * Formats a number as a USD currency string.
- * Uses manual formatting for speed (avoids Intl.NumberFormat overhead).
+ * Formats a number as a localized currency string.
  *
  * @param amount — number to format
- * @returns formatted string like "$1,234.56"
+ * @param locale — optional locale (defaults to en-US)
+ * @param currencyCode — optional currency code (defaults to USD)
  */
-export const formatCurrency = (amount: number): string => {
-  return (
-    "$" +
-    amount
-      .toFixed(2)
-      .replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-  );
+export const formatCurrency = (
+  amount: number,
+  locale: string = "en-US",
+  currencyCode: string = "USD"
+): string => {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: currencyCode,
+    maximumFractionDigits: 2,
+  }).format(amount);
 };

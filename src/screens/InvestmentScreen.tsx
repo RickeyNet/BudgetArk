@@ -22,26 +22,23 @@ import {
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
-import {
-  calcInvestmentTimeline,
-  formatCurrency,
-} from "../utils/calculations";
+import { calcInvestmentTimeline } from "../utils/calculations";
+import { useCurrency } from "../currency/CurrencyProvider";
 import SmoothSlider from "../components/SmoothSlider";
 
 /* ── Slider Config ── */
 
 type SliderConfig = {
   label: string;
-  unit: string;
   min: number;
   max: number;
   step: number;
 };
 
 const SLIDERS: Record<"contribution" | "returnRate" | "years", SliderConfig> = {
-  contribution: { label: "Monthly Contribution", unit: "$", min: 50, max: 50000, step: 50 },
-  returnRate: { label: "Annual Return", unit: "%", min: 1, max: 30, step: 0.5 },
-  years: { label: "Time Horizon", unit: "yr", min: 1, max: 50, step: 1 },
+  contribution: { label: "Monthly Contribution", min: 50, max: 50000, step: 50 },
+  returnRate: { label: "Annual Return", min: 1, max: 30, step: 0.5 },
+  years: { label: "Time Horizon", min: 1, max: 50, step: 1 },
 };
 
 const YEAR_PRESETS = [10, 20, 30] as const;
@@ -54,10 +51,11 @@ interface AreaChartProps {
   successColor: string;
   textDim: string;
   textMuted: string;
+  formatCompactCurrency: (amount: number) => string;
 }
 
 const AreaChart: React.FC<AreaChartProps> = React.memo(
-  ({ data, accentColor, successColor, textDim, textMuted }) => {
+  ({ data, accentColor, successColor, textDim, textMuted, formatCompactCurrency }) => {
     const W = 340;
     const H = 180;
     const padL = 50;
@@ -91,12 +89,6 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
     const xTicks: number[] = [];
     for (let x = 0; x <= maxYears; x += xStep) xTicks.push(x);
     if (xTicks[xTicks.length - 1] !== maxYears) xTicks.push(maxYears);
-
-    const formatShort = (n: number) => {
-      if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-      if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-      return `$${n}`;
-    };
 
     return (
       <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
@@ -141,7 +133,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
             fontSize={9}
             textAnchor="end"
           >
-            {formatShort(tick)}
+            {formatCompactCurrency(tick)}
           </SvgText>
         ))}
 
@@ -167,6 +159,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
 
 const InvestmentScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { formatCurrency, formatCompactCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [contribution, setContribution] = useState(500);
@@ -254,7 +247,7 @@ const InvestmentScreen: React.FC = () => {
     const cfg = SLIDERS[key];
     const displayValue =
       key === "contribution"
-        ? `$${value.toLocaleString()}`
+        ? formatCurrency(value)
         : key === "returnRate"
           ? `${value}%`
           : `${value} yr`;
@@ -370,6 +363,7 @@ const InvestmentScreen: React.FC = () => {
               successColor={colors.success}
               textDim={colors.textDim}
               textMuted={colors.textMuted}
+              formatCompactCurrency={formatCompactCurrency}
             />
           </View>
           <View style={styles.legendRow}>

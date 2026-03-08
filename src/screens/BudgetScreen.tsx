@@ -29,8 +29,8 @@ import {
   saveCategoryBudgetLimits,
 } from "../storage/budgetStorage";
 import { getDebts } from "../storage/debtStorage";
-import { formatCurrency } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
+import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 
 type ExpenseCategoryEntry = {
@@ -83,6 +83,7 @@ const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
 
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { formatCurrency } = useCurrency();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);

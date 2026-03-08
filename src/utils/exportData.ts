@@ -35,6 +35,8 @@ export const exportAllData = async (): Promise<void> => {
       id: user.id,
       displayName: user.displayName,
       createdAt: user.createdAt,
+      onboardingComplete: user.onboardingComplete,
+      currencyPreferenceId: user.currencyPreferenceId,
     },
     debts,
     payments,
