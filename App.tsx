@@ -3,7 +3,7 @@
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import {
   View,
   ActivityIndicator,
@@ -22,6 +22,12 @@ import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
+import {
+  getLastSeenReleaseNotesVersion,
+  setLastSeenReleaseNotesVersion,
+} from "./src/storage/releaseNotesStorage";
+import { CURRENT_APP_VERSION, RELEASE_NOTES } from "./src/data/releaseNotes";
+import type { RootTabParamList } from "./src/types";
 import {
   getUpdatePreferences,
   setLastUpdateCheckAt,
@@ -47,10 +53,13 @@ type UpdatePrompt = {
  */
 const AppContent: React.FC = () => {
   const { colors, themeId } = useTheme();
+  const navigationRef = useRef(createNavigationContainerRef<RootTabParamList>());
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
+  const [showReleaseNotesPrompt, setShowReleaseNotesPrompt] = useState(false);
   const isCheckingUpdatesRef = useRef(false);
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
+  const latestRelease = RELEASE_NOTES[0];
 
   /** Check onboarding status on mount */
   useEffect(() => {
@@ -147,12 +156,43 @@ const AppContent: React.FC = () => {
     };
   }, [canCheckUpdates, isOnboardingComplete, runAutoUpdateCheck]);
 
+  useEffect(() => {
+    if (isOnboardingComplete !== true) return;
+
+    const checkReleaseNotesPrompt = async () => {
+      const lastSeenVersion = await getLastSeenReleaseNotesVersion();
+      if (lastSeenVersion !== CURRENT_APP_VERSION) {
+        setShowReleaseNotesPrompt(true);
+      }
+    };
+
+    void checkReleaseNotesPrompt();
+  }, [isOnboardingComplete]);
+
   const handleInstallUpdate = useCallback(async () => {
     try {
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error) {
       console.error("Failed to apply update:", error);
+    }
+  }, []);
+
+  const handleDismissReleaseNotesPrompt = useCallback(async () => {
+    setShowReleaseNotesPrompt(false);
+    await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+  }, []);
+
+  const handleOpenReleaseHistory = useCallback(async () => {
+    setShowReleaseNotesPrompt(false);
+    await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 220);
+    });
+
+    if (navigationRef.current.isReady()) {
+      navigationRef.current.navigate("Profile", { openReleaseNotes: true });
     }
   }, []);
 
@@ -175,7 +215,7 @@ const AppContent: React.FC = () => {
   /** Show main app navigation */
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef.current}>
         <AppNavigator />
       </NavigationContainer>
       {isSynthwave && <SynthwaveGrid color={colors.accent} />}
@@ -211,6 +251,40 @@ const AppContent: React.FC = () => {
                 <Text style={[styles.dialogButtonText, { color: colors.white }]}>Install Now</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showReleaseNotesPrompt}
+        animationType="fade"
+        transparent
+        onRequestClose={handleDismissReleaseNotesPrompt}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>You're on v{CURRENT_APP_VERSION}</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>What's new: {latestRelease?.title || "Latest updates are now available."}</Text>
+            {latestRelease?.highlights?.[0] ? (
+              <Text style={[styles.dialogMessage, { color: colors.textDim }]}>{latestRelease.highlights[0]}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.dialogButton, { backgroundColor: colors.accent }]}
+              onPress={handleOpenReleaseHistory}
+            >
+              <Text style={[styles.dialogButtonText, { color: colors.white }]}>View release notes</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dialogButton, { backgroundColor: colors.bg }]}
+              onPress={handleDismissReleaseNotesPrompt}
+            >
+              <Text style={[styles.dialogButtonText, { color: colors.text }]}>Got it</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

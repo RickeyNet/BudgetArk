@@ -29,9 +29,13 @@ import {
   Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
   CurrencyPreferenceId,
   DEFAULT_CURRENCY_PREFERENCE_ID,
+  RootTabParamList,
   UserAccount,
 } from "../types";
 import {
@@ -68,6 +72,9 @@ type HowToDocKey = "export" | "import";
 type ReleaseNoteKey = string;
 
 const ProfileScreen: React.FC = () => {
+  const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
+  const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+
   /** Current theme context */
   const { colors, presets, themeId, setThemeId } = useTheme();
   const {
@@ -137,6 +144,12 @@ const ProfileScreen: React.FC = () => {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    if (!route.params?.openReleaseNotes) return;
+    setShowReleaseNotesModal(true);
+    navigation.setParams({ openReleaseNotes: undefined });
+  }, [navigation, route.params?.openReleaseNotes]);
 
   /**
    * Saves the updated display name to storage.

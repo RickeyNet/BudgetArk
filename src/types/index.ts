@@ -198,5 +198,7 @@ export type RootTabParamList = {
   DebtTracker: undefined;
   Budget: undefined;
   Investments: undefined;
-  Profile: undefined;
+  Profile: {
+    openReleaseNotes?: boolean;
+  } | undefined;
 };
