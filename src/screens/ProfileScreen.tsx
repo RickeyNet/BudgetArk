@@ -35,6 +35,11 @@ import {
   UserAccount,
 } from "../types";
 import {
+  CURRENT_APP_VERSION,
+  RELEASE_NOTES,
+  type ReleaseNote,
+} from "../data/releaseNotes";
+import {
   getOrCreateUser,
   updateDisplayName,
   deleteAccount,
@@ -60,6 +65,7 @@ type UpdateMetadata = {
 };
 
 type HowToDocKey = "export" | "import";
+type ReleaseNoteKey = string;
 
 const ProfileScreen: React.FC = () => {
   /** Current theme context */
@@ -101,6 +107,11 @@ const ProfileScreen: React.FC = () => {
   /** How-to docs modal and accordion state */
   const [showHowToDocsModal, setShowHowToDocsModal] = useState(false);
   const [expandedHowToDoc, setExpandedHowToDoc] = useState<HowToDocKey | null>(null);
+
+  /** Release notes modal and accordion state */
+  const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
+  const [expandedReleaseNote, setExpandedReleaseNote] =
+    useState<ReleaseNoteKey | null>(RELEASE_NOTES[0]?.version || null);
 
   /** Generic themed info/alert modal (replaces all Alert.alert) */
   const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
@@ -268,6 +279,10 @@ const ProfileScreen: React.FC = () => {
     setExpandedHowToDoc((current) => (current === key ? null : key));
   }, []);
 
+  const toggleReleaseNote = useCallback((version: string) => {
+    setExpandedReleaseNote((current) => (current === version ? null : version));
+  }, []);
+
   /**
    * Resets all app data after user confirmation.
    * Clears debts, payments, and user account.
@@ -372,6 +387,7 @@ const ProfileScreen: React.FC = () => {
 
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
+  const latestRelease: ReleaseNote = RELEASE_NOTES[0];
 
   return (
     <>
@@ -652,36 +668,28 @@ const ProfileScreen: React.FC = () => {
           <View style={[styles.newsCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <View style={styles.newsItem}>
               <View style={[styles.newsBadge, { backgroundColor: `${colors.accent}20` }]}>
-                <Text style={[styles.newsBadgeText, { color: colors.accent }]}>v1.0.1</Text>
+                <Text style={[styles.newsBadgeText, { color: colors.accent }]}>v{latestRelease.version}</Text>
               </View>
-              <Text style={[styles.newsTitle, { color: colors.text }]}>Debt Payoff Tools</Text>
-              <Text style={[styles.newsBody, { color: colors.textDim }]}>
-                Edit existing debts — tap the Edit button on any debt card to update name, balance, APR, or minimum payment.
-              </Text>
-              <Text style={[styles.newsBody, { color: colors.textDim, marginTop: 4 }]}>
-                Payoff strategies — choose Avalanche (highest rate first) or Snowball (smallest balance first) to prioritize your debts.
-              </Text>
-              <Text style={[styles.newsBody, { color: colors.textDim, marginTop: 4 }]}>
-                Goal dates — set a target payoff date on any debt and see exactly how much you need to pay each month to hit it.
-              </Text>
+              <Text style={[styles.newsTitle, { color: colors.text }]}>{latestRelease.title}</Text>
+              {latestRelease.highlights.map((item) => (
+                <Text key={item} style={[styles.newsBody, { color: colors.textDim }]}>- {item}</Text>
+              ))}
             </View>
             <View style={[styles.newsDivider, { backgroundColor: colors.cardBorder }]} />
-            <View style={styles.newsItem}>
-              <View style={[styles.newsBadge, { backgroundColor: `${colors.teal}20` }]}>
-                <Text style={[styles.newsBadgeText, { color: colors.teal }]}>v1.0.0</Text>
-              </View>
-              <Text style={[styles.newsTitle, { color: colors.text }]}>Initial Release</Text>
-              <Text style={[styles.newsBody, { color: colors.textDim }]}>
-                Debt tracking, budget management, investment projections, and multiple themes.
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.newsHistoryBtn}
+              onPress={() => setShowReleaseNotesModal(true)}
+            >
+              <Text style={[styles.newsHistoryBtnText, { color: colors.accent }]}>View release history</Text>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            BudgetArk v1.0.0
+            BudgetArk v{CURRENT_APP_VERSION}
           </Text>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
             Built with React Native + Expo
@@ -846,6 +854,65 @@ const ProfileScreen: React.FC = () => {
               onPress={() => setShowCurrencyModal(false)}
             >
               <Text style={[styles.closeBtnText, { color: colors.white }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showReleaseNotesModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowReleaseNotesModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>Release Notes</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Browse current and past versions.</Text>
+
+            <View style={styles.faqList}>
+              {RELEASE_NOTES.map((release) => {
+                const isExpanded = expandedReleaseNote === release.version;
+                return (
+                  <TouchableOpacity
+                    key={release.version}
+                    style={[
+                      styles.faqItem,
+                      { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                    ]}
+                    onPress={() => toggleReleaseNote(release.version)}
+                  >
+                    <View style={styles.faqHeader}>
+                      <Text style={[styles.faqQuestion, { color: colors.text }]}>
+                        v{release.version} - {release.title}
+                      </Text>
+                      <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                        {isExpanded ? "v" : ">"}
+                      </Text>
+                    </View>
+                    {isExpanded ? (
+                      <>
+                        <Text style={[styles.faqAnswer, { color: colors.textMuted }]}>Released {release.releasedAt}</Text>
+                        {release.highlights.map((item) => (
+                          <Text key={`${release.version}-${item}`} style={[styles.faqAnswer, { color: colors.textDim }]}>- {item}</Text>
+                        ))}
+                      </>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowReleaseNotesModal(false)}
+            >
+              <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1417,6 +1484,17 @@ const styles = StyleSheet.create({
   newsDivider: {
     height: 1,
     marginHorizontal: 16,
+  },
+  newsHistoryBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  newsHistoryBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   /* App Info */

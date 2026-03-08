@@ -11,6 +11,7 @@ import { Share } from "react-native";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import { getBudgetEntries, getCategoryBudgetLimits } from "../storage/budgetStorage";
 import { getOrCreateUser } from "../storage/userStorage";
+import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 
 /**
  * Gathers all app data into a single object and opens
@@ -30,7 +31,7 @@ export const exportAllData = async (): Promise<void> => {
 
   const exportPayload = {
     exportedAt: new Date().toISOString(),
-    appVersion: "1.0.0",
+    appVersion: CURRENT_APP_VERSION,
     user: {
       id: user.id,
       displayName: user.displayName,

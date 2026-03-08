@@ -2,7 +2,7 @@
   "expo": {
     "name": "BudgetArk",
     "slug": "BudgetArk",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -32,7 +32,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": "1.0.2",
     "updates": {
       "checkAutomatically": "NEVER",
       "url": "https://u.expo.dev/08046ba8-b8f4-46ef-b98b-c31fe698c65b"
