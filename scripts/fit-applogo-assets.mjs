@@ -41,7 +41,7 @@ async function main() {
   // iOS app icon: full square, padded slightly for visual breathing room.
   await createContainedSquare({
     size: 1024,
-    scale: 0.9,
+    scale: 0.98,
     background: "#5b646c",
     output: "icon.png",
   });
