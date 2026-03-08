@@ -185,13 +185,13 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 
 ## Nice-to-Have (Post-Launch)
 
-- [ ] Payment history screen — the data is already being recorded, just needs a UI
+- [x] Payment history screen — the data is already being recorded, just needs a UI
 - [x] Edit existing debts (currently debts can only be added or deleted, not edited)
 - [x] Debt payoff order strategies (avalanche vs. snowball method)
 - [ ] Push notifications for payment reminders (requires `expo-notifications`)
 - [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
-- [ ] Localization / currency format options beyond USD
+- [x] Localization / currency format options beyond USD
 
 
 
