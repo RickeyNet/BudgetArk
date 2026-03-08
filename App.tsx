@@ -2,7 +2,7 @@
 
 import "react-native-gesture-handler";
 import "react-native-reanimated";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import {
   View,
@@ -53,11 +53,11 @@ type UpdatePrompt = {
  */
 const AppContent: React.FC = () => {
   const { colors, themeId } = useTheme();
-  const navigationRef = useRef(createNavigationContainerRef<RootTabParamList>());
+  const navigationRef = useMemo(() => createNavigationContainerRef<RootTabParamList>(), []);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
   const [showReleaseNotesPrompt, setShowReleaseNotesPrompt] = useState(false);
-  const isCheckingUpdatesRef = useRef(false);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
   const latestRelease = RELEASE_NOTES[0];
 
@@ -111,8 +111,8 @@ const AppContent: React.FC = () => {
   }, []);
 
   const runAutoUpdateCheck = useCallback(async () => {
-    if (isCheckingUpdatesRef.current || !canCheckUpdates || isOnboardingComplete !== true) return;
-    isCheckingUpdatesRef.current = true;
+    if (isCheckingUpdates || !canCheckUpdates || isOnboardingComplete !== true) return;
+    setIsCheckingUpdates(true);
 
     try {
       const prefs = await getUpdatePreferences();
@@ -137,9 +137,9 @@ const AppContent: React.FC = () => {
         console.error("Auto update check failed:", error);
       }
     } finally {
-      isCheckingUpdatesRef.current = false;
+      setIsCheckingUpdates(false);
     }
-  }, [canCheckUpdates, extractUpdatePrompt, isOnboardingComplete]);
+  }, [canCheckUpdates, extractUpdatePrompt, isCheckingUpdates, isOnboardingComplete]);
 
   useEffect(() => {
     if (isOnboardingComplete !== true || !canCheckUpdates) return;
@@ -191,10 +191,10 @@ const AppContent: React.FC = () => {
       setTimeout(resolve, 220);
     });
 
-    if (navigationRef.current.isReady()) {
-      navigationRef.current.navigate("Profile", { openReleaseNotes: true });
+    if (navigationRef.isReady()) {
+      navigationRef.navigate("Profile", { openReleaseNotes: true });
     }
-  }, []);
+  }, [navigationRef]);
 
   /** Show loading indicator while checking onboarding status */
   if (isOnboardingComplete === null) {
@@ -215,7 +215,7 @@ const AppContent: React.FC = () => {
   /** Show main app navigation */
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <NavigationContainer ref={navigationRef.current}>
+      <NavigationContainer ref={navigationRef}>
         <AppNavigator />
       </NavigationContainer>
       {isSynthwave && <SynthwaveGrid color={colors.accent} />}
