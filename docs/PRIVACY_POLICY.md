@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **BudgetArk**
-**Effective Date:** March 1, 2026
+**Effective Date:** March 8, 2026
 **Developer:** Rickey Cornett
 
 ---
@@ -39,7 +39,7 @@ BudgetArk does not integrate with any third-party services, analytics platforms,
 
 ## Children's Privacy
 
-BudgetArk does not knowingly collect any data from children under the age of 13. Since no personal data is collected from any user, the app is compliant with the Children's Online Privacy Protection Act (COPPA).
+BudgetArk does not knowingly collect any data from children under the age of 13. Since no personal data is collected from any user, children are not asked to provide personal information.
 
 ## Data Deletion
 
@@ -54,7 +54,7 @@ If this privacy policy is updated, the revised version will be posted at this UR
 If you have any questions about this privacy policy, please contact:
 
 **Rickey Cornett**
-Email: accode@protonmail.com
+Email: budgetark.support@gmail.com
 
 ---
 

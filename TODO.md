@@ -62,8 +62,8 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ## Apple App Store Submission
 
-- [ ] Enroll in the Apple Developer Program ($99/year) at https://developer.apple.com
-- [ ] Create an App Store Connect record for BudgetArk
+- [x] Enroll in the Apple Developer Program ($99/year) at https://developer.apple.com
+- [x] Create an App Store Connect record for BudgetArk
 - [ ] Prepare store listing assets:
   - [ ] App name and subtitle
   - [ ] Description (up to 4,000 characters)
