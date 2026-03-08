@@ -25,7 +25,33 @@ interface AddBudgetEntryModalProps {
   onAdd: (entry: NewBudgetEntryInput) => void;
 }
 
-const todayISODate = () => new Date().toISOString().slice(0, 10);
+const todayYearMonth = () => new Date().toISOString().slice(0, 7);
+
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+const formatYearMonthLabel = (yearMonth: string): string => {
+  const [yearStr, monthStr] = yearMonth.split("-");
+  const monthIndex = Number(monthStr) - 1;
+  const monthLabel = MONTH_LABELS[monthIndex] || "Jan";
+  return `${monthLabel} ${yearStr}`;
+};
+
+const SELECTABLE_BUDGET_CATEGORIES: BudgetCategory[] = BUDGET_CATEGORIES.filter(
+  (category) => category !== "Freelance" && category !== "Debt Payments"
+) as BudgetCategory[];
 
 const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   visible,
@@ -39,38 +65,41 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const [category, setCategory] = useState<BudgetCategory>("Food");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(todayISODate());
+  const [yearMonth, setYearMonth] = useState(todayYearMonth());
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
 
-  const isValidDate = useMemo(() => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-    const parsed = new Date(date);
-    return !Number.isNaN(parsed.getTime());
-  }, [date]);
-
-  const isValid = parseFloat(amount) > 0 && isValidDate;
+  const isValid = parseFloat(amount) > 0;
 
   const reset = useCallback(() => {
     setType("expense");
     setCategory("Food");
     setAmount("");
     setDescription("");
-    setDate(todayISODate());
+    setYearMonth(todayYearMonth());
+    setPickerYear(new Date().getFullYear());
   }, []);
 
   const handleSubmit = useCallback(() => {
     const amountNum = parseFloat(amount);
-    if (amountNum <= 0 || !isValidDate) return;
+    if (amountNum <= 0) return;
 
     onAdd({
       type,
       category,
       amount: amountNum,
       description: description.trim() || undefined,
-      date: new Date(`${date}T12:00:00`).toISOString(),
+      date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
     });
 
     reset();
-  }, [amount, description, isValidDate, onAdd, type, category, date, reset]);
+  }, [amount, description, onAdd, type, category, yearMonth, reset]);
+
+  const selectMonth = useCallback((monthIndex: number) => {
+    const month = String(monthIndex + 1).padStart(2, "0");
+    setYearMonth(`${pickerYear}-${month}`);
+    setShowMonthPicker(false);
+  }, [pickerYear]);
 
   const handleClose = useCallback(() => {
     reset();
@@ -128,7 +157,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
             <View style={styles.field}>
               <Text style={styles.label}>CATEGORY</Text>
               <View style={styles.categoryWrap}>
-                {BUDGET_CATEGORIES.map((item) => (
+                {SELECTABLE_BUDGET_CATEGORIES.map((item) => (
                   <TouchableOpacity
                     key={item}
                     style={[
@@ -175,19 +204,21 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>DATE (YYYY-MM-DD)</Text>
-              <TextInput
+              <Text style={styles.label}>MONTH</Text>
+              <TouchableOpacity
                 style={styles.input}
-                placeholder="2026-02-27"
-                placeholderTextColor={colors.textMuted}
-                value={date}
-                onChangeText={setDate}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {!isValidDate && (
-                <Text style={[styles.helperText, { color: colors.warning }]}>Use YYYY-MM-DD.</Text>
-              )}
+                onPress={() => {
+                  const parsedYear = Number(yearMonth.split("-")[0]);
+                  if (!Number.isNaN(parsedYear)) {
+                    setPickerYear(parsedYear);
+                  }
+                  setShowMonthPicker(true);
+                }}
+              >
+                <Text style={{ color: colors.text, fontSize: 15 }}>
+                  {formatYearMonthLabel(yearMonth)}
+                </Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
 
@@ -206,6 +237,50 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showMonthPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMonthPicker(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <TouchableOpacity onPress={() => setPickerYear((y) => y - 1)}>
+                <Text style={styles.pickerArrow}>←</Text>
+              </TouchableOpacity>
+              <Text style={styles.pickerYear}>{pickerYear}</Text>
+              <TouchableOpacity onPress={() => setPickerYear((y) => y + 1)}>
+                <Text style={styles.pickerArrow}>→</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.monthGrid}>
+              {MONTH_LABELS.map((label, index) => {
+                const monthValue = String(index + 1).padStart(2, "0");
+                const isSelected = yearMonth === `${pickerYear}-${monthValue}`;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    style={[
+                      styles.monthBtn,
+                      isSelected && styles.monthBtnActive,
+                    ]}
+                    onPress={() => selectMonth(index)}
+                  >
+                    <Text style={[styles.monthBtnText, isSelected && styles.monthBtnTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowMonthPicker(false)}>
+              <Text style={styles.cancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -315,6 +390,62 @@ const makeStyles = (colors: ThemeColors) =>
     helperText: {
       fontSize: 12,
       fontWeight: "500",
+    },
+    pickerOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      justifyContent: "center",
+      paddingHorizontal: 20,
+    },
+    pickerCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 16,
+      gap: 12,
+    },
+    pickerHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    pickerArrow: {
+      fontSize: 20,
+      color: colors.text,
+      fontWeight: "700",
+      paddingHorizontal: 8,
+    },
+    pickerYear: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    monthGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    monthBtn: {
+      width: "22%",
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingVertical: 8,
+      alignItems: "center",
+      backgroundColor: colors.bg,
+    },
+    monthBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    monthBtnText: {
+      color: colors.textDim,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    monthBtnTextActive: {
+      color: colors.accent,
     },
 
     /* Buttons — outside ScrollView so they stay above keyboard */

@@ -1,5 +1,13 @@
 # BudgetArk Release Notes
 
+## v1.0.3 - Shared Debt Planning and Budget Workflow Upgrades (2026-03-08)
+
+- Added debt ownership tracking (Mine, Partner, Joint) with filters and balance summaries for couples.
+- Added explicit debt types (Credit/Personal vs Car/House) for Snowball ordering, plus bulk classification tools and review badges for inferred types.
+- Added month/year pickers to debt and budget add/edit flows to replace manual date typing.
+- Expanded budget categories with Grocery, Restaurant, Tech, Giving, Retirement, and Investing.
+- Added a one-time Food split helper to migrate older Food entries into Grocery or Restaurant.
+
 ## v1.0.2 - Payment History & Localization (2026-03-07)
 
 - Added Payment History view accessible from the Debt Tracker summary card, showing all recorded payments grouped by month with totals.

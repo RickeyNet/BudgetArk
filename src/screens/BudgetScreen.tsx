@@ -48,6 +48,29 @@ type ExpenseCategoryRow = {
   entries: ExpenseCategoryEntry[];
 };
 
+const inferFoodSplitCategory = (entry: BudgetEntry): Extract<BudgetCategory, "Grocery" | "Restaurant"> => {
+  const text = `${entry.description || ""} ${entry.category}`.toLowerCase();
+  const restaurantHints = [
+    "restaurant",
+    "dine",
+    "dinner",
+    "lunch",
+    "breakfast",
+    "takeout",
+    "delivery",
+    "uber eats",
+    "doordash",
+    "grubhub",
+    "cafe",
+    "coffee",
+    "bar",
+    "pizza",
+  ];
+  return restaurantHints.some((hint) => text.includes(hint))
+    ? "Restaurant"
+    : "Grocery";
+};
+
 const getMonthKey = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${date.getFullYear()}-${month}`;
@@ -95,6 +118,8 @@ const BudgetScreen: React.FC = () => {
   const [limitModalCategory, setLimitModalCategory] = useState<BudgetCategory | null>(null);
   const [limitInput, setLimitInput] = useState("");
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
+  const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
+  const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
@@ -316,6 +341,37 @@ const BudgetScreen: React.FC = () => {
     setEditingEntry(null);
   }, []);
 
+  const foodEntriesToSplit = useMemo(
+    () => entries.filter((entry) => entry.type === "expense" && entry.category === "Food"),
+    [entries]
+  );
+
+  const openFoodSplitModal = useCallback(() => {
+    const draft: Record<string, "Grocery" | "Restaurant"> = {};
+    foodEntriesToSplit.forEach((entry) => {
+      draft[entry.id] = inferFoodSplitCategory(entry);
+    });
+    setFoodSplitDraft(draft);
+    setShowFoodSplitModal(true);
+  }, [foodEntriesToSplit]);
+
+  const setFoodSplitForEntry = useCallback((entryId: string, category: "Grocery" | "Restaurant") => {
+    setFoodSplitDraft((current) => ({ ...current, [entryId]: category }));
+  }, []);
+
+  const applyFoodSplit = useCallback(() => {
+    setEntries((prev) => {
+      const next = prev.map((entry) => {
+        if (entry.type !== "expense" || entry.category !== "Food") return entry;
+        const mapped = foodSplitDraft[entry.id];
+        return mapped ? { ...entry, category: mapped } : entry;
+      });
+      saveBudgetEntries(next);
+      return next;
+    });
+    setShowFoodSplitModal(false);
+  }, [foodSplitDraft]);
+
   const openLimitModal = useCallback(
     (category: BudgetCategory) => {
       const currentLimit = limitByCategory[category];
@@ -421,6 +477,14 @@ const BudgetScreen: React.FC = () => {
         <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddModal(true)}>
           <Text style={styles.addBtnText}>+ Add Income / Expense</Text>
         </TouchableOpacity>
+        {foodEntriesToSplit.length > 0 && (
+          <TouchableOpacity
+            style={[styles.splitBtn, { borderColor: colors.cardBorder }]}
+            onPress={openFoodSplitModal}
+          >
+            <Text style={[styles.splitBtnText, { color: colors.textDim }]}>Split Food into Grocery/Restaurant ({foodEntriesToSplit.length})</Text>
+          </TouchableOpacity>
+        )}
         {automaticDebtMonthlyCost > 0 && (
           <Text style={styles.autoDebtHint}>Includes auto debt minimums: {formatCurrency(automaticDebtMonthlyCost)}</Text>
         )}
@@ -622,6 +686,79 @@ const BudgetScreen: React.FC = () => {
       />
 
       <Modal
+        visible={showFoodSplitModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFoodSplitModal(false)}
+      >
+        <View style={styles.limitOverlay}>
+          <View style={styles.limitModalCard}>
+            <Text style={styles.limitModalTitle}>Split Food Entries</Text>
+            <Text style={styles.limitModalSub}>Review each Food expense and assign Grocery or Restaurant.</Text>
+
+            <FlatList
+              data={foodEntriesToSplit}
+              keyExtractor={(item) => item.id}
+              style={styles.foodSplitList}
+              contentContainerStyle={styles.foodSplitListContent}
+              renderItem={({ item }) => {
+                const selected = foodSplitDraft[item.id] || "Grocery";
+                return (
+                  <View style={[styles.foodSplitRow, { borderColor: colors.cardBorder }]}> 
+                    <View style={styles.foodSplitInfo}>
+                      <Text style={styles.foodSplitAmount}>{formatCurrency(item.amount)}</Text>
+                      <Text style={styles.foodSplitDesc} numberOfLines={1}>
+                        {item.description || new Date(item.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      </Text>
+                    </View>
+                    <View style={styles.foodSplitOptions}>
+                      {(["Grocery", "Restaurant"] as const).map((option) => {
+                        const isSelected = selected === option;
+                        return (
+                          <TouchableOpacity
+                            key={option}
+                            style={[
+                              styles.foodSplitOption,
+                              {
+                                borderColor: isSelected ? colors.accent : colors.cardBorder,
+                                backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
+                              },
+                            ]}
+                            onPress={() => setFoodSplitForEntry(item.id, option)}
+                          >
+                            <Text
+                              style={[
+                                styles.foodSplitOptionText,
+                                { color: isSelected ? colors.accent : colors.textDim },
+                              ]}
+                            >
+                              {option}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              }}
+            />
+
+            <View style={styles.limitActions}>
+              <TouchableOpacity
+                style={styles.limitCancelBtn}
+                onPress={() => setShowFoodSplitModal(false)}
+              >
+                <Text style={styles.limitCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.limitSaveBtn} onPress={applyFoodSplit}>
+                <Text style={styles.limitSaveText}>Apply Split</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={limitModalCategory != null}
         transparent
         animationType="fade"
@@ -764,6 +901,19 @@ const makeStyles = (colors: ThemeColors) =>
       color: "#000000",
       fontSize: 14,
       fontWeight: "700",
+    },
+    splitBtn: {
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      alignItems: "center",
+      marginTop: 10,
+      backgroundColor: colors.bg,
+    },
+    splitBtnText: {
+      fontSize: 12,
+      fontWeight: "600",
     },
     autoDebtHint: {
       color: colors.textDim,
@@ -1001,6 +1151,47 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 10,
       marginTop: 16,
+    },
+    foodSplitList: {
+      maxHeight: 320,
+    },
+    foodSplitListContent: {
+      gap: 8,
+    },
+    foodSplitRow: {
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 10,
+      gap: 8,
+      backgroundColor: colors.bg,
+    },
+    foodSplitInfo: {
+      gap: 2,
+    },
+    foodSplitAmount: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+    },
+    foodSplitDesc: {
+      color: colors.textDim,
+      fontSize: 12,
+    },
+    foodSplitOptions: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    foodSplitOption: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingVertical: 8,
+      alignItems: "center",
+    },
+    foodSplitOptionText: {
+      fontSize: 12,
+      fontWeight: "600",
     },
     limitCancelBtn: {
       flex: 1,

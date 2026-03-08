@@ -25,7 +25,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from "react-native";
-import { Debt } from "../types";
+import { DEBT_CLASS_OPTIONS, DEBT_OWNER_OPTIONS, Debt } from "../types";
 import {
   calcMonthsToPayoff,
   calcMonthsUntilDate,
@@ -107,6 +107,13 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }
       ? "Making progress"
       : "Keep going";
 
+  const ownerLabel =
+    DEBT_OWNER_OPTIONS.find((option) => option.id === debt.owner)?.label || "Mine";
+  const debtClassLabel =
+    DEBT_CLASS_OPTIONS.find((option) => option.id === debt.debtClass)?.label ||
+    "Credit / Personal";
+  const usesInferredType = debt.debtClassSource !== "manual";
+
   /**
    * Handles payment submission.
    * Validates the amount is positive and doesn't exceed the balance.
@@ -137,6 +144,14 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }
           <Text style={styles.rateText}>
             {debt.rate}% APR · {formatCurrency(debt.minPayment)}/mo minimum
           </Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.ownerText}>Owner: {ownerLabel} · Type: {debtClassLabel}</Text>
+            {usesInferredType && (
+              <View style={[styles.inferredBadge, { backgroundColor: colors.warningDim || `${colors.warning || colors.accent}20` }]}>
+                <Text style={[styles.inferredBadgeText, { color: colors.warning || colors.accent }]}>Review type</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Progress Ring with percent label */}
@@ -317,6 +332,28 @@ const makeStyles = (colors: ThemeColors) =>
     rateText: {
       fontSize: 13,
       color: colors.textDim,
+    },
+    ownerText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    metaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 2,
+      flexWrap: "wrap",
+    },
+    inferredBadge: {
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    inferredBadgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.2,
     },
 
     /* Progress Ring */

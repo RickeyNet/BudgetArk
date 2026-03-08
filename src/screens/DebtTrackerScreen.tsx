@@ -23,10 +23,18 @@ import {
   StatusBar,
   StyleSheet,
   Modal,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
-import { Debt, NewDebtInput } from "../types";
+import {
+  DEBT_CLASS_OPTIONS,
+  DEBT_OWNER_OPTIONS,
+  Debt,
+  DebtClass,
+  DebtOwner,
+  NewDebtInput,
+} from "../types";
 import { getDebts, saveDebts, recordPayment, updateDebt } from "../storage/debtStorage";
 import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
@@ -38,6 +46,11 @@ import type { ThemeColors } from "../theme/themes";
 
 
 type PayoffStrategy = "custom" | "avalanche" | "snowball";
+type DebtOwnerFilter = "all" | DebtOwner;
+
+const getSnowballPriority = (debt: Debt): number => {
+  return debt.debtClass === "car_house" ? 1 : 0;
+};
 
 const DebtTrackerScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -47,6 +60,10 @@ const DebtTrackerScreen: React.FC = () => {
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
   const [showHistory, setShowHistory] = useState(false);
+  const [ownerFilter, setOwnerFilter] = useState<DebtOwnerFilter>("all");
+  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
+  const [showClassifyModal, setShowClassifyModal] = useState(false);
+  const [classDraftByDebtId, setClassDraftByDebtId] = useState<Record<string, DebtClass>>({});
 
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -82,11 +99,27 @@ const DebtTrackerScreen: React.FC = () => {
     }, [])
   );
 
+  const filteredDebts = React.useMemo(() => {
+    const ownerScoped =
+      ownerFilter === "all" ? debts : debts.filter((debt) => debt.owner === ownerFilter);
+    if (!needsReviewOnly) return ownerScoped;
+    return ownerScoped.filter((debt) => debt.debtClassSource !== "manual");
+  }, [debts, needsReviewOnly, ownerFilter]);
+
   /** Derived summary values */
-  const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
-  const totalOriginal = debts.reduce((sum, d) => sum + d.originalBalance, 0);
+  const totalDebt = filteredDebts.reduce((sum, d) => sum + d.balance, 0);
+  const totalOriginal = filteredDebts.reduce((sum, d) => sum + d.originalBalance, 0);
   const totalPaid = totalOriginal - totalDebt;
   const overallPercent = totalOriginal > 0 ? Math.round((totalPaid / totalOriginal) * 100) : 0;
+  const totalMine = debts
+    .filter((debt) => debt.owner === "mine")
+    .reduce((sum, debt) => sum + debt.balance, 0);
+  const totalPartner = debts
+    .filter((debt) => debt.owner === "partner")
+    .reduce((sum, debt) => sum + debt.balance, 0);
+  const totalJoint = debts
+    .filter((debt) => debt.owner === "joint")
+    .reduce((sum, debt) => sum + debt.balance, 0);
 
   /** Add a new debt */
   const handleAddDebt = useCallback(async (input: NewDebtInput) => {
@@ -153,17 +186,45 @@ const DebtTrackerScreen: React.FC = () => {
     setPendingDeleteDebt(null);
   }, [pendingDeleteDebt]);
 
+  const openClassifyModal = useCallback(() => {
+    const nextDraft: Record<string, DebtClass> = {};
+    debts.forEach((debt) => {
+      nextDraft[debt.id] = debt.debtClass;
+    });
+    setClassDraftByDebtId(nextDraft);
+    setShowClassifyModal(true);
+  }, [debts]);
+
+  const setDebtClassDraft = useCallback((debtId: string, debtClass: DebtClass) => {
+    setClassDraftByDebtId((current) => ({ ...current, [debtId]: debtClass }));
+  }, []);
+
+  const saveClassifications = useCallback(async () => {
+    const updatedDebts = debts.map((debt) => ({
+      ...debt,
+      debtClass: classDraftByDebtId[debt.id] || debt.debtClass,
+      debtClassSource: "manual" as const,
+    }));
+    setDebts(updatedDebts);
+    await saveDebts(updatedDebts);
+    setShowClassifyModal(false);
+  }, [classDraftByDebtId, debts]);
+
   /** Sort debts based on payoff strategy */
   const sortedDebts = React.useMemo(() => {
-    const active = debts.filter((d) => d.balance > 0);
-    const paidOff = debts.filter((d) => d.balance <= 0);
+    const active = filteredDebts.filter((d) => d.balance > 0);
+    const paidOff = filteredDebts.filter((d) => d.balance <= 0);
     if (strategy === "avalanche") {
       active.sort((a, b) => b.rate - a.rate);
     } else if (strategy === "snowball") {
-      active.sort((a, b) => a.balance - b.balance);
+      active.sort((a, b) => {
+        const priorityDiff = getSnowballPriority(a) - getSnowballPriority(b);
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.balance - b.balance;
+      });
     }
     return [...active, ...paidOff];
-  }, [debts, strategy]);
+  }, [filteredDebts, strategy]);
 
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
@@ -213,12 +274,12 @@ const DebtTrackerScreen: React.FC = () => {
         <View style={styles.badgeRow}>
           <View style={[styles.badge, { backgroundColor: `${colors.accent}20` }]}>
             <Text style={[styles.badgeText, { color: colors.accent }]}>
-              {debts.length} active {debts.length === 1 ? "debt" : "debts"}
+              {filteredDebts.length} in view
             </Text>
           </View>
           <View style={[styles.badge, { backgroundColor: colors.successDim }]}>
-            <Text style={[styles.badgeText, { color: colors.success }]}>
-              {debts.filter((d) => d.balance === 0).length} paid off
+            <Text style={[styles.badgeText, { color: colors.success }]}> 
+              {filteredDebts.filter((d) => d.balance === 0).length} paid off
             </Text>
           </View>
           <TouchableOpacity
@@ -228,17 +289,96 @@ const DebtTrackerScreen: React.FC = () => {
             <Text style={[styles.badgeText, { color: colors.teal }]}>History</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.ownerSummaryRow}>
+          <View style={[styles.ownerSummaryCard, { backgroundColor: colors.bg }]}> 
+            <Text style={styles.ownerSummaryLabel}>Mine</Text>
+            <Text style={styles.ownerSummaryValue}>{formatCurrency(totalMine)}</Text>
+          </View>
+          <View style={[styles.ownerSummaryCard, { backgroundColor: colors.bg }]}> 
+            <Text style={styles.ownerSummaryLabel}>Partner</Text>
+            <Text style={styles.ownerSummaryValue}>{formatCurrency(totalPartner)}</Text>
+          </View>
+          <View style={[styles.ownerSummaryCard, { backgroundColor: colors.bg }]}> 
+            <Text style={styles.ownerSummaryLabel}>Joint</Text>
+            <Text style={styles.ownerSummaryValue}>{formatCurrency(totalJoint)}</Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Your Debts</Text>
-        <TouchableOpacity onPress={() => setShowModal(true)} style={styles.addBtn}>
-          <Text style={styles.addBtnText}>+ Add Debt</Text>
+        <Text style={styles.sectionTitle}>Debts</Text>
+        <View style={styles.sectionActions}>
+          <TouchableOpacity onPress={openClassifyModal} style={[styles.secondaryBtn, { borderColor: colors.cardBorder }]}>
+            <Text style={[styles.secondaryBtnText, { color: colors.textDim }]}>Classify</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowModal(true)} style={styles.addBtn}>
+            <Text style={styles.addBtnText}>+ Add Debt</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.ownerFilterRow}>
+        {([
+          { id: "all", label: "All" },
+          ...DEBT_OWNER_OPTIONS,
+        ] as const).map((item) => {
+          const isSelected = ownerFilter === item.id;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.ownerFilterBtn,
+                {
+                  borderColor: isSelected ? colors.accent : colors.cardBorder,
+                  backgroundColor: isSelected ? `${colors.accent}20` : colors.card,
+                },
+              ]}
+              onPress={() => setOwnerFilter(item.id)}
+            >
+              <Text
+                style={[
+                  styles.ownerFilterText,
+                  { color: isSelected ? colors.accent : colors.textDim },
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={styles.reviewFilterRow}>
+        <TouchableOpacity
+          style={[
+            styles.ownerFilterBtn,
+            {
+              borderColor: needsReviewOnly ? colors.warning || colors.accent : colors.cardBorder,
+              backgroundColor: needsReviewOnly
+                ? colors.warningDim || `${colors.warning || colors.accent}20`
+                : colors.card,
+            },
+          ]}
+          onPress={() => setNeedsReviewOnly((current) => !current)}
+        >
+          <Text
+            style={[
+              styles.ownerFilterText,
+              {
+                color: needsReviewOnly
+                  ? colors.warning || colors.accent
+                  : colors.textDim,
+              },
+            ]}
+          >
+            {needsReviewOnly ? "Needs Review Only" : "Show Needs Review"}
+          </Text>
         </TouchableOpacity>
       </View>
 
       {/* Payoff Strategy Picker */}
-      {debts.filter((d) => d.balance > 0).length > 1 && (
+      {sortedDebts.filter((d) => d.balance > 0).length > 1 && (
         <View style={styles.strategyRow}>
           <Text style={styles.strategyLabel}>PAYOFF ORDER</Text>
           <View style={styles.strategyButtons}>
@@ -270,7 +410,7 @@ const DebtTrackerScreen: React.FC = () => {
             {strategy === "avalanche"
               ? "Highest interest rate first — saves the most money"
               : strategy === "snowball"
-              ? "Smallest balance first — quick wins for motivation"
+              ? "Credit/Personal debts first, then Car/House debts, with smallest balance first inside each group"
               : "Your original order"}
           </Text>
         </View>
@@ -314,6 +454,80 @@ const DebtTrackerScreen: React.FC = () => {
         onClose={() => setShowHistory(false)}
         debts={debts}
       />
+
+      <Modal
+        visible={showClassifyModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowClassifyModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialogBox}>
+            <Text style={styles.dialogTitle}>Debt Type Classification</Text>
+            <Text style={styles.dialogMessage}>
+              Choose whether each debt should be treated as Credit/Personal or Car/House for Snowball ordering.
+            </Text>
+            <ScrollView style={styles.classifyList} contentContainerStyle={styles.classifyListContent}>
+              {debts.map((debt) => {
+                const selectedClass = classDraftByDebtId[debt.id] || debt.debtClass;
+                return (
+                  <View key={debt.id} style={[styles.classifyRow, { borderColor: colors.cardBorder }]}>
+                    <View style={styles.classifyHeaderRow}>
+                      <Text style={styles.classifyDebtName}>{debt.name}</Text>
+                      {debt.debtClassSource !== "manual" && (
+                        <View style={[styles.classifyInferredBadge, { backgroundColor: colors.warningDim || `${colors.warning || colors.accent}20` }]}>
+                          <Text style={[styles.classifyInferredText, { color: colors.warning || colors.accent }]}>Inferred</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.classifyOptionRow}>
+                      {DEBT_CLASS_OPTIONS.map((option) => {
+                        const selected = selectedClass === option.id;
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={[
+                              styles.classifyOptionBtn,
+                              {
+                                borderColor: selected ? colors.accent : colors.cardBorder,
+                                backgroundColor: selected ? `${colors.accent}20` : colors.bg,
+                              },
+                            ]}
+                            onPress={() => setDebtClassDraft(debt.id, option.id)}
+                          >
+                            <Text
+                              style={[
+                                styles.classifyOptionText,
+                                { color: selected ? colors.accent : colors.textDim },
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogButton, styles.dialogCancelButton]}
+                onPress={() => setShowClassifyModal(false)}
+              >
+                <Text style={styles.dialogCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogButton, { backgroundColor: colors.accent }]}
+                onPress={saveClassifications}
+              >
+                <Text style={styles.dialogDeleteText}>Save Types</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={pendingDeleteDebt !== null}
@@ -374,12 +588,34 @@ const makeStyles = (colors: ThemeColors) =>
   summaryRingWrap: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
   summaryRingLabel: { position: "absolute", fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
 
-  badgeRow: { flexDirection: "row", gap: 8, marginTop: 14 },
-  badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  badgeText: { fontSize: 11, fontWeight: "600" },
+   badgeRow: { flexDirection: "row", gap: 8, marginTop: 14 },
+   badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+   badgeText: { fontSize: 11, fontWeight: "600" },
+   ownerSummaryRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+   },
+   ownerSummaryCard: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+   },
+   ownerSummaryLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginBottom: 2,
+   },
+   ownerSummaryValue: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: "700",
+   },
 
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: colors.text },
+  sectionActions: { flexDirection: "row", gap: 8, alignItems: "center" },
   addBtn: {
     backgroundColor: colors.accent,
     borderRadius: 10,
@@ -392,6 +628,36 @@ const makeStyles = (colors: ThemeColors) =>
     elevation: 4,
   },
   addBtnText: { color: "#000000", fontSize: 13, fontWeight: "600" },
+  secondaryBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.card,
+  },
+  secondaryBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  ownerFilterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  reviewFilterRow: {
+    marginBottom: 12,
+    alignItems: "flex-start",
+  },
+  ownerFilterBtn: {
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  ownerFilterText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
 
   strategyRow: {
     marginBottom: 14,
@@ -474,6 +740,55 @@ const makeStyles = (colors: ThemeColors) =>
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
+  },
+  classifyList: {
+    maxHeight: 320,
+    marginBottom: 14,
+  },
+  classifyListContent: {
+    gap: 10,
+  },
+  classifyRow: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+    backgroundColor: colors.bg,
+  },
+  classifyDebtName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  classifyHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  classifyInferredBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  classifyInferredText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  classifyOptionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  classifyOptionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  classifyOptionText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   dialogCancelButton: {
     backgroundColor: colors.bg,

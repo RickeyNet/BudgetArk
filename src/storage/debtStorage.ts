@@ -12,7 +12,7 @@
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Debt, Payment } from "../types";
+import { Debt, DebtClass, DebtClassSource, DebtOwner, Payment } from "../types";
 
 /** Storage keys — centralized to prevent typos */
 const STORAGE_KEYS = {
@@ -22,6 +22,34 @@ const STORAGE_KEYS = {
 
 /* ─── Debt CRUD Operations ─── */
 
+const isDebtOwner = (value: unknown): value is DebtOwner =>
+  value === "mine" || value === "partner" || value === "joint";
+
+const isDebtClass = (value: unknown): value is DebtClass =>
+  value === "personal_credit" || value === "car_house";
+
+const isDebtClassSource = (value: unknown): value is DebtClassSource =>
+  value === "manual" || value === "inferred";
+
+const inferDebtClassFromName = (name: string): DebtClass => {
+  const normalized = name.toLowerCase();
+  const securedKeywords = ["car", "auto", "vehicle", "mortgage", "house", "home loan", "home"];
+  return securedKeywords.some((keyword) => normalized.includes(keyword))
+    ? "car_house"
+    : "personal_credit";
+};
+
+const normalizeDebt = (debt: Debt): Debt => ({
+  ...debt,
+  owner: isDebtOwner(debt.owner) ? debt.owner : "mine",
+  debtClass: isDebtClass(debt.debtClass)
+    ? debt.debtClass
+    : inferDebtClassFromName(debt.name),
+  debtClassSource: isDebtClassSource(debt.debtClassSource)
+    ? debt.debtClassSource
+    : "inferred",
+});
+
 /**
  * Retrieves all stored debts from device storage.
  * Returns an empty array if no debts exist yet.
@@ -30,7 +58,13 @@ const STORAGE_KEYS = {
  */
 export const getDebts = async (): Promise<Debt[]> => {
   const raw = await AsyncStorage.getItem(STORAGE_KEYS.DEBTS);
-  return raw ? JSON.parse(raw) : [];
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as Debt[];
+  const normalized = parsed.map(normalizeDebt);
+  if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+    await saveDebts(normalized);
+  }
+  return normalized;
 };
 
 /**

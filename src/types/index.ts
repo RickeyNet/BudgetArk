@@ -35,6 +35,15 @@ export interface Debt {
   /** Minimum monthly payment in dollars */
   minPayment: number;
 
+  /** Who is legally responsible for this debt */
+  owner: DebtOwner;
+
+  /** Debt class used for snowball ordering */
+  debtClass: DebtClass;
+
+  /** Whether debt class is manually set or inferred */
+  debtClassSource: DebtClassSource;
+
   /** ISO timestamp of when this debt was created */
   createdAt: string;
 
@@ -47,6 +56,29 @@ export interface Debt {
  * Omits auto-generated fields (id, createdAt) from the full Debt type.
  */
 export type NewDebtInput = Omit<Debt, "id" | "createdAt">;
+
+export type DebtOwner = "mine" | "partner" | "joint";
+
+export type DebtClass = "personal_credit" | "car_house";
+
+export type DebtClassSource = "manual" | "inferred";
+
+export const DEBT_CLASS_OPTIONS: ReadonlyArray<{
+  id: DebtClass;
+  label: string;
+}> = [
+  { id: "personal_credit", label: "Credit / Personal" },
+  { id: "car_house", label: "Car / House" },
+];
+
+export const DEBT_OWNER_OPTIONS: ReadonlyArray<{
+  id: DebtOwner;
+  label: string;
+}> = [
+  { id: "mine", label: "Mine" },
+  { id: "partner", label: "Partner" },
+  { id: "joint", label: "Joint" },
+];
 
 /* ─── Payment Types ─── */
 
@@ -75,11 +107,17 @@ export const BUDGET_CATEGORIES = [
   "Freelance",
   "Housing",
   "Food",
+  "Grocery",
+  "Restaurant",
+  "Tech",
   "Transportation",
   "Utilities",
   "Healthcare",
   "Insurance",
   "Debt Payments",
+  "Giving",
+  "Retirement",
+  "Investing",
   "Savings",
   "Entertainment",
   "Shopping",

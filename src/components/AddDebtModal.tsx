@@ -29,11 +29,40 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { Debt, NewDebtInput } from "../types";
+import {
+  DEBT_CLASS_OPTIONS,
+  DEBT_OWNER_OPTIONS,
+  Debt,
+  DebtClass,
+  DebtOwner,
+  NewDebtInput,
+} from "../types";
 import { calcPaymentForGoalDate, calcMonthsUntilDate } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+const formatYearMonthLabel = (yearMonth: string): string => {
+  const [yearStr, monthStr] = yearMonth.split("-");
+  const monthIndex = Number(monthStr) - 1;
+  const monthLabel = MONTH_LABELS[monthIndex] || "Jan";
+  return `${monthLabel} ${yearStr}`;
+};
 
 /* ─── Props Interface ─── */
 interface AddDebtModalProps {
@@ -75,7 +104,11 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const [balance, setBalance] = useState("");
   const [rate, setRate] = useState("");
   const [minPayment, setMinPayment] = useState("");
-  const [goalDate, setGoalDate] = useState("");
+  const [goalMonth, setGoalMonth] = useState("");
+  const [owner, setOwner] = useState<DebtOwner>("mine");
+  const [debtClass, setDebtClass] = useState<DebtClass>("personal_credit");
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
 
   /** Pre-fill form when editing */
   React.useEffect(() => {
@@ -84,27 +117,31 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       setBalance(String(editDebt.balance));
       setRate(String(editDebt.rate));
       setMinPayment(String(editDebt.minPayment));
-      setGoalDate(editDebt.goalDate ?? "");
+      setGoalMonth(editDebt.goalDate ? editDebt.goalDate.slice(0, 7) : "");
+      setOwner(editDebt.owner ?? "mine");
+      setDebtClass(editDebt.debtClass ?? "personal_credit");
     } else {
       setName("");
       setBalance("");
       setRate("");
       setMinPayment("");
-      setGoalDate("");
+      setGoalMonth("");
+      setOwner("mine");
+      setDebtClass("personal_credit");
     }
   }, [editDebt]);
 
   /** Calculate required payment for goal date */
   const goalPaymentInfo = React.useMemo(() => {
-    if (!goalDate) return null;
+    if (!goalMonth) return null;
     const balanceNum = parseFloat(balance);
     const rateNum = parseFloat(rate);
     if (isNaN(balanceNum) || balanceNum <= 0 || isNaN(rateNum) || rateNum < 0) return null;
-    const months = calcMonthsUntilDate(goalDate);
+    const months = calcMonthsUntilDate(`${goalMonth}-01`);
     if (months <= 0) return null;
     const required = calcPaymentForGoalDate(balanceNum, rateNum, months);
     return { months, required };
-  }, [goalDate, balance, rate]);
+  }, [goalMonth, balance, rate]);
 
   /**
    * Validates and submits the form.
@@ -122,7 +159,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     if (isNaN(rateNum) || rateNum < 0) return;
     if (isNaN(paymentNum) || paymentNum <= 0) return;
 
-    const parsedGoalDate = goalDate.trim() || undefined;
+    const parsedGoalDate = goalMonth.trim() ? `${goalMonth.trim()}-01` : undefined;
 
     if (isEditing && onEdit && editDebt) {
       onEdit(editDebt.id, {
@@ -131,6 +168,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
         rate: rateNum,
         minPayment: paymentNum,
         goalDate: parsedGoalDate,
+        owner,
+        debtClass,
+        debtClassSource: "manual",
       });
     } else {
       onAdd({
@@ -140,6 +180,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
         rate: rateNum,
         minPayment: paymentNum,
         goalDate: parsedGoalDate,
+        owner,
+        debtClass,
+        debtClassSource: "manual",
       });
     }
 
@@ -148,8 +191,31 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     setBalance("");
     setRate("");
     setMinPayment("");
-    setGoalDate("");
-  }, [name, balance, rate, minPayment, goalDate, onAdd, isEditing, onEdit, editDebt]);
+    setGoalMonth("");
+    setOwner("mine");
+    setDebtClass("personal_credit");
+  }, [
+    name,
+    balance,
+    rate,
+    minPayment,
+    goalMonth,
+    onAdd,
+    owner,
+    debtClass,
+    isEditing,
+    onEdit,
+    editDebt,
+  ]);
+
+  const selectGoalMonth = useCallback(
+    (monthIndex: number) => {
+      const month = String(monthIndex + 1).padStart(2, "0");
+      setGoalMonth(`${pickerYear}-${month}`);
+      setShowMonthPicker(false);
+    },
+    [pickerYear]
+  );
 
   /** Check if form is valid (for button state) */
   const isValid =
@@ -214,6 +280,68 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 />
               </View>
 
+              <View style={styles.field}>
+                <Text style={styles.label}>OWNER</Text>
+                <View style={styles.ownerRow}>
+                  {DEBT_OWNER_OPTIONS.map((option) => {
+                    const selected = owner === option.id;
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={[
+                          styles.ownerBtn,
+                          {
+                            borderColor: selected ? colors.accent : colors.cardBorder,
+                            backgroundColor: selected ? `${colors.accent}20` : colors.bg,
+                          },
+                        ]}
+                        onPress={() => setOwner(option.id)}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerBtnText,
+                            { color: selected ? colors.accent : colors.textDim },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>DEBT TYPE</Text>
+                <View style={styles.ownerRow}>
+                  {DEBT_CLASS_OPTIONS.map((option) => {
+                    const selected = debtClass === option.id;
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={[
+                          styles.ownerBtn,
+                          {
+                            borderColor: selected ? colors.accent : colors.cardBorder,
+                            backgroundColor: selected ? `${colors.accent}20` : colors.bg,
+                          },
+                        ]}
+                        onPress={() => setDebtClass(option.id)}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerBtnText,
+                            { color: selected ? colors.accent : colors.textDim },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
               {/* APR and Min Payment (side-by-side) */}
               <View style={styles.row}>
                 <View style={[styles.field, { flex: 1 }]}>
@@ -244,16 +372,27 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               {/* Goal Date (optional) */}
               <View style={styles.field}>
                 <Text style={styles.label}>PAYOFF GOAL DATE (OPTIONAL)</Text>
-                <TextInput
+                <TouchableOpacity
                   style={styles.input}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textMuted}
-                  value={goalDate}
-                  onChangeText={setGoalDate}
-                  maxLength={10}
-                />
+                  onPress={() => {
+                    const parsedYear = Number(goalMonth.split("-")[0]);
+                    if (!Number.isNaN(parsedYear)) {
+                      setPickerYear(parsedYear);
+                    }
+                    setShowMonthPicker(true);
+                  }}
+                >
+                  <Text style={{ color: goalMonth ? colors.text : colors.textMuted, fontSize: 15 }}>
+                    {goalMonth ? formatYearMonthLabel(goalMonth) : "Select month"}
+                  </Text>
+                </TouchableOpacity>
+                {goalMonth ? (
+                  <TouchableOpacity onPress={() => setGoalMonth("")}>
+                    <Text style={[styles.goalHint, { color: colors.textMuted }]}>Clear goal month</Text>
+                  </TouchableOpacity>
+                ) : null}
                 {goalPaymentInfo && isFinite(goalPaymentInfo.required) && (
-                  <Text style={[styles.goalHint, { color: colors.accent }]}>
+                  <Text style={[styles.goalHint, { color: colors.accent }]}> 
                     Pay {formatCurrency(goalPaymentInfo.required)}/mo to be debt-free in {goalPaymentInfo.months} months
                   </Text>
                 )}
@@ -288,6 +427,47 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showMonthPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMonthPicker(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <TouchableOpacity onPress={() => setPickerYear((y) => y - 1)}>
+                <Text style={styles.pickerArrow}>←</Text>
+              </TouchableOpacity>
+              <Text style={styles.pickerYear}>{pickerYear}</Text>
+              <TouchableOpacity onPress={() => setPickerYear((y) => y + 1)}>
+                <Text style={styles.pickerArrow}>→</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.monthGrid}>
+              {MONTH_LABELS.map((label, index) => {
+                const monthValue = String(index + 1).padStart(2, "0");
+                const isSelected = goalMonth === `${pickerYear}-${monthValue}`;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    style={[styles.monthBtn, isSelected && styles.monthBtnActive]}
+                    onPress={() => selectGoalMonth(index)}
+                  >
+                    <Text style={[styles.monthBtnText, isSelected && styles.monthBtnTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowMonthPicker(false)}>
+              <Text style={styles.cancelText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -364,6 +544,77 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 12,
       fontWeight: "600",
       marginTop: 6,
+    },
+    ownerRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    ownerBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    ownerBtnText: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    pickerOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      justifyContent: "center",
+      paddingHorizontal: 20,
+    },
+    pickerCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 16,
+      gap: 12,
+    },
+    pickerHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    pickerArrow: {
+      fontSize: 20,
+      color: colors.text,
+      fontWeight: "700",
+      paddingHorizontal: 8,
+    },
+    pickerYear: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    monthGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    monthBtn: {
+      width: "22%",
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingVertical: 8,
+      alignItems: "center",
+      backgroundColor: colors.bg,
+    },
+    monthBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    monthBtnText: {
+      color: colors.textDim,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    monthBtnTextActive: {
+      color: colors.accent,
     },
 
     /* Buttons — outside ScrollView so they stay above keyboard */
