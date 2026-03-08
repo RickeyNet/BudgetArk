@@ -15,6 +15,7 @@ async function createContainedSquare({
   const inner = Math.round(size * scale);
 
   const fitted = await sharp(SOURCE)
+    .trim()
     .resize(inner, inner, {
       fit: "contain",
       background: { r: 0, g: 0, b: 0, alpha: 0 },
@@ -41,7 +42,7 @@ async function main() {
   // iOS app icon: full square, padded slightly for visual breathing room.
   await createContainedSquare({
     size: 1024,
-    scale: 0.98,
+    scale: 1.0,
     background: "#5b646c",
     output: "icon.png",
   });
