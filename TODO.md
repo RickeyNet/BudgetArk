@@ -218,3 +218,48 @@ Recommended first version:
 3. OCR text -> extract best amount/date/merchant.
 4. Open prefilled expense modal for confirmation.
 5. Save only after user taps confirm.
+
+
+- [ ] Add original debt milestone program (Ramsey-inspired structure, fully custom naming/copy) with progress tracking and actionable next steps
+Possible feature design (v1):
+- Feature name
+  - Debt Milestones (safe, generic, clear)
+- Entry point
+  - New card on Debt Tracker: Your Milestone Plan
+  - Tap opens a dedicated screen with step list + progress
+- Example milestone structure (original wording)
+  1. Build a Starter Cushion (e.g. $1,000 emergency cash)
+  2. Clear Non-Mortgage Debt
+  3. Build Core Emergency Fund (3-6 months)
+  4. Increase Retirement Contributions
+  5. Optional: Education/Long-Term Goals
+  6. Mortgage Paydown (if applicable)
+  7. Wealth Building targets
+- Screen layout
+  - Top: overall progress bar (2/7 completed)
+  - Middle: milestone cards
+    - title
+    - status (Not started / In progress / Complete)
+    - progress metric (percent or amount)
+    - next action button
+  - Bottom: “Why this step matters” short explanation
+- Data model (simple)
+  - MilestonePlan
+    - currentStep
+    - completedSteps[]
+    - per-step target config (amount/months)
+  - Persist in AsyncStorage like other modules
+- Automation hooks
+  - Use existing debt totals and budget data to auto-calc progress:
+    - debt paid %
+    - savings category totals
+    - emergency fund amount
+  - Manual override toggle per step for users who want custom flow
+- User actions
+  - Set target
+  - Mark complete
+  - Set as current step
+  - View recommended action (e.g. “Add $150 this month to emergency fund”)
+- Couples support
+  - Add “Plan owner” mode: Mine / Partner / Household
+  - Reuse your existing debt ownership concepts where possible
