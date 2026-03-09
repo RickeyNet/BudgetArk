@@ -43,3 +43,12 @@ yarn-error.*
 ios/
 android/
 
+# App Store screenshot assets (generated / large files)
+screenshots/app-store/
+screenshots/raw/**
+!screenshots/raw/
+!screenshots/raw/iphone/
+!screenshots/raw/ipad/
+!screenshots/raw/iphone/.gitkeep
+!screenshots/raw/ipad/.gitkeep
+
