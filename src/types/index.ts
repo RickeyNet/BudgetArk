@@ -226,6 +226,69 @@ export interface UpdatePreferences {
   lastCheckedAt?: string;
 }
 
+/* ─── Debt Milestone Program Types ─── */
+
+export type DebtMilestoneKey =
+  | "starter_cushion"
+  | "non_mortgage_debt"
+  | "core_emergency_fund"
+  | "retirement_momentum"
+  | "home_vehicle_paydown"
+  | "wealth_building";
+
+export interface DebtMilestoneStep {
+  key: DebtMilestoneKey;
+  title: string;
+  description: string;
+  targetAmount?: number;
+  isCompleted: boolean;
+  completedAt?: string;
+}
+
+export interface DebtMilestonePlan {
+  currentStepKey: DebtMilestoneKey;
+  steps: DebtMilestoneStep[];
+  updatedAt: string;
+}
+
+export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
+  DebtMilestoneStep,
+  "isCompleted" | "completedAt"
+>[] = [
+  {
+    key: "starter_cushion",
+    title: "Starter Cushion",
+    description: "Build a starter emergency cushion before aggressive payoff.",
+    targetAmount: 1000,
+  },
+  {
+    key: "non_mortgage_debt",
+    title: "Clear Non-Mortgage Debt",
+    description: "Focus snowball/avalanche efforts on personal and credit debt.",
+  },
+  {
+    key: "core_emergency_fund",
+    title: "Core Emergency Fund",
+    description: "Grow emergency reserves to cover multiple months of essentials.",
+  },
+  {
+    key: "retirement_momentum",
+    title: "Retirement Momentum",
+    description: "Set and maintain monthly retirement and investment contributions.",
+    targetAmount: 500,
+  },
+  {
+    key: "home_vehicle_paydown",
+    title: "Home and Vehicle Paydown",
+    description: "Make steady extra payments on secured debt balances.",
+  },
+  {
+    key: "wealth_building",
+    title: "Wealth Building",
+    description: "Advance long-term investing, giving, and legacy goals.",
+  },
+];
+
 /* ─── Navigation Types ─── */
 
 /**
