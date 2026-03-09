@@ -220,7 +220,7 @@ Recommended first version:
 5. Save only after user taps confirm.
 
 
-- [ ] Add original debt milestone program (Ramsey-inspired structure, fully custom naming/copy) with progress tracking and actionable next steps
+- [ ] Add original debt milestone program with progress tracking and actionable next steps
 Possible feature design (v1):
 - Feature name
   - Debt Milestones (safe, generic, clear)
