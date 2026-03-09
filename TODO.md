@@ -65,32 +65,32 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Enroll in the Apple Developer Program ($99/year) at https://developer.apple.com
 - [x] Create an App Store Connect record for BudgetArk
 - [ ] Prepare store listing assets:
-  - [ ] App name and subtitle
-  - [ ] Description (up to 4,000 characters)
-  - [ ] Keywords (up to 100 characters)
-  - [ ] Screenshots for iPhone (6.9" required; 6.5" and 5.5" recommended)
-  - [ ] App icon (1024×1024, no alpha channel)
-- [ ] Set the content rating (Finance category, no objectionable content)
-- [ ] Submit for review via `eas submit --platform ios`
+  - [x] App name and subtitle
+  - [x] Description (up to 4,000 characters)
+  - [x] Keywords (up to 100 characters)
+  - [x] Screenshots for iPhone (6.9" required; 6.5" and 5.5" recommended)
+  - [x] App icon (1024×1024, no alpha channel)
+- [x] Set the content rating (Finance category, no objectionable content)
+- [x] Submit for review via `eas submit --platform ios`
 
 ---
 
 ## Google Play Submission
 
 ### 1. Developer Account
-- [ ] Create a Google Play Developer account ($25 one-time fee) at https://play.google.com/console
+- [x] Create a Google Play Developer account ($25 one-time fee) at https://play.google.com/console
 
 ### 2. Build Production AAB
-- [ ] Run `eas build --platform android --profile production`
-- [ ] Download the `.aab` file from EAS when the build finishes
+- [x] Run `eas build --platform android --profile production`
+- [x] Download the `.aab` file from EAS when the build finishes
 
 ### 3. Prepare Store Assets
-- [ ] App icon: 512×512 PNG
-- [ ] Feature graphic: 1024×500 PNG
-- [ ] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
-- [ ] Short description (80 characters max)
-- [ ] Full description (4,000 characters max)
-- [ ] Privacy policy URL (required — host on GitHub Pages for free, state no data leaves the device)
+- [x] App icon: 512×512 PNG
+- [x] Feature graphic: 1024×500 PNG
+- [x] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
+- [x] Short description (80 characters max)
+- [x] Full description (4,000 characters max)
+- [x] Privacy policy URL (required — host on GitHub Pages for free, state no data leaves the device)
 
 ### 4. App Content Questionnaire (in Play Console)
 - [ ] Complete content rating (IARC questionnaire — should be "Everyone")
@@ -99,12 +99,12 @@ Work through phases in order: finish the features first, then handle store prep 
 - [ ] Ads declaration (no ads)
 
 ### 5. Create App & Upload
-- [ ] Go to Play Console > Create app
-- [ ] Fill in app name, default language, app/game, free/paid
-- [ ] Complete all Setup checklist items
-- [ ] Go to Production > Create new release
-- [ ] Upload the `.aab` file
-- [ ] Add release notes
+- [x] Go to Play Console > Create app
+- [x] Fill in app name, default language, app/game, free/paid
+- [x] Complete all Setup checklist items
+- [x] Go to Production > Create new release
+- [x] Upload the `.aab` file
+- [x] Add release notes
 - [ ] Review and roll out
 
 ### 6. Wait for Review
@@ -192,19 +192,21 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 - [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
 - [x] Localization / currency format options beyond USD
-
-
-
-
-
+- [ ] Recurring entries and due-date reminder banners
+- [ ] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
+- [ ] Savings goals and emergency fund runway tracker
+- [ ] Monthly review insights (category changes, spending trends, streaks)
+- [ ] Custom categories and category icon support
+- [ ] Search and advanced filters across debts, payments, and budget entries
+- [ ] Undo actions and bulk edit/delete operations
+- [ ] Data confidence tools (last backup badge + backup reminders)
+- [ ] Accessibility improvements (larger text mode + better screen reader labels)
+- [ ] Onboarding quick-start templates (single, couple, debt-heavy, zero-based)
+- [ ] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage
 - [x] fix theme selection so it doesn't close option window until you hit done
-
 - [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
-
 - [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
-
 - [x] create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
-
 - [ ] create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
 Tech options:
 1. On-device OCR library (more private, no backend)
