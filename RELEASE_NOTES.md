@@ -1,5 +1,14 @@
 # BudgetArk Release Notes
 
+## v1.0.4 - Debt Milestones and UX Polish (2026-03-09)
+
+- Added a new Debt Milestones planner with progress tracking, current-step focus, and completion management.
+- Added editable milestone targets with quick adjust chips (+100, +250, +500, -100).
+- Completed milestones now collapse into concise cards with congratulatory messages; future steps are collapsed by default and expandable on tap.
+- Improved debt and budget modal button visibility on Android devices with bottom navigation bars to avoid keyboard overlap.
+- Updated budget category options by adding Fitness and removing Food from add/edit selection bubbles.
+- Improved theme selector readability by forcing black theme-name text in onboarding and profile theme pickers.
+
 ## v1.0.3 - Shared Debt Planning and Budget Workflow Upgrades (2026-03-08)
 
 - Added debt ownership tracking (Mine, Partner, Joint) with filters and balance summaries for couples.

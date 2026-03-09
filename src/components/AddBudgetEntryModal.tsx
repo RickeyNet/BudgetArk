@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   BUDGET_CATEGORIES,
   BudgetEntryType,
@@ -50,7 +51,10 @@ const formatYearMonthLabel = (yearMonth: string): string => {
 };
 
 const SELECTABLE_BUDGET_CATEGORIES: BudgetCategory[] = BUDGET_CATEGORIES.filter(
-  (category) => category !== "Freelance" && category !== "Debt Payments"
+  (category) =>
+    category !== "Freelance" &&
+    category !== "Debt Payments" &&
+    category !== "Food"
 ) as BudgetCategory[];
 
 const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
@@ -60,9 +64,10 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const [type, setType] = useState<BudgetEntryType>("expense");
-  const [category, setCategory] = useState<BudgetCategory>("Food");
+  const [category, setCategory] = useState<BudgetCategory>("Grocery");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [yearMonth, setYearMonth] = useState(todayYearMonth());
@@ -73,7 +78,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
 
   const reset = useCallback(() => {
     setType("expense");
-    setCategory("Food");
+    setCategory("Grocery");
     setAmount("");
     setDescription("");
     setYearMonth(todayYearMonth());
@@ -223,7 +228,14 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
           </ScrollView>
 
           {/* ── Action Buttons — pinned at bottom, always visible above keyboard ── */}
-          <View style={styles.buttonRow}>
+          <View
+            style={[
+              styles.buttonRow,
+              Platform.OS === "android" && insets.bottom > 0
+                ? { paddingBottom: insets.bottom + 12 }
+                : null,
+            ]}
+          >
             <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>

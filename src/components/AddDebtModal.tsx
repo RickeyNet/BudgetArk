@@ -29,6 +29,7 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   DEBT_CLASS_OPTIONS,
   DEBT_OWNER_OPTIONS,
@@ -93,6 +94,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
+  const insets = useSafeAreaInsets();
 
   /** Memoized styles */
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
@@ -406,7 +408,14 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
           </ScrollView>
 
           {/* ── Action Buttons — pinned at bottom, always visible above keyboard ── */}
-          <View style={styles.buttonRow}>
+          <View
+            style={[
+              styles.buttonRow,
+              Platform.OS === "android" && insets.bottom > 0
+                ? { paddingBottom: insets.bottom + 12 }
+                : null,
+            ]}
+          >
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={onClose}

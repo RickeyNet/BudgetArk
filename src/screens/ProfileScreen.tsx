@@ -773,7 +773,7 @@ const ProfileScreen: React.FC = () => {
                   <Text
                     style={[
                       styles.themeOptionText,
-                      { color: preset.colors.text },
+                      { color: "#000000" },
                     ]}
                   >
                     {preset.name}

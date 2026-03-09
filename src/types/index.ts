@@ -110,6 +110,7 @@ export const BUDGET_CATEGORIES = [
   "Grocery",
   "Restaurant",
   "Tech",
+  "Fitness",
   "Transportation",
   "Utilities",
   "Healthcare",

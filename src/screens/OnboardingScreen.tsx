@@ -93,7 +93,7 @@ const ThemePreviewCard = React.memo<{
       <Text
         style={[
           styles.themeName,
-          { color: isSelected ? preset.colors.accent : preset.colors.text },
+          { color: "#000000" },
         ]}
       >
         {preset.name}

@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   BUDGET_CATEGORIES,
   BudgetEntry,
@@ -51,7 +52,10 @@ const formatYearMonthLabel = (yearMonth: string): string => {
 };
 
 const SELECTABLE_BUDGET_CATEGORIES: BudgetCategory[] = BUDGET_CATEGORIES.filter(
-  (category) => category !== "Freelance" && category !== "Debt Payments"
+  (category) =>
+    category !== "Freelance" &&
+    category !== "Debt Payments" &&
+    category !== "Food"
 ) as BudgetCategory[];
 
 const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
@@ -62,9 +66,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const [type, setType] = useState<BudgetEntryType>("expense");
-  const [category, setCategory] = useState<BudgetCategory>("Food");
+  const [category, setCategory] = useState<BudgetCategory>("Grocery");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [yearMonth, setYearMonth] = useState("");
@@ -237,7 +242,14 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.buttonRow}>
+              <View
+                style={[
+                  styles.buttonRow,
+                  Platform.OS === "android" && insets.bottom > 0
+                    ? { marginBottom: insets.bottom + 8 }
+                    : null,
+                ]}
+              >
                 <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
                   <Text style={styles.deleteText}>Delete</Text>
                 </TouchableOpacity>

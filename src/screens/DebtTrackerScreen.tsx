@@ -81,6 +81,15 @@ const getSnowballPriority = (debt: Debt): number => {
   return debt.debtClass === "car_house" ? 1 : 0;
 };
 
+const getMilestoneCongratsMessage = (key: DebtMilestoneKey): string => {
+  if (key === "starter_cushion") return "Great start. You just built real financial breathing room.";
+  if (key === "non_mortgage_debt") return "Huge win. You knocked out a major debt burden.";
+  if (key === "core_emergency_fund") return "Excellent discipline. Your safety net is getting stronger.";
+  if (key === "retirement_momentum") return "Nice momentum. Your future self will thank you.";
+  if (key === "home_vehicle_paydown") return "Outstanding progress. You are building long-term equity.";
+  return "Congratulations! Another milestone complete. Keep going.";
+};
+
 const DebtTrackerScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -90,7 +99,6 @@ const DebtTrackerScreen: React.FC = () => {
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
   const [showHistory, setShowHistory] = useState(false);
   const [ownerFilter, setOwnerFilter] = useState<DebtOwnerFilter>("all");
-  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
   const [showClassifyModal, setShowClassifyModal] = useState(false);
   const [classDraftByDebtId, setClassDraftByDebtId] = useState<Record<string, DebtClass>>({});
   const [milestonePlan, setMilestonePlan] = useState<DebtMilestonePlan | null>(null);
@@ -98,6 +106,16 @@ const DebtTrackerScreen: React.FC = () => {
   const [savingsReserve, setSavingsReserve] = useState(0);
   const [retirementInvestingMonthly, setRetirementInvestingMonthly] = useState(0);
   const [monthlyEssentialsEstimate, setMonthlyEssentialsEstimate] = useState(3000);
+  const [expandedMilestones, setExpandedMilestones] = useState<
+    Record<DebtMilestoneKey, boolean>
+  >({
+    starter_cushion: false,
+    non_mortgage_debt: false,
+    core_emergency_fund: false,
+    retirement_momentum: false,
+    home_vehicle_paydown: false,
+    wealth_building: false,
+  });
   const [targetDraftByStep, setTargetDraftByStep] = useState<Record<DebtMilestoneKey, string>>({
     starter_cushion: "",
     non_mortgage_debt: "",
@@ -197,11 +215,10 @@ const DebtTrackerScreen: React.FC = () => {
   );
 
   const filteredDebts = React.useMemo(() => {
-    const ownerScoped =
-      ownerFilter === "all" ? debts : debts.filter((debt) => debt.owner === ownerFilter);
-    if (!needsReviewOnly) return ownerScoped;
-    return ownerScoped.filter((debt) => debt.debtClassSource !== "manual");
-  }, [debts, needsReviewOnly, ownerFilter]);
+    return ownerFilter === "all"
+      ? debts
+      : debts.filter((debt) => debt.owner === ownerFilter);
+  }, [debts, ownerFilter]);
 
   /** Derived summary values */
   const totalDebt = filteredDebts.reduce((sum, d) => sum + d.balance, 0);
@@ -443,8 +460,22 @@ const DebtTrackerScreen: React.FC = () => {
       });
       setTargetDraftByStep(nextDraft);
     }
+    if (milestonePlan) {
+      setExpandedMilestones({
+        starter_cushion: milestonePlan.currentStepKey === "starter_cushion",
+        non_mortgage_debt: milestonePlan.currentStepKey === "non_mortgage_debt",
+        core_emergency_fund: milestonePlan.currentStepKey === "core_emergency_fund",
+        retirement_momentum: milestonePlan.currentStepKey === "retirement_momentum",
+        home_vehicle_paydown: milestonePlan.currentStepKey === "home_vehicle_paydown",
+        wealth_building: milestonePlan.currentStepKey === "wealth_building",
+      });
+    }
     setShowMilestonesModal(true);
   }, [milestonePlan, targetDraftByStep]);
+
+  const toggleMilestoneExpanded = useCallback((key: DebtMilestoneKey) => {
+    setExpandedMilestones((current) => ({ ...current, [key]: !current[key] }));
+  }, []);
 
   const setMilestoneTargetDraft = useCallback(
     (key: DebtMilestoneKey, value: string) => {
@@ -637,34 +668,6 @@ const DebtTrackerScreen: React.FC = () => {
         })}
       </View>
 
-      <View style={styles.reviewFilterRow}>
-        <TouchableOpacity
-          style={[
-            styles.ownerFilterBtn,
-            {
-              borderColor: needsReviewOnly ? colors.warning || colors.accent : colors.cardBorder,
-              backgroundColor: needsReviewOnly
-                ? colors.warningDim || `${colors.warning || colors.accent}20`
-                : colors.card,
-            },
-          ]}
-          onPress={() => setNeedsReviewOnly((current) => !current)}
-        >
-          <Text
-            style={[
-              styles.ownerFilterText,
-              {
-                color: needsReviewOnly
-                  ? colors.warning || colors.accent
-                  : colors.textDim,
-              },
-            ]}
-          >
-            {needsReviewOnly ? "Needs Review Only" : "Show Needs Review"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Payoff Strategy Picker */}
       {sortedDebts.filter((d) => d.balance > 0).length > 1 && (
         <View style={styles.strategyRow}>
@@ -753,11 +756,55 @@ const DebtTrackerScreen: React.FC = () => {
           <View style={styles.dialogBox}>
             <Text style={styles.dialogTitle}>Debt Milestones</Text>
             <Text style={styles.dialogMessage}>
-              Follow an original milestone plan to stay focused and track progress.
+              Follow a Milestone plan to stay focused and track progress.
             </Text>
             <ScrollView style={styles.classifyList} contentContainerStyle={styles.classifyListContent}>
               {computedMilestones.map((step) => {
                 const isCurrent = milestonePlan?.currentStepKey === step.key;
+                if (step.isCompleted) {
+                  return (
+                    <View key={step.key} style={[styles.classifyRow, { borderColor: colors.success }]}> 
+                      <View style={styles.classifyHeaderRow}>
+                        <Text style={styles.classifyDebtName}>{step.title}</Text>
+                        <View style={[styles.classifyInferredBadge, { backgroundColor: `${colors.success}20` }]}> 
+                          <Text style={[styles.classifyInferredText, { color: colors.success }]}>Completed</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.milestoneDescription}>{getMilestoneCongratsMessage(step.key)}</Text>
+                      <View style={styles.classifyOptionRow}>
+                        <TouchableOpacity
+                          style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                          onPress={() => handleSetCurrentMilestone(step.key)}
+                        >
+                          <Text style={styles.classifyOptionText}>Set Current</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                          onPress={() => handleToggleMilestoneComplete(step)}
+                        >
+                          <Text style={styles.classifyOptionText}>Reopen Step</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                }
+
+                const isExpanded = isCurrent || expandedMilestones[step.key];
+                if (!isExpanded) {
+                  return (
+                    <TouchableOpacity
+                      key={step.key}
+                      style={[styles.classifyRow, { borderColor: colors.cardBorder }]}
+                      onPress={() => toggleMilestoneExpanded(step.key)}
+                    >
+                      <View style={styles.classifyHeaderRow}>
+                        <Text style={styles.classifyDebtName}>{step.title}</Text>
+                        <Text style={styles.milestoneArrow}>+</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+
                 return (
                   <View key={step.key} style={[styles.classifyRow, { borderColor: colors.cardBorder }]}> 
                     <View style={styles.classifyHeaderRow}>
@@ -820,6 +867,14 @@ const DebtTrackerScreen: React.FC = () => {
                     </View>
                     <Text style={styles.strategyHint}>{step.nextAction}</Text>
                     <View style={styles.classifyOptionRow}>
+                      {!isCurrent ? (
+                        <TouchableOpacity
+                          style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                          onPress={() => toggleMilestoneExpanded(step.key)}
+                        >
+                          <Text style={styles.classifyOptionText}>Collapse</Text>
+                        </TouchableOpacity>
+                      ) : null}
                       <TouchableOpacity
                         style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                         onPress={() => handleSetCurrentMilestone(step.key)}
@@ -1073,10 +1128,6 @@ const makeStyles = (colors: ThemeColors) =>
     flexDirection: "row",
     gap: 8,
     marginBottom: 12,
-  },
-  reviewFilterRow: {
-    marginBottom: 12,
-    alignItems: "flex-start",
   },
   ownerFilterBtn: {
     borderWidth: 1,

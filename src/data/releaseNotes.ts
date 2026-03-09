@@ -7,6 +7,19 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.0.4",
+    title: "Debt Milestones and UX Polish",
+    releasedAt: "2026-03-09",
+    highlights: [
+      "Added a new Debt Milestones planner with progress tracking, current-step focus, and completion management.",
+      "Added editable milestone targets with quick adjust chips (+100, +250, +500, -100).",
+      "Completed milestones now collapse into concise cards with congratulatory messages; future steps are collapsed by default and expandable on tap.",
+      "Improved debt and budget modal button visibility on Android devices with bottom navigation bars to avoid keyboard overlap.",
+      "Updated budget category options by adding Fitness and removing Food from add/edit selection bubbles.",
+      "Improved theme selector readability by forcing black theme-name text in onboarding and profile theme pickers.",
+    ],
+  },
+  {
     version: "1.0.3",
     title: "Shared Debt Planning and Budget Workflow Upgrades",
     releasedAt: "2026-03-08",
