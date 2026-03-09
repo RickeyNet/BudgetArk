@@ -1,0 +1,36 @@
+name: Generate App Store Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "screenshots/raw/**"
+      - "scripts/generate-appstore-screenshots.mjs"
+      - ".github/workflows/generate-appstore-screenshots.yml"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate screenshots
+        run: npm run screenshots:generate
+
+      - name: Upload screenshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-screenshots
+          path: screenshots/app-store
+          if-no-files-found: error
