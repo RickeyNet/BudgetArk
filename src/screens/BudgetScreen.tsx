@@ -38,6 +38,7 @@ type ExpenseCategoryEntry = {
   amount: number;
   description?: string;
   date: string;
+  recurring?: boolean;
 };
 
 type ExpenseCategoryRow = {
@@ -104,6 +105,10 @@ const getBudgetMonthKeys = (): string[] => [
 const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
   getMonthKey(new Date(dateISO)) === monthKey;
 
+/** Returns true when a recurring entry should appear in the given month (its start month or any later month). */
+const isRecurringInMonth = (dateISO: string, monthKey: string): boolean =>
+  getMonthKey(new Date(dateISO)) <= monthKey;
+
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -150,7 +155,12 @@ const BudgetScreen: React.FC = () => {
   );
 
   const monthlyEntries = useMemo(
-    () => entries.filter((entry) => isDateInMonthKey(entry.date, selectedMonthKey)),
+    () =>
+      entries.filter((entry) =>
+        entry.recurring
+          ? isRecurringInMonth(entry.date, selectedMonthKey)
+          : isDateInMonthKey(entry.date, selectedMonthKey)
+      ),
     [entries, selectedMonthKey]
   );
 
@@ -252,6 +262,7 @@ const BudgetScreen: React.FC = () => {
             amount: e.amount,
             description: e.description,
             date: e.date,
+            recurring: e.recurring,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -544,9 +555,9 @@ const BudgetScreen: React.FC = () => {
                     </Text>
                   </View>
                   <View style={styles.entryRight}>
-                    <Text style={styles.entryDate}>
-                      {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                    </Text>
+                    {entry.recurring && (
+                      <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
+                    )}
                     <Text style={styles.entryEditHint}>Edit</Text>
                   </View>
                 </TouchableOpacity>
@@ -638,9 +649,9 @@ const BudgetScreen: React.FC = () => {
                     ) : null}
                   </View>
                   <View style={styles.entryRight}>
-                    <Text style={styles.entryDate}>
-                      {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                    </Text>
+                    {entry.recurring && (
+                      <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
+                    )}
                     <Text style={styles.entryEditHint}>{isAutoDebtPayment ? "Auto" : "Edit"}</Text>
                   </View>
                 </TouchableOpacity>

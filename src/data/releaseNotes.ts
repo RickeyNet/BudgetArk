@@ -14,6 +14,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Added a new Debt Milestones planner with progress tracking, current-step focus, and completion management.",
       "Added editable milestone targets with quick adjust chips (+100, +250, +500, -100).",
       "Completed milestones now collapse into concise cards with congratulatory messages; future steps are collapsed by default and expandable on tap.",
+      "Debt Milestones modal is now full-screen with larger text and touch targets for improved readability.",
+      "Added monthly recurring toggle to budget entries — mark fixed expenses like rent or subscriptions so they automatically appear in every future month.",
       "Improved debt and budget modal button visibility on Android devices with bottom navigation bars to avoid keyboard overlap.",
       "Updated budget category options by adding Fitness and removing Food from add/edit selection bubbles.",
       "Improved theme selector readability by forcing black theme-name text in onboarding and profile theme pickers.",

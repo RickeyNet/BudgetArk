@@ -75,6 +75,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const [yearMonth, setYearMonth] = useState("");
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+  const [recurring, setRecurring] = useState(false);
 
   useEffect(() => {
     if (entry) {
@@ -85,6 +86,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       const ym = toYearMonth(entry.date);
       setYearMonth(ym);
       setPickerYear(Number(ym.split("-")[0]) || new Date().getFullYear());
+      setRecurring(!!entry.recurring);
     }
   }, [entry]);
 
@@ -108,8 +110,9 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       amount: amountNum,
       description: description.trim() || undefined,
       date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
+      recurring: recurring || undefined,
     });
-  }, [entry, isValid, amount, type, category, description, yearMonth, onSave]);
+  }, [entry, isValid, amount, type, category, description, yearMonth, recurring, onSave]);
 
   const selectMonth = useCallback(
     (monthIndex: number) => {
@@ -241,6 +244,30 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              <TouchableOpacity
+                style={styles.recurringRow}
+                onPress={() => setRecurring((prev) => !prev)}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.recurringToggle,
+                    recurring && {
+                      backgroundColor: colors.accent,
+                      borderColor: colors.accent,
+                    },
+                  ]}
+                >
+                  {recurring && <Text style={styles.recurringCheck}>✓</Text>}
+                </View>
+                <View style={styles.recurringTextWrap}>
+                  <Text style={styles.recurringLabel}>Monthly Recurring</Text>
+                  <Text style={styles.recurringHint}>
+                    This entry will appear in every month from the start month onward.
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
               <View
                 style={[
@@ -474,6 +501,44 @@ const makeStyles = (colors: ThemeColors) =>
     monthBtnTextActive: {
       color: colors.accent,
     },
+    /* Recurring toggle */
+    recurringRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+      paddingVertical: 4,
+    },
+    recurringToggle: {
+      width: 24,
+      height: 24,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+    },
+    recurringCheck: {
+      color: colors.white,
+      fontSize: 14,
+      fontWeight: "700",
+      lineHeight: 18,
+    },
+    recurringTextWrap: {
+      flex: 1,
+    },
+    recurringLabel: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    recurringHint: {
+      color: colors.textMuted,
+      fontSize: 12,
+      marginTop: 2,
+    },
+
     buttonRow: {
       flexDirection: "row",
       gap: 10,

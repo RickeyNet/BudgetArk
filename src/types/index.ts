@@ -139,6 +139,8 @@ export interface BudgetEntry {
   description?: string;
   date: string;
   createdAt: string;
+  /** When true, this entry repeats every month from its `date` month onward */
+  recurring?: boolean;
 }
 
 export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt">;

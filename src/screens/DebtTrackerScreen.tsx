@@ -25,7 +25,9 @@ import {
   Modal,
   ScrollView,
   TextInput,
+  Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import {
@@ -127,6 +129,7 @@ const DebtTrackerScreen: React.FC = () => {
 
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
+  const insets = useSafeAreaInsets();
 
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   /** Load debts from device storage whenever this tab is focused */
@@ -749,40 +752,40 @@ const DebtTrackerScreen: React.FC = () => {
       <Modal
         visible={showMilestonesModal}
         animationType="slide"
-        transparent
+        transparent={false}
         onRequestClose={() => setShowMilestonesModal(false)}
       >
-        <View style={styles.dialogOverlay}>
-          <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Debt Milestones</Text>
-            <Text style={styles.dialogMessage}>
+        <View style={styles.msFullOverlay}>
+          <View style={[styles.msFullBox, { paddingTop: Math.max(insets.top, 20) + 12, paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <Text style={styles.msFullTitle}>Debt Milestones</Text>
+            <Text style={styles.msFullMessage}>
               Follow a Milestone plan to stay focused and track progress.
             </Text>
-            <ScrollView style={styles.classifyList} contentContainerStyle={styles.classifyListContent}>
+            <ScrollView style={styles.msFullList} contentContainerStyle={styles.msFullListContent}>
               {computedMilestones.map((step) => {
                 const isCurrent = milestonePlan?.currentStepKey === step.key;
                 if (step.isCompleted) {
                   return (
-                    <View key={step.key} style={[styles.classifyRow, { borderColor: colors.success }]}> 
-                      <View style={styles.classifyHeaderRow}>
-                        <Text style={styles.classifyDebtName}>{step.title}</Text>
-                        <View style={[styles.classifyInferredBadge, { backgroundColor: `${colors.success}20` }]}> 
-                          <Text style={[styles.classifyInferredText, { color: colors.success }]}>Completed</Text>
+                    <View key={step.key} style={[styles.msStepCard, { borderColor: colors.success }]}> 
+                      <View style={styles.msStepHeaderRow}>
+                        <Text style={styles.msStepName}>{step.title}</Text>
+                        <View style={[styles.msStepBadge, { backgroundColor: `${colors.success}20` }]}> 
+                          <Text style={[styles.msStepBadgeText, { color: colors.success }]}>Completed</Text>
                         </View>
                       </View>
-                      <Text style={styles.milestoneDescription}>{getMilestoneCongratsMessage(step.key)}</Text>
-                      <View style={styles.classifyOptionRow}>
+                      <Text style={styles.msStepDescription}>{getMilestoneCongratsMessage(step.key)}</Text>
+                      <View style={styles.msStepActionRow}>
                         <TouchableOpacity
-                          style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                          style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                           onPress={() => handleSetCurrentMilestone(step.key)}
                         >
-                          <Text style={styles.classifyOptionText}>Set Current</Text>
+                          <Text style={styles.msStepActionText}>Set Current</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                          style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                           onPress={() => handleToggleMilestoneComplete(step)}
                         >
-                          <Text style={styles.classifyOptionText}>Reopen Step</Text>
+                          <Text style={styles.msStepActionText}>Reopen Step</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -794,33 +797,33 @@ const DebtTrackerScreen: React.FC = () => {
                   return (
                     <TouchableOpacity
                       key={step.key}
-                      style={[styles.classifyRow, { borderColor: colors.cardBorder }]}
+                      style={[styles.msStepCard, { borderColor: colors.cardBorder }]}
                       onPress={() => toggleMilestoneExpanded(step.key)}
                     >
-                      <View style={styles.classifyHeaderRow}>
-                        <Text style={styles.classifyDebtName}>{step.title}</Text>
-                        <Text style={styles.milestoneArrow}>+</Text>
+                      <View style={styles.msStepHeaderRow}>
+                        <Text style={styles.msStepName}>{step.title}</Text>
+                        <Text style={styles.msStepExpandIcon}>+</Text>
                       </View>
                     </TouchableOpacity>
                   );
                 }
 
                 return (
-                  <View key={step.key} style={[styles.classifyRow, { borderColor: colors.cardBorder }]}> 
-                    <View style={styles.classifyHeaderRow}>
-                      <Text style={styles.classifyDebtName}>{step.title}</Text>
+                  <View key={step.key} style={[styles.msStepCard, { borderColor: colors.cardBorder }]}> 
+                    <View style={styles.msStepHeaderRow}>
+                      <Text style={styles.msStepName}>{step.title}</Text>
                       {isCurrent && (
-                        <View style={[styles.classifyInferredBadge, { backgroundColor: `${colors.accent}20` }]}> 
-                          <Text style={[styles.classifyInferredText, { color: colors.accent }]}>Current</Text>
+                        <View style={[styles.msStepBadge, { backgroundColor: `${colors.accent}20` }]}> 
+                          <Text style={[styles.msStepBadgeText, { color: colors.accent }]}>Current</Text>
                         </View>
                       )}
                     </View>
-                    <Text style={styles.milestoneDescription}>{step.description}</Text>
-                    <Text style={styles.milestoneMetric}>{step.metricLabel}</Text>
+                    <Text style={styles.msStepDescription}>{step.description}</Text>
+                    <Text style={styles.msStepMetric}>{step.metricLabel}</Text>
                     {typeof step.targetAmount === "number" ? (
-                      <View style={styles.targetEditorRow}>
+                      <View style={styles.msTargetEditorRow}>
                         <TextInput
-                          style={styles.targetInput}
+                          style={styles.msTargetInput}
                           placeholder="Target"
                           placeholderTextColor={colors.textMuted}
                           keyboardType="decimal-pad"
@@ -828,36 +831,36 @@ const DebtTrackerScreen: React.FC = () => {
                           onChangeText={(value) => setMilestoneTargetDraft(step.key, value)}
                         />
                         <TouchableOpacity
-                          style={[styles.targetSaveBtn, { backgroundColor: colors.bg }]}
+                          style={[styles.msTargetSaveBtn, { backgroundColor: colors.bg }]}
                           onPress={() => handleSaveMilestoneTarget(step.key)}
                         >
-                          <Text style={styles.targetSaveText}>Save Target</Text>
+                          <Text style={styles.msTargetSaveText}>Save Target</Text>
                         </TouchableOpacity>
                       </View>
                     ) : null}
                     {typeof step.targetAmount === "number" ? (
-                      <View style={styles.targetQuickRow}>
+                      <View style={styles.msTargetQuickRow}>
                         {[100, 250, 500].map((amount) => (
                           <TouchableOpacity
                             key={amount}
-                            style={[styles.targetQuickBtn, { borderColor: colors.cardBorder }]}
+                            style={[styles.msTargetQuickBtn, { borderColor: colors.cardBorder }]}
                             onPress={() => bumpMilestoneTargetDraft(step.key, amount)}
                           >
-                            <Text style={styles.targetQuickText}>+{amount}</Text>
+                            <Text style={styles.msTargetQuickText}>+{amount}</Text>
                           </TouchableOpacity>
                         ))}
                         <TouchableOpacity
-                          style={[styles.targetQuickBtn, { borderColor: colors.cardBorder }]}
+                          style={[styles.msTargetQuickBtn, { borderColor: colors.cardBorder }]}
                           onPress={() => bumpMilestoneTargetDraft(step.key, -100)}
                         >
-                          <Text style={styles.targetQuickText}>-100</Text>
+                          <Text style={styles.msTargetQuickText}>-100</Text>
                         </TouchableOpacity>
                       </View>
                     ) : null}
-                    <View style={styles.progressTrack}>
+                    <View style={styles.msProgressTrack}>
                       <View
                         style={[
-                          styles.progressFill,
+                          styles.msProgressFill,
                           {
                             width: `${Math.round(step.progress * 100)}%`,
                             backgroundColor: step.isCompleted ? colors.success : colors.accent,
@@ -865,25 +868,25 @@ const DebtTrackerScreen: React.FC = () => {
                         ]}
                       />
                     </View>
-                    <Text style={styles.strategyHint}>{step.nextAction}</Text>
-                    <View style={styles.classifyOptionRow}>
+                    <Text style={styles.msNextAction}>{step.nextAction}</Text>
+                    <View style={styles.msStepActionRow}>
                       {!isCurrent ? (
                         <TouchableOpacity
-                          style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                          style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                           onPress={() => toggleMilestoneExpanded(step.key)}
                         >
-                          <Text style={styles.classifyOptionText}>Collapse</Text>
+                          <Text style={styles.msStepActionText}>Collapse</Text>
                         </TouchableOpacity>
                       ) : null}
                       <TouchableOpacity
-                        style={[styles.classifyOptionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                        style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                         onPress={() => handleSetCurrentMilestone(step.key)}
                       >
-                        <Text style={styles.classifyOptionText}>Set Current</Text>
+                        <Text style={styles.msStepActionText}>Set Current</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
-                          styles.classifyOptionBtn,
+                          styles.msStepActionBtn,
                           {
                             borderColor: step.isCompleted ? colors.success : colors.accent,
                             backgroundColor: step.isCompleted ? `${colors.success}20` : `${colors.accent}20`,
@@ -893,7 +896,7 @@ const DebtTrackerScreen: React.FC = () => {
                       >
                         <Text
                           style={[
-                            styles.classifyOptionText,
+                            styles.msStepActionText,
                             { color: step.isCompleted ? colors.success : colors.accent },
                           ]}
                         >
@@ -906,10 +909,10 @@ const DebtTrackerScreen: React.FC = () => {
               })}
             </ScrollView>
             <TouchableOpacity
-              style={[styles.dialogButton, styles.dialogCancelButton]}
+              style={styles.msFullDoneBtn}
               onPress={() => setShowMilestonesModal(false)}
             >
-              <Text style={styles.dialogCancelText}>Done</Text>
+              <Text style={styles.msFullDoneText}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1245,6 +1248,171 @@ const makeStyles = (colors: ThemeColors) =>
     height: "100%",
     borderRadius: 999,
     minWidth: 2,
+  },
+
+  /* ── Full-screen milestones modal ── */
+  msFullOverlay: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  msFullBox: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  msFullTitle: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 8,
+  },
+  msFullMessage: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.textDim,
+    marginBottom: 20,
+  },
+  msFullList: {
+    flex: 1,
+  },
+  msFullListContent: {
+    gap: 14,
+    paddingBottom: 12,
+  },
+  msFullDoneBtn: {
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    marginTop: 8,
+  },
+  msFullDoneText: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+
+  /* ── Milestone step cards (full-screen) ── */
+  msStepCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+    backgroundColor: colors.card,
+  },
+  msStepHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  msStepName: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
+  msStepBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  msStepBadgeText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  msStepExpandIcon: {
+    color: colors.textDim,
+    fontSize: 22,
+    fontWeight: "600",
+  },
+  msStepDescription: {
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.textDim,
+  },
+  msStepMetric: {
+    fontSize: 15,
+    color: colors.text,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  msTargetEditorRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  msTargetInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    backgroundColor: colors.bg,
+    color: colors.text,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  msTargetSaveBtn: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  msTargetSaveText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textDim,
+  },
+  msTargetQuickRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  msTargetQuickBtn: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: colors.bg,
+  },
+  msTargetQuickText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textDim,
+  },
+  msProgressTrack: {
+    height: 10,
+    backgroundColor: colors.cardBorder,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  msProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    minWidth: 2,
+  },
+  msNextAction: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  msStepActionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  msStepActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  msStepActionText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   emptyWrap: { alignItems: "center", paddingVertical: 48 },
