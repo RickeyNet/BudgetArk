@@ -61,7 +61,10 @@ const ThemePreviewCard = React.memo<{
     <TouchableOpacity
       style={[
         styles.themeCard,
-        { borderColor: isSelected ? preset.colors.accent : preset.colors.cardBorder },
+        {
+          borderColor: isSelected ? preset.colors.accent : preset.colors.cardBorder,
+          backgroundColor: preset.colors.card,
+        },
         isSelected && styles.themeCardSelected,
       ]}
       onPress={handlePress}
@@ -93,7 +96,7 @@ const ThemePreviewCard = React.memo<{
       <Text
         style={[
           styles.themeName,
-          { color: "#000000" },
+          { color: preset.colors.text },
         ]}
       >
         {preset.name}

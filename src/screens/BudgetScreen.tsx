@@ -909,7 +909,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     addBtnText: {
-      color: "#000000",
+      color: colors.accentButtonText,
       fontSize: 14,
       fontWeight: "700",
     },

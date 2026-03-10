@@ -1115,7 +1115,7 @@ const makeStyles = (colors: ThemeColors) =>
     shadowRadius: 8,
     elevation: 4,
   },
-  addBtnText: { color: "#000000", fontSize: 13, fontWeight: "600" },
+  addBtnText: { color: colors.accentButtonText, fontSize: 13, fontWeight: "600" },
   secondaryBtn: {
     borderWidth: 1,
     borderRadius: 10,
@@ -1175,7 +1175,7 @@ const makeStyles = (colors: ThemeColors) =>
     color: colors.textDim,
   },
   strategyButtonTextActive: {
-    color: "#000000",
+    color: colors.accentButtonText,
   },
   strategyHint: {
     fontSize: 11,
@@ -1413,6 +1413,7 @@ const makeStyles = (colors: ThemeColors) =>
   msStepActionText: {
     fontSize: 14,
     fontWeight: "600",
+    color: colors.textDim,
   },
 
   emptyWrap: { alignItems: "center", paddingVertical: 48 },
@@ -1505,6 +1506,7 @@ const makeStyles = (colors: ThemeColors) =>
   classifyOptionText: {
     fontSize: 12,
     fontWeight: "600",
+    color: colors.textDim,
   },
   dialogCancelButton: {
     backgroundColor: colors.bg,

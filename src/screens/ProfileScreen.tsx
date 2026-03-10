@@ -739,10 +739,7 @@ const ProfileScreen: React.FC = () => {
                         themeId === preset.id
                           ? preset.colors.accent
                           : colors.cardBorder,
-                      backgroundColor:
-                        themeId === preset.id
-                          ? `${preset.colors.accent}10`
-                          : "transparent",
+                      backgroundColor: preset.colors.card,
                     },
                   ]}
                   onPress={() => handleThemeSelect(preset.id)}
@@ -773,7 +770,7 @@ const ProfileScreen: React.FC = () => {
                   <Text
                     style={[
                       styles.themeOptionText,
-                      { color: "#000000" },
+                      { color: preset.colors.text },
                     ]}
                   >
                     {preset.name}

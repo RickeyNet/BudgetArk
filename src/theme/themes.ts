@@ -22,7 +22,8 @@ export type ThemeColors = Readonly<{
   textMuted: string;
   white: string;
   teal: string;           
-  tealDim: string;        
+  tealDim: string;
+  accentButtonText: string;
 }>;
 
 export type ThemePreset = Readonly<{
@@ -30,6 +31,30 @@ export type ThemePreset = Readonly<{
   name: string;
   colors: ThemeColors;
 }>;
+
+const ARK_PARCHMENT: ThemePreset = {
+  id: "ark_parchment",
+  name: "The Ark",
+  colors: {
+    bg: "#F2E6D0",
+    card: "#FAF3E8",
+    cardBorder: "#D4B896",
+    accent: "#7C4A2E",
+    success: "#5A7A3A",
+    successDim: "rgba(90, 122, 58, 0.15)",
+    warning: "#C48A2A",
+    warningDim: "rgba(196, 138, 42, 0.15)",
+    danger: "#A0392A",
+    dangerDim: "rgba(160, 57, 42, 0.15)",
+    text: "#3E2010",
+    textDim: "#8A6A50",
+    textMuted: "#C4A888",
+    white: "#F2E6D0",
+    teal: "#5A8A7A",
+    tealDim: "rgba(90, 138, 122, 0.15)",
+    accentButtonText: "#D4B896",
+  },
+};
 
 const FOREST_GOLD: ThemePreset = {
   id: "forest_gold",
@@ -51,6 +76,7 @@ const FOREST_GOLD: ThemePreset = {
     white: "#e8e0c8",
     teal: "#3aaa8a",
     tealDim: "rgba(58, 170, 138, 0.15)",
+    accentButtonText: "#000000",
   },
 };
 
@@ -73,7 +99,8 @@ const NEON_PURPLE: ThemePreset = {
     textMuted: "#3d4566",
     white: "#ffffff",
     teal: "#00bcd4",                         
-    tealDim: "rgba(0, 188, 212, 0.15)", 
+    tealDim: "rgba(0, 188, 212, 0.15)",
+    accentButtonText: "#000000",
   },
 };
 
@@ -97,6 +124,7 @@ const SLATE_DARK: ThemePreset = {
     white: "#f5f0e8",
     teal: "#7aaca0",
     tealDim: "rgba(122, 172, 160, 0.15)",
+    accentButtonText: "#000000",
   },
 };
 
@@ -120,6 +148,7 @@ const ROSE_LIGHT: ThemePreset = {
     white: "#4a3040",
     teal: "#5aafb0",
     tealDim: "rgba(90, 175, 176, 0.15)",
+    accentButtonText: "#000000",
   },
 };
 
@@ -143,6 +172,7 @@ const SYNTHWAVE: ThemePreset = {
     white: "#ede6f4",
     teal: "#6aadcc",
     tealDim: "rgba(106, 173, 204, 0.15)",
+    accentButtonText: "#000000",
   },
 };
 
@@ -166,31 +196,11 @@ const DEEPFOREST: ThemePreset = {
     white: "#e8ede9",
     teal: "#89ddff",
     tealDim: "rgba(137, 221, 255, 0.15)",
+    accentButtonText: "#000000",
   },
 };
 
-const ARK_PARCHMENT: ThemePreset = {
-  id: "ark_parchment",
-  name: "The Ark",
-  colors: {
-    bg: "#F2E6D0",
-    card: "#FAF3E8",
-    cardBorder: "#D4B896",
-    accent: "#7C4A2E",
-    success: "#5A7A3A",
-    successDim: "rgba(90, 122, 58, 0.15)",
-    warning: "#C48A2A",
-    warningDim: "rgba(196, 138, 42, 0.15)",
-    danger: "#A0392A",
-    dangerDim: "rgba(160, 57, 42, 0.15)",
-    text: "#3E2010",
-    textDim: "#8A6A50",
-    textMuted: "#C4A888",
-    white: "#F2E6D0",
-    teal: "#5A8A7A",
-    tealDim: "rgba(90, 138, 122, 0.15)",
-  },
-};
+
 
 export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT] as const;
 
