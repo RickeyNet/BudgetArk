@@ -40,12 +40,12 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Create an Expo account at https://expo.dev if you don't have one
 - [x] Run `eas login` and `eas build:configure` to generate `eas.json`
 - [x] Configure `eas.json` with `development`, `preview`, and `production` build profiles
-- [ ] Run a production build for iOS: `eas build --platform ios --profile production`
-- [ ] Run a production build for Android: `eas build --platform android --profile production`
+- [x] Run a production build for iOS: `eas build --platform ios --profile production`
+- [x] Run a production build for Android: `eas build --platform android --profile production`
 
 ### App Icons & Splash Screen
-- [ ] Verify `icon.png` is exactly 1024×1024px (required by Apple)
-- [ ] Verify `adaptive-icon.png` meets Android requirements (foreground should be ~66% of frame)
+- [x] Verify `icon.png` is exactly 1024×1024px (required by Apple)
+- [x] Verify `adaptive-icon.png` meets Android requirements (foreground should be ~66% of frame)
 - [x] Update splash screen `backgroundColor` in `app.json` from `"#ffffff"` to match the app's dark background (e.g., `"#232424"`)
 - [ ] Consider adding a proper splash icon that fits the dark background
 
@@ -54,17 +54,17 @@ Work through phases in order: finish the features first, then handle store prep 
   - Exports all data (debts, payments, budget entries, limits, user) as JSON via `expo-sharing` + `expo-file-system`
 
 ### Privacy Policy
-- [ ] Write a privacy policy (required by both Apple and Google)
+- [x] Write a privacy policy (required by both Apple and Google)
   - Can be a simple web page or GitHub Gist — key point: state that no data leaves the device
-- [ ] Add the privacy policy URL to `app.json` under `expo.ios.privacyManifests` or as a link in the store listing
+- [x] Add the privacy policy URL to `app.json` under `expo.ios.privacyManifests` or as a link in the store listing
 
----
+===========================================================================================================================================================================================
 
 ## Apple App Store Submission
 
 - [x] Enroll in the Apple Developer Program ($99/year) at https://developer.apple.com
 - [x] Create an App Store Connect record for BudgetArk
-- [ ] Prepare store listing assets:
+- [x] Prepare store listing assets:
   - [x] App name and subtitle
   - [x] Description (up to 4,000 characters)
   - [x] Keywords (up to 100 characters)
@@ -73,7 +73,7 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Set the content rating (Finance category, no objectionable content)
 - [x] Submit for review via `eas submit --platform ios`
 
----
+==============================================================================================================================================================================================
 
 ## Google Play Submission
 
@@ -85,18 +85,18 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Download the `.aab` file from EAS when the build finishes
 
 ### 3. Prepare Store Assets
-- [x] App icon: 512×512 PNG
-- [x] Feature graphic: 1024×500 PNG
-- [x] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
+- [ ] App icon: 512×512 PNG
+- [ ] Feature graphic: 1024×500 PNG
+- [ ] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
 - [x] Short description (80 characters max)
 - [x] Full description (4,000 characters max)
 - [x] Privacy policy URL (required — host on GitHub Pages for free, state no data leaves the device)
 
 ### 4. App Content Questionnaire (in Play Console)
-- [ ] Complete content rating (IARC questionnaire — should be "Everyone")
-- [ ] Set target audience / age group
-- [ ] Complete Data Safety form (no data collected, no data shared, all data stays on device)
-- [ ] Ads declaration (no ads)
+- [x] Complete content rating (IARC questionnaire — should be "Everyone")
+- [x] Set target audience / age group
+- [x] Complete Data Safety form (no data collected, no data shared, all data stays on device)
+- [x] Ads declaration (no ads)
 
 ### 5. Create App & Upload
 - [x] Go to Play Console > Create app
@@ -112,7 +112,7 @@ Work through phases in order: finish the features first, then handle store prep 
 - [ ] Note: `android.package` is `com.budgetark.app` — this is your permanent Play Store identity
 - [ ] Google Play App Signing manages your keys by default — no risk of losing your keystore
 
----
+==============================================================================================================================================================================================
 
 ## F-Droid Submission
 
@@ -181,7 +181,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 - [ ] Updates go through F-Droid's build cycle — not instant like EAS OTA
 - [ ] No analytics, tracking, or proprietary push services allowed (BudgetArk should be fine since it's fully offline)
 
----
+=================================================================================================================================================================================================
 
 ## Nice-to-Have (Post-Launch)
 

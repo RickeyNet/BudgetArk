@@ -18,7 +18,9 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Added monthly recurring toggle to budget entries — mark fixed expenses like rent or subscriptions so they automatically appear in every future month.",
       "Improved debt and budget modal button visibility on Android devices with bottom navigation bars to avoid keyboard overlap.",
       "Updated budget category options by adding Fitness and removing Food from add/edit selection bubbles.",
-      "Improved theme selector readability by forcing black theme-name text in onboarding and profile theme pickers.",
+      "Fixed button text contrast on The Ark theme — accent buttons now use a readable tan instead of black.",
+      "Fixed milestone action buttons (Set Current, Reopen Step, etc.) being unreadable on dark themes.",
+      "Theme picker cards now preview each theme's own colors, ensuring names are always readable regardless of active theme.",
     ],
   },
   {
