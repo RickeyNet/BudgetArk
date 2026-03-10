@@ -40,7 +40,14 @@ import {
   DebtOwner,
   NewDebtInput,
 } from "../types";
-import { getDebts, saveDebts, recordPayment, updateDebt } from "../storage/debtStorage";
+import {
+  getDebts,
+  saveDebts,
+  recordPayment,
+  updateDebt,
+  getPayoffStrategyPreference,
+  savePayoffStrategyPreference,
+} from "../storage/debtStorage";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import {
   getDebtMilestonePlan,
@@ -51,6 +58,7 @@ import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
+import PayoffPlannerModal from "../components/PayoffPlannerModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -100,6 +108,7 @@ const DebtTrackerScreen: React.FC = () => {
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
   const [showHistory, setShowHistory] = useState(false);
+  const [showPlannerModal, setShowPlannerModal] = useState(false);
   const [ownerFilter, setOwnerFilter] = useState<DebtOwnerFilter>("all");
   const [showClassifyModal, setShowClassifyModal] = useState(false);
   const [classDraftByDebtId, setClassDraftByDebtId] = useState<Record<string, DebtClass>>({});
@@ -137,10 +146,11 @@ const DebtTrackerScreen: React.FC = () => {
     useCallback(() => {
       const loadDebts = async () => {
         try {
-          const [stored, budgetEntries, storedMilestones] = await Promise.all([
+          const [stored, budgetEntries, storedMilestones, savedStrategy] = await Promise.all([
             getDebts(),
             getBudgetEntries(),
             getDebtMilestonePlan(),
+            getPayoffStrategyPreference(),
           ]);
           // Filter out any corrupted entries from earlier sessions
           const valid = stored.filter(
@@ -157,6 +167,9 @@ const DebtTrackerScreen: React.FC = () => {
           }
           setDebts(valid);
           setMilestonePlan(storedMilestones);
+          if (savedStrategy) {
+            setStrategy(savedStrategy);
+          }
 
           const savings = budgetEntries
             .filter(
@@ -532,6 +545,11 @@ const DebtTrackerScreen: React.FC = () => {
     return [...active, ...paidOff];
   }, [filteredDebts, strategy]);
 
+  const handleChangeStrategy = useCallback(async (nextStrategy: PayoffStrategy) => {
+    setStrategy(nextStrategy);
+    await savePayoffStrategyPreference(nextStrategy);
+  }, []);
+
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
   const renderDebtCard = useCallback(
@@ -674,7 +692,15 @@ const DebtTrackerScreen: React.FC = () => {
       {/* Payoff Strategy Picker */}
       {sortedDebts.filter((d) => d.balance > 0).length > 1 && (
         <View style={styles.strategyRow}>
-          <Text style={styles.strategyLabel}>PAYOFF ORDER</Text>
+          <View style={styles.strategyHeaderRow}>
+            <Text style={styles.strategyLabel}>PAYOFF ORDER</Text>
+            <TouchableOpacity
+              style={[styles.strategyPlannerBtn, { borderColor: colors.cardBorder }]}
+              onPress={() => setShowPlannerModal(true)}
+            >
+              <Text style={[styles.strategyPlannerBtnText, { color: colors.textDim }]}>What-if Planner</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.strategyButtons}>
             {([
               ["custom", "Custom"],
@@ -687,7 +713,7 @@ const DebtTrackerScreen: React.FC = () => {
                   styles.strategyButton,
                   strategy === key && styles.strategyButtonActive,
                 ]}
-                onPress={() => setStrategy(key)}
+                onPress={() => handleChangeStrategy(key)}
               >
                 <Text
                   style={[
@@ -747,6 +773,14 @@ const DebtTrackerScreen: React.FC = () => {
         visible={showHistory}
         onClose={() => setShowHistory(false)}
         debts={debts}
+      />
+
+      <PayoffPlannerModal
+        visible={showPlannerModal}
+        onClose={() => setShowPlannerModal(false)}
+        debts={debts}
+        selectedStrategy={strategy}
+        onSelectStrategy={handleChangeStrategy}
       />
 
       <Modal
@@ -1146,11 +1180,27 @@ const makeStyles = (colors: ThemeColors) =>
   strategyRow: {
     marginBottom: 14,
   },
+  strategyHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   strategyLabel: {
     fontSize: 11,
     color: colors.textDim,
     letterSpacing: 1,
-    marginBottom: 8,
+  },
+  strategyPlannerBtn: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: colors.card,
+  },
+  strategyPlannerBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   strategyButtons: {
     flexDirection: "row",

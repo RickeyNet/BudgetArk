@@ -10,6 +10,200 @@
  * formulas (no iterative loops) unless otherwise noted.
  */
 
+import type { DebtClass } from "../types";
+
+export type PayoffMethod = "avalanche" | "snowball";
+
+export type PayoffDebtInput = {
+  id: string;
+  balance: number;
+  rate: number;
+  minPayment: number;
+  debtClass?: DebtClass;
+};
+
+export type PayoffSimulationResult = {
+  method: PayoffMethod;
+  monthsToPayoff: number;
+  totalInterestPaid: number;
+  totalPaid: number;
+  debtsClearedInFirstYear: number;
+  isPayoffPossible: boolean;
+};
+
+const getSnowballPriority = (debtClass?: DebtClass): number =>
+  debtClass === "car_house" ? 1 : 0;
+
+const pickTargetDebtIndex = (
+  debts: Array<{ balance: number; rate: number; debtClass?: DebtClass }>,
+  method: PayoffMethod
+): number => {
+  let bestIndex = -1;
+
+  for (let i = 0; i < debts.length; i++) {
+    if (debts[i].balance <= 0) continue;
+
+    if (bestIndex === -1) {
+      bestIndex = i;
+      continue;
+    }
+
+    const current = debts[i];
+    const best = debts[bestIndex];
+
+    if (method === "avalanche") {
+      if (current.rate > best.rate) {
+        bestIndex = i;
+        continue;
+      }
+      if (current.rate === best.rate && current.balance < best.balance) {
+        bestIndex = i;
+      }
+      continue;
+    }
+
+    const currentPriority = getSnowballPriority(current.debtClass);
+    const bestPriority = getSnowballPriority(best.debtClass);
+
+    if (currentPriority < bestPriority) {
+      bestIndex = i;
+      continue;
+    }
+    if (currentPriority === bestPriority && current.balance < best.balance) {
+      bestIndex = i;
+      continue;
+    }
+    if (
+      currentPriority === bestPriority &&
+      current.balance === best.balance &&
+      current.rate > best.rate
+    ) {
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+};
+
+/**
+ * Simulates multi-debt payoff month-by-month using either Avalanche or Snowball.
+ *
+ * - All debt minimums are paid first each month.
+ * - Optional extra payment is then applied to one target debt at a time based on method.
+ * - Returns aggregate timeline and interest metrics for what-if comparisons.
+ */
+export const simulatePayoffPlan = (
+  inputDebts: PayoffDebtInput[],
+  method: PayoffMethod,
+  extraMonthlyPayment: number = 0,
+  maxMonths: number = 600
+): PayoffSimulationResult => {
+  const debts = inputDebts
+    .filter((debt) => debt.balance > 0)
+    .map((debt) => ({
+      id: debt.id,
+      balance: debt.balance,
+      rate: Math.max(0, debt.rate),
+      minPayment: Math.max(0, debt.minPayment),
+      debtClass: debt.debtClass,
+    }));
+
+  if (debts.length === 0) {
+    return {
+      method,
+      monthsToPayoff: 0,
+      totalInterestPaid: 0,
+      totalPaid: 0,
+      debtsClearedInFirstYear: 0,
+      isPayoffPossible: true,
+    };
+  }
+
+  const effectiveExtra = Math.max(0, extraMonthlyPayment);
+  let totalInterestPaid = 0;
+  let totalPaid = 0;
+  let monthsToPayoff = 0;
+  let debtsClearedInFirstYear = 0;
+
+  for (let month = 1; month <= maxMonths; month++) {
+    let beforeBalance = 0;
+    let afterBalance = 0;
+
+    debts.forEach((debt) => {
+      if (debt.balance <= 0) return;
+      beforeBalance += debt.balance;
+
+      const interest = debt.balance * (debt.rate / 100 / 12);
+      debt.balance += interest;
+      totalInterestPaid += interest;
+
+      const minimumPayment = Math.min(debt.minPayment, debt.balance);
+      debt.balance -= minimumPayment;
+      totalPaid += minimumPayment;
+    });
+
+    let extraRemaining = effectiveExtra;
+    while (extraRemaining > 0) {
+      const targetIndex = pickTargetDebtIndex(debts, method);
+      if (targetIndex < 0) break;
+
+      const target = debts[targetIndex];
+      const extraPayment = Math.min(extraRemaining, target.balance);
+      target.balance -= extraPayment;
+      totalPaid += extraPayment;
+      extraRemaining -= extraPayment;
+
+      if (target.balance <= 0.000001) {
+        target.balance = 0;
+      }
+    }
+
+    debts.forEach((debt) => {
+      if (debt.balance > 0) {
+        afterBalance += debt.balance;
+      }
+    });
+
+    const paidOffThisMonth = debts.filter((debt) => debt.balance === 0).length;
+    if (month <= 12) {
+      debtsClearedInFirstYear = paidOffThisMonth;
+    }
+
+    monthsToPayoff = month;
+    const allPaidOff = debts.every((debt) => debt.balance <= 0);
+    if (allPaidOff) {
+      return {
+        method,
+        monthsToPayoff,
+        totalInterestPaid,
+        totalPaid,
+        debtsClearedInFirstYear,
+        isPayoffPossible: true,
+      };
+    }
+
+    if (afterBalance >= beforeBalance - 0.000001) {
+      return {
+        method,
+        monthsToPayoff,
+        totalInterestPaid,
+        totalPaid,
+        debtsClearedInFirstYear,
+        isPayoffPossible: false,
+      };
+    }
+  }
+
+  return {
+    method,
+    monthsToPayoff,
+    totalInterestPaid,
+    totalPaid,
+    debtsClearedInFirstYear,
+    isPayoffPossible: false,
+  };
+};
+
 /**
  * Calculates the number of months required to pay off a debt
  * given a fixed monthly payment and APR.

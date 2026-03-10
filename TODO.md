@@ -193,7 +193,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
 - [x] Localization / currency format options beyond USD
 - [ ] Recurring entries and due-date reminder banners
-- [ ] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
+- [x] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
 - [ ] Savings goals and emergency fund runway tracker
 - [ ] Monthly review insights (category changes, spending trends, streaks)
 - [ ] Custom categories and category icon support
