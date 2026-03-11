@@ -150,6 +150,27 @@ export interface CategoryBudgetLimit {
   monthlyLimit: number;
 }
 
+/* ─── Savings Goal Types ─── */
+
+export type SavingsGoalCategory =
+  | "emergency_fund"
+  | "travel"
+  | "home"
+  | "car"
+  | "education"
+  | "other";
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  category: SavingsGoalCategory;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /* ─── Currency + Localization Types ─── */
 
 export interface CurrencyPreferenceOption {

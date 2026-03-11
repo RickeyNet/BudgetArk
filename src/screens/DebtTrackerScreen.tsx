@@ -39,6 +39,7 @@ import {
   DebtMilestonePlan,
   DebtOwner,
   NewDebtInput,
+  SavingsGoal,
 } from "../types";
 import {
   getDebts,
@@ -48,6 +49,7 @@ import {
   getPayoffStrategyPreference,
   savePayoffStrategyPreference,
 } from "../storage/debtStorage";
+import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import {
   getDebtMilestonePlan,
@@ -58,7 +60,7 @@ import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
-import PayoffPlannerModal from "../components/PayoffPlannerModal";
+import SmartPlanModal from "../components/SmartPlanModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -108,7 +110,10 @@ const DebtTrackerScreen: React.FC = () => {
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
   const [showHistory, setShowHistory] = useState(false);
-  const [showPlannerModal, setShowPlannerModal] = useState(false);
+  const [showSmartPlanModal, setShowSmartPlanModal] = useState(false);
+  const [smartPlanInitialSection, setSmartPlanInitialSection] = useState<
+    "hull" | "deck" | "supplies"
+  >("hull");
   const [ownerFilter, setOwnerFilter] = useState<DebtOwnerFilter>("all");
   const [showClassifyModal, setShowClassifyModal] = useState(false);
   const [classDraftByDebtId, setClassDraftByDebtId] = useState<Record<string, DebtClass>>({});
@@ -135,6 +140,7 @@ const DebtTrackerScreen: React.FC = () => {
     home_vehicle_paydown: "",
     wealth_building: "",
   });
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
 
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -146,11 +152,12 @@ const DebtTrackerScreen: React.FC = () => {
     useCallback(() => {
       const loadDebts = async () => {
         try {
-          const [stored, budgetEntries, storedMilestones, savedStrategy] = await Promise.all([
+          const [stored, budgetEntries, storedMilestones, savedStrategy, storedGoals] = await Promise.all([
             getDebts(),
             getBudgetEntries(),
             getDebtMilestonePlan(),
             getPayoffStrategyPreference(),
+            getSavingsGoals(),
           ]);
           // Filter out any corrupted entries from earlier sessions
           const valid = stored.filter(
@@ -170,6 +177,7 @@ const DebtTrackerScreen: React.FC = () => {
           if (savedStrategy) {
             setStrategy(savedStrategy);
           }
+          setSavingsGoals(storedGoals);
 
           const savings = budgetEntries
             .filter(
@@ -351,6 +359,13 @@ const DebtTrackerScreen: React.FC = () => {
   ]);
 
   const completedMilestones = computedMilestones.filter((step) => step.isCompleted).length;
+  const runwayMonths = monthlyEssentialsEstimate > 0 ? savingsReserve / monthlyEssentialsEstimate : 0;
+  const activeSavingsGoal = React.useMemo(() => {
+    const openGoals = savingsGoals.filter((goal) => goal.currentAmount < goal.targetAmount);
+    if (openGoals.length === 0) return null;
+    const emergencyGoal = openGoals.find((goal) => goal.category === "emergency_fund");
+    return emergencyGoal || openGoals[0];
+  }, [savingsGoals]);
 
   /** Add a new debt */
   const handleAddDebt = useCallback(async (input: NewDebtInput) => {
@@ -550,6 +565,50 @@ const DebtTrackerScreen: React.FC = () => {
     await savePayoffStrategyPreference(nextStrategy);
   }, []);
 
+  const openSmartPlan = useCallback((section: "hull" | "deck" | "supplies") => {
+    setSmartPlanInitialSection(section);
+    setShowSmartPlanModal(true);
+  }, []);
+
+  const handleAddSavingsGoal = useCallback(
+    async (goal: SavingsGoal) => {
+      const updated = [...savingsGoals, goal];
+      setSavingsGoals(updated);
+      await saveSavingsGoals(updated);
+    },
+    [savingsGoals]
+  );
+
+  const handleUpdateSavingsGoal = useCallback(
+    async (goalId: string, updates: Partial<SavingsGoal>) => {
+      const updated = savingsGoals.map((goal) =>
+        goal.id === goalId
+          ? {
+              ...goal,
+              ...updates,
+              updatedAt: new Date().toISOString(),
+            }
+          : goal
+      );
+      setSavingsGoals(updated);
+      await saveSavingsGoals(updated);
+    },
+    [savingsGoals]
+  );
+
+  const handleDeleteSavingsGoal = useCallback(
+    async (goalId: string) => {
+      const updated = savingsGoals.filter((goal) => goal.id !== goalId);
+      setSavingsGoals(updated);
+      await saveSavingsGoals(updated);
+    },
+    [savingsGoals]
+  );
+
+  const handleUpdateEssentialsEstimate = useCallback((value: number) => {
+    setMonthlyEssentialsEstimate(value);
+  }, []);
+
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
   const renderDebtCard = useCallback(
@@ -629,12 +688,39 @@ const DebtTrackerScreen: React.FC = () => {
           </View>
         </View>
 
+        <View style={styles.smartPlanChipRow}>
+          <TouchableOpacity
+            style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+            onPress={() => openSmartPlan("deck")}
+          >
+            <Text style={styles.smartPlanChipLabel}>Deck</Text>
+            <Text style={styles.smartPlanChipValue}>{runwayMonths.toFixed(1)} months</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+            onPress={() => openSmartPlan("supplies")}
+          >
+            <Text style={styles.smartPlanChipLabel}>Supplies Goal</Text>
+            <Text style={styles.smartPlanChipValue}>
+              {activeSavingsGoal
+                ? `${activeSavingsGoal.name} ${Math.round(
+                    Math.min(
+                      activeSavingsGoal.currentAmount /
+                        Math.max(activeSavingsGoal.targetAmount, 1),
+                      1
+                    ) * 100
+                  )}%`
+                : "Create a goal"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
           style={[styles.milestonesCard, { backgroundColor: colors.bg, borderColor: colors.cardBorder }]}
           onPress={openMilestonesModal}
         >
           <View>
-            <Text style={styles.ownerSummaryLabel}>Debt Milestones</Text>
+            <Text style={styles.ownerSummaryLabel}>Build Your Ark Milestones</Text>
             <Text style={styles.milestonesTitle}>
               {completedMilestones}/{computedMilestones.length || 6} completed
             </Text>
@@ -696,9 +782,9 @@ const DebtTrackerScreen: React.FC = () => {
             <Text style={styles.strategyLabel}>PAYOFF ORDER</Text>
             <TouchableOpacity
               style={[styles.strategyPlannerBtn, { borderColor: colors.cardBorder }]}
-              onPress={() => setShowPlannerModal(true)}
+              onPress={() => openSmartPlan("hull")}
             >
-              <Text style={[styles.strategyPlannerBtnText, { color: colors.textDim }]}>What-if Planner</Text>
+              <Text style={[styles.strategyPlannerBtnText, { color: colors.textDim }]}>Build Your Ark</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.strategyButtons}>
@@ -775,12 +861,20 @@ const DebtTrackerScreen: React.FC = () => {
         debts={debts}
       />
 
-      <PayoffPlannerModal
-        visible={showPlannerModal}
-        onClose={() => setShowPlannerModal(false)}
+      <SmartPlanModal
+        visible={showSmartPlanModal}
+        onClose={() => setShowSmartPlanModal(false)}
         debts={debts}
         selectedStrategy={strategy}
         onSelectStrategy={handleChangeStrategy}
+        savingsReserve={savingsReserve}
+        monthlyEssentialsEstimate={monthlyEssentialsEstimate}
+        onUpdateMonthlyEssentialsEstimate={handleUpdateEssentialsEstimate}
+        goals={savingsGoals}
+        onAddGoal={handleAddSavingsGoal}
+        onUpdateGoal={handleUpdateSavingsGoal}
+        onDeleteGoal={handleDeleteSavingsGoal}
+        initialSection={smartPlanInitialSection}
       />
 
       <Modal
@@ -1105,6 +1199,28 @@ const makeStyles = (colors: ThemeColors) =>
     marginBottom: 2,
    },
    ownerSummaryValue: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: "700",
+   },
+   smartPlanChipRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+   },
+   smartPlanChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+   },
+   smartPlanChipLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginBottom: 3,
+   },
+   smartPlanChipValue: {
     fontSize: 13,
     color: colors.text,
     fontWeight: "700",
