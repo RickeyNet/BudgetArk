@@ -9,7 +9,7 @@ import {
 const DEBT_MILESTONE_PLAN_KEY = "@budgetark_debt_milestones" as const;
 
 const createDefaultPlan = (): DebtMilestonePlan => ({
-  currentStepKey: "starter_cushion",
+  currentStepKey: "keel",
   steps: DEFAULT_DEBT_MILESTONE_STEPS.map((step) => ({
     ...step,
     isCompleted: false,
@@ -30,7 +30,7 @@ const normalizePlan = (raw: DebtMilestonePlan): DebtMilestonePlan => {
 
   const hasCurrent = steps.some((step) => step.key === raw.currentStepKey);
   return {
-    currentStepKey: hasCurrent ? raw.currentStepKey : "starter_cushion",
+    currentStepKey: hasCurrent ? raw.currentStepKey : "keel",
     steps,
     updatedAt: raw.updatedAt || new Date().toISOString(),
   };

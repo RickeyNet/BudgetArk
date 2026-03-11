@@ -56,6 +56,7 @@ import {
   saveDebtMilestonePlan,
   updateDebtMilestoneStep,
 } from "../storage/debtMilestoneStorage";
+import { consumeArkSetupPromptRequest } from "../storage/arkSetupStorage";
 import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
@@ -89,17 +90,25 @@ const ESSENTIAL_CATEGORIES = [
   "Healthcare",
 ] as const;
 
+const KEEL_MAX_TARGET = 2000;
+
 const getSnowballPriority = (debt: Debt): number => {
   return debt.debtClass === "car_house" ? 1 : 0;
 };
 
 const getMilestoneCongratsMessage = (key: DebtMilestoneKey): string => {
-  if (key === "starter_cushion") return "Great start. You just built real financial breathing room.";
-  if (key === "non_mortgage_debt") return "Huge win. You knocked out a major debt burden.";
-  if (key === "core_emergency_fund") return "Excellent discipline. Your safety net is getting stronger.";
-  if (key === "retirement_momentum") return "Nice momentum. Your future self will thank you.";
-  if (key === "home_vehicle_paydown") return "Outstanding progress. You are building long-term equity.";
+  if (key === "keel") return "Great start. Your foundation is in place.";
+  if (key === "hull") return "Strong work. Your core debt body is getting lighter.";
+  if (key === "deck") return "Excellent discipline. Your emergency runway is stronger.";
+  if (key === "supplies") return "Nice consistency. Your plan has what it needs month to month.";
+  if (key === "sail") return "Momentum unlocked. Your long-term plan is moving forward.";
   return "Congratulations! Another milestone complete. Keep going.";
+};
+
+const getMilestoneBuildActionLabel = (key: DebtMilestoneKey): string => {
+  if (key === "supplies") return "Collect";
+  if (key === "sail") return "Raise";
+  return "Build";
 };
 
 const DebtTrackerScreen: React.FC = () => {
@@ -125,20 +134,18 @@ const DebtTrackerScreen: React.FC = () => {
   const [expandedMilestones, setExpandedMilestones] = useState<
     Record<DebtMilestoneKey, boolean>
   >({
-    starter_cushion: false,
-    non_mortgage_debt: false,
-    core_emergency_fund: false,
-    retirement_momentum: false,
-    home_vehicle_paydown: false,
-    wealth_building: false,
+    keel: false,
+    hull: false,
+    deck: false,
+    supplies: false,
+    sail: false,
   });
   const [targetDraftByStep, setTargetDraftByStep] = useState<Record<DebtMilestoneKey, string>>({
-    starter_cushion: "",
-    non_mortgage_debt: "",
-    core_emergency_fund: "",
-    retirement_momentum: "",
-    home_vehicle_paydown: "",
-    wealth_building: "",
+    keel: "",
+    hull: "",
+    deck: "",
+    supplies: "",
+    sail: "",
   });
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
 
@@ -147,17 +154,46 @@ const DebtTrackerScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
 
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
+
+  const primeMilestonesModal = useCallback((plan: DebtMilestonePlan) => {
+    const nextDraft = { ...targetDraftByStep };
+    plan.steps.forEach((step) => {
+      nextDraft[step.key] =
+        typeof step.targetAmount === "number" && Number.isFinite(step.targetAmount)
+          ? String(Math.round(step.targetAmount))
+          : "";
+    });
+    setTargetDraftByStep(nextDraft);
+    const currentStep = plan.steps.find((step) => step.key === plan.currentStepKey);
+    const shouldExpandCurrent = !!currentStep && !currentStep.isCompleted;
+    setExpandedMilestones({
+      keel: shouldExpandCurrent && plan.currentStepKey === "keel",
+      hull: shouldExpandCurrent && plan.currentStepKey === "hull",
+      deck: shouldExpandCurrent && plan.currentStepKey === "deck",
+      supplies: shouldExpandCurrent && plan.currentStepKey === "supplies",
+      sail: shouldExpandCurrent && plan.currentStepKey === "sail",
+    });
+  }, [targetDraftByStep]);
+
   /** Load debts from device storage whenever this tab is focused */
   useFocusEffect(
     useCallback(() => {
       const loadDebts = async () => {
         try {
-          const [stored, budgetEntries, storedMilestones, savedStrategy, storedGoals] = await Promise.all([
+          const [
+            stored,
+            budgetEntries,
+            storedMilestones,
+            savedStrategy,
+            storedGoals,
+            shouldOpenArkSetup,
+          ] = await Promise.all([
             getDebts(),
             getBudgetEntries(),
             getDebtMilestonePlan(),
             getPayoffStrategyPreference(),
             getSavingsGoals(),
+            consumeArkSetupPromptRequest(),
           ]);
           // Filter out any corrupted entries from earlier sessions
           const valid = stored.filter(
@@ -174,6 +210,10 @@ const DebtTrackerScreen: React.FC = () => {
           }
           setDebts(valid);
           setMilestonePlan(storedMilestones);
+          if (shouldOpenArkSetup) {
+            primeMilestonesModal(storedMilestones);
+            setShowMilestonesModal(true);
+          }
           if (savedStrategy) {
             setStrategy(savedStrategy);
           }
@@ -235,7 +275,7 @@ const DebtTrackerScreen: React.FC = () => {
         setIsLoading(false);
       };
       loadDebts();
-    }, [])
+    }, [primeMilestonesModal])
   );
 
   const filteredDebts = React.useMemo(() => {
@@ -280,18 +320,18 @@ const DebtTrackerScreen: React.FC = () => {
     if (!milestonePlan) return [];
 
     return milestonePlan.steps.map((step) => {
-      if (step.key === "starter_cushion") {
-        const target = step.targetAmount || 1000;
+      if (step.key === "keel") {
+        const target = step.targetAmount || 1200;
         const progress = target > 0 ? Math.min(savingsReserve / target, 1) : 0;
         return {
           ...step,
           progress,
           metricLabel: `${formatCurrency(savingsReserve)} / ${formatCurrency(target)}`,
-          nextAction: "Direct next extra dollars into emergency savings until target is hit.",
+          nextAction: "Set aside your first cushion target before pushing harder elsewhere.",
         };
       }
 
-      if (step.key === "non_mortgage_debt") {
+      if (step.key === "hull") {
         const progress =
           nonMortgageOriginal > 0
             ? Math.min((nonMortgageOriginal - nonMortgageRemaining) / nonMortgageOriginal, 1)
@@ -300,33 +340,22 @@ const DebtTrackerScreen: React.FC = () => {
           ...step,
           progress,
           metricLabel: `${formatCurrency(nonMortgageRemaining)} remaining`,
-          nextAction: "Apply extra payment to the first debt in your current payoff order.",
+          nextAction: "Apply your next extra payment to the first debt in your chosen payoff order.",
         };
       }
 
-      if (step.key === "core_emergency_fund") {
+      if (step.key === "deck") {
         const target = step.targetAmount || monthlyEssentialsEstimate * 3;
         const progress = target > 0 ? Math.min(savingsReserve / target, 1) : 0;
         return {
           ...step,
           progress,
           metricLabel: `${formatCurrency(savingsReserve)} / ${formatCurrency(target)}`,
-          nextAction: "Aim for 3-6 months of essentials before shifting to aggressive investing.",
+          nextAction: "Grow your reserves toward 3-6 months of essentials for stability.",
         };
       }
 
-      if (step.key === "retirement_momentum") {
-        const target = step.targetAmount || 500;
-        const progress = target > 0 ? Math.min(retirementInvestingMonthly / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(retirementInvestingMonthly)} /mo`,
-          nextAction: "Set automatic monthly transfers into retirement and investing categories.",
-        };
-      }
-
-      if (step.key === "home_vehicle_paydown") {
+      if (step.key === "supplies") {
         const progress =
           securedOriginal > 0
             ? Math.min((securedOriginal - securedRemaining) / securedOriginal, 1)
@@ -335,7 +364,18 @@ const DebtTrackerScreen: React.FC = () => {
           ...step,
           progress,
           metricLabel: `${formatCurrency(securedRemaining)} remaining`,
-          nextAction: "Apply consistent extra principal payments to your secured balances.",
+          nextAction: "Keep steady principal reductions on secured balances each month.",
+        };
+      }
+
+      if (step.key === "sail") {
+        const target = step.targetAmount || 500;
+        const progress = target > 0 ? Math.min(retirementInvestingMonthly / target, 1) : 0;
+        return {
+          ...step,
+          progress,
+          metricLabel: `${formatCurrency(retirementInvestingMonthly)} /mo`,
+          nextAction: "Automate monthly investing contributions to keep forward momentum.",
         };
       }
 
@@ -358,7 +398,21 @@ const DebtTrackerScreen: React.FC = () => {
     securedRemaining,
   ]);
 
-  const completedMilestones = computedMilestones.filter((step) => step.isCompleted).length;
+  const currentMilestone =
+    computedMilestones.find((step) => step.key === milestonePlan?.currentStepKey) ||
+    computedMilestones[0] ||
+    null;
+  const orderedMilestones = React.useMemo(() => {
+    const completed = computedMilestones.filter((step) => step.isCompleted);
+    const inProgress = computedMilestones.filter((step) => !step.isCompleted);
+    return [...completed, ...inProgress];
+  }, [computedMilestones]);
+  const currentMilestoneKey = currentMilestone?.key;
+  const currentMilestoneIndex = currentMilestone
+    ? computedMilestones.findIndex((step) => step.key === currentMilestone.key)
+    : 0;
+  const allMilestonesCompleted =
+    computedMilestones.length > 0 && computedMilestones.every((step) => step.isCompleted);
   const runwayMonths = monthlyEssentialsEstimate > 0 ? savingsReserve / monthlyEssentialsEstimate : 0;
   const activeSavingsGoal = React.useMemo(() => {
     const openGoals = savingsGoals.filter((goal) => goal.currentAmount < goal.targetAmount);
@@ -462,6 +516,9 @@ const DebtTrackerScreen: React.FC = () => {
         isCompleted: !step.isCompleted,
       });
       setMilestonePlan(nextPlan);
+      if (!step.isCompleted) {
+        setExpandedMilestones((current) => ({ ...current, [step.key]: false }));
+      }
     },
     []
   );
@@ -482,27 +539,10 @@ const DebtTrackerScreen: React.FC = () => {
 
   const openMilestonesModal = useCallback(() => {
     if (milestonePlan) {
-      const nextDraft = { ...targetDraftByStep };
-      milestonePlan.steps.forEach((step) => {
-        nextDraft[step.key] =
-          typeof step.targetAmount === "number" && Number.isFinite(step.targetAmount)
-            ? String(Math.round(step.targetAmount))
-            : "";
-      });
-      setTargetDraftByStep(nextDraft);
-    }
-    if (milestonePlan) {
-      setExpandedMilestones({
-        starter_cushion: milestonePlan.currentStepKey === "starter_cushion",
-        non_mortgage_debt: milestonePlan.currentStepKey === "non_mortgage_debt",
-        core_emergency_fund: milestonePlan.currentStepKey === "core_emergency_fund",
-        retirement_momentum: milestonePlan.currentStepKey === "retirement_momentum",
-        home_vehicle_paydown: milestonePlan.currentStepKey === "home_vehicle_paydown",
-        wealth_building: milestonePlan.currentStepKey === "wealth_building",
-      });
+      primeMilestonesModal(milestonePlan);
     }
     setShowMilestonesModal(true);
-  }, [milestonePlan, targetDraftByStep]);
+  }, [milestonePlan, primeMilestonesModal]);
 
   const toggleMilestoneExpanded = useCallback((key: DebtMilestoneKey) => {
     setExpandedMilestones((current) => ({ ...current, [key]: !current[key] }));
@@ -520,7 +560,8 @@ const DebtTrackerScreen: React.FC = () => {
     (key: DebtMilestoneKey, amount: number) => {
       setTargetDraftByStep((current) => {
         const base = parseFloat(current[key] || "0");
-        const next = Math.max(0, (Number.isFinite(base) ? base : 0) + amount);
+        const unclamped = Math.max(0, (Number.isFinite(base) ? base : 0) + amount);
+        const next = key === "keel" ? Math.min(unclamped, KEEL_MAX_TARGET) : unclamped;
         return { ...current, [key]: String(Math.round(next)) };
       });
     },
@@ -532,13 +573,14 @@ const DebtTrackerScreen: React.FC = () => {
       const raw = targetDraftByStep[key];
       const parsed = parseFloat(raw);
       if (Number.isNaN(parsed) || parsed <= 0) return;
+      const normalized = key === "keel" ? Math.min(parsed, KEEL_MAX_TARGET) : parsed;
       const nextPlan = await updateDebtMilestoneStep(key, {
-        targetAmount: parsed,
+        targetAmount: normalized,
       });
       setMilestonePlan(nextPlan);
       setTargetDraftByStep((current) => ({
         ...current,
-        [key]: String(Math.round(parsed)),
+        [key]: String(Math.round(normalized)),
       }));
     },
     [targetDraftByStep]
@@ -688,44 +730,46 @@ const DebtTrackerScreen: React.FC = () => {
           </View>
         </View>
 
-        <View style={styles.smartPlanChipRow}>
-          <TouchableOpacity
-            style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
-            onPress={() => openSmartPlan("deck")}
-          >
-            <Text style={styles.smartPlanChipLabel}>Deck</Text>
-            <Text style={styles.smartPlanChipValue}>{runwayMonths.toFixed(1)} months</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
-            onPress={() => openSmartPlan("supplies")}
-          >
-            <Text style={styles.smartPlanChipLabel}>Supplies Goal</Text>
-            <Text style={styles.smartPlanChipValue}>
-              {activeSavingsGoal
-                ? `${activeSavingsGoal.name} ${Math.round(
-                    Math.min(
-                      activeSavingsGoal.currentAmount /
-                        Math.max(activeSavingsGoal.targetAmount, 1),
-                      1
-                    ) * 100
-                  )}%`
-                : "Create a goal"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {(currentMilestoneKey === "deck" || currentMilestoneKey === "supplies") && (
+          <View style={styles.smartPlanChipRow}>
+            {currentMilestoneKey === "deck" && (
+              <TouchableOpacity
+                style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                onPress={() => openSmartPlan("deck")}
+              >
+                <Text style={styles.smartPlanChipLabel}>Deck</Text>
+                <Text style={styles.smartPlanChipValue}>{runwayMonths.toFixed(1)} months</Text>
+              </TouchableOpacity>
+            )}
+            {currentMilestoneKey === "supplies" && (
+              <TouchableOpacity
+                style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
+                onPress={() => openSmartPlan("supplies")}
+              >
+                <Text style={styles.smartPlanChipLabel}>Supplies Goal</Text>
+                <Text style={styles.smartPlanChipValue}>
+                  {activeSavingsGoal
+                    ? `${activeSavingsGoal.name} ${Math.round(
+                        Math.min(
+                          activeSavingsGoal.currentAmount /
+                            Math.max(activeSavingsGoal.targetAmount, 1),
+                          1
+                        ) * 100
+                      )}%`
+                    : "Create a goal"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         <TouchableOpacity
           style={[styles.milestonesCard, { backgroundColor: colors.bg, borderColor: colors.cardBorder }]}
           onPress={openMilestonesModal}
         >
           <View>
-            <Text style={styles.ownerSummaryLabel}>Build Your Ark Milestones</Text>
-            <Text style={styles.milestonesTitle}>
-              {completedMilestones}/{computedMilestones.length || 6} completed
-            </Text>
-            <Text style={styles.milestonesSubtext}>
-              Current: {computedMilestones.find((step) => step.key === milestonePlan?.currentStepKey)?.title || "Starter Cushion"}
+            <Text style={styles.milestonesInlineText}>
+              Step {Math.max(currentMilestoneIndex + 1, 1)}/{computedMilestones.length || 5} • {(currentMilestone?.title || "Keel").toUpperCase()} • Building your {currentMilestone?.title || "Keel"}
             </Text>
           </View>
           <Text style={styles.milestoneArrow}>→</Text>
@@ -827,11 +871,17 @@ const DebtTrackerScreen: React.FC = () => {
   /** Empty state when user has no debts */
   const emptyState = (
     <View style={styles.emptyWrap}>
-      <Text style={styles.emptyEmoji}>🎉</Text>
-      <Text style={styles.emptyTitle}>Debt Free!</Text>
+      <Text style={styles.emptyEmoji}>🧭</Text>
+      <Text style={styles.emptyTitle}>Build Your Ark</Text>
       <Text style={styles.emptySub}>
-        Add a debt to start tracking your payoff journey.
+        Add debt accounts when you are ready, or map your milestone targets first.
       </Text>
+      <TouchableOpacity
+        style={[styles.emptyActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}
+        onPress={openMilestonesModal}
+      >
+        <Text style={[styles.emptyActionText, { color: colors.text }]}>Set Up Milestones</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -885,14 +935,34 @@ const DebtTrackerScreen: React.FC = () => {
       >
         <View style={styles.msFullOverlay}>
           <View style={[styles.msFullBox, { paddingTop: Math.max(insets.top, 20) + 12, paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <Text style={styles.msFullTitle}>Debt Milestones</Text>
+            <Text style={styles.msFullTitle}>Build Your Ark Milestones</Text>
             <Text style={styles.msFullMessage}>
-              Follow a Milestone plan to stay focused and track progress.
+              Keel to Hull to Deck to Supplies to Sail. Follow each stage at your pace.
             </Text>
             <ScrollView style={styles.msFullList} contentContainerStyle={styles.msFullListContent}>
-              {computedMilestones.map((step) => {
+              {orderedMilestones.map((step) => {
                 const isCurrent = milestonePlan?.currentStepKey === step.key;
+                const isExpanded = step.isCompleted
+                  ? !!expandedMilestones[step.key]
+                  : isCurrent || expandedMilestones[step.key];
                 if (step.isCompleted) {
+                  if (!isExpanded) {
+                    return (
+                      <TouchableOpacity
+                        key={step.key}
+                        style={[styles.msStepCard, { borderColor: colors.success }]}
+                        onPress={() => toggleMilestoneExpanded(step.key)}
+                      >
+                        <View style={styles.msStepHeaderRow}>
+                          <Text style={styles.msStepName}>{step.title}</Text>
+                          <View style={[styles.msStepBadge, { backgroundColor: `${colors.success}20` }]}> 
+                            <Text style={[styles.msStepBadgeText, { color: colors.success }]}>Complete</Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  }
+
                   return (
                     <View key={step.key} style={[styles.msStepCard, { borderColor: colors.success }]}> 
                       <View style={styles.msStepHeaderRow}>
@@ -905,22 +975,15 @@ const DebtTrackerScreen: React.FC = () => {
                       <View style={styles.msStepActionRow}>
                         <TouchableOpacity
                           style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
-                          onPress={() => handleSetCurrentMilestone(step.key)}
-                        >
-                          <Text style={styles.msStepActionText}>Set Current</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                           onPress={() => handleToggleMilestoneComplete(step)}
                         >
-                          <Text style={styles.msStepActionText}>Reopen Step</Text>
+                          <Text style={styles.msStepActionText}>Rebuild</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
                   );
                 }
 
-                const isExpanded = isCurrent || expandedMilestones[step.key];
                 if (!isExpanded) {
                   return (
                     <TouchableOpacity
@@ -968,7 +1031,7 @@ const DebtTrackerScreen: React.FC = () => {
                     ) : null}
                     {typeof step.targetAmount === "number" ? (
                       <View style={styles.msTargetQuickRow}>
-                        {[100, 250, 500].map((amount) => (
+                        {(step.key === "keel" ? [50, 100] : [100, 250, 500]).map((amount) => (
                           <TouchableOpacity
                             key={amount}
                             style={[styles.msTargetQuickBtn, { borderColor: colors.cardBorder }]}
@@ -1010,7 +1073,7 @@ const DebtTrackerScreen: React.FC = () => {
                         style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                         onPress={() => handleSetCurrentMilestone(step.key)}
                       >
-                        <Text style={styles.msStepActionText}>Set Current</Text>
+                        <Text style={styles.msStepActionText}>{getMilestoneBuildActionLabel(step.key)}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -1035,6 +1098,14 @@ const DebtTrackerScreen: React.FC = () => {
                   </View>
                 );
               })}
+              {allMilestonesCompleted ? (
+                <View style={[styles.msJourneyCompleteCard, { borderColor: colors.success, backgroundColor: `${colors.success}12` }]}>
+                  <Text style={[styles.msJourneyCompleteTitle, { color: colors.success }]}>Ark Complete</Text>
+                  <Text style={styles.msJourneyCompleteMessage}>
+                    You have finished your Ark. Now set sail and find new lands.
+                  </Text>
+                </View>
+              ) : null}
             </ScrollView>
             <TouchableOpacity
               style={styles.msFullDoneBtn}
@@ -1225,26 +1296,22 @@ const makeStyles = (colors: ThemeColors) =>
     color: colors.text,
     fontWeight: "700",
    },
-   milestonesCard: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-   },
-   milestonesTitle: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: "700",
-   },
-   milestonesSubtext: {
-    fontSize: 12,
-    color: colors.textDim,
-    marginTop: 2,
-   },
+    milestonesCard: {
+      marginTop: 12,
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    milestonesInlineText: {
+      fontSize: 10,
+      color: colors.textDim,
+      fontWeight: "600",
+      maxWidth: "95%",
+    },
    milestoneArrow: {
     color: colors.textDim,
     fontSize: 18,
@@ -1581,11 +1648,40 @@ const makeStyles = (colors: ThemeColors) =>
     fontWeight: "600",
     color: colors.textDim,
   },
+  msJourneyCompleteCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  msJourneyCompleteTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  msJourneyCompleteMessage: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.text,
+  },
 
   emptyWrap: { alignItems: "center", paddingVertical: 48 },
   emptyEmoji: { fontSize: 40, marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: "600", color: colors.text, marginBottom: 4 },
   emptySub: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
+  emptyActionBtn: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  emptyActionText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
 
   dialogOverlay: {
     flex: 1,

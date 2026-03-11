@@ -253,12 +253,11 @@ export interface UpdatePreferences {
 /* ─── Debt Milestone Program Types ─── */
 
 export type DebtMilestoneKey =
-  | "starter_cushion"
-  | "non_mortgage_debt"
-  | "core_emergency_fund"
-  | "retirement_momentum"
-  | "home_vehicle_paydown"
-  | "wealth_building";
+  | "keel"
+  | "hull"
+  | "deck"
+  | "supplies"
+  | "sail";
 
 export interface DebtMilestoneStep {
   key: DebtMilestoneKey;
@@ -280,36 +279,31 @@ export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
   "isCompleted" | "completedAt"
 >[] = [
   {
-    key: "starter_cushion",
-    title: "Starter Cushion",
-    description: "Build a starter emergency cushion before aggressive payoff.",
-    targetAmount: 1000,
+    key: "keel",
+    title: "Keel",
+    description: "Set your first cash cushion so your plan has a stable base.",
+    targetAmount: 1200,
   },
   {
-    key: "non_mortgage_debt",
-    title: "Clear Non-Mortgage Debt",
-    description: "Focus snowball/avalanche efforts on personal and credit debt.",
+    key: "hull",
+    title: "Hull",
+    description: "Knock down high-friction consumer debt with focused payoff momentum.",
   },
   {
-    key: "core_emergency_fund",
-    title: "Core Emergency Fund",
-    description: "Grow emergency reserves to cover multiple months of essentials.",
+    key: "deck",
+    title: "Deck",
+    description: "Build a stronger emergency runway for real-world surprises.",
   },
   {
-    key: "retirement_momentum",
-    title: "Retirement Momentum",
-    description: "Set and maintain monthly retirement and investment contributions.",
+    key: "supplies",
+    title: "Supplies",
+    description: "Steadily reduce secured balances while keeping monthly plans consistent.",
+  },
+  {
+    key: "sail",
+    title: "Sail",
+    description: "Automate long-term investing so your money keeps moving forward.",
     targetAmount: 500,
-  },
-  {
-    key: "home_vehicle_paydown",
-    title: "Home and Vehicle Paydown",
-    description: "Make steady extra payments on secured debt balances.",
-  },
-  {
-    key: "wealth_building",
-    title: "Wealth Building",
-    description: "Advance long-term investing, giving, and legacy goals.",
   },
 ];
 
