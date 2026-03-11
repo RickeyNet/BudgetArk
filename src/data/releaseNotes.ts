@@ -7,6 +7,23 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.0.5",
+    title: "Build Your Ark Planning Hub",
+    releasedAt: "2026-03-10",
+    highlights: [
+      "Added Build Your Ark, a unified planning hub that combines Hull (payoff), Deck (emergency coverage), and Supplies (savings goals) in one modal.",
+      "Added side-by-side Avalanche vs Snowball what-if comparisons with extra-payment scenarios, payoff speed, total-interest impact, and strategy recommendations.",
+      "Payoff strategy preference now persists across app restarts instead of resetting to Custom each launch.",
+      "Added savings goals with on-device persistence, quick contribution chips, progress bars, and inline create/delete management.",
+      "Added Deck tracking (formerly runway) with monthly essentials input, coverage status (Deck at risk -> Storm-ready deck), and progress guidance.",
+      "Added Ark phase progress framing (Keel, Hull, Deck, Supplies, Sail) to tie payoff, safety cushion, and goals into one guided journey.",
+      "Added compact Debt Tracker summary chips for Deck and active Supplies goal to keep key planning context visible without screen clutter.",
+      "Improved Debt Milestones readability with a full-screen modal, larger typography, and safe-area-aware spacing on Android and iOS.",
+      "Added recurring budget entries so fixed monthly items can automatically appear in future months while one-off imports remain month-specific.",
+      "Improved theme contrast across dark themes and The Ark, including milestone action buttons and theme selector card readability.",
+    ],
+  },
+  {
     version: "1.0.4",
     title: "Debt Milestones and UX Polish",
     releasedAt: "2026-03-09",

@@ -192,9 +192,14 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 - [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
 - [x] Localization / currency format options beyond USD
-- [ ] Recurring entries and due-date reminder banners
-- [ ] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
-- [ ] Savings goals and emergency fund runway tracker
+- [x] Recurring budget entries
+- [ ] Due-date reminder banners
+- [x] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
+- [x] Savings goals and emergency fund Deck tracker
+- [x] Persist user-selected payoff strategy across app restarts (no default reset to Custom)
+- [x] Build Your Ark planning hub (Hull/Deck/Supplies) integrated with Debt Tracker
+- [x] Improve debt milestone modal readability (full-screen layout + larger text + safe-area support)
+- [x] Improve theme readability and contrast across The Ark and dark themes (buttons + theme selector cards)
 - [ ] Monthly review insights (category changes, spending trends, streaks)
 - [ ] Custom categories and category icon support
 - [ ] Search and advanced filters across debts, payments, and budget entries

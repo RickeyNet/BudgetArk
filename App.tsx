@@ -32,6 +32,7 @@ import {
   getUpdatePreferences,
   setLastUpdateCheckAt,
 } from "./src/storage/updatePreferencesStorage";
+import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
 
 type UpdatePrompt = {
   message: string;
@@ -76,7 +77,10 @@ const AppContent: React.FC = () => {
   }, []);
 
   /** Handle onboarding completion */
-  const handleOnboardingComplete = useCallback(() => {
+  const handleOnboardingComplete = useCallback(async (options?: { openArkSetup?: boolean }) => {
+    if (options?.openArkSetup) {
+      await requestArkSetupPrompt();
+    }
     setIsOnboardingComplete(true);
   }, []);
 

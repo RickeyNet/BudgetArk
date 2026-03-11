@@ -41,7 +41,7 @@ type OnboardingStep = "theme" | "welcome" | "name";
 
 interface OnboardingScreenProps {
   /** Callback when onboarding is complete */
-  onComplete: () => void;
+  onComplete: (options?: { openArkSetup?: boolean }) => void;
 }
 
 /**
@@ -156,9 +156,9 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /**
    * Complete onboarding and mark as done
    */
-  const handleComplete = useCallback(async () => {
+  const handleComplete = useCallback(async (openArkSetup?: boolean) => {
     await completeOnboarding(displayName);
-    onComplete();
+    onComplete({ openArkSetup: !!openArkSetup });
   }, [displayName, onComplete]);
 
   /**
@@ -310,15 +310,34 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         </Text>
       </View>
 
+      <View style={[styles.arkCard, { backgroundColor: colors.card }]}> 
+        <Text style={styles.arkTitle}>Build Your Ark (Optional)</Text>
+        <Text style={styles.arkText}>
+          You can set milestone targets now, or skip for now and do it later from the Debt screen.
+        </Text>
+      </View>
+
       <TouchableOpacity
         style={[
           styles.completeBtn,
-          { backgroundColor: colors.success },
+          { backgroundColor: colors.accent },
         ]}
-        onPress={handleComplete}
+        onPress={() => handleComplete(true)}
       >
-        <Text style={[styles.completeBtnText, { color: colors.bg }]}>
-          Get Started
+        <Text style={[styles.completeBtnText, { color: colors.accentButtonText }]}>
+          Finish + Build Your Ark
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[
+          styles.completeBtn,
+          { backgroundColor: colors.success, marginTop: 10 },
+        ]}
+        onPress={() => handleComplete(false)}
+      >
+        <Text style={[styles.completeBtnText, { color: colors.bg }]}> 
+          Skip for Now
         </Text>
       </TouchableOpacity>
     </View>
@@ -499,6 +518,23 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
       marginBottom: 8,
     },
     privacyText: {
+      fontSize: 14,
+      color: colors.textDim,
+      lineHeight: 20,
+    },
+    arkCard: {
+      borderRadius: 12,
+      padding: 18,
+      marginBottom: 20,
+      width: "100%",
+    },
+    arkTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 6,
+    },
+    arkText: {
       fontSize: 14,
       color: colors.textDim,
       lineHeight: 20,

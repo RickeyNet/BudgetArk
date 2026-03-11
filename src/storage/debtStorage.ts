@@ -14,11 +14,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Debt, DebtClass, DebtClassSource, DebtOwner, Payment } from "../types";
 
+export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
+
 /** Storage keys — centralized to prevent typos */
 const STORAGE_KEYS = {
   DEBTS: "@budgetark_debts",
   PAYMENTS: "@budgetark_payments",
+  PAYOFF_STRATEGY: "@budgetark_payoff_strategy",
 } as const;
+
+const isPayoffStrategyPreference = (
+  value: unknown
+): value is PayoffStrategyPreference =>
+  value === "custom" || value === "avalanche" || value === "snowball";
 
 /* ─── Debt CRUD Operations ─── */
 
@@ -178,7 +186,20 @@ export const clearAllData = async (): Promise<void> => {
   await AsyncStorage.multiRemove([
     STORAGE_KEYS.DEBTS,
     STORAGE_KEYS.PAYMENTS,
+    STORAGE_KEYS.PAYOFF_STRATEGY,
     "@budgetark_budget_entries",
     "@budgetark_budget_limits_by_month",
+    "@budgetark_savings_goals",
   ]);
+};
+
+export const getPayoffStrategyPreference = async (): Promise<PayoffStrategyPreference | null> => {
+  const raw = await AsyncStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
+  return isPayoffStrategyPreference(raw) ? raw : null;
+};
+
+export const savePayoffStrategyPreference = async (
+  strategy: PayoffStrategyPreference
+): Promise<void> => {
+  await AsyncStorage.setItem(STORAGE_KEYS.PAYOFF_STRATEGY, strategy);
 };
