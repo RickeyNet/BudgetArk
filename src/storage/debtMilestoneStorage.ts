@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "./encryptedStorage";
 import {
   DEFAULT_DEBT_MILESTONE_STEPS,
   DebtMilestoneKey,
@@ -37,10 +37,10 @@ const normalizePlan = (raw: DebtMilestonePlan): DebtMilestonePlan => {
 };
 
 export const getDebtMilestonePlan = async (): Promise<DebtMilestonePlan> => {
-  const raw = await AsyncStorage.getItem(DEBT_MILESTONE_PLAN_KEY);
+  const raw = await EncryptedStorage.getItem(DEBT_MILESTONE_PLAN_KEY);
   if (!raw) {
     const plan = createDefaultPlan();
-    await AsyncStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(plan));
+    await EncryptedStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(plan));
     return plan;
   }
 
@@ -48,12 +48,12 @@ export const getDebtMilestonePlan = async (): Promise<DebtMilestonePlan> => {
     const parsed = JSON.parse(raw) as DebtMilestonePlan;
     const normalized = normalizePlan(parsed);
     if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      await AsyncStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(normalized));
+      await EncryptedStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(normalized));
     }
     return normalized;
   } catch {
     const fallback = createDefaultPlan();
-    await AsyncStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(fallback));
+    await EncryptedStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(fallback));
     return fallback;
   }
 };
@@ -65,7 +65,7 @@ export const saveDebtMilestonePlan = async (
     ...plan,
     updatedAt: new Date().toISOString(),
   };
-  await AsyncStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(next));
+  await EncryptedStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(next));
 };
 
 export const updateDebtMilestoneStep = async (

@@ -1,15 +1,15 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "./encryptedStorage";
 import type { SavingsGoal } from "../types";
 
 const STORAGE_KEY = "@budgetark_savings_goals";
 
 export const getSavingsGoals = async (): Promise<SavingsGoal[]> => {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+  const raw = await EncryptedStorage.getItem(STORAGE_KEY);
   return raw ? (JSON.parse(raw) as SavingsGoal[]) : [];
 };
 
 export const saveSavingsGoals = async (goals: SavingsGoal[]): Promise<void> => {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
+  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
 };
 
 export const addSavingsGoal = async (goal: SavingsGoal): Promise<SavingsGoal[]> => {

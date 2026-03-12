@@ -11,7 +11,7 @@
 
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
   BUDGET_CATEGORIES,
   DEFAULT_CURRENCY_PREFERENCE_ID,
@@ -291,7 +291,7 @@ export const importFromString = async (
   };
 
   if (mode === "replace") {
-    await AsyncStorage.multiRemove([
+    await EncryptedStorage.multiRemove([
       KEYS.DEBTS,
       KEYS.PAYMENTS,
       KEYS.BUDGET_ENTRIES,
@@ -307,12 +307,12 @@ export const importFromString = async (
     if (!incoming || incoming.length === 0) return 0;
 
     if (mode === "replace") {
-      await AsyncStorage.setItem(storageKey, JSON.stringify(incoming));
+      await EncryptedStorage.setItem(storageKey, JSON.stringify(incoming));
       return incoming.length;
     }
 
     // Merge: load existing, deduplicate by id
-    const existingRaw = await AsyncStorage.getItem(storageKey);
+    const existingRaw = await EncryptedStorage.getItem(storageKey);
     const existing: Record<string, unknown>[] = existingRaw
       ? JSON.parse(existingRaw)
       : [];
@@ -333,7 +333,7 @@ export const importFromString = async (
       added++;
     }
 
-    await AsyncStorage.setItem(storageKey, JSON.stringify(existing));
+    await EncryptedStorage.setItem(storageKey, JSON.stringify(existing));
     return added;
   };
 
@@ -346,14 +346,14 @@ export const importFromString = async (
     const monthKey = getCurrentMonthKey();
 
     if (mode === "replace") {
-      await AsyncStorage.setItem(
+      await EncryptedStorage.setItem(
         KEYS.BUDGET_LIMITS,
         JSON.stringify({ [monthKey]: incoming })
       );
       return incoming.length;
     }
 
-    const existingRaw = await AsyncStorage.getItem(KEYS.BUDGET_LIMITS);
+    const existingRaw = await EncryptedStorage.getItem(KEYS.BUDGET_LIMITS);
     const parsed = existingRaw ? JSON.parse(existingRaw) : {};
     const history =
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
@@ -379,7 +379,7 @@ export const importFromString = async (
     }
 
     history[monthKey] = existingForMonth;
-    await AsyncStorage.setItem(KEYS.BUDGET_LIMITS, JSON.stringify(history));
+    await EncryptedStorage.setItem(KEYS.BUDGET_LIMITS, JSON.stringify(history));
     return incoming.length;
   };
 
@@ -389,7 +389,7 @@ export const importFromString = async (
   counts.budgetLimits = await mergeLimits(sanitized.budgetLimits);
 
   if (sanitized.user && mode === "replace") {
-    await AsyncStorage.setItem(KEYS.USER, JSON.stringify(sanitized.user));
+    await EncryptedStorage.setItem(KEYS.USER, JSON.stringify(sanitized.user));
   }
 
   return counts;

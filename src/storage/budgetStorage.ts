@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "./encryptedStorage";
 import { BudgetEntry, CategoryBudgetLimit } from "../types";
 
 export const BUDGET_STORAGE_KEYS = {
@@ -17,7 +17,7 @@ const cloneLimits = (limits: CategoryBudgetLimit[]): CategoryBudgetLimit[] =>
   limits.map((limit) => ({ ...limit }));
 
 const getLimitHistory = async (): Promise<BudgetLimitHistory> => {
-  const raw = await AsyncStorage.getItem(BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH);
+  const raw = await EncryptedStorage.getItem(BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH);
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as BudgetLimitHistory;
@@ -41,12 +41,12 @@ const pruneLimitHistory = (history: BudgetLimitHistory): BudgetLimitHistory => {
 };
 
 export const getBudgetEntries = async (): Promise<BudgetEntry[]> => {
-  const raw = await AsyncStorage.getItem(BUDGET_STORAGE_KEYS.ENTRIES);
+  const raw = await EncryptedStorage.getItem(BUDGET_STORAGE_KEYS.ENTRIES);
   return raw ? JSON.parse(raw) : [];
 };
 
 export const saveBudgetEntries = async (entries: BudgetEntry[]): Promise<void> => {
-  await AsyncStorage.setItem(BUDGET_STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
+  await EncryptedStorage.setItem(BUDGET_STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
 };
 
 export const addBudgetEntry = async (entry: BudgetEntry): Promise<BudgetEntry[]> => {
@@ -91,7 +91,7 @@ export const saveCategoryBudgetLimits = async (
   const history = await getLimitHistory();
   history[monthKey] = cloneLimits(limits);
   const pruned = pruneLimitHistory(history);
-  await AsyncStorage.setItem(
+  await EncryptedStorage.setItem(
     BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH,
     JSON.stringify(pruned)
   );

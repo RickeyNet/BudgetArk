@@ -11,7 +11,7 @@
  * - This is efficient for typical use (< 50 debts) and avoids key fragmentation.
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "./encryptedStorage";
 import { Debt, DebtClass, DebtClassSource, DebtOwner, Payment } from "../types";
 
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
@@ -65,7 +65,7 @@ const normalizeDebt = (debt: Debt): Debt => ({
  * @returns Promise<Debt[]> — array of all debt entries
  */
 export const getDebts = async (): Promise<Debt[]> => {
-  const raw = await AsyncStorage.getItem(STORAGE_KEYS.DEBTS);
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.DEBTS);
   if (!raw) return [];
   const parsed = JSON.parse(raw) as Debt[];
   const normalized = parsed.map(normalizeDebt);
@@ -82,7 +82,7 @@ export const getDebts = async (): Promise<Debt[]> => {
  * @param debts — the full array of debts to save
  */
 export const saveDebts = async (debts: Debt[]): Promise<void> => {
-  await AsyncStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+  await EncryptedStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
 };
 
 /**
@@ -139,7 +139,7 @@ export const updateDebt = async (
  * @returns Promise<Payment[]> — array of all payments
  */
 export const getPayments = async (): Promise<Payment[]> => {
-  const raw = await AsyncStorage.getItem(STORAGE_KEYS.PAYMENTS);
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYMENTS);
   return raw ? JSON.parse(raw) : [];
 };
 
@@ -156,7 +156,7 @@ export const recordPayment = async (
   /* Save payment record */
   const payments = await getPayments();
   payments.push(payment);
-  await AsyncStorage.setItem(
+  await EncryptedStorage.setItem(
     STORAGE_KEYS.PAYMENTS,
     JSON.stringify(payments)
   );
@@ -183,7 +183,7 @@ export const recordPayment = async (
  * WARNING: This is destructive and cannot be undone.
  */
 export const clearAllData = async (): Promise<void> => {
-  await AsyncStorage.multiRemove([
+  await EncryptedStorage.multiRemove([
     STORAGE_KEYS.DEBTS,
     STORAGE_KEYS.PAYMENTS,
     STORAGE_KEYS.PAYOFF_STRATEGY,
@@ -194,12 +194,12 @@ export const clearAllData = async (): Promise<void> => {
 };
 
 export const getPayoffStrategyPreference = async (): Promise<PayoffStrategyPreference | null> => {
-  const raw = await AsyncStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
   return isPayoffStrategyPreference(raw) ? raw : null;
 };
 
 export const savePayoffStrategyPreference = async (
   strategy: PayoffStrategyPreference
 ): Promise<void> => {
-  await AsyncStorage.setItem(STORAGE_KEYS.PAYOFF_STRATEGY, strategy);
+  await EncryptedStorage.setItem(STORAGE_KEYS.PAYOFF_STRATEGY, strategy);
 };

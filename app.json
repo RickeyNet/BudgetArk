@@ -21,6 +21,7 @@
     },
     "android": {
       "package": "com.budgetark.app",
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F2E6D0"
@@ -41,6 +42,9 @@
       "eas": {
         "projectId": "08046ba8-b8f4-46ef-b98b-c31fe698c65b"
       }
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }

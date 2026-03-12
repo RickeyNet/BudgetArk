@@ -7,7 +7,7 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "../storage/encryptedStorage";
 import { DEFAULT_THEME_ID, THEME_BY_ID, THEME_PRESETS, ThemeColors, ThemePreset } from "./themes";
 
 const THEME_KEY = "@budgetark_theme_id" as const;
@@ -30,7 +30,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
   /** Load saved theme on app start */
   useEffect(() => {
     const load = async () => {
-      const stored = await AsyncStorage.getItem(THEME_KEY);
+      const stored = await EncryptedStorage.getItem(THEME_KEY);
       if (stored && THEME_BY_ID[stored]) setThemeIdState(stored);
     };
     load();
@@ -40,7 +40,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
   const setThemeId = useCallback(async (id: ThemePreset["id"]) => {
     if (!THEME_BY_ID[id]) return; // guard
     setThemeIdState(id);
-    await AsyncStorage.setItem(THEME_KEY, id);
+    await EncryptedStorage.setItem(THEME_KEY, id);
   }, []);
 
   const colors = THEME_BY_ID[themeId]?.colors ?? THEME_BY_ID[DEFAULT_THEME_ID].colors;
