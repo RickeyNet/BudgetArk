@@ -12,6 +12,8 @@ import {
   Modal,
   Text,
   TouchableOpacity,
+  NativeModules,
+  Platform,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -33,6 +35,10 @@ import {
   setLastUpdateCheckAt,
 } from "./src/storage/updatePreferencesStorage";
 import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
+import { isUpdateSafe } from "./src/utils/versionGuard";
+import { getPrivacyMode } from "./src/storage/privacyStorage";
+
+const FlagSecureModule = Platform.OS === "android" ? NativeModules.FlagSecureModule : null;
 
 type UpdatePrompt = {
   message: string;
@@ -69,7 +75,7 @@ const AppContent: React.FC = () => {
         const user = await getOrCreateUser();
         setIsOnboardingComplete(user.onboardingComplete);
       } catch (error) {
-        console.error("Failed to load user:", error);
+        if (__DEV__) console.error("Failed to load user:", error);
         setIsOnboardingComplete(false);
       }
     };
@@ -134,11 +140,19 @@ const AppContent: React.FC = () => {
 
       const fetchResult = await Updates.fetchUpdateAsync();
       const manifest = (fetchResult as any).manifest || (checkResult as any).manifest || null;
-      setPendingUpdate(extractUpdatePrompt(manifest));
+      const prompt = extractUpdatePrompt(manifest);
+
+      const currentRuntime = Updates.runtimeVersion ?? undefined;
+      if (!isUpdateSafe(currentRuntime, prompt.runtimeVersion)) {
+        if (__DEV__) console.warn("Blocked OTA downgrade:", prompt.runtimeVersion, "<", currentRuntime);
+        return;
+      }
+
+      setPendingUpdate(prompt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes("not supported in development builds")) {
-        console.error("Auto update check failed:", error);
+        if (__DEV__) console.error("Auto update check failed:", error);
       }
     } finally {
       setIsCheckingUpdates(false);
@@ -160,6 +174,31 @@ const AppContent: React.FC = () => {
     };
   }, [canCheckUpdates, isOnboardingComplete, runAutoUpdateCheck]);
 
+  /** Apply FLAG_SECURE based on privacy mode preference */
+  useEffect(() => {
+    if (!FlagSecureModule) return;
+
+    const applyPrivacyMode = async () => {
+      const enabled = await getPrivacyMode();
+      if (enabled) {
+        FlagSecureModule.enable();
+      } else {
+        FlagSecureModule.disable();
+      }
+    };
+
+    void applyPrivacyMode();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void applyPrivacyMode();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   useEffect(() => {
     if (isOnboardingComplete !== true) return;
 
@@ -178,7 +217,7 @@ const AppContent: React.FC = () => {
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error) {
-      console.error("Failed to apply update:", error);
+      if (__DEV__) console.error("Failed to apply update:", error);
     }
   }, []);
 

@@ -51,7 +51,7 @@ import {
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
-import { importData, importFromString } from "../utils/importData";
+import { importData, importFromString, isEncryptedExport, type ImportResult } from "../utils/importData";
 import {
   getUpdatePreferences,
   setLastUpdateCheckAt,
@@ -60,6 +60,8 @@ import {
 import { useTheme } from "../theme/ThemeProvider";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { isUpdateSafe } from "../utils/versionGuard";
+import { getPrivacyMode, setPrivacyMode } from "../storage/privacyStorage";
 
 type UpdateMetadata = {
   id: string;
@@ -70,6 +72,10 @@ type UpdateMetadata = {
 
 type HowToDocKey = "export" | "import";
 type ReleaseNoteKey = string;
+
+/** Strip control characters and null bytes, keeping normal whitespace. */
+const sanitizeTextInput = (text: string): string =>
+  text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
@@ -102,6 +108,16 @@ const ProfileScreen: React.FC = () => {
   /** Raw JSON text entered in the paste-import modal */
   const [pasteText, setPasteText] = useState("");
 
+  /** Export confirmation modal state */
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportEncrypt, setExportEncrypt] = useState(true);
+  const [exportPassword, setExportPassword] = useState("");
+
+  /** Import password modal state (for encrypted exports) */
+  const [showImportPasswordModal, setShowImportPasswordModal] = useState(false);
+  const [importPassword, setImportPassword] = useState("");
+  const [pendingImportAction, setPendingImportAction] = useState<(() => void) | null>(null);
+
   /** Whether the reset confirmation modal is visible */
   const [showResetModal, setShowResetModal] = useState(false);
 
@@ -131,16 +147,21 @@ const ProfileScreen: React.FC = () => {
   const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(null);
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
 
+  /** Privacy mode — blocks screenshots/screen recording when enabled */
+  const [privacyMode, setPrivacyModeState] = useState(false);
+
   /** Load user on mount */
   useEffect(() => {
     const load = async () => {
-      const [u, prefs] = await Promise.all([
+      const [u, prefs, privacy] = await Promise.all([
         getOrCreateUser(),
         getUpdatePreferences(),
+        getPrivacyMode(),
       ]);
       setUser(u);
       setEditName(u.displayName);
       setUpdatePrefs(prefs);
+      setPrivacyModeState(privacy);
     };
     load();
   }, []);
@@ -246,7 +267,21 @@ const ProfileScreen: React.FC = () => {
         const fetchResult = await Updates.fetchUpdateAsync();
         const manifest =
           (fetchResult as any).manifest || (checkResult as any).manifest || null;
-        setPendingUpdate(extractUpdateMetadata(manifest));
+        const updateMeta = extractUpdateMetadata(manifest);
+
+        const currentRuntime = Updates.runtimeVersion ?? undefined;
+        if (!isUpdateSafe(currentRuntime, updateMeta.runtimeVersion)) {
+          if (source === "manual") {
+            setInfoModal({
+              title: "Update Rejected",
+              message:
+                "This update was rejected because it targets an older runtime version. This may indicate a rollback attempt.",
+            });
+          }
+          return;
+        }
+
+        setPendingUpdate(updateMeta);
       } catch (error: any) {
         if (source === "manual") {
           setInfoModal({
@@ -273,6 +308,18 @@ const ProfileScreen: React.FC = () => {
         : "Automatic update checks are enabled.",
     });
   }, [updatePrefs.manualUpdateMode]);
+
+  const togglePrivacyMode = useCallback(async () => {
+    const next = !privacyMode;
+    await setPrivacyMode(next);
+    setPrivacyModeState(next);
+    setInfoModal({
+      title: next ? "Privacy Mode On" : "Privacy Mode Off",
+      message: next
+        ? "Screenshots and screen recording are now blocked on Android. On iOS, screen capture notifications may be shown."
+        : "Screenshot and screen recording protection is disabled.",
+    });
+  }, [privacyMode]);
 
   const installPendingUpdate = useCallback(async () => {
     try {
@@ -317,16 +364,31 @@ const ProfileScreen: React.FC = () => {
     setInfoModal({ title: "Done", message: "All data has been reset successfully." });
   }, [setPreferenceId]);
 
-  const handleExportData = useCallback(async () => {
+  const handleExportData = useCallback(() => {
+    setExportEncrypt(true);
+    setExportPassword("");
+    setShowExportModal(true);
+  }, []);
+
+  const confirmExport = useCallback(async () => {
+    if (exportEncrypt && exportPassword.length < 4) {
+      setInfoModal({
+        title: "Password Too Short",
+        message: "Please enter a password with at least 4 characters, or turn off encryption.",
+      });
+      return;
+    }
+    setShowExportModal(false);
     try {
-      await exportAllData();
+      await exportAllData(exportEncrypt ? exportPassword : undefined);
     } catch (error: any) {
       setInfoModal({
         title: "Export Failed",
         message: error?.message || "Something went wrong while exporting your data.",
       });
     }
-  }, []);
+    setExportPassword("");
+  }, [exportEncrypt, exportPassword]);
 
   /**
    * First step: show a themed modal to choose import source.
@@ -344,25 +406,57 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   /**
-   * File-picker: run the document picker with the chosen mode.
+   * Runs the actual import and shows the result.
+   * Called directly or after password entry for encrypted exports.
    */
-  const confirmFileImport = useCallback(async (mode: "merge" | "replace") => {
-    setShowImportModeModal(false);
+  const executeImport = useCallback(async (
+    importFn: (password?: string) => Promise<ImportResult | null>,
+    label: string,
+    password?: string
+  ) => {
     try {
-      const result = await importData(mode);
+      const result = await importFn(password);
       if (!result) return;
-      const label = mode === "merge" ? "Merged" : "Imported";
       setInfoModal({
         title: "Import Complete",
         message: `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`,
       });
     } catch (error: any) {
-      setInfoModal({
-        title: "Import Failed",
-        message: error?.message || "Something went wrong while importing your data.",
-      });
+      if (error?.message?.includes("password-encrypted")) {
+        // Need password — show the password prompt
+        setPendingImportAction(() => (pw: string) =>
+          executeImport(importFn, label, pw)
+        );
+        setImportPassword("");
+        setShowImportPasswordModal(true);
+      } else {
+        setInfoModal({
+          title: "Import Failed",
+          message: error?.message || "Something went wrong while importing your data.",
+        });
+      }
     }
   }, []);
+
+  const confirmImportPassword = useCallback(() => {
+    if (!pendingImportAction) return;
+    setShowImportPasswordModal(false);
+    (pendingImportAction as any)(importPassword);
+    setImportPassword("");
+    setPendingImportAction(null);
+  }, [pendingImportAction, importPassword]);
+
+  /**
+   * File-picker: run the document picker with the chosen mode.
+   */
+  const confirmFileImport = useCallback(async (mode: "merge" | "replace") => {
+    setShowImportModeModal(false);
+    const label = mode === "merge" ? "Merged" : "Imported";
+    await executeImport(
+      (password) => importData(mode, password),
+      label
+    );
+  }, [executeImport]);
 
   /**
    * Paste-text path: parse the pasted JSON and write to storage.
@@ -374,26 +468,15 @@ const ProfileScreen: React.FC = () => {
         setInfoModal({ title: "Empty", message: "Please paste your exported JSON data first." });
         return;
       }
-      const run = async () => {
-        try {
-          const result = await importFromString(text, mode);
-          setShowPasteModal(false);
-          setPasteText("");
-          const label = mode === "merge" ? "Merged" : "Imported";
-          setInfoModal({
-            title: "Import Complete",
-            message: `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`,
-          });
-        } catch (error: any) {
-          setInfoModal({
-            title: "Import Failed",
-            message: error?.message || "Something went wrong while importing your data.",
-          });
-        }
-      };
-      run();
+      setShowPasteModal(false);
+      setPasteText("");
+      const label = mode === "merge" ? "Merged" : "Imported";
+      executeImport(
+        (password) => importFromString(text, mode, password),
+        label
+      );
     },
-    [pasteText]
+    [pasteText, executeImport]
   );
 
   if (!user) return null;
@@ -446,7 +529,7 @@ const ProfileScreen: React.FC = () => {
                   },
                 ]}
                 value={editName}
-                onChangeText={setEditName}
+                onChangeText={(text) => setEditName(sanitizeTextInput(text))}
                 autoFocus
                 maxLength={20}
               />
@@ -540,6 +623,30 @@ const ProfileScreen: React.FC = () => {
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PRIVACY</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={togglePrivacyMode}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Privacy Mode</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                {privacyMode
+                  ? "Screenshots & screen recording blocked"
+                  : "Screenshots & screen recording allowed"}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {privacyMode ? "On" : "Off"}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -989,6 +1096,183 @@ const ProfileScreen: React.FC = () => {
             >
               <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Export Confirmation Modal ── */}
+      <Modal
+        visible={showExportModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowExportModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Export My Data
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {exportEncrypt
+                ? "Your data will be encrypted with a password before sharing."
+                : "Your data will be exported as plaintext JSON. Anyone with access to the file can read your financial data."}
+            </Text>
+
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                alignSelf: "center",
+                marginBottom: 16,
+              }}
+              onPress={() => {
+                setExportEncrypt((v) => !v);
+                if (exportEncrypt) setExportPassword("");
+              }}
+            >
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 4,
+                  borderWidth: 2,
+                  borderColor: exportEncrypt ? colors.accent : colors.textMuted,
+                  backgroundColor: exportEncrypt ? colors.accent : "transparent",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: 10,
+                }}
+              >
+                {exportEncrypt ? (
+                  <Text style={{ color: colors.white, fontSize: 14, fontWeight: "700" }}>
+                    ✓
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={{ color: colors.text, fontSize: 14 }}>
+                Encrypt with password
+              </Text>
+            </TouchableOpacity>
+
+            {exportEncrypt ? (
+              <TextInput
+                style={[
+                  {
+                    borderWidth: 1,
+                    borderColor: colors.cardBorder,
+                    borderRadius: 10,
+                    padding: 12,
+                    fontSize: 15,
+                    color: colors.text,
+                    backgroundColor: colors.bg,
+                    marginBottom: 16,
+                  },
+                ]}
+                placeholder="Enter export password"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry
+                value={exportPassword}
+                onChangeText={setExportPassword}
+                autoFocus
+              />
+            ) : null}
+
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => {
+                  setShowExportModal(false);
+                  setExportPassword("");
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmExport}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  {exportEncrypt ? "Encrypt & Share" : "Share Plaintext"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Import Password Modal ── */}
+      <Modal
+        visible={showImportPasswordModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setShowImportPasswordModal(false);
+          setPendingImportAction(null);
+          setImportPassword("");
+        }}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Encrypted Export
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              This export was encrypted with a password. Enter the password to decrypt it.
+            </Text>
+            <TextInput
+              style={[
+                {
+                  borderWidth: 1,
+                  borderColor: colors.cardBorder,
+                  borderRadius: 10,
+                  padding: 12,
+                  fontSize: 15,
+                  color: colors.text,
+                  backgroundColor: colors.bg,
+                  marginBottom: 16,
+                },
+              ]}
+              placeholder="Enter password"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry
+              value={importPassword}
+              onChangeText={setImportPassword}
+              autoFocus
+            />
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => {
+                  setShowImportPasswordModal(false);
+                  setPendingImportAction(null);
+                  setImportPassword("");
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmImportPassword}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Decrypt & Import
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

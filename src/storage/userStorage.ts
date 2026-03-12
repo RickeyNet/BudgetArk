@@ -27,6 +27,10 @@ import {
 } from "../types";
 import { isCurrencyPreferenceId } from "../utils/currencyPreferences";
 
+/** Strip control characters and null bytes, keeping normal whitespace (space, tab, newline). */
+const sanitizeText = (text: string): string =>
+  text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
 /** Storage key for the user account */
 const USER_KEY = "@budgetark_user" as const;
 
@@ -41,7 +45,13 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
 
   /* If user already exists, return it */
   if (raw) {
-    const parsed = JSON.parse(raw) as Partial<UserAccount>;
+    let parsed: Partial<UserAccount>;
+    try {
+      parsed = JSON.parse(raw) as Partial<UserAccount>;
+    } catch {
+      // Stored data is corrupted — create a fresh user instead of crashing
+      parsed = {};
+    }
     const normalized: UserAccount = {
       id: parsed.id || generateUUID(),
       displayName: parsed.displayName || "Buddy",
@@ -80,7 +90,12 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
  */
 export const getUser = async (): Promise<UserAccount | null> => {
   const raw = await EncryptedStorage.getItem(USER_KEY);
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as UserAccount;
+  } catch {
+    return null;
+  }
 };
 
 /**
@@ -94,7 +109,7 @@ export const updateDisplayName = async (
   name: string
 ): Promise<UserAccount> => {
   const user = await getOrCreateUser();
-  const updated = { ...user, displayName: name.trim() || "Buddy" };
+  const updated = { ...user, displayName: sanitizeText(name.trim()) || "Buddy" };
   await EncryptedStorage.setItem(USER_KEY, JSON.stringify(updated));
   return updated;
 };
@@ -109,7 +124,7 @@ export const completeOnboarding = async (
   displayName?: string
 ): Promise<UserAccount> => {
   const user = await getOrCreateUser();
-  const nextDisplayName = displayName?.trim();
+  const nextDisplayName = displayName ? sanitizeText(displayName.trim()) : undefined;
   const updated = {
     ...user,
     displayName: nextDisplayName ? nextDisplayName : user.displayName,

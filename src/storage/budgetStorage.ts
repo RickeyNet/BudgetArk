@@ -42,7 +42,12 @@ const pruneLimitHistory = (history: BudgetLimitHistory): BudgetLimitHistory => {
 
 export const getBudgetEntries = async (): Promise<BudgetEntry[]> => {
   const raw = await EncryptedStorage.getItem(BUDGET_STORAGE_KEYS.ENTRIES);
-  return raw ? JSON.parse(raw) : [];
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as BudgetEntry[];
+  } catch {
+    return [];
+  }
 };
 
 export const saveBudgetEntries = async (entries: BudgetEntry[]): Promise<void> => {

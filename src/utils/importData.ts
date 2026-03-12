@@ -11,12 +11,14 @@
 
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
+import CryptoJS from "crypto-js";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
   BUDGET_CATEGORIES,
   DEFAULT_CURRENCY_PREFERENCE_ID,
 } from "../types";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
+import { ENCRYPTED_EXPORT_PREFIX } from "./exportData";
 
 /* ── Storage keys (must match the rest of the app) ── */
 const KEYS = {
@@ -86,7 +88,7 @@ export interface ImportResult {
 }
 
 const LIMITS = {
-  MAX_RAW_CHARS: 2_000_000,
+  MAX_RAW_CHARS: 500_000,
   MAX_COLLECTION_ITEMS: 2_000,
   MAX_TOTAL_ITEMS: 6_000,
   MAX_TEXT_LENGTH: 120,
@@ -253,20 +255,47 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
  * @param mode — "merge" keeps existing data, "replace" wipes first
  * @returns ImportResult with counts of imported items
  */
+/**
+ * Returns true if the raw string is a password-encrypted BudgetArk export.
+ */
+export const isEncryptedExport = (raw: string): boolean =>
+  raw.trimStart().startsWith(ENCRYPTED_EXPORT_PREFIX);
+
 export const importFromString = async (
   raw: string,
-  mode: "merge" | "replace" = "merge"
+  mode: "merge" | "replace" = "merge",
+  password?: string
 ): Promise<ImportResult> => {
   if (raw.length > LIMITS.MAX_RAW_CHARS) {
     throw new Error(
-      "Import file is too large. Please use an export under 2 MB."
+      "Import file is too large. Please use an export under 500 KB."
     );
+  }
+
+  /* 0. Decrypt if this is a password-encrypted export */
+  let jsonString = raw;
+  if (isEncryptedExport(raw)) {
+    if (!password) {
+      throw new Error(
+        "This export is password-encrypted. Please enter the password to decrypt it."
+      );
+    }
+    const ciphertext = raw.trimStart().slice(ENCRYPTED_EXPORT_PREFIX.length);
+    try {
+      const bytes = CryptoJS.AES.decrypt(ciphertext, password);
+      jsonString = bytes.toString(CryptoJS.enc.Utf8);
+    } catch {
+      throw new Error("Decryption failed. The password may be incorrect.");
+    }
+    if (!jsonString) {
+      throw new Error("Decryption failed. The password may be incorrect.");
+    }
   }
 
   /* 1. Parse */
   let data: unknown;
   try {
-    data = JSON.parse(raw);
+    data = JSON.parse(jsonString);
   } catch {
     throw new Error(
       "The text is not valid JSON. Please paste a BudgetArk export."
@@ -282,7 +311,7 @@ export const importFromString = async (
 
   const sanitized = sanitizePayload(data);
 
-  /* 3. Write to AsyncStorage */
+  /* 3. Compute merged data in memory before writing anything */
   const counts: ImportResult = {
     debts: 0,
     payments: 0,
@@ -290,32 +319,26 @@ export const importFromString = async (
     budgetLimits: 0,
   };
 
-  if (mode === "replace") {
-    await EncryptedStorage.multiRemove([
-      KEYS.DEBTS,
-      KEYS.PAYMENTS,
-      KEYS.BUDGET_ENTRIES,
-      KEYS.BUDGET_LIMITS,
-    ]);
-  }
-
-  // Helper: merge arrays by id (or full-replace if mode is "replace")
-  const mergeById = async (
+  // Helper: merge arrays by id in memory (no storage writes)
+  const computeMergedById = async (
     storageKey: string,
     incoming: unknown[] | undefined
-  ): Promise<number> => {
-    if (!incoming || incoming.length === 0) return 0;
+  ): Promise<{ json: string; count: number } | null> => {
+    if (!incoming || incoming.length === 0) return null;
 
     if (mode === "replace") {
-      await EncryptedStorage.setItem(storageKey, JSON.stringify(incoming));
-      return incoming.length;
+      return { json: JSON.stringify(incoming), count: incoming.length };
     }
 
-    // Merge: load existing, deduplicate by id
     const existingRaw = await EncryptedStorage.getItem(storageKey);
-    const existing: Record<string, unknown>[] = existingRaw
-      ? JSON.parse(existingRaw)
-      : [];
+    let existing: Record<string, unknown>[] = [];
+    if (existingRaw) {
+      try {
+        existing = JSON.parse(existingRaw);
+      } catch {
+        existing = []; // corrupted storage — treat as empty
+      }
+    }
 
     const existingIds = new Set(
       existing.map((item) => (item as any).id as string).filter(Boolean)
@@ -333,28 +356,30 @@ export const importFromString = async (
       added++;
     }
 
-    await EncryptedStorage.setItem(storageKey, JSON.stringify(existing));
-    return added;
+    return { json: JSON.stringify(existing), count: added };
   };
 
-  // Merge budget limits by category instead of id
-  const mergeLimits = async (
+  // Compute merged budget limits in memory
+  const computeMergedLimits = async (
     incoming: unknown[] | undefined
-  ): Promise<number> => {
-    if (!incoming || incoming.length === 0) return 0;
+  ): Promise<{ json: string; count: number } | null> => {
+    if (!incoming || incoming.length === 0) return null;
 
     const monthKey = getCurrentMonthKey();
 
     if (mode === "replace") {
-      await EncryptedStorage.setItem(
-        KEYS.BUDGET_LIMITS,
-        JSON.stringify({ [monthKey]: incoming })
-      );
-      return incoming.length;
+      return { json: JSON.stringify({ [monthKey]: incoming }), count: incoming.length };
     }
 
     const existingRaw = await EncryptedStorage.getItem(KEYS.BUDGET_LIMITS);
-    const parsed = existingRaw ? JSON.parse(existingRaw) : {};
+    let parsed: unknown = {};
+    if (existingRaw) {
+      try {
+        parsed = JSON.parse(existingRaw);
+      } catch {
+        parsed = {}; // corrupted storage — treat as empty
+      }
+    }
     const history =
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
         ? (parsed as Record<string, unknown>)
@@ -379,17 +404,75 @@ export const importFromString = async (
     }
 
     history[monthKey] = existingForMonth;
-    await EncryptedStorage.setItem(KEYS.BUDGET_LIMITS, JSON.stringify(history));
-    return incoming.length;
+    return { json: JSON.stringify(history), count: incoming.length };
   };
 
-  counts.debts = await mergeById(KEYS.DEBTS, sanitized.debts);
-  counts.payments = await mergeById(KEYS.PAYMENTS, sanitized.payments);
-  counts.budgetEntries = await mergeById(KEYS.BUDGET_ENTRIES, sanitized.budgetEntries);
-  counts.budgetLimits = await mergeLimits(sanitized.budgetLimits);
+  // Phase 1: Compute all merged results in memory
+  const mergedDebts = await computeMergedById(KEYS.DEBTS, sanitized.debts);
+  const mergedPayments = await computeMergedById(KEYS.PAYMENTS, sanitized.payments);
+  const mergedBudgetEntries = await computeMergedById(KEYS.BUDGET_ENTRIES, sanitized.budgetEntries);
+  const mergedLimits = await computeMergedLimits(sanitized.budgetLimits);
 
+  // Phase 2: Write to temp keys first
+  const TEMP_SUFFIX = "_import_tmp";
+  const tempKeys: string[] = [];
+  const tempWrites: Array<[string, string]> = [];
+
+  if (mergedDebts) {
+    tempWrites.push([KEYS.DEBTS + TEMP_SUFFIX, mergedDebts.json]);
+  }
+  if (mergedPayments) {
+    tempWrites.push([KEYS.PAYMENTS + TEMP_SUFFIX, mergedPayments.json]);
+  }
+  if (mergedBudgetEntries) {
+    tempWrites.push([KEYS.BUDGET_ENTRIES + TEMP_SUFFIX, mergedBudgetEntries.json]);
+  }
+  if (mergedLimits) {
+    tempWrites.push([KEYS.BUDGET_LIMITS + TEMP_SUFFIX, mergedLimits.json]);
+  }
   if (sanitized.user && mode === "replace") {
-    await EncryptedStorage.setItem(KEYS.USER, JSON.stringify(sanitized.user));
+    tempWrites.push([KEYS.USER + TEMP_SUFFIX, JSON.stringify(sanitized.user)]);
+  }
+
+  // Write all temp keys
+  for (const [key, value] of tempWrites) {
+    await EncryptedStorage.setItem(key, value);
+    tempKeys.push(key);
+  }
+
+  // Phase 3: Promote temp keys to real keys; rollback on failure
+  try {
+    if (mode === "replace") {
+      await EncryptedStorage.multiRemove([
+        KEYS.DEBTS,
+        KEYS.PAYMENTS,
+        KEYS.BUDGET_ENTRIES,
+        KEYS.BUDGET_LIMITS,
+      ]);
+    }
+
+    for (const [tempKey, value] of tempWrites) {
+      const realKey = tempKey.replace(TEMP_SUFFIX, "");
+      await EncryptedStorage.setItem(realKey, value);
+    }
+
+    counts.debts = mergedDebts?.count ?? 0;
+    counts.payments = mergedPayments?.count ?? 0;
+    counts.budgetEntries = mergedBudgetEntries?.count ?? 0;
+    counts.budgetLimits = mergedLimits?.count ?? 0;
+  } catch (error) {
+    // Rollback: clean up temp keys, leave originals untouched
+    if (tempKeys.length > 0) {
+      await EncryptedStorage.multiRemove(tempKeys);
+    }
+    throw new Error(
+      "Import failed during write. Your existing data has not been modified."
+    );
+  }
+
+  // Phase 4: Clean up temp keys
+  if (tempKeys.length > 0) {
+    await EncryptedStorage.multiRemove(tempKeys);
   }
 
   return counts;
@@ -405,10 +488,11 @@ export const importFromString = async (
  * @returns ImportResult with counts, or null if the user cancelled the picker.
  */
 export const importData = async (
-  mode: "merge" | "replace" = "merge"
+  mode: "merge" | "replace" = "merge",
+  password?: string
 ): Promise<ImportResult | null> => {
   const result = await DocumentPicker.getDocumentAsync({
-    type: "application/json",
+    type: ["application/json", "text/plain"],
   });
 
   if (result.canceled) return null;
@@ -417,5 +501,5 @@ export const importData = async (
   if (!file?.uri) throw new Error("No file selected.");
 
   const raw = await FileSystem.readAsStringAsync(file.uri);
-  return importFromString(raw, mode);
+  return importFromString(raw, mode, password);
 };

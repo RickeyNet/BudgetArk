@@ -124,6 +124,10 @@ ThemePreviewCard.displayName = "ThemePreviewCard";
 /**
  * Main onboarding screen component
  */
+/** Strip control characters and null bytes, keeping normal whitespace. */
+const sanitizeTextInput = (text: string): string =>
+  text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { colors, presets, themeId, setThemeId } = useTheme();
   const [step, setStep] = useState<OnboardingStep>("theme");
@@ -292,7 +296,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           placeholder="Buddy"
           placeholderTextColor={colors.textMuted}
           value={displayName}
-          onChangeText={setDisplayName}
+          onChangeText={(text) => setDisplayName(sanitizeTextInput(text))}
           maxLength={20}
           autoCapitalize="words"
           autoCorrect={false}

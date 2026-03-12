@@ -67,12 +67,16 @@ const normalizeDebt = (debt: Debt): Debt => ({
 export const getDebts = async (): Promise<Debt[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEYS.DEBTS);
   if (!raw) return [];
-  const parsed = JSON.parse(raw) as Debt[];
-  const normalized = parsed.map(normalizeDebt);
-  if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-    await saveDebts(normalized);
+  try {
+    const parsed = JSON.parse(raw) as Debt[];
+    const normalized = parsed.map(normalizeDebt);
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+      await saveDebts(normalized);
+    }
+    return normalized;
+  } catch {
+    return [];
   }
-  return normalized;
 };
 
 /**
@@ -140,7 +144,12 @@ export const updateDebt = async (
  */
 export const getPayments = async (): Promise<Payment[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYMENTS);
-  return raw ? JSON.parse(raw) : [];
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as Payment[];
+  } catch {
+    return [];
+  }
 };
 
 /**

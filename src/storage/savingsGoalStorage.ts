@@ -5,7 +5,12 @@ const STORAGE_KEY = "@budgetark_savings_goals";
 
 export const getSavingsGoals = async (): Promise<SavingsGoal[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEY);
-  return raw ? (JSON.parse(raw) as SavingsGoal[]) : [];
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as SavingsGoal[];
+  } catch {
+    return [];
+  }
 };
 
 export const saveSavingsGoals = async (goals: SavingsGoal[]): Promise<void> => {

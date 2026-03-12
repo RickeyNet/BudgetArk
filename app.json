@@ -27,7 +27,16 @@
         "backgroundColor": "#F2E6D0"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "INTERNET",
+        "READ_EXTERNAL_STORAGE",
+        "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "WRITE_EXTERNAL_STORAGE",
+        "SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

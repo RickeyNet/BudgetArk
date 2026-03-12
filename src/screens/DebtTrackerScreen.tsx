@@ -269,7 +269,7 @@ const DebtTrackerScreen: React.FC = () => {
               : 3000;
           setMonthlyEssentialsEstimate(essentialsAverage);
         } catch (error) {
-          console.error("Failed to load debts:", error);
+          if (__DEV__) console.error("Failed to load debts:", error);
           setDebts([]);
         }
         setIsLoading(false);

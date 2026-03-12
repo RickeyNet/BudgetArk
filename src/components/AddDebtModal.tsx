@@ -43,6 +43,10 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 
+/** Strip control characters and null bytes, keeping normal whitespace. */
+const sanitizeTextInput = (text: string): string =>
+  text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
 const MONTH_LABELS = [
   "Jan",
   "Feb",
@@ -263,7 +267,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                   placeholder="e.g., Chase Visa, Student Loan"
                   placeholderTextColor={colors.textMuted}
                   value={name}
-                  onChangeText={setName}
+                  onChangeText={(text) => setName(sanitizeTextInput(text))}
                   autoFocus
                   maxLength={50}
                 />
