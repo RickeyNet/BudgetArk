@@ -36,6 +36,9 @@ yarn-error.*
 # Editor
 .vscode/
 
+# Personal notes
+TODO.md
+
 # typescript
 *.tsbuildinfo
 

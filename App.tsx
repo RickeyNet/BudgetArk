@@ -96,13 +96,14 @@ const AppContent: React.FC = () => {
   }, []);
 
   const extractUpdatePrompt = useCallback((manifest: unknown): UpdatePrompt => {
-    const data = (manifest ?? {}) as any;
-    const metadata = (data.metadata ?? {}) as any;
-    const extras = (data.extra ?? {}) as any;
+    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
+    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
+    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
+    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
     const messageCandidates = [
       metadata.message,
       metadata.updateMessage,
-      extras?.eas?.message,
+      eas.message,
       data.description,
       data.message,
     ];
@@ -144,7 +145,9 @@ const AppContent: React.FC = () => {
       if (!checkResult.isAvailable) return;
 
       const fetchResult = await Updates.fetchUpdateAsync();
-      const manifest = (fetchResult as any).manifest || (checkResult as any).manifest || null;
+      const fetchObj = fetchResult as Record<string, unknown>;
+      const checkObj = checkResult as Record<string, unknown>;
+      const manifest = fetchObj.manifest || checkObj.manifest || null;
       const prompt = extractUpdatePrompt(manifest);
 
       const currentRuntime = Updates.runtimeVersion ?? undefined;

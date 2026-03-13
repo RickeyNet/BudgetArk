@@ -159,11 +159,11 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     const rateNum = parseFloat(rate);
     const paymentNum = parseFloat(minPayment);
 
-    /* Validate: all fields must be filled and positive */
+    /* Validate: all fields must be filled, finite, and positive */
     if (!name.trim()) return;
-    if (isNaN(balanceNum) || balanceNum <= 0) return;
-    if (isNaN(rateNum) || rateNum < 0) return;
-    if (isNaN(paymentNum) || paymentNum <= 0) return;
+    if (!Number.isFinite(balanceNum) || balanceNum <= 0) return;
+    if (!Number.isFinite(rateNum) || rateNum < 0) return;
+    if (!Number.isFinite(paymentNum) || paymentNum <= 0) return;
 
     const parsedGoalDate = goalMonth.trim() ? `${goalMonth.trim()}-01` : undefined;
 
@@ -224,11 +224,14 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   );
 
   /** Check if form is valid (for button state) */
+  const balanceParsed = parseFloat(balance);
+  const rateParsed = parseFloat(rate);
+  const minPaymentParsed = parseFloat(minPayment);
   const isValid =
     name.trim().length > 0 &&
-    parseFloat(balance) > 0 &&
-    parseFloat(rate) >= 0 &&
-    parseFloat(minPayment) > 0;
+    Number.isFinite(balanceParsed) && balanceParsed > 0 &&
+    Number.isFinite(rateParsed) && rateParsed >= 0 &&
+    Number.isFinite(minPaymentParsed) && minPaymentParsed > 0;
 
   return (
     <Modal

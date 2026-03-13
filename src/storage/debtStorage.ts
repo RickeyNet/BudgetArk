@@ -162,29 +162,28 @@ export const getPayments = async (): Promise<Payment[]> => {
 export const recordPayment = async (
   payment: Payment
 ): Promise<{ debts: Debt[]; payments: Payment[] }> => {
-  /* Save payment record */
-  const payments = await getPayments();
-  payments.push(payment);
-  await EncryptedStorage.setItem(
-    STORAGE_KEYS.PAYMENTS,
-    JSON.stringify(payments)
-  );
+  /* Load current state */
+  const [debts, payments] = await Promise.all([getDebts(), getPayments()]);
 
-  /* Update the debt balance */
-  const debts = await updateDebt(payment.debtId, {
-    balance: undefined as any, // Will be calculated below
-  });
-
-  /* Recalculate — find the debt and subtract payment */
-  const recalculated = debts.map((d) => {
+  /* Calculate updated debt balance */
+  const updatedDebts = debts.map((d) => {
     if (d.id === payment.debtId) {
       return { ...d, balance: Math.max(0, d.balance - payment.amount) };
     }
     return d;
   });
 
-  await saveDebts(recalculated);
-  return { debts: recalculated, payments };
+  /* Append the new payment */
+  const updatedPayments = [...payments, payment];
+
+  /* Save both atomically (back-to-back to minimize race window) */
+  await saveDebts(updatedDebts);
+  await EncryptedStorage.setItem(
+    STORAGE_KEYS.PAYMENTS,
+    JSON.stringify(updatedPayments)
+  );
+
+  return { debts: updatedDebts, payments: updatedPayments };
 };
 
 /**

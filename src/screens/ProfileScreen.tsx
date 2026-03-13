@@ -116,7 +116,7 @@ const ProfileScreen: React.FC = () => {
   /** Import password modal state (for encrypted exports) */
   const [showImportPasswordModal, setShowImportPasswordModal] = useState(false);
   const [importPassword, setImportPassword] = useState("");
-  const [pendingImportAction, setPendingImportAction] = useState<(() => void) | null>(null);
+  const [pendingImportAction, setPendingImportAction] = useState<((pw: string) => void) | null>(null);
 
   /** Whether the reset confirmation modal is visible */
   const [showResetModal, setShowResetModal] = useState(false);
@@ -210,9 +210,10 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   const extractUpdateMetadata = useCallback((manifest: unknown): UpdateMetadata => {
-    const data = (manifest ?? {}) as any;
-    const metadata = (data.metadata ?? {}) as any;
-    const extras = (data.extra ?? {}) as any;
+    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
+    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
+    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
+    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
 
     const id = typeof data.id === "string" ? data.id : "unknown";
     const createdAt = typeof data.createdAt === "string" ? data.createdAt : undefined;
@@ -222,7 +223,7 @@ const ProfileScreen: React.FC = () => {
     const messageCandidates = [
       metadata.message,
       metadata.updateMessage,
-      extras?.eas?.message,
+      eas.message,
       data.description,
       data.message,
     ];
@@ -266,7 +267,7 @@ const ProfileScreen: React.FC = () => {
 
         const fetchResult = await Updates.fetchUpdateAsync();
         const manifest =
-          (fetchResult as any).manifest || (checkResult as any).manifest || null;
+          (fetchResult as Record<string, unknown>).manifest || (checkResult as Record<string, unknown>).manifest || null;
         const updateMeta = extractUpdateMetadata(manifest);
 
         const currentRuntime = Updates.runtimeVersion ?? undefined;
@@ -441,7 +442,7 @@ const ProfileScreen: React.FC = () => {
   const confirmImportPassword = useCallback(() => {
     if (!pendingImportAction) return;
     setShowImportPasswordModal(false);
-    (pendingImportAction as any)(importPassword);
+    pendingImportAction(importPassword);
     setImportPassword("");
     setPendingImportAction(null);
   }, [pendingImportAction, importPassword]);

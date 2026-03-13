@@ -175,6 +175,17 @@ const isEncryptedV1 = (value: string): boolean =>
   value.startsWith(ENCRYPTED_V1_PREFIX);
 
 /**
+ * Error thrown when encrypted data fails integrity verification or decryption.
+ * Distinguishes data corruption from a missing key (which returns null).
+ */
+export class DecryptionError extends Error {
+  constructor(key: string) {
+    super(`Decryption or integrity check failed for key: ${key}`);
+    this.name = "DecryptionError";
+  }
+}
+
+/**
  * Reads and decrypts a value from AsyncStorage.
  *
  * Handles three cases:
@@ -182,8 +193,8 @@ const isEncryptedV1 = (value: string): boolean =>
  *   2. V1 encrypted (old format without HMAC) — decrypt and re-encrypt as V2.
  *   3. Legacy plaintext (pre-encryption) — re-encrypt as V2.
  *
- * If HMAC verification fails (tampered data), returns null as a safe fallback
- * rather than returning corrupted data to the app.
+ * Returns null only when the key does not exist in storage.
+ * Throws DecryptionError if HMAC verification or decryption fails (tampered/corrupted data).
  */
 export const getItem = async (key: string): Promise<string | null> => {
   const raw = await AsyncStorage.getItem(key);
@@ -193,15 +204,20 @@ export const getItem = async (key: string): Promise<string | null> => {
 
   // Case 1: Current V2 format — verify integrity then decrypt
   if (isEncryptedV2(raw)) {
-    return decryptV2(raw, encKey);
+    const result = decryptV2(raw, encKey);
+    if (result === null) {
+      throw new DecryptionError(key);
+    }
+    return result;
   }
 
   // Case 2: Old V1 format (no HMAC) — decrypt and upgrade to V2
   if (isEncryptedV1(raw)) {
     const plaintext = decryptV1(raw, encKey);
-    if (plaintext !== null) {
-      await AsyncStorage.setItem(key, encrypt(plaintext, encKey));
+    if (plaintext === null) {
+      throw new DecryptionError(key);
     }
+    await AsyncStorage.setItem(key, encrypt(plaintext, encKey));
     return plaintext;
   }
 
