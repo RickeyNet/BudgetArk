@@ -1,5 +1,15 @@
 # BudgetArk Release Notes
 
+## v1.0.6 - Security & Encryption (2026-03-12)
+
+- Added AES-256 encryption for all on-device data with HMAC-SHA256 integrity verification — your financial data is now encrypted at rest.
+- Encryption keys are stored in the platform secure vault (iOS Keychain / Android Keystore) and cleared from memory when the app is backgrounded.
+- Existing data from previous versions is automatically migrated to the encrypted format on first launch — no action needed.
+- Added privacy mode toggle in Profile settings to mask sensitive balances on screen.
+- Added version guard to prevent downgrade attacks via OTA updates.
+- Upgraded to cryptographically strong UUID generation for all identifiers.
+- Improved data import validation with stricter schema checks and encrypted storage support.
+
 ## v1.0.5 - Build Your Ark Planning Hub (2026-03-10)
 
 - Added Build Your Ark, a unified planning hub that combines Hull (payoff), Deck (emergency coverage), and Supplies (savings goals) in one modal.

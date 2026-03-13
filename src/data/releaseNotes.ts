@@ -7,6 +7,20 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.0.6",
+    title: "Security & Encryption",
+    releasedAt: "2026-03-12",
+    highlights: [
+      "Added AES-256 encryption for all on-device data with HMAC-SHA256 integrity verification — your financial data is now encrypted at rest.",
+      "Encryption keys are stored in the platform secure vault (iOS Keychain / Android Keystore) and cleared from memory when the app is backgrounded.",
+      "Existing data from previous versions is automatically migrated to the encrypted format on first launch — no action needed.",
+      "Added privacy mode toggle in Profile settings to mask sensitive balances on screen.",
+      "Added version guard to prevent downgrade attacks via OTA updates.",
+      "Upgraded to cryptographically strong UUID generation for all identifiers.",
+      "Improved data import validation with stricter schema checks and encrypted storage support.",
+    ],
+  },
+  {
     version: "1.0.5",
     title: "Build Your Ark Planning Hub",
     releasedAt: "2026-03-10",
