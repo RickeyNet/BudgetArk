@@ -1,5 +1,6 @@
 // File: App.tsx
 
+import "react-native-get-random-values";
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -84,8 +85,12 @@ const AppContent: React.FC = () => {
 
   /** Handle onboarding completion */
   const handleOnboardingComplete = useCallback(async (options?: { openArkSetup?: boolean }) => {
-    if (options?.openArkSetup) {
-      await requestArkSetupPrompt();
+    try {
+      if (options?.openArkSetup) {
+        await requestArkSetupPrompt();
+      }
+    } catch (error) {
+      if (__DEV__) console.error("Failed to request ark setup:", error);
     }
     setIsOnboardingComplete(true);
   }, []);

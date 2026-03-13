@@ -161,7 +161,11 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    * Complete onboarding and mark as done
    */
   const handleComplete = useCallback(async (openArkSetup?: boolean) => {
-    await completeOnboarding(displayName);
+    try {
+      await completeOnboarding(displayName);
+    } catch (error) {
+      if (__DEV__) console.error("Failed to save onboarding:", error);
+    }
     onComplete({ openArkSetup: !!openArkSetup });
   }, [displayName, onComplete]);
 

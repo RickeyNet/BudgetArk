@@ -38,6 +38,7 @@ import {
   DebtMilestoneKey,
   DebtMilestonePlan,
   DebtOwner,
+  BudgetEntry,
   NewDebtInput,
   SavingsGoal,
 } from "../types";
@@ -50,7 +51,7 @@ import {
   savePayoffStrategyPreference,
 } from "../storage/debtStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
-import { getBudgetEntries } from "../storage/budgetStorage";
+import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import {
   getDebtMilestonePlan,
   saveDebtMilestonePlan,
@@ -148,6 +149,7 @@ const DebtTrackerScreen: React.FC = () => {
     sail: "",
   });
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  const [savingsDraft, setSavingsDraft] = useState("");
 
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -512,13 +514,30 @@ const DebtTrackerScreen: React.FC = () => {
 
   const handleToggleMilestoneComplete = useCallback(
     async (step: ComputedMilestone) => {
+      const markingComplete = !step.isCompleted;
       const nextPlan = await updateDebtMilestoneStep(step.key, {
-        isCompleted: !step.isCompleted,
+        isCompleted: markingComplete,
       });
-      setMilestonePlan(nextPlan);
-      if (!step.isCompleted) {
-        setExpandedMilestones((current) => ({ ...current, [step.key]: false }));
+
+      if (markingComplete && nextPlan) {
+        const stepOrder: DebtMilestoneKey[] = ["keel", "hull", "deck", "supplies", "sail"];
+        const currentIndex = stepOrder.indexOf(step.key);
+        const nextKey = stepOrder[currentIndex + 1];
+        if (nextKey) {
+          nextPlan.currentStepKey = nextKey;
+          nextPlan.updatedAt = new Date().toISOString();
+          await saveDebtMilestonePlan(nextPlan);
+          setExpandedMilestones((current) => ({
+            ...current,
+            [step.key]: false,
+            [nextKey]: true,
+          }));
+        } else {
+          setExpandedMilestones((current) => ({ ...current, [step.key]: false }));
+        }
       }
+
+      setMilestonePlan(nextPlan);
     },
     []
   );
@@ -584,6 +603,26 @@ const DebtTrackerScreen: React.FC = () => {
       }));
     },
     [targetDraftByStep]
+  );
+
+  const handleLogSavings = useCallback(
+    async (amount: number) => {
+      if (amount <= 0) return;
+      const now = new Date();
+      const entry: BudgetEntry = {
+        id: generateUUID(),
+        type: "expense",
+        category: "Savings",
+        amount,
+        description: "Logged from Build Your Ark",
+        date: now.toISOString().slice(0, 10),
+        createdAt: now.toISOString(),
+      };
+      await addBudgetEntry(entry);
+      setSavingsReserve((prev) => prev + amount);
+      setSavingsDraft("");
+    },
+    []
   );
 
   /** Sort debts based on payoff strategy */
@@ -1059,6 +1098,43 @@ const DebtTrackerScreen: React.FC = () => {
                         ]}
                       />
                     </View>
+                    {(step.key === "keel" || step.key === "deck") && !step.isCompleted ? (
+                      <View style={styles.msSavingsLogSection}>
+                        <Text style={styles.msSavingsLogLabel}>Log Savings</Text>
+                        <View style={styles.msSavingsLogRow}>
+                          <TextInput
+                            style={styles.msSavingsLogInput}
+                            placeholder="Amount"
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="decimal-pad"
+                            value={savingsDraft}
+                            onChangeText={setSavingsDraft}
+                          />
+                          <TouchableOpacity
+                            style={[styles.msSavingsLogBtn, { backgroundColor: colors.accent }]}
+                            onPress={() => {
+                              const parsed = parseFloat(savingsDraft);
+                              if (!Number.isNaN(parsed) && parsed > 0) {
+                                handleLogSavings(parsed);
+                              }
+                            }}
+                          >
+                            <Text style={[styles.msSavingsLogBtnText, { color: colors.white }]}>Add</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.msTargetQuickRow}>
+                          {[25, 50, 100, 250].map((amount) => (
+                            <TouchableOpacity
+                              key={amount}
+                              style={[styles.msTargetQuickBtn, { borderColor: colors.cardBorder }]}
+                              onPress={() => handleLogSavings(amount)}
+                            >
+                              <Text style={styles.msTargetQuickText}>+{formatCurrency(amount)}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
                     <Text style={styles.msNextAction}>{step.nextAction}</Text>
                     <View style={styles.msStepActionRow}>
                       {!isCurrent ? (
@@ -1631,6 +1707,43 @@ const makeStyles = (colors: ThemeColors) =>
   msNextAction: {
     fontSize: 13,
     color: colors.textMuted,
+  },
+  msSavingsLogSection: {
+    marginTop: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  msSavingsLogLabel: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    color: colors.text,
+  },
+  msSavingsLogRow: {
+    flexDirection: "row" as const,
+    gap: 10,
+    alignItems: "center" as const,
+  },
+  msSavingsLogInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: colors.text,
+    backgroundColor: colors.bg,
+  },
+  msSavingsLogBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  msSavingsLogBtnText: {
+    fontSize: 15,
+    fontWeight: "700" as const,
   },
   msStepActionRow: {
     flexDirection: "row",
