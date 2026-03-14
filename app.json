@@ -43,7 +43,7 @@
     },
     "runtimeVersion": "1.0.6",
     "updates": {
-      "checkAutomatically": "ON_LAUNCH",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
       "url": "https://u.expo.dev/08046ba8-b8f4-46ef-b98b-c31fe698c65b"
     },
     "owner": "rickeynet",
