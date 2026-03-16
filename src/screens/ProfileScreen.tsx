@@ -153,15 +153,19 @@ const ProfileScreen: React.FC = () => {
   /** Load user on mount */
   useEffect(() => {
     const load = async () => {
-      const [u, prefs, privacy] = await Promise.all([
-        getOrCreateUser(),
-        getUpdatePreferences(),
-        getPrivacyMode(),
-      ]);
-      setUser(u);
-      setEditName(u.displayName);
-      setUpdatePrefs(prefs);
-      setPrivacyModeState(privacy);
+      try {
+        const [u, prefs, privacy] = await Promise.all([
+          getOrCreateUser(),
+          getUpdatePreferences(),
+          getPrivacyMode(),
+        ]);
+        setUser(u);
+        setEditName(u.displayName);
+        setUpdatePrefs(prefs);
+        setPrivacyModeState(privacy);
+      } catch (error) {
+        if (__DEV__) console.error("Failed to load profile:", error);
+      }
     };
     load();
   }, []);
@@ -480,7 +484,13 @@ const ProfileScreen: React.FC = () => {
     [pasteText, executeImport]
   );
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: colors.textDim, fontSize: 14 }}>Loading profile...</Text>
+      </View>
+    );
+  }
 
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);

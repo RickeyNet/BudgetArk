@@ -81,18 +81,26 @@ AppState.addEventListener("change", (state) => {
  * Every time after: loads the existing key from the vault and caches it in
  * memory so subsequent calls are instant.
  */
-const getEncryptionKey = async (): Promise<string> => {
+const getEncryptionKey = async (): Promise<string | null> => {
   if (cachedKey) return cachedKey;
 
-  let key = await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS);
-  if (!key) {
-    // Generate 32 random bytes = 256-bit key, converted to a hex string
-    key = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Hex);
-    await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key);
-  }
+  try {
+    let key = await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS);
+    if (!key) {
+      // Generate 32 random bytes = 256-bit key, converted to a hex string
+      key = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Hex);
+      await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key);
+    }
 
-  cachedKey = key;
-  return key;
+    cachedKey = key;
+    return key;
+  } catch (error) {
+    // SecureStore can fail on sideloaded APKs with mismatched signing keys
+    // or on devices with broken Keystore. Return null to signal that
+    // encryption is unavailable — callers will fall back to plaintext.
+    if (__DEV__) console.error("SecureStore access failed:", error);
+    return null;
+  }
 };
 
 /**
@@ -202,6 +210,17 @@ export const getItem = async (key: string): Promise<string | null> => {
 
   const encKey = await getEncryptionKey();
 
+  // If SecureStore is unavailable, fall back to plaintext read-only mode.
+  // Don't encrypt data we can't decrypt later.
+  if (encKey === null) {
+    if (isEncryptedV2(raw) || isEncryptedV1(raw)) {
+      // Data was encrypted but we can't access the key — treat as unreadable
+      throw new DecryptionError(key);
+    }
+    // Legacy plaintext — return as-is without encrypting
+    return raw;
+  }
+
   // Case 1: Current V2 format — verify integrity then decrypt
   if (isEncryptedV2(raw)) {
     const result = decryptV2(raw, encKey);
@@ -234,6 +253,11 @@ export const setItem = async (
   value: string
 ): Promise<void> => {
   const encKey = await getEncryptionKey();
+  if (encKey === null) {
+    // SecureStore unavailable — store as plaintext to avoid data loss
+    await AsyncStorage.setItem(key, value);
+    return;
+  }
   await AsyncStorage.setItem(key, encrypt(value, encKey));
 };
 
