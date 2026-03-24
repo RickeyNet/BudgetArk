@@ -1,5 +1,17 @@
 # BudgetArk Release Notes
 
+## v1.1.0 - Partner Sync & Feedback (2026-03-23)
+
+- Added peer-to-peer sync for couples — share budgets, debts, and savings goals directly between phones over WiFi with no server or account required.
+- One-time device pairing with a 6-digit code and PBKDF2 key exchange. All sync traffic is AES-256 encrypted with HMAC integrity verification.
+- Sync Now button for on-demand data exchange — both devices see the same debts, payments, budget entries, savings goals, and milestone progress.
+- Optional auto-sync when both phones are on your home WiFi network. Set your home network once and syncing happens automatically in the foreground.
+- Added in-app feedback — report bugs or suggest features directly from Profile. Your message is sent via your email app with device info auto-attached.
+- Added a link to GitHub Issues for public bug tracking and feature requests.
+- Added updatedAt timestamps to all record types for accurate conflict resolution using last-write-wins per record.
+- Existing data is automatically migrated to include timestamps on first launch — no action needed.
+- Squashed some bugs and improved overall stability.
+
 ## v1.0.6 - Security & Encryption (2026-03-12)
 
 - Added AES-256 encryption for all on-device data with HMAC-SHA256 integrity verification — your financial data is now encrypted at rest.

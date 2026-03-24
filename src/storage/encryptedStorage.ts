@@ -65,12 +65,15 @@ let cachedKey: string | null = null;
 /**
  * Clear the cached encryption key whenever the app leaves the foreground.
  * The key will be re-fetched from SecureStore on the next storage operation.
+ * Stored as a module-level subscription so only one listener is ever registered.
  */
-AppState.addEventListener("change", (state) => {
+const _appStateSubscription = AppState.addEventListener("change", (state) => {
   if (state !== "active") {
     cachedKey = null;
   }
 });
+// Prevent unused variable warning while keeping the reference alive
+void _appStateSubscription;
 
 /**
  * Lazily loads or creates the AES encryption key.

@@ -62,6 +62,23 @@ import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
 import { getPrivacyMode, setPrivacyMode } from "../storage/privacyStorage";
+import {
+  getPairingState,
+  clearPairingState,
+  getSyncMetadata,
+  updateHomeSSID,
+  setAutoSyncEnabled,
+} from "../sync/pairingStorage";
+import { syncNow } from "../sync/syncOrchestrator";
+import {
+  getCurrentSSID,
+  startMonitoring,
+  stopMonitoring,
+  requestLocationPermission,
+} from "../sync/autoSyncManager";
+import type { PairingState, SyncStatus, SyncResult } from "../sync/types";
+import PairingModal from "../components/PairingModal";
+import FeedbackModal from "../components/FeedbackModal";
 
 type UpdateMetadata = {
   id: string;
@@ -70,12 +87,10 @@ type UpdateMetadata = {
   runtimeVersion?: string;
 };
 
-type HowToDocKey = "export" | "import";
+type HowToDocKey = "export" | "import" | "sync";
 type ReleaseNoteKey = string;
 
-/** Strip control characters and null bytes, keeping normal whitespace. */
-const sanitizeTextInput = (text: string): string =>
-  text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+import { sanitizeTextInput } from "../utils/sanitize";
 
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
@@ -150,24 +165,46 @@ const ProfileScreen: React.FC = () => {
   /** Privacy mode — blocks screenshots/screen recording when enabled */
   const [privacyMode, setPrivacyModeState] = useState(false);
 
+  /** Partner sync state */
+  const [pairing, setPairing] = useState<PairingState | null>(null);
+  const [showPairingModal, setShowPairingModal] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [showUnpairConfirm, setShowUnpairConfirm] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
   /** Load user on mount */
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       try {
-        const [u, prefs, privacy] = await Promise.all([
+        const [u, prefs, privacy, pairState, syncMeta] = await Promise.all([
           getOrCreateUser(),
           getUpdatePreferences(),
           getPrivacyMode(),
+          getPairingState(),
+          getSyncMetadata(),
         ]);
+        if (cancelled) return;
         setUser(u);
         setEditName(u.displayName);
         setUpdatePrefs(prefs);
         setPrivacyModeState(privacy);
+        setPairing(pairState);
+        setLastSyncTime(syncMeta.lastSyncTimestamp);
+        if (pairState?.autoSyncEnabled) {
+          startMonitoring((result) => {
+            if (result.success) {
+              setLastSyncTime(result.timestamp);
+            }
+          });
+        }
       } catch (error) {
         if (__DEV__) console.error("Failed to load profile:", error);
       }
     };
     load();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -326,6 +363,92 @@ const ProfileScreen: React.FC = () => {
     });
   }, [privacyMode]);
 
+  /* ─── Partner Sync Handlers ─── */
+
+  const handlePaired = useCallback((state: PairingState) => {
+    setPairing(state);
+    setShowPairingModal(false);
+    setInfoModal({
+      title: "Paired!",
+      message: `You're now paired with ${state.partnerName}. Tap "Sync Now" anytime to share data.`,
+    });
+  }, []);
+
+  const handleSyncNow = useCallback(async () => {
+    if (syncStatus === "syncing" || syncStatus === "discovering" || syncStatus === "connecting") return;
+    try {
+      const result = await syncNow((status) => setSyncStatus(status));
+      if (result.success) {
+        setLastSyncTime(result.timestamp);
+        setInfoModal({
+          title: "Sync Complete",
+          message: `Sent ${result.recordsSent} records, received ${result.recordsReceived} records.`,
+        });
+      } else {
+        setInfoModal({
+          title: "Sync Failed",
+          message: result.error || "Could not connect to partner.",
+        });
+      }
+    } catch {
+      setSyncStatus("error");
+    }
+    setSyncStatus("idle");
+  }, [syncStatus]);
+
+  const handleUnpair = useCallback(async () => {
+    await clearPairingState();
+    stopMonitoring();
+    setPairing(null);
+    setLastSyncTime(null);
+    setShowUnpairConfirm(false);
+    setInfoModal({
+      title: "Unpaired",
+      message: "Partner sync has been disconnected. Your data is still on this device.",
+    });
+  }, []);
+
+  const handleSetHomeNetwork = useCallback(async () => {
+    if (Platform.OS === "android") {
+      const granted = await requestLocationPermission();
+      if (!granted) {
+        setInfoModal({
+          title: "Permission Required",
+          message: "Location permission is needed to read the WiFi network name for auto-sync. Your location is never stored or shared.",
+        });
+        return;
+      }
+    }
+    const ssid = await getCurrentSSID();
+    if (!ssid) {
+      setInfoModal({
+        title: "No WiFi Detected",
+        message: "Connect to your home WiFi first, then try again.",
+      });
+      return;
+    }
+    await updateHomeSSID(ssid);
+    setPairing((prev) => prev ? { ...prev, homeSSID: ssid } : null);
+    setInfoModal({
+      title: "Home Network Set",
+      message: `Auto-sync will trigger when both devices are on "${ssid}".`,
+    });
+  }, []);
+
+  const handleToggleAutoSync = useCallback(async () => {
+    if (!pairing) return;
+    const next = !pairing.autoSyncEnabled;
+    await setAutoSyncEnabled(next);
+    setPairing((prev) => prev ? { ...prev, autoSyncEnabled: next } : null);
+    if (next) {
+      startMonitoring((result) => {
+        if (result.success) setLastSyncTime(result.timestamp);
+      });
+    } else {
+      stopMonitoring();
+    }
+  }, [pairing]);
+
   const installPendingUpdate = useCallback(async () => {
     try {
       setPendingUpdate(null);
@@ -360,12 +483,16 @@ const ProfileScreen: React.FC = () => {
   const confirmReset = useCallback(async () => {
     setShowResetModal(false);
     await clearAllData();
+    await clearPairingState();
+    stopMonitoring();
     await deleteAccount();
     await getOrCreateUser();
     const freshUser = await completeOnboarding();
     await setPreferenceId(DEFAULT_CURRENCY_PREFERENCE_ID);
     setUser(freshUser);
     setEditName(freshUser.displayName);
+    setPairing(null);
+    setLastSyncTime(null);
     setInfoModal({ title: "Done", message: "All data has been reset successfully." });
   }, [setPreferenceId]);
 
@@ -661,6 +788,127 @@ const ProfileScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* ── Partner Sync ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PARTNER SYNC</Text>
+
+          {!pairing ? (
+            <TouchableOpacity
+              style={[
+                styles.settingsRow,
+                { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              ]}
+              onPress={() => setShowPairingModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Pair with Partner</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  Sync budgets over WiFi — no account needed
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <View
+                style={[
+                  styles.settingsRow,
+                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                ]}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Partner: {pairing.partnerName}
+                  </Text>
+                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                    Paired {new Date(pairing.pairedAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.settingsRow,
+                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                  (syncStatus !== "idle" && syncStatus !== "error") && { opacity: 0.7 },
+                ]}
+                onPress={handleSyncNow}
+                disabled={syncStatus !== "idle" && syncStatus !== "error"}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.accent }]}>Sync Now</Text>
+                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                    {syncStatus === "discovering"
+                      ? "Looking for partner..."
+                      : syncStatus === "connecting"
+                      ? "Connecting..."
+                      : syncStatus === "syncing"
+                      ? "Syncing data..."
+                      : lastSyncTime
+                      ? `Last synced ${formatDateTime(lastSyncTime)}`
+                      : "Never synced"}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.accent }]}>
+                  {syncStatus !== "idle" && syncStatus !== "error" ? "..." : "->"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.settingsRow,
+                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                ]}
+                onPress={handleSetHomeNetwork}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>Home Network</Text>
+                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                    {pairing.homeSSID
+                      ? `Auto-sync on "${pairing.homeSSID}"`
+                      : "Tap to set current WiFi as home"}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
+              </TouchableOpacity>
+
+              {pairing.homeSSID && (
+                <TouchableOpacity
+                  style={[
+                    styles.settingsRow,
+                    { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                  ]}
+                  onPress={handleToggleAutoSync}
+                >
+                  <View>
+                    <Text style={[styles.settingsRowText, { color: colors.text }]}>Auto-Sync</Text>
+                    <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                      {pairing.autoSyncEnabled
+                        ? "Syncs automatically on home WiFi"
+                        : "Manual sync only"}
+                    </Text>
+                  </View>
+                  <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                    {pairing.autoSyncEnabled ? "On" : "Off"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.settingsRow,
+                  styles.dangerRow,
+                  { backgroundColor: colors.card },
+                ]}
+                onPress={() => setShowUnpairConfirm(true)}
+              >
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Unpair</Text>
+                <Text style={[styles.settingsRowArrow, { color: colors.text }]}>-&gt;</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>APP UPDATES</Text>
 
@@ -788,6 +1036,27 @@ const ProfileScreen: React.FC = () => {
               <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Step-by-step instructions for import/export.</Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Feedback ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>FEEDBACK</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={() => setShowFeedbackModal(true)}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                Report a bug or suggest a feature
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
           </TouchableOpacity>
         </View>
 
@@ -1099,6 +1368,48 @@ const ProfileScreen: React.FC = () => {
                   <Text style={[styles.faqAnswer, { color: colors.textDim }]}>Go to Data Management {">"} Import My Data, then choose Pick File or Paste Text.</Text>
                 ) : null}
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.faqItem,
+                  { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                ]}
+                onPress={() => toggleHowToDoc("sync")}
+              >
+                <View style={styles.faqHeader}>
+                  <Text style={[styles.faqQuestion, { color: colors.text }]}>How do I sync data with my partner?</Text>
+                  <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                    {expandedHowToDoc === "sync" ? "v" : ">"}
+                  </Text>
+                </View>
+                {expandedHowToDoc === "sync" ? (
+                  <View style={{ gap: 8 }}>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>First-time setup (one time only):</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      1. Connect both phones to the same WiFi network.{"\n"}
+                      2. On Phone A: go to Profile {">"} Partner Sync {">"} Pair with Partner {">"} tap "Show Code".{"\n"}
+                      3. On Phone B: go to Profile {">"} Partner Sync {">"} Pair with Partner {">"} tap "Enter Code" and type the 6-digit code shown on Phone A.{"\n"}
+                      4. Once paired, you'll see your partner's name in the sync section.
+                    </Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Syncing your data:</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      Tap "Sync Now" on either phone while both are on the same WiFi. All debts, payments, budget entries, savings goals, and milestones will be shared. Changes are merged automatically — the most recent edit wins.
+                    </Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Auto-sync (optional):</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      Tap "Home Network" to save your current WiFi, then turn on "Auto-Sync". The app will sync automatically whenever both phones are on that network and the app is open.{"\n\n"}On Android, location permission is required to read the WiFi name — your location is never stored or shared.
+                    </Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Good to know:</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      {"\u2022"} No server or account is needed — data goes directly between phones.{"\n"}
+                      {"\u2022"} All sync traffic is encrypted end-to-end.{"\n"}
+                      {"\u2022"} Works between iPhone and Android.{"\n"}
+                      {"\u2022"} Both phones must be on the same WiFi to sync.{"\n"}
+                      {"\u2022"} To disconnect, tap "Unpair" in the sync section. Your data stays on your device.
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -1189,6 +1500,7 @@ const ProfileScreen: React.FC = () => {
                 secureTextEntry
                 value={exportPassword}
                 onChangeText={setExportPassword}
+                maxLength={64}
                 autoFocus
               />
             ) : null}
@@ -1260,6 +1572,7 @@ const ProfileScreen: React.FC = () => {
               secureTextEntry
               value={importPassword}
               onChangeText={setImportPassword}
+              maxLength={64}
               autoFocus
             />
             <View style={styles.dialogActions}>
@@ -1568,6 +1881,66 @@ const ProfileScreen: React.FC = () => {
               >
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>
                   OK
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Feedback Modal ── */}
+      <FeedbackModal
+        visible={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        onResult={(result) => {
+          setShowFeedbackModal(false);
+          setInfoModal(result);
+        }}
+      />
+
+      {/* ── Pairing Modal ── */}
+      <PairingModal
+        visible={showPairingModal}
+        onClose={() => setShowPairingModal(false)}
+        onPaired={handlePaired}
+      />
+
+      {/* ── Unpair Confirmation ── */}
+      <Modal
+        visible={showUnpairConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowUnpairConfirm(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Unpair Device
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              This will disconnect partner sync. Your data stays on this device, but
+              you'll need to pair again to sync.
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowUnpairConfirm(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
+                onPress={handleUnpair}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Unpair
                 </Text>
               </TouchableOpacity>
             </View>

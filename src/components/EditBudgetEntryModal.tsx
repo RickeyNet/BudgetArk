@@ -111,6 +111,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       description: description.trim() || undefined,
       date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
       recurring: recurring || undefined,
+      updatedAt: new Date().toISOString(),
     });
   }, [entry, isValid, amount, type, category, description, yearMonth, recurring, onSave]);
 

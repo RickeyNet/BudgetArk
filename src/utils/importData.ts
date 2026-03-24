@@ -163,7 +163,7 @@ const isBudgetLimitItem = (item: unknown): item is Record<string, unknown> => {
   return (
     typeof item.category === "string" &&
     VALID_CATEGORIES.has(item.category) &&
-    isSafeNumber(item.monthlyLimit, { min: 0.01 })
+    isSafeNumber(item.monthlyLimit, { min: 0.01, max: LIMITS.MAX_MONEY })
   );
 };
 
@@ -441,18 +441,24 @@ export const importFromString = async (
   }
 
   // Phase 3: Promote temp keys to real keys; rollback on failure
+  // Back up originals first so we can restore them if the write loop fails
+  const backups: Array<[string, string | null]> = [];
   try {
     if (mode === "replace") {
-      await EncryptedStorage.multiRemove([
-        KEYS.DEBTS,
-        KEYS.PAYMENTS,
-        KEYS.BUDGET_ENTRIES,
-        KEYS.BUDGET_LIMITS,
-      ]);
+      const keysToRemove = [KEYS.DEBTS, KEYS.PAYMENTS, KEYS.BUDGET_ENTRIES, KEYS.BUDGET_LIMITS];
+      for (const key of keysToRemove) {
+        const original = await EncryptedStorage.getItem(key);
+        backups.push([key, original]);
+      }
+      await EncryptedStorage.multiRemove(keysToRemove);
     }
 
     for (const [tempKey, value] of tempWrites) {
       const realKey = tempKey.replace(TEMP_SUFFIX, "");
+      if (mode !== "replace") {
+        const original = await EncryptedStorage.getItem(realKey);
+        backups.push([realKey, original]);
+      }
       await EncryptedStorage.setItem(realKey, value);
     }
 
@@ -461,12 +467,19 @@ export const importFromString = async (
     counts.budgetEntries = mergedBudgetEntries?.count ?? 0;
     counts.budgetLimits = mergedLimits?.count ?? 0;
   } catch (error) {
-    // Rollback: clean up temp keys, leave originals untouched
+    // Rollback: restore original values, then clean up temp keys
+    for (const [key, value] of backups) {
+      if (value !== null) {
+        await EncryptedStorage.setItem(key, value);
+      } else {
+        await EncryptedStorage.removeItem(key);
+      }
+    }
     if (tempKeys.length > 0) {
       await EncryptedStorage.multiRemove(tempKeys);
     }
     throw new Error(
-      "Import failed during write. Your existing data has not been modified."
+      "Import failed during write. Your existing data has been restored."
     );
   }
 

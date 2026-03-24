@@ -56,6 +56,7 @@ const normalizeDebt = (debt: Debt): Debt => ({
   debtClassSource: isDebtClassSource(debt.debtClassSource)
     ? debt.debtClassSource
     : "inferred",
+  updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
 });
 
 /**
@@ -130,7 +131,10 @@ export const updateDebt = async (
   updates: Partial<Debt>
 ): Promise<Debt[]> => {
   const debts = await getDebts();
-  const updated = debts.map((d) => (d.id === id ? { ...d, ...updates } : d));
+  const now = new Date().toISOString();
+  const updated = debts.map((d) =>
+    d.id === id ? { ...d, ...updates, updatedAt: now } : d
+  );
   await saveDebts(updated);
   return updated;
 };
@@ -142,11 +146,24 @@ export const updateDebt = async (
  *
  * @returns Promise<Payment[]> — array of all payments
  */
+const normalizePayment = (payment: Payment): Payment => ({
+  ...payment,
+  updatedAt: payment.updatedAt || payment.date || new Date().toISOString(),
+});
+
 export const getPayments = async (): Promise<Payment[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYMENTS);
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as Payment[];
+    const parsed = JSON.parse(raw) as Payment[];
+    const normalized = parsed.map(normalizePayment);
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+      await EncryptedStorage.setItem(
+        STORAGE_KEYS.PAYMENTS,
+        JSON.stringify(normalized)
+      );
+    }
+    return normalized;
   } catch {
     return [];
   }
@@ -166,9 +183,10 @@ export const recordPayment = async (
   const [debts, payments] = await Promise.all([getDebts(), getPayments()]);
 
   /* Calculate updated debt balance */
+  const now = new Date().toISOString();
   const updatedDebts = debts.map((d) => {
     if (d.id === payment.debtId) {
-      return { ...d, balance: Math.max(0, d.balance - payment.amount) };
+      return { ...d, balance: Math.max(0, d.balance - payment.amount), updatedAt: now };
     }
     return d;
   });

@@ -314,15 +314,17 @@ const BudgetScreen: React.FC = () => {
   );
 
   const handleAddEntry = useCallback((input: NewBudgetEntryInput) => {
+    const now = new Date().toISOString();
     const newEntry: BudgetEntry = {
       ...input,
       id: generateUUID(),
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
     setEntries((prev) => {
       const updated = [...prev, newEntry];
-      saveBudgetEntries(updated);
+      void saveBudgetEntries(updated);
       return updated;
     });
 
@@ -337,7 +339,7 @@ const BudgetScreen: React.FC = () => {
   const handleSaveEntry = useCallback((updated: BudgetEntry) => {
     setEntries((prev) => {
       const next = prev.map((e) => (e.id === updated.id ? updated : e));
-      saveBudgetEntries(next);
+      void saveBudgetEntries(next);
       return next;
     });
     setEditingEntry(null);
@@ -346,7 +348,7 @@ const BudgetScreen: React.FC = () => {
   const handleDeleteEntry = useCallback((id: string) => {
     setEntries((prev) => {
       const next = prev.filter((e) => e.id !== id);
-      saveBudgetEntries(next);
+      void saveBudgetEntries(next);
       return next;
     });
     setEditingEntry(null);

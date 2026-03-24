@@ -594,7 +594,7 @@ const SmartPlanModal: React.FC<SmartPlanModalProps> = ({
                 </View>
 
                 {goals.map((goal) => {
-                  const progress = goal.targetAmount > 0 ? Math.min(goal.currentAmount / goal.targetAmount, 1) : 0;
+                  const progress = goal.targetAmount > 0 ? Math.max(0, Math.min(goal.currentAmount / goal.targetAmount, 1)) : 0;
                   return (
                     <View key={goal.id} style={styles.card}>
                       <View style={styles.row}>

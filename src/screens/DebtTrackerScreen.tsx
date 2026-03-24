@@ -158,14 +158,16 @@ const DebtTrackerScreen: React.FC = () => {
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const primeMilestonesModal = useCallback((plan: DebtMilestonePlan) => {
-    const nextDraft = { ...targetDraftByStep };
-    plan.steps.forEach((step) => {
-      nextDraft[step.key] =
-        typeof step.targetAmount === "number" && Number.isFinite(step.targetAmount)
-          ? String(Math.round(step.targetAmount))
-          : "";
+    setTargetDraftByStep((prev) => {
+      const nextDraft = { ...prev };
+      plan.steps.forEach((step) => {
+        nextDraft[step.key] =
+          typeof step.targetAmount === "number" && Number.isFinite(step.targetAmount)
+            ? String(Math.round(step.targetAmount))
+            : "";
+      });
+      return nextDraft;
     });
-    setTargetDraftByStep(nextDraft);
     const currentStep = plan.steps.find((step) => step.key === plan.currentStepKey);
     const shouldExpandCurrent = !!currentStep && !currentStep.isCompleted;
     setExpandedMilestones({
@@ -175,7 +177,7 @@ const DebtTrackerScreen: React.FC = () => {
       supplies: shouldExpandCurrent && plan.currentStepKey === "supplies",
       sail: shouldExpandCurrent && plan.currentStepKey === "sail",
     });
-  }, [targetDraftByStep]);
+  }, []);
 
   /** Load debts from device storage whenever this tab is focused */
   useFocusEffect(
@@ -425,10 +427,12 @@ const DebtTrackerScreen: React.FC = () => {
 
   /** Add a new debt */
   const handleAddDebt = useCallback(async (input: NewDebtInput) => {
+    const now = new Date().toISOString();
     const newDebt: Debt = {
       ...input,
       id: generateUUID(),
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     setDebts((prev) => {
       const updated = [...prev, newDebt];
@@ -447,11 +451,13 @@ const DebtTrackerScreen: React.FC = () => {
       saveDebts(updated);
       return updated;
     });
+    const paymentNow = new Date().toISOString();
     await recordPayment({
       id: generateUUID(),
       debtId,
       amount,
-      date: new Date().toISOString(),
+      date: paymentNow,
+      updatedAt: paymentNow,
     });
   }, []);
 
@@ -617,6 +623,7 @@ const DebtTrackerScreen: React.FC = () => {
         description: "Logged from Build Your Ark",
         date: now.toISOString().slice(0, 10),
         createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       };
       await addBudgetEntry(entry);
       setSavingsReserve((prev) => prev + amount);
@@ -1114,7 +1121,7 @@ const DebtTrackerScreen: React.FC = () => {
                             style={[styles.msSavingsLogBtn, { backgroundColor: colors.accent }]}
                             onPress={() => {
                               const parsed = parseFloat(savingsDraft);
-                              if (!Number.isNaN(parsed) && parsed > 0) {
+                              if (Number.isFinite(parsed) && parsed > 0) {
                                 handleLogSavings(parsed);
                               }
                             }}

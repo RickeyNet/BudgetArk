@@ -40,11 +40,21 @@ const pruneLimitHistory = (history: BudgetLimitHistory): BudgetLimitHistory => {
   return next;
 };
 
+const normalizeBudgetEntry = (entry: BudgetEntry): BudgetEntry => ({
+  ...entry,
+  updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),
+});
+
 export const getBudgetEntries = async (): Promise<BudgetEntry[]> => {
   const raw = await EncryptedStorage.getItem(BUDGET_STORAGE_KEYS.ENTRIES);
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as BudgetEntry[];
+    const parsed = JSON.parse(raw) as BudgetEntry[];
+    const normalized = parsed.map(normalizeBudgetEntry);
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+      await saveBudgetEntries(normalized);
+    }
+    return normalized;
   } catch {
     return [];
   }

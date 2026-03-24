@@ -243,7 +243,32 @@ const AppContent: React.FC = () => {
     });
 
     if (navigationRef.isReady()) {
-      navigationRef.navigate("Profile", { openReleaseNotes: true });
+      try {
+        navigationRef.navigate("Profile", { openReleaseNotes: true });
+      } catch (e) {
+        if (__DEV__) console.warn("Navigation to Profile failed:", e);
+      }
+    } else if (__DEV__) {
+      console.warn("Navigation not ready — could not open release notes");
+    }
+  }, [navigationRef]);
+
+  const handleTryNewFeature = useCallback(async () => {
+    setShowReleaseNotesPrompt(false);
+    await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 220);
+    });
+
+    if (navigationRef.isReady()) {
+      try {
+        navigationRef.navigate("Profile");
+      } catch (e) {
+        if (__DEV__) console.warn("Navigation to Profile failed:", e);
+      }
+    } else if (__DEV__) {
+      console.warn("Navigation not ready — could not navigate to new feature");
     }
   }, [navigationRef]);
 
@@ -319,22 +344,28 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>You're on v{CURRENT_APP_VERSION}</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>What's new: {latestRelease?.title || "Latest updates are now available."}</Text>
-            {latestRelease?.highlights?.[0] ? (
-              <Text style={[styles.dialogMessage, { color: colors.textDim }]}>{latestRelease.highlights[0]}</Text>
-            ) : null}
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{CURRENT_APP_VERSION}</Text>
+            <Text style={[styles.featureTitle, { color: colors.accent }]}>Partner Sync is here</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              You can now sync budgets, debts, and savings goals with your partner directly over WiFi — no server or account needed. Pair once, then tap Sync Now anytime.
+            </Text>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
-              onPress={handleOpenReleaseHistory}
+              onPress={handleTryNewFeature}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.white }]}>View release notes</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.white }]}>Try Partner Sync</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.bg }]}
+              onPress={handleOpenReleaseHistory}
+            >
+              <Text style={[styles.dialogButtonText, { color: colors.text }]}>View all release notes</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dialogButton, { backgroundColor: "transparent" }]}
               onPress={handleDismissReleaseNotesPrompt}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.text }]}>Got it</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.textMuted }]}>Maybe later</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -390,6 +421,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
     marginBottom: 10,
+  },
+  featureTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 8,
   },
   dialogActions: {
     gap: 10,

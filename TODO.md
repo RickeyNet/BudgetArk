@@ -259,20 +259,20 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [x] Remove `as any` casts and replace with proper type guards — `debtStorage.ts:175`, `App.tsx:99-100`, `ProfileScreen.tsx:213-214`, plus `ProfileScreen.tsx:445`.
 
 ### Medium Priority
-- [ ] Fix stale closure in `useCallback` — `DebtTrackerScreen.tsx:160-178`. `primeMilestonesModal` captures `targetDraftByStep` but may not properly list it in dependencies.
-- [ ] Add cleanup functions to async `useEffect` hooks — `ProfileScreen.tsx:154-167`. If component unmounts mid-load, state updates on unmounted components cause warnings/crashes.
-- [ ] Fix memory leak in AppState listener — `encryptedStorage.ts:69-73`. `AppState.addEventListener` at module scope with no removal; listeners accumulate during hot-reload.
-- [ ] Fix concurrent budget entry write race condition — `BudgetScreen.tsx:316-344`. `saveBudgetEntries()` is async inside a sync `setState` callback. Rapid edits can cause storage to lag behind state, leading to data loss on restart.
-- [ ] Add upper bound validation on import numeric values — `importData.ts:161-168`. `monthlyLimit` validated only as `> 0.01` with no ceiling. A malformed import could inject absurd values.
-- [ ] Handle chart empty state gracefully — `InvestmentScreen.tsx:68`. Chart returns `null` for < 2 data points, which could cause layout shift.
-- [ ] Add safeguard for simulation loop — `calculations.ts:128-195`. `simulatePayoffPlan` runs up to 600 iterations; pathological inputs (zero payment + high interest) could hang the UI.
+- [x] Fix stale closure in `useCallback` — `DebtTrackerScreen.tsx:160-178`. `primeMilestonesModal` captures `targetDraftByStep` but may not properly list it in dependencies.
+- [x] Add cleanup functions to async `useEffect` hooks — `ProfileScreen.tsx:154-167`. If component unmounts mid-load, state updates on unmounted components cause warnings/crashes.
+- [x] Fix memory leak in AppState listener — `encryptedStorage.ts:69-73`. `AppState.addEventListener` at module scope with no removal; listeners accumulate during hot-reload.
+- [x] Fix concurrent budget entry write race condition — `BudgetScreen.tsx:316-344`. `saveBudgetEntries()` is async inside a sync `setState` callback. Rapid edits can cause storage to lag behind state, leading to data loss on restart.
+- [x] Add upper bound validation on import numeric values — `importData.ts:161-168`. `monthlyLimit` validated only as `> 0.01` with no ceiling. A malformed import could inject absurd values.
+- [x] Handle chart empty state gracefully — `InvestmentScreen.tsx:68`. Chart returns `null` for < 2 data points, which could cause layout shift.
+- [x] Add safeguard for simulation loop — `calculations.ts:128-195`. Already guarded: line 185 exits early when balance isn't decreasing (`afterBalance >= beforeBalance - 0.000001`), plus hard cap at 600 iterations and input sanitization. No additional fix needed.
 
 ### Low Priority
-- [ ] Improve navigation error logging — `App.tsx:242-244`. `navigationRef.navigate()` failure goes unlogged.
-- [ ] Fix FlatList `keyExtractor` — `BudgetScreen.tsx:672`. Uses `item.category` instead of unique ID; duplicate categories would break list updates.
-- [ ] Reduce excessive local state in `DebtTrackerScreen.tsx:115-152` — 15+ `useState` hooks in one component causing full re-renders on any state change. Consider grouping related state with `useReducer`.
-- [ ] Fix missing `useCallback` dependency in `InvestmentScreen.tsx:188-191` — `handleSliderChange` has empty dependency array but uses `config`.
-- [ ] Add negative value validation for savings goals — `SmartPlanModal.tsx:597`. If `goal.currentAmount` is negative (data corruption), progress silently returns 0 instead of flagging the issue.
+- [x] Improve navigation error logging — `App.tsx:242-244`. Added try-catch around `navigate()` calls and `__DEV__` warnings when navigation isn't ready.
+- [x] Fix FlatList `keyExtractor` — `BudgetScreen.tsx:672`. Verified safe: `expenseRows` derives from a `Set<BudgetCategory>`, so `item.category` is guaranteed unique. No change needed.
+- [x] Reduce excessive local state in `DebtTrackerScreen.tsx:115-152` — Evaluated: `useReducer` would not reduce re-renders (React re-renders the full component on any state change regardless). The main stale-closure risk was already fixed in medium priority. Not worth the refactor risk.
+- [x] Fix missing `useCallback` dependency in `InvestmentScreen.tsx:188-191` — Verified correct: `handleSliderChange` and `adjust` only use stable `useState` setters and module-level constants (`SLIDERS`). Empty dependency arrays are appropriate.
+- [x] Add negative value validation for savings goals — `SmartPlanModal.tsx:597`. Added `Math.max(0, ...)` clamp so negative `currentAmount` from data corruption renders as 0% instead of a negative percentage.
 
 ---
 

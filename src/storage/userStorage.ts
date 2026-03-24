@@ -26,10 +26,7 @@ import {
   UserAccount,
 } from "../types";
 import { isCurrencyPreferenceId } from "../utils/currencyPreferences";
-
-/** Strip control characters and null bytes, keeping normal whitespace (space, tab, newline). */
-const sanitizeText = (text: string): string =>
-  text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+import { sanitizeTextInput as sanitizeText } from "../utils/sanitize";
 
 /** Storage key for the user account */
 const USER_KEY = "@budgetark_user" as const;
