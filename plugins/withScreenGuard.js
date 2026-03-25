@@ -116,11 +116,20 @@ const withScreenGuardXcode = (config) => {
     const xcodeProject = cfg.modResults;
     const projectName = cfg.modRequest.projectName || "BudgetArk";
 
-    // Find or create the main group
-    const mainGroup = xcodeProject.getFirstProject().firstProject.mainGroup;
-    const projectGroup = xcodeProject.pbxGroupByName(projectName);
+    // Find the project group key by name from PBXGroup section
+    const pbxGroups = xcodeProject.hash.project.objects["PBXGroup"];
+    let groupKey = null;
+    for (const key of Object.keys(pbxGroups)) {
+      if (key.endsWith("_comment")) continue;
+      const group = pbxGroups[key];
+      if (group.name === projectName || group.path === projectName) {
+        groupKey = key;
+        break;
+      }
+    }
 
-    if (projectGroup) {
+    if (groupKey) {
+      const projectGroup = pbxGroups[groupKey];
       const existingFiles = (projectGroup.children || []).map(
         (c) => c.comment
       );
@@ -129,7 +138,7 @@ const withScreenGuardXcode = (config) => {
         xcodeProject.addSourceFile(
           `${projectName}/${SWIFT_FILE_NAME}`,
           null,
-          projectGroup.id || projectGroup
+          groupKey
         );
       }
 
@@ -137,7 +146,7 @@ const withScreenGuardXcode = (config) => {
         xcodeProject.addSourceFile(
           `${projectName}/${OBJ_C_BRIDGE_FILE_NAME}`,
           null,
-          projectGroup.id || projectGroup
+          groupKey
         );
       }
 
@@ -145,7 +154,7 @@ const withScreenGuardXcode = (config) => {
         xcodeProject.addHeaderFile(
           `${projectName}/${BRIDGING_HEADER_NAME}`,
           null,
-          projectGroup.id || projectGroup
+          groupKey
         );
       }
     }
