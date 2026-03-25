@@ -10,7 +10,7 @@
  */
 
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+import { File as ExpoFile } from "expo-file-system";
 import CryptoJS from "crypto-js";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
@@ -513,6 +513,6 @@ export const importData = async (
   const file = result.assets[0];
   if (!file?.uri) throw new Error("No file selected.");
 
-  const raw = await FileSystem.readAsStringAsync(file.uri);
+  const raw = await new ExpoFile(file.uri).text();
   return importFromString(raw, mode, password);
 };

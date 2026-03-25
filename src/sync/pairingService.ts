@@ -7,13 +7,50 @@
  * a shared secret for all future sync communication.
  */
 
+import { Platform, PermissionsAndroid } from "react-native";
 import CryptoJS from "crypto-js";
+import NetInfo from "@react-native-community/netinfo";
 import { generateUUID } from "../utils/uuid";
 import { getOrCreateUser } from "../storage/userStorage";
 import { savePairingState } from "./pairingStorage";
 import * as Discovery from "./discoveryService";
 import * as Transport from "./transportService";
 import type { PairingState, PairOfferPayload, PairAcceptPayload } from "./types";
+
+/** Get this device's LAN IP address */
+const getLocalIp = async (): Promise<string | null> => {
+  // On Android, location permission may be needed for WiFi details (especially GrapheneOS)
+  if (Platform.OS === "android") {
+    try {
+      const granted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+      if (!granted) {
+        const result = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Network Permission",
+            message:
+              "BudgetArk needs this permission to display your device's IP address for pairing.",
+            buttonPositive: "Allow",
+            buttonNegative: "Deny",
+          }
+        );
+        if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+          return null;
+        }
+      }
+    } catch {
+      // Fall through — try NetInfo anyway
+    }
+  }
+
+  const state = await NetInfo.fetch();
+  if (state.type === "wifi" && state.isConnected) {
+    return (state.details as any)?.ipAddress ?? null;
+  }
+  return null;
+};
 
 /** Generate a random 6-digit pairing code */
 export const generatePairingCode = (): string => {
@@ -46,7 +83,8 @@ const PAIRING_TIMEOUT_MS = 60_000;
  */
 export const startPairingAsInitiator = (
   code: string,
-  onTimeout?: () => void
+  onTimeout?: () => void,
+  onServerReady?: (ip: string | null, port: number) => void
 ): Promise<PairingState> => {
   return new Promise(async (resolve, reject) => {
     const user = await getOrCreateUser();
@@ -70,6 +108,10 @@ export const startPairingAsInitiator = (
         "", // We don't know the partner ID yet during pairing
         tempKey
       );
+
+      // Report IP:port for manual connection fallback
+      const localIp = await getLocalIp();
+      onServerReady?.(localIp, port);
 
       // Advertise via Zeroconf
       Discovery.publish(user.id, port);
@@ -128,25 +170,36 @@ export const startPairingAsInitiator = (
  * Joiner flow: enter code, discover partner, connect and exchange keys.
  * Returns the established PairingState.
  */
-export const joinPairing = async (code: string): Promise<PairingState> => {
+export const joinPairing = async (
+  code: string,
+  manualAddress?: { host: string; port: number }
+): Promise<PairingState> => {
   const user = await getOrCreateUser();
   const tempKey = deriveKeyFromCode(code);
   const sharedSecret = generateSharedSecret();
 
-  // Discover the initiator on the LAN
-  // During pairing we look for any budgetark service (we don't know partner ID yet)
-  const peer = await Discovery.discoverPartner("", PAIRING_TIMEOUT_MS);
-  // Since we can't filter by partnerId during pairing, we'll accept the first service found
-  // The code verification provides mutual authentication
+  let host: string;
+  let port: number;
 
-  if (!peer) {
-    throw new Error("Could not find partner on the network. Make sure both devices are on the same WiFi.");
+  if (manualAddress) {
+    // Manual IP:port provided — skip mDNS discovery
+    host = manualAddress.host;
+    port = manualAddress.port;
+  } else {
+    // Discover the initiator on the LAN via mDNS
+    const peer = await Discovery.discoverPartner("", PAIRING_TIMEOUT_MS);
+
+    if (!peer) {
+      throw new Error("Could not find partner on the network. Make sure both devices are on the same WiFi, or use manual IP.");
+    }
+    host = peer.host;
+    port = peer.port;
   }
 
   // Connect via TCP
   const connection = await Transport.connectToHost(
-    peer.host,
-    peer.port,
+    host,
+    port,
     user.id,
     "", // Don't know partner ID yet
     tempKey

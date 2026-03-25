@@ -21,6 +21,7 @@ export interface DiscoveredPeer {
 }
 
 let zeroconf: Zeroconf | null = null;
+let publishedServiceName: string | null = null;
 
 const getZeroconf = (): Zeroconf => {
   if (!zeroconf) {
@@ -38,11 +39,12 @@ export const publish = (
   port: number
 ): void => {
   const zc = getZeroconf();
+  publishedServiceName = `BudgetArk-${userId.slice(0, 8)}`;
   zc.publishService(
     SERVICE_TYPE,
     PROTOCOL,
     DOMAIN,
-    `BudgetArk-${userId.slice(0, 8)}`,
+    publishedServiceName,
     port,
     { userId, syncVersion: "1" }
   );
@@ -75,7 +77,14 @@ export const discoverPartner = (
 
     zc.on("resolved", (service: any) => {
       const txt = service.txt || {};
-      if (txt.userId === partnerId && service.host && service.port) {
+      // During pairing partnerId is "" — accept any budgetark service.
+      // During sync we match the specific partner.
+      const isMatch =
+        partnerId === ""
+          ? !!txt.userId
+          : txt.userId === partnerId;
+
+      if (isMatch && service.host && service.port) {
         clearTimeout(timer);
         const peer: DiscoveredPeer = {
           host: service.host,
@@ -102,7 +111,10 @@ export const discoverPartner = (
  */
 export const stop = (): void => {
   if (zeroconf) {
-    zeroconf.unpublishService(`BudgetArk`);
+    if (publishedServiceName) {
+      zeroconf.unpublishService(publishedServiceName);
+      publishedServiceName = null;
+    }
     zeroconf.stop();
     zeroconf.removeAllListeners();
   }

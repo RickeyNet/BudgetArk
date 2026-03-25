@@ -95,8 +95,8 @@ const validateAndDecrypt = (
     return null;
   }
 
-  // Verify sender
-  if (msg.senderId !== expectedSenderId) return null;
+  // Verify sender (skip check during pairing when partner ID is unknown)
+  if (expectedSenderId && msg.senderId !== expectedSenderId) return null;
 
   // Replay protection: reject seen nonces
   if (seenNonces.has(msg.nonce)) return null;

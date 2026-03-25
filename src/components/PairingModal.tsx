@@ -16,11 +16,26 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { generatePairingCode, startPairingAsInitiator, joinPairing } from "../sync/pairingService";
 import type { PairingState, PairingRole } from "../sync/types";
+
+/** Parse "host:port" string, returns null if invalid */
+const parseAddress = (input: string): { host: string; port: number } | null => {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const lastColon = trimmed.lastIndexOf(":");
+  if (lastColon === -1) return null;
+  const host = trimmed.slice(0, lastColon);
+  const port = parseInt(trimmed.slice(lastColon + 1), 10);
+  if (!host || isNaN(port) || port < 1 || port > 65535) return null;
+  return { host, port };
+};
 
 interface PairingModalProps {
   visible: boolean;
@@ -32,6 +47,7 @@ const TIMEOUT_SECONDS = 60;
 
 const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired }) => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [role, setRole] = useState<PairingRole | null>(null);
@@ -40,6 +56,10 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
   const [countdown, setCountdown] = useState(TIMEOUT_SECONDS);
   const [status, setStatus] = useState<"idle" | "waiting" | "connecting" | "error">("idle");
   const [error, setError] = useState("");
+  const [serverAddress, setServerAddress] = useState("");
+  const [serverPort, setServerPort] = useState(0);
+  const [manualIp, setManualIp] = useState("");
+  const [showManualIp, setShowManualIp] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Reset state when modal opens/closes
@@ -51,6 +71,10 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       setCountdown(TIMEOUT_SECONDS);
       setStatus("idle");
       setError("");
+      setServerAddress("");
+      setServerPort(0);
+      setManualIp("");
+      setShowManualIp(false);
       if (timerRef.current) clearInterval(timerRef.current);
     }
   }, [visible]);
@@ -74,10 +98,17 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
     }, 1000);
 
     try {
-      const result = await startPairingAsInitiator(newCode, () => {
-        setStatus("error");
-        setError("Pairing timed out. Try again.");
-      });
+      const result = await startPairingAsInitiator(
+        newCode,
+        () => {
+          setStatus("error");
+          setError("Pairing timed out. Try again.");
+        },
+        (ip, port) => {
+          setServerPort(port);
+          if (ip) setServerAddress(`${ip}:${port}`);
+        }
+      );
       if (timerRef.current) clearInterval(timerRef.current);
       onPaired(result);
     } catch (err) {
@@ -97,22 +128,36 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
     setError("");
 
     try {
-      const result = await joinPairing(joinCode);
+      const manual = showManualIp ? parseAddress(manualIp) : undefined;
+      if (showManualIp && !manual) {
+        setStatus("error");
+        setError("Enter a valid address (e.g. 192.168.1.5:12345)");
+        return;
+      }
+      const result = await joinPairing(joinCode, manual ?? undefined);
       onPaired(result);
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Failed to connect");
     }
-  }, [joinCode, onPaired]);
+  }, [joinCode, onPaired, showManualIp, manualIp]);
 
   if (!visible) return null;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior="padding"
+      >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <View style={styles.card}>
+            <View style={[
+              styles.card,
+              Platform.OS === "android" && insets.bottom > 0
+                ? { paddingBottom: insets.bottom + 24 }
+                : null,
+            ]}>
               <Text style={styles.title}>Pair with Partner</Text>
               <Text style={styles.subtitle}>
                 Both devices must be on the same WiFi network.
@@ -144,6 +189,16 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
               {role === "initiator" && (
                 <View style={styles.codeContainer}>
                   <Text style={styles.codeDisplay}>{code}</Text>
+                  {serverAddress ? (
+                    <Text style={styles.addressText} selectable>
+                      {serverAddress}
+                    </Text>
+                  ) : serverPort > 0 ? (
+                    <Text style={styles.ipHintText}>
+                      Port: {serverPort} — check your IP in WiFi settings{"\n"}
+                      and share your IP:{serverPort} with your partner
+                    </Text>
+                  ) : null}
                   <Text style={styles.countdownText}>
                     {status === "waiting"
                       ? `Waiting for partner... ${countdown}s`
@@ -175,6 +230,24 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                     autoFocus
                     editable={status !== "connecting"}
                   />
+                  <TouchableOpacity onPress={() => setShowManualIp((v) => !v)}>
+                    <Text style={styles.manualToggle}>
+                      {showManualIp ? "Use automatic discovery" : "Can't find device? Enter IP manually"}
+                    </Text>
+                  </TouchableOpacity>
+                  {showManualIp && (
+                    <TextInput
+                      style={styles.ipInput}
+                      placeholder="192.168.1.5:12345"
+                      placeholderTextColor={colors.textMuted}
+                      value={manualIp}
+                      onChangeText={setManualIp}
+                      keyboardType="numbers-and-punctuation"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={status !== "connecting"}
+                    />
+                  )}
                   <TouchableOpacity
                     style={[
                       styles.connectButton,
@@ -201,7 +274,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -266,6 +339,20 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.accent,
       letterSpacing: 12,
     },
+    addressText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.textDim,
+      marginTop: 8,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    },
+    ipHintText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 8,
+      textAlign: "center",
+      lineHeight: 18,
+    },
     countdownText: {
       fontSize: 14,
       color: colors.textDim,
@@ -273,6 +360,23 @@ const makeStyles = (colors: ThemeColors) =>
     },
     joinContainer: {
       gap: 12,
+    },
+    manualToggle: {
+      fontSize: 13,
+      color: colors.accent,
+      textAlign: "center",
+    },
+    ipInput: {
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: colors.text,
+      textAlign: "center",
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     },
     codeInput: {
       backgroundColor: colors.bg,

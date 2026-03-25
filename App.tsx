@@ -40,6 +40,7 @@ import { isUpdateSafe } from "./src/utils/versionGuard";
 import { getPrivacyMode } from "./src/storage/privacyStorage";
 
 const FlagSecureModule = Platform.OS === "android" ? NativeModules.FlagSecureModule : null;
+const ScreenGuardModule = Platform.OS === "ios" ? NativeModules.ScreenGuardModule : null;
 
 type UpdatePrompt = {
   message: string;
@@ -182,16 +183,17 @@ const AppContent: React.FC = () => {
     };
   }, [canCheckUpdates, isOnboardingComplete, runAutoUpdateCheck]);
 
-  /** Apply FLAG_SECURE based on privacy mode preference */
+  /** Apply screen-capture prevention based on privacy mode preference */
   useEffect(() => {
-    if (!FlagSecureModule) return;
+    const privacyModule = FlagSecureModule || ScreenGuardModule;
+    if (!privacyModule) return;
 
     const applyPrivacyMode = async () => {
       const enabled = await getPrivacyMode();
       if (enabled) {
-        FlagSecureModule.enable();
+        privacyModule.enable();
       } else {
-        FlagSecureModule.disable();
+        privacyModule.disable();
       }
     };
 

@@ -22,6 +22,7 @@ import {
   ScrollView,
 } from "react-native";
 import { openComposer } from "react-native-email-link";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
@@ -39,7 +40,8 @@ const SUPPORT_EMAIL = "support@budgetark.app";
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResult }) => {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
 
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
   const [message, setMessage] = useState("");
@@ -115,8 +117,9 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.overlay}
+        keyboardVerticalOffset={0}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
@@ -225,7 +228,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
+const makeStyles = (colors: ThemeColors, bottomInset: number) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
@@ -243,10 +246,11 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
-      maxHeight: "85%",
+      maxHeight: "95%",
     },
     cardContent: {
       padding: 24,
+      paddingBottom: Math.max(24, bottomInset),
       gap: 16,
     },
     title: {

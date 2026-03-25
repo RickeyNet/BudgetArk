@@ -358,7 +358,7 @@ const ProfileScreen: React.FC = () => {
     setInfoModal({
       title: next ? "Privacy Mode On" : "Privacy Mode Off",
       message: next
-        ? "Screenshots and screen recording are now blocked on Android. On iOS, screen capture notifications may be shown."
+        ? "Screenshots and screen recording are now blocked."
         : "Screenshot and screen recording protection is disabled.",
     });
   }, [privacyMode]);
@@ -788,6 +788,48 @@ const ProfileScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* ── Feedback ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>FEEDBACK</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={() => setShowFeedbackModal(true)}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                Report a bug or suggest a feature
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>HOW TO DOCS</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={() => {
+              setShowHowToDocsModal(true);
+              setExpandedHowToDoc("export");
+            }}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Open How to Docs</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Step-by-step instructions for import/export.</Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* ── Partner Sync ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PARTNER SYNC</Text>
@@ -910,6 +952,58 @@ const ProfileScreen: React.FC = () => {
         </View>
 
         <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            DATA MANAGEMENT
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={handleExportData}
+          >
+            <Text style={[styles.settingsRowText, { color: colors.text }]}>
+              Export My Data
+            </Text>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+            onPress={handleImportData}
+          >
+            <Text style={[styles.settingsRowText, { color: colors.text }]}>
+              Import My Data
+            </Text>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              styles.dangerRow,
+              { backgroundColor: colors.card },
+            ]}
+            onPress={handleResetData}
+          >
+            <Text style={[styles.settingsRowText, { color: colors.text }]}>
+              Reset All Data
+            </Text>
+            <Text style={[styles.settingsRowArrow, { color: colors.text }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>APP UPDATES</Text>
 
           <TouchableOpacity
@@ -964,100 +1058,6 @@ const ProfileScreen: React.FC = () => {
             </View>
           </View>
 
-        </View>
-
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
-            DATA MANAGEMENT
-          </Text>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={handleExportData}
-          >
-            <Text style={[styles.settingsRowText, { color: colors.text }]}>
-              Export My Data
-            </Text>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={handleImportData}
-          >
-            <Text style={[styles.settingsRowText, { color: colors.text }]}>
-              Import My Data
-            </Text>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              styles.dangerRow,
-              { backgroundColor: colors.card },
-            ]}
-            onPress={handleResetData}
-          >
-            <Text style={[styles.settingsRowText, { color: colors.text }]}>
-              Reset All Data
-            </Text>
-            <Text style={[styles.settingsRowArrow, { color: colors.text }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>HOW TO DOCS</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={() => {
-              setShowHowToDocsModal(true);
-              setExpandedHowToDoc("export");
-            }}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Open How to Docs</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Step-by-step instructions for import/export.</Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Feedback ── */}
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>FEEDBACK</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={() => setShowFeedbackModal(true)}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                Report a bug or suggest a feature
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
-          </TouchableOpacity>
         </View>
 
         {/* ── What's New ── */}
@@ -1266,13 +1266,13 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Release Notes</Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Browse current and past versions.</Text>
 
-            <View style={styles.faqList}>
+            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
               {RELEASE_NOTES.map((release) => {
                 const isExpanded = expandedReleaseNote === release.version;
                 return (
@@ -1303,7 +1303,7 @@ const ProfileScreen: React.FC = () => {
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
@@ -1326,13 +1326,13 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>How to Docs</Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Tap a topic to expand instructions.</Text>
 
-            <View style={styles.faqList}>
+            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
               <TouchableOpacity
                 style={[
                   styles.faqItem,
@@ -1410,7 +1410,7 @@ const ProfileScreen: React.FC = () => {
                   </View>
                 ) : null}
               </TouchableOpacity>
-            </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
