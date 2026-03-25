@@ -1,11 +1,11 @@
 /**
- * Expo config plugin that adds a native iOS module to prevent screen capture.
+ * Expo config plugin that adds native modules to prevent screen capture.
  *
- * Uses the UITextField isSecureTextEntry trick to piggyback on iOS DRM,
+ * iOS: Uses the UITextField isSecureTextEntry trick to piggyback on iOS DRM,
  * which blanks the screen in screenshots and screen recordings.
  *
- * Mirrors the Android FlagSecureModule — both expose enable()/disable()
- * under the name "ScreenGuardModule".
+ * Android: Uses WindowManager.LayoutParams.FLAG_SECURE to block screenshots
+ * and screen recordings.
  */
 const {
   withXcodeProject,
@@ -83,6 +83,112 @@ RCT_EXTERN_METHOD(enable)
 RCT_EXTERN_METHOD(disable)
 @end
 `;
+
+// ── Android native source ──
+
+const ANDROID_KOTLIN_SOURCE = `package com.budgetark.app
+
+import android.view.WindowManager
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.UiThreadUtil
+
+class FlagSecureModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+    override fun getName(): String = "FlagSecureModule"
+
+    @ReactMethod
+    fun enable() {
+        UiThreadUtil.runOnUiThread {
+            currentActivity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    @ReactMethod
+    fun disable() {
+        UiThreadUtil.runOnUiThread {
+            currentActivity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+}
+`;
+
+const ANDROID_PACKAGE_SOURCE = `package com.budgetark.app
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
+class FlagSecurePackage : ReactPackage {
+    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
+        return listOf(FlagSecureModule(reactContext))
+    }
+
+    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
+        return emptyList()
+    }
+}
+`;
+
+/**
+ * Write Android native source files and register the package.
+ */
+const withScreenGuardAndroid = (config) => {
+  return withDangerousMod(config, [
+    "android",
+    async (cfg) => {
+      const androidRoot = cfg.modRequest.platformProjectRoot;
+      const srcDir = path.join(
+        androidRoot,
+        "app",
+        "src",
+        "main",
+        "java",
+        "com",
+        "budgetark",
+        "app"
+      );
+
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(srcDir, "FlagSecureModule.kt"),
+        ANDROID_KOTLIN_SOURCE,
+        "utf-8"
+      );
+      fs.writeFileSync(
+        path.join(srcDir, "FlagSecurePackage.kt"),
+        ANDROID_PACKAGE_SOURCE,
+        "utf-8"
+      );
+
+      // Register the package in MainApplication
+      const mainAppPath = path.join(srcDir, "MainApplication.kt");
+      if (fs.existsSync(mainAppPath)) {
+        let mainApp = fs.readFileSync(mainAppPath, "utf-8");
+
+        // Add the package to getPackages() if not already present
+        if (!mainApp.includes("FlagSecurePackage")) {
+          mainApp = mainApp.replace(
+            /override fun getPackages\(\): List<ReactPackage> \{/,
+            `override fun getPackages(): List<ReactPackage> {\n          packages.add(FlagSecurePackage())`
+          );
+          // Alternative pattern: PackageList + add
+          if (!mainApp.includes("FlagSecurePackage")) {
+            mainApp = mainApp.replace(
+              /PackageList\(this\)\.packages/,
+              `PackageList(this).packages.apply { add(FlagSecurePackage()) }`
+            );
+          }
+          fs.writeFileSync(mainAppPath, mainApp, "utf-8");
+        }
+      }
+
+      return cfg;
+    },
+  ]);
+};
 
 /**
  * Step 1: Write native source files into the ios project directory.
@@ -182,6 +288,7 @@ const withScreenGuardXcode = (config) => {
 const withScreenGuard = (config) => {
   config = withScreenGuardFiles(config);
   config = withScreenGuardXcode(config);
+  config = withScreenGuardAndroid(config);
   return config;
 };
 

@@ -117,9 +117,8 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
         style={styles.overlay}
-        keyboardVerticalOffset={0}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>

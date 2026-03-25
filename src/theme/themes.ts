@@ -202,7 +202,31 @@ const DEEPFOREST: ThemePreset = {
 
 
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT] as const;
+const OCEAN_CORAL: ThemePreset = {
+  id: "ocean_coral",
+  name: "Coral",
+  colors: {
+    bg: "#0b1e24",
+    card: "#112e35",
+    cardBorder: "#1a4450",
+    accent: "#f08a65",
+    success: "#8abb6a",
+    successDim: "rgba(138, 187, 106, 0.15)",
+    warning: "#f0a050",
+    warningDim: "rgba(240, 160, 80, 0.15)",
+    danger: "#e05555",
+    dangerDim: "rgba(224, 85, 85, 0.15)",
+    text: "#e0d4bc",
+    textDim: "#7a9a8a",
+    textMuted: "#3e6058",
+    white: "#f0e8d8",
+    teal: "#5abaa0",
+    tealDim: "rgba(90, 186, 160, 0.15)",
+    accentButtonText: "#000000",
+  },
+};
+
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";
