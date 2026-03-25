@@ -14,6 +14,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -23,6 +24,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { generatePairingCode, startPairingAsInitiator, joinPairing } from "../sync/pairingService";
+import * as Discovery from "../sync/discoveryService";
+import type { TransportConnection } from "../sync/transportService";
 import type { PairingState, PairingRole } from "../sync/types";
 
 /** Parse "host:port" string, returns null if invalid */
@@ -61,10 +64,13 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
   const [manualIp, setManualIp] = useState("");
   const [showManualIp, setShowManualIp] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const connectionRef = useRef<TransportConnection | null>(null);
+  const cancelledRef = useRef(false);
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!visible) {
+      cancelledRef.current = true;
       setRole(null);
       setCode("");
       setJoinCode("");
@@ -76,6 +82,14 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       setManualIp("");
       setShowManualIp(false);
       if (timerRef.current) clearInterval(timerRef.current);
+      // Clean up TCP server and Zeroconf immediately
+      if (connectionRef.current) {
+        connectionRef.current.close();
+        connectionRef.current = null;
+      }
+      Discovery.stop();
+    } else {
+      cancelledRef.current = false;
     }
   }, [visible]);
 
@@ -101,17 +115,22 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       const result = await startPairingAsInitiator(
         newCode,
         () => {
+          if (cancelledRef.current) return;
           setStatus("error");
           setError("Pairing timed out. Try again.");
         },
-        (ip, port) => {
+        (ip, port, connection) => {
+          connectionRef.current = connection;
+          if (cancelledRef.current) return;
           setServerPort(port);
           if (ip) setServerAddress(`${ip}:${port}`);
         }
       );
+      if (cancelledRef.current) return;
       if (timerRef.current) clearInterval(timerRef.current);
       onPaired(result);
     } catch (err) {
+      if (cancelledRef.current) return;
       if (timerRef.current) clearInterval(timerRef.current);
       setStatus("error");
       setError(err instanceof Error ? err.message : "Pairing failed");
@@ -150,8 +169,8 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
         style={styles.overlay}
         behavior="padding"
       >
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <View onStartShouldSetResponder={() => true}>
             <View style={[
               styles.card,
               Platform.OS === "android" && insets.bottom > 0
@@ -272,8 +291,8 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </Pressable>
       </KeyboardAvoidingView>
     </Modal>
   );

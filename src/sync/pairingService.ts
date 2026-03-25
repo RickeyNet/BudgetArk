@@ -84,7 +84,7 @@ const PAIRING_TIMEOUT_MS = 60_000;
 export const startPairingAsInitiator = (
   code: string,
   onTimeout?: () => void,
-  onServerReady?: (ip: string | null, port: number) => void
+  onServerReady?: (ip: string | null, port: number, connection: Transport.TransportConnection) => void
 ): Promise<PairingState> => {
   return new Promise(async (resolve, reject) => {
     const user = await getOrCreateUser();
@@ -109,9 +109,9 @@ export const startPairingAsInitiator = (
         tempKey
       );
 
-      // Report IP:port for manual connection fallback
+      // Report IP:port and connection for manual connection fallback / cleanup
       const localIp = await getLocalIp();
-      onServerReady?.(localIp, port);
+      onServerReady?.(localIp, port, connection);
 
       // Advertise via Zeroconf
       Discovery.publish(user.id, port);
