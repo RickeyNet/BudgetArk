@@ -36,7 +36,7 @@ interface FeedbackModalProps {
 type FeedbackType = "bug" | "feature";
 
 const GITHUB_ISSUES_URL = "https://github.com/RickeyNet/BudgetArk/issues";
-const SUPPORT_EMAIL = "support@budgetark.app";
+const SUPPORT_EMAIL = "budgetark.support@gmail.com";
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResult }) => {
   const { colors } = useTheme();
