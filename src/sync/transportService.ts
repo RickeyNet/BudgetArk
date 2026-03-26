@@ -7,6 +7,7 @@
  * and signed with HMAC-SHA256 for integrity.
  */
 
+import { Buffer } from "buffer";
 import TcpSocket from "react-native-tcp-socket";
 import CryptoJS from "crypto-js";
 import { generateUUID } from "../utils/uuid";
@@ -120,7 +121,8 @@ const validateAndDecrypt = (
 export const startServer = (
   senderId: string,
   expectedPartnerId: string,
-  key: string
+  key: string,
+  onListening?: (port: number, closeServer: () => void) => void
 ): Promise<{ connection: TransportConnection; port: number }> => {
   return new Promise((resolve, reject) => {
     let messageCallback: ((msg: SyncMessage, payload: string) => void) | null = null;
@@ -167,8 +169,13 @@ export const startServer = (
       reject(err);
     });
 
-    // Listen on port 0 to let the OS assign an available port
-    server.listen({ port: 0, host: "0.0.0.0" });
+    // Listen on port 0 to let the OS assign an available port.
+    // Fire onListening as soon as the server is ready (before any client connects)
+    // so the caller can advertise the address and show it to the user.
+    server.listen({ port: 0, host: "0.0.0.0" }, () => {
+      const assignedPort = (server.address() as any)?.port ?? 0;
+      onListening?.(assignedPort, () => server.close());
+    });
   });
 };
 

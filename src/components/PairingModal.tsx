@@ -25,7 +25,6 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { generatePairingCode, startPairingAsInitiator, joinPairing } from "../sync/pairingService";
 import * as Discovery from "../sync/discoveryService";
-import type { TransportConnection } from "../sync/transportService";
 import type { PairingState, PairingRole } from "../sync/types";
 
 /** Parse "host:port" string, returns null if invalid */
@@ -64,7 +63,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
   const [manualIp, setManualIp] = useState("");
   const [showManualIp, setShowManualIp] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const connectionRef = useRef<TransportConnection | null>(null);
+  const serverCloseRef = useRef<(() => void) | null>(null);
   const cancelledRef = useRef(false);
 
   // Reset state when modal opens/closes
@@ -83,9 +82,9 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       setShowManualIp(false);
       if (timerRef.current) clearInterval(timerRef.current);
       // Clean up TCP server and Zeroconf immediately
-      if (connectionRef.current) {
-        connectionRef.current.close();
-        connectionRef.current = null;
+      if (serverCloseRef.current) {
+        serverCloseRef.current();
+        serverCloseRef.current = null;
       }
       Discovery.stop();
     } else {
@@ -119,8 +118,8 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
           setStatus("error");
           setError("Pairing timed out. Try again.");
         },
-        (ip, port, connection) => {
-          connectionRef.current = connection;
+        (ip, port, closeFn) => {
+          serverCloseRef.current = closeFn;
           if (cancelledRef.current) return;
           setServerPort(port);
           if (ip) setServerAddress(`${ip}:${port}`);

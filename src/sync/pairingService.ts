@@ -84,7 +84,7 @@ const PAIRING_TIMEOUT_MS = 60_000;
 export const startPairingAsInitiator = (
   code: string,
   onTimeout?: () => void,
-  onServerReady?: (ip: string | null, port: number, connection: Transport.TransportConnection) => void
+  onServerReady?: (ip: string | null, port: number, closeServer: (() => void) | null) => void
 ): Promise<PairingState> => {
   return new Promise(async (resolve, reject) => {
     const user = await getOrCreateUser();
@@ -102,19 +102,20 @@ export const startPairingAsInitiator = (
     }, PAIRING_TIMEOUT_MS);
 
     try {
-      // Start TCP server
+      // Start TCP server — onListening fires as soon as the port is assigned,
+      // BEFORE any client connects, so we can advertise and show the address.
       const { connection, port } = await Transport.startServer(
         user.id,
         "", // We don't know the partner ID yet during pairing
-        tempKey
+        tempKey,
+        async (listenPort, closeServer) => {
+          // Advertise via Zeroconf immediately
+          Discovery.publish(user.id, listenPort);
+          // Show IP:port to user
+          const localIp = await getLocalIp();
+          onServerReady?.(localIp, listenPort, closeServer);
+        }
       );
-
-      // Report IP:port and connection for manual connection fallback / cleanup
-      const localIp = await getLocalIp();
-      onServerReady?.(localIp, port, connection);
-
-      // Advertise via Zeroconf
-      Discovery.publish(user.id, port);
 
       // Wait for PAIR_OFFER from joiner
       connection.onMessage(async (msg, decryptedPayload) => {
