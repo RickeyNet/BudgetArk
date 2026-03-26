@@ -33,15 +33,16 @@ const syncAsServer = async (
 
   onStatus("connecting");
 
-  // Start TCP server
+  // Start TCP server — publish via Zeroconf as soon as the port is assigned
+  // (before any client connects) so the partner can discover us.
   const { connection, port } = await Transport.startServer(
     user.id,
     pairing.partnerId,
-    pairing.sharedSecret
+    pairing.sharedSecret,
+    (listenPort) => {
+      Discovery.publish(user.id, listenPort);
+    }
   );
-
-  // Publish so partner can find us
-  Discovery.publish(user.id, port);
 
   return new Promise((resolve, reject) => {
     let partnerDiff: SyncDiff | null = null;
@@ -194,14 +195,28 @@ export const syncNow = async (
     onStatus("discovering");
 
     // Try to find partner's service first (we become the client)
-    const peer = await Discovery.discoverPartner(pairing.partnerId, 10_000);
+    let peer = await Discovery.discoverPartner(pairing.partnerId, 10_000);
 
     if (peer) {
       return await syncAsClient(peer.host, peer.port, onStatus);
     }
 
-    // Partner not found — start server and wait for them to connect
-    return await syncAsServer(onStatus);
+    // Partner not found — start server and advertise, but also keep
+    // scanning in case the partner starts their server around the same time.
+    // This avoids the deadlock where both devices become servers.
+    const serverPromise = syncAsServer(onStatus);
+
+    // Scan again — if partner also started a server we'll find them.
+    const retryPeer = await Discovery.discoverPartner(pairing.partnerId, 8_000);
+    if (retryPeer) {
+      // Found partner's server — connect as client instead.
+      // Let the abandoned server promise timeout silently.
+      serverPromise.catch(() => {});
+      return await syncAsClient(retryPeer.host, retryPeer.port, onStatus);
+    }
+
+    // No luck — wait for partner to connect to our server
+    return await serverPromise;
   } catch (err) {
     onStatus("error");
     Discovery.stop();

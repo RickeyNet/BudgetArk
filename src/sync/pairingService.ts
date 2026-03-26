@@ -10,6 +10,9 @@
 import { Platform, PermissionsAndroid } from "react-native";
 import CryptoJS from "crypto-js";
 import NetInfo from "@react-native-community/netinfo";
+
+// Ensure SSID fetching is enabled before any NetInfo.fetch() call
+NetInfo.configure({ shouldFetchWiFiSSID: true });
 import { generateUUID } from "../utils/uuid";
 import { getOrCreateUser } from "../storage/userStorage";
 import { savePairingState } from "./pairingStorage";

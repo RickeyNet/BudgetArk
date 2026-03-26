@@ -15,7 +15,10 @@ import type { SyncResult } from "./types";
 
 const COOLDOWN_MS = 30_000;
 
-let configured = false;
+// Configure NetInfo at module load — must happen before any NetInfo.fetch()
+// or addEventListener call anywhere in the app, so SSID is available on iOS.
+NetInfo.configure({ shouldFetchWiFiSSID: true });
+
 let lastSyncAttempt = 0;
 let unsubscribeNetInfo: (() => void) | null = null;
 let appStateListener: any = null;
@@ -23,19 +26,6 @@ let isMonitoring = false;
 
 type AutoSyncCallback = (result: SyncResult) => void;
 let onSyncComplete: AutoSyncCallback | null = null;
-
-/**
- * Configure NetInfo to fetch WiFi SSID.
- * Must be called once before any SSID reads.
- * On iOS this enables CNCopyCurrentNetworkInfo / NEHotspotNetwork.
- */
-const ensureConfigured = () => {
-  if (configured) return;
-  configured = true;
-  NetInfo.configure({
-    shouldFetchWiFiSSID: true,
-  });
-};
 
 /**
  * Request ACCESS_FINE_LOCATION on Android (required for SSID reads).
@@ -101,7 +91,7 @@ export const startMonitoring = (callback?: AutoSyncCallback): void => {
   isMonitoring = true;
   onSyncComplete = callback ?? null;
 
-  ensureConfigured();
+
 
   // Listen for network state changes
   unsubscribeNetInfo = NetInfo.addEventListener((state) => {
@@ -143,7 +133,7 @@ export const stopMonitoring = (): void => {
  * Get the current WiFi SSID (requires location permission on Android).
  */
 export const getCurrentSSID = async (): Promise<string | null> => {
-  ensureConfigured();
+
   const state = await NetInfo.fetch();
   return getSSID(state);
 };
