@@ -699,11 +699,20 @@ const DebtTrackerScreen: React.FC = () => {
 
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
+  /** The first active debt in sortedDebts is the priority payoff target */
+  const focusDebtId = sortedDebts.find((d) => d.balance > 0)?.id ?? null;
+
   const renderDebtCard = useCallback(
     ({ item }: { item: Debt }) => (
-      <DebtCard debt={item} onPayment={handlePayment} onDelete={handleDelete} onEdit={handleEdit} />
+      <DebtCard
+        debt={item}
+        onPayment={handlePayment}
+        onDelete={handleDelete}
+        onEdit={handleEdit}
+        isFocusDebt={item.id === focusDebtId}
+      />
     ),
-    [handlePayment, handleDelete, handleEdit]
+    [handlePayment, handleDelete, handleEdit, focusDebtId]
   );
 
   /** Summary + section header rendered above the debt list */
@@ -750,7 +759,7 @@ const DebtTrackerScreen: React.FC = () => {
         {/* Owner summary row doubles as filter — tap to filter */}
         <View style={styles.ownerSummaryRow}>
           {([
-            { id: "all" as DebtOwnerFilter, label: "All", value: totalDebt },
+            { id: "all" as DebtOwnerFilter, label: "All", value: totalMine + totalPartner + totalJoint },
             { id: "mine" as DebtOwnerFilter, label: "Mine", value: totalMine },
             { id: "partner" as DebtOwnerFilter, label: "Partner", value: totalPartner },
             { id: "joint" as DebtOwnerFilter, label: "Joint", value: totalJoint },
@@ -777,10 +786,18 @@ const DebtTrackerScreen: React.FC = () => {
           })}
         </View>
 
-        {/* Milestone bar — absorbs chips, strategy hint, and Ark entry point */}
+        {/* Milestone bar — tap opens Smart Plan (strategy comparison + payment calculator), long-press opens milestones */}
         <TouchableOpacity
           style={[styles.milestonesCard, { backgroundColor: colors.bg, borderColor: colors.cardBorder }]}
-          onPress={openMilestonesModal}
+          onPress={() => {
+            const section = currentMilestoneKey === "deck"
+              ? "deck" as const
+              : currentMilestoneKey === "supplies"
+              ? "supplies" as const
+              : "hull" as const;
+            openSmartPlan(section);
+          }}
+          onLongPress={openMilestonesModal}
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.milestonesInlineText}>
@@ -791,10 +808,10 @@ const DebtTrackerScreen: React.FC = () => {
                 : ""}
             </Text>
             <Text style={styles.milestonesSubText}>
-              {strategy === "custom" ? "Custom order" : strategy === "avalanche" ? "Avalanche" : "Snowball"} • Tap to manage
+              {strategy === "custom" ? "Custom order" : strategy === "avalanche" ? "Avalanche" : "Snowball"} • Tap to plan • Hold for milestones
             </Text>
           </View>
-          <Text style={styles.milestoneArrow}>→</Text>
+          <Text style={styles.milestoneArkLabel}>Build Your Ark →</Text>
         </TouchableOpacity>
       </View>
 
@@ -1311,6 +1328,12 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
       fontSize: 18,
       fontWeight: "600",
+    },
+    milestoneArkLabel: {
+      color: colors.accent,
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.3,
     },
 
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },

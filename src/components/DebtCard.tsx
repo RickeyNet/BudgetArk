@@ -49,10 +49,13 @@ interface DebtCardProps {
 
   /** Callback when user wants to edit this debt */
   onEdit: (debt: Debt) => void;
+
+  /** Whether this is the priority debt to pay off first (expanded by default) */
+  isFocusDebt?: boolean;
 }
 
 /* ─── Component ─── */
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, isFocusDebt = false }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -60,7 +63,8 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }
   /** Memoized styles - only recreate when colors change */
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
-  /** Local state for the payment input visibility and value */
+  /** Local state for collapsed/expanded and payment input */
+  const [expanded, setExpanded] = useState(isFocusDebt);
   const [showPayInput, setShowPayInput] = useState(false);
   const [payAmount, setPayAmount] = useState("");
 
@@ -128,8 +132,36 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }
     }
   }, [payAmount, debt.id, debt.balance, onPayment]);
 
+  /* ── Collapsed compact view ── */
+  if (!expanded) {
+    return (
+      <TouchableOpacity
+        style={styles.collapsedCard}
+        onPress={() => setExpanded(true)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.collapsedLeft}>
+          <Text style={styles.collapsedName} numberOfLines={1}>{debt.name}</Text>
+          <Text style={styles.collapsedDetail}>
+            {formatCurrency(debt.balance)} · {debt.rate}% APR
+          </Text>
+        </View>
+        <View style={styles.collapsedRight}>
+          <Text style={[styles.collapsedPercent, { color: ringColor }]}>
+            {Math.round(percentPaid)}%
+          </Text>
+          <Text style={styles.collapsedChevron}>▼</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
   return (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={1}
+      onPress={() => setExpanded(false)}
+    >
       {/* ── Header: Name + Status Badge + Progress Ring ── */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
@@ -280,7 +312,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit }
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -297,6 +329,46 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: 16,
       padding: 20,
       marginBottom: 12,
+    },
+    collapsedCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      marginBottom: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    collapsedLeft: {
+      flex: 1,
+      marginRight: 12,
+    },
+    collapsedName: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: colors.text,
+    },
+    collapsedDetail: {
+      fontSize: 12,
+      color: colors.textDim,
+      marginTop: 2,
+    },
+    collapsedRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    collapsedPercent: {
+      fontSize: 14,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"] as any,
+    },
+    collapsedChevron: {
+      fontSize: 10,
+      color: colors.textMuted,
     },
 
     /* Header */

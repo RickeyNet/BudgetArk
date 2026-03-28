@@ -26,6 +26,7 @@ import {
   ScrollView,
   Modal,
   KeyboardAvoidingView,
+  Linking,
   Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
@@ -655,62 +656,72 @@ const ProfileScreen: React.FC = () => {
             { backgroundColor: colors.card, borderColor: colors.cardBorder },
           ]}
         >
-          {/* Avatar circle */}
-          <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
-            <Text style={[styles.avatarText, { color: colors.white }]}>
-              {user.displayName[0].toUpperCase()}
-            </Text>
-          </View>
-
-          {/* Display name — tap to edit */}
-          {isEditing ? (
-            <View style={styles.editRow}>
-              <TextInput
-                style={[
-                  styles.nameInput,
-                  {
-                    backgroundColor: colors.bg,
-                    borderColor: colors.cardBorder,
-                    color: colors.text,
-                  },
-                ]}
-                value={editName}
-                onChangeText={(text) => setEditName(sanitizeTextInput(text))}
-                autoFocus
-                maxLength={20}
-              />
-              <TouchableOpacity
-                style={[styles.saveBtn, { backgroundColor: colors.success }]}
-                onPress={handleSaveName}
-              >
-                <Text style={[styles.saveBtnText, { color: colors.bg }]}>
-                  Save
-                </Text>
-              </TouchableOpacity>
+          <View style={styles.profileRow}>
+            {/* Avatar circle */}
+            <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.avatarText, { color: colors.white }]}>
+                {user.displayName[0].toUpperCase()}
+              </Text>
             </View>
-          ) : (
-            <TouchableOpacity onPress={() => setIsEditing(true)}>
-              <Text style={[styles.displayName, { color: colors.text }]}>
-                {user.displayName}
-              </Text>
-              <Text style={[styles.editHint, { color: colors.textMuted }]}>
-                Tap to edit
-              </Text>
-            </TouchableOpacity>
-          )}
 
-          {/* Anonymous ID badge */}
-          <View style={[styles.idBadge, { backgroundColor: colors.bg }]}>
-            <Text style={[styles.idLabel, { color: colors.textMuted }]}>
-              ACCOUNT ID
-            </Text>
-            <Text style={[styles.idValue, { color: colors.textDim }]}>
-              {user.id.slice(0, 8)}...
-            </Text>
+            {/* Display name — tap to edit */}
+            <View style={styles.profileInfo}>
+              {isEditing ? (
+                <View style={styles.editRow}>
+                  <TextInput
+                    style={[
+                      styles.nameInput,
+                      {
+                        backgroundColor: colors.bg,
+                        borderColor: colors.cardBorder,
+                        color: colors.text,
+                      },
+                    ]}
+                    value={editName}
+                    onChangeText={(text) => setEditName(sanitizeTextInput(text))}
+                    autoFocus
+                    maxLength={20}
+                  />
+                  <TouchableOpacity
+                    style={[styles.saveBtn, { backgroundColor: colors.success }]}
+                    onPress={handleSaveName}
+                  >
+                    <Text style={[styles.saveBtnText, { color: colors.bg }]}>
+                      Save
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={() => setIsEditing(true)}>
+                  <Text style={[styles.displayName, { color: colors.text }]}>
+                    {user.displayName}
+                  </Text>
+                  <Text style={[styles.editHint, { color: colors.textMuted }]}>
+                    {user.id.slice(0, 8)}... · Tap name to edit
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
 
-        {/* ── Appearance (Theme + Currency + Privacy) ── */}
+        {/* ── Send Feedback ── */}
+        <View style={styles.settingsSection}>
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowFeedbackModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Bug reports & feature requests</Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Appearance (Theme + Currency) ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
             APPEARANCE
@@ -730,40 +741,6 @@ const ProfileScreen: React.FC = () => {
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
-
-            <TouchableOpacity
-              style={styles.groupedRow}
-              onPress={() => setShowCurrencyModal(true)}
-            >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Currency</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                  {preference.label}
-                </Text>
-              </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
-
-            <TouchableOpacity
-              style={styles.groupedRow}
-              onPress={togglePrivacyMode}
-            >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Privacy Mode</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                  {privacyMode
-                    ? "Screenshots & screen recording blocked"
-                    : "Screenshots & screen recording allowed"}
-                </Text>
-              </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-                {privacyMode ? "On" : "Off"}
-              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -851,7 +828,7 @@ const ProfileScreen: React.FC = () => {
           )}
         </View>
 
-        {/* ── Data (Export + Import) ── */}
+        {/* ── Data (Export, Import, Reset) ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
             DATA
@@ -881,29 +858,56 @@ const ProfileScreen: React.FC = () => {
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
             </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleResetData}
+            >
+              <Text style={[styles.settingsRowText, { color: colors.danger }]}>Reset All Data</Text>
+              <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>→</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* ── About (version, updates, feedback, reset) ── */}
+        {/* ── Settings (privacy, updates) ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
-            ABOUT
+            SETTINGS
           </Text>
 
           <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <TouchableOpacity
               style={styles.groupedRow}
-              onPress={() => setShowReleaseNotesModal(true)}
+              onPress={() => setShowCurrencyModal(true)}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  v{latestRelease.version} — {latestRelease.title}
-                </Text>
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Currency</Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                  Tap for release notes
+                  {preference.label}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={togglePrivacyMode}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Privacy Mode</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {privacyMode
+                    ? "Screenshots & screen recording blocked"
+                    : "Screenshots & screen recording allowed"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                {privacyMode ? "On" : "Off"}
+              </Text>
             </TouchableOpacity>
 
             <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
@@ -930,11 +934,39 @@ const ProfileScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.groupedRow}
-              onPress={() => setShowFeedbackModal(true)}
+              onPress={toggleManualMode}
             >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Bug reports & feature requests</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Auto Updates</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {updatePrefs.manualUpdateMode ? "Off — manual checks only" : "On — checks automatically"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                {updatePrefs.manualUpdateMode ? "Off" : "On"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── About (release notes, github) ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            ABOUT
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowReleaseNotesModal(true)}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  v{latestRelease.version} — {latestRelease.title}
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  Tap for release notes
+                </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
             </TouchableOpacity>
@@ -943,10 +975,13 @@ const ProfileScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.groupedRow}
-              onPress={handleResetData}
+              onPress={() => Linking.openURL("https://github.com/RickeyNet")}
             >
-              <Text style={[styles.settingsRowText, { color: colors.danger }]}>Reset All Data</Text>
-              <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>→</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>GitHub</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>github.com/RickeyNet</Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1776,31 +1811,35 @@ const styles = StyleSheet.create({
   /* Profile Card */
   profileCard: {
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 28,
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 4,
+  },
+  profileRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 20,
+    gap: 14,
+  },
+  profileInfo: {
+    flex: 1,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
   },
   avatarText: {
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: "700",
   },
   displayName: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: "700",
-    textAlign: "center",
   },
   editHint: {
-    fontSize: 12,
-    textAlign: "center",
+    fontSize: 11,
     marginTop: 2,
   },
   editRow: {
@@ -1825,39 +1864,6 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontWeight: "700",
     fontSize: 14,
-  },
-  idBadge: {
-    marginTop: 20,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  idLabel: {
-    fontSize: 10,
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  idValue: {
-    fontSize: 13,
-    fontVariant: ["tabular-nums"],
-  },
-
-  /* Privacy Info */
-  infoCard: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 16,
-  },
-  infoTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 13,
-    lineHeight: 19,
   },
 
   /* Settings */

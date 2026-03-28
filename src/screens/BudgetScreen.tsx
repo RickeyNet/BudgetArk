@@ -124,6 +124,7 @@ const BudgetScreen: React.FC = () => {
   const [limitInput, setLimitInput] = useState("");
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
@@ -385,6 +386,18 @@ const BudgetScreen: React.FC = () => {
     setShowFoodSplitModal(false);
   }, [foodSplitDraft]);
 
+  const toggleCategory = useCallback((category: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  }, []);
+
   const openLimitModal = useCallback(
     (category: BudgetCategory) => {
       const currentLimit = limitByCategory[category];
@@ -488,158 +501,150 @@ const BudgetScreen: React.FC = () => {
         {automaticDebtMonthlyCost > 0 && (
           <Text style={styles.autoDebtHint}>Includes {formatCurrency(automaticDebtMonthlyCost)} auto debt minimums</Text>
         )}
+        {incomeEntries.length > 0 && (
+          <View style={styles.incomeSummaryList}>
+            {incomeEntries.map((entry) => (
+              <TouchableOpacity
+                key={entry.id}
+                style={styles.incomeSummaryRow}
+                onPress={() => handleEditEntry(entry.id)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                  {entry.description || entry.category}
+                </Text>
+                <View style={styles.incomeSummaryRight}>
+                  {entry.recurring && (
+                    <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>Monthly</Text>
+                  )}
+                  <Text style={[styles.incomeSummaryAmount, { color: colors.success }]}>
+                    {formatCurrency(entry.amount)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
-      {/* Donut chart — no separate legend, the category list below IS the legend */}
-      {chartData.length > 0 ? (
-        <View style={styles.chartCard}>
-          <DonutChart data={pieData} size={180} strokeWidth={28} />
+      {/* Spending card — donut chart + category rows in one card */}
+      <View style={styles.spendingCard}>
+        <View style={styles.spendingHeaderRow}>
+          <Text style={styles.spendingTitle}>Spending</Text>
+          {foodEntriesToSplit.length > 0 ? (
+            <TouchableOpacity onPress={openFoodSplitModal}>
+              <Text style={[styles.spendingHint, { color: colors.accent }]}>Split Food ({foodEntriesToSplit.length})</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.spendingHint}>Tap row to expand · Hold for limit</Text>
+          )}
         </View>
-      ) : (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyCardTitle}>No expenses this month</Text>
-          <Text style={styles.emptyCardSubtext}>Add entries to see your spending chart.</Text>
-        </View>
-      )}
 
-      {incomeEntries.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Income</Text>
-          <View style={styles.incomeCard}>
-            <View style={styles.incomeEntryList}>
-              {incomeEntries.map((entry) => (
-                <TouchableOpacity
-                  key={entry.id}
-                  style={styles.entryRow}
-                  onPress={() => handleEditEntry(entry.id)}
-                  activeOpacity={0.6}
-                >
-                  <View style={styles.entryInfo}>
-                    <Text style={[styles.entryAmount, { color: colors.success }]}>
-                      {formatCurrency(entry.amount)}
-                    </Text>
-                    <Text style={styles.entryDesc} numberOfLines={1}>
-                      {entry.description || entry.category}
-                    </Text>
-                  </View>
-                  <View style={styles.entryRight}>
-                    {entry.recurring && (
-                      <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
+        {chartData.length > 0 ? (
+          <View style={styles.spendingChartWrap}>
+            <DonutChart data={pieData} size={160} strokeWidth={26} />
           </View>
-        </View>
-      )}
-
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Spending</Text>
-        {foodEntriesToSplit.length > 0 && (
-          <TouchableOpacity onPress={openFoodSplitModal}>
-            <Text style={[styles.sectionHint, { color: colors.accent }]}>Split Food ({foodEntriesToSplit.length})</Text>
-          </TouchableOpacity>
+        ) : (
+          <View style={styles.spendingEmptyWrap}>
+            <Text style={styles.emptyCardTitle}>No expenses this month</Text>
+            <Text style={styles.emptyCardSubtext}>Add entries to see your spending chart.</Text>
+          </View>
         )}
+
+        {expenseRows.map((item, index) => {
+          const ratio = item.ratio;
+          const progressPercent = ratio ? Math.min(ratio, 1) * 100 : null;
+          const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
+          const isOver = ratio != null && ratio >= 1;
+          const statusColor = isOver ? colors.danger : hasWarning ? colors.warning : colors.success;
+          const dotColor = chartColors[index % chartColors.length];
+          const isExpanded = expandedCategories.has(item.category);
+
+          return (
+            <View key={item.category}>
+              <TouchableOpacity
+                style={styles.categoryRow}
+                activeOpacity={0.7}
+                onPress={() => toggleCategory(item.category)}
+                onLongPress={() => openLimitModal(item.category)}
+              >
+                <View style={styles.categoryRowLeft}>
+                  <View style={[styles.categoryDot, { backgroundColor: dotColor }]} />
+                  <Text style={styles.rowCategory}>{item.category}</Text>
+                </View>
+                <View style={styles.categoryRowRight}>
+                  <Text style={styles.rowSpent}>
+                    {formatCurrency(item.spent)}
+                    {item.limit ? ` / ${formatCurrency(item.limit)}` : ""}
+                  </Text>
+                  <Text style={styles.categoryChevron}>{isExpanded ? "▾" : "›"}</Text>
+                </View>
+              </TouchableOpacity>
+
+              {item.limit ? (
+                <View style={styles.categoryProgressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${progressPercent ?? 0}%`, backgroundColor: statusColor },
+                    ]}
+                  />
+                </View>
+              ) : null}
+
+              {isExpanded && item.entries.length > 0 && (
+                <View style={styles.expandedEntries}>
+                  <Text style={styles.expandedHeader}>
+                    Expanded — {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
+                  </Text>
+                  {item.entries.map((entry) => {
+                    const isAutoDebtPayment = entry.id.startsWith("auto-debt-");
+                    const entryDate = new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                    return (
+                      <TouchableOpacity
+                        key={entry.id}
+                        style={styles.expandedEntryRow}
+                        onPress={() => {
+                          if (!isAutoDebtPayment) handleEditEntry(entry.id);
+                        }}
+                        activeOpacity={isAutoDebtPayment ? 1 : 0.6}
+                      >
+                        <View style={styles.expandedEntryLeft}>
+                          <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
+                          {entry.description ? (
+                            <Text style={styles.entryDesc} numberOfLines={1}> — {entry.description}</Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.expandedEntryRight}>
+                          {entry.recurring && (
+                            <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
+                          )}
+                          {isAutoDebtPayment ? (
+                            <Text style={styles.entryEditHint}>Auto</Text>
+                          ) : (
+                            <Text style={styles.expandedEntryDate}>{entryDate}</Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          );
+        })}
       </View>
     </View>
   );
-
-  const renderExpenseRow = ({ item, index }: { item: ExpenseCategoryRow; index: number }) => {
-    const ratio = item.ratio;
-    const progressPercent = ratio ? Math.min(ratio, 1) * 100 : null;
-    const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
-    const isOver = ratio != null && ratio >= 1;
-
-    const statusColor = isOver
-      ? colors.danger
-      : hasWarning
-        ? colors.warning
-        : colors.success;
-
-    const dotColor = chartColors[index % chartColors.length];
-
-    return (
-      <TouchableOpacity
-        style={styles.rowCard}
-        activeOpacity={0.7}
-        onLongPress={() => openLimitModal(item.category)}
-      >
-        <View style={styles.rowTop}>
-          <View style={styles.rowCategoryRow}>
-            <View style={[styles.categoryDot, { backgroundColor: dotColor }]} />
-            <View>
-              <Text style={styles.rowCategory}>{item.category}</Text>
-              <Text style={styles.rowSpent}>
-                {formatCurrency(item.spent)}
-                {item.limit ? ` / ${formatCurrency(item.limit)}` : ""}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {item.limit ? (
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${progressPercent ?? 0}%`, backgroundColor: statusColor },
-              ]}
-            />
-          </View>
-        ) : null}
-
-        {item.entries.length > 0 && (
-          <View style={styles.entryList}>
-            {item.entries.map((entry) => {
-              const isAutoDebtPayment = entry.id.startsWith("auto-debt-");
-              return (
-                <TouchableOpacity
-                  key={entry.id}
-                  style={styles.entryRow}
-                  onPress={() => {
-                    if (!isAutoDebtPayment) {
-                      handleEditEntry(entry.id);
-                    }
-                  }}
-                  activeOpacity={isAutoDebtPayment ? 1 : 0.6}
-                >
-                  <View style={styles.entryInfo}>
-                    <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
-                    {entry.description ? (
-                      <Text style={styles.entryDesc} numberOfLines={1}>{entry.description}</Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.entryRight}>
-                    {entry.recurring && (
-                      <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
-                    )}
-                    {isAutoDebtPayment && <Text style={styles.entryEditHint}>Auto</Text>}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
 
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       {isLoaded && (
         <FlatList
-          data={expenseRows}
-          keyExtractor={(item) => item.category}
-          renderItem={renderExpenseRow}
+          data={[]}
+          renderItem={null}
           ListHeaderComponent={listHeader}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTitle}>No expense categories yet</Text>
-              <Text style={styles.emptySub}>Add an expense entry to begin tracking.</Text>
-            </View>
-          }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />
@@ -903,6 +908,39 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: 10,
       textAlign: "center",
     },
+    incomeSummaryList: {
+      marginTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: 10,
+      gap: 6,
+    },
+    incomeSummaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 4,
+    },
+    incomeSummaryDesc: {
+      fontSize: 13,
+      color: colors.textDim,
+      flex: 1,
+      marginRight: 8,
+    },
+    incomeSummaryRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    incomeSummaryTag: {
+      fontSize: 11,
+      fontWeight: "600",
+    },
+    incomeSummaryAmount: {
+      fontSize: 13,
+      fontWeight: "600",
+      fontVariant: ["tabular-nums"] as any,
+    },
     section: {
       marginBottom: 20,
     },
@@ -912,38 +950,96 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       marginBottom: 10,
     },
-    chartCard: {
+    spendingCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: 16,
-      paddingVertical: 16,
-      paddingHorizontal: 10,
-      alignItems: "center",
+      padding: 16,
     },
-    legendWrap: {
-      gap: 6,
+    spendingHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    spendingTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    spendingHint: {
+      fontSize: 11,
+      color: colors.textMuted,
+    },
+    spendingChartWrap: {
+      alignItems: "center",
       marginBottom: 8,
     },
-    legendRow: {
+    spendingEmptyWrap: {
+      alignItems: "center",
+      paddingVertical: 16,
+    },
+    categoryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    categoryRowLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      flex: 1,
+    },
+    categoryRowRight: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
     },
-    legendDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-    },
-    legendLabel: {
-      flex: 1,
-      color: colors.textDim,
-      fontSize: 12,
-    },
-    legendValue: {
-      color: colors.text,
-      fontSize: 12,
+    categoryChevron: {
+      fontSize: 16,
+      color: colors.textMuted,
       fontWeight: "600",
+    },
+    categoryProgressTrack: {
+      height: 4,
+      backgroundColor: colors.bg,
+      borderRadius: 999,
+      overflow: "hidden",
+      marginBottom: 4,
+    },
+    expandedEntries: {
+      backgroundColor: colors.bg,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 8,
+      gap: 8,
+    },
+    expandedHeader: {
+      fontSize: 11,
+      color: colors.textMuted,
+      marginBottom: 2,
+    },
+    expandedEntryRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 8,
+    },
+    expandedEntryLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    expandedEntryRight: {
+      alignItems: "flex-end",
+    },
+    expandedEntryDate: {
+      fontSize: 11,
+      color: colors.textMuted,
     },
     emptyCard: {
       backgroundColor: colors.card,
@@ -964,74 +1060,6 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
       textAlign: "center",
     },
-    incomeCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 14,
-      padding: 14,
-    },
-    incomeWrap: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-    },
-    incomeEntryList: {
-      marginTop: 10,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-      paddingTop: 8,
-      gap: 6,
-    },
-    incomePill: {
-      backgroundColor: colors.successDim,
-      borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-      flexDirection: "row",
-      gap: 8,
-    },
-    incomePillCategory: {
-      fontSize: 12,
-      color: colors.success,
-      fontWeight: "600",
-    },
-    incomePillAmount: {
-      fontSize: 12,
-      color: colors.success,
-      fontWeight: "700",
-      fontVariant: ["tabular-nums"],
-    },
-    sectionHeaderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 10,
-    },
-    sectionHint: {
-      color: colors.textMuted,
-      fontSize: 11,
-    },
-    rowCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 14,
-      padding: 14,
-      marginBottom: 10,
-    },
-    rowTop: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 8,
-      gap: 8,
-    },
-    rowCategoryRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
     categoryDot: {
       width: 10,
       height: 10,
@@ -1044,25 +1072,9 @@ const makeStyles = (colors: ThemeColors) =>
     },
     rowSpent: {
       color: colors.textDim,
-      fontSize: 12,
-      marginTop: 2,
-    },
-    limitBtn: {
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-    },
-    limitBtnText: {
-      color: colors.textDim,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: "600",
-    },
-    limitText: {
-      color: colors.textMuted,
-      fontSize: 12,
-      marginBottom: 8,
+      fontVariant: ["tabular-nums"] as any,
     },
     progressTrack: {
       height: 8,
@@ -1074,16 +1086,6 @@ const makeStyles = (colors: ThemeColors) =>
       height: "100%",
       borderRadius: 999,
       minWidth: 2,
-    },
-    rowStatus: {
-      marginTop: 8,
-      fontSize: 12,
-      fontWeight: "600",
-    },
-    noLimitText: {
-      fontSize: 12,
-      color: colors.textMuted,
-      fontStyle: "italic",
     },
     emptyWrap: {
       alignItems: "center",
@@ -1210,25 +1212,6 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 14,
       fontWeight: "700",
     },
-    entryList: {
-      marginTop: 10,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-      paddingTop: 8,
-      gap: 6,
-    },
-    entryRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: 8,
-    },
-    entryInfo: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
     entryAmount: {
       color: colors.text,
       fontSize: 13,
@@ -1239,14 +1222,6 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       color: colors.textDim,
       fontSize: 12,
-    },
-    entryRight: {
-      alignItems: "flex-end",
-      gap: 2,
-    },
-    entryDate: {
-      color: colors.textMuted,
-      fontSize: 11,
     },
     entryEditHint: {
       color: colors.accent,

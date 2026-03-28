@@ -1,5 +1,15 @@
 # BudgetArk Release Notes
 
+## v1.2.1 - Bug Fixes & Polish (2026-03-28)
+
+- Fixed edit budget modal scroll freeze after selecting a category pill.
+- Fixed extra bottom padding in edit budget modal on devices without a navigation bar.
+- Debt cards now collapse by default — only the priority payoff debt is expanded based on your chosen strategy.
+- Income entries moved inline into the summary card for a cleaner budget layout.
+- Spending section redesigned — donut chart and category rows in one card, tap any row to expand entries.
+- Profile screen reorganized — Send Feedback at top, Data/Settings/About sections consolidated.
+- Restored missing Auto Updates toggle in Profile settings.
+
 ## v1.2.0 - Minimalist UI Redesign (2026-03-28)
 
 - Redesigned Debt Tracker — owner summary row now doubles as a filter (tap to filter and see amounts), milestone bar absorbs strategy label and Deck/Supplies chips into one row, and the progress ring opens payment history on tap.
