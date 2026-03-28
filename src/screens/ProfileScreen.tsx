@@ -338,11 +338,10 @@ const ProfileScreen: React.FC = () => {
         setPendingUpdate(updateMeta);
       } catch (error: any) {
         if (source === "manual") {
+          const raw = error?.message || String(error);
           setInfoModal({
             title: "Update Check Failed",
-            message:
-              error?.message ||
-              "Unable to check for updates right now. Please try again shortly.",
+            message: raw,
           });
         }
       } finally {

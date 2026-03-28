@@ -160,7 +160,7 @@ const AppContent: React.FC = () => {
       setPendingUpdate(prompt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("not supported in development builds")) {
+      if (!message.includes("not supported in development builds") && !message.includes("call to function")) {
         if (__DEV__) console.error("Auto update check failed:", error);
       }
     } finally {
