@@ -724,7 +724,12 @@ const DebtTrackerScreen: React.FC = () => {
             <Text style={styles.summaryAmount}>{formatCurrency(totalDebt)}</Text>
             <Text style={styles.paidText}>{formatCurrency(totalPaid)} paid off</Text>
           </View>
-          <View style={styles.summaryRingWrap}>
+          {/* Tap ring → payment history */}
+          <TouchableOpacity
+            style={styles.summaryRingWrap}
+            onPress={() => setShowHistory(true)}
+            activeOpacity={0.7}
+          >
             <ProgressRing
               percent={overallPercent}
               size={80}
@@ -739,178 +744,71 @@ const DebtTrackerScreen: React.FC = () => {
             >
               {overallPercent}%
             </Text>
-          </View>
-        </View>
-
-        <View style={styles.badgeRow}>
-          <View style={[styles.badge, { backgroundColor: `${colors.accent}20` }]}>
-            <Text style={[styles.badgeText, { color: colors.accent }]}>
-              {filteredDebts.length} in view
-            </Text>
-          </View>
-          <View style={[styles.badge, { backgroundColor: colors.successDim }]}>
-            <Text style={[styles.badgeText, { color: colors.success }]}> 
-              {filteredDebts.filter((d) => d.balance === 0).length} paid off
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.badge, { backgroundColor: colors.tealDim }]}
-            onPress={() => setShowHistory(true)}
-          >
-            <Text style={[styles.badgeText, { color: colors.teal }]}>History</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Owner summary row doubles as filter — tap to filter */}
         <View style={styles.ownerSummaryRow}>
-          <View style={[styles.ownerSummaryCard, { backgroundColor: colors.bg }]}> 
-            <Text style={styles.ownerSummaryLabel}>Mine</Text>
-            <Text style={styles.ownerSummaryValue}>{formatCurrency(totalMine)}</Text>
-          </View>
-          <View style={[styles.ownerSummaryCard, { backgroundColor: colors.bg }]}> 
-            <Text style={styles.ownerSummaryLabel}>Partner</Text>
-            <Text style={styles.ownerSummaryValue}>{formatCurrency(totalPartner)}</Text>
-          </View>
-          <View style={[styles.ownerSummaryCard, { backgroundColor: colors.bg }]}> 
-            <Text style={styles.ownerSummaryLabel}>Joint</Text>
-            <Text style={styles.ownerSummaryValue}>{formatCurrency(totalJoint)}</Text>
-          </View>
+          {([
+            { id: "all" as DebtOwnerFilter, label: "All", value: totalDebt },
+            { id: "mine" as DebtOwnerFilter, label: "Mine", value: totalMine },
+            { id: "partner" as DebtOwnerFilter, label: "Partner", value: totalPartner },
+            { id: "joint" as DebtOwnerFilter, label: "Joint", value: totalJoint },
+          ]).map((item) => {
+            const isSelected = ownerFilter === item.id;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.ownerSummaryCard,
+                  {
+                    backgroundColor: colors.bg,
+                    borderWidth: 1,
+                    borderColor: isSelected ? colors.accent : "transparent",
+                  },
+                ]}
+                onPress={() => setOwnerFilter(item.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.ownerSummaryLabel, isSelected && { color: colors.accent }]}>{item.label}</Text>
+                <Text style={styles.ownerSummaryValue}>{formatCurrency(item.value)}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {(currentMilestoneKey === "deck" || currentMilestoneKey === "supplies") && (
-          <View style={styles.smartPlanChipRow}>
-            {currentMilestoneKey === "deck" && (
-              <TouchableOpacity
-                style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
-                onPress={() => openSmartPlan("deck")}
-              >
-                <Text style={styles.smartPlanChipLabel}>Deck</Text>
-                <Text style={styles.smartPlanChipValue}>{runwayMonths.toFixed(1)} months</Text>
-              </TouchableOpacity>
-            )}
-            {currentMilestoneKey === "supplies" && (
-              <TouchableOpacity
-                style={[styles.smartPlanChip, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
-                onPress={() => openSmartPlan("supplies")}
-              >
-                <Text style={styles.smartPlanChipLabel}>Supplies Goal</Text>
-                <Text style={styles.smartPlanChipValue}>
-                  {activeSavingsGoal
-                    ? `${activeSavingsGoal.name} ${Math.round(
-                        Math.min(
-                          activeSavingsGoal.currentAmount /
-                            Math.max(activeSavingsGoal.targetAmount, 1),
-                          1
-                        ) * 100
-                      )}%`
-                    : "Create a goal"}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
+        {/* Milestone bar — absorbs chips, strategy hint, and Ark entry point */}
         <TouchableOpacity
           style={[styles.milestonesCard, { backgroundColor: colors.bg, borderColor: colors.cardBorder }]}
           onPress={openMilestonesModal}
         >
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.milestonesInlineText}>
-              Step {Math.max(currentMilestoneIndex + 1, 1)}/{computedMilestones.length || 5} • {(currentMilestone?.title || "Keel").toUpperCase()} • Building your {currentMilestone?.title || "Keel"}
+              Step {Math.max(currentMilestoneIndex + 1, 1)}/{computedMilestones.length || 5} • {(currentMilestone?.title || "Keel").toUpperCase()}
+              {currentMilestoneKey === "deck" ? ` • ${runwayMonths.toFixed(1)} mo runway` : ""}
+              {currentMilestoneKey === "supplies" && activeSavingsGoal
+                ? ` • ${activeSavingsGoal.name} ${Math.round(Math.min(activeSavingsGoal.currentAmount / Math.max(activeSavingsGoal.targetAmount, 1), 1) * 100)}%`
+                : ""}
+            </Text>
+            <Text style={styles.milestonesSubText}>
+              {strategy === "custom" ? "Custom order" : strategy === "avalanche" ? "Avalanche" : "Snowball"} • Tap to manage
             </Text>
           </View>
           <Text style={styles.milestoneArrow}>→</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Section header — just title + sort hint */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Debts</Text>
-        <View style={styles.sectionActions}>
-          <TouchableOpacity onPress={openClassifyModal} style={[styles.secondaryBtn, { borderColor: colors.cardBorder }]}>
-            <Text style={[styles.secondaryBtnText, { color: colors.textDim }]}>Classify</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowModal(true)} style={styles.addBtn}>
-            <Text style={styles.addBtnText}>+ Add Debt</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={[styles.strategyHint, { marginBottom: 0 }]}>
+          {strategy === "avalanche"
+            ? "Avalanche order"
+            : strategy === "snowball"
+            ? "Snowball order"
+            : "Custom order"}
+        </Text>
       </View>
-
-      <View style={styles.ownerFilterRow}>
-        {([
-          { id: "all", label: "All" },
-          ...DEBT_OWNER_OPTIONS,
-        ] as const).map((item) => {
-          const isSelected = ownerFilter === item.id;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.ownerFilterBtn,
-                {
-                  borderColor: isSelected ? colors.accent : colors.cardBorder,
-                  backgroundColor: isSelected ? `${colors.accent}20` : colors.card,
-                },
-              ]}
-              onPress={() => setOwnerFilter(item.id)}
-            >
-              <Text
-                style={[
-                  styles.ownerFilterText,
-                  { color: isSelected ? colors.accent : colors.textDim },
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Payoff Strategy Picker */}
-      {sortedDebts.filter((d) => d.balance > 0).length > 1 && (
-        <View style={styles.strategyRow}>
-          <View style={styles.strategyHeaderRow}>
-            <Text style={styles.strategyLabel}>PAYOFF ORDER</Text>
-            <TouchableOpacity
-              style={[styles.strategyPlannerBtn, { borderColor: colors.cardBorder }]}
-              onPress={() => openSmartPlan("hull")}
-            >
-              <Text style={[styles.strategyPlannerBtnText, { color: colors.textDim }]}>Build Your Ark</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.strategyButtons}>
-            {([
-              ["custom", "Custom"],
-              ["avalanche", "Avalanche"],
-              ["snowball", "Snowball"],
-            ] as const).map(([key, label]) => (
-              <TouchableOpacity
-                key={key}
-                style={[
-                  styles.strategyButton,
-                  strategy === key && styles.strategyButtonActive,
-                ]}
-                onPress={() => handleChangeStrategy(key)}
-              >
-                <Text
-                  style={[
-                    styles.strategyButtonText,
-                    strategy === key && styles.strategyButtonTextActive,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.strategyHint}>
-            {strategy === "avalanche"
-              ? "Highest interest rate first — saves the most money"
-              : strategy === "snowball"
-              ? "Credit/Personal debts first, then Car/House debts, with smallest balance first inside each group"
-              : "Your original order"}
-          </Text>
-        </View>
-      )}
     </View>
   );
 
@@ -943,6 +841,15 @@ const DebtTrackerScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
+      {/* FAB — Add Debt */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowModal(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
+
       <AddDebtModal
         visible={showModal}
         onClose={() => { setShowModal(false); setEditingDebt(null); }}
@@ -1395,11 +1302,16 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       maxWidth: "95%",
     },
-   milestoneArrow: {
-    color: colors.textDim,
-    fontSize: 18,
-    fontWeight: "600",
-   },
+    milestonesSubText: {
+      fontSize: 9,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    milestoneArrow: {
+      color: colors.textDim,
+      fontSize: 18,
+      fontWeight: "600",
+    },
 
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: colors.text },
@@ -1905,6 +1817,30 @@ const makeStyles = (colors: ThemeColors) =>
     color: colors.white,
     fontSize: 15,
     fontWeight: "700",
+  },
+
+  /* FAB */
+  fab: {
+    position: "absolute",
+    bottom: 90,
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: colors.accent,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  fabText: {
+    fontSize: 26,
+    fontWeight: "300",
+    color: colors.accentButtonText || colors.bg,
+    lineHeight: 28,
   },
 });
 

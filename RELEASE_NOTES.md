@@ -1,5 +1,14 @@
 # BudgetArk Release Notes
 
+## v1.2.0 - Minimalist UI Redesign (2026-03-28)
+
+- Redesigned Debt Tracker — owner summary row now doubles as a filter (tap to filter and see amounts), milestone bar absorbs strategy label and Deck/Supplies chips into one row, and the progress ring opens payment history on tap.
+- Redesigned Budget — donut chart and category list merged into one unified section with color-coded rows. Long-press any category to set a spending limit. Split Food action moved to a compact link in the section header instead of a full-width button.
+- Redesigned Profile — grouped Theme, Currency, and Privacy Mode into a single Appearance card. Compressed Partner Sync from five rows to three (partner info, sync now, unpair). Consolidated Updates, Release Notes, Feedback, and Reset into an About card. Removed standalone How-To Docs, Feedback, Privacy, and What's New sections.
+- Added floating action buttons (FAB) on Debt Tracker and Budget screens for quick access to adding entries, replacing the inline header buttons.
+- OTA update prompt now shows the app version and what's new from the release notes instead of raw update metadata (ID, runtime version).
+- Removed the standalone How-To Docs modal — help guidance will be added inline to Export, Import, and Sync flows in a future update.
+
 ## v1.1.0 - Partner Sync & Feedback (2026-03-23)
 
 - Added peer-to-peer sync for couples — share budgets, debts, and savings goals directly between phones over WiFi with no server or account required.

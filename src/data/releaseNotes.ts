@@ -7,6 +7,18 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.2.0",
+    title: "Minimalist UI Redesign",
+    releasedAt: "2026-03-28",
+    highlights: [
+      "Cleaner Debt Tracker — owner row filters inline, milestone bar consolidates strategy and progress chips, tap the ring for history.",
+      "Cleaner Budget — chart and category list merged, long-press to set limits, Split Food moved to header.",
+      "Cleaner Profile — settings grouped into fewer cards, How-To Docs removed.",
+      "Floating action buttons on Debt and Budget screens.",
+      "OTA update prompt now shows version and what's new.",
+    ],
+  },
+  {
     version: "1.1.0",
     title: "Partner Sync & Feedback",
     releasedAt: "2026-03-23",

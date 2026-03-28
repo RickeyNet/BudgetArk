@@ -460,17 +460,16 @@ const BudgetScreen: React.FC = () => {
       </View>
 
       <View style={styles.summaryCard}>
-        <Text style={styles.summaryLabel}>{formatMonthLabel(selectedMonthKey).toUpperCase()}</Text>
         <View style={styles.summaryTopRow}>
           <View style={styles.summaryStat}>
             <Text style={styles.summaryStatLabel}>Income</Text>
-            <Text style={[styles.summaryStatValue, { color: colors.success }]}> 
+            <Text style={[styles.summaryStatValue, { color: colors.success }]}>
               {formatCurrency(monthlyIncome)}
             </Text>
           </View>
           <View style={styles.summaryStat}>
             <Text style={styles.summaryStatLabel}>Expenses</Text>
-            <Text style={[styles.summaryStatValue, { color: colors.warning }]}> 
+            <Text style={[styles.summaryStatValue, { color: colors.warning }]}>
               {formatCurrency(monthlyExpenses)}
             </Text>
           </View>
@@ -482,64 +481,31 @@ const BudgetScreen: React.FC = () => {
                 { color: monthlyNet >= 0 ? colors.success : colors.danger },
               ]}
             >
-              {formatCurrency(monthlyNet)}
+              {monthlyNet >= 0 ? "+" : ""}{formatCurrency(monthlyNet)}
             </Text>
           </View>
         </View>
-
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddModal(true)}>
-          <Text style={styles.addBtnText}>+ Add Income / Expense</Text>
-        </TouchableOpacity>
-        {foodEntriesToSplit.length > 0 && (
-          <TouchableOpacity
-            style={[styles.splitBtn, { borderColor: colors.cardBorder }]}
-            onPress={openFoodSplitModal}
-          >
-            <Text style={[styles.splitBtnText, { color: colors.textDim }]}>Split Food into Grocery/Restaurant ({foodEntriesToSplit.length})</Text>
-          </TouchableOpacity>
-        )}
         {automaticDebtMonthlyCost > 0 && (
-          <Text style={styles.autoDebtHint}>Includes auto debt minimums: {formatCurrency(automaticDebtMonthlyCost)}</Text>
+          <Text style={styles.autoDebtHint}>Includes {formatCurrency(automaticDebtMonthlyCost)} auto debt minimums</Text>
         )}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Expense Breakdown</Text>
-        {chartData.length > 0 ? (
-          <View style={styles.chartCard}>
-            <DonutChart data={pieData} size={200} strokeWidth={32} />
-            <View style={styles.legendWrap}>
-              {pieData.map((item) => (
-                <View key={item.label} style={styles.legendRow}>
-                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                  <Text style={styles.legendLabel}>{item.label}</Text>
-                  <Text style={styles.legendValue}>{formatCurrency(item.value)}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        ) : (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyCardTitle}>No expenses this month</Text>
-            <Text style={styles.emptyCardSubtext}>Add entries to see your category chart.</Text>
-          </View>
-        )}
-      </View>
+      {/* Donut chart — no separate legend, the category list below IS the legend */}
+      {chartData.length > 0 ? (
+        <View style={styles.chartCard}>
+          <DonutChart data={pieData} size={180} strokeWidth={28} />
+        </View>
+      ) : (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyCardTitle}>No expenses this month</Text>
+          <Text style={styles.emptyCardSubtext}>Add entries to see your spending chart.</Text>
+        </View>
+      )}
 
       {incomeEntries.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Income</Text>
           <View style={styles.incomeCard}>
-            <View style={styles.incomeWrap}>
-              {Object.entries(incomeByCategory)
-                .sort((a, b) => b[1] - a[1])
-                .map(([category, amount]) => (
-                  <View key={category} style={styles.incomePill}>
-                    <Text style={styles.incomePillCategory}>{category}</Text>
-                    <Text style={styles.incomePillAmount}>{formatCurrency(amount)}</Text>
-                  </View>
-                ))}
-            </View>
             <View style={styles.incomeEntryList}>
               {incomeEntries.map((entry) => (
                 <TouchableOpacity
@@ -560,7 +526,6 @@ const BudgetScreen: React.FC = () => {
                     {entry.recurring && (
                       <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
                     )}
-                    <Text style={styles.entryEditHint}>Edit</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -570,13 +535,17 @@ const BudgetScreen: React.FC = () => {
       )}
 
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Expense Categories</Text>
-        <Text style={styles.sectionHint}>Warning at 80%</Text>
+        <Text style={styles.sectionTitle}>Spending</Text>
+        {foodEntriesToSplit.length > 0 && (
+          <TouchableOpacity onPress={openFoodSplitModal}>
+            <Text style={[styles.sectionHint, { color: colors.accent }]}>Split Food ({foodEntriesToSplit.length})</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
 
-  const renderExpenseRow = ({ item }: { item: ExpenseCategoryRow }) => {
+  const renderExpenseRow = ({ item, index }: { item: ExpenseCategoryRow; index: number }) => {
     const ratio = item.ratio;
     const progressPercent = ratio ? Math.min(ratio, 1) * 100 : null;
     const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
@@ -588,46 +557,37 @@ const BudgetScreen: React.FC = () => {
         ? colors.warning
         : colors.success;
 
-    return (
-      <View style={styles.rowCard}>
-        <View style={styles.rowTop}>
-          <View>
-            <Text style={styles.rowCategory}>{item.category}</Text>
-            <Text style={styles.rowSpent}>Spent: {formatCurrency(item.spent)}</Text>
-          </View>
+    const dotColor = chartColors[index % chartColors.length];
 
-          <TouchableOpacity
-            style={styles.limitBtn}
-            onPress={() => openLimitModal(item.category)}
-          >
-            <Text style={styles.limitBtnText}>
-              {item.limit ? "Edit Limit" : "Set Limit"}
-            </Text>
-          </TouchableOpacity>
+    return (
+      <TouchableOpacity
+        style={styles.rowCard}
+        activeOpacity={0.7}
+        onLongPress={() => openLimitModal(item.category)}
+      >
+        <View style={styles.rowTop}>
+          <View style={styles.rowCategoryRow}>
+            <View style={[styles.categoryDot, { backgroundColor: dotColor }]} />
+            <View>
+              <Text style={styles.rowCategory}>{item.category}</Text>
+              <Text style={styles.rowSpent}>
+                {formatCurrency(item.spent)}
+                {item.limit ? ` / ${formatCurrency(item.limit)}` : ""}
+              </Text>
+            </View>
+          </View>
         </View>
 
         {item.limit ? (
-          <>
-            <Text style={styles.limitText}>Limit: {formatCurrency(item.limit)}</Text>
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${progressPercent ?? 0}%`, backgroundColor: statusColor },
-                ]}
-              />
-            </View>
-            <Text style={[styles.rowStatus, { color: statusColor }]}> 
-              {isOver
-                ? "Over budget"
-                : hasWarning
-                  ? "Approaching limit"
-                  : "On track"}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.noLimitText}>No monthly limit set yet.</Text>
-        )}
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${progressPercent ?? 0}%`, backgroundColor: statusColor },
+              ]}
+            />
+          </View>
+        ) : null}
 
         {item.entries.length > 0 && (
           <View style={styles.entryList}>
@@ -654,14 +614,14 @@ const BudgetScreen: React.FC = () => {
                     {entry.recurring && (
                       <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
                     )}
-                    <Text style={styles.entryEditHint}>{isAutoDebtPayment ? "Auto" : "Edit"}</Text>
+                    {isAutoDebtPayment && <Text style={styles.entryEditHint}>Auto</Text>}
                   </View>
                 </TouchableOpacity>
               );
             })}
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -684,6 +644,15 @@ const BudgetScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* FAB — Add Income / Expense */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowAddModal(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
 
       <AddBudgetEntryModal
         visible={showAddModal}
@@ -1058,6 +1027,16 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 8,
       gap: 8,
     },
+    rowCategoryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    categoryDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 3,
+    },
     rowCategory: {
       color: colors.text,
       fontSize: 15,
@@ -1273,6 +1252,30 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.accent,
       fontSize: 10,
       fontWeight: "600",
+    },
+
+    /* FAB */
+    fab: {
+      position: "absolute",
+      bottom: 90,
+      right: 20,
+      width: 52,
+      height: 52,
+      borderRadius: 16,
+      backgroundColor: colors.accent,
+      justifyContent: "center",
+      alignItems: "center",
+      elevation: 6,
+      shadowColor: colors.accent,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+    },
+    fabText: {
+      fontSize: 26,
+      fontWeight: "300",
+      color: colors.accentButtonText || colors.bg,
+      lineHeight: 28,
     },
   });
 
