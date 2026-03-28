@@ -183,6 +183,99 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 
 =================================================================================================================================================================================================
 
+## Security Hardening
+
+### Critical
+- [x] Fix encryption implementation — add HMAC integrity verification to `encryptedStorage.ts` so tampered ciphertexts are detected
+- [x] Wrap all unsafe `JSON.parse` calls in try-catch with fallback defaults (`userStorage.ts:83`, `debtStorage.ts:70`, `savingsGoalStorage.ts:8`, `budgetStorage.ts:45`)
+
+### High
+- [x] Encrypt exported data or add confirmation dialog warning about sensitive plaintext in `exportData.ts`
+- [x] Add try-catch around `JSON.parse(existingRaw)` in `importData.ts` merge logic to prevent silent data loss
+- [x] Clear encryption key from memory (`cachedKey`) when app is backgrounded (`encryptedStorage.ts:22`)
+
+### Medium
+- [x] Gate `console.error` / `console.warn` calls behind `__DEV__` checks in production (`App.tsx`, screens)
+- [x] Add input validation against control characters and null bytes on display name and debt name fields
+- [x] Audit Android permissions — consider removing `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` from `AndroidManifest.xml`
+- [x] Add `FLAG_SECURE` screenshot/screen recording protection on screens showing financial data
+- [x] Add transactional safety (write-to-temp-key, then rename) for import merge operations in `importData.ts`
+
+### Low
+- [x] Replace custom `Math.random()` UUID in `src/utils/uuid.ts` with the `uuid` package (already in `package.json`)
+- [ ] Add deep link validation if deep link routing is implemented in the future
+- [x] Reduce import size limits (`MAX_RAW_CHARS` from 2MB to 500KB) to prevent OOM on low-end devices
+
+### Info / Optional
+
+#### 1. Add timeouts to AsyncStorage operations to prevent app hangs on slow I/O
+File: `src/storage/encryptedStorage.ts`
+Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash storage or backed-up I/O queues could hang indefinitely, freezing the app.
+- **Option A — Promise.race timeout wrapper:** Create a `withTimeout()` utility wrapping each AsyncStorage call with `Promise.race([operation, rejectAfter5s])`. Apply inside `encryptedStorage.ts` so all callers get it automatically.
+- **Option B — Timeout only on raw I/O:** Same concept but wrap only the `AsyncStorage.*` calls, not the crypto operations (which can be slow on low-end devices). More surgical.
+- **Option C — Timeout + retry once:** On timeout, retry the operation once before throwing. Handles transient I/O hiccups without surfacing errors on brief blips.
+- Recommended: **Option A** — simple, comprehensive, 5-second timeout is generous enough for slow devices.
+
+- [ ] Implement AsyncStorage timeout wrapper
+
+#### 2. Fail-closed policy for version downgrade guard
+File: `src/utils/versionGuard.ts`
+Currently `isUpdateSafe()` returns `true` (fail-open) when either version is missing. An attacker could strip version metadata from a malicious OTA update to bypass the downgrade guard.
+- **Option A — Fail-closed on missing incoming version:** Return `false` if incoming version is undefined (block the update). Keep fail-open if the *current* version is missing (avoids locking out users whose app was installed without version metadata).
+- **Option B — Full fail-closed:** Return `false` if either version is missing. Strictest, but risks blocking legitimate updates if Expo metadata has a hiccup.
+- **Option C — Fail-closed with user override:** Return `false` by default, but show a modal letting the user choose to install anyway.
+- Recommended: **Option A** — blocks the actual attack vector without risking lockout from legitimate updates.
+
+- [ ] Implement fail-closed downgrade guard
+
+#### 3. Data expiration warnings for stale imports
+Files: `src/utils/importData.ts`, `src/utils/exportData.ts`
+Exports already include an `exportedAt` timestamp, but imports don't check it. A user could import a 6-month-old backup and silently overwrite fresher data in merge mode.
+- **Option A — Warning in import result:** After successful import, check `exportedAt`; if >30 days old, include a warning message in the result for the UI to display.
+- **Option B — Pre-import warning with confirmation:** Before writing data, check `exportedAt` and throw a special error if stale, prompting user confirmation. Blocks stale imports by default.
+- **Option C — Non-blocking info banner:** Parse `exportedAt`, return a `staleDays` field alongside import counts. UI shows an info banner but doesn't block the import.
+- Recommended: **Option C** — stale imports aren't dangerous (merge deduplicates by ID), so blocking would be frustrating. A simple banner is the right awareness level.
+
+- [ ] Implement stale import warning
+
+#### 4. Explicit bounds checks before financial calculations
+File: `src/utils/calculations.ts`
+Calculation functions accept raw `number` inputs with no upper bounds. JS `Number` loses precision above ~2^53, and `Math.pow()` with extreme inputs returns `Infinity`/`NaN`, which cascades into the UI.
+- **Option A — Input clamping at function boundaries:** Add bounds checks at the top of each exported function — clamp `balance` to max $1B, `annualRate` to max 200%, `monthlyPayment` to max $1M, `years` to max 100, `monthlyContribution` to max $1M. Return early with safe defaults (0 or Infinity) if out of range. Matches limits already in `importData.ts`.
+- **Option B — Shared validation utility:** Create `validateFinancialInput()` that all functions call; throws descriptive errors for out-of-bounds inputs.
+- **Option C — Output validation:** Don't restrict inputs, but check outputs. If any result is `NaN`, `Infinity`, or unexpectedly negative, return a safe fallback.
+- Recommended: **Option A** — prevents the issue at the source. Bounds match `importData.ts` limits (`MAX_MONEY: 1_000_000_000`, `MAX_RATE: 200`). Clamping is silent and non-disruptive.
+
+---
+
+## Code Quality & Crash Prevention
+
+### High Priority
+- [x] Fix race condition in `recordPayment()` — `src/storage/debtStorage.ts:162-177`. The `balance: undefined as any` workaround means if `updateDebt` fails after payment is written, the payment is saved but debt balance never updates. Add atomic/transactional storage operations.
+- [x] Wrap `Promise.all()` in try-catch in `DebtTrackerScreen.tsx:181-205` — was already wrapped in try-catch with fallback to empty state. Verified correct.
+- [x] Fix division by zero in `DebtTrackerScreen.tsx:339` — was already guarded with `nonMortgageOriginal > 0` ternary. Verified correct.
+- [x] Use `Number.isFinite()` for all parsed numeric inputs in `AddDebtModal.tsx:229-231` — `parseFloat(x) > 0` doesn't catch `Infinity` edge cases.
+- [x] Make decryption failures distinguishable from missing data in `encryptedStorage.ts:195-211` — now throws `DecryptionError` instead of returning `null`, so callers can distinguish corruption from missing data.
+- [x] Remove `as any` casts and replace with proper type guards — `debtStorage.ts:175`, `App.tsx:99-100`, `ProfileScreen.tsx:213-214`, plus `ProfileScreen.tsx:445`.
+
+### Medium Priority
+- [x] Fix stale closure in `useCallback` — `DebtTrackerScreen.tsx:160-178`. `primeMilestonesModal` captures `targetDraftByStep` but may not properly list it in dependencies.
+- [x] Add cleanup functions to async `useEffect` hooks — `ProfileScreen.tsx:154-167`. If component unmounts mid-load, state updates on unmounted components cause warnings/crashes.
+- [x] Fix memory leak in AppState listener — `encryptedStorage.ts:69-73`. `AppState.addEventListener` at module scope with no removal; listeners accumulate during hot-reload.
+- [x] Fix concurrent budget entry write race condition — `BudgetScreen.tsx:316-344`. `saveBudgetEntries()` is async inside a sync `setState` callback. Rapid edits can cause storage to lag behind state, leading to data loss on restart.
+- [x] Add upper bound validation on import numeric values — `importData.ts:161-168`. `monthlyLimit` validated only as `> 0.01` with no ceiling. A malformed import could inject absurd values.
+- [x] Handle chart empty state gracefully — `InvestmentScreen.tsx:68`. Chart returns `null` for < 2 data points, which could cause layout shift.
+- [x] Add safeguard for simulation loop — `calculations.ts:128-195`. Already guarded: line 185 exits early when balance isn't decreasing (`afterBalance >= beforeBalance - 0.000001`), plus hard cap at 600 iterations and input sanitization. No additional fix needed.
+
+### Low Priority
+- [x] Improve navigation error logging — `App.tsx:242-244`. Added try-catch around `navigate()` calls and `__DEV__` warnings when navigation isn't ready.
+- [x] Fix FlatList `keyExtractor` — `BudgetScreen.tsx:672`. Verified safe: `expenseRows` derives from a `Set<BudgetCategory>`, so `item.category` is guaranteed unique. No change needed.
+- [x] Reduce excessive local state in `DebtTrackerScreen.tsx:115-152` — Evaluated: `useReducer` would not reduce re-renders (React re-renders the full component on any state change regardless). The main stale-closure risk was already fixed in medium priority. Not worth the refactor risk.
+- [x] Fix missing `useCallback` dependency in `InvestmentScreen.tsx:188-191` — Verified correct: `handleSliderChange` and `adjust` only use stable `useState` setters and module-level constants (`SLIDERS`). Empty dependency arrays are appropriate.
+- [x] Add negative value validation for savings goals — `SmartPlanModal.tsx:597`. Added `Math.max(0, ...)` clamp so negative `currentAmount` from data corruption renders as 0% instead of a negative percentage.
+
+---
+
 ## Nice-to-Have (Post-Launch)
 
 - [x] Payment history screen — the data is already being recorded, just needs a UI

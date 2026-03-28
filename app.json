@@ -2,11 +2,10 @@
   "expo": {
     "name": "BudgetArk",
     "slug": "BudgetArk",
-    "version": "1.0.5",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#F2E6D0"
@@ -16,24 +15,44 @@
       "bundleIdentifier": "com.budgetark.app",
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocalNetworkUsageDescription": "BudgetArk uses your local network to sync data with your partner's device.",
+        "NSBonjourServices": [
+          "_budgetark._tcp."
+        ]
+      },
+      "entitlements": {
+        "com.apple.developer.networking.wifi-info": true
       }
     },
     "android": {
       "package": "com.budgetark.app",
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F2E6D0"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "INTERNET",
+        "READ_EXTERNAL_STORAGE",
+        "VIBRATE",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_MULTICAST_STATE",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "WRITE_EXTERNAL_STORAGE",
+        "SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": "1.1.0",
     "updates": {
-      "checkAutomatically": "NEVER",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
       "url": "https://u.expo.dev/08046ba8-b8f4-46ef-b98b-c31fe698c65b"
     },
     "owner": "rickeynet",
@@ -41,6 +60,11 @@
       "eas": {
         "projectId": "08046ba8-b8f4-46ef-b98b-c31fe698c65b"
       }
-    }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "./plugins/withScreenGuard",
+      "expo-sharing"
+    ]
   }
 }

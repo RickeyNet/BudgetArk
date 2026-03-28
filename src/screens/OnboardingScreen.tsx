@@ -124,6 +124,8 @@ ThemePreviewCard.displayName = "ThemePreviewCard";
 /**
  * Main onboarding screen component
  */
+import { sanitizeTextInput } from "../utils/sanitize";
+
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { colors, presets, themeId, setThemeId } = useTheme();
   const [step, setStep] = useState<OnboardingStep>("theme");
@@ -157,7 +159,11 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    * Complete onboarding and mark as done
    */
   const handleComplete = useCallback(async (openArkSetup?: boolean) => {
-    await completeOnboarding(displayName);
+    try {
+      await completeOnboarding(displayName);
+    } catch (error) {
+      if (__DEV__) console.error("Failed to save onboarding:", error);
+    }
     onComplete({ openArkSetup: !!openArkSetup });
   }, [displayName, onComplete]);
 
@@ -292,7 +298,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           placeholder="Buddy"
           placeholderTextColor={colors.textMuted}
           value={displayName}
-          onChangeText={setDisplayName}
+          onChangeText={(text) => setDisplayName(sanitizeTextInput(text))}
           maxLength={20}
           autoCapitalize="words"
           autoCorrect={false}

@@ -65,7 +65,15 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
     const chartW = W - padL - padR;
     const chartH = H - padT - padB;
 
-    if (data.length < 2) return null;
+    if (data.length < 2) {
+      return (
+        <View style={{ width: W, height: H, justifyContent: "center", alignItems: "center" }}>
+          <Text style={{ color: textMuted, fontSize: 13 }}>
+            Adjust the sliders to see a projection chart.
+          </Text>
+        </View>
+      );
+    }
 
     const maxVal = Math.max(...data.map((d) => d.total), 1);
     const maxYears = data[data.length - 1].year;

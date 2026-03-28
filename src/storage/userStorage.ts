@@ -18,7 +18,7 @@
  * - Data tied to device (portable via future cloud sync)
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "./encryptedStorage";
 import { generateUUID } from "../utils/uuid";
 import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
@@ -26,6 +26,7 @@ import {
   UserAccount,
 } from "../types";
 import { isCurrencyPreferenceId } from "../utils/currencyPreferences";
+import { sanitizeTextInput as sanitizeText } from "../utils/sanitize";
 
 /** Storage key for the user account */
 const USER_KEY = "@budgetark_user" as const;
@@ -37,11 +38,17 @@ const USER_KEY = "@budgetark_user" as const;
  * @returns Promise<UserAccount> — the current user (existing or newly created)
  */
 export const getOrCreateUser = async (): Promise<UserAccount> => {
-  const raw = await AsyncStorage.getItem(USER_KEY);
+  const raw = await EncryptedStorage.getItem(USER_KEY);
 
   /* If user already exists, return it */
   if (raw) {
-    const parsed = JSON.parse(raw) as Partial<UserAccount>;
+    let parsed: Partial<UserAccount>;
+    try {
+      parsed = JSON.parse(raw) as Partial<UserAccount>;
+    } catch {
+      // Stored data is corrupted — create a fresh user instead of crashing
+      parsed = {};
+    }
     const normalized: UserAccount = {
       id: parsed.id || generateUUID(),
       displayName: parsed.displayName || "Buddy",
@@ -53,7 +60,7 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
     };
 
     if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized));
+      await EncryptedStorage.setItem(USER_KEY, JSON.stringify(normalized));
     }
 
     return normalized;
@@ -68,7 +75,7 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
     currencyPreferenceId: DEFAULT_CURRENCY_PREFERENCE_ID,
   };
 
-  await AsyncStorage.setItem(USER_KEY, JSON.stringify(newUser));
+  await EncryptedStorage.setItem(USER_KEY, JSON.stringify(newUser));
   return newUser;
 };
 
@@ -79,8 +86,13 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
  * @returns Promise<UserAccount | null>
  */
 export const getUser = async (): Promise<UserAccount | null> => {
-  const raw = await AsyncStorage.getItem(USER_KEY);
-  return raw ? JSON.parse(raw) : null;
+  const raw = await EncryptedStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as UserAccount;
+  } catch {
+    return null;
+  }
 };
 
 /**
@@ -94,8 +106,8 @@ export const updateDisplayName = async (
   name: string
 ): Promise<UserAccount> => {
   const user = await getOrCreateUser();
-  const updated = { ...user, displayName: name.trim() || "Buddy" };
-  await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
+  const updated = { ...user, displayName: sanitizeText(name.trim()) || "Buddy" };
+  await EncryptedStorage.setItem(USER_KEY, JSON.stringify(updated));
   return updated;
 };
 
@@ -109,13 +121,13 @@ export const completeOnboarding = async (
   displayName?: string
 ): Promise<UserAccount> => {
   const user = await getOrCreateUser();
-  const nextDisplayName = displayName?.trim();
+  const nextDisplayName = displayName ? sanitizeText(displayName.trim()) : undefined;
   const updated = {
     ...user,
     displayName: nextDisplayName ? nextDisplayName : user.displayName,
     onboardingComplete: true,
   };
-  await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
+  await EncryptedStorage.setItem(USER_KEY, JSON.stringify(updated));
   return updated;
 };
 
@@ -127,7 +139,7 @@ export const updateCurrencyPreference = async (
     ...user,
     currencyPreferenceId,
   };
-  await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
+  await EncryptedStorage.setItem(USER_KEY, JSON.stringify(updated));
   return updated;
 };
 
@@ -138,5 +150,5 @@ export const updateCurrencyPreference = async (
  * WARNING: Destructive and irreversible.
  */
 export const deleteAccount = async (): Promise<void> => {
-  await AsyncStorage.removeItem(USER_KEY);
+  await EncryptedStorage.removeItem(USER_KEY);
 };

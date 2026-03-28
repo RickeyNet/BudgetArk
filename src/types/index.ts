@@ -47,6 +47,9 @@ export interface Debt {
   /** ISO timestamp of when this debt was created */
   createdAt: string;
 
+  /** ISO timestamp of when this debt was last modified */
+  updatedAt: string;
+
   /** Optional ISO date string for payoff goal date */
   goalDate?: string;
 }
@@ -55,7 +58,7 @@ export interface Debt {
  * Form data for creating a new debt.
  * Omits auto-generated fields (id, createdAt) from the full Debt type.
  */
-export type NewDebtInput = Omit<Debt, "id" | "createdAt">;
+export type NewDebtInput = Omit<Debt, "id" | "createdAt" | "updatedAt">;
 
 export type DebtOwner = "mine" | "partner" | "joint";
 
@@ -98,6 +101,9 @@ export interface Payment {
 
   /** ISO timestamp of when payment was recorded */
   date: string;
+
+  /** ISO timestamp of when this payment was last modified */
+  updatedAt: string;
 }
 
 /* ─── Budget Types ─── */
@@ -139,11 +145,13 @@ export interface BudgetEntry {
   description?: string;
   date: string;
   createdAt: string;
+  /** ISO timestamp of when this entry was last modified */
+  updatedAt: string;
   /** When true, this entry repeats every month from its `date` month onward */
   recurring?: boolean;
 }
 
-export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt">;
+export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt" | "updatedAt">;
 
 export interface CategoryBudgetLimit {
   category: BudgetCategory;

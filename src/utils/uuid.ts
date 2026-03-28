@@ -2,24 +2,10 @@
  * BudgetArk — UUID Utility
  * File: src/utils/uuid.ts
  *
- * Pure JavaScript UUID v4 generator.
- * No native modules required — works in Expo Go and dev builds.
+ * Cryptographically strong UUID v4 generator via the `uuid` package,
+ * which uses crypto.getRandomValues() under the hood.
  */
 
-export const generateUUID = (): string => {
-  let d = Date.now();
-  let d2 =
-    (typeof performance !== "undefined" && performance.now && performance.now() * 1000) || 0;
+import { v4 } from "uuid";
 
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    let r = Math.random() * 16;
-    if (d > 0) {
-      r = (d + r) % 16 | 0;
-      d = Math.floor(d / 16);
-    } else {
-      r = (d2 + r) % 16 | 0;
-      d2 = Math.floor(d2 / 16);
-    }
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
-};
+export const generateUUID = (): string => v4();

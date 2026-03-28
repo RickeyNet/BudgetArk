@@ -11,7 +11,7 @@
  * - This is efficient for typical use (< 50 debts) and avoids key fragmentation.
  */
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "./encryptedStorage";
 import { Debt, DebtClass, DebtClassSource, DebtOwner, Payment } from "../types";
 
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
@@ -56,6 +56,7 @@ const normalizeDebt = (debt: Debt): Debt => ({
   debtClassSource: isDebtClassSource(debt.debtClassSource)
     ? debt.debtClassSource
     : "inferred",
+  updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
 });
 
 /**
@@ -65,14 +66,18 @@ const normalizeDebt = (debt: Debt): Debt => ({
  * @returns Promise<Debt[]> — array of all debt entries
  */
 export const getDebts = async (): Promise<Debt[]> => {
-  const raw = await AsyncStorage.getItem(STORAGE_KEYS.DEBTS);
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.DEBTS);
   if (!raw) return [];
-  const parsed = JSON.parse(raw) as Debt[];
-  const normalized = parsed.map(normalizeDebt);
-  if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-    await saveDebts(normalized);
+  try {
+    const parsed = JSON.parse(raw) as Debt[];
+    const normalized = parsed.map(normalizeDebt);
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+      await saveDebts(normalized);
+    }
+    return normalized;
+  } catch {
+    return [];
   }
-  return normalized;
 };
 
 /**
@@ -82,7 +87,7 @@ export const getDebts = async (): Promise<Debt[]> => {
  * @param debts — the full array of debts to save
  */
 export const saveDebts = async (debts: Debt[]): Promise<void> => {
-  await AsyncStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+  await EncryptedStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
 };
 
 /**
@@ -126,7 +131,10 @@ export const updateDebt = async (
   updates: Partial<Debt>
 ): Promise<Debt[]> => {
   const debts = await getDebts();
-  const updated = debts.map((d) => (d.id === id ? { ...d, ...updates } : d));
+  const now = new Date().toISOString();
+  const updated = debts.map((d) =>
+    d.id === id ? { ...d, ...updates, updatedAt: now } : d
+  );
   await saveDebts(updated);
   return updated;
 };
@@ -138,9 +146,27 @@ export const updateDebt = async (
  *
  * @returns Promise<Payment[]> — array of all payments
  */
+const normalizePayment = (payment: Payment): Payment => ({
+  ...payment,
+  updatedAt: payment.updatedAt || payment.date || new Date().toISOString(),
+});
+
 export const getPayments = async (): Promise<Payment[]> => {
-  const raw = await AsyncStorage.getItem(STORAGE_KEYS.PAYMENTS);
-  return raw ? JSON.parse(raw) : [];
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYMENTS);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Payment[];
+    const normalized = parsed.map(normalizePayment);
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+      await EncryptedStorage.setItem(
+        STORAGE_KEYS.PAYMENTS,
+        JSON.stringify(normalized)
+      );
+    }
+    return normalized;
+  } catch {
+    return [];
+  }
 };
 
 /**
@@ -153,29 +179,29 @@ export const getPayments = async (): Promise<Payment[]> => {
 export const recordPayment = async (
   payment: Payment
 ): Promise<{ debts: Debt[]; payments: Payment[] }> => {
-  /* Save payment record */
-  const payments = await getPayments();
-  payments.push(payment);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.PAYMENTS,
-    JSON.stringify(payments)
-  );
+  /* Load current state */
+  const [debts, payments] = await Promise.all([getDebts(), getPayments()]);
 
-  /* Update the debt balance */
-  const debts = await updateDebt(payment.debtId, {
-    balance: undefined as any, // Will be calculated below
-  });
-
-  /* Recalculate — find the debt and subtract payment */
-  const recalculated = debts.map((d) => {
+  /* Calculate updated debt balance */
+  const now = new Date().toISOString();
+  const updatedDebts = debts.map((d) => {
     if (d.id === payment.debtId) {
-      return { ...d, balance: Math.max(0, d.balance - payment.amount) };
+      return { ...d, balance: Math.max(0, d.balance - payment.amount), updatedAt: now };
     }
     return d;
   });
 
-  await saveDebts(recalculated);
-  return { debts: recalculated, payments };
+  /* Append the new payment */
+  const updatedPayments = [...payments, payment];
+
+  /* Save both atomically (back-to-back to minimize race window) */
+  await saveDebts(updatedDebts);
+  await EncryptedStorage.setItem(
+    STORAGE_KEYS.PAYMENTS,
+    JSON.stringify(updatedPayments)
+  );
+
+  return { debts: updatedDebts, payments: updatedPayments };
 };
 
 /**
@@ -183,7 +209,7 @@ export const recordPayment = async (
  * WARNING: This is destructive and cannot be undone.
  */
 export const clearAllData = async (): Promise<void> => {
-  await AsyncStorage.multiRemove([
+  await EncryptedStorage.multiRemove([
     STORAGE_KEYS.DEBTS,
     STORAGE_KEYS.PAYMENTS,
     STORAGE_KEYS.PAYOFF_STRATEGY,
@@ -194,12 +220,12 @@ export const clearAllData = async (): Promise<void> => {
 };
 
 export const getPayoffStrategyPreference = async (): Promise<PayoffStrategyPreference | null> => {
-  const raw = await AsyncStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
   return isPayoffStrategyPreference(raw) ? raw : null;
 };
 
 export const savePayoffStrategyPreference = async (
   strategy: PayoffStrategyPreference
 ): Promise<void> => {
-  await AsyncStorage.setItem(STORAGE_KEYS.PAYOFF_STRATEGY, strategy);
+  await EncryptedStorage.setItem(STORAGE_KEYS.PAYOFF_STRATEGY, strategy);
 };

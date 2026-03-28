@@ -65,7 +65,7 @@ export const CurrencyProvider: React.FC<React.PropsWithChildren> = ({ children }
         const user = await getOrCreateUser();
         setPreferenceIdState(user.currencyPreferenceId);
       } catch (error) {
-        console.error("Failed to load currency preference:", error);
+        if (__DEV__) console.error("Failed to load currency preference:", error);
       }
     };
     void load();

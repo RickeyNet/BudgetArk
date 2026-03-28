@@ -1,5 +1,6 @@
 // File: App.tsx
 
+import "react-native-get-random-values";
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -12,6 +13,8 @@ import {
   Modal,
   Text,
   TouchableOpacity,
+  NativeModules,
+  Platform,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -33,6 +36,11 @@ import {
   setLastUpdateCheckAt,
 } from "./src/storage/updatePreferencesStorage";
 import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
+import { isUpdateSafe } from "./src/utils/versionGuard";
+import { getPrivacyMode } from "./src/storage/privacyStorage";
+
+const FlagSecureModule = Platform.OS === "android" ? NativeModules.FlagSecureModule : null;
+const ScreenGuardModule = Platform.OS === "ios" ? NativeModules.ScreenGuardModule : null;
 
 type UpdatePrompt = {
   message: string;
@@ -69,7 +77,7 @@ const AppContent: React.FC = () => {
         const user = await getOrCreateUser();
         setIsOnboardingComplete(user.onboardingComplete);
       } catch (error) {
-        console.error("Failed to load user:", error);
+        if (__DEV__) console.error("Failed to load user:", error);
         setIsOnboardingComplete(false);
       }
     };
@@ -78,20 +86,25 @@ const AppContent: React.FC = () => {
 
   /** Handle onboarding completion */
   const handleOnboardingComplete = useCallback(async (options?: { openArkSetup?: boolean }) => {
-    if (options?.openArkSetup) {
-      await requestArkSetupPrompt();
+    try {
+      if (options?.openArkSetup) {
+        await requestArkSetupPrompt();
+      }
+    } catch (error) {
+      if (__DEV__) console.error("Failed to request ark setup:", error);
     }
     setIsOnboardingComplete(true);
   }, []);
 
   const extractUpdatePrompt = useCallback((manifest: unknown): UpdatePrompt => {
-    const data = (manifest ?? {}) as any;
-    const metadata = (data.metadata ?? {}) as any;
-    const extras = (data.extra ?? {}) as any;
+    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
+    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
+    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
+    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
     const messageCandidates = [
       metadata.message,
       metadata.updateMessage,
-      extras?.eas?.message,
+      eas.message,
       data.description,
       data.message,
     ];
@@ -133,12 +146,22 @@ const AppContent: React.FC = () => {
       if (!checkResult.isAvailable) return;
 
       const fetchResult = await Updates.fetchUpdateAsync();
-      const manifest = (fetchResult as any).manifest || (checkResult as any).manifest || null;
-      setPendingUpdate(extractUpdatePrompt(manifest));
+      const fetchObj = fetchResult as Record<string, unknown>;
+      const checkObj = checkResult as Record<string, unknown>;
+      const manifest = fetchObj.manifest || checkObj.manifest || null;
+      const prompt = extractUpdatePrompt(manifest);
+
+      const currentRuntime = Updates.runtimeVersion ?? undefined;
+      if (!isUpdateSafe(currentRuntime, prompt.runtimeVersion)) {
+        if (__DEV__) console.warn("Blocked OTA downgrade:", prompt.runtimeVersion, "<", currentRuntime);
+        return;
+      }
+
+      setPendingUpdate(prompt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes("not supported in development builds")) {
-        console.error("Auto update check failed:", error);
+        if (__DEV__) console.error("Auto update check failed:", error);
       }
     } finally {
       setIsCheckingUpdates(false);
@@ -160,6 +183,32 @@ const AppContent: React.FC = () => {
     };
   }, [canCheckUpdates, isOnboardingComplete, runAutoUpdateCheck]);
 
+  /** Apply screen-capture prevention based on privacy mode preference */
+  useEffect(() => {
+    const privacyModule = FlagSecureModule || ScreenGuardModule;
+    if (!privacyModule) return;
+
+    const applyPrivacyMode = async () => {
+      const enabled = await getPrivacyMode();
+      if (enabled) {
+        privacyModule.enable();
+      } else {
+        privacyModule.disable();
+      }
+    };
+
+    void applyPrivacyMode();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void applyPrivacyMode();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   useEffect(() => {
     if (isOnboardingComplete !== true) return;
 
@@ -178,7 +227,7 @@ const AppContent: React.FC = () => {
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error) {
-      console.error("Failed to apply update:", error);
+      if (__DEV__) console.error("Failed to apply update:", error);
     }
   }, []);
 
@@ -196,7 +245,32 @@ const AppContent: React.FC = () => {
     });
 
     if (navigationRef.isReady()) {
-      navigationRef.navigate("Profile", { openReleaseNotes: true });
+      try {
+        navigationRef.navigate("Profile", { openReleaseNotes: true });
+      } catch (e) {
+        if (__DEV__) console.warn("Navigation to Profile failed:", e);
+      }
+    } else if (__DEV__) {
+      console.warn("Navigation not ready — could not open release notes");
+    }
+  }, [navigationRef]);
+
+  const handleTryNewFeature = useCallback(async () => {
+    setShowReleaseNotesPrompt(false);
+    await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 220);
+    });
+
+    if (navigationRef.isReady()) {
+      try {
+        navigationRef.navigate("Profile");
+      } catch (e) {
+        if (__DEV__) console.warn("Navigation to Profile failed:", e);
+      }
+    } else if (__DEV__) {
+      console.warn("Navigation not ready — could not navigate to new feature");
     }
   }, [navigationRef]);
 
@@ -272,22 +346,28 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>You're on v{CURRENT_APP_VERSION}</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>What's new: {latestRelease?.title || "Latest updates are now available."}</Text>
-            {latestRelease?.highlights?.[0] ? (
-              <Text style={[styles.dialogMessage, { color: colors.textDim }]}>{latestRelease.highlights[0]}</Text>
-            ) : null}
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{CURRENT_APP_VERSION}</Text>
+            <Text style={[styles.featureTitle, { color: colors.accent }]}>Partner Sync is here</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              You can now sync budgets, debts, and savings goals with your partner directly over WiFi — no server or account needed. Pair once, then tap Sync Now anytime.
+            </Text>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
-              onPress={handleOpenReleaseHistory}
+              onPress={handleTryNewFeature}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.white }]}>View release notes</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.white }]}>Try Partner Sync</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.bg }]}
+              onPress={handleOpenReleaseHistory}
+            >
+              <Text style={[styles.dialogButtonText, { color: colors.text }]}>View all release notes</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dialogButton, { backgroundColor: "transparent" }]}
               onPress={handleDismissReleaseNotesPrompt}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.text }]}>Got it</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.textMuted }]}>Maybe later</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -343,6 +423,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
     marginBottom: 10,
+  },
+  featureTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 8,
   },
   dialogActions: {
     gap: 10,

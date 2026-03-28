@@ -51,7 +51,7 @@ import {
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
-import { importData, importFromString } from "../utils/importData";
+import { importData, importFromString, isEncryptedExport, type ImportResult } from "../utils/importData";
 import {
   getUpdatePreferences,
   setLastUpdateCheckAt,
@@ -60,6 +60,25 @@ import {
 import { useTheme } from "../theme/ThemeProvider";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { isUpdateSafe } from "../utils/versionGuard";
+import { getPrivacyMode, setPrivacyMode } from "../storage/privacyStorage";
+import {
+  getPairingState,
+  clearPairingState,
+  getSyncMetadata,
+  updateHomeSSID,
+  setAutoSyncEnabled,
+} from "../sync/pairingStorage";
+import { syncNow } from "../sync/syncOrchestrator";
+import {
+  getCurrentSSID,
+  startMonitoring,
+  stopMonitoring,
+  requestLocationPermission,
+} from "../sync/autoSyncManager";
+import type { PairingState, SyncStatus, SyncResult } from "../sync/types";
+import PairingModal from "../components/PairingModal";
+import FeedbackModal from "../components/FeedbackModal";
 
 type UpdateMetadata = {
   id: string;
@@ -68,8 +87,10 @@ type UpdateMetadata = {
   runtimeVersion?: string;
 };
 
-type HowToDocKey = "export" | "import";
+type HowToDocKey = "export" | "import" | "sync";
 type ReleaseNoteKey = string;
+
+import { sanitizeTextInput } from "../utils/sanitize";
 
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
@@ -102,6 +123,16 @@ const ProfileScreen: React.FC = () => {
   /** Raw JSON text entered in the paste-import modal */
   const [pasteText, setPasteText] = useState("");
 
+  /** Export confirmation modal state */
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportEncrypt, setExportEncrypt] = useState(true);
+  const [exportPassword, setExportPassword] = useState("");
+
+  /** Import password modal state (for encrypted exports) */
+  const [showImportPasswordModal, setShowImportPasswordModal] = useState(false);
+  const [importPassword, setImportPassword] = useState("");
+  const [pendingImportAction, setPendingImportAction] = useState<((pw: string) => void) | null>(null);
+
   /** Whether the reset confirmation modal is visible */
   const [showResetModal, setShowResetModal] = useState(false);
 
@@ -131,18 +162,49 @@ const ProfileScreen: React.FC = () => {
   const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(null);
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
 
+  /** Privacy mode — blocks screenshots/screen recording when enabled */
+  const [privacyMode, setPrivacyModeState] = useState(false);
+
+  /** Partner sync state */
+  const [pairing, setPairing] = useState<PairingState | null>(null);
+  const [showPairingModal, setShowPairingModal] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [showUnpairConfirm, setShowUnpairConfirm] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
   /** Load user on mount */
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      const [u, prefs] = await Promise.all([
-        getOrCreateUser(),
-        getUpdatePreferences(),
-      ]);
-      setUser(u);
-      setEditName(u.displayName);
-      setUpdatePrefs(prefs);
+      try {
+        const [u, prefs, privacy, pairState, syncMeta] = await Promise.all([
+          getOrCreateUser(),
+          getUpdatePreferences(),
+          getPrivacyMode(),
+          getPairingState(),
+          getSyncMetadata(),
+        ]);
+        if (cancelled) return;
+        setUser(u);
+        setEditName(u.displayName);
+        setUpdatePrefs(prefs);
+        setPrivacyModeState(privacy);
+        setPairing(pairState);
+        setLastSyncTime(syncMeta.lastSyncTimestamp);
+        if (pairState?.autoSyncEnabled) {
+          startMonitoring((result) => {
+            if (result.success) {
+              setLastSyncTime(result.timestamp);
+            }
+          });
+        }
+      } catch (error) {
+        if (__DEV__) console.error("Failed to load profile:", error);
+      }
     };
     load();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -189,9 +251,10 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   const extractUpdateMetadata = useCallback((manifest: unknown): UpdateMetadata => {
-    const data = (manifest ?? {}) as any;
-    const metadata = (data.metadata ?? {}) as any;
-    const extras = (data.extra ?? {}) as any;
+    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
+    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
+    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
+    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
 
     const id = typeof data.id === "string" ? data.id : "unknown";
     const createdAt = typeof data.createdAt === "string" ? data.createdAt : undefined;
@@ -201,7 +264,7 @@ const ProfileScreen: React.FC = () => {
     const messageCandidates = [
       metadata.message,
       metadata.updateMessage,
-      extras?.eas?.message,
+      eas.message,
       data.description,
       data.message,
     ];
@@ -245,8 +308,22 @@ const ProfileScreen: React.FC = () => {
 
         const fetchResult = await Updates.fetchUpdateAsync();
         const manifest =
-          (fetchResult as any).manifest || (checkResult as any).manifest || null;
-        setPendingUpdate(extractUpdateMetadata(manifest));
+          (fetchResult as Record<string, unknown>).manifest || (checkResult as Record<string, unknown>).manifest || null;
+        const updateMeta = extractUpdateMetadata(manifest);
+
+        const currentRuntime = Updates.runtimeVersion ?? undefined;
+        if (!isUpdateSafe(currentRuntime, updateMeta.runtimeVersion)) {
+          if (source === "manual") {
+            setInfoModal({
+              title: "Update Rejected",
+              message:
+                "This update was rejected because it targets an older runtime version. This may indicate a rollback attempt.",
+            });
+          }
+          return;
+        }
+
+        setPendingUpdate(updateMeta);
       } catch (error: any) {
         if (source === "manual") {
           setInfoModal({
@@ -273,6 +350,104 @@ const ProfileScreen: React.FC = () => {
         : "Automatic update checks are enabled.",
     });
   }, [updatePrefs.manualUpdateMode]);
+
+  const togglePrivacyMode = useCallback(async () => {
+    const next = !privacyMode;
+    await setPrivacyMode(next);
+    setPrivacyModeState(next);
+    setInfoModal({
+      title: next ? "Privacy Mode On" : "Privacy Mode Off",
+      message: next
+        ? "Screenshots and screen recording are now blocked."
+        : "Screenshot and screen recording protection is disabled.",
+    });
+  }, [privacyMode]);
+
+  /* ─── Partner Sync Handlers ─── */
+
+  const handlePaired = useCallback((state: PairingState) => {
+    setPairing(state);
+    setShowPairingModal(false);
+    setInfoModal({
+      title: "Paired!",
+      message: `You're now paired with ${state.partnerName}. Tap "Sync Now" anytime to share data.`,
+    });
+  }, []);
+
+  const handleSyncNow = useCallback(async () => {
+    if (syncStatus === "syncing" || syncStatus === "discovering" || syncStatus === "connecting") return;
+    try {
+      const result = await syncNow((status) => setSyncStatus(status));
+      if (result.success) {
+        setLastSyncTime(result.timestamp);
+        setInfoModal({
+          title: "Sync Complete",
+          message: `Sent ${result.recordsSent} records, received ${result.recordsReceived} records.`,
+        });
+      } else {
+        setInfoModal({
+          title: "Sync Failed",
+          message: result.error || "Could not connect to partner.",
+        });
+      }
+    } catch {
+      setSyncStatus("error");
+    }
+    setSyncStatus("idle");
+  }, [syncStatus]);
+
+  const handleUnpair = useCallback(async () => {
+    await clearPairingState();
+    stopMonitoring();
+    setPairing(null);
+    setLastSyncTime(null);
+    setShowUnpairConfirm(false);
+    setInfoModal({
+      title: "Unpaired",
+      message: "Partner sync has been disconnected. Your data is still on this device.",
+    });
+  }, []);
+
+  const handleSetHomeNetwork = useCallback(async () => {
+    if (Platform.OS === "android") {
+      const granted = await requestLocationPermission();
+      if (!granted) {
+        setInfoModal({
+          title: "Permission Required",
+          message: "Location permission is needed to read the WiFi network name for auto-sync. Your location is never stored or shared.",
+        });
+        return;
+      }
+    }
+    const ssid = await getCurrentSSID();
+    if (!ssid) {
+      setInfoModal({
+        title: "No WiFi Detected",
+        message: "Connect to your home WiFi first, then try again.",
+      });
+      return;
+    }
+    await updateHomeSSID(ssid);
+    setPairing((prev) => prev ? { ...prev, homeSSID: ssid } : null);
+    setInfoModal({
+      title: "Home Network Set",
+      message: `Auto-sync will trigger when both devices are on "${ssid}".`,
+    });
+  }, []);
+
+  const handleToggleAutoSync = useCallback(async () => {
+    if (!pairing) return;
+    const next = !pairing.autoSyncEnabled;
+    await setAutoSyncEnabled(next);
+    setPairing((prev) => prev ? { ...prev, autoSyncEnabled: next } : null);
+    if (next) {
+      startMonitoring((result) => {
+        if (result.success) setLastSyncTime(result.timestamp);
+      });
+    } else {
+      stopMonitoring();
+    }
+  }, [pairing]);
 
   const installPendingUpdate = useCallback(async () => {
     try {
@@ -308,25 +483,44 @@ const ProfileScreen: React.FC = () => {
   const confirmReset = useCallback(async () => {
     setShowResetModal(false);
     await clearAllData();
+    await clearPairingState();
+    stopMonitoring();
     await deleteAccount();
     await getOrCreateUser();
     const freshUser = await completeOnboarding();
     await setPreferenceId(DEFAULT_CURRENCY_PREFERENCE_ID);
     setUser(freshUser);
     setEditName(freshUser.displayName);
+    setPairing(null);
+    setLastSyncTime(null);
     setInfoModal({ title: "Done", message: "All data has been reset successfully." });
   }, [setPreferenceId]);
 
-  const handleExportData = useCallback(async () => {
+  const handleExportData = useCallback(() => {
+    setExportEncrypt(true);
+    setExportPassword("");
+    setShowExportModal(true);
+  }, []);
+
+  const confirmExport = useCallback(async () => {
+    if (exportEncrypt && exportPassword.length < 4) {
+      setInfoModal({
+        title: "Password Too Short",
+        message: "Please enter a password with at least 4 characters, or turn off encryption.",
+      });
+      return;
+    }
+    setShowExportModal(false);
     try {
-      await exportAllData();
+      await exportAllData(exportEncrypt ? exportPassword : undefined);
     } catch (error: any) {
       setInfoModal({
         title: "Export Failed",
         message: error?.message || "Something went wrong while exporting your data.",
       });
     }
-  }, []);
+    setExportPassword("");
+  }, [exportEncrypt, exportPassword]);
 
   /**
    * First step: show a themed modal to choose import source.
@@ -344,25 +538,57 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   /**
-   * File-picker: run the document picker with the chosen mode.
+   * Runs the actual import and shows the result.
+   * Called directly or after password entry for encrypted exports.
    */
-  const confirmFileImport = useCallback(async (mode: "merge" | "replace") => {
-    setShowImportModeModal(false);
+  const executeImport = useCallback(async (
+    importFn: (password?: string) => Promise<ImportResult | null>,
+    label: string,
+    password?: string
+  ) => {
     try {
-      const result = await importData(mode);
+      const result = await importFn(password);
       if (!result) return;
-      const label = mode === "merge" ? "Merged" : "Imported";
       setInfoModal({
         title: "Import Complete",
         message: `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`,
       });
     } catch (error: any) {
-      setInfoModal({
-        title: "Import Failed",
-        message: error?.message || "Something went wrong while importing your data.",
-      });
+      if (error?.message?.includes("password-encrypted")) {
+        // Need password — show the password prompt
+        setPendingImportAction(() => (pw: string) =>
+          executeImport(importFn, label, pw)
+        );
+        setImportPassword("");
+        setShowImportPasswordModal(true);
+      } else {
+        setInfoModal({
+          title: "Import Failed",
+          message: error?.message || "Something went wrong while importing your data.",
+        });
+      }
     }
   }, []);
+
+  const confirmImportPassword = useCallback(() => {
+    if (!pendingImportAction) return;
+    setShowImportPasswordModal(false);
+    pendingImportAction(importPassword);
+    setImportPassword("");
+    setPendingImportAction(null);
+  }, [pendingImportAction, importPassword]);
+
+  /**
+   * File-picker: run the document picker with the chosen mode.
+   */
+  const confirmFileImport = useCallback(async (mode: "merge" | "replace") => {
+    setShowImportModeModal(false);
+    const label = mode === "merge" ? "Merged" : "Imported";
+    await executeImport(
+      (password) => importData(mode, password),
+      label
+    );
+  }, [executeImport]);
 
   /**
    * Paste-text path: parse the pasted JSON and write to storage.
@@ -374,29 +600,24 @@ const ProfileScreen: React.FC = () => {
         setInfoModal({ title: "Empty", message: "Please paste your exported JSON data first." });
         return;
       }
-      const run = async () => {
-        try {
-          const result = await importFromString(text, mode);
-          setShowPasteModal(false);
-          setPasteText("");
-          const label = mode === "merge" ? "Merged" : "Imported";
-          setInfoModal({
-            title: "Import Complete",
-            message: `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`,
-          });
-        } catch (error: any) {
-          setInfoModal({
-            title: "Import Failed",
-            message: error?.message || "Something went wrong while importing your data.",
-          });
-        }
-      };
-      run();
+      setShowPasteModal(false);
+      setPasteText("");
+      const label = mode === "merge" ? "Merged" : "Imported";
+      executeImport(
+        (password) => importFromString(text, mode, password),
+        label
+      );
     },
-    [pasteText]
+    [pasteText, executeImport]
   );
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: colors.textDim, fontSize: 14 }}>Loading profile...</Text>
+      </View>
+    );
+  }
 
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
@@ -446,7 +667,7 @@ const ProfileScreen: React.FC = () => {
                   },
                 ]}
                 value={editName}
-                onChangeText={setEditName}
+                onChangeText={(text) => setEditName(sanitizeTextInput(text))}
                 autoFocus
                 maxLength={20}
               />
@@ -544,60 +765,190 @@ const ProfileScreen: React.FC = () => {
         </View>
 
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>APP UPDATES</Text>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PRIVACY</Text>
 
           <TouchableOpacity
             style={[
               styles.settingsRow,
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
-            onPress={toggleManualMode}
+            onPress={togglePrivacyMode}
           >
             <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Manual update mode (advanced)</Text>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Privacy Mode</Text>
               <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                {updatePrefs.manualUpdateMode
-                  ? "Checks happen only when requested"
-                  : "Automatic checks are enabled"}
+                {privacyMode
+                  ? "Screenshots & screen recording blocked"
+                  : "Screenshots & screen recording allowed"}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {updatePrefs.manualUpdateMode ? "On" : "Off"}
+              {privacyMode ? "On" : "Off"}
             </Text>
           </TouchableOpacity>
+        </View>
+
+        {/* ── Feedback ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>FEEDBACK</Text>
 
           <TouchableOpacity
             style={[
               styles.settingsRow,
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
-              isCheckingUpdates && { opacity: 0.7 },
             ]}
-            onPress={() => checkForUpdates("manual")}
-            disabled={isCheckingUpdates}
+            onPress={() => setShowFeedbackModal(true)}
           >
             <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Check for Updates</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>View metadata before installation</Text>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                Report a bug or suggest a feature
+              </Text>
             </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {isCheckingUpdates ? "..." : "->"}
-            </Text>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
           </TouchableOpacity>
+        </View>
 
-          <View
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>HOW TO DOCS</Text>
+
+          <TouchableOpacity
             style={[
               styles.settingsRow,
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
+            onPress={() => {
+              setShowHowToDocsModal(true);
+              setExpandedHowToDoc("export");
+            }}
           >
             <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Last Checked</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                {formatDateTime(updatePrefs.lastCheckedAt)}
-              </Text>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Open How to Docs</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Step-by-step instructions for import/export.</Text>
             </View>
-          </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+          </TouchableOpacity>
+        </View>
 
+        {/* ── Partner Sync ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PARTNER SYNC</Text>
+
+          {!pairing ? (
+            <TouchableOpacity
+              style={[
+                styles.settingsRow,
+                { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              ]}
+              onPress={() => setShowPairingModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Pair with Partner</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  Sync budgets over WiFi — no account needed
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <View
+                style={[
+                  styles.settingsRow,
+                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                ]}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Partner: {pairing.partnerName}
+                  </Text>
+                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                    Paired {new Date(pairing.pairedAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.settingsRow,
+                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                  (syncStatus !== "idle" && syncStatus !== "error") && { opacity: 0.7 },
+                ]}
+                onPress={handleSyncNow}
+                disabled={syncStatus !== "idle" && syncStatus !== "error"}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.accent }]}>Sync Now</Text>
+                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                    {syncStatus === "discovering"
+                      ? "Looking for partner..."
+                      : syncStatus === "connecting"
+                      ? "Connecting..."
+                      : syncStatus === "syncing"
+                      ? "Syncing data..."
+                      : lastSyncTime
+                      ? `Last synced ${formatDateTime(lastSyncTime)}`
+                      : "Never synced"}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.accent }]}>
+                  {syncStatus !== "idle" && syncStatus !== "error" ? "..." : "->"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.settingsRow,
+                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                ]}
+                onPress={handleSetHomeNetwork}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>Home Network</Text>
+                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                    {pairing.homeSSID
+                      ? `Auto-sync on "${pairing.homeSSID}"`
+                      : "Tap to set current WiFi as home"}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
+              </TouchableOpacity>
+
+              {pairing.homeSSID && (
+                <TouchableOpacity
+                  style={[
+                    styles.settingsRow,
+                    { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                  ]}
+                  onPress={handleToggleAutoSync}
+                >
+                  <View>
+                    <Text style={[styles.settingsRowText, { color: colors.text }]}>Auto-Sync</Text>
+                    <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                      {pairing.autoSyncEnabled
+                        ? "Syncs automatically on home WiFi"
+                        : "Manual sync only"}
+                    </Text>
+                  </View>
+                  <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                    {pairing.autoSyncEnabled ? "On" : "Off"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.settingsRow,
+                  styles.dangerRow,
+                  { backgroundColor: colors.card },
+                ]}
+                onPress={() => setShowUnpairConfirm(true)}
+              >
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Unpair</Text>
+                <Text style={[styles.settingsRowArrow, { color: colors.text }]}>-&gt;</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         <View style={styles.settingsSection}>
@@ -653,24 +1004,60 @@ const ProfileScreen: React.FC = () => {
         </View>
 
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>HOW TO DOCS</Text>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>APP UPDATES</Text>
 
           <TouchableOpacity
             style={[
               styles.settingsRow,
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
-            onPress={() => {
-              setShowHowToDocsModal(true);
-              setExpandedHowToDoc("export");
-            }}
+            onPress={toggleManualMode}
           >
             <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Open How to Docs</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Step-by-step instructions for import/export.</Text>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Manual update mode (advanced)</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                {updatePrefs.manualUpdateMode
+                  ? "Checks happen only when requested"
+                  : "Automatic checks are enabled"}
+              </Text>
             </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {updatePrefs.manualUpdateMode ? "On" : "Off"}
+            </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              isCheckingUpdates && { opacity: 0.7 },
+            ]}
+            onPress={() => checkForUpdates("manual")}
+            disabled={isCheckingUpdates}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Check for Updates</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>View metadata before installation</Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {isCheckingUpdates ? "..." : "->"}
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.settingsRow,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>Last Checked</Text>
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                {formatDateTime(updatePrefs.lastCheckedAt)}
+              </Text>
+            </View>
+          </View>
+
         </View>
 
         {/* ── What's New ── */}
@@ -879,13 +1266,13 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Release Notes</Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Browse current and past versions.</Text>
 
-            <View style={styles.faqList}>
+            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
               {RELEASE_NOTES.map((release) => {
                 const isExpanded = expandedReleaseNote === release.version;
                 return (
@@ -916,7 +1303,7 @@ const ProfileScreen: React.FC = () => {
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
@@ -939,13 +1326,13 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>How to Docs</Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Tap a topic to expand instructions.</Text>
 
-            <View style={styles.faqList}>
+            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
               <TouchableOpacity
                 style={[
                   styles.faqItem,
@@ -981,7 +1368,49 @@ const ProfileScreen: React.FC = () => {
                   <Text style={[styles.faqAnswer, { color: colors.textDim }]}>Go to Data Management {">"} Import My Data, then choose Pick File or Paste Text.</Text>
                 ) : null}
               </TouchableOpacity>
-            </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.faqItem,
+                  { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                ]}
+                onPress={() => toggleHowToDoc("sync")}
+              >
+                <View style={styles.faqHeader}>
+                  <Text style={[styles.faqQuestion, { color: colors.text }]}>How do I sync data with my partner?</Text>
+                  <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                    {expandedHowToDoc === "sync" ? "v" : ">"}
+                  </Text>
+                </View>
+                {expandedHowToDoc === "sync" ? (
+                  <View style={{ gap: 8 }}>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>First-time setup (one time only):</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      1. Connect both phones to the same WiFi network.{"\n"}
+                      2. On Phone A: go to Profile {">"} Partner Sync {">"} Pair with Partner {">"} tap "Show Code".{"\n"}
+                      3. On Phone B: go to Profile {">"} Partner Sync {">"} Pair with Partner {">"} tap "Enter Code" and type the 6-digit code shown on Phone A.{"\n"}
+                      4. Once paired, you'll see your partner's name in the sync section.
+                    </Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Syncing your data:</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      Tap "Sync Now" on either phone while both are on the same WiFi. All debts, payments, budget entries, savings goals, and milestones will be shared. Changes are merged automatically — the most recent edit wins.
+                    </Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Auto-sync (optional):</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      Tap "Home Network" to save your current WiFi, then turn on "Auto-Sync". The app will sync automatically whenever both phones are on that network and the app is open.{"\n\n"}On Android, location permission is required to read the WiFi name — your location is never stored or shared.
+                    </Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Good to know:</Text>
+                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
+                      {"\u2022"} No server or account is needed — data goes directly between phones.{"\n"}
+                      {"\u2022"} All sync traffic is encrypted end-to-end.{"\n"}
+                      {"\u2022"} Works between iPhone and Android.{"\n"}
+                      {"\u2022"} Both phones must be on the same WiFi to sync.{"\n"}
+                      {"\u2022"} To disconnect, tap "Unpair" in the sync section. Your data stays on your device.
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            </ScrollView>
 
             <TouchableOpacity
               style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
@@ -989,6 +1418,185 @@ const ProfileScreen: React.FC = () => {
             >
               <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Export Confirmation Modal ── */}
+      <Modal
+        visible={showExportModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowExportModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Export My Data
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {exportEncrypt
+                ? "Your data will be encrypted with a password before sharing."
+                : "Your data will be exported as plaintext JSON. Anyone with access to the file can read your financial data."}
+            </Text>
+
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                alignSelf: "center",
+                marginBottom: 16,
+              }}
+              onPress={() => {
+                setExportEncrypt((v) => !v);
+                if (exportEncrypt) setExportPassword("");
+              }}
+            >
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 4,
+                  borderWidth: 2,
+                  borderColor: exportEncrypt ? colors.accent : colors.textMuted,
+                  backgroundColor: exportEncrypt ? colors.accent : "transparent",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: 10,
+                }}
+              >
+                {exportEncrypt ? (
+                  <Text style={{ color: colors.white, fontSize: 14, fontWeight: "700" }}>
+                    ✓
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={{ color: colors.text, fontSize: 14 }}>
+                Encrypt with password
+              </Text>
+            </TouchableOpacity>
+
+            {exportEncrypt ? (
+              <TextInput
+                style={[
+                  {
+                    borderWidth: 1,
+                    borderColor: colors.cardBorder,
+                    borderRadius: 10,
+                    padding: 12,
+                    fontSize: 15,
+                    color: colors.text,
+                    backgroundColor: colors.bg,
+                    marginBottom: 16,
+                  },
+                ]}
+                placeholder="Enter export password"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry
+                value={exportPassword}
+                onChangeText={setExportPassword}
+                maxLength={64}
+                autoFocus
+              />
+            ) : null}
+
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => {
+                  setShowExportModal(false);
+                  setExportPassword("");
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmExport}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  {exportEncrypt ? "Encrypt & Share" : "Share Plaintext"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Import Password Modal ── */}
+      <Modal
+        visible={showImportPasswordModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setShowImportPasswordModal(false);
+          setPendingImportAction(null);
+          setImportPassword("");
+        }}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Encrypted Export
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              This export was encrypted with a password. Enter the password to decrypt it.
+            </Text>
+            <TextInput
+              style={[
+                {
+                  borderWidth: 1,
+                  borderColor: colors.cardBorder,
+                  borderRadius: 10,
+                  padding: 12,
+                  fontSize: 15,
+                  color: colors.text,
+                  backgroundColor: colors.bg,
+                  marginBottom: 16,
+                },
+              ]}
+              placeholder="Enter password"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry
+              value={importPassword}
+              onChangeText={setImportPassword}
+              maxLength={64}
+              autoFocus
+            />
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => {
+                  setShowImportPasswordModal(false);
+                  setPendingImportAction(null);
+                  setImportPassword("");
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmImportPassword}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Decrypt & Import
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1273,6 +1881,66 @@ const ProfileScreen: React.FC = () => {
               >
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>
                   OK
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Feedback Modal ── */}
+      <FeedbackModal
+        visible={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        onResult={(result) => {
+          setShowFeedbackModal(false);
+          setInfoModal(result);
+        }}
+      />
+
+      {/* ── Pairing Modal ── */}
+      <PairingModal
+        visible={showPairingModal}
+        onClose={() => setShowPairingModal(false)}
+        onPaired={handlePaired}
+      />
+
+      {/* ── Unpair Confirmation ── */}
+      <Modal
+        visible={showUnpairConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowUnpairConfirm(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Unpair Device
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              This will disconnect partner sync. Your data stays on this device, but
+              you'll need to pair again to sync.
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowUnpairConfirm(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
+                onPress={handleUnpair}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Unpair
                 </Text>
               </TouchableOpacity>
             </View>

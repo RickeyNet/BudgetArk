@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as EncryptedStorage from "./encryptedStorage";
 import { UpdatePreferences } from "../types";
 
 const UPDATE_PREFERENCES_KEY = "@budgetark_update_preferences" as const;
@@ -8,7 +8,7 @@ const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
 };
 
 export const getUpdatePreferences = async (): Promise<UpdatePreferences> => {
-  const raw = await AsyncStorage.getItem(UPDATE_PREFERENCES_KEY);
+  const raw = await EncryptedStorage.getItem(UPDATE_PREFERENCES_KEY);
   if (!raw) {
     return DEFAULT_UPDATE_PREFERENCES;
   }
@@ -27,7 +27,7 @@ export const getUpdatePreferences = async (): Promise<UpdatePreferences> => {
 export const saveUpdatePreferences = async (
   value: UpdatePreferences
 ): Promise<UpdatePreferences> => {
-  await AsyncStorage.setItem(UPDATE_PREFERENCES_KEY, JSON.stringify(value));
+  await EncryptedStorage.setItem(UPDATE_PREFERENCES_KEY, JSON.stringify(value));
   return value;
 };
 
