@@ -339,9 +339,15 @@ const ProfileScreen: React.FC = () => {
       } catch (error: any) {
         if (source === "manual") {
           const raw = error?.message || String(error);
+          const isNetworkError =
+            raw.includes("failed to check") ||
+            raw.includes("network") ||
+            raw.includes("timeout");
           setInfoModal({
             title: "Update Check Failed",
-            message: raw,
+            message: isNetworkError
+              ? "Could not reach the update server. Check your internet connection and try again."
+              : raw || "Unable to check for updates right now. Please try again shortly.",
           });
         }
       } finally {
@@ -434,7 +440,9 @@ const ProfileScreen: React.FC = () => {
     if (!ssid) {
       setInfoModal({
         title: "No WiFi Detected",
-        message: "Connect to your home WiFi first, then try again.",
+        message: Platform.OS === "ios"
+          ? "Unable to read your WiFi network name. Make sure you are connected to WiFi, then check:\n\n1. Settings > Privacy & Security > Location Services — turn on for BudgetArk (\"While Using\")\n2. Settings > Privacy & Security > Local Network — turn on for BudgetArk\n\niOS requires location access to read the WiFi name. Your location is never stored or shared."
+          : "Connect to your home WiFi first, then try again.",
       });
       return;
     }
