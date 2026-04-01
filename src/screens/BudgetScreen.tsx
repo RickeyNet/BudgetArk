@@ -14,6 +14,7 @@ import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
+import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import {
   BUDGET_CATEGORIES,
   BudgetCategory,
@@ -21,14 +22,18 @@ import {
   CategoryBudgetLimit,
   Debt,
   NewBudgetEntryInput,
+  SavingsGoal,
 } from "../types";
 import {
   getBudgetEntries,
+  getAllLimitsByMonth,
   getCategoryBudgetLimits,
   saveBudgetEntries,
   saveCategoryBudgetLimits,
 } from "../storage/budgetStorage";
+import { buildMonthlyReview, type MonthlyReviewData } from "../utils/budgetInsights";
 import { getDebts } from "../storage/debtStorage";
+import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -116,6 +121,7 @@ const BudgetScreen: React.FC = () => {
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -126,6 +132,8 @@ const BudgetScreen: React.FC = () => {
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
@@ -135,14 +143,16 @@ const BudgetScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       const loadBudgetData = async () => {
-        const [storedEntries, storedLimits, storedDebts] = await Promise.all([
+        const [storedEntries, storedLimits, storedDebts, storedGoals] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
+          getSavingsGoals(),
         ]);
         setEntries(storedEntries);
         setLimits(storedLimits);
         setDebts(storedDebts);
+        setSavingsGoals(storedGoals);
         setIsLoaded(true);
       };
 
@@ -197,6 +207,23 @@ const BudgetScreen: React.FC = () => {
   );
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
+
+  const emergencyFundGoal = useMemo(
+    () => savingsGoals.find((g) => g.category === "emergency_fund") ?? null,
+    [savingsGoals]
+  );
+
+  const totalSavings = useMemo(
+    () => savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0),
+    [savingsGoals]
+  );
+
+  const totalDebt = useMemo(
+    () => debts.reduce((sum, d) => sum + d.balance, 0),
+    [debts]
+  );
+
+  const netWorth = totalSavings - totalDebt;
 
   const limitByCategory = useMemo(() => {
     const map: Partial<Record<BudgetCategory, number>> = {};
@@ -436,6 +463,13 @@ const BudgetScreen: React.FC = () => {
     closeLimitModal();
   }, [closeLimitModal, limitInput, limitModalCategory, selectedMonthKey]);
 
+  const openReviewModal = useCallback(async () => {
+    const limitsByMonth = await getAllLimitsByMonth();
+    const data = buildMonthlyReview(entries, limitsByMonth);
+    setReviewData(data);
+    setShowReviewModal(true);
+  }, [entries]);
+
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
@@ -501,7 +535,7 @@ const BudgetScreen: React.FC = () => {
         {automaticDebtMonthlyCost > 0 && (
           <Text style={styles.autoDebtHint}>Includes {formatCurrency(automaticDebtMonthlyCost)} auto debt minimums</Text>
         )}
-        {incomeEntries.length > 0 && (
+        {(incomeEntries.length > 0 || emergencyFundGoal) && (
           <View style={styles.incomeSummaryList}>
             {incomeEntries.map((entry) => (
               <TouchableOpacity
@@ -523,9 +557,63 @@ const BudgetScreen: React.FC = () => {
                 </View>
               </TouchableOpacity>
             ))}
+            {emergencyFundGoal && (
+              <View style={styles.incomeSummaryRow}>
+                <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                  Emergency Fund (Keel)
+                </Text>
+                <View style={styles.incomeSummaryRight}>
+                  <Text style={[styles.incomeSummaryTag, { color: colors.teal }]}>Saved</Text>
+                  <Text style={[styles.incomeSummaryAmount, { color: colors.teal }]}>
+                    {formatCurrency(emergencyFundGoal.currentAmount)}
+                    {emergencyFundGoal.targetAmount > 0
+                      ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                      : ""}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         )}
       </View>
+
+      {/* Net Worth card */}
+      <View style={styles.netWorthCard}>
+        <Text style={styles.netWorthTitle}>Net Worth</Text>
+        <Text
+          style={[
+            styles.netWorthValue,
+            { color: netWorth >= 0 ? colors.success : colors.danger },
+          ]}
+        >
+          {netWorth >= 0 ? "" : "-"}{formatCurrency(Math.abs(netWorth))}
+        </Text>
+        <View style={styles.netWorthBreakdown}>
+          <View style={styles.netWorthStat}>
+            <Text style={styles.netWorthStatLabel}>Total Savings</Text>
+            <Text style={[styles.netWorthStatValue, { color: colors.success }]}>
+              {formatCurrency(totalSavings)}
+            </Text>
+          </View>
+          <View style={styles.netWorthDivider} />
+          <View style={styles.netWorthStat}>
+            <Text style={styles.netWorthStatLabel}>Total Debt</Text>
+            <Text style={[styles.netWorthStatValue, { color: totalDebt > 0 ? colors.danger : colors.textDim }]}>
+              {totalDebt > 0 ? "-" : ""}{formatCurrency(totalDebt)}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Monthly Review button */}
+      <TouchableOpacity
+        style={styles.reviewBtn}
+        onPress={openReviewModal}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.reviewBtnText}>Monthly Review</Text>
+        <Text style={styles.reviewBtnHint}>Trends, changes, streaks</Text>
+      </TouchableOpacity>
 
       {/* Spending card — donut chart + category rows in one card */}
       <View style={styles.spendingCard}>
@@ -670,6 +758,12 @@ const BudgetScreen: React.FC = () => {
         onClose={() => setEditingEntry(null)}
         onSave={handleSaveEntry}
         onDelete={handleDeleteEntry}
+      />
+
+      <MonthlyReviewModal
+        visible={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        data={reviewData}
       />
 
       <Modal
@@ -850,7 +944,53 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: `${colors.accent}30`,
       borderRadius: 20,
       padding: 20,
-      marginBottom: 18,
+      marginBottom: 14,
+    },
+    netWorthCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 18,
+      marginBottom: 14,
+      alignItems: "center",
+    },
+    netWorthTitle: {
+      fontSize: 12,
+      color: colors.textDim,
+      letterSpacing: 1,
+      marginBottom: 4,
+    },
+    netWorthValue: {
+      fontSize: 24,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+      marginBottom: 14,
+    },
+    netWorthBreakdown: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "stretch",
+    },
+    netWorthStat: {
+      flex: 1,
+      alignItems: "center",
+    },
+    netWorthStatLabel: {
+      fontSize: 11,
+      color: colors.textDim,
+      marginBottom: 3,
+    },
+    netWorthStatValue: {
+      fontSize: 14,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+    },
+    netWorthDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: colors.cardBorder,
+      marginHorizontal: 8,
     },
     summaryLabel: {
       color: colors.textMuted,
@@ -949,6 +1089,27 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       color: colors.text,
       marginBottom: 10,
+    },
+    reviewBtn: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: `${colors.accent}30`,
+      borderRadius: 14,
+      paddingVertical: 14,
+      paddingHorizontal: 18,
+      marginBottom: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    reviewBtnText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.accent,
+    },
+    reviewBtnHint: {
+      fontSize: 11,
+      color: colors.textMuted,
     },
     spendingCard: {
       backgroundColor: colors.card,

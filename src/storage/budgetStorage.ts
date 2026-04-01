@@ -78,6 +78,9 @@ export const deleteBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
   return filtered;
 };
 
+export const getAllLimitsByMonth = async (): Promise<BudgetLimitHistory> =>
+  getLimitHistory();
+
 export const getCategoryBudgetLimits = async (
   monthKey: string = getMonthKey(new Date())
 ): Promise<CategoryBudgetLimit[]> => {
