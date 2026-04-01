@@ -208,6 +208,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 
 ### Info / Optional
 
+- [ ] Implement AsyncStorage timeout wrapper
 #### 1. Add timeouts to AsyncStorage operations to prevent app hangs on slow I/O
 File: `src/storage/encryptedStorage.ts`
 Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash storage or backed-up I/O queues could hang indefinitely, freezing the app.
@@ -216,8 +217,8 @@ Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash st
 - **Option C — Timeout + retry once:** On timeout, retry the operation once before throwing. Handles transient I/O hiccups without surfacing errors on brief blips.
 - Recommended: **Option A** — simple, comprehensive, 5-second timeout is generous enough for slow devices.
 
-- [ ] Implement AsyncStorage timeout wrapper
 
+- [ ] Implement fail-closed downgrade guard 
 #### 2. Fail-closed policy for version downgrade guard
 File: `src/utils/versionGuard.ts`
 Currently `isUpdateSafe()` returns `true` (fail-open) when either version is missing. An attacker could strip version metadata from a malicious OTA update to bypass the downgrade guard.
@@ -226,8 +227,8 @@ Currently `isUpdateSafe()` returns `true` (fail-open) when either version is mis
 - **Option C — Fail-closed with user override:** Return `false` by default, but show a modal letting the user choose to install anyway.
 - Recommended: **Option A** — blocks the actual attack vector without risking lockout from legitimate updates.
 
-- [ ] Implement fail-closed downgrade guard
 
+- [ ] Implement stale import warning
 #### 3. Data expiration warnings for stale imports
 Files: `src/utils/importData.ts`, `src/utils/exportData.ts`
 Exports already include an `exportedAt` timestamp, but imports don't check it. A user could import a 6-month-old backup and silently overwrite fresher data in merge mode.
@@ -236,8 +237,7 @@ Exports already include an `exportedAt` timestamp, but imports don't check it. A
 - **Option C — Non-blocking info banner:** Parse `exportedAt`, return a `staleDays` field alongside import counts. UI shows an info banner but doesn't block the import.
 - Recommended: **Option C** — stale imports aren't dangerous (merge deduplicates by ID), so blocking would be frustrating. A simple banner is the right awareness level.
 
-- [ ] Implement stale import warning
-
+- [ ] Implement explicit bounds checks
 #### 4. Explicit bounds checks before financial calculations
 File: `src/utils/calculations.ts`
 Calculation functions accept raw `number` inputs with no upper bounds. JS `Number` loses precision above ~2^53, and `Math.pow()` with extreme inputs returns `Infinity`/`NaN`, which cascades into the UI.
