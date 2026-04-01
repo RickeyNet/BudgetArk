@@ -214,8 +214,14 @@ const BudgetScreen: React.FC = () => {
   );
 
   const totalSavings = useMemo(
-    () => savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0),
-    [savingsGoals]
+    () => {
+      const goalSavings = savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0);
+      const entrySavings = entries
+        .filter((entry) => entry.type === "expense" && entry.category === "Savings")
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      return goalSavings + entrySavings;
+    },
+    [savingsGoals, entries]
   );
 
   const totalDebt = useMemo(

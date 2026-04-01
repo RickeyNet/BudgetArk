@@ -72,7 +72,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
       value: s.net,
     }));
 
-  const hasChartData = chartData.length >= 2;
+  const hasChartData = chartData.length >= 1;
   const hasChanges = categoryChanges.length > 0;
   const hasStreaks = streaks.length > 0;
 

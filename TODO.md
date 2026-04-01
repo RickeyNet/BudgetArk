@@ -293,7 +293,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [x] Build Your Ark planning hub (Hull/Deck/Supplies) integrated with Debt Tracker
 - [x] Improve debt milestone modal readability (full-screen layout + larger text + safe-area support)
 - [x] Improve theme readability and contrast across The Ark and dark themes (buttons + theme selector cards)
-- [ ] Monthly review insights (category changes, spending trends, streaks)
+- [x] Monthly review insights (category changes, spending trends, streaks)
 - [ ] Custom categories and category icon support
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Undo actions and bulk edit/delete operations

@@ -7,6 +7,21 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.2.2",
+    title: "Bug Fixes & Ark Build Expansion",
+    releasedAt: "2026-03-31",
+    highlights: [
+      "Fixed Keel savings not reflecting in the Budget screen total savings.",
+      "Fixed Build Your Ark plan requiring a long-press to open — now opens on a single tap.",
+      "Savings log now lets you set an exact amount or adjust down with quick buttons.",
+      "Expanded Build Your Ark from 5 to 7 steps: Keel, Hull, Deck, Supplies, Gather Animals, Moorings, Sail.",
+      "Payoff strategy comparison (Avalanche vs Snowball) now lives inside the Hull milestone step.",
+      "Added monthly budget summary graph showing income vs expenses across recent months.",
+      "Emergency fund balance now reflects consistently across Budget and Debt Tracker tabs.",
+      "Existing milestone progress is preserved automatically — new steps are added without losing data.",
+    ],
+  },
+  {
     version: "1.2.1",
     title: "Bug Fixes & Polish",
     releasedAt: "2026-03-28",

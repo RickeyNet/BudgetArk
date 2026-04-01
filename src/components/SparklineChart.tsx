@@ -28,13 +28,73 @@ const SparklineChart: React.FC<SparklineChartProps> = ({
   dotColor,
   gridColor = "#333",
 }) => {
-  if (data.length < 2) return null;
+  if (data.length < 1) return null;
 
   const paddingTop = 12;
   const paddingBottom = 24;
   const paddingX = 28;
   const chartW = width - paddingX * 2;
   const chartH = height - paddingTop - paddingBottom;
+
+  const resolvedDotColor = dotColor ?? lineColor;
+
+  // Single data point — render centered dot with value
+  if (data.length === 1) {
+    const cx = width / 2;
+    const cy = paddingTop + chartH * 0.4;
+    return (
+      <View style={{ alignSelf: "center" }}>
+        <Svg width={width} height={height}>
+          {[0, 0.5, 1].map((frac) => {
+            const y = paddingTop + chartH * (1 - frac);
+            return (
+              <Line
+                key={`grid-${frac}`}
+                x1={paddingX}
+                y1={y}
+                x2={width - paddingX}
+                y2={y}
+                stroke={gridColor}
+                strokeWidth={0.5}
+                strokeDasharray="4,4"
+              />
+            );
+          })}
+          {fillColor && (
+            <Rect
+              x={cx - 20}
+              y={cy}
+              width={40}
+              height={paddingTop + chartH - cy}
+              fill={fillColor}
+              rx={4}
+            />
+          )}
+          <Circle cx={cx} cy={cy} r={5} fill={resolvedDotColor} />
+          <SvgText
+            x={cx}
+            y={cy - 10}
+            fill={labelColor}
+            fontSize={11}
+            fontWeight="700"
+            textAnchor="middle"
+          >
+            {Math.round(data[0].value).toLocaleString()}
+          </SvgText>
+          <SvgText
+            x={cx}
+            y={height - 4}
+            fill={labelColor}
+            fontSize={10}
+            fontWeight="600"
+            textAnchor="middle"
+          >
+            {data[0].label}
+          </SvgText>
+        </Svg>
+      </View>
+    );
+  }
 
   const values = data.map((d) => d.value);
   const maxVal = Math.max(...values, 1);
@@ -46,8 +106,6 @@ const SparklineChart: React.FC<SparklineChartProps> = ({
     paddingTop + chartH - ((v - minVal) / range) * chartH;
 
   const points = data.map((d, i) => `${toX(i)},${toY(d.value)}`).join(" ");
-
-  const resolvedDotColor = dotColor ?? lineColor;
 
   return (
     <View style={{ alignSelf: "center" }}>

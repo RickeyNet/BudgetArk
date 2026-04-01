@@ -1,5 +1,26 @@
 # BudgetArk Release Notes
 
+## v1.2.2 - Bug Fixes & Ark Build Expansion (2026-03-31)
+
+### Bug Fixes
+- Fixed Keel savings not reflecting in the Budget screen total savings display.
+- Fixed Build Your Ark plan requiring a long-press to open — now opens on a single tap.
+- Fixed savings log only allowing additions — you can now set an exact savings amount or adjust down with -$50 / -$100 quick buttons.
+
+### Ark Build Expansion
+- Expanded Build Your Ark from 5 steps to 7, following a complete financial milestone journey:
+  1. **Keel** — Save $1,000 for a starter emergency fund.
+  2. **Hull** — Pay off all debt except the house using the debt snowball.
+  3. **Deck** — Save 3 to 6 months of living expenses for a fully funded emergency fund.
+  4. **Supplies** — Invest 15% of household income for retirement.
+  5. **Gather Animals** — Save for your children's college education.
+  6. **Moorings** — Pay off your home early.
+  7. **Sail** — Build wealth and give.
+- Moved payoff strategy comparison (Avalanche vs Snowball) into the Hull milestone step so planning and progress live in one place.
+- Existing milestone progress is automatically preserved when upgrading — new steps are added without losing any data.
+- Added monthly budget summary graph showing income vs expenses across recent months.
+- Emergency fund balance now reflects consistently across Budget and Debt Tracker tabs.
+
 ## v1.2.1 - Bug Fixes & Polish (2026-03-28)
 
 - Fixed edit budget modal scroll freeze after selecting a category pill.
