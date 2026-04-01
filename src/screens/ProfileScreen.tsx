@@ -26,6 +26,7 @@ import {
   ScrollView,
   Modal,
   KeyboardAvoidingView,
+  Linking,
   Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
@@ -85,9 +86,9 @@ type UpdateMetadata = {
   message: string;
   createdAt?: string;
   runtimeVersion?: string;
+  appVersion?: string;
 };
 
-type HowToDocKey = "export" | "import" | "sync";
 type ReleaseNoteKey = string;
 
 import { sanitizeTextInput } from "../utils/sanitize";
@@ -142,9 +143,7 @@ const ProfileScreen: React.FC = () => {
   /** Whether the import merge/replace modal is visible (file path) */
   const [showImportModeModal, setShowImportModeModal] = useState(false);
 
-  /** How-to docs modal and accordion state */
-  const [showHowToDocsModal, setShowHowToDocsModal] = useState(false);
-  const [expandedHowToDoc, setExpandedHowToDoc] = useState<HowToDocKey | null>(null);
+  /** @deprecated How-to docs removed in v1.2.0 — help text moved inline */
 
   /** Release notes modal and accordion state */
   const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
@@ -255,6 +254,7 @@ const ProfileScreen: React.FC = () => {
     const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
     const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
     const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
+    const expoClient = (extras.expoClient != null && typeof extras.expoClient === "object" ? extras.expoClient : {}) as Record<string, unknown>;
 
     const id = typeof data.id === "string" ? data.id : "unknown";
     const createdAt = typeof data.createdAt === "string" ? data.createdAt : undefined;
@@ -272,7 +272,19 @@ const ProfileScreen: React.FC = () => {
       messageCandidates.find((candidate) => typeof candidate === "string") ||
       "A new update is ready to install.";
 
-    return { id, createdAt, runtimeVersion, message };
+    // Try to extract the app version from several manifest locations
+    const versionCandidates = [
+      expoClient.version,
+      extras.version,
+      metadata.version,
+      metadata.appVersion,
+      eas.appVersion,
+      data.version,
+    ];
+    const appVersion =
+      versionCandidates.find((candidate) => typeof candidate === "string") as string | undefined;
+
+    return { id, createdAt, runtimeVersion, message, appVersion };
   }, []);
 
   const checkForUpdates = useCallback(
@@ -326,11 +338,16 @@ const ProfileScreen: React.FC = () => {
         setPendingUpdate(updateMeta);
       } catch (error: any) {
         if (source === "manual") {
+          const raw = error?.message || String(error);
+          const isNetworkError =
+            raw.includes("failed to check") ||
+            raw.includes("network") ||
+            raw.includes("timeout");
           setInfoModal({
             title: "Update Check Failed",
-            message:
-              error?.message ||
-              "Unable to check for updates right now. Please try again shortly.",
+            message: isNetworkError
+              ? "Could not reach the update server. Check your internet connection and try again."
+              : raw || "Unable to check for updates right now. Please try again shortly.",
           });
         }
       } finally {
@@ -423,7 +440,9 @@ const ProfileScreen: React.FC = () => {
     if (!ssid) {
       setInfoModal({
         title: "No WiFi Detected",
-        message: "Connect to your home WiFi first, then try again.",
+        message: Platform.OS === "ios"
+          ? "Unable to read your WiFi network name. Make sure you are connected to WiFi, then check:\n\n1. Settings > Privacy & Security > Location Services — turn on for BudgetArk (\"While Using\")\n2. Settings > Privacy & Security > Local Network — turn on for BudgetArk\n\niOS requires location access to read the WiFi name. Your location is never stored or shared."
+          : "Connect to your home WiFi first, then try again.",
       });
       return;
     }
@@ -463,9 +482,6 @@ const ProfileScreen: React.FC = () => {
     }
   }, []);
 
-  const toggleHowToDoc = useCallback((key: HowToDocKey) => {
-    setExpandedHowToDoc((current) => (current === key ? null : key));
-  }, []);
 
   const toggleReleaseNote = useCallback((version: string) => {
     setExpandedReleaseNote((current) => (current === version ? null : version));
@@ -647,233 +663,143 @@ const ProfileScreen: React.FC = () => {
             { backgroundColor: colors.card, borderColor: colors.cardBorder },
           ]}
         >
-          {/* Avatar circle */}
-          <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
-            <Text style={[styles.avatarText, { color: colors.white }]}>
-              {user.displayName[0].toUpperCase()}
-            </Text>
-          </View>
-
-          {/* Display name — tap to edit */}
-          {isEditing ? (
-            <View style={styles.editRow}>
-              <TextInput
-                style={[
-                  styles.nameInput,
-                  {
-                    backgroundColor: colors.bg,
-                    borderColor: colors.cardBorder,
-                    color: colors.text,
-                  },
-                ]}
-                value={editName}
-                onChangeText={(text) => setEditName(sanitizeTextInput(text))}
-                autoFocus
-                maxLength={20}
-              />
-              <TouchableOpacity
-                style={[styles.saveBtn, { backgroundColor: colors.success }]}
-                onPress={handleSaveName}
-              >
-                <Text style={[styles.saveBtnText, { color: colors.bg }]}>
-                  Save
-                </Text>
-              </TouchableOpacity>
+          <View style={styles.profileRow}>
+            {/* Avatar circle */}
+            <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+              <Text style={[styles.avatarText, { color: colors.white }]}>
+                {user.displayName[0].toUpperCase()}
+              </Text>
             </View>
-          ) : (
-            <TouchableOpacity onPress={() => setIsEditing(true)}>
-              <Text style={[styles.displayName, { color: colors.text }]}>
-                {user.displayName}
-              </Text>
-              <Text style={[styles.editHint, { color: colors.textMuted }]}>
-                Tap to edit
-              </Text>
-            </TouchableOpacity>
-          )}
 
-          {/* Anonymous ID badge */}
-          <View style={[styles.idBadge, { backgroundColor: colors.bg }]}>
-            <Text style={[styles.idLabel, { color: colors.textMuted }]}>
-              ACCOUNT ID
-            </Text>
-            <Text style={[styles.idValue, { color: colors.textDim }]}>
-              {user.id.slice(0, 8)}...
-            </Text>
+            {/* Display name — tap to edit */}
+            <View style={styles.profileInfo}>
+              {isEditing ? (
+                <View style={styles.editRow}>
+                  <TextInput
+                    style={[
+                      styles.nameInput,
+                      {
+                        backgroundColor: colors.bg,
+                        borderColor: colors.cardBorder,
+                        color: colors.text,
+                      },
+                    ]}
+                    value={editName}
+                    onChangeText={(text) => setEditName(sanitizeTextInput(text))}
+                    autoFocus
+                    maxLength={20}
+                  />
+                  <TouchableOpacity
+                    style={[styles.saveBtn, { backgroundColor: colors.success }]}
+                    onPress={handleSaveName}
+                  >
+                    <Text style={[styles.saveBtnText, { color: colors.bg }]}>
+                      Save
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={() => setIsEditing(true)}>
+                  <Text style={[styles.displayName, { color: colors.text }]}>
+                    {user.displayName}
+                  </Text>
+                  <Text style={[styles.editHint, { color: colors.textMuted }]}>
+                    {user.id.slice(0, 8)}... · Tap name to edit
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
 
-        {/* ── Privacy Info ── */}
-        <View
-          style={[
-            styles.infoCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: `${colors.success}20`,
-            },
-          ]}
-        >
-          <Text style={[styles.infoTitle, { color: colors.text }]}>
-            🔒 Privacy First
-          </Text>
-          <Text style={[styles.infoText, { color: colors.textDim }]}>
-            Your data is stored locally on this device and is never sent to any
-            server.
-          </Text>
+        {/* ── Send Feedback ── */}
+        <View style={styles.settingsSection}>
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowFeedbackModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Bug reports & feature requests</Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* ── Settings Section ── */}
+        {/* ── Appearance (Theme + Currency) ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
             APPEARANCE
           </Text>
 
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={() => setShowThemeModal(true)}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Theme
-              </Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                {currentTheme?.name || "Forest Gold"}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}> 
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={() => setShowCurrencyModal(true)}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Currency & Locale</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                {preference.label}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
-          </TouchableOpacity>
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowThemeModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Theme
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {currentTheme?.name || "Forest Gold"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PRIVACY</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={togglePrivacyMode}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Privacy Mode</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                {privacyMode
-                  ? "Screenshots & screen recording blocked"
-                  : "Screenshots & screen recording allowed"}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {privacyMode ? "On" : "Off"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Feedback ── */}
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>FEEDBACK</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={() => setShowFeedbackModal(true)}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                Report a bug or suggest a feature
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>HOW TO DOCS</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={() => {
-              setShowHowToDocsModal(true);
-              setExpandedHowToDoc("export");
-            }}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Open How to Docs</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Step-by-step instructions for import/export.</Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Partner Sync ── */}
+        {/* ── Partner Sync (compressed) ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PARTNER SYNC</Text>
 
           {!pairing ? (
-            <TouchableOpacity
-              style={[
-                styles.settingsRow,
-                { backgroundColor: colors.card, borderColor: colors.cardBorder },
-              ]}
-              onPress={() => setShowPairingModal(true)}
-            >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Pair with Partner</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                  Sync budgets over WiFi — no account needed
-                </Text>
-              </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
-            </TouchableOpacity>
+            <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <TouchableOpacity
+                style={styles.groupedRow}
+                onPress={() => setShowPairingModal(true)}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>Pair with Partner</Text>
+                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                    Sync budgets over WiFi — no account needed
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <>
-              <View
-                style={[
-                  styles.settingsRow,
-                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
-                ]}
+            <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <TouchableOpacity
+                style={styles.groupedRow}
+                onPress={handleSetHomeNetwork}
               >
                 <View>
                   <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                    Partner: {pairing.partnerName}
+                    {pairing.partnerName}
                   </Text>
                   <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                    Paired {new Date(pairing.pairedAt).toLocaleDateString()}
+                    {pairing.homeSSID
+                      ? `Auto-sync ${pairing.autoSyncEnabled ? "on" : "off"} · "${pairing.homeSSID}"`
+                      : "Tap to set home WiFi for auto-sync"}
+                    {pairing.homeSSID ? (
+                      <Text
+                        style={{ color: colors.textMuted }}
+                        onPress={handleToggleAutoSync}
+                      > · {pairing.autoSyncEnabled ? "Disable" : "Enable"}</Text>
+                    ) : null}
                   </Text>
                 </View>
-              </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              </TouchableOpacity>
+
+              <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
 
               <TouchableOpacity
-                style={[
-                  styles.settingsRow,
-                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
-                  (syncStatus !== "idle" && syncStatus !== "error") && { opacity: 0.7 },
-                ]}
+                style={[styles.groupedRow, (syncStatus !== "idle" && syncStatus !== "error") && { opacity: 0.7 }]}
                 onPress={handleSyncNow}
                 disabled={syncStatus !== "idle" && syncStatus !== "error"}
               >
@@ -892,195 +818,176 @@ const ProfileScreen: React.FC = () => {
                   </Text>
                 </View>
                 <Text style={[styles.settingsRowArrow, { color: colors.accent }]}>
-                  {syncStatus !== "idle" && syncStatus !== "error" ? "..." : "->"}
+                  {syncStatus !== "idle" && syncStatus !== "error" ? "..." : "→"}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.settingsRow,
-                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
-                ]}
-                onPress={handleSetHomeNetwork}
-              >
-                <View>
-                  <Text style={[styles.settingsRowText, { color: colors.text }]}>Home Network</Text>
-                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                    {pairing.homeSSID
-                      ? `Auto-sync on "${pairing.homeSSID}"`
-                      : "Tap to set current WiFi as home"}
-                  </Text>
-                </View>
-                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>-&gt;</Text>
-              </TouchableOpacity>
-
-              {pairing.homeSSID && (
-                <TouchableOpacity
-                  style={[
-                    styles.settingsRow,
-                    { backgroundColor: colors.card, borderColor: colors.cardBorder },
-                  ]}
-                  onPress={handleToggleAutoSync}
-                >
-                  <View>
-                    <Text style={[styles.settingsRowText, { color: colors.text }]}>Auto-Sync</Text>
-                    <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                      {pairing.autoSyncEnabled
-                        ? "Syncs automatically on home WiFi"
-                        : "Manual sync only"}
-                    </Text>
-                  </View>
-                  <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-                    {pairing.autoSyncEnabled ? "On" : "Off"}
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
 
               <TouchableOpacity
-                style={[
-                  styles.settingsRow,
-                  styles.dangerRow,
-                  { backgroundColor: colors.card },
-                ]}
+                style={styles.groupedRow}
                 onPress={() => setShowUnpairConfirm(true)}
               >
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Unpair</Text>
-                <Text style={[styles.settingsRowArrow, { color: colors.text }]}>-&gt;</Text>
+                <Text style={[styles.settingsRowText, { color: colors.danger }]}>Unpair</Text>
+                <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>→</Text>
               </TouchableOpacity>
-            </>
+            </View>
           )}
         </View>
 
+        {/* ── Data (Export, Import, Reset) ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
-            DATA MANAGEMENT
+            DATA
           </Text>
 
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={handleExportData}
-          >
-            <Text style={[styles.settingsRowText, { color: colors.text }]}>
-              Export My Data
-            </Text>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={handleImportData}
-          >
-            <Text style={[styles.settingsRowText, { color: colors.text }]}>
-              Import My Data
-            </Text>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              styles.dangerRow,
-              { backgroundColor: colors.card },
-            ]}
-            onPress={handleResetData}
-          >
-            <Text style={[styles.settingsRowText, { color: colors.text }]}>
-              Reset All Data
-            </Text>
-            <Text style={[styles.settingsRowArrow, { color: colors.text }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>APP UPDATES</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-            onPress={toggleManualMode}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Manual update mode (advanced)</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                {updatePrefs.manualUpdateMode
-                  ? "Checks happen only when requested"
-                  : "Automatic checks are enabled"}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {updatePrefs.manualUpdateMode ? "On" : "Off"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-              isCheckingUpdates && { opacity: 0.7 },
-            ]}
-            onPress={() => checkForUpdates("manual")}
-            disabled={isCheckingUpdates}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Check for Updates</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>View metadata before installation</Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {isCheckingUpdates ? "..." : "->"}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.settingsRow,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>Last Checked</Text>
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                {formatDateTime(updatePrefs.lastCheckedAt)}
-              </Text>
-            </View>
-          </View>
-
-        </View>
-
-        {/* ── What's New ── */}
-        <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
-            WHAT'S NEW
-          </Text>
-          <View style={[styles.newsCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-            <View style={styles.newsItem}>
-              <View style={[styles.newsBadge, { backgroundColor: `${colors.accent}20` }]}>
-                <Text style={[styles.newsBadgeText, { color: colors.accent }]}>v{latestRelease.version}</Text>
-              </View>
-              <Text style={[styles.newsTitle, { color: colors.text }]}>{latestRelease.title}</Text>
-              {latestRelease.highlights.map((item) => (
-                <Text key={item} style={[styles.newsBody, { color: colors.textDim }]}>- {item}</Text>
-              ))}
-            </View>
-            <View style={[styles.newsDivider, { backgroundColor: colors.cardBorder }]} />
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <TouchableOpacity
-              style={styles.newsHistoryBtn}
+              style={styles.groupedRow}
+              onPress={handleExportData}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Export</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Encrypted backup to file</Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleImportData}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Import</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>From file or clipboard</Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleResetData}
+            >
+              <Text style={[styles.settingsRowText, { color: colors.danger }]}>Reset All Data</Text>
+              <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>→</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Settings (privacy, updates) ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            SETTINGS
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowCurrencyModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Currency</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {preference.label}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={togglePrivacyMode}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Privacy Mode</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {privacyMode
+                    ? "Screenshots & screen recording blocked"
+                    : "Screenshots & screen recording allowed"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                {privacyMode ? "On" : "Off"}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={[styles.groupedRow, isCheckingUpdates && { opacity: 0.7 }]}
+              onPress={() => checkForUpdates("manual")}
+              disabled={isCheckingUpdates}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Check for Updates</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {updatePrefs.lastCheckedAt
+                    ? `Last checked ${formatDateTime(updatePrefs.lastCheckedAt)}`
+                    : "Never checked"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                {isCheckingUpdates ? "..." : "→"}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={toggleManualMode}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Auto Updates</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {updatePrefs.manualUpdateMode ? "Off — manual checks only" : "On — checks automatically"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                {updatePrefs.manualUpdateMode ? "Off" : "On"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── About (release notes, github) ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            ABOUT
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
               onPress={() => setShowReleaseNotesModal(true)}
             >
-              <Text style={[styles.newsHistoryBtnText, { color: colors.accent }]}>View release history</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  v{latestRelease.version} — {latestRelease.title}
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  Tap for release notes
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => Linking.openURL("https://github.com/RickeyNet")}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>GitHub</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>github.com/RickeyNet</Text>
+              </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
             </TouchableOpacity>
           </View>
@@ -1090,9 +997,6 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
             BudgetArk v{CURRENT_APP_VERSION}
-          </Text>
-          <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            Built with React Native + Expo
           </Text>
         </View>
       </ScrollView>
@@ -1308,113 +1212,6 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity
               style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
               onPress={() => setShowReleaseNotesModal(false)}
-            >
-              <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── How To Docs Modal ── */}
-      <Modal
-        visible={showHowToDocsModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowHowToDocsModal(false)}
-      >
-        <View style={styles.dialogOverlay}>
-          <View
-            style={[
-              styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
-            ]}
-          >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>How to Docs</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Tap a topic to expand instructions.</Text>
-
-            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity
-                style={[
-                  styles.faqItem,
-                  { backgroundColor: colors.bg, borderColor: colors.cardBorder },
-                ]}
-                onPress={() => toggleHowToDoc("export")}
-              >
-                <View style={styles.faqHeader}>
-                  <Text style={[styles.faqQuestion, { color: colors.text }]}>How do I export my data?</Text>
-                  <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
-                    {expandedHowToDoc === "export" ? "v" : ">"}
-                  </Text>
-                </View>
-                {expandedHowToDoc === "export" ? (
-                  <Text style={[styles.faqAnswer, { color: colors.textDim }]}>Go to Data Management {">"} Export My Data, then save or share the JSON backup.</Text>
-                ) : null}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.faqItem,
-                  { backgroundColor: colors.bg, borderColor: colors.cardBorder },
-                ]}
-                onPress={() => toggleHowToDoc("import")}
-              >
-                <View style={styles.faqHeader}>
-                  <Text style={[styles.faqQuestion, { color: colors.text }]}>How do I import my data?</Text>
-                  <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
-                    {expandedHowToDoc === "import" ? "v" : ">"}
-                  </Text>
-                </View>
-                {expandedHowToDoc === "import" ? (
-                  <Text style={[styles.faqAnswer, { color: colors.textDim }]}>Go to Data Management {">"} Import My Data, then choose Pick File or Paste Text.</Text>
-                ) : null}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.faqItem,
-                  { backgroundColor: colors.bg, borderColor: colors.cardBorder },
-                ]}
-                onPress={() => toggleHowToDoc("sync")}
-              >
-                <View style={styles.faqHeader}>
-                  <Text style={[styles.faqQuestion, { color: colors.text }]}>How do I sync data with my partner?</Text>
-                  <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
-                    {expandedHowToDoc === "sync" ? "v" : ">"}
-                  </Text>
-                </View>
-                {expandedHowToDoc === "sync" ? (
-                  <View style={{ gap: 8 }}>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>First-time setup (one time only):</Text>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
-                      1. Connect both phones to the same WiFi network.{"\n"}
-                      2. On Phone A: go to Profile {">"} Partner Sync {">"} Pair with Partner {">"} tap "Show Code".{"\n"}
-                      3. On Phone B: go to Profile {">"} Partner Sync {">"} Pair with Partner {">"} tap "Enter Code" and type the 6-digit code shown on Phone A.{"\n"}
-                      4. Once paired, you'll see your partner's name in the sync section.
-                    </Text>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Syncing your data:</Text>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
-                      Tap "Sync Now" on either phone while both are on the same WiFi. All debts, payments, budget entries, savings goals, and milestones will be shared. Changes are merged automatically — the most recent edit wins.
-                    </Text>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Auto-sync (optional):</Text>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
-                      Tap "Home Network" to save your current WiFi, then turn on "Auto-Sync". The app will sync automatically whenever both phones are on that network and the app is open.{"\n\n"}On Android, location permission is required to read the WiFi name — your location is never stored or shared.
-                    </Text>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim, fontWeight: "600" }]}>Good to know:</Text>
-                    <Text style={[styles.faqAnswer, { color: colors.textDim }]}>
-                      {"\u2022"} No server or account is needed — data goes directly between phones.{"\n"}
-                      {"\u2022"} All sync traffic is encrypted end-to-end.{"\n"}
-                      {"\u2022"} Works between iPhone and Android.{"\n"}
-                      {"\u2022"} Both phones must be on the same WiFi to sync.{"\n"}
-                      {"\u2022"} To disconnect, tap "Unpair" in the sync section. Your data stays on your device.
-                    </Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
-              onPress={() => setShowHowToDocsModal(false)}
             >
               <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
@@ -1828,28 +1625,69 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Update ID: {pendingUpdate?.id}</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Message: {pendingUpdate?.message}</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Published: {formatDateTime(pendingUpdate?.createdAt)}</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Runtime: {pendingUpdate?.runtimeVersion || "Unknown"}</Text>
-            <View style={styles.dialogActions}>
-              <TouchableOpacity
-                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
-                onPress={() => setPendingUpdate(null)}
-              >
-                <Text style={[styles.dialogBtnText, { color: colors.text }]}>Later</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
-                onPress={installPendingUpdate}
-              >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>Install Now</Text>
-              </TouchableOpacity>
-            </View>
+            {(() => {
+              const updateVersion = pendingUpdate?.appVersion;
+              const matchedRelease = updateVersion
+                ? RELEASE_NOTES.find((r) => r.version === updateVersion)
+                : undefined;
+
+              return (
+                <>
+                  <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
+
+                  {updateVersion ? (
+                    <View style={[styles.updateVersionBadge, { backgroundColor: `${colors.accent}20` }]}>
+                      <Text style={[styles.updateVersionText, { color: colors.accent }]}>
+                        v{updateVersion}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {matchedRelease ? (
+                    <>
+                      <Text style={[styles.updateReleaseTitle, { color: colors.text }]}>
+                        {matchedRelease.title}
+                      </Text>
+                      <ScrollView style={styles.updateHighlightsList} showsVerticalScrollIndicator={false}>
+                        {matchedRelease.highlights.map((item) => (
+                          <Text key={item} style={[styles.updateHighlight, { color: colors.textDim }]}>
+                            {"\u2022"} {item}
+                          </Text>
+                        ))}
+                      </ScrollView>
+                    </>
+                  ) : (
+                    <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+                      {pendingUpdate?.message || "A new update is ready to install."}
+                    </Text>
+                  )}
+
+                  {pendingUpdate?.createdAt ? (
+                    <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
+                      Published {formatDateTime(pendingUpdate.createdAt)}
+                    </Text>
+                  ) : null}
+
+                  <View style={styles.dialogActions}>
+                    <TouchableOpacity
+                      style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                      onPress={() => setPendingUpdate(null)}
+                    >
+                      <Text style={[styles.dialogBtnText, { color: colors.text }]}>Later</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                      onPress={installPendingUpdate}
+                    >
+                      <Text style={[styles.dialogBtnText, { color: colors.white }]}>Install Now</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -1980,31 +1818,35 @@ const styles = StyleSheet.create({
   /* Profile Card */
   profileCard: {
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 28,
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 4,
+  },
+  profileRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 20,
+    gap: 14,
+  },
+  profileInfo: {
+    flex: 1,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
   },
   avatarText: {
-    fontSize: 28,
+    fontSize: 18,
     fontWeight: "700",
   },
   displayName: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: "700",
-    textAlign: "center",
   },
   editHint: {
-    fontSize: 12,
-    textAlign: "center",
+    fontSize: 11,
     marginTop: 2,
   },
   editRow: {
@@ -2029,39 +1871,6 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontWeight: "700",
     fontSize: 14,
-  },
-  idBadge: {
-    marginTop: 20,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  idLabel: {
-    fontSize: 10,
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  idValue: {
-    fontSize: 13,
-    fontVariant: ["tabular-nums"],
-  },
-
-  /* Privacy Info */
-  infoCard: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 16,
-  },
-  infoTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 13,
-    lineHeight: 19,
   },
 
   /* Settings */
@@ -2096,6 +1905,24 @@ const styles = StyleSheet.create({
   },
   dangerRow: {
     borderColor: "#ff525220",
+  },
+
+  /* Grouped Card */
+  groupedCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  groupedRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  groupedDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 16,
   },
 
   /* How To Docs */
@@ -2328,6 +2155,40 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
+  /* Update modal */
+  updateVersionBadge: {
+    alignSelf: "center",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  updateVersionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  updateReleaseTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  updateHighlightsList: {
+    maxHeight: 240,
+    marginBottom: 12,
+  },
+  updateHighlight: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 6,
+  },
+  updateMeta: {
+    fontSize: 11,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+
   dialogActions: {
     gap: 10,
   },

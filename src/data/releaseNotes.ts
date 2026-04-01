@@ -7,6 +7,32 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.2.1",
+    title: "Bug Fixes & Polish",
+    releasedAt: "2026-03-28",
+    highlights: [
+      "Fixed edit budget modal scroll freeze after selecting a category pill.",
+      "Fixed extra bottom padding in edit budget modal on devices without a navigation bar.",
+      "Debt cards now collapse by default — only the priority payoff debt is expanded based on your chosen strategy.",
+      "Income entries moved inline into the summary card for a cleaner budget layout.",
+      "Spending section redesigned — donut chart and category rows in one card, tap any row to expand entries.",
+      "Profile screen reorganized — Send Feedback at top, Data/Settings/About sections consolidated.",
+      "Restored missing Auto Updates toggle in Profile settings.",
+    ],
+  },
+  {
+    version: "1.2.0",
+    title: "Minimalist UI Redesign",
+    releasedAt: "2026-03-28",
+    highlights: [
+      "Cleaner Debt Tracker — owner row filters inline, milestone bar consolidates strategy and progress chips, tap the ring for history.",
+      "Cleaner Budget — chart and category list merged, long-press to set limits, Split Food moved to header.",
+      "Cleaner Profile — settings grouped into fewer cards, How-To Docs removed.",
+      "Floating action buttons on Debt and Budget screens.",
+      "OTA update prompt now shows version and what's new.",
+    ],
+  },
+  {
     version: "1.1.0",
     title: "Partner Sync & Feedback",
     releasedAt: "2026-03-23",

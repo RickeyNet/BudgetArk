@@ -139,10 +139,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
         style={styles.overlay}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          <View onStartShouldSetResponder={() => true}>
             <ScrollView
               style={styles.modalContent}
-              contentContainerStyle={styles.modalScroll}
+              contentContainerStyle={[styles.modalScroll, { paddingBottom: Math.max(insets.bottom, 16) }]}
               keyboardShouldPersistTaps="handled"
             >
               <Text style={styles.title}>Edit Entry</Text>
@@ -270,14 +270,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                 </View>
               </TouchableOpacity>
 
-              <View
-                style={[
-                  styles.buttonRow,
-                  Platform.OS === "android" && insets.bottom > 0
-                    ? { marginBottom: insets.bottom + 8 }
-                    : null,
-                ]}
-              >
+              <View style={styles.buttonRow}>
                 <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
                   <Text style={styles.deleteText}>Delete</Text>
                 </TouchableOpacity>
@@ -293,7 +286,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                 </TouchableOpacity>
               </View>
             </ScrollView>
-          </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </Modal>
@@ -544,7 +537,6 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 10,
       marginTop: 8,
-      marginBottom: 16,
     },
     deleteButton: {
       flex: 1,

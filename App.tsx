@@ -160,7 +160,7 @@ const AppContent: React.FC = () => {
       setPendingUpdate(prompt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("not supported in development builds")) {
+      if (!message.includes("not supported in development builds") && !message.includes("call to function")) {
         if (__DEV__) console.error("Auto update check failed:", error);
       }
     } finally {
@@ -312,9 +312,19 @@ const AppContent: React.FC = () => {
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Message: {pendingUpdate?.message}</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Published: {formatDateTime(pendingUpdate?.createdAt)}</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Runtime: {pendingUpdate?.runtimeVersion || "Unknown"}</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              v{latestRelease.version} — {latestRelease.title}
+            </Text>
+            {latestRelease.highlights.slice(0, 3).map((line, i) => (
+              <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                {"\u2022"} {line}
+              </Text>
+            ))}
+            {latestRelease.highlights.length > 3 && (
+              <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                +{latestRelease.highlights.length - 3} more
+              </Text>
+            )}
             <View style={styles.dialogActions}>
               <TouchableOpacity
                 style={[styles.dialogButton, { backgroundColor: colors.bg }]}
@@ -423,6 +433,13 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
     marginBottom: 10,
+  },
+  dialogBullet: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "left",
+    alignSelf: "stretch",
+    marginBottom: 4,
   },
   featureTitle: {
     fontSize: 18,
