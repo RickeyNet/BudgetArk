@@ -122,6 +122,24 @@ const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
 const isRecurringInMonth = (dateISO: string, monthKey: string): boolean =>
   getMonthKey(new Date(dateISO)) <= monthKey;
 
+/** Returns an array of YYYY-MM keys from the month after `from` up to and including `to`. */
+const getMonthKeysBetween = (from: string, to: string): string[] => {
+  const keys: string[] = [];
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  let y = fy;
+  let m = fm;
+  // Advance one month past `from`
+  m++;
+  if (m > 12) { m = 1; y++; }
+  while (y < ty || (y === ty && m <= tm)) {
+    keys.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return keys;
+};
+
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -164,6 +182,42 @@ const BudgetScreen: React.FC = () => {
           getSavingsGoals(),
           getAssetAccounts(),
         ]);
+        // Process recurring contributions for linked accounts
+        const currentMonth = getMonthKey(new Date());
+        let entriesModified = false;
+        const accountBalanceDeltas = new Map<string, number>();
+
+        for (const entry of storedEntries) {
+          if (!entry.recurring || !entry.linkedAccountId) continue;
+          const entryStartMonth = getMonthKey(new Date(entry.date));
+          const lastApplied = entry.lastAppliedMonth ?? entryStartMonth;
+          if (lastApplied >= currentMonth) continue;
+
+          const missedMonths = getMonthKeysBetween(lastApplied, currentMonth);
+          if (missedMonths.length === 0) continue;
+
+          const delta = entry.amount * missedMonths.length;
+          const prev = accountBalanceDeltas.get(entry.linkedAccountId) ?? 0;
+          accountBalanceDeltas.set(entry.linkedAccountId, prev + delta);
+          entry.lastAppliedMonth = currentMonth;
+          entriesModified = true;
+        }
+
+        if (entriesModified) {
+          void saveBudgetEntries(storedEntries);
+        }
+
+        if (accountBalanceDeltas.size > 0) {
+          for (const account of storedAssets) {
+            const delta = accountBalanceDeltas.get(account.id);
+            if (delta) {
+              account.balance += delta;
+              account.updatedAt = new Date().toISOString();
+            }
+          }
+          void saveAssetAccounts(storedAssets);
+        }
+
         setEntries(storedEntries);
         setLimits(storedLimits);
         setDebts(storedDebts);
@@ -368,13 +422,30 @@ const BudgetScreen: React.FC = () => {
     [chartColors, chartData]
   );
 
+  const applyAccountContribution = useCallback(
+    (accountId: string, amount: number) => {
+      setAssetAccounts((prev) => {
+        const next = prev.map((a) =>
+          a.id === accountId
+            ? { ...a, balance: a.balance + amount, updatedAt: new Date().toISOString() }
+            : a
+        );
+        void saveAssetAccounts(next);
+        return next;
+      });
+    },
+    []
+  );
+
   const handleAddEntry = useCallback((input: NewBudgetEntryInput) => {
     const now = new Date().toISOString();
+    const monthKey = now.slice(0, 7);
     const newEntry: BudgetEntry = {
       ...input,
       id: generateUUID(),
       createdAt: now,
       updatedAt: now,
+      lastAppliedMonth: input.linkedAccountId ? monthKey : undefined,
     };
 
     setEntries((prev) => {
@@ -383,8 +454,12 @@ const BudgetScreen: React.FC = () => {
       return updated;
     });
 
+    if (input.linkedAccountId) {
+      applyAccountContribution(input.linkedAccountId, input.amount);
+    }
+
     setShowAddModal(false);
-  }, []);
+  }, [applyAccountContribution]);
 
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
@@ -392,13 +467,28 @@ const BudgetScreen: React.FC = () => {
   }, [entries]);
 
   const handleSaveEntry = useCallback((updated: BudgetEntry) => {
+    const original = entries.find((e) => e.id === updated.id);
+    const oldAccount = original?.linkedAccountId;
+    const newAccount = updated.linkedAccountId;
+    const oldAmount = original?.amount ?? 0;
+    const newAmount = updated.amount;
+
+    // Reverse old contribution if link/amount changed
+    if (oldAccount && (oldAccount !== newAccount || oldAmount !== newAmount)) {
+      applyAccountContribution(oldAccount, -oldAmount);
+    }
+    // Apply new contribution if link/amount changed
+    if (newAccount && (oldAccount !== newAccount || oldAmount !== newAmount)) {
+      applyAccountContribution(newAccount, newAmount);
+    }
+
     setEntries((prev) => {
       const next = prev.map((e) => (e.id === updated.id ? updated : e));
       void saveBudgetEntries(next);
       return next;
     });
     setEditingEntry(null);
-  }, []);
+  }, [entries, applyAccountContribution]);
 
   const handleDeleteEntry = useCallback((id: string) => {
     setEntries((prev) => {
@@ -705,12 +795,27 @@ const BudgetScreen: React.FC = () => {
             <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add</Text>
           </TouchableOpacity>
         </View>
-        {assetAccounts.length === 0 ? (
+        {assetAccounts.length === 0 && !emergencyFundGoal ? (
           <Text style={styles.accountsEmpty}>
             Track your savings, 401k, HSA, and other account balances here.
           </Text>
         ) : (
           <>
+            {emergencyFundGoal && (
+              <View style={styles.accountRow}>
+                <View style={styles.accountRowLeft}>
+                  <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
+                  <Text style={styles.accountCategory}>
+                    {emergencyFundGoal.targetAmount > 0
+                      ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                      : "Savings Goal"}
+                  </Text>
+                </View>
+                <Text style={[styles.accountBalance, { color: colors.teal }]}>
+                  {formatCurrency(emergencyFundGoal.currentAmount)}
+                </Text>
+              </View>
+            )}
             {assetAccounts.map((account) => (
               <TouchableOpacity
                 key={account.id}
@@ -732,7 +837,7 @@ const BudgetScreen: React.FC = () => {
             <View style={styles.accountTotalRow}>
               <Text style={styles.accountTotalLabel}>Total</Text>
               <Text style={[styles.accountTotalValue, { color: colors.success }]}>
-                {formatCurrency(totalAssetBalance)}
+                {formatCurrency(totalAssetBalance + (emergencyFundGoal?.currentAmount ?? 0))}
               </Text>
             </View>
           </>
@@ -885,6 +990,7 @@ const BudgetScreen: React.FC = () => {
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddEntry}
+        assetAccounts={assetAccounts}
       />
 
       <EditBudgetEntryModal
@@ -892,6 +998,7 @@ const BudgetScreen: React.FC = () => {
         onClose={() => setEditingEntry(null)}
         onSave={handleSaveEntry}
         onDelete={handleDeleteEntry}
+        assetAccounts={assetAccounts}
       />
 
       <MonthlyReviewModal

@@ -18,15 +18,23 @@ import {
   BudgetEntry,
   BudgetEntryType,
   BudgetCategory,
+  AssetAccount,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+
+const LINKABLE_CATEGORIES: ReadonlySet<BudgetCategory> = new Set([
+  "Savings",
+  "Retirement",
+  "Investing",
+]);
 
 interface EditBudgetEntryModalProps {
   entry: BudgetEntry | null;
   onClose: () => void;
   onSave: (updated: BudgetEntry) => void;
   onDelete: (id: string) => void;
+  assetAccounts?: AssetAccount[];
 }
 
 const MONTH_LABELS = [
@@ -65,6 +73,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  assetAccounts = [],
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -78,6 +87,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const [recurring, setRecurring] = useState(false);
+  const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -90,11 +100,13 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setYearMonth(ym);
       setPickerYear(Number(ym.split("-")[0]) || new Date().getFullYear());
       setRecurring(!!entry.recurring);
+      setLinkedAccountId(entry.linkedAccountId);
       setReady(false);
     }
   }, [entry]);
 
   const isValid = parseFloat(amount) > 0;
+  const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
 
   const categoryOptions = useMemo(() => {
     if (SELECTABLE_BUDGET_CATEGORIES.includes(category)) {
@@ -115,6 +127,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       description: description.trim() || undefined,
       date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
       recurring: recurring || undefined,
+      linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       updatedAt: new Date().toISOString(),
     });
   }, [entry, isValid, amount, type, category, description, yearMonth, recurring, onSave]);
@@ -283,6 +296,52 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                     </Text>
                   </View>
                 </TouchableOpacity>
+
+                {showAccountPicker && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>LINK TO ACCOUNT</Text>
+                    <Text style={styles.accountPickerHint}>
+                      Contributions will be added to this account's balance.
+                    </Text>
+                    <View style={styles.categoryWrap}>
+                      <TouchableOpacity
+                        style={[
+                          styles.categoryPill,
+                          !linkedAccountId && styles.categoryPillActive,
+                        ]}
+                        onPress={() => setLinkedAccountId(undefined)}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryPillText,
+                            !linkedAccountId && styles.categoryPillTextActive,
+                          ]}
+                        >
+                          None
+                        </Text>
+                      </TouchableOpacity>
+                      {assetAccounts.map((account) => (
+                        <TouchableOpacity
+                          key={account.id}
+                          style={[
+                            styles.categoryPill,
+                            linkedAccountId === account.id && styles.categoryPillActive,
+                          ]}
+                          onPress={() => setLinkedAccountId(account.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryPillText,
+                              linkedAccountId === account.id && styles.categoryPillTextActive,
+                            ]}
+                          >
+                            {account.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
 
                 <View style={styles.buttonRow}>
                   <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
@@ -553,6 +612,10 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textMuted,
       fontSize: 12,
       marginTop: 2,
+    },
+    accountPickerHint: {
+      color: colors.textMuted,
+      fontSize: 12,
     },
 
     buttonRow: {

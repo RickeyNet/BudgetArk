@@ -12,6 +12,9 @@
 - Added asset accounts on the Budget screen for tracking savings, 401k/retirement, HSA, investment, and other account balances.
 - Asset accounts are persistent balances that don't count as monthly budget entries but are included in net worth calculations.
 - Asset accounts sync between paired devices via the existing peer-to-peer sync system.
+- Emergency fund savings goal now appears automatically in the Accounts section on the Budget screen.
+- Savings, Retirement, and Investing budget entries can now be linked to a specific asset account — contributions are added to the account balance on save.
+- Recurring budget entries linked to an account automatically contribute to that account's balance each month.
 
 ### Bug Fixes & Polish
 - Fixed scroll freeze when opening the edit budget entry modal — form rendering is now deferred until the modal animation completes.

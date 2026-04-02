@@ -149,6 +149,10 @@ export interface BudgetEntry {
   updatedAt: string;
   /** When true, this entry repeats every month from its `date` month onward */
   recurring?: boolean;
+  /** Asset account ID this savings entry contributes to */
+  linkedAccountId?: string;
+  /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
+  lastAppliedMonth?: string;
 }
 
 export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt" | "updatedAt">;
