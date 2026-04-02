@@ -37,7 +37,10 @@ import {
 } from "../storage/budgetStorage";
 import { buildMonthlyReview, type MonthlyReviewData } from "../utils/budgetInsights";
 import { getDebts } from "../storage/debtStorage";
-import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import {
+  getSavingsGoals,
+  saveSavingsGoals,
+} from "../storage/savingsGoalStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
@@ -168,6 +171,8 @@ const BudgetScreen: React.FC = () => {
   const [assetBalance, setAssetBalance] = useState("");
   const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
   const [keelTarget, setKeelTarget] = useState(0);
+  const [showEfContribModal, setShowEfContribModal] = useState(false);
+  const [efContribAmount, setEfContribAmount] = useState("");
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
@@ -682,6 +687,44 @@ const BudgetScreen: React.FC = () => {
     closeAssetModal();
   }, [closeAssetModal]);
 
+  const handleEfContribution = useCallback(async () => {
+    const parsed = parseFloat(efContribAmount);
+    if (Number.isNaN(parsed) || parsed === 0) return;
+
+    const now = new Date().toISOString();
+    const existing = savingsGoals.find((g) => g.category === "emergency_fund");
+
+    if (existing) {
+      const updatedGoal = {
+        ...existing,
+        currentAmount: Math.max(0, existing.currentAmount + parsed),
+        updatedAt: now,
+      };
+      const updatedGoals = savingsGoals.map((g) =>
+        g.id === existing.id ? updatedGoal : g
+      );
+      setSavingsGoals(updatedGoals);
+      await saveSavingsGoals(updatedGoals);
+    } else {
+      // Create a real savings goal so the contribution persists
+      const newGoal: SavingsGoal = {
+        id: generateUUID(),
+        name: "Emergency Fund",
+        category: "emergency_fund",
+        targetAmount: keelTarget,
+        currentAmount: Math.max(0, parsed),
+        createdAt: now,
+        updatedAt: now,
+      };
+      const updatedGoals = [...savingsGoals, newGoal];
+      setSavingsGoals(updatedGoals);
+      await saveSavingsGoals(updatedGoals);
+    }
+
+    setShowEfContribModal(false);
+    setEfContribAmount("");
+  }, [efContribAmount, keelTarget, savingsGoals]);
+
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
@@ -770,7 +813,14 @@ const BudgetScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
             {emergencyFundGoal && (
-              <View style={styles.incomeSummaryRow}>
+              <TouchableOpacity
+                style={styles.incomeSummaryRow}
+                onPress={() => {
+                  setEfContribAmount("");
+                  setShowEfContribModal(true);
+                }}
+                activeOpacity={0.6}
+              >
                 <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
                   Emergency Fund (Keel)
                 </Text>
@@ -783,7 +833,7 @@ const BudgetScreen: React.FC = () => {
                       : ""}
                   </Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -832,7 +882,14 @@ const BudgetScreen: React.FC = () => {
         ) : (
           <>
             {emergencyFundGoal && (
-              <View style={styles.accountRow}>
+              <TouchableOpacity
+                style={styles.accountRow}
+                onPress={() => {
+                  setEfContribAmount("");
+                  setShowEfContribModal(true);
+                }}
+                activeOpacity={0.6}
+              >
                 <View style={styles.accountRowLeft}>
                   <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
                   <Text style={styles.accountCategory}>
@@ -844,7 +901,7 @@ const BudgetScreen: React.FC = () => {
                 <Text style={[styles.accountBalance, { color: colors.teal }]}>
                   {formatCurrency(emergencyFundGoal.currentAmount)}
                 </Text>
-              </View>
+              </TouchableOpacity>
             )}
             {assetAccounts.map((account) => (
               <TouchableOpacity
@@ -1219,6 +1276,51 @@ const BudgetScreen: React.FC = () => {
               </TouchableOpacity>
               <TouchableOpacity style={styles.limitSaveBtn} onPress={saveAsset}>
                 <Text style={styles.limitSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Emergency Fund Contribution Modal */}
+      <Modal
+        visible={showEfContribModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEfContribModal(false)}
+      >
+        <View style={styles.limitOverlay}>
+          <View style={styles.limitModalCard}>
+            <Text style={styles.limitModalTitle}>Emergency Fund</Text>
+            <Text style={styles.limitModalSub}>
+              Current balance: {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
+              {emergencyFundGoal?.targetAmount
+                ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                : ""}
+            </Text>
+
+            <TextInput
+              style={styles.limitInput}
+              placeholder="Amount to add (or negative to withdraw)"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+              value={efContribAmount}
+              onChangeText={setEfContribAmount}
+            />
+
+            <Text style={styles.limitModalHint}>
+              Enter a positive number to contribute, or negative to withdraw.
+            </Text>
+
+            <View style={styles.limitActions}>
+              <TouchableOpacity
+                style={styles.limitCancelBtn}
+                onPress={() => setShowEfContribModal(false)}
+              >
+                <Text style={styles.limitCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.limitSaveBtn} onPress={handleEfContribution}>
+                <Text style={styles.limitSaveText}>Add</Text>
               </TouchableOpacity>
             </View>
           </View>
