@@ -7,7 +7,7 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
-    version: "1.3.0",
+    version: "1.3.3",
     title: "Utilities Hub & Asset Tracking",
     releasedAt: "2026-04-01",
     highlights: [

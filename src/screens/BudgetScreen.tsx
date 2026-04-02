@@ -38,6 +38,7 @@ import {
 import { buildMonthlyReview, type MonthlyReviewData } from "../utils/budgetInsights";
 import { getDebts } from "../storage/debtStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
   saveAssetAccounts,
@@ -166,6 +167,7 @@ const BudgetScreen: React.FC = () => {
   const [assetName, setAssetName] = useState("");
   const [assetBalance, setAssetBalance] = useState("");
   const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
+  const [keelTarget, setKeelTarget] = useState(0);
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
@@ -175,13 +177,16 @@ const BudgetScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       const loadBudgetData = async () => {
-        const [storedEntries, storedLimits, storedDebts, storedGoals, storedAssets] = await Promise.all([
+        const [storedEntries, storedLimits, storedDebts, storedGoals, storedAssets, milestonePlan] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
           getSavingsGoals(),
           getAssetAccounts(),
+          getDebtMilestonePlan(),
         ]);
+        const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
+        setKeelTarget(keelStep?.targetAmount ?? 1000);
         // Process recurring contributions for linked accounts
         const currentMonth = getMonthKey(new Date());
         let entriesModified = false;
@@ -278,10 +283,35 @@ const BudgetScreen: React.FC = () => {
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
 
-  const emergencyFundGoal = useMemo(
-    () => savingsGoals.find((g) => g.category === "emergency_fund") ?? null,
-    [savingsGoals]
+  const savingsReserve = useMemo(
+    () =>
+      entries
+        .filter(
+          (e) =>
+            e.type === "expense" &&
+            ["Savings", "Retirement", "Investing"].includes(e.category)
+        )
+        .reduce((sum, e) => sum + e.amount, 0),
+    [entries]
   );
+
+  const emergencyFundGoal = useMemo(() => {
+    const explicit = savingsGoals.find((g) => g.category === "emergency_fund");
+    if (explicit) return explicit;
+    // Fall back to Keel milestone data so the emergency fund appears automatically
+    if (keelTarget > 0 || savingsReserve > 0) {
+      return {
+        id: "__keel_ef__",
+        name: "Emergency Fund",
+        category: "emergency_fund" as const,
+        targetAmount: keelTarget,
+        currentAmount: savingsReserve,
+        createdAt: "",
+        updatedAt: "",
+      } satisfies SavingsGoal;
+    }
+    return null;
+  }, [savingsGoals, keelTarget, savingsReserve]);
 
   const totalAssetBalance = useMemo(
     () => assetAccounts.reduce((sum, a) => sum + a.balance, 0),

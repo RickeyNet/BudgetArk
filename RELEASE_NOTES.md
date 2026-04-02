@@ -1,6 +1,6 @@
 # BudgetArk Release Notes
 
-## v1.3.0 - Utilities Hub & Asset Tracking (2026-04-01)
+## v1.3.2 - Utilities Hub & Asset Tracking (2026-04-01)
 
 ### Utilities Tab
 - Replaced the Investments tab with a new Utilities hub containing collapsible financial tools.
