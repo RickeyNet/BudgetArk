@@ -265,25 +265,6 @@ const AppContent: React.FC = () => {
     }
   }, [navigationRef]);
 
-  const handleTryNewFeature = useCallback(async () => {
-    setShowReleaseNotesPrompt(false);
-    await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 220);
-    });
-
-    if (navigationRef.isReady()) {
-      try {
-        navigationRef.navigate("Profile");
-      } catch (e) {
-        if (__DEV__) console.warn("Navigation to Profile failed:", e);
-      }
-    } else if (__DEV__) {
-      console.warn("Navigation not ready — could not navigate to new feature");
-    }
-  }, [navigationRef]);
-
   /** Show loading indicator while checking onboarding status */
   if (isOnboardingComplete === null) {
     return (
@@ -366,22 +347,23 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{CURRENT_APP_VERSION}</Text>
-            <Text style={[styles.featureTitle, { color: colors.accent }]}>Partner Sync is here</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              You can now sync budgets, debts, and savings goals with your partner directly over WiFi — no server or account needed. Pair once, then tap Sync Now anytime.
-            </Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{latestRelease.version}</Text>
+            <Text style={[styles.featureTitle, { color: colors.accent }]}>{latestRelease.title}</Text>
+            {latestRelease.highlights.slice(0, 3).map((line, i) => (
+              <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                {"\u2022"} {line}
+              </Text>
+            ))}
+            {latestRelease.highlights.length > 3 && (
+              <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                +{latestRelease.highlights.length - 3} more
+              </Text>
+            )}
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
-              onPress={handleTryNewFeature}
-            >
-              <Text style={[styles.dialogButtonText, { color: colors.white }]}>Try Partner Sync</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.dialogButton, { backgroundColor: colors.bg }]}
               onPress={handleOpenReleaseHistory}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.text }]}>View all release notes</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.white }]}>See what's new</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: "transparent" }]}
