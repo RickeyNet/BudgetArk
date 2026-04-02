@@ -225,7 +225,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       <Text style={styles.stepTitle}>Welcome to BudgetArk</Text>
       <Text style={styles.stepSubtitle}>
         Your personal finance companion for tracking debt, managing budgets, and
-        planning investments.
+        building wealth.
       </Text>
 
       <View style={styles.featureList}>
@@ -250,9 +250,9 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         </View>
 
         <View style={styles.featureItem}>
-          <Text style={styles.featureIcon}>📈</Text>
+          <Text style={styles.featureIcon}>🧰</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Investment Planning</Text>
+            <Text style={styles.featureTitle}>Financial Utilities</Text>
             <Text style={styles.featureDesc}>
               Project your wealth growth with interactive calculators
             </Text>

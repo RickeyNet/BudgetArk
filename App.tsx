@@ -28,6 +28,8 @@ import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
   setLastSeenReleaseNotesVersion,
+  setOtaUpdateInstalled,
+  consumeOtaUpdateInstalled,
 } from "./src/storage/releaseNotesStorage";
 import { CURRENT_APP_VERSION, RELEASE_NOTES } from "./src/data/releaseNotes";
 import type { RootTabParamList } from "./src/types";
@@ -213,6 +215,13 @@ const AppContent: React.FC = () => {
     if (isOnboardingComplete !== true) return;
 
     const checkReleaseNotesPrompt = async () => {
+      const justInstalledOta = await consumeOtaUpdateInstalled();
+      if (justInstalledOta) {
+        // OTA update was just applied — the update modal already showed
+        // the release notes, so mark as seen and skip the prompt.
+        await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+        return;
+      }
       const lastSeenVersion = await getLastSeenReleaseNotesVersion();
       if (lastSeenVersion !== CURRENT_APP_VERSION) {
         setShowReleaseNotesPrompt(true);
@@ -224,6 +233,7 @@ const AppContent: React.FC = () => {
 
   const handleInstallUpdate = useCallback(async () => {
     try {
+      await setOtaUpdateInstalled();
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error) {

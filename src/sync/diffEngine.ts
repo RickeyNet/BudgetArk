@@ -9,6 +9,7 @@
 import { getDebts, saveDebts, getPayments } from "../storage/debtStorage";
 import { getBudgetEntries, saveBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
+import { getAssetAccounts, saveAssetAccounts } from "../storage/assetAccountStorage";
 import {
   getDebtMilestonePlan,
   saveDebtMilestonePlan,
@@ -23,6 +24,7 @@ import type {
   Payment,
   BudgetEntry,
   SavingsGoal,
+  AssetAccount,
   DebtMilestonePlan,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
@@ -39,12 +41,13 @@ const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
 export const computeOutgoingDiff = async (
   lastSyncTimestamp: string | null
 ): Promise<SyncDiff> => {
-  const [debts, payments, budgetEntries, savingsGoals, milestonePlan, strategy] =
+  const [debts, payments, budgetEntries, savingsGoals, assetAccounts, milestonePlan, strategy] =
     await Promise.all([
       getDebts(),
       getPayments(),
       getBudgetEntries(),
       getSavingsGoals(),
+      getAssetAccounts(),
       getDebtMilestonePlan(),
       getPayoffStrategyPreference(),
     ]);
@@ -80,6 +83,7 @@ export const computeOutgoingDiff = async (
     payments: filterChanged(payments),
     budgetEntries: filterChanged(budgetEntries),
     savingsGoals: filterChanged(savingsGoals),
+    assetAccounts: filterChanged(assetAccounts),
     budgetLimits,
     debtMilestonePlan:
       !lastSyncTimestamp ||
@@ -167,6 +171,14 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     const merged = mergeById(localGoals, diff.savingsGoals);
     await saveSavingsGoals(merged);
     changedCount += diff.savingsGoals.length;
+  }
+
+  // Merge asset accounts
+  if (diff.assetAccounts && diff.assetAccounts.length > 0) {
+    const localAccounts = await getAssetAccounts();
+    const merged = mergeById(localAccounts, diff.assetAccounts);
+    await saveAssetAccounts(merged);
+    changedCount += diff.assetAccounts.length;
   }
 
   // Merge budget limits (union of months, per-month union of categories)

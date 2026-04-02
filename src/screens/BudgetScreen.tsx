@@ -23,6 +23,10 @@ import {
   Debt,
   NewBudgetEntryInput,
   SavingsGoal,
+  AssetAccount,
+  AssetAccountCategory,
+  ASSET_ACCOUNT_CATEGORIES,
+  ASSET_ACCOUNT_CATEGORY_LABELS,
 } from "../types";
 import {
   getBudgetEntries,
@@ -34,6 +38,10 @@ import {
 import { buildMonthlyReview, type MonthlyReviewData } from "../utils/budgetInsights";
 import { getDebts } from "../storage/debtStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import {
+  getAssetAccounts,
+  saveAssetAccounts,
+} from "../storage/assetAccountStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -134,6 +142,12 @@ const BudgetScreen: React.FC = () => {
   const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
+  const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
+  const [showAssetModal, setShowAssetModal] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
+  const [assetName, setAssetName] = useState("");
+  const [assetBalance, setAssetBalance] = useState("");
+  const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
@@ -143,16 +157,18 @@ const BudgetScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       const loadBudgetData = async () => {
-        const [storedEntries, storedLimits, storedDebts, storedGoals] = await Promise.all([
+        const [storedEntries, storedLimits, storedDebts, storedGoals, storedAssets] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
           getSavingsGoals(),
+          getAssetAccounts(),
         ]);
         setEntries(storedEntries);
         setLimits(storedLimits);
         setDebts(storedDebts);
         setSavingsGoals(storedGoals);
+        setAssetAccounts(storedAssets);
         setIsLoaded(true);
       };
 
@@ -213,15 +229,20 @@ const BudgetScreen: React.FC = () => {
     [savingsGoals]
   );
 
+  const totalAssetBalance = useMemo(
+    () => assetAccounts.reduce((sum, a) => sum + a.balance, 0),
+    [assetAccounts]
+  );
+
   const totalSavings = useMemo(
     () => {
       const goalSavings = savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0);
       const entrySavings = entries
         .filter((entry) => entry.type === "expense" && entry.category === "Savings")
         .reduce((sum, entry) => sum + entry.amount, 0);
-      return goalSavings + entrySavings;
+      return goalSavings + entrySavings + totalAssetBalance;
     },
-    [savingsGoals, entries]
+    [savingsGoals, entries, totalAssetBalance]
   );
 
   const totalDebt = useMemo(
@@ -476,6 +497,71 @@ const BudgetScreen: React.FC = () => {
     setShowReviewModal(true);
   }, [entries]);
 
+  const openAddAssetModal = useCallback(() => {
+    setEditingAsset(null);
+    setAssetName("");
+    setAssetBalance("");
+    setAssetCategory("savings");
+    setShowAssetModal(true);
+  }, []);
+
+  const openEditAssetModal = useCallback((account: AssetAccount) => {
+    setEditingAsset(account);
+    setAssetName(account.name);
+    setAssetBalance(String(account.balance));
+    setAssetCategory(account.category);
+    setShowAssetModal(true);
+  }, []);
+
+  const closeAssetModal = useCallback(() => {
+    setShowAssetModal(false);
+    setEditingAsset(null);
+  }, []);
+
+  const saveAsset = useCallback(() => {
+    const parsedBalance = parseFloat(assetBalance);
+    if (!assetName.trim() || Number.isNaN(parsedBalance) || parsedBalance < 0) return;
+
+    const now = new Date().toISOString();
+
+    if (editingAsset) {
+      setAssetAccounts((prev) => {
+        const next = prev.map((a) =>
+          a.id === editingAsset.id
+            ? { ...a, name: assetName.trim(), balance: parsedBalance, category: assetCategory, updatedAt: now }
+            : a
+        );
+        void saveAssetAccounts(next);
+        return next;
+      });
+    } else {
+      const newAccount: AssetAccount = {
+        id: generateUUID(),
+        name: assetName.trim(),
+        category: assetCategory,
+        balance: parsedBalance,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setAssetAccounts((prev) => {
+        const next = [...prev, newAccount];
+        void saveAssetAccounts(next);
+        return next;
+      });
+    }
+
+    closeAssetModal();
+  }, [assetBalance, assetCategory, assetName, closeAssetModal, editingAsset]);
+
+  const deleteAsset = useCallback((id: string) => {
+    setAssetAccounts((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      void saveAssetAccounts(next);
+      return next;
+    });
+    closeAssetModal();
+  }, [closeAssetModal]);
+
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
@@ -609,6 +695,48 @@ const BudgetScreen: React.FC = () => {
             </Text>
           </View>
         </View>
+      </View>
+
+      {/* Accounts card */}
+      <View style={styles.accountsCard}>
+        <View style={styles.accountsHeaderRow}>
+          <Text style={styles.accountsTitle}>Accounts</Text>
+          <TouchableOpacity onPress={openAddAssetModal}>
+            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
+        {assetAccounts.length === 0 ? (
+          <Text style={styles.accountsEmpty}>
+            Track your savings, 401k, HSA, and other account balances here.
+          </Text>
+        ) : (
+          <>
+            {assetAccounts.map((account) => (
+              <TouchableOpacity
+                key={account.id}
+                style={styles.accountRow}
+                onPress={() => openEditAssetModal(account)}
+                activeOpacity={0.6}
+              >
+                <View style={styles.accountRowLeft}>
+                  <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
+                  <Text style={styles.accountCategory}>
+                    {ASSET_ACCOUNT_CATEGORY_LABELS[account.category]}
+                  </Text>
+                </View>
+                <Text style={[styles.accountBalance, { color: colors.success }]}>
+                  {formatCurrency(account.balance)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.accountTotalRow}>
+              <Text style={styles.accountTotalLabel}>Total</Text>
+              <Text style={[styles.accountTotalValue, { color: colors.success }]}>
+                {formatCurrency(totalAssetBalance)}
+              </Text>
+            </View>
+          </>
+        )}
       </View>
 
       {/* Monthly Review button */}
@@ -878,6 +1006,87 @@ const BudgetScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Asset Account Add/Edit Modal */}
+      <Modal
+        visible={showAssetModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeAssetModal}
+      >
+        <View style={styles.limitOverlay}>
+          <View style={styles.limitModalCard}>
+            <Text style={styles.limitModalTitle}>
+              {editingAsset ? "Edit Account" : "Add Account"}
+            </Text>
+            <Text style={styles.limitModalSub}>
+              Track a balance that won't affect your monthly budget.
+            </Text>
+
+            <TextInput
+              style={styles.limitInput}
+              placeholder="Account name"
+              placeholderTextColor={colors.textMuted}
+              value={assetName}
+              onChangeText={setAssetName}
+            />
+
+            <TextInput
+              style={styles.limitInput}
+              placeholder="Balance"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+              value={assetBalance}
+              onChangeText={setAssetBalance}
+            />
+
+            <View style={styles.assetCategoryRow}>
+              {ASSET_ACCOUNT_CATEGORIES.map((cat) => {
+                const isSelected = assetCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.assetCategoryChip,
+                      {
+                        borderColor: isSelected ? colors.accent : colors.cardBorder,
+                        backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
+                      },
+                    ]}
+                    onPress={() => setAssetCategory(cat)}
+                  >
+                    <Text
+                      style={[
+                        styles.assetCategoryChipText,
+                        { color: isSelected ? colors.accent : colors.textDim },
+                      ]}
+                    >
+                      {ASSET_ACCOUNT_CATEGORY_LABELS[cat]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.limitActions}>
+              {editingAsset && (
+                <TouchableOpacity
+                  style={styles.limitCancelBtn}
+                  onPress={() => deleteAsset(editingAsset.id)}
+                >
+                  <Text style={[styles.limitCancelText, { color: colors.danger }]}>Delete</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.limitCancelBtn} onPress={closeAssetModal}>
+                <Text style={styles.limitCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.limitSaveBtn} onPress={saveAsset}>
+                <Text style={styles.limitSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -895,22 +1104,26 @@ const makeStyles = (colors: ThemeColors) =>
     titleSection: {
       paddingTop: 56,
       paddingBottom: 20,
+      alignItems: "center",
     },
     appLabel: {
       fontSize: 12,
       color: colors.textDim,
       letterSpacing: 2,
       marginBottom: 4,
+      textAlign: "center",
     },
     screenTitle: {
       fontSize: 28,
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
+      textAlign: "center",
     },
     screenSubtitle: {
       fontSize: 14,
       color: colors.textMuted,
+      textAlign: "center",
     },
     monthSwitchRow: {
       flexDirection: "row",
@@ -1393,6 +1606,98 @@ const makeStyles = (colors: ThemeColors) =>
     entryEditHint: {
       color: colors.accent,
       fontSize: 10,
+      fontWeight: "600",
+    },
+
+    /* Accounts card */
+    accountsCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 14,
+    },
+    accountsHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 10,
+    },
+    accountsTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    accountsAddBtn: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    accountsEmpty: {
+      fontSize: 13,
+      color: colors.textDim,
+      textAlign: "center",
+      paddingVertical: 8,
+    },
+    accountRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    accountRowLeft: {
+      flex: 1,
+      marginRight: 8,
+    },
+    accountName: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.text,
+    },
+    accountCategory: {
+      fontSize: 11,
+      color: colors.textDim,
+      marginTop: 1,
+    },
+    accountBalance: {
+      fontSize: 14,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"] as any,
+    },
+    accountTotalRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    accountTotalLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.textDim,
+    },
+    accountTotalValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"] as any,
+    },
+    assetCategoryRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 8,
+    },
+    assetCategoryChip: {
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    assetCategoryChipText: {
+      fontSize: 12,
       fontWeight: "600",
     },
 

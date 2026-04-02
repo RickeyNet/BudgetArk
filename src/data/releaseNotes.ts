@@ -7,6 +7,25 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.3.0",
+    title: "Utilities Hub & Asset Tracking",
+    releasedAt: "2026-04-01",
+    highlights: [
+      "New Utilities tab replaces Investments — a collapsible toolbox for financial calculators.",
+      "Compound Interest Calculator now includes S&P 500 return presets, a \"Why 7%?\" educational card, and Rule of 72 insight.",
+      "Added Loan/Mortgage Calculator with principal vs interest breakdown and term presets (15, 20, 30 years).",
+      "Added Emergency Fund Calculator that auto-fills monthly expenses from your budget and tracks progress toward 3- and 6-month targets.",
+      "Added asset account tracking on the Budget screen — track savings, 401k/retirement, HSA, and investment balances without affecting your monthly budget.",
+      "Asset account balances are included in net worth calculations and synced between paired devices.",
+      "Fixed scroll freeze when opening the edit budget entry modal.",
+      "Centered page titles and subtitles across all screens for a cleaner layout.",
+      "Added timeout protection on all storage operations to prevent app freezes from slow device I/O.",
+      "Hardened OTA update guard — updates with missing version metadata are now blocked to prevent downgrade attacks.",
+      "Importing a backup older than 30 days now shows a staleness warning so you know the data may be outdated.",
+      "Added safety bounds on all financial calculations to prevent display errors from extreme input values.",
+    ],
+  },
+  {
     version: "1.2.2",
     title: "Bug Fixes & Ark Build Expansion",
     releasedAt: "2026-03-31",

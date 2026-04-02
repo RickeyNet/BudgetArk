@@ -6,7 +6,7 @@
  * Contains 4 tabs:
  *   1. Debt Tracker (⛓️) — default/home screen
  *   2. Budget (💰)       — income & expense tracking
- *   3. Investments (📈)  — growth projections
+ *   3. Utilities (🧰)   — financial tools & calculators
  *   4. Profile (👤)      — anonymous account & settings
  *
  * Design decisions:
@@ -31,7 +31,7 @@ import type { ThemeColors } from "../theme/themes";
 /* ── Screen Imports ── */
 import DebtTrackerScreen from "../screens/DebtTrackerScreen";
 import BudgetScreen from "../screens/BudgetScreen";
-import InvestmentScreen from "../screens/InvestmentScreen";
+import UtilitiesScreen from "../screens/UtilitiesScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
 /** Create the typed tab navigator */
@@ -45,7 +45,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 const TAB_ICONS: Record<keyof RootTabParamList, string> = {
   DebtTracker: "⛓️",
   Budget: "💰",
-  Investments: "📈",
+  Utilities: "🧰",
   Profile: "👤",
 };
 
@@ -56,7 +56,7 @@ const TAB_ICONS: Record<keyof RootTabParamList, string> = {
 const TAB_LABELS: Record<keyof RootTabParamList, string> = {
   DebtTracker: "Debts",
   Budget: "Budget",
-  Investments: "Invest",
+  Utilities: "Utilities",
   Profile: "Profile",
 };
 
@@ -96,7 +96,7 @@ const AppNavigator: React.FC = () => {
     >
       <Tab.Screen name="DebtTracker" component={DebtTrackerScreen} />
       <Tab.Screen name="Budget" component={BudgetScreen} />
-      <Tab.Screen name="Investments" component={InvestmentScreen} />
+      <Tab.Screen name="Utilities" component={UtilitiesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

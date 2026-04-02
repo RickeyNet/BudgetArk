@@ -12,6 +12,19 @@
 
 import type { DebtClass } from "../types";
 
+/* ── Input bounds (match importData.ts limits) ── */
+const MAX_BALANCE = 1_000_000_000;  // $1B
+const MAX_PAYMENT = 1_000_000;      // $1M per month
+const MAX_RATE = 200;               // 200% APR
+const MAX_YEARS = 100;
+const MAX_MONTHS = MAX_YEARS * 12;
+
+/** Clamp a number to [min, max]. Returns min for NaN/non-finite. */
+const clamp = (value: number, min: number, max: number): number => {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(Math.max(value, min), max);
+};
+
 export type PayoffMethod = "avalanche" | "snowball";
 
 export type PayoffDebtInput = {
@@ -102,9 +115,9 @@ export const simulatePayoffPlan = (
     .filter((debt) => debt.balance > 0)
     .map((debt) => ({
       id: debt.id,
-      balance: debt.balance,
-      rate: Math.max(0, debt.rate),
-      minPayment: Math.max(0, debt.minPayment),
+      balance: clamp(debt.balance, 0, MAX_BALANCE),
+      rate: clamp(debt.rate, 0, MAX_RATE),
+      minPayment: clamp(debt.minPayment, 0, MAX_PAYMENT),
       debtClass: debt.debtClass,
     }));
 
@@ -119,7 +132,7 @@ export const simulatePayoffPlan = (
     };
   }
 
-  const effectiveExtra = Math.max(0, extraMonthlyPayment);
+  const effectiveExtra = clamp(extraMonthlyPayment, 0, MAX_PAYMENT);
   let totalInterestPaid = 0;
   let totalPaid = 0;
   let monthsToPayoff = 0;
@@ -222,6 +235,10 @@ export const calcMonthsToPayoff = (
   annualRate: number,
   monthlyPayment: number
 ): number => {
+  balance = clamp(balance, 0, MAX_BALANCE);
+  annualRate = clamp(annualRate, 0, MAX_RATE);
+  monthlyPayment = clamp(monthlyPayment, 0, MAX_PAYMENT);
+
   if (balance <= 0) return 0;
   if (monthlyPayment <= 0) return Infinity;
 
@@ -252,6 +269,10 @@ export const calcTotalInterest = (
   annualRate: number,
   monthlyPayment: number
 ): number => {
+  balance = clamp(balance, 0, MAX_BALANCE);
+  annualRate = clamp(annualRate, 0, MAX_RATE);
+  monthlyPayment = clamp(monthlyPayment, 0, MAX_PAYMENT);
+
   const months = calcMonthsToPayoff(balance, annualRate, monthlyPayment);
   if (months === Infinity || months === 0) return 0;
 
@@ -285,6 +306,10 @@ export const generatePayoffSchedule = (
     interestPaid: number;
     principalPaid: number;
   }> = [];
+
+  balance = clamp(balance, 0, MAX_BALANCE);
+  annualRate = clamp(annualRate, 0, MAX_RATE);
+  monthlyPayment = clamp(monthlyPayment, 0, MAX_PAYMENT);
 
   const monthlyRate = annualRate / 100 / 12;
   let remaining = balance;
@@ -329,6 +354,10 @@ export const calcInvestmentGrowth = (
   annualReturn: number,
   years: number
 ): number => {
+  monthlyContribution = clamp(monthlyContribution, 0, MAX_PAYMENT);
+  annualReturn = clamp(annualReturn, 0, MAX_RATE);
+  years = clamp(years, 0, MAX_YEARS);
+
   if (monthlyContribution <= 0 || years <= 0) return 0;
 
   const monthlyRate = annualReturn / 100 / 12;
@@ -353,6 +382,10 @@ export const calcInvestmentTimeline = (
   annualReturn: number,
   years: number
 ): { year: number; total: number; contributed: number; interest: number }[] => {
+  monthlyContribution = clamp(monthlyContribution, 0, MAX_PAYMENT);
+  annualReturn = clamp(annualReturn, 0, MAX_RATE);
+  years = clamp(years, 0, MAX_YEARS);
+
   const timeline: { year: number; total: number; contributed: number; interest: number }[] = [];
 
   for (let y = 0; y <= years; y++) {
@@ -386,6 +419,10 @@ export const calcPaymentForGoalDate = (
   annualRate: number,
   monthsRemaining: number
 ): number => {
+  balance = clamp(balance, 0, MAX_BALANCE);
+  annualRate = clamp(annualRate, 0, MAX_RATE);
+  monthsRemaining = clamp(monthsRemaining, 0, MAX_MONTHS);
+
   if (balance <= 0) return 0;
   if (monthsRemaining <= 0) return Infinity;
 

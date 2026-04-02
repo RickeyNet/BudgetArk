@@ -63,6 +63,35 @@ const ENCRYPTED_V1_PREFIX = "__ENC__:";
 let cachedKey: string | null = null;
 
 /**
+ * Timeout duration for AsyncStorage operations (milliseconds).
+ * 5 seconds is generous enough for slow/low-end devices while still
+ * preventing indefinite hangs from degraded flash storage or backed-up I/O.
+ */
+const STORAGE_TIMEOUT_MS = 5_000;
+
+/**
+ * Wraps a promise with a timeout. If the operation doesn't resolve within
+ * the given duration, the returned promise rejects with a descriptive error.
+ *
+ * Used to guard every AsyncStorage call so a stalled I/O queue can't freeze
+ * the app indefinitely.
+ */
+const withTimeout = <T>(
+  operation: Promise<T>,
+  label: string,
+  ms: number = STORAGE_TIMEOUT_MS,
+): Promise<T> =>
+  Promise.race([
+    operation,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`AsyncStorage operation timed out after ${ms}ms: ${label}`)),
+        ms,
+      ),
+    ),
+  ]);
+
+/**
  * Clear the cached encryption key whenever the app leaves the foreground.
  * The key will be re-fetched from SecureStore on the next storage operation.
  * Stored as a module-level subscription so only one listener is ever registered.
@@ -208,7 +237,7 @@ export class DecryptionError extends Error {
  * Throws DecryptionError if HMAC verification or decryption fails (tampered/corrupted data).
  */
 export const getItem = async (key: string): Promise<string | null> => {
-  const raw = await AsyncStorage.getItem(key);
+  const raw = await withTimeout(AsyncStorage.getItem(key), `getItem(${key})`);
   if (raw === null) return null;
 
   const encKey = await getEncryptionKey();
@@ -239,12 +268,12 @@ export const getItem = async (key: string): Promise<string | null> => {
     if (plaintext === null) {
       throw new DecryptionError(key);
     }
-    await AsyncStorage.setItem(key, encrypt(plaintext, encKey));
+    await withTimeout(AsyncStorage.setItem(key, encrypt(plaintext, encKey)), `setItem(${key})`);
     return plaintext;
   }
 
   // Case 3: Legacy plaintext — encrypt as V2 for future reads
-  await AsyncStorage.setItem(key, encrypt(raw, encKey));
+  await withTimeout(AsyncStorage.setItem(key, encrypt(raw, encKey)), `setItem(${key})`);
   return raw;
 };
 
@@ -258,22 +287,22 @@ export const setItem = async (
   const encKey = await getEncryptionKey();
   if (encKey === null) {
     // SecureStore unavailable — store as plaintext to avoid data loss
-    await AsyncStorage.setItem(key, value);
+    await withTimeout(AsyncStorage.setItem(key, value), `setItem(${key})`);
     return;
   }
-  await AsyncStorage.setItem(key, encrypt(value, encKey));
+  await withTimeout(AsyncStorage.setItem(key, encrypt(value, encKey)), `setItem(${key})`);
 };
 
 /**
  * Removes a value from AsyncStorage (no encryption needed for deletion).
  */
 export const removeItem = async (key: string): Promise<void> => {
-  await AsyncStorage.removeItem(key);
+  await withTimeout(AsyncStorage.removeItem(key), `removeItem(${key})`);
 };
 
 /**
  * Removes multiple values from AsyncStorage.
  */
 export const multiRemove = async (keys: string[]): Promise<void> => {
-  await AsyncStorage.multiRemove(keys);
+  await withTimeout(AsyncStorage.multiRemove(keys), `multiRemove(${keys.length} keys)`);
 };

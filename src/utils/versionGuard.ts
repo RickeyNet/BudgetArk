@@ -43,13 +43,18 @@ export const compareVersions = (a: string, b: string): -1 | 0 | 1 => {
  * Returns true if the incoming update's runtimeVersion is safe to install
  * (i.e. it is not a downgrade from the current runtimeVersion).
  *
- * - If either version is missing/empty, the check passes (fail-open so
- *   updates still work when metadata is unavailable).
+ * Fail-closed on missing incoming version: an update that strips version
+ * metadata is blocked, preventing an attacker from bypassing the guard.
+ * Fail-open on missing current version: avoids locking out users whose
+ * app was installed without version metadata (e.g. fresh dev builds).
  */
 export const isUpdateSafe = (
   currentRuntimeVersion: string | undefined,
   incomingRuntimeVersion: string | undefined
 ): boolean => {
-  if (!currentRuntimeVersion || !incomingRuntimeVersion) return true;
+  // Incoming version missing — block the update (fail-closed)
+  if (!incomingRuntimeVersion) return false;
+  // Current version missing — allow the update (fail-open)
+  if (!currentRuntimeVersion) return true;
   return compareVersions(incomingRuntimeVersion, currentRuntimeVersion) >= 0;
 };

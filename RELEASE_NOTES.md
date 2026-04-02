@@ -1,5 +1,29 @@
 # BudgetArk Release Notes
 
+## v1.3.0 - Utilities Hub & Asset Tracking (2026-04-01)
+
+### Utilities Tab
+- Replaced the Investments tab with a new Utilities hub containing collapsible financial tools.
+- **Compound Interest Calculator** — now includes S&P 500 return presets (Savings 2%, Bonds 4%, S&P 500 7%, Aggressive 10%), a "Why 7%?" educational card explaining inflation-adjusted returns, and a Rule of 72 insight showing how quickly your money doubles.
+- **Loan/Mortgage Calculator** — enter loan amount, interest rate, and term to see monthly payments with a principal vs interest breakdown and visual ratio bar. Includes 15, 20, and 30-year term presets.
+- **Emergency Fund Calculator** — automatically pulls your average monthly expenses from the last 6 months of budget data. Shows progress toward 3-month and 6-month savings targets with a monthly savings slider and time-to-reach estimates.
+
+### Asset Account Tracking
+- Added asset accounts on the Budget screen for tracking savings, 401k/retirement, HSA, investment, and other account balances.
+- Asset accounts are persistent balances that don't count as monthly budget entries but are included in net worth calculations.
+- Asset accounts sync between paired devices via the existing peer-to-peer sync system.
+
+### Bug Fixes & Polish
+- Fixed scroll freeze when opening the edit budget entry modal — form rendering is now deferred until the modal animation completes.
+- Centered page titles and subtitles across all screens (Debt Tracker, Budget, Utilities, Profile).
+- Updated onboarding to reflect the new Utilities tab.
+
+### Security & Reliability
+- Added 5-second timeout protection on all storage operations to prevent app freezes from degraded flash storage or backed-up I/O queues.
+- Hardened OTA update version guard — updates with missing version metadata are now blocked (fail-closed) to prevent downgrade attacks. Fresh installs without version metadata are still allowed.
+- Importing a backup older than 30 days now shows a staleness warning so you know the data may be outdated. The import still proceeds — the warning is informational only.
+- Added explicit bounds checks on all financial calculation inputs (balance capped at $1B, rate at 200%, payments at $1M, years at 100) to prevent Infinity/NaN from cascading into the UI.
+
 ## v1.2.2 - Bug Fixes & Ark Build Expansion (2026-03-31)
 
 ### Bug Fixes

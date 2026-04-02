@@ -85,6 +85,8 @@ export interface ImportResult {
   payments: number;
   budgetEntries: number;
   budgetLimits: number;
+  /** Number of days since the export was created, or undefined if no exportedAt timestamp */
+  staleDays?: number;
 }
 
 const LIMITS = {
@@ -311,12 +313,23 @@ export const importFromString = async (
 
   const sanitized = sanitizePayload(data);
 
+  /* 2b. Check export age for stale-import warning */
+  let staleDays: number | undefined;
+  if (isObject(data) && typeof (data as any).exportedAt === "string") {
+    const exportedMs = Date.parse((data as any).exportedAt);
+    if (!Number.isNaN(exportedMs)) {
+      staleDays = Math.floor((Date.now() - exportedMs) / (1000 * 60 * 60 * 24));
+      if (staleDays < 0) staleDays = 0;
+    }
+  }
+
   /* 3. Compute merged data in memory before writing anything */
   const counts: ImportResult = {
     debts: 0,
     payments: 0,
     budgetEntries: 0,
     budgetLimits: 0,
+    staleDays,
   };
 
   // Helper: merge arrays by id in memory (no storage writes)

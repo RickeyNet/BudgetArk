@@ -565,9 +565,13 @@ const ProfileScreen: React.FC = () => {
     try {
       const result = await importFn(password);
       if (!result) return;
+      let message = `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`;
+      if (result.staleDays !== undefined && result.staleDays > 30) {
+        message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
+      }
       setInfoModal({
         title: "Import Complete",
-        message: `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`,
+        message,
       });
     } catch (error: any) {
       if (error?.message?.includes("password-encrypted")) {
@@ -1800,19 +1804,23 @@ const styles = StyleSheet.create({
   titleSection: {
     paddingTop: 56,
     paddingBottom: 20,
+    alignItems: "center",
   },
   appLabel: {
     fontSize: 12,
     letterSpacing: 2,
     marginBottom: 4,
+    textAlign: "center",
   },
   screenTitle: {
     fontSize: 28,
     fontWeight: "700",
     marginBottom: 4,
+    textAlign: "center",
   },
   screenSubtitle: {
     fontSize: 14,
+    textAlign: "center",
   },
 
   /* Profile Card */

@@ -179,6 +179,35 @@ export interface SavingsGoal {
   updatedAt: string;
 }
 
+/* ─── Asset Account Types ─── */
+
+export const ASSET_ACCOUNT_CATEGORIES = [
+  "savings",
+  "retirement",
+  "hsa",
+  "investment",
+  "other",
+] as const;
+
+export type AssetAccountCategory = (typeof ASSET_ACCOUNT_CATEGORIES)[number];
+
+export const ASSET_ACCOUNT_CATEGORY_LABELS: Record<AssetAccountCategory, string> = {
+  savings: "Savings",
+  retirement: "401k / Retirement",
+  hsa: "HSA",
+  investment: "Investment",
+  other: "Other",
+};
+
+export interface AssetAccount {
+  id: string;
+  name: string;
+  category: AssetAccountCategory;
+  balance: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /* ─── Currency + Localization Types ─── */
 
 export interface CurrencyPreferenceOption {
@@ -338,7 +367,7 @@ export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
 export type RootTabParamList = {
   DebtTracker: undefined;
   Budget: undefined;
-  Investments: undefined;
+  Utilities: undefined;
   Profile: {
     openReleaseNotes?: boolean;
   } | undefined;

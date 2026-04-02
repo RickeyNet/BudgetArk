@@ -1367,10 +1367,10 @@ const makeStyles = (colors: ThemeColors) =>
     screen: { flex: 1, backgroundColor: colors.bg },
     listContent: { paddingHorizontal: 16, paddingBottom: 100 },
 
-    titleSection: { paddingTop: 56, paddingBottom: 20 },
-    appLabel: { fontSize: 12, color: colors.textDim, letterSpacing: 2, marginBottom: 4 },
-    screenTitle: { fontSize: 28, fontWeight: "700", color: colors.text, marginBottom: 4 },
-    screenSubtitle: { fontSize: 14, color: colors.textMuted },
+    titleSection: { paddingTop: 56, paddingBottom: 20, alignItems: "center" as const },
+    appLabel: { fontSize: 12, color: colors.textDim, letterSpacing: 2, marginBottom: 4, textAlign: "center" as const },
+    screenTitle: { fontSize: 28, fontWeight: "700" as const, color: colors.text, marginBottom: 4, textAlign: "center" as const },
+    screenSubtitle: { fontSize: 14, color: colors.textMuted, textAlign: "center" as const },
 
     summaryCard: {
       backgroundColor: colors.card,
