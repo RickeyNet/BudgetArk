@@ -802,7 +802,7 @@ const BudgetScreen: React.FC = () => {
         </Text>
         <View style={styles.netWorthBreakdown}>
           <View style={styles.netWorthStat}>
-            <Text style={styles.netWorthStatLabel}>Total Savings</Text>
+            <Text style={styles.netWorthStatLabel}>Total Assets</Text>
             <Text style={[styles.netWorthStatValue, { color: colors.success }]}>
               {formatCurrency(totalSavings)}
             </Text>
