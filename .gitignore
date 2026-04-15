@@ -55,3 +55,6 @@ screenshots/raw/**
 !screenshots/raw/iphone/.gitkeep
 !screenshots/raw/ipad/.gitkeep
 
+
+# UI ideas in html format
+ui-concept*
