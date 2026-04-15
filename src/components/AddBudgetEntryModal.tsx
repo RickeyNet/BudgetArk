@@ -95,6 +95,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     setAmount("");
     setDescription("");
     setYearMonth(todayYearMonth());
+    setShowMonthPicker(false);
     setPickerYear(new Date().getFullYear());
     setRecurring(false);
     setLinkedAccountId(undefined);
@@ -115,7 +116,18 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     });
 
     reset();
-  }, [amount, description, onAdd, type, category, yearMonth, recurring, reset]);
+  }, [
+    amount,
+    category,
+    description,
+    linkedAccountId,
+    onAdd,
+    recurring,
+    reset,
+    showAccountPicker,
+    type,
+    yearMonth,
+  ]);
 
   const selectMonth = useCallback((monthIndex: number) => {
     const month = String(monthIndex + 1).padStart(2, "0");

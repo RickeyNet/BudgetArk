@@ -102,7 +102,12 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setRecurring(!!entry.recurring);
       setLinkedAccountId(entry.linkedAccountId);
       setReady(false);
+      setShowMonthPicker(false);
+      return;
     }
+
+    setReady(false);
+    setShowMonthPicker(false);
   }, [entry]);
 
   const isValid = parseFloat(amount) > 0;
@@ -130,7 +135,19 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       updatedAt: new Date().toISOString(),
     });
-  }, [entry, isValid, amount, type, category, description, yearMonth, recurring, onSave]);
+  }, [
+    amount,
+    category,
+    description,
+    entry,
+    isValid,
+    linkedAccountId,
+    onSave,
+    recurring,
+    showAccountPicker,
+    type,
+    yearMonth,
+  ]);
 
   const selectMonth = useCallback(
     (monthIndex: number) => {
@@ -146,13 +163,13 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     onDelete(entry.id);
   }, [entry, onDelete]);
 
-  if (!entry) return null;
-
   const handleShow = useCallback(() => {
     InteractionManager.runAfterInteractions(() => {
       setReady(true);
     });
   }, []);
+
+  if (!entry) return null;
 
   return (
     <>

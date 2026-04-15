@@ -7,6 +7,17 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.3.4",
+    title: "Budget Editing Stability Fixes",
+    releasedAt: "2026-04-15",
+    highlights: [
+      "Fixed a crash when editing pre-existing monthly budget entries.",
+      "Resolved a React hooks ordering bug in the Edit Budget Entry modal that could crash the app when opening certain existing entries.",
+      "Improved budget entry modal state reset behavior so month picker and linked-account state stay in sync when closing and reopening the form.",
+      "Small reliability polish for add/edit budget entry flows.",
+    ],
+  },
+  {
     version: "1.3.3",
     title: "Utilities Hub & Asset Tracking",
     releasedAt: "2026-04-01",
