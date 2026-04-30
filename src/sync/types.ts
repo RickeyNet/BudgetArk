@@ -12,6 +12,7 @@ import type {
   CategoryBudgetLimit,
   SavingsGoal,
   DebtMilestonePlan,
+  AssetAccount,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -85,6 +86,7 @@ export interface SyncDiff {
   budgetEntries: DiffEntry<BudgetEntry>[];
   budgetLimits: BudgetLimitDiff[];
   savingsGoals: DiffEntry<SavingsGoal>[];
+  assetAccounts: DiffEntry<AssetAccount>[];
   debtMilestonePlan?: DebtMilestonePlan;
   payoffStrategy?: PayoffStrategyPreference;
   syncTimestamp: string;

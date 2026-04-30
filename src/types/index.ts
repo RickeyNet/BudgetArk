@@ -149,6 +149,10 @@ export interface BudgetEntry {
   updatedAt: string;
   /** When true, this entry repeats every month from its `date` month onward */
   recurring?: boolean;
+  /** Asset account ID this savings entry contributes to */
+  linkedAccountId?: string;
+  /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
+  lastAppliedMonth?: string;
 }
 
 export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt" | "updatedAt">;
@@ -175,6 +179,35 @@ export interface SavingsGoal {
   targetAmount: number;
   currentAmount: number;
   targetDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* ─── Asset Account Types ─── */
+
+export const ASSET_ACCOUNT_CATEGORIES = [
+  "savings",
+  "retirement",
+  "hsa",
+  "investment",
+  "other",
+] as const;
+
+export type AssetAccountCategory = (typeof ASSET_ACCOUNT_CATEGORIES)[number];
+
+export const ASSET_ACCOUNT_CATEGORY_LABELS: Record<AssetAccountCategory, string> = {
+  savings: "Savings",
+  retirement: "401k / Retirement",
+  hsa: "HSA",
+  investment: "Investment",
+  other: "Other",
+};
+
+export interface AssetAccount {
+  id: string;
+  name: string;
+  category: AssetAccountCategory;
+  balance: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -265,6 +298,8 @@ export type DebtMilestoneKey =
   | "hull"
   | "deck"
   | "supplies"
+  | "gather_animals"
+  | "moorings"
   | "sail";
 
 export interface DebtMilestoneStep {
@@ -289,29 +324,41 @@ export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
   {
     key: "keel",
     title: "Keel",
-    description: "Set your first cash cushion so your plan has a stable base.",
+    description: "Save $1,000 for a starter emergency fund so your plan has a stable base.",
     targetAmount: 1200,
   },
   {
     key: "hull",
     title: "Hull",
-    description: "Knock down high-friction consumer debt with focused payoff momentum.",
+    description: "Pay off all debt except the house using the debt snowball.",
   },
   {
     key: "deck",
     title: "Deck",
-    description: "Build a stronger emergency runway for real-world surprises.",
+    description: "Save 3 to 6 months of living expenses for a fully funded emergency fund.",
   },
   {
     key: "supplies",
     title: "Supplies",
-    description: "Steadily reduce secured balances while keeping monthly plans consistent.",
+    description: "Invest 15% of household income for retirement.",
+    targetAmount: 500,
+  },
+  {
+    key: "gather_animals",
+    title: "Gather Animals",
+    description: "Save for your children\u2019s college education.",
+    targetAmount: 10000,
+  },
+  {
+    key: "moorings",
+    title: "Moorings",
+    description: "Pay off your home early with extra principal payments.",
   },
   {
     key: "sail",
     title: "Sail",
-    description: "Automate long-term investing so your money keeps moving forward.",
-    targetAmount: 500,
+    description: "Build wealth and give generously.",
+    targetAmount: 1000,
   },
 ];
 
@@ -324,7 +371,7 @@ export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
 export type RootTabParamList = {
   DebtTracker: undefined;
   Budget: undefined;
-  Investments: undefined;
+  Utilities: undefined;
   Profile: {
     openReleaseNotes?: boolean;
   } | undefined;

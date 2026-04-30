@@ -14,6 +14,7 @@ import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
+import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import {
   BUDGET_CATEGORIES,
   BudgetCategory,
@@ -21,14 +22,30 @@ import {
   CategoryBudgetLimit,
   Debt,
   NewBudgetEntryInput,
+  SavingsGoal,
+  AssetAccount,
+  AssetAccountCategory,
+  ASSET_ACCOUNT_CATEGORIES,
+  ASSET_ACCOUNT_CATEGORY_LABELS,
 } from "../types";
 import {
   getBudgetEntries,
+  getAllLimitsByMonth,
   getCategoryBudgetLimits,
   saveBudgetEntries,
   saveCategoryBudgetLimits,
 } from "../storage/budgetStorage";
+import { buildMonthlyReview, type MonthlyReviewData } from "../utils/budgetInsights";
 import { getDebts } from "../storage/debtStorage";
+import {
+  getSavingsGoals,
+  saveSavingsGoals,
+} from "../storage/savingsGoalStorage";
+import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
+import {
+  getAssetAccounts,
+  saveAssetAccounts,
+} from "../storage/assetAccountStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -109,6 +126,24 @@ const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
 const isRecurringInMonth = (dateISO: string, monthKey: string): boolean =>
   getMonthKey(new Date(dateISO)) <= monthKey;
 
+/** Returns an array of YYYY-MM keys from the month after `from` up to and including `to`. */
+const getMonthKeysBetween = (from: string, to: string): string[] => {
+  const keys: string[] = [];
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  let y = fy;
+  let m = fm;
+  // Advance one month past `from`
+  m++;
+  if (m > 12) { m = 1; y++; }
+  while (y < ty || (y === ty && m <= tm)) {
+    keys.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return keys;
+};
+
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -116,6 +151,7 @@ const BudgetScreen: React.FC = () => {
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -126,6 +162,17 @@ const BudgetScreen: React.FC = () => {
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
+  const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
+  const [showAssetModal, setShowAssetModal] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
+  const [assetName, setAssetName] = useState("");
+  const [assetBalance, setAssetBalance] = useState("");
+  const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
+  const [keelTarget, setKeelTarget] = useState(0);
+  const [showEfContribModal, setShowEfContribModal] = useState(false);
+  const [efContribAmount, setEfContribAmount] = useState("");
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
@@ -135,14 +182,57 @@ const BudgetScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       const loadBudgetData = async () => {
-        const [storedEntries, storedLimits, storedDebts] = await Promise.all([
+        const [storedEntries, storedLimits, storedDebts, storedGoals, storedAssets, milestonePlan] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
+          getSavingsGoals(),
+          getAssetAccounts(),
+          getDebtMilestonePlan(),
         ]);
+        const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
+        setKeelTarget(keelStep?.targetAmount ?? 1000);
+        // Process recurring contributions for linked accounts
+        const currentMonth = getMonthKey(new Date());
+        let entriesModified = false;
+        const accountBalanceDeltas = new Map<string, number>();
+
+        for (const entry of storedEntries) {
+          if (!entry.recurring || !entry.linkedAccountId) continue;
+          const entryStartMonth = getMonthKey(new Date(entry.date));
+          const lastApplied = entry.lastAppliedMonth ?? entryStartMonth;
+          if (lastApplied >= currentMonth) continue;
+
+          const missedMonths = getMonthKeysBetween(lastApplied, currentMonth);
+          if (missedMonths.length === 0) continue;
+
+          const delta = entry.amount * missedMonths.length;
+          const prev = accountBalanceDeltas.get(entry.linkedAccountId) ?? 0;
+          accountBalanceDeltas.set(entry.linkedAccountId, prev + delta);
+          entry.lastAppliedMonth = currentMonth;
+          entriesModified = true;
+        }
+
+        if (entriesModified) {
+          void saveBudgetEntries(storedEntries);
+        }
+
+        if (accountBalanceDeltas.size > 0) {
+          for (const account of storedAssets) {
+            const delta = accountBalanceDeltas.get(account.id);
+            if (delta) {
+              account.balance += delta;
+              account.updatedAt = new Date().toISOString();
+            }
+          }
+          void saveAssetAccounts(storedAssets);
+        }
+
         setEntries(storedEntries);
         setLimits(storedLimits);
         setDebts(storedDebts);
+        setSavingsGoals(storedGoals);
+        setAssetAccounts(storedAssets);
         setIsLoaded(true);
       };
 
@@ -197,6 +287,59 @@ const BudgetScreen: React.FC = () => {
   );
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
+
+  const savingsReserve = useMemo(
+    () =>
+      entries
+        .filter(
+          (e) =>
+            e.type === "expense" &&
+            ["Savings", "Retirement", "Investing"].includes(e.category)
+        )
+        .reduce((sum, e) => sum + e.amount, 0),
+    [entries]
+  );
+
+  const emergencyFundGoal = useMemo(() => {
+    const explicit = savingsGoals.find((g) => g.category === "emergency_fund");
+    if (explicit) return explicit;
+    // Fall back to Keel milestone data so the emergency fund appears automatically
+    if (keelTarget > 0 || savingsReserve > 0) {
+      return {
+        id: "__keel_ef__",
+        name: "Emergency Fund",
+        category: "emergency_fund" as const,
+        targetAmount: keelTarget,
+        currentAmount: savingsReserve,
+        createdAt: "",
+        updatedAt: "",
+      } satisfies SavingsGoal;
+    }
+    return null;
+  }, [savingsGoals, keelTarget, savingsReserve]);
+
+  const totalAssetBalance = useMemo(
+    () => assetAccounts.reduce((sum, a) => sum + a.balance, 0),
+    [assetAccounts]
+  );
+
+  const totalSavings = useMemo(
+    () => {
+      const goalSavings = savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0);
+      const entrySavings = entries
+        .filter((entry) => entry.type === "expense" && entry.category === "Savings")
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      return goalSavings + entrySavings + totalAssetBalance;
+    },
+    [savingsGoals, entries, totalAssetBalance]
+  );
+
+  const totalDebt = useMemo(
+    () => debts.reduce((sum, d) => sum + d.balance, 0),
+    [debts]
+  );
+
+  const netWorth = totalSavings - totalDebt;
 
   const limitByCategory = useMemo(() => {
     const map: Partial<Record<BudgetCategory, number>> = {};
@@ -314,13 +457,30 @@ const BudgetScreen: React.FC = () => {
     [chartColors, chartData]
   );
 
+  const applyAccountContribution = useCallback(
+    (accountId: string, amount: number) => {
+      setAssetAccounts((prev) => {
+        const next = prev.map((a) =>
+          a.id === accountId
+            ? { ...a, balance: a.balance + amount, updatedAt: new Date().toISOString() }
+            : a
+        );
+        void saveAssetAccounts(next);
+        return next;
+      });
+    },
+    []
+  );
+
   const handleAddEntry = useCallback((input: NewBudgetEntryInput) => {
     const now = new Date().toISOString();
+    const monthKey = now.slice(0, 7);
     const newEntry: BudgetEntry = {
       ...input,
       id: generateUUID(),
       createdAt: now,
       updatedAt: now,
+      lastAppliedMonth: input.linkedAccountId ? monthKey : undefined,
     };
 
     setEntries((prev) => {
@@ -329,8 +489,12 @@ const BudgetScreen: React.FC = () => {
       return updated;
     });
 
+    if (input.linkedAccountId) {
+      applyAccountContribution(input.linkedAccountId, input.amount);
+    }
+
     setShowAddModal(false);
-  }, []);
+  }, [applyAccountContribution]);
 
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
@@ -338,13 +502,28 @@ const BudgetScreen: React.FC = () => {
   }, [entries]);
 
   const handleSaveEntry = useCallback((updated: BudgetEntry) => {
+    const original = entries.find((e) => e.id === updated.id);
+    const oldAccount = original?.linkedAccountId;
+    const newAccount = updated.linkedAccountId;
+    const oldAmount = original?.amount ?? 0;
+    const newAmount = updated.amount;
+
+    // Reverse old contribution if link/amount changed
+    if (oldAccount && (oldAccount !== newAccount || oldAmount !== newAmount)) {
+      applyAccountContribution(oldAccount, -oldAmount);
+    }
+    // Apply new contribution if link/amount changed
+    if (newAccount && (oldAccount !== newAccount || oldAmount !== newAmount)) {
+      applyAccountContribution(newAccount, newAmount);
+    }
+
     setEntries((prev) => {
       const next = prev.map((e) => (e.id === updated.id ? updated : e));
       void saveBudgetEntries(next);
       return next;
     });
     setEditingEntry(null);
-  }, []);
+  }, [entries, applyAccountContribution]);
 
   const handleDeleteEntry = useCallback((id: string) => {
     setEntries((prev) => {
@@ -436,6 +615,116 @@ const BudgetScreen: React.FC = () => {
     closeLimitModal();
   }, [closeLimitModal, limitInput, limitModalCategory, selectedMonthKey]);
 
+  const openReviewModal = useCallback(async () => {
+    const limitsByMonth = await getAllLimitsByMonth();
+    const data = buildMonthlyReview(entries, limitsByMonth);
+    setReviewData(data);
+    setShowReviewModal(true);
+  }, [entries]);
+
+  const openAddAssetModal = useCallback(() => {
+    setEditingAsset(null);
+    setAssetName("");
+    setAssetBalance("");
+    setAssetCategory("savings");
+    setShowAssetModal(true);
+  }, []);
+
+  const openEditAssetModal = useCallback((account: AssetAccount) => {
+    setEditingAsset(account);
+    setAssetName(account.name);
+    setAssetBalance(String(account.balance));
+    setAssetCategory(account.category);
+    setShowAssetModal(true);
+  }, []);
+
+  const closeAssetModal = useCallback(() => {
+    setShowAssetModal(false);
+    setEditingAsset(null);
+  }, []);
+
+  const saveAsset = useCallback(() => {
+    const parsedBalance = parseFloat(assetBalance);
+    if (!assetName.trim() || Number.isNaN(parsedBalance) || parsedBalance < 0) return;
+
+    const now = new Date().toISOString();
+
+    if (editingAsset) {
+      setAssetAccounts((prev) => {
+        const next = prev.map((a) =>
+          a.id === editingAsset.id
+            ? { ...a, name: assetName.trim(), balance: parsedBalance, category: assetCategory, updatedAt: now }
+            : a
+        );
+        void saveAssetAccounts(next);
+        return next;
+      });
+    } else {
+      const newAccount: AssetAccount = {
+        id: generateUUID(),
+        name: assetName.trim(),
+        category: assetCategory,
+        balance: parsedBalance,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setAssetAccounts((prev) => {
+        const next = [...prev, newAccount];
+        void saveAssetAccounts(next);
+        return next;
+      });
+    }
+
+    closeAssetModal();
+  }, [assetBalance, assetCategory, assetName, closeAssetModal, editingAsset]);
+
+  const deleteAsset = useCallback((id: string) => {
+    setAssetAccounts((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      void saveAssetAccounts(next);
+      return next;
+    });
+    closeAssetModal();
+  }, [closeAssetModal]);
+
+  const handleEfContribution = useCallback(async () => {
+    const parsed = parseFloat(efContribAmount);
+    if (Number.isNaN(parsed) || parsed === 0) return;
+
+    const now = new Date().toISOString();
+    const existing = savingsGoals.find((g) => g.category === "emergency_fund");
+
+    if (existing) {
+      const updatedGoal = {
+        ...existing,
+        currentAmount: Math.max(0, existing.currentAmount + parsed),
+        updatedAt: now,
+      };
+      const updatedGoals = savingsGoals.map((g) =>
+        g.id === existing.id ? updatedGoal : g
+      );
+      setSavingsGoals(updatedGoals);
+      await saveSavingsGoals(updatedGoals);
+    } else {
+      // Create a real savings goal so the contribution persists
+      const newGoal: SavingsGoal = {
+        id: generateUUID(),
+        name: "Emergency Fund",
+        category: "emergency_fund",
+        targetAmount: keelTarget,
+        currentAmount: Math.max(0, parsed),
+        createdAt: now,
+        updatedAt: now,
+      };
+      const updatedGoals = [...savingsGoals, newGoal];
+      setSavingsGoals(updatedGoals);
+      await saveSavingsGoals(updatedGoals);
+    }
+
+    setShowEfContribModal(false);
+    setEfContribAmount("");
+  }, [efContribAmount, keelTarget, savingsGoals]);
+
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
@@ -501,7 +790,7 @@ const BudgetScreen: React.FC = () => {
         {automaticDebtMonthlyCost > 0 && (
           <Text style={styles.autoDebtHint}>Includes {formatCurrency(automaticDebtMonthlyCost)} auto debt minimums</Text>
         )}
-        {incomeEntries.length > 0 && (
+        {(incomeEntries.length > 0 || emergencyFundGoal) && (
           <View style={styles.incomeSummaryList}>
             {incomeEntries.map((entry) => (
               <TouchableOpacity
@@ -523,9 +812,134 @@ const BudgetScreen: React.FC = () => {
                 </View>
               </TouchableOpacity>
             ))}
+            {emergencyFundGoal && (
+              <TouchableOpacity
+                style={styles.incomeSummaryRow}
+                onPress={() => {
+                  setEfContribAmount("");
+                  setShowEfContribModal(true);
+                }}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
+                  Emergency Fund (Keel)
+                </Text>
+                <View style={styles.incomeSummaryRight}>
+                  <Text style={[styles.incomeSummaryTag, { color: colors.teal }]}>Saved</Text>
+                  <Text style={[styles.incomeSummaryAmount, { color: colors.teal }]}>
+                    {formatCurrency(emergencyFundGoal.currentAmount)}
+                    {emergencyFundGoal.targetAmount > 0
+                      ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                      : ""}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
+
+      {/* Net Worth card */}
+      <View style={styles.netWorthCard}>
+        <Text style={styles.netWorthTitle}>Net Worth</Text>
+        <Text
+          style={[
+            styles.netWorthValue,
+            { color: netWorth >= 0 ? colors.success : colors.danger },
+          ]}
+        >
+          {netWorth >= 0 ? "" : "-"}{formatCurrency(Math.abs(netWorth))}
+        </Text>
+        <View style={styles.netWorthBreakdown}>
+          <View style={styles.netWorthStat}>
+            <Text style={styles.netWorthStatLabel}>Total Assets</Text>
+            <Text style={[styles.netWorthStatValue, { color: colors.success }]}>
+              {formatCurrency(totalSavings)}
+            </Text>
+          </View>
+          <View style={styles.netWorthDivider} />
+          <View style={styles.netWorthStat}>
+            <Text style={styles.netWorthStatLabel}>Total Debt</Text>
+            <Text style={[styles.netWorthStatValue, { color: totalDebt > 0 ? colors.danger : colors.textDim }]}>
+              {totalDebt > 0 ? "-" : ""}{formatCurrency(totalDebt)}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Accounts card */}
+      <View style={styles.accountsCard}>
+        <View style={styles.accountsHeaderRow}>
+          <Text style={styles.accountsTitle}>Accounts</Text>
+          <TouchableOpacity onPress={openAddAssetModal}>
+            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
+        {assetAccounts.length === 0 && !emergencyFundGoal ? (
+          <Text style={styles.accountsEmpty}>
+            Track your savings, 401k, HSA, and other account balances here.
+          </Text>
+        ) : (
+          <>
+            {emergencyFundGoal && (
+              <TouchableOpacity
+                style={styles.accountRow}
+                onPress={() => {
+                  setEfContribAmount("");
+                  setShowEfContribModal(true);
+                }}
+                activeOpacity={0.6}
+              >
+                <View style={styles.accountRowLeft}>
+                  <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
+                  <Text style={styles.accountCategory}>
+                    {emergencyFundGoal.targetAmount > 0
+                      ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                      : "Savings Goal"}
+                  </Text>
+                </View>
+                <Text style={[styles.accountBalance, { color: colors.teal }]}>
+                  {formatCurrency(emergencyFundGoal.currentAmount)}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {assetAccounts.map((account) => (
+              <TouchableOpacity
+                key={account.id}
+                style={styles.accountRow}
+                onPress={() => openEditAssetModal(account)}
+                activeOpacity={0.6}
+              >
+                <View style={styles.accountRowLeft}>
+                  <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
+                  <Text style={styles.accountCategory}>
+                    {ASSET_ACCOUNT_CATEGORY_LABELS[account.category]}
+                  </Text>
+                </View>
+                <Text style={[styles.accountBalance, { color: colors.success }]}>
+                  {formatCurrency(account.balance)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.accountTotalRow}>
+              <Text style={styles.accountTotalLabel}>Total</Text>
+              <Text style={[styles.accountTotalValue, { color: colors.success }]}>
+                {formatCurrency(totalAssetBalance + (emergencyFundGoal?.currentAmount ?? 0))}
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
+
+      {/* Monthly Review button */}
+      <TouchableOpacity
+        style={styles.reviewBtn}
+        onPress={openReviewModal}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.reviewBtnText}>Monthly Review</Text>
+        <Text style={styles.reviewBtnHint}>Trends, changes, streaks</Text>
+      </TouchableOpacity>
 
       {/* Spending card — donut chart + category rows in one card */}
       <View style={styles.spendingCard}>
@@ -663,6 +1077,7 @@ const BudgetScreen: React.FC = () => {
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddEntry}
+        assetAccounts={assetAccounts}
       />
 
       <EditBudgetEntryModal
@@ -670,6 +1085,13 @@ const BudgetScreen: React.FC = () => {
         onClose={() => setEditingEntry(null)}
         onSave={handleSaveEntry}
         onDelete={handleDeleteEntry}
+        assetAccounts={assetAccounts}
+      />
+
+      <MonthlyReviewModal
+        visible={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        data={reviewData}
       />
 
       <Modal
@@ -778,6 +1200,132 @@ const BudgetScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Asset Account Add/Edit Modal */}
+      <Modal
+        visible={showAssetModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeAssetModal}
+      >
+        <View style={styles.limitOverlay}>
+          <View style={styles.limitModalCard}>
+            <Text style={styles.limitModalTitle}>
+              {editingAsset ? "Edit Account" : "Add Account"}
+            </Text>
+            <Text style={styles.limitModalSub}>
+              Track a balance that won't affect your monthly budget.
+            </Text>
+
+            <TextInput
+              style={styles.limitInput}
+              placeholder="Account name"
+              placeholderTextColor={colors.textMuted}
+              value={assetName}
+              onChangeText={setAssetName}
+            />
+
+            <TextInput
+              style={styles.limitInput}
+              placeholder="Balance"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+              value={assetBalance}
+              onChangeText={setAssetBalance}
+            />
+
+            <View style={styles.assetCategoryRow}>
+              {ASSET_ACCOUNT_CATEGORIES.map((cat) => {
+                const isSelected = assetCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.assetCategoryChip,
+                      {
+                        borderColor: isSelected ? colors.accent : colors.cardBorder,
+                        backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
+                      },
+                    ]}
+                    onPress={() => setAssetCategory(cat)}
+                  >
+                    <Text
+                      style={[
+                        styles.assetCategoryChipText,
+                        { color: isSelected ? colors.accent : colors.textDim },
+                      ]}
+                    >
+                      {ASSET_ACCOUNT_CATEGORY_LABELS[cat]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.limitActions}>
+              {editingAsset && (
+                <TouchableOpacity
+                  style={styles.limitCancelBtn}
+                  onPress={() => deleteAsset(editingAsset.id)}
+                >
+                  <Text style={[styles.limitCancelText, { color: colors.danger }]}>Delete</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.limitCancelBtn} onPress={closeAssetModal}>
+                <Text style={styles.limitCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.limitSaveBtn} onPress={saveAsset}>
+                <Text style={styles.limitSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Emergency Fund Contribution Modal */}
+      <Modal
+        visible={showEfContribModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEfContribModal(false)}
+      >
+        <View style={styles.limitOverlay}>
+          <View style={styles.limitModalCard}>
+            <Text style={styles.limitModalTitle}>Emergency Fund</Text>
+            <Text style={styles.limitModalSub}>
+              Current balance: {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
+              {emergencyFundGoal?.targetAmount
+                ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                : ""}
+            </Text>
+
+            <TextInput
+              style={styles.limitInput}
+              placeholder="Amount to add (or negative to withdraw)"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+              value={efContribAmount}
+              onChangeText={setEfContribAmount}
+            />
+
+            <Text style={styles.limitModalHint}>
+              Enter a positive number to contribute, or negative to withdraw.
+            </Text>
+
+            <View style={styles.limitActions}>
+              <TouchableOpacity
+                style={styles.limitCancelBtn}
+                onPress={() => setShowEfContribModal(false)}
+              >
+                <Text style={styles.limitCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.limitSaveBtn} onPress={handleEfContribution}>
+                <Text style={styles.limitSaveText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -795,22 +1343,26 @@ const makeStyles = (colors: ThemeColors) =>
     titleSection: {
       paddingTop: 56,
       paddingBottom: 20,
+      alignItems: "center",
     },
     appLabel: {
       fontSize: 12,
       color: colors.textDim,
       letterSpacing: 2,
       marginBottom: 4,
+      textAlign: "center",
     },
     screenTitle: {
       fontSize: 28,
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
+      textAlign: "center",
     },
     screenSubtitle: {
       fontSize: 14,
       color: colors.textMuted,
+      textAlign: "center",
     },
     monthSwitchRow: {
       flexDirection: "row",
@@ -850,7 +1402,53 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: `${colors.accent}30`,
       borderRadius: 20,
       padding: 20,
-      marginBottom: 18,
+      marginBottom: 14,
+    },
+    netWorthCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 18,
+      marginBottom: 14,
+      alignItems: "center",
+    },
+    netWorthTitle: {
+      fontSize: 12,
+      color: colors.textDim,
+      letterSpacing: 1,
+      marginBottom: 4,
+    },
+    netWorthValue: {
+      fontSize: 24,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+      marginBottom: 14,
+    },
+    netWorthBreakdown: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "stretch",
+    },
+    netWorthStat: {
+      flex: 1,
+      alignItems: "center",
+    },
+    netWorthStatLabel: {
+      fontSize: 11,
+      color: colors.textDim,
+      marginBottom: 3,
+    },
+    netWorthStatValue: {
+      fontSize: 14,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+    },
+    netWorthDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: colors.cardBorder,
+      marginHorizontal: 8,
     },
     summaryLabel: {
       color: colors.textMuted,
@@ -949,6 +1547,27 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       color: colors.text,
       marginBottom: 10,
+    },
+    reviewBtn: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: `${colors.accent}30`,
+      borderRadius: 14,
+      paddingVertical: 14,
+      paddingHorizontal: 18,
+      marginBottom: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    reviewBtnText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.accent,
+    },
+    reviewBtnHint: {
+      fontSize: 11,
+      color: colors.textMuted,
     },
     spendingCard: {
       backgroundColor: colors.card,
@@ -1226,6 +1845,98 @@ const makeStyles = (colors: ThemeColors) =>
     entryEditHint: {
       color: colors.accent,
       fontSize: 10,
+      fontWeight: "600",
+    },
+
+    /* Accounts card */
+    accountsCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 14,
+    },
+    accountsHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 10,
+    },
+    accountsTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    accountsAddBtn: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    accountsEmpty: {
+      fontSize: 13,
+      color: colors.textDim,
+      textAlign: "center",
+      paddingVertical: 8,
+    },
+    accountRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    accountRowLeft: {
+      flex: 1,
+      marginRight: 8,
+    },
+    accountName: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.text,
+    },
+    accountCategory: {
+      fontSize: 11,
+      color: colors.textDim,
+      marginTop: 1,
+    },
+    accountBalance: {
+      fontSize: 14,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"] as any,
+    },
+    accountTotalRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    accountTotalLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.textDim,
+    },
+    accountTotalValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"] as any,
+    },
+    assetCategoryRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 8,
+    },
+    assetCategoryChip: {
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    assetCategoryChipText: {
+      fontSize: 12,
       fontWeight: "600",
     },
 

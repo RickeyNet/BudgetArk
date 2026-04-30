@@ -18,7 +18,7 @@ import { generateUUID } from "../utils/uuid";
 
 type PlannerStrategy = "avalanche" | "snowball";
 type SmartPlanSection = "hull" | "deck" | "supplies";
-type ArkPhase = "keel" | "hull" | "deck" | "supplies" | "sail";
+type ArkPhase = "keel" | "hull" | "deck" | "supplies" | "gather_animals" | "moorings" | "sail";
 
 interface SmartPlanModalProps {
   visible: boolean;

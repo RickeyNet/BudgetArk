@@ -445,22 +445,26 @@ const makeStyles = (colors: ThemeColors) =>
     titleSection: {
       paddingTop: 56,
       paddingBottom: 20,
+      alignItems: "center",
     },
     appLabel: {
       fontSize: 12,
       color: colors.textDim,
       letterSpacing: 2,
       marginBottom: 4,
+      textAlign: "center",
     },
     screenTitle: {
       fontSize: 28,
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
+      textAlign: "center",
     },
     screenSubtitle: {
       fontSize: 14,
       color: colors.textMuted,
+      textAlign: "center",
     },
 
     /* Result Card */

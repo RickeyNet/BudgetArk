@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  InteractionManager,
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,15 +18,23 @@ import {
   BudgetEntry,
   BudgetEntryType,
   BudgetCategory,
+  AssetAccount,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+
+const LINKABLE_CATEGORIES: ReadonlySet<BudgetCategory> = new Set([
+  "Savings",
+  "Retirement",
+  "Investing",
+]);
 
 interface EditBudgetEntryModalProps {
   entry: BudgetEntry | null;
   onClose: () => void;
   onSave: (updated: BudgetEntry) => void;
   onDelete: (id: string) => void;
+  assetAccounts?: AssetAccount[];
 }
 
 const MONTH_LABELS = [
@@ -63,6 +73,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  assetAccounts = [],
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -76,6 +87,8 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const [recurring, setRecurring] = useState(false);
+  const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (entry) {
@@ -87,10 +100,18 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setYearMonth(ym);
       setPickerYear(Number(ym.split("-")[0]) || new Date().getFullYear());
       setRecurring(!!entry.recurring);
+      setLinkedAccountId(entry.linkedAccountId);
+      setReady(false);
+      setShowMonthPicker(false);
+      return;
     }
+
+    setReady(false);
+    setShowMonthPicker(false);
   }, [entry]);
 
   const isValid = parseFloat(amount) > 0;
+  const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
 
   const categoryOptions = useMemo(() => {
     if (SELECTABLE_BUDGET_CATEGORIES.includes(category)) {
@@ -111,9 +132,22 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       description: description.trim() || undefined,
       date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
       recurring: recurring || undefined,
+      linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       updatedAt: new Date().toISOString(),
     });
-  }, [entry, isValid, amount, type, category, description, yearMonth, recurring, onSave]);
+  }, [
+    amount,
+    category,
+    description,
+    entry,
+    isValid,
+    linkedAccountId,
+    onSave,
+    recurring,
+    showAccountPicker,
+    type,
+    yearMonth,
+  ]);
 
   const selectMonth = useCallback(
     (monthIndex: number) => {
@@ -129,165 +163,226 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     onDelete(entry.id);
   }, [entry, onDelete]);
 
+  const handleShow = useCallback(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setReady(true);
+    });
+  }, []);
+
   if (!entry) return null;
 
   return (
     <>
-    <Modal visible={!!entry} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={!!entry} animationType="slide" transparent onRequestClose={onClose} onShow={handleShow}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.overlay}
       >
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
-          <View onStartShouldSetResponder={() => true}>
-            <ScrollView
-              style={styles.modalContent}
-              contentContainerStyle={[styles.modalScroll, { paddingBottom: Math.max(insets.bottom, 16) }]}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text style={styles.title}>Edit Entry</Text>
-              <Text style={styles.subtitle}>Update or delete this budget entry.</Text>
+        {/* Tap-to-dismiss area above the sheet */}
+        <Pressable style={styles.backdrop} onPress={onClose} />
 
-              <View style={styles.field}>
-                <Text style={styles.label}>ENTRY TYPE</Text>
-                <View style={styles.typeRow}>
-                  {(["expense", "income"] as const).map((entryType) => (
-                    <TouchableOpacity
-                      key={entryType}
-                      style={[
-                        styles.typeButton,
-                        type === entryType && styles.typeButtonActive,
-                        type === entryType && {
-                          borderColor:
-                            entryType === "expense" ? colors.warning : colors.success,
-                        },
-                      ]}
-                      onPress={() => setType(entryType)}
-                    >
-                      <Text
+        {/* Modal sheet */}
+        <View style={styles.modalContent}>
+          <ScrollView
+            contentContainerStyle={[styles.modalScroll, { paddingBottom: Math.max(insets.bottom, 16) }]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.title}>Edit Entry</Text>
+            <Text style={styles.subtitle}>Update or delete this budget entry.</Text>
+
+            {ready ? (
+              <>
+                <View style={styles.field}>
+                  <Text style={styles.label}>ENTRY TYPE</Text>
+                  <View style={styles.typeRow}>
+                    {(["expense", "income"] as const).map((entryType) => (
+                      <TouchableOpacity
+                        key={entryType}
                         style={[
-                          styles.typeText,
+                          styles.typeButton,
+                          type === entryType && styles.typeButtonActive,
                           type === entryType && {
-                            color: entryType === "expense" ? colors.warning : colors.success,
+                            borderColor:
+                              entryType === "expense" ? colors.warning : colors.success,
                           },
                         ]}
+                        onPress={() => setType(entryType)}
                       >
-                        {entryType === "expense" ? "Expense" : "Income"}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[
+                            styles.typeText,
+                            type === entryType && {
+                              color: entryType === "expense" ? colors.warning : colors.success,
+                            },
+                          ]}
+                        >
+                          {entryType === "expense" ? "Expense" : "Income"}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>CATEGORY</Text>
-                <View style={styles.categoryWrap}>
-                  {categoryOptions.map((item) => (
-                    <TouchableOpacity
-                      key={item}
-                      style={[
-                        styles.categoryPill,
-                        category === item && styles.categoryPillActive,
-                      ]}
-                      onPress={() => setCategory(item)}
-                    >
-                      <Text
+                <View style={styles.field}>
+                  <Text style={styles.label}>CATEGORY</Text>
+                  <View style={styles.categoryWrap}>
+                    {categoryOptions.map((item) => (
+                      <TouchableOpacity
+                        key={item}
                         style={[
-                          styles.categoryPillText,
-                          category === item && styles.categoryPillTextActive,
+                          styles.categoryPill,
+                          category === item && styles.categoryPillActive,
                         ]}
+                        onPress={() => setCategory(item)}
                       >
-                        {item}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[
+                            styles.categoryPillText,
+                            category === item && styles.categoryPillTextActive,
+                          ]}
+                        >
+                          {item}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>AMOUNT</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textMuted}
-                  value={amount}
-                  onChangeText={setAmount}
-                  keyboardType="decimal-pad"
-                />
-              </View>
+                <View style={styles.field}>
+                  <Text style={styles.label}>AMOUNT</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textMuted}
+                    value={amount}
+                    onChangeText={setAmount}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>DESCRIPTION (OPTIONAL)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Grocery run, Netflix, etc."
-                  placeholderTextColor={colors.textMuted}
-                  value={description}
-                  onChangeText={setDescription}
-                  maxLength={100}
-                />
-              </View>
+                <View style={styles.field}>
+                  <Text style={styles.label}>DESCRIPTION (OPTIONAL)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Grocery run, Netflix, etc."
+                    placeholderTextColor={colors.textMuted}
+                    value={description}
+                    onChangeText={setDescription}
+                    maxLength={100}
+                  />
+                </View>
 
-              <View style={styles.field}>
-                <Text style={styles.label}>MONTH</Text>
+                <View style={styles.field}>
+                  <Text style={styles.label}>MONTH</Text>
+                  <TouchableOpacity
+                    style={styles.input}
+                    onPress={() => {
+                      const parsedYear = Number(yearMonth.split("-")[0]);
+                      if (!Number.isNaN(parsedYear)) {
+                        setPickerYear(parsedYear);
+                      }
+                      setShowMonthPicker(true);
+                    }}
+                  >
+                    <Text style={{ color: colors.text, fontSize: 15 }}>
+                      {formatYearMonthLabel(yearMonth)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity
-                  style={styles.input}
-                  onPress={() => {
-                    const parsedYear = Number(yearMonth.split("-")[0]);
-                    if (!Number.isNaN(parsedYear)) {
-                      setPickerYear(parsedYear);
-                    }
-                    setShowMonthPicker(true);
-                  }}
+                  style={styles.recurringRow}
+                  onPress={() => setRecurring((prev) => !prev)}
+                  activeOpacity={0.7}
                 >
-                  <Text style={{ color: colors.text, fontSize: 15 }}>
-                    {formatYearMonthLabel(yearMonth)}
-                  </Text>
+                  <View
+                    style={[
+                      styles.recurringToggle,
+                      recurring && {
+                        backgroundColor: colors.accent,
+                        borderColor: colors.accent,
+                      },
+                    ]}
+                  >
+                    {recurring && <Text style={styles.recurringCheck}>✓</Text>}
+                  </View>
+                  <View style={styles.recurringTextWrap}>
+                    <Text style={styles.recurringLabel}>Monthly Recurring</Text>
+                    <Text style={styles.recurringHint}>
+                      This entry will appear in every month from the start month onward.
+                    </Text>
+                  </View>
                 </TouchableOpacity>
-              </View>
 
-              <TouchableOpacity
-                style={styles.recurringRow}
-                onPress={() => setRecurring((prev) => !prev)}
-                activeOpacity={0.7}
-              >
-                <View
-                  style={[
-                    styles.recurringToggle,
-                    recurring && {
-                      backgroundColor: colors.accent,
-                      borderColor: colors.accent,
-                    },
-                  ]}
-                >
-                  {recurring && <Text style={styles.recurringCheck}>✓</Text>}
-                </View>
-                <View style={styles.recurringTextWrap}>
-                  <Text style={styles.recurringLabel}>Monthly Recurring</Text>
-                  <Text style={styles.recurringHint}>
-                    This entry will appear in every month from the start month onward.
-                  </Text>
-                </View>
-              </TouchableOpacity>
+                {showAccountPicker && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>LINK TO ACCOUNT</Text>
+                    <Text style={styles.accountPickerHint}>
+                      Contributions will be added to this account's balance.
+                    </Text>
+                    <View style={styles.categoryWrap}>
+                      <TouchableOpacity
+                        style={[
+                          styles.categoryPill,
+                          !linkedAccountId && styles.categoryPillActive,
+                        ]}
+                        onPress={() => setLinkedAccountId(undefined)}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryPillText,
+                            !linkedAccountId && styles.categoryPillTextActive,
+                          ]}
+                        >
+                          None
+                        </Text>
+                      </TouchableOpacity>
+                      {assetAccounts.map((account) => (
+                        <TouchableOpacity
+                          key={account.id}
+                          style={[
+                            styles.categoryPill,
+                            linkedAccountId === account.id && styles.categoryPillActive,
+                          ]}
+                          onPress={() => setLinkedAccountId(account.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryPillText,
+                              linkedAccountId === account.id && styles.categoryPillTextActive,
+                            ]}
+                          >
+                            {account.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
 
-              <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                  <Text style={styles.deleteText}>Delete</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.saveButton, !isValid && styles.saveButtonDisabled]}
-                  onPress={handleSave}
-                  disabled={!isValid}
-                >
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </TouchableOpacity>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+                    <Text style={styles.deleteText}>Delete</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveButton, !isValid && styles.saveButtonDisabled]}
+                    onPress={handleSave}
+                    disabled={!isValid}
+                  >
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.loadingPlaceholder}>
+                <Text style={styles.subtitle}>Loading...</Text>
               </View>
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
     <Modal
@@ -343,7 +438,6 @@ const makeStyles = (colors: ThemeColors) =>
     },
     backdrop: {
       flex: 1,
-      justifyContent: "flex-end",
     },
     modalContent: {
       backgroundColor: colors.card,
@@ -353,6 +447,10 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
       maxHeight: "85%",
+    },
+    loadingPlaceholder: {
+      alignItems: "center",
+      paddingVertical: 40,
     },
     modalScroll: {
       padding: 24,
@@ -531,6 +629,10 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textMuted,
       fontSize: 12,
       marginTop: 2,
+    },
+    accountPickerHint: {
+      color: colors.textMuted,
+      fontSize: 12,
     },
 
     buttonRow: {

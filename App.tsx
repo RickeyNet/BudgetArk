@@ -28,6 +28,8 @@ import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
   setLastSeenReleaseNotesVersion,
+  setOtaUpdateInstalled,
+  consumeOtaUpdateInstalled,
 } from "./src/storage/releaseNotesStorage";
 import { CURRENT_APP_VERSION, RELEASE_NOTES } from "./src/data/releaseNotes";
 import type { RootTabParamList } from "./src/types";
@@ -213,6 +215,13 @@ const AppContent: React.FC = () => {
     if (isOnboardingComplete !== true) return;
 
     const checkReleaseNotesPrompt = async () => {
+      const justInstalledOta = await consumeOtaUpdateInstalled();
+      if (justInstalledOta) {
+        // OTA update was just applied — the update modal already showed
+        // the release notes, so mark as seen and skip the prompt.
+        await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+        return;
+      }
       const lastSeenVersion = await getLastSeenReleaseNotesVersion();
       if (lastSeenVersion !== CURRENT_APP_VERSION) {
         setShowReleaseNotesPrompt(true);
@@ -224,6 +233,7 @@ const AppContent: React.FC = () => {
 
   const handleInstallUpdate = useCallback(async () => {
     try {
+      await setOtaUpdateInstalled();
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error) {
@@ -252,25 +262,6 @@ const AppContent: React.FC = () => {
       }
     } else if (__DEV__) {
       console.warn("Navigation not ready — could not open release notes");
-    }
-  }, [navigationRef]);
-
-  const handleTryNewFeature = useCallback(async () => {
-    setShowReleaseNotesPrompt(false);
-    await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 220);
-    });
-
-    if (navigationRef.isReady()) {
-      try {
-        navigationRef.navigate("Profile");
-      } catch (e) {
-        if (__DEV__) console.warn("Navigation to Profile failed:", e);
-      }
-    } else if (__DEV__) {
-      console.warn("Navigation not ready — could not navigate to new feature");
     }
   }, [navigationRef]);
 
@@ -356,22 +347,23 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{CURRENT_APP_VERSION}</Text>
-            <Text style={[styles.featureTitle, { color: colors.accent }]}>Partner Sync is here</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              You can now sync budgets, debts, and savings goals with your partner directly over WiFi — no server or account needed. Pair once, then tap Sync Now anytime.
-            </Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{latestRelease.version}</Text>
+            <Text style={[styles.featureTitle, { color: colors.accent }]}>{latestRelease.title}</Text>
+            {latestRelease.highlights.slice(0, 3).map((line, i) => (
+              <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                {"\u2022"} {line}
+              </Text>
+            ))}
+            {latestRelease.highlights.length > 3 && (
+              <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                +{latestRelease.highlights.length - 3} more
+              </Text>
+            )}
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
-              onPress={handleTryNewFeature}
-            >
-              <Text style={[styles.dialogButtonText, { color: colors.white }]}>Try Partner Sync</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.dialogButton, { backgroundColor: colors.bg }]}
               onPress={handleOpenReleaseHistory}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.text }]}>View all release notes</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.white }]}>See what's new</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: "transparent" }]}

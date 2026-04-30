@@ -1,5 +1,53 @@
 # BudgetArk Release Notes
 
+## v1.3.3 - Utilities Hub & Asset Tracking (2026-04-01)
+
+### Utilities Tab
+- Replaced the Investments tab with a new Utilities hub containing collapsible financial tools.
+- **Compound Interest Calculator** — now includes S&P 500 return presets (Savings 2%, Bonds 4%, S&P 500 7%, Aggressive 10%), a "Why 7%?" educational card explaining inflation-adjusted returns, and a Rule of 72 insight showing how quickly your money doubles.
+- **Loan/Mortgage Calculator** — enter loan amount, interest rate, and term to see monthly payments with a principal vs interest breakdown and visual ratio bar. Includes 15, 20, and 30-year term presets.
+- **Emergency Fund Calculator** — automatically pulls your average monthly expenses from the last 6 months of budget data. Shows progress toward 3-month and 6-month savings targets with a monthly savings slider and time-to-reach estimates.
+
+### Asset Account Tracking
+- Added asset accounts on the Budget screen for tracking savings, 401k/retirement, HSA, investment, and other account balances.
+- Asset accounts are persistent balances that don't count as monthly budget entries but are included in net worth calculations.
+- Asset accounts sync between paired devices via the existing peer-to-peer sync system.
+- Emergency fund savings goal now appears automatically in the Accounts section on the Budget screen.
+- Savings, Retirement, and Investing budget entries can now be linked to a specific asset account — contributions are added to the account balance on save.
+- Recurring budget entries linked to an account automatically contribute to that account's balance each month.
+
+### Bug Fixes & Polish
+- Fixed scroll freeze when opening the edit budget entry modal — form rendering is now deferred until the modal animation completes.
+- Centered page titles and subtitles across all screens (Debt Tracker, Budget, Utilities, Profile).
+- Updated onboarding to reflect the new Utilities tab.
+
+### Security & Reliability
+- Added 5-second timeout protection on all storage operations to prevent app freezes from degraded flash storage or backed-up I/O queues.
+- Hardened OTA update version guard — updates with missing version metadata are now blocked (fail-closed) to prevent downgrade attacks. Fresh installs without version metadata are still allowed.
+- Importing a backup older than 30 days now shows a staleness warning so you know the data may be outdated. The import still proceeds — the warning is informational only.
+- Added explicit bounds checks on all financial calculation inputs (balance capped at $1B, rate at 200%, payments at $1M, years at 100) to prevent Infinity/NaN from cascading into the UI.
+
+## v1.2.2 - Bug Fixes & Ark Build Expansion (2026-03-31)
+
+### Bug Fixes
+- Fixed Keel savings not reflecting in the Budget screen total savings display.
+- Fixed Build Your Ark plan requiring a long-press to open — now opens on a single tap.
+- Fixed savings log only allowing additions — you can now set an exact savings amount or adjust down with -$50 / -$100 quick buttons.
+
+### Ark Build Expansion
+- Expanded Build Your Ark from 5 steps to 7, following a complete financial milestone journey:
+  1. **Keel** — Save $1,000 for a starter emergency fund.
+  2. **Hull** — Pay off all debt except the house using the debt snowball.
+  3. **Deck** — Save 3 to 6 months of living expenses for a fully funded emergency fund.
+  4. **Supplies** — Invest 15% of household income for retirement.
+  5. **Gather Animals** — Save for your children's college education.
+  6. **Moorings** — Pay off your home early.
+  7. **Sail** — Build wealth and give.
+- Moved payoff strategy comparison (Avalanche vs Snowball) into the Hull milestone step so planning and progress live in one place.
+- Existing milestone progress is automatically preserved when upgrading — new steps are added without losing any data.
+- Added monthly budget summary graph showing income vs expenses across recent months.
+- Emergency fund balance now reflects consistently across Budget and Debt Tracker tabs.
+
 ## v1.2.1 - Bug Fixes & Polish (2026-03-28)
 
 - Fixed edit budget modal scroll freeze after selecting a category pill.

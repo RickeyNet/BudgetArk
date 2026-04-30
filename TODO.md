@@ -208,7 +208,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 
 ### Info / Optional
 
-- [ ] Implement AsyncStorage timeout wrapper
+- [x] Implement AsyncStorage timeout wrapper
 #### 1. Add timeouts to AsyncStorage operations to prevent app hangs on slow I/O
 File: `src/storage/encryptedStorage.ts`
 Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash storage or backed-up I/O queues could hang indefinitely, freezing the app.
@@ -218,7 +218,7 @@ Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash st
 - Recommended: **Option A** — simple, comprehensive, 5-second timeout is generous enough for slow devices.
 
 
-- [ ] Implement fail-closed downgrade guard 
+- [x] Implement fail-closed downgrade guard 
 #### 2. Fail-closed policy for version downgrade guard
 File: `src/utils/versionGuard.ts`
 Currently `isUpdateSafe()` returns `true` (fail-open) when either version is missing. An attacker could strip version metadata from a malicious OTA update to bypass the downgrade guard.
@@ -228,7 +228,7 @@ Currently `isUpdateSafe()` returns `true` (fail-open) when either version is mis
 - Recommended: **Option A** — blocks the actual attack vector without risking lockout from legitimate updates.
 
 
-- [ ] Implement stale import warning
+- [x] Implement stale import warning
 #### 3. Data expiration warnings for stale imports
 Files: `src/utils/importData.ts`, `src/utils/exportData.ts`
 Exports already include an `exportedAt` timestamp, but imports don't check it. A user could import a 6-month-old backup and silently overwrite fresher data in merge mode.
@@ -237,7 +237,7 @@ Exports already include an `exportedAt` timestamp, but imports don't check it. A
 - **Option C — Non-blocking info banner:** Parse `exportedAt`, return a `staleDays` field alongside import counts. UI shows an info banner but doesn't block the import.
 - Recommended: **Option C** — stale imports aren't dangerous (merge deduplicates by ID), so blocking would be frustrating. A simple banner is the right awareness level.
 
-- [ ] Implement explicit bounds checks
+- [x] Implement explicit bounds checks
 #### 4. Explicit bounds checks before financial calculations
 File: `src/utils/calculations.ts`
 Calculation functions accept raw `number` inputs with no upper bounds. JS `Number` loses precision above ~2^53, and `Math.pow()` with extreme inputs returns `Infinity`/`NaN`, which cascades into the UI.
@@ -293,7 +293,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [x] Build Your Ark planning hub (Hull/Deck/Supplies) integrated with Debt Tracker
 - [x] Improve debt milestone modal readability (full-screen layout + larger text + safe-area support)
 - [x] Improve theme readability and contrast across The Ark and dark themes (buttons + theme selector cards)
-- [ ] Monthly review insights (category changes, spending trends, streaks)
+- [x] Monthly review insights (category changes, spending trends, streaks)
 - [ ] Custom categories and category icon support
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Undo actions and bulk edit/delete operations
@@ -301,6 +301,22 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Accessibility improvements (larger text mode + better screen reader labels)
 - [ ] Onboarding quick-start templates (single, couple, debt-heavy, zero-based)
 - [ ] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage
+- [ ] Debt-Free Countdown Timer — live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
+- [ ] Annual Financial Report — end-of-year summary: total debt paid, total saved, net worth change, biggest spending category, months under budget. Shareable as an image (percentages and milestones only, no PII).
+- [ ] Budget Rollover Mode — unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
+- [ ] Spending Velocity Alerts — passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
+- [ ] Partner Budget Visibility Controls — mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
+- [ ] Debt Payoff Celebration Screen — confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
+- [ ] "What If I Stopped Spending on X" Projections — pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
+- [ ] Net Worth Timeline Graph — plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
+- [ ] Savings Streak Tracker — track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
+- [ ] Quick-Entry Home Screen Widget — minimal widget to log an expense (category + amount) without opening the full app.
+- [ ] Bill Calendar View — monthly calendar showing when recurring expenses hit. Visual cash flow timing.
+- [ ] Spending Heatmap — calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
+- [ ] Financial Health Score — single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
+- [ ] Ark Journey Timeline — visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
+- [ ] Category Spending Comparison — "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
+- [ ] Dark Mode Schedule — auto-switch themes based on time of day (lighter during day, dark at night).
 - [x] fix theme selection so it doesn't close option window until you hit done
 - [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
 - [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.

@@ -62,7 +62,7 @@ import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
-import SmartPlanModal from "../components/SmartPlanModal";
+import { simulatePayoffPlan } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -97,18 +97,32 @@ const getSnowballPriority = (debt: Debt): number => {
   return debt.debtClass === "car_house" ? 1 : 0;
 };
 
+const formatPayoffMonths = (months: number): string => {
+  if (!Number.isFinite(months)) return "Not solvable";
+  if (months <= 0) return "0 months";
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  if (years <= 0) return `${remainingMonths} mo`;
+  if (remainingMonths <= 0) return `${years} yr`;
+  return `${years} yr ${remainingMonths} mo`;
+};
+
 const getMilestoneCongratsMessage = (key: DebtMilestoneKey): string => {
   if (key === "keel") return "Great start. Your foundation is in place.";
-  if (key === "hull") return "Strong work. Your core debt body is getting lighter.";
-  if (key === "deck") return "Excellent discipline. Your emergency runway is stronger.";
-  if (key === "supplies") return "Nice consistency. Your plan has what it needs month to month.";
-  if (key === "sail") return "Momentum unlocked. Your long-term plan is moving forward.";
+  if (key === "hull") return "Strong work. All non-mortgage debt is cleared.";
+  if (key === "deck") return "Excellent discipline. Your emergency fund is fully funded.";
+  if (key === "supplies") return "Nice consistency. Your retirement investing is on track.";
+  if (key === "gather_animals") return "Well done. Your children's future is being built.";
+  if (key === "moorings") return "Incredible. Your home is paid off.";
+  if (key === "sail") return "You did it. Your Ark is complete. Build wealth and give generously.";
   return "Congratulations! Another milestone complete. Keep going.";
 };
 
 const getMilestoneBuildActionLabel = (key: DebtMilestoneKey): string => {
-  if (key === "supplies") return "Collect";
-  if (key === "sail") return "Raise";
+  if (key === "supplies") return "Invest";
+  if (key === "gather_animals") return "Gather";
+  if (key === "moorings") return "Secure";
+  if (key === "sail") return "Launch";
   return "Build";
 };
 
@@ -120,10 +134,7 @@ const DebtTrackerScreen: React.FC = () => {
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
   const [showHistory, setShowHistory] = useState(false);
-  const [showSmartPlanModal, setShowSmartPlanModal] = useState(false);
-  const [smartPlanInitialSection, setSmartPlanInitialSection] = useState<
-    "hull" | "deck" | "supplies"
-  >("hull");
+  const [hullExtraDraft, setHullExtraDraft] = useState("100");
   const [ownerFilter, setOwnerFilter] = useState<DebtOwnerFilter>("all");
   const [showClassifyModal, setShowClassifyModal] = useState(false);
   const [classDraftByDebtId, setClassDraftByDebtId] = useState<Record<string, DebtClass>>({});
@@ -139,6 +150,8 @@ const DebtTrackerScreen: React.FC = () => {
     hull: false,
     deck: false,
     supplies: false,
+    gather_animals: false,
+    moorings: false,
     sail: false,
   });
   const [targetDraftByStep, setTargetDraftByStep] = useState<Record<DebtMilestoneKey, string>>({
@@ -146,6 +159,8 @@ const DebtTrackerScreen: React.FC = () => {
     hull: "",
     deck: "",
     supplies: "",
+    gather_animals: "",
+    moorings: "",
     sail: "",
   });
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
@@ -175,6 +190,8 @@ const DebtTrackerScreen: React.FC = () => {
       hull: shouldExpandCurrent && plan.currentStepKey === "hull",
       deck: shouldExpandCurrent && plan.currentStepKey === "deck",
       supplies: shouldExpandCurrent && plan.currentStepKey === "supplies",
+      gather_animals: shouldExpandCurrent && plan.currentStepKey === "gather_animals",
+      moorings: shouldExpandCurrent && plan.currentStepKey === "moorings",
       sail: shouldExpandCurrent && plan.currentStepKey === "sail",
     });
   }, []);
@@ -360,6 +377,33 @@ const DebtTrackerScreen: React.FC = () => {
       }
 
       if (step.key === "supplies") {
+        const target = step.targetAmount || 500;
+        const progress = target > 0 ? Math.min(retirementInvestingMonthly / target, 1) : 0;
+        return {
+          ...step,
+          progress,
+          metricLabel: `${formatCurrency(retirementInvestingMonthly)} / ${formatCurrency(target)} /mo`,
+          nextAction: "Increase retirement contributions toward 15% of household income.",
+        };
+      }
+
+      if (step.key === "gather_animals") {
+        const educationGoals = savingsGoals.filter((g) => g.category === "education");
+        const totalSaved = educationGoals.reduce((sum, g) => sum + g.currentAmount, 0);
+        const totalGoalTarget = educationGoals.reduce((sum, g) => sum + g.targetAmount, 0);
+        const target = step.targetAmount || totalGoalTarget || 10000;
+        const progress = target > 0 ? Math.min(totalSaved / target, 1) : 0;
+        return {
+          ...step,
+          progress,
+          metricLabel: educationGoals.length > 0
+            ? `${formatCurrency(totalSaved)} / ${formatCurrency(target)}`
+            : "Add an education savings goal to track",
+          nextAction: "Open or contribute to a 529 plan or education savings account.",
+        };
+      }
+
+      if (step.key === "moorings") {
         const progress =
           securedOriginal > 0
             ? Math.min((securedOriginal - securedRemaining) / securedOriginal, 1)
@@ -367,19 +411,20 @@ const DebtTrackerScreen: React.FC = () => {
         return {
           ...step,
           progress,
-          metricLabel: `${formatCurrency(securedRemaining)} remaining`,
-          nextAction: "Keep steady principal reductions on secured balances each month.",
+          metricLabel: securedRemaining > 0
+            ? `${formatCurrency(securedRemaining)} remaining`
+            : "No mortgage debt tracked",
+          nextAction: "Make extra principal payments on your mortgage when possible.",
         };
       }
 
       if (step.key === "sail") {
-        const target = step.targetAmount || 500;
-        const progress = target > 0 ? Math.min(retirementInvestingMonthly / target, 1) : 0;
+        const target = step.targetAmount || 1000;
         return {
           ...step,
-          progress,
-          metricLabel: `${formatCurrency(retirementInvestingMonthly)} /mo`,
-          nextAction: "Automate monthly investing contributions to keep forward momentum.",
+          progress: step.isCompleted ? 1 : 0,
+          metricLabel: step.isCompleted ? "Completed" : `Target: ${formatCurrency(target)} /mo`,
+          nextAction: "Live generously, invest beyond retirement, and build lasting wealth.",
         };
       }
 
@@ -387,7 +432,7 @@ const DebtTrackerScreen: React.FC = () => {
         ...step,
         progress: step.isCompleted ? 1 : 0,
         metricLabel: step.isCompleted ? "Completed" : "Not started",
-        nextAction: "Use this stage for long-term investing, giving, and legacy planning.",
+        nextAction: "",
       };
     });
   }, [
@@ -397,6 +442,7 @@ const DebtTrackerScreen: React.FC = () => {
     nonMortgageOriginal,
     nonMortgageRemaining,
     retirementInvestingMonthly,
+    savingsGoals,
     savingsReserve,
     securedOriginal,
     securedRemaining,
@@ -424,6 +470,29 @@ const DebtTrackerScreen: React.FC = () => {
     const emergencyGoal = openGoals.find((goal) => goal.category === "emergency_fund");
     return emergencyGoal || openGoals[0];
   }, [savingsGoals]);
+
+  // Payoff comparison calculations for Hull step
+  const payoffActiveDebts = React.useMemo(() => debts.filter((d) => d.balance > 0), [debts]);
+  const hullExtraAmount = React.useMemo(() => {
+    const parsed = parseFloat(hullExtraDraft);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  }, [hullExtraDraft]);
+  const avalancheBase = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "avalanche", 0), [payoffActiveDebts]);
+  const avalancheWhatIf = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "avalanche", hullExtraAmount), [payoffActiveDebts, hullExtraAmount]);
+  const snowballBase = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "snowball", 0), [payoffActiveDebts]);
+  const snowballWhatIf = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "snowball", hullExtraAmount), [payoffActiveDebts, hullExtraAmount]);
+  const payoffRecommendation = React.useMemo(() => {
+    if (!avalancheWhatIf.isPayoffPossible || !snowballWhatIf.isPayoffPossible) {
+      return "Increase payments until both plans are solvable.";
+    }
+    if (avalancheWhatIf.totalInterestPaid < snowballWhatIf.totalInterestPaid) {
+      return "Lowest interest: Avalanche.";
+    }
+    if (snowballWhatIf.totalInterestPaid < avalancheWhatIf.totalInterestPaid) {
+      return "Lowest interest: Snowball.";
+    }
+    return "Tie — both methods cost the same interest.";
+  }, [avalancheWhatIf, snowballWhatIf]);
 
   /** Add a new debt */
   const handleAddDebt = useCallback(async (input: NewDebtInput) => {
@@ -526,7 +595,7 @@ const DebtTrackerScreen: React.FC = () => {
       });
 
       if (markingComplete && nextPlan) {
-        const stepOrder: DebtMilestoneKey[] = ["keel", "hull", "deck", "supplies", "sail"];
+        const stepOrder: DebtMilestoneKey[] = ["keel", "hull", "deck", "supplies", "gather_animals", "moorings", "sail"];
         const currentIndex = stepOrder.indexOf(step.key);
         const nextKey = stepOrder[currentIndex + 1];
         if (nextKey) {
@@ -611,25 +680,27 @@ const DebtTrackerScreen: React.FC = () => {
     [targetDraftByStep]
   );
 
-  const handleLogSavings = useCallback(
-    async (amount: number) => {
-      if (amount <= 0) return;
+  const handleSetSavingsReserve = useCallback(
+    async (targetAmount: number) => {
+      if (!Number.isFinite(targetAmount) || targetAmount < 0) return;
+      const delta = targetAmount - savingsReserve;
+      if (delta === 0) { setSavingsDraft(""); return; }
       const now = new Date();
       const entry: BudgetEntry = {
         id: generateUUID(),
         type: "expense",
         category: "Savings",
-        amount,
-        description: "Logged from Build Your Ark",
+        amount: delta,
+        description: delta > 0 ? "Logged from Build Your Ark" : "Correction from Build Your Ark",
         date: now.toISOString().slice(0, 10),
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
       await addBudgetEntry(entry);
-      setSavingsReserve((prev) => prev + amount);
+      setSavingsReserve(targetAmount);
       setSavingsDraft("");
     },
-    []
+    [savingsReserve]
   );
 
   /** Sort debts based on payoff strategy */
@@ -653,10 +724,6 @@ const DebtTrackerScreen: React.FC = () => {
     await savePayoffStrategyPreference(nextStrategy);
   }, []);
 
-  const openSmartPlan = useCallback((section: "hull" | "deck" | "supplies") => {
-    setSmartPlanInitialSection(section);
-    setShowSmartPlanModal(true);
-  }, []);
 
   const handleAddSavingsGoal = useCallback(
     async (goal: SavingsGoal) => {
@@ -786,29 +853,21 @@ const DebtTrackerScreen: React.FC = () => {
           })}
         </View>
 
-        {/* Milestone bar — tap opens Smart Plan (strategy comparison + payment calculator), long-press opens milestones */}
+        {/* Milestone bar — tap opens milestones */}
         <TouchableOpacity
           style={[styles.milestonesCard, { backgroundColor: colors.bg, borderColor: colors.cardBorder }]}
-          onPress={() => {
-            const section = currentMilestoneKey === "deck"
-              ? "deck" as const
-              : currentMilestoneKey === "supplies"
-              ? "supplies" as const
-              : "hull" as const;
-            openSmartPlan(section);
-          }}
-          onLongPress={openMilestonesModal}
+          onPress={openMilestonesModal}
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.milestonesInlineText}>
-              Step {Math.max(currentMilestoneIndex + 1, 1)}/{computedMilestones.length || 5} • {(currentMilestone?.title || "Keel").toUpperCase()}
+              Step {Math.max(currentMilestoneIndex + 1, 1)}/{computedMilestones.length || 7} • {(currentMilestone?.title || "Keel").toUpperCase()}
               {currentMilestoneKey === "deck" ? ` • ${runwayMonths.toFixed(1)} mo runway` : ""}
               {currentMilestoneKey === "supplies" && activeSavingsGoal
                 ? ` • ${activeSavingsGoal.name} ${Math.round(Math.min(activeSavingsGoal.currentAmount / Math.max(activeSavingsGoal.targetAmount, 1), 1) * 100)}%`
                 : ""}
             </Text>
             <Text style={styles.milestonesSubText}>
-              {strategy === "custom" ? "Custom order" : strategy === "avalanche" ? "Avalanche" : "Snowball"} • Tap to plan • Hold for milestones
+              {strategy === "custom" ? "Custom order" : strategy === "avalanche" ? "Avalanche" : "Snowball"} • Tap to plan
             </Text>
           </View>
           <Text style={styles.milestoneArkLabel}>Build Your Ark →</Text>
@@ -881,21 +940,6 @@ const DebtTrackerScreen: React.FC = () => {
         debts={debts}
       />
 
-      <SmartPlanModal
-        visible={showSmartPlanModal}
-        onClose={() => setShowSmartPlanModal(false)}
-        debts={debts}
-        selectedStrategy={strategy}
-        onSelectStrategy={handleChangeStrategy}
-        savingsReserve={savingsReserve}
-        monthlyEssentialsEstimate={monthlyEssentialsEstimate}
-        onUpdateMonthlyEssentialsEstimate={handleUpdateEssentialsEstimate}
-        goals={savingsGoals}
-        onAddGoal={handleAddSavingsGoal}
-        onUpdateGoal={handleUpdateSavingsGoal}
-        onDeleteGoal={handleDeleteSavingsGoal}
-        initialSection={smartPlanInitialSection}
-      />
 
       <Modal
         visible={showMilestonesModal}
@@ -1029,13 +1073,100 @@ const DebtTrackerScreen: React.FC = () => {
                         ]}
                       />
                     </View>
+                    {step.key === "hull" && payoffActiveDebts.length > 0 && !step.isCompleted ? (
+                      <View style={styles.msPayoffSection}>
+                        <Text style={styles.msPayoffTitle}>Compare Payoff Strategies</Text>
+                        <Text style={styles.msPayoffLabel}>EXTRA MONTHLY PAYMENT</Text>
+                        <TextInput
+                          style={styles.msPayoffInput}
+                          keyboardType="decimal-pad"
+                          value={hullExtraDraft}
+                          onChangeText={(v) => setHullExtraDraft(v.replace(/[^0-9.]/g, ""))}
+                          placeholder="0"
+                          placeholderTextColor={colors.textMuted}
+                        />
+                        <View style={styles.msPayoffChips}>
+                          {[50, 100, 250, 500].map((amt) => (
+                            <TouchableOpacity
+                              key={amt}
+                              style={[styles.msPayoffChip, { borderColor: colors.cardBorder }]}
+                              onPress={() => setHullExtraDraft(String(amt))}
+                            >
+                              <Text style={styles.msPayoffChipText}>+{formatCurrency(amt)}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <View style={[styles.msPayoffRecBox, { borderColor: colors.cardBorder }]}>
+                          <Text style={styles.msPayoffRecText}>{payoffRecommendation}</Text>
+                        </View>
+                        {/* Avalanche */}
+                        <View style={[styles.msPayoffCard, { borderColor: strategy === "avalanche" ? colors.accent : colors.cardBorder }]}>
+                          <Text style={styles.msPayoffCardTitle}>Avalanche</Text>
+                          <Text style={styles.msPayoffCardHint}>Highest APR first</Text>
+                          <View style={styles.msPayoffMetricRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.msPayoffMetricLabel}>Current</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(avalancheBase.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(avalancheBase.totalInterestPaid)} int.</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.msPayoffMetricLabel}>+{formatCurrency(hullExtraAmount)}/mo</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(avalancheWhatIf.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(avalancheWhatIf.totalInterestPaid)} int.</Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.msPayoffSaved, { color: colors.success }]}>
+                            Save {formatCurrency(Math.max(0, avalancheBase.totalInterestPaid - avalancheWhatIf.totalInterestPaid))} • {Math.max(0, avalancheBase.monthsToPayoff - avalancheWhatIf.monthsToPayoff)} mo faster
+                          </Text>
+                          <TouchableOpacity
+                            style={[styles.msPayoffUseBtn, strategy === "avalanche" && { borderColor: colors.accent, backgroundColor: `${colors.accent}20` }]}
+                            onPress={() => handleChangeStrategy("avalanche")}
+                          >
+                            <Text style={[styles.msPayoffUseBtnText, strategy === "avalanche" && { color: colors.accent }]}>
+                              {strategy === "avalanche" ? "Current Method" : "Use Avalanche"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                        {/* Snowball */}
+                        <View style={[styles.msPayoffCard, { borderColor: strategy === "snowball" ? colors.accent : colors.cardBorder }]}>
+                          <Text style={styles.msPayoffCardTitle}>Snowball</Text>
+                          <Text style={styles.msPayoffCardHint}>Smallest balance first</Text>
+                          <View style={styles.msPayoffMetricRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.msPayoffMetricLabel}>Current</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(snowballBase.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(snowballBase.totalInterestPaid)} int.</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.msPayoffMetricLabel}>+{formatCurrency(hullExtraAmount)}/mo</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(snowballWhatIf.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(snowballWhatIf.totalInterestPaid)} int.</Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.msPayoffSaved, { color: colors.success }]}>
+                            Save {formatCurrency(Math.max(0, snowballBase.totalInterestPaid - snowballWhatIf.totalInterestPaid))} • {Math.max(0, snowballBase.monthsToPayoff - snowballWhatIf.monthsToPayoff)} mo faster
+                          </Text>
+                          <TouchableOpacity
+                            style={[styles.msPayoffUseBtn, strategy === "snowball" && { borderColor: colors.accent, backgroundColor: `${colors.accent}20` }]}
+                            onPress={() => handleChangeStrategy("snowball")}
+                          >
+                            <Text style={[styles.msPayoffUseBtnText, strategy === "snowball" && { color: colors.accent }]}>
+                              {strategy === "snowball" ? "Current Method" : "Use Snowball"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
                     {(step.key === "keel" || step.key === "deck") && !step.isCompleted ? (
                       <View style={styles.msSavingsLogSection}>
-                        <Text style={styles.msSavingsLogLabel}>Log Savings</Text>
+                        <Text style={styles.msSavingsLogLabel}>Set Savings</Text>
+                        <Text style={[styles.msPayoffMetricLabel, { marginBottom: 4 }]}>
+                          Current: {formatCurrency(savingsReserve)}
+                        </Text>
                         <View style={styles.msSavingsLogRow}>
                           <TextInput
                             style={styles.msSavingsLogInput}
-                            placeholder="Amount"
+                            placeholder={String(Math.round(savingsReserve))}
                             placeholderTextColor={colors.textMuted}
                             keyboardType="decimal-pad"
                             value={savingsDraft}
@@ -1045,22 +1176,22 @@ const DebtTrackerScreen: React.FC = () => {
                             style={[styles.msSavingsLogBtn, { backgroundColor: colors.accent }]}
                             onPress={() => {
                               const parsed = parseFloat(savingsDraft);
-                              if (Number.isFinite(parsed) && parsed > 0) {
-                                handleLogSavings(parsed);
+                              if (Number.isFinite(parsed) && parsed >= 0) {
+                                handleSetSavingsReserve(parsed);
                               }
                             }}
                           >
-                            <Text style={[styles.msSavingsLogBtnText, { color: colors.white }]}>Add</Text>
+                            <Text style={[styles.msSavingsLogBtnText, { color: colors.white }]}>Set</Text>
                           </TouchableOpacity>
                         </View>
                         <View style={styles.msTargetQuickRow}>
-                          {[25, 50, 100, 250].map((amount) => (
+                          {[-100, -50, 50, 100].map((amount) => (
                             <TouchableOpacity
                               key={amount}
                               style={[styles.msTargetQuickBtn, { borderColor: colors.cardBorder }]}
-                              onPress={() => handleLogSavings(amount)}
+                              onPress={() => handleSetSavingsReserve(Math.max(0, savingsReserve + amount))}
                             >
-                              <Text style={styles.msTargetQuickText}>+{formatCurrency(amount)}</Text>
+                              <Text style={styles.msTargetQuickText}>{amount > 0 ? "+" : ""}{formatCurrency(amount)}</Text>
                             </TouchableOpacity>
                           ))}
                         </View>
@@ -1236,10 +1367,10 @@ const makeStyles = (colors: ThemeColors) =>
     screen: { flex: 1, backgroundColor: colors.bg },
     listContent: { paddingHorizontal: 16, paddingBottom: 100 },
 
-    titleSection: { paddingTop: 56, paddingBottom: 20 },
-    appLabel: { fontSize: 12, color: colors.textDim, letterSpacing: 2, marginBottom: 4 },
-    screenTitle: { fontSize: 28, fontWeight: "700", color: colors.text, marginBottom: 4 },
-    screenSubtitle: { fontSize: 14, color: colors.textMuted },
+    titleSection: { paddingTop: 56, paddingBottom: 20, alignItems: "center" as const },
+    appLabel: { fontSize: 12, color: colors.textDim, letterSpacing: 2, marginBottom: 4, textAlign: "center" as const },
+    screenTitle: { fontSize: 28, fontWeight: "700" as const, color: colors.text, marginBottom: 4, textAlign: "center" as const },
+    screenSubtitle: { fontSize: 14, color: colors.textMuted, textAlign: "center" as const },
 
     summaryCard: {
       backgroundColor: colors.card,
@@ -1720,6 +1851,112 @@ const makeStyles = (colors: ThemeColors) =>
     fontSize: 13,
     lineHeight: 18,
     color: colors.text,
+  },
+
+  /* ── Hull payoff comparison (inside milestone modal) ── */
+  msPayoffSection: {
+    marginTop: 6,
+    gap: 8,
+  },
+  msPayoffTitle: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  msPayoffLabel: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    letterSpacing: 0.5,
+    color: colors.textDim,
+  },
+  msPayoffInput: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    backgroundColor: colors.bg,
+    color: colors.text,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 15,
+    fontWeight: "600" as const,
+  },
+  msPayoffChips: {
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: 8,
+  },
+  msPayoffChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.bg,
+  },
+  msPayoffChipText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: colors.textDim,
+  },
+  msPayoffRecBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    backgroundColor: colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  msPayoffRecText: {
+    fontSize: 12,
+    color: colors.textDim,
+    lineHeight: 18,
+  },
+  msPayoffCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    padding: 12,
+    gap: 6,
+  },
+  msPayoffCardTitle: {
+    fontSize: 16,
+    fontWeight: "700" as const,
+    color: colors.text,
+  },
+  msPayoffCardHint: {
+    fontSize: 12,
+    color: colors.textDim,
+  },
+  msPayoffMetricRow: {
+    flexDirection: "row" as const,
+    gap: 10,
+  },
+  msPayoffMetricLabel: {
+    fontSize: 11,
+    color: colors.textDim,
+    marginBottom: 2,
+  },
+  msPayoffMetricValue: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: colors.text,
+    fontVariant: ["tabular-nums"] as const,
+  },
+  msPayoffSaved: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+  },
+  msPayoffUseBtn: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: "center" as const,
+    backgroundColor: colors.bg,
+  },
+  msPayoffUseBtnText: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: colors.textDim,
   },
 
   emptyWrap: { alignItems: "center", paddingVertical: 48 },
