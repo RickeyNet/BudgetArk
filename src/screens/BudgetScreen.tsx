@@ -37,7 +37,11 @@ import {
   saveBudgetEntries,
   saveCategoryBudgetLimits,
 } from "../storage/budgetStorage";
-import { buildMonthlyReview, type MonthlyReviewData } from "../utils/budgetInsights";
+import {
+  buildMonthlyReview,
+  type CategorySpendingComparison,
+  type MonthlyReviewData,
+} from "../utils/budgetInsights";
 import { getDebts } from "../storage/debtStorage";
 import {
   getSavingsGoals,
@@ -148,6 +152,26 @@ const getMonthKeysBetween = (from: string, to: string): string[] => {
   return keys;
 };
 
+const getCategoryComparisonHeadline = (comparison: CategorySpendingComparison): string => {
+  if (comparison.percentChange != null) {
+    const direction = comparison.percentChange > 0 ? "more" : "less";
+    return `${Math.abs(comparison.percentChange).toFixed(0)}% ${direction} on ${comparison.category}`;
+  }
+  if (comparison.average === 0 && comparison.current > 0) {
+    return `New spending in ${comparison.category}`;
+  }
+  if (comparison.current === 0 && comparison.average > 0) {
+    return `No ${comparison.category} spend this month`;
+  }
+  return `${comparison.category} flat vs average`;
+};
+
+const getCategoryComparisonSubtext = (
+  comparison: CategorySpendingComparison,
+  formatCurrency: (value: number) => string
+): string =>
+  `${formatCurrency(comparison.current)} this month · ${formatCurrency(comparison.average)} avg over ${comparison.monthsAveraged} mo`;
+
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
@@ -168,6 +192,7 @@ const BudgetScreen: React.FC = () => {
   const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
+  const [reviewPreviewData, setReviewPreviewData] = useState<MonthlyReviewData | null>(null);
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
@@ -190,16 +215,32 @@ const BudgetScreen: React.FC = () => {
     return nextSnapshots;
   }, []);
 
+  const refreshMonthlyReview = useCallback(async (reviewEntries: BudgetEntry[]) => {
+    const limitsByMonth = await getAllLimitsByMonth();
+    const nextReviewData = buildMonthlyReview(reviewEntries, limitsByMonth);
+    setReviewPreviewData(nextReviewData);
+    return nextReviewData;
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       const loadBudgetData = async () => {
-        const [storedEntries, storedLimits, storedDebts, storedGoals, storedAssets, milestonePlan] = await Promise.all([
+        const [
+          storedEntries,
+          storedLimits,
+          storedDebts,
+          storedGoals,
+          storedAssets,
+          milestonePlan,
+          allLimitsByMonth,
+        ] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
           getSavingsGoals(),
           getAssetAccounts(),
           getDebtMilestonePlan(),
+          getAllLimitsByMonth(),
         ]);
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
         setKeelTarget(keelStep?.targetAmount ?? 1000);
@@ -239,11 +280,14 @@ const BudgetScreen: React.FC = () => {
           await saveAssetAccounts(storedAssets);
         }
 
+        const nextReviewData = buildMonthlyReview(storedEntries, allLimitsByMonth);
+
         setEntries(storedEntries);
         setLimits(storedLimits);
         setDebts(storedDebts);
         setSavingsGoals(storedGoals);
         setAssetAccounts(storedAssets);
+        setReviewPreviewData(nextReviewData);
         await refreshNetWorthSnapshots();
         setIsLoaded(true);
       };
@@ -349,6 +393,11 @@ const BudgetScreen: React.FC = () => {
   const totalSavings = netWorthTotals.totalAssets;
   const totalDebt = netWorthTotals.totalDebt;
   const netWorth = netWorthTotals.netWorth;
+
+  const topCategoryComparison = useMemo(
+    () => reviewPreviewData?.categoryComparisons[0] ?? null,
+    [reviewPreviewData]
+  );
 
   const limitByCategory = useMemo(() => {
     const map: Partial<Record<BudgetCategory, number>> = {};
@@ -516,9 +565,12 @@ const BudgetScreen: React.FC = () => {
     if (nextAssets !== assetAccounts) {
       await saveAssetAccounts(nextAssets);
     }
-    await refreshNetWorthSnapshots();
+    await Promise.all([
+      refreshNetWorthSnapshots(),
+      refreshMonthlyReview(nextEntries),
+    ]);
     setShowAddModal(false);
-  }, [adjustAssetAccounts, assetAccounts, entries, refreshNetWorthSnapshots]);
+  }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
@@ -554,9 +606,12 @@ const BudgetScreen: React.FC = () => {
     if (nextAssets !== assetAccounts) {
       await saveAssetAccounts(nextAssets);
     }
-    await refreshNetWorthSnapshots();
+    await Promise.all([
+      refreshNetWorthSnapshots(),
+      refreshMonthlyReview(nextEntries),
+    ]);
     setEditingEntry(null);
-  }, [adjustAssetAccounts, assetAccounts, entries, refreshNetWorthSnapshots]);
+  }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
@@ -574,9 +629,12 @@ const BudgetScreen: React.FC = () => {
     if (nextAssets !== assetAccounts) {
       await saveAssetAccounts(nextAssets);
     }
-    await refreshNetWorthSnapshots();
+    await Promise.all([
+      refreshNetWorthSnapshots(),
+      refreshMonthlyReview(nextEntries),
+    ]);
     setEditingEntry(null);
-  }, [adjustAssetAccounts, assetAccounts, entries, refreshNetWorthSnapshots]);
+  }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const foodEntriesToSplit = useMemo(
     () => entries.filter((entry) => entry.type === "expense" && entry.category === "Food"),
@@ -596,18 +654,17 @@ const BudgetScreen: React.FC = () => {
     setFoodSplitDraft((current) => ({ ...current, [entryId]: category }));
   }, []);
 
-  const applyFoodSplit = useCallback(() => {
-    setEntries((prev) => {
-      const next = prev.map((entry) => {
-        if (entry.type !== "expense" || entry.category !== "Food") return entry;
-        const mapped = foodSplitDraft[entry.id];
-        return mapped ? { ...entry, category: mapped } : entry;
-      });
-      saveBudgetEntries(next);
-      return next;
+  const applyFoodSplit = useCallback(async () => {
+    const nextEntries = entries.map((entry) => {
+      if (entry.type !== "expense" || entry.category !== "Food") return entry;
+      const mapped = foodSplitDraft[entry.id];
+      return mapped ? { ...entry, category: mapped } : entry;
     });
+    setEntries(nextEntries);
+    await saveBudgetEntries(nextEntries);
+    await refreshMonthlyReview(nextEntries);
     setShowFoodSplitModal(false);
-  }, [foodSplitDraft]);
+  }, [entries, foodSplitDraft, refreshMonthlyReview]);
 
   const toggleCategory = useCallback((category: string) => {
     setExpandedCategories((prev) => {
@@ -635,36 +692,31 @@ const BudgetScreen: React.FC = () => {
     setLimitInput("");
   }, []);
 
-  const saveLimit = useCallback(() => {
+  const saveLimit = useCallback(async () => {
     if (!limitModalCategory) return;
 
     const parsedLimit = parseFloat(limitInput);
+    const withoutCategory = limits.filter((item) => item.category !== limitModalCategory);
 
-    setLimits((prev) => {
-      const withoutCategory = prev.filter((item) => item.category !== limitModalCategory);
+    const updatedLimits =
+      Number.isNaN(parsedLimit) || parsedLimit <= 0
+        ? withoutCategory
+        : [
+            ...withoutCategory,
+            { category: limitModalCategory, monthlyLimit: parsedLimit },
+          ];
 
-      if (Number.isNaN(parsedLimit) || parsedLimit <= 0) {
-        saveCategoryBudgetLimits(withoutCategory, selectedMonthKey);
-        return withoutCategory;
-      }
-
-      const updated = [
-        ...withoutCategory,
-        { category: limitModalCategory, monthlyLimit: parsedLimit },
-      ];
-      saveCategoryBudgetLimits(updated, selectedMonthKey);
-      return updated;
-    });
-
+    setLimits(updatedLimits);
+    await saveCategoryBudgetLimits(updatedLimits, selectedMonthKey);
+    await refreshMonthlyReview(entries);
     closeLimitModal();
-  }, [closeLimitModal, limitInput, limitModalCategory, selectedMonthKey]);
+  }, [closeLimitModal, entries, limitInput, limitModalCategory, limits, refreshMonthlyReview, selectedMonthKey]);
 
   const openReviewModal = useCallback(async () => {
-    const limitsByMonth = await getAllLimitsByMonth();
-    const data = buildMonthlyReview(entries, limitsByMonth);
+    const data = reviewPreviewData ?? (await refreshMonthlyReview(entries));
     setReviewData(data);
     setShowReviewModal(true);
-  }, [entries]);
+  }, [entries, refreshMonthlyReview, reviewPreviewData]);
 
   const openAddAssetModal = useCallback(() => {
     setEditingAsset(null);
@@ -959,6 +1011,29 @@ const BudgetScreen: React.FC = () => {
         )}
       </View>
 
+      {reviewPreviewData && (topCategoryComparison || reviewPreviewData.spendingVsAvgPercent != null) && (
+        <TouchableOpacity
+          style={styles.reviewSpotlightCard}
+          onPress={openReviewModal}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.reviewSpotlightEyebrow}>Monthly Insight</Text>
+          <Text style={styles.reviewSpotlightTitle}>
+            {topCategoryComparison
+              ? getCategoryComparisonHeadline(topCategoryComparison)
+              : `${Math.abs(reviewPreviewData.spendingVsAvgPercent ?? 0).toFixed(0)}% ${
+                  (reviewPreviewData.spendingVsAvgPercent ?? 0) > 0 ? "more" : "less"
+                } vs monthly avg`}
+          </Text>
+          <Text style={styles.reviewSpotlightBody}>
+            {topCategoryComparison
+              ? getCategoryComparisonSubtext(topCategoryComparison, formatCurrency)
+              : `${formatCurrency(reviewPreviewData.currentMonthSpending)} this month · ${formatCurrency(reviewPreviewData.avgMonthlySpending)} avg`}
+          </Text>
+          <Text style={[styles.reviewSpotlightCta, { color: colors.accent }]}>Open Monthly Review →</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Monthly Review button */}
       <TouchableOpacity
         style={styles.reviewBtn}
@@ -966,7 +1041,7 @@ const BudgetScreen: React.FC = () => {
         activeOpacity={0.7}
       >
         <Text style={styles.reviewBtnText}>Monthly Review</Text>
-        <Text style={styles.reviewBtnHint}>Trends, changes, streaks</Text>
+        <Text style={styles.reviewBtnHint}>Trends, changes, streaks, comparisons</Text>
       </TouchableOpacity>
 
       {/* Spending card — donut chart + category rows in one card */}
@@ -1575,6 +1650,38 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       color: colors.text,
       marginBottom: 10,
+    },
+    reviewSpotlightCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: `${colors.accent}30`,
+      borderRadius: 16,
+      paddingVertical: 16,
+      paddingHorizontal: 18,
+      marginBottom: 12,
+    },
+    reviewSpotlightEyebrow: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1,
+      color: colors.textDim,
+      marginBottom: 6,
+      textTransform: "uppercase",
+    },
+    reviewSpotlightTitle: {
+      fontSize: 17,
+      fontWeight: "700",
+      color: colors.text,
+      marginBottom: 6,
+    },
+    reviewSpotlightBody: {
+      fontSize: 13,
+      color: colors.textDim,
+      marginBottom: 8,
+    },
+    reviewSpotlightCta: {
+      fontSize: 13,
+      fontWeight: "700",
     },
     reviewBtn: {
       backgroundColor: colors.card,

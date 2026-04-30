@@ -7,6 +7,19 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.0",
+    title: "Net Worth History & Monthly Insights",
+    releasedAt: "2026-04-30",
+    highlights: [
+      "Added Net Worth history to the top of the Budget screen with current net worth, assets, debt, and 7D / 30D / All timeline views.",
+      "Net Worth now saves daily snapshots automatically so your history graph starts building from current balances and keeps updating over time.",
+      "Added Monthly Insight spotlight card on the Budget screen so biggest spending trend shows before you open the full review.",
+      "Added Category Spending Comparison in Monthly Review to compare this month's category spend against your trailing 3-month average.",
+      "Fixed linked account balances so deleting or editing linked budget entries properly reverses and reapplies account contributions.",
+      "Fixed debt payment handling so recorded payments no longer risk double-applying balance changes.",
+    ],
+  },
+  {
     version: "1.3.4",
     title: "Budget Editing Stability Fixes",
     releasedAt: "2026-04-15",

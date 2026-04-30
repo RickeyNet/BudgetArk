@@ -315,7 +315,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Spending Heatmap — calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
 - [ ] Financial Health Score — single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
 - [ ] Ark Journey Timeline — visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
-- [ ] Category Spending Comparison — "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
+- [x] Category Spending Comparison — "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
 - [ ] Dark Mode Schedule — auto-switch themes based on time of day (lighter during day, dark at night).
 - [x] fix theme selection so it doesn't close option window until you hit done
 - [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window

@@ -33,6 +33,19 @@ const formatFullMonth = (monthKey: string): string => {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 };
 
+const buildComparisonLabel = (
+  percentChange: number | null,
+  current: number,
+  average: number
+): string => {
+  if (percentChange != null) {
+    return `${percentChange > 0 ? "+" : ""}${percentChange.toFixed(0)}%`;
+  }
+  if (average === 0 && current > 0) return "New";
+  if (current === 0 && average > 0) return "Stopped";
+  return "Flat";
+};
+
 const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
   visible,
   onClose,
@@ -47,6 +60,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
   const {
     summaries,
     categoryChanges,
+    categoryComparisons,
     streaks,
     avgMonthlySpending,
     currentMonthSpending,
@@ -74,9 +88,10 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
 
   const hasChartData = chartData.length >= 1;
   const hasChanges = categoryChanges.length > 0;
+  const hasComparisons = categoryComparisons.length > 0;
   const hasStreaks = streaks.length > 0;
 
-  const isEmpty = !hasChartData && !hasChanges && !hasStreaks;
+  const isEmpty = !hasChartData && !hasChanges && !hasComparisons && !hasStreaks;
 
   return (
     <Modal
@@ -156,6 +171,47 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                       </Text>
                     </View>
                   </View>
+                </View>
+              )}
+
+              {/* Category spending comparison */}
+              {hasComparisons && (
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Category Spending Comparison</Text>
+                  <Text style={styles.cardHint}>vs. trailing 3-month average</Text>
+                  {categoryComparisons.slice(0, 5).map((comparison) => {
+                    const isUp = comparison.delta > 0;
+                    const changeColor =
+                      comparison.delta > 0
+                        ? colors.warning
+                        : comparison.delta < 0
+                          ? colors.success
+                          : colors.textDim;
+
+                    return (
+                      <View key={comparison.category} style={styles.changeRow}>
+                        <View style={styles.changeLeft}>
+                          <Text style={styles.changeCategory}>{comparison.category}</Text>
+                          <Text style={[styles.changeAmount, { color: colors.textDim }]}>
+                            {formatCurrency(comparison.current)} this month · avg {formatCurrency(comparison.average)}
+                          </Text>
+                        </View>
+                        <View style={styles.changeRight}>
+                          <Text style={[styles.changeDelta, { color: changeColor }]}>
+                            {buildComparisonLabel(
+                              comparison.percentChange,
+                              comparison.current,
+                              comparison.average
+                            )}
+                          </Text>
+                          <Text style={[styles.changePercent, { color: changeColor }]}>
+                            {isUp ? "+" : comparison.delta < 0 ? "-" : ""}
+                            {formatCurrency(Math.abs(comparison.delta))}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
 

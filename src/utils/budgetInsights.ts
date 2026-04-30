@@ -46,9 +46,19 @@ export interface Streak {
   type: "positive" | "warning";
 }
 
+export interface CategorySpendingComparison {
+  category: BudgetCategory;
+  current: number;
+  average: number;
+  delta: number;
+  percentChange: number | null;
+  monthsAveraged: number;
+}
+
 export interface MonthlyReviewData {
   summaries: MonthSummary[];
   categoryChanges: CategoryChange[];
+  categoryComparisons: CategorySpendingComparison[];
   streaks: Streak[];
   avgMonthlySpending: number;
   currentMonthSpending: number;
@@ -147,6 +157,64 @@ export const computeCategoryChanges = (
   // Sort by absolute delta descending (biggest changes first)
   changes.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
   return changes;
+};
+
+/* ─── Category comparisons (current vs 3-month avg) ─── */
+
+export const computeCategorySpendingComparisons = (
+  summaries: MonthSummary[],
+  months: number = 3
+): CategorySpendingComparison[] => {
+  if (summaries.length < 2) return [];
+
+  const current = summaries[summaries.length - 1];
+  const priorMonths = summaries
+    .slice(Math.max(0, summaries.length - (months + 1)), -1)
+    .filter((summary) => summary.totalIncome > 0 || summary.totalExpenses > 0);
+
+  if (priorMonths.length === 0) return [];
+
+  const categories = new Set<BudgetCategory>();
+  (Object.keys(current.byCategory) as BudgetCategory[]).forEach((category) => {
+    categories.add(category);
+  });
+  priorMonths.forEach((summary) => {
+    (Object.keys(summary.byCategory) as BudgetCategory[]).forEach((category) => {
+      categories.add(category);
+    });
+  });
+
+  const comparisons: CategorySpendingComparison[] = [];
+
+  categories.forEach((category) => {
+    const currentAmount = current.byCategory[category] ?? 0;
+    const average =
+      priorMonths.reduce(
+        (sum, summary) => sum + (summary.byCategory[category] ?? 0),
+        0
+      ) / priorMonths.length;
+
+    if (currentAmount === 0 && average === 0) return;
+
+    const delta = currentAmount - average;
+    comparisons.push({
+      category,
+      current: currentAmount,
+      average,
+      delta,
+      percentChange: average > 0 ? (delta / average) * 100 : null,
+      monthsAveraged: priorMonths.length,
+    });
+  });
+
+  comparisons.sort((a, b) => {
+    const aScore = a.percentChange == null ? Math.abs(a.delta) : Math.abs(a.percentChange);
+    const bScore = b.percentChange == null ? Math.abs(b.delta) : Math.abs(b.percentChange);
+    if (bScore !== aScore) return bScore - aScore;
+    return Math.abs(b.delta) - Math.abs(a.delta);
+  });
+
+  return comparisons;
 };
 
 /* ─── Streaks ─── */
@@ -255,6 +323,7 @@ export const buildMonthlyReview = (
 ): MonthlyReviewData => {
   const summaries = buildMonthSummaries(entries, months);
   const categoryChanges = computeCategoryChanges(summaries);
+  const categoryComparisons = computeCategorySpendingComparisons(summaries);
   const streaks = computeStreaks(summaries, limitsByMonth);
 
   // Past months only (exclude current month for average)
@@ -276,6 +345,7 @@ export const buildMonthlyReview = (
   return {
     summaries,
     categoryChanges,
+    categoryComparisons,
     streaks,
     avgMonthlySpending,
     currentMonthSpending,
