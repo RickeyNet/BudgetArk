@@ -216,6 +216,7 @@ export const clearAllData = async (): Promise<void> => {
     "@budgetark_budget_entries",
     "@budgetark_budget_limits_by_month",
     "@budgetark_savings_goals",
+    "@budgetark_net_worth_snapshots",
   ]);
 };
 

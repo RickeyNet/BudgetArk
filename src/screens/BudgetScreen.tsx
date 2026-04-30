@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
+import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
@@ -27,6 +28,7 @@ import {
   AssetAccountCategory,
   ASSET_ACCOUNT_CATEGORIES,
   ASSET_ACCOUNT_CATEGORY_LABELS,
+  NetWorthSnapshot,
 } from "../types";
 import {
   getBudgetEntries,
@@ -46,9 +48,11 @@ import {
   getAssetAccounts,
   saveAssetAccounts,
 } from "../storage/assetAccountStorage";
+import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import { calculateNetWorthTotals } from "../utils/netWorth";
 
 type ExpenseCategoryEntry = {
   id: string;
@@ -146,7 +150,7 @@ const getMonthKeysBetween = (from: string, to: string): string[] => {
 
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, formatCompactCurrency } = useCurrency();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -173,11 +177,18 @@ const BudgetScreen: React.FC = () => {
   const [keelTarget, setKeelTarget] = useState(0);
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
+  const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
   const nextMonthKey = monthKeys[0];
   const selectedMonthIndex = Math.max(0, monthKeys.indexOf(selectedMonthKey));
+
+  const refreshNetWorthSnapshots = useCallback(async () => {
+    const nextSnapshots = await syncNetWorthSnapshot();
+    setNetWorthSnapshots(nextSnapshots);
+    return nextSnapshots;
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -214,7 +225,7 @@ const BudgetScreen: React.FC = () => {
         }
 
         if (entriesModified) {
-          void saveBudgetEntries(storedEntries);
+          await saveBudgetEntries(storedEntries);
         }
 
         if (accountBalanceDeltas.size > 0) {
@@ -225,7 +236,7 @@ const BudgetScreen: React.FC = () => {
               account.updatedAt = new Date().toISOString();
             }
           }
-          void saveAssetAccounts(storedAssets);
+          await saveAssetAccounts(storedAssets);
         }
 
         setEntries(storedEntries);
@@ -233,11 +244,12 @@ const BudgetScreen: React.FC = () => {
         setDebts(storedDebts);
         setSavingsGoals(storedGoals);
         setAssetAccounts(storedAssets);
+        await refreshNetWorthSnapshots();
         setIsLoaded(true);
       };
 
       loadBudgetData();
-    }, [selectedMonthKey])
+    }, [refreshNetWorthSnapshots, selectedMonthKey])
   );
 
   const selectedMonthDate = useMemo(
@@ -323,23 +335,20 @@ const BudgetScreen: React.FC = () => {
     [assetAccounts]
   );
 
-  const totalSavings = useMemo(
-    () => {
-      const goalSavings = savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0);
-      const entrySavings = entries
-        .filter((entry) => entry.type === "expense" && entry.category === "Savings")
-        .reduce((sum, entry) => sum + entry.amount, 0);
-      return goalSavings + entrySavings + totalAssetBalance;
-    },
-    [savingsGoals, entries, totalAssetBalance]
+  const netWorthTotals = useMemo(
+    () =>
+      calculateNetWorthTotals({
+        entries,
+        debts,
+        savingsGoals,
+        assetAccounts,
+      }),
+    [assetAccounts, debts, entries, savingsGoals]
   );
 
-  const totalDebt = useMemo(
-    () => debts.reduce((sum, d) => sum + d.balance, 0),
-    [debts]
-  );
-
-  const netWorth = totalSavings - totalDebt;
+  const totalSavings = netWorthTotals.totalAssets;
+  const totalDebt = netWorthTotals.totalDebt;
+  const netWorth = netWorthTotals.netWorth;
 
   const limitByCategory = useMemo(() => {
     const map: Partial<Record<BudgetCategory, number>> = {};
@@ -457,22 +466,32 @@ const BudgetScreen: React.FC = () => {
     [chartColors, chartData]
   );
 
-  const applyAccountContribution = useCallback(
-    (accountId: string, amount: number) => {
-      setAssetAccounts((prev) => {
-        const next = prev.map((a) =>
-          a.id === accountId
-            ? { ...a, balance: a.balance + amount, updatedAt: new Date().toISOString() }
-            : a
-        );
-        void saveAssetAccounts(next);
-        return next;
+  const adjustAssetAccounts = useCallback(
+    (
+      accounts: AssetAccount[],
+      deltas: Array<{ accountId: string; amount: number }>
+    ): AssetAccount[] => {
+      if (deltas.length === 0) return accounts;
+
+      const totalsById = new Map<string, number>();
+      deltas.forEach(({ accountId, amount }) => {
+        totalsById.set(accountId, (totalsById.get(accountId) ?? 0) + amount);
+      });
+
+      return accounts.map((account) => {
+        const delta = totalsById.get(account.id);
+        if (!delta) return account;
+        return {
+          ...account,
+          balance: account.balance + delta,
+          updatedAt: new Date().toISOString(),
+        };
       });
     },
     []
   );
 
-  const handleAddEntry = useCallback((input: NewBudgetEntryInput) => {
+  const handleAddEntry = useCallback(async (input: NewBudgetEntryInput) => {
     const now = new Date().toISOString();
     const monthKey = now.slice(0, 7);
     const newEntry: BudgetEntry = {
@@ -483,56 +502,81 @@ const BudgetScreen: React.FC = () => {
       lastAppliedMonth: input.linkedAccountId ? monthKey : undefined,
     };
 
-    setEntries((prev) => {
-      const updated = [...prev, newEntry];
-      void saveBudgetEntries(updated);
-      return updated;
-    });
+    const nextEntries = [...entries, newEntry];
+    const nextAssets = input.linkedAccountId
+      ? adjustAssetAccounts(assetAccounts, [{ accountId: input.linkedAccountId, amount: input.amount }])
+      : assetAccounts;
 
-    if (input.linkedAccountId) {
-      applyAccountContribution(input.linkedAccountId, input.amount);
+    setEntries(nextEntries);
+    if (nextAssets !== assetAccounts) {
+      setAssetAccounts(nextAssets);
     }
 
+    await saveBudgetEntries(nextEntries);
+    if (nextAssets !== assetAccounts) {
+      await saveAssetAccounts(nextAssets);
+    }
+    await refreshNetWorthSnapshots();
     setShowAddModal(false);
-  }, [applyAccountContribution]);
+  }, [adjustAssetAccounts, assetAccounts, entries, refreshNetWorthSnapshots]);
 
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
     setEditingEntry(found);
   }, [entries]);
 
-  const handleSaveEntry = useCallback((updated: BudgetEntry) => {
+  const handleSaveEntry = useCallback(async (updated: BudgetEntry) => {
     const original = entries.find((e) => e.id === updated.id);
-    const oldAccount = original?.linkedAccountId;
-    const newAccount = updated.linkedAccountId;
-    const oldAmount = original?.amount ?? 0;
-    const newAmount = updated.amount;
-
-    // Reverse old contribution if link/amount changed
-    if (oldAccount && (oldAccount !== newAccount || oldAmount !== newAmount)) {
-      applyAccountContribution(oldAccount, -oldAmount);
-    }
-    // Apply new contribution if link/amount changed
-    if (newAccount && (oldAccount !== newAccount || oldAmount !== newAmount)) {
-      applyAccountContribution(newAccount, newAmount);
+    if (!original) {
+      setEditingEntry(null);
+      return;
     }
 
-    setEntries((prev) => {
-      const next = prev.map((e) => (e.id === updated.id ? updated : e));
-      void saveBudgetEntries(next);
-      return next;
-    });
-    setEditingEntry(null);
-  }, [entries, applyAccountContribution]);
+    const deltas: Array<{ accountId: string; amount: number }> = [];
+    if (original.linkedAccountId) {
+      deltas.push({ accountId: original.linkedAccountId, amount: -original.amount });
+    }
+    if (updated.linkedAccountId) {
+      deltas.push({ accountId: updated.linkedAccountId, amount: updated.amount });
+    }
 
-  const handleDeleteEntry = useCallback((id: string) => {
-    setEntries((prev) => {
-      const next = prev.filter((e) => e.id !== id);
-      void saveBudgetEntries(next);
-      return next;
-    });
+    const nextEntries = entries.map((entry) => (entry.id === updated.id ? updated : entry));
+    const nextAssets = deltas.length > 0
+      ? adjustAssetAccounts(assetAccounts, deltas)
+      : assetAccounts;
+
+    setEntries(nextEntries);
+    if (nextAssets !== assetAccounts) {
+      setAssetAccounts(nextAssets);
+    }
+
+    await saveBudgetEntries(nextEntries);
+    if (nextAssets !== assetAccounts) {
+      await saveAssetAccounts(nextAssets);
+    }
+    await refreshNetWorthSnapshots();
     setEditingEntry(null);
-  }, []);
+  }, [adjustAssetAccounts, assetAccounts, entries, refreshNetWorthSnapshots]);
+
+  const handleDeleteEntry = useCallback(async (id: string) => {
+    const target = entries.find((entry) => entry.id === id);
+    const nextEntries = entries.filter((entry) => entry.id !== id);
+    const nextAssets = target?.linkedAccountId
+      ? adjustAssetAccounts(assetAccounts, [{ accountId: target.linkedAccountId, amount: -target.amount }])
+      : assetAccounts;
+
+    setEntries(nextEntries);
+    if (nextAssets !== assetAccounts) {
+      setAssetAccounts(nextAssets);
+    }
+
+    await saveBudgetEntries(nextEntries);
+    if (nextAssets !== assetAccounts) {
+      await saveAssetAccounts(nextAssets);
+    }
+    await refreshNetWorthSnapshots();
+    setEditingEntry(null);
+  }, [adjustAssetAccounts, assetAccounts, entries, refreshNetWorthSnapshots]);
 
   const foodEntriesToSplit = useMemo(
     () => entries.filter((entry) => entry.type === "expense" && entry.category === "Food"),
@@ -643,22 +687,25 @@ const BudgetScreen: React.FC = () => {
     setEditingAsset(null);
   }, []);
 
-  const saveAsset = useCallback(() => {
+  const saveAsset = useCallback(async () => {
     const parsedBalance = parseFloat(assetBalance);
     if (!assetName.trim() || Number.isNaN(parsedBalance) || parsedBalance < 0) return;
 
     const now = new Date().toISOString();
+    let nextAccounts: AssetAccount[];
 
     if (editingAsset) {
-      setAssetAccounts((prev) => {
-        const next = prev.map((a) =>
-          a.id === editingAsset.id
-            ? { ...a, name: assetName.trim(), balance: parsedBalance, category: assetCategory, updatedAt: now }
-            : a
-        );
-        void saveAssetAccounts(next);
-        return next;
-      });
+      nextAccounts = assetAccounts.map((account) =>
+        account.id === editingAsset.id
+          ? {
+              ...account,
+              name: assetName.trim(),
+              balance: parsedBalance,
+              category: assetCategory,
+              updatedAt: now,
+            }
+          : account
+      );
     } else {
       const newAccount: AssetAccount = {
         id: generateUUID(),
@@ -668,24 +715,22 @@ const BudgetScreen: React.FC = () => {
         createdAt: now,
         updatedAt: now,
       };
-      setAssetAccounts((prev) => {
-        const next = [...prev, newAccount];
-        void saveAssetAccounts(next);
-        return next;
-      });
+      nextAccounts = [...assetAccounts, newAccount];
     }
 
+    setAssetAccounts(nextAccounts);
+    await saveAssetAccounts(nextAccounts);
+    await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [assetBalance, assetCategory, assetName, closeAssetModal, editingAsset]);
+  }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, refreshNetWorthSnapshots]);
 
-  const deleteAsset = useCallback((id: string) => {
-    setAssetAccounts((prev) => {
-      const next = prev.filter((a) => a.id !== id);
-      void saveAssetAccounts(next);
-      return next;
-    });
+  const deleteAsset = useCallback(async (id: string) => {
+    const nextAccounts = assetAccounts.filter((account) => account.id !== id);
+    setAssetAccounts(nextAccounts);
+    await saveAssetAccounts(nextAccounts);
+    await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [closeAssetModal]);
+  }, [assetAccounts, closeAssetModal, refreshNetWorthSnapshots]);
 
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);
@@ -694,17 +739,17 @@ const BudgetScreen: React.FC = () => {
     const now = new Date().toISOString();
     const existing = savingsGoals.find((g) => g.category === "emergency_fund");
 
+    let updatedGoals: SavingsGoal[];
+
     if (existing) {
       const updatedGoal = {
         ...existing,
         currentAmount: Math.max(0, existing.currentAmount + parsed),
         updatedAt: now,
       };
-      const updatedGoals = savingsGoals.map((g) =>
+      updatedGoals = savingsGoals.map((g) =>
         g.id === existing.id ? updatedGoal : g
       );
-      setSavingsGoals(updatedGoals);
-      await saveSavingsGoals(updatedGoals);
     } else {
       // Create a real savings goal so the contribution persists
       const newGoal: SavingsGoal = {
@@ -716,14 +761,15 @@ const BudgetScreen: React.FC = () => {
         createdAt: now,
         updatedAt: now,
       };
-      const updatedGoals = [...savingsGoals, newGoal];
-      setSavingsGoals(updatedGoals);
-      await saveSavingsGoals(updatedGoals);
+      updatedGoals = [...savingsGoals, newGoal];
     }
 
+    setSavingsGoals(updatedGoals);
+    await saveSavingsGoals(updatedGoals);
+    await refreshNetWorthSnapshots();
     setShowEfContribModal(false);
     setEfContribAmount("");
-  }, [efContribAmount, keelTarget, savingsGoals]);
+  }, [efContribAmount, keelTarget, refreshNetWorthSnapshots, savingsGoals]);
 
   const listHeader = (
     <View>
@@ -732,6 +778,16 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.screenTitle}>Budget</Text>
         <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
       </View>
+
+      <NetWorthHistoryCard
+        snapshots={netWorthSnapshots}
+        netWorth={netWorth}
+        totalAssets={totalSavings}
+        totalDebt={totalDebt}
+        formatCurrency={formatCurrency}
+        formatCompactCurrency={formatCompactCurrency}
+        colors={colors}
+      />
 
       <View style={styles.monthSwitchRow}>
         <TouchableOpacity
@@ -837,34 +893,6 @@ const BudgetScreen: React.FC = () => {
             )}
           </View>
         )}
-      </View>
-
-      {/* Net Worth card */}
-      <View style={styles.netWorthCard}>
-        <Text style={styles.netWorthTitle}>Net Worth</Text>
-        <Text
-          style={[
-            styles.netWorthValue,
-            { color: netWorth >= 0 ? colors.success : colors.danger },
-          ]}
-        >
-          {netWorth >= 0 ? "" : "-"}{formatCurrency(Math.abs(netWorth))}
-        </Text>
-        <View style={styles.netWorthBreakdown}>
-          <View style={styles.netWorthStat}>
-            <Text style={styles.netWorthStatLabel}>Total Assets</Text>
-            <Text style={[styles.netWorthStatValue, { color: colors.success }]}>
-              {formatCurrency(totalSavings)}
-            </Text>
-          </View>
-          <View style={styles.netWorthDivider} />
-          <View style={styles.netWorthStat}>
-            <Text style={styles.netWorthStatLabel}>Total Debt</Text>
-            <Text style={[styles.netWorthStatValue, { color: totalDebt > 0 ? colors.danger : colors.textDim }]}>
-              {totalDebt > 0 ? "-" : ""}{formatCurrency(totalDebt)}
-            </Text>
-          </View>
-        </View>
       </View>
 
       {/* Accounts card */}

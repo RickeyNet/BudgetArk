@@ -212,6 +212,14 @@ export interface AssetAccount {
   updatedAt: string;
 }
 
+export interface NetWorthSnapshot {
+  dayKey: string;
+  capturedAt: string;
+  totalAssets: number;
+  totalDebt: number;
+  netWorth: number;
+}
+
 /* ─── Currency + Localization Types ─── */
 
 export interface CurrencyPreferenceOption {

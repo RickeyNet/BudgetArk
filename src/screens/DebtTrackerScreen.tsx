@@ -52,6 +52,7 @@ import {
 } from "../storage/debtStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
+import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
   getDebtMilestonePlan,
   saveDebtMilestonePlan,
@@ -503,31 +504,25 @@ const DebtTrackerScreen: React.FC = () => {
       createdAt: now,
       updatedAt: now,
     };
-    setDebts((prev) => {
-      const updated = [...prev, newDebt];
-      saveDebts(updated);
-      return updated;
-    });
+    const updated = [...debts, newDebt];
+    setDebts(updated);
+    await saveDebts(updated);
+    await syncNetWorthSnapshot();
     setShowModal(false);
-  }, []);
+  }, [debts]);
 
   /** Record a payment against a debt */
   const handlePayment = useCallback(async (debtId: string, amount: number) => {
-    setDebts((prev) => {
-      const updated = prev.map((d) =>
-        d.id === debtId ? { ...d, balance: Math.max(0, d.balance - amount) } : d
-      );
-      saveDebts(updated);
-      return updated;
-    });
     const paymentNow = new Date().toISOString();
-    await recordPayment({
+    const result = await recordPayment({
       id: generateUUID(),
       debtId,
       amount,
       date: paymentNow,
       updatedAt: paymentNow,
     });
+    setDebts(result.debts);
+    await syncNetWorthSnapshot(paymentNow);
   }, []);
 
   /** Open edit modal for a debt */
@@ -541,6 +536,7 @@ const DebtTrackerScreen: React.FC = () => {
     const updated = await updateDebt(debtId, updates);
     if (updated) {
       setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, ...updates } : d)));
+      await syncNetWorthSnapshot();
     }
     setShowModal(false);
     setEditingDebt(null);
@@ -555,13 +551,12 @@ const DebtTrackerScreen: React.FC = () => {
   const confirmDelete = useCallback(async () => {
     if (!pendingDeleteDebt) return;
     const debtId = pendingDeleteDebt.id;
-    setDebts((prev) => {
-      const updated = prev.filter((d) => d.id !== debtId);
-      saveDebts(updated);
-      return updated;
-    });
+    const updated = debts.filter((debt) => debt.id !== debtId);
+    setDebts(updated);
+    await saveDebts(updated);
+    await syncNetWorthSnapshot();
     setPendingDeleteDebt(null);
-  }, [pendingDeleteDebt]);
+  }, [debts, pendingDeleteDebt]);
 
   const openClassifyModal = useCallback(() => {
     const nextDraft: Record<string, DebtClass> = {};
@@ -697,6 +692,7 @@ const DebtTrackerScreen: React.FC = () => {
         updatedAt: now.toISOString(),
       };
       await addBudgetEntry(entry);
+      await syncNetWorthSnapshot();
       setSavingsReserve(targetAmount);
       setSavingsDraft("");
     },
@@ -730,6 +726,7 @@ const DebtTrackerScreen: React.FC = () => {
       const updated = [...savingsGoals, goal];
       setSavingsGoals(updated);
       await saveSavingsGoals(updated);
+      await syncNetWorthSnapshot();
     },
     [savingsGoals]
   );
@@ -747,6 +744,7 @@ const DebtTrackerScreen: React.FC = () => {
       );
       setSavingsGoals(updated);
       await saveSavingsGoals(updated);
+      await syncNetWorthSnapshot();
     },
     [savingsGoals]
   );
@@ -756,6 +754,7 @@ const DebtTrackerScreen: React.FC = () => {
       const updated = savingsGoals.filter((goal) => goal.id !== goalId);
       setSavingsGoals(updated);
       await saveSavingsGoals(updated);
+      await syncNetWorthSnapshot();
     },
     [savingsGoals]
   );
