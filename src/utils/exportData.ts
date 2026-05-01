@@ -9,9 +9,21 @@
 
 import { Share } from "react-native";
 import CryptoJS from "crypto-js";
-import { getDebts, getPayments } from "../storage/debtStorage";
-import { getBudgetEntries, getCategoryBudgetLimits } from "../storage/budgetStorage";
+import {
+  getDebts,
+  getPayments,
+  getPayoffStrategyPreference,
+} from "../storage/debtStorage";
+import {
+  getBudgetEntries,
+  getAllLimitsByMonth,
+  getCategoryBudgetLimits,
+} from "../storage/budgetStorage";
 import { getOrCreateUser } from "../storage/userStorage";
+import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { getAssetAccounts } from "../storage/assetAccountStorage";
+import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
+import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 
 /** Prefix used to identify password-encrypted export payloads */
@@ -26,12 +38,30 @@ export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
  */
 export const exportAllData = async (password?: string): Promise<void> => {
   // Collect all data in parallel
-  const [debts, payments, budgetEntries, budgetLimits, user] = await Promise.all([
+  const [
+    debts,
+    payments,
+    budgetEntries,
+    budgetLimits,
+    budgetLimitsByMonth,
+    user,
+    savingsGoals,
+    assetAccounts,
+    debtMilestones,
+    payoffStrategy,
+    netWorthSnapshots,
+  ] = await Promise.all([
     getDebts(),
     getPayments(),
     getBudgetEntries(),
     getCategoryBudgetLimits(),
+    getAllLimitsByMonth(),
     getOrCreateUser(),
+    getSavingsGoals(),
+    getAssetAccounts(),
+    getDebtMilestonePlan(),
+    getPayoffStrategyPreference(),
+    getNetWorthSnapshots(),
   ]);
 
   const exportPayload = {
@@ -47,7 +77,16 @@ export const exportAllData = async (password?: string): Promise<void> => {
     debts,
     payments,
     budgetEntries,
+    // Keep the legacy current-month-only field so older app versions can still
+    // partially restore from a new export.
     budgetLimits,
+    // Full per-month limit history (preferred when reading).
+    budgetLimitsByMonth,
+    savingsGoals,
+    assetAccounts,
+    debtMilestones,
+    payoffStrategy,
+    netWorthSnapshots,
   };
 
   const json = JSON.stringify(exportPayload, null, 2);

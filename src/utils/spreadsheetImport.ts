@@ -38,6 +38,13 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_ROWS_PER_SHEET = 5000;
 
 const VALID_BUDGET_CATEGORIES = new Set<string>(BUDGET_CATEGORIES);
+
+/** Categories where the app legitimately writes negative-amount correction entries. */
+const NEGATIVE_AMOUNT_CATEGORIES = new Set<string>([
+  "Savings",
+  "Retirement",
+  "Investing",
+]);
 const VALID_ASSET_CATEGORIES = new Set<string>(ASSET_ACCOUNT_CATEGORIES);
 const VALID_SAVINGS_CATEGORIES = new Set([
   "emergency_fund",
@@ -209,7 +216,17 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
   const amount = parseAmount(get(row, "Amount"));
   const dateIso = parseDate(get(row, "Date"));
 
-  if (!type || !category || !Number.isFinite(amount) || amount <= 0 || !dateIso) {
+  // Savings/Retirement/Investing entries may legitimately be negative
+  // (correction entries when the user lowers a tracked reserve). All other
+  // categories require positive amounts.
+  const allowsNegative =
+    category !== null && NEGATIVE_AMOUNT_CATEGORIES.has(category);
+  const amountValid =
+    Number.isFinite(amount) &&
+    Math.abs(amount) >= 0.01 &&
+    (allowsNegative ? true : amount > 0);
+
+  if (!type || !category || !amountValid || !dateIso) {
     return null;
   }
 
@@ -493,24 +510,19 @@ export const importSpreadsheet = async (
     );
   }
 
-  // Pipe into the JSON import pipeline. We DON'T include `savingsGoals` /
-  // `assetAccounts` in the payload because importData.ts (currently) only
-  // handles debts/payments/budgetEntries/budgetLimits — those entities are
-  // imported separately below via direct storage.
+  // Pipe into the JSON import pipeline so all collections inherit the
+  // transactional safety + rollback semantics in importFromString.
   const payload = {
     exportedAt: new Date().toISOString(),
     debts,
     payments,
     budgetEntries,
     budgetLimits,
+    savingsGoals,
+    assetAccounts,
   };
 
   const result = await importFromString(JSON.stringify(payload), mode);
-
-  // TODO (future): wire savingsGoals + assetAccounts through a similar
-  // transactional path. For now we surface the count to the user so they
-  // know rows were detected even if not imported.
-  // (counts intentionally not added to result yet to avoid overstating.)
 
   return {
     ...result,

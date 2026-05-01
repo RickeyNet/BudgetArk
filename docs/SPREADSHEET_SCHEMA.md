@@ -13,7 +13,7 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 | `Date`            | Yes      | ISO `YYYY-MM-DD`, full ISO timestamp, US `M/D/YYYY`, or Excel native date.             |
 | `Type`            | Yes      | `income` or `expense` (case-insensitive).                                              |
 | `Category`        | Yes      | Must match one of the BudgetArk categories (see list below).                           |
-| `Amount`          | Yes      | Positive number. Strips `$`, commas, and treats `(50.00)` as `-50.00`.                 |
+| `Amount`          | Yes      | Positive number for most categories. Strips `$`, commas, and treats `(50.00)` as `-50.00`. Exception: `Savings`, `Retirement`, and `Investing` accept negative amounts — these represent app-generated correction entries when a tracked reserve is lowered. |
 | `Description`     | No       | Free-form note (max 220 chars).                                                        |
 | `Recurring`       | No       | `yes` / `no` / `true` / `false` / `1` / `0`.                                           |
 | `LinkedAccountId` | No       | UUID of an asset account (used for savings entries).                                   |
@@ -70,7 +70,7 @@ Imported limits land in the current month's limit set.
 | `TargetDate`    | No       | Optional target date.                                                                |
 | `CreatedAt`     | No       | ISO timestamp; defaults to now.                                                      |
 
-> Note: This sheet is round-trip safe with the export utility, but the v1 importer does not yet write savings goals into storage. They will be parsed and the row count surfaced for confirmation in a follow-up release.
+> Imported on Excel imports — full round-trip with the export utility.
 
 ## Sheet: Asset Accounts (xlsx only)
 
@@ -82,7 +82,7 @@ Imported limits land in the current month's limit set.
 | `Balance`   | Yes      | Number, ≥ 0.                                                         |
 | `CreatedAt` | No       | ISO timestamp; defaults to now.                                      |
 
-> Note: Same caveat as Savings Goals — round-trip exported but not yet imported in v1.
+> Imported on Excel imports — full round-trip with the export utility.
 
 ## Limits
 

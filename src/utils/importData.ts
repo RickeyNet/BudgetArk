@@ -14,6 +14,7 @@ import { File as ExpoFile } from "expo-file-system";
 import CryptoJS from "crypto-js";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
+  ASSET_ACCOUNT_CATEGORIES,
   BUDGET_CATEGORIES,
   DEFAULT_CURRENCY_PREFERENCE_ID,
 } from "../types";
@@ -27,6 +28,11 @@ const KEYS = {
   BUDGET_ENTRIES: "@budgetark_budget_entries",
   BUDGET_LIMITS: "@budgetark_budget_limits_by_month",
   USER: "@budgetark_user",
+  SAVINGS_GOALS: "@budgetark_savings_goals",
+  ASSET_ACCOUNTS: "@budgetark_asset_accounts",
+  DEBT_MILESTONES: "@budgetark_debt_milestones",
+  PAYOFF_STRATEGY: "@budgetark_payoff_strategy",
+  NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
 } as const;
 
 const getCurrentMonthKey = (): string => {
@@ -50,17 +56,21 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const validatePayload = (data: unknown): data is ImportPayload => {
   if (!isObject(data)) return false;
 
-  // Must have at least one data array
-  const hasDebts = Array.isArray(data.debts);
-  const hasPayments = Array.isArray(data.payments);
-  const hasBudgetEntries = Array.isArray(data.budgetEntries);
-  const hasBudgetLimits = Array.isArray(data.budgetLimits);
+  // Must have at least one recognized collection. Each new field added below
+  // expands the surface so older / partial exports still pass.
+  const hasAny =
+    Array.isArray(data.debts) ||
+    Array.isArray(data.payments) ||
+    Array.isArray(data.budgetEntries) ||
+    Array.isArray(data.budgetLimits) ||
+    isObject(data.budgetLimitsByMonth) ||
+    Array.isArray(data.savingsGoals) ||
+    Array.isArray(data.assetAccounts) ||
+    isObject(data.debtMilestones) ||
+    typeof data.payoffStrategy === "string" ||
+    Array.isArray(data.netWorthSnapshots);
 
-  if (!hasDebts && !hasPayments && !hasBudgetEntries && !hasBudgetLimits) {
-    return false;
-  }
-
-  return true;
+  return hasAny;
 };
 
 interface ImportPayload {
@@ -68,6 +78,12 @@ interface ImportPayload {
   payments?: unknown[];
   budgetEntries?: unknown[];
   budgetLimits?: unknown[];
+  budgetLimitsByMonth?: Record<string, unknown>;
+  savingsGoals?: unknown[];
+  assetAccounts?: unknown[];
+  debtMilestones?: Record<string, unknown>;
+  payoffStrategy?: unknown;
+  netWorthSnapshots?: unknown[];
   user?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -77,6 +93,12 @@ interface SanitizedImportPayload {
   payments: Record<string, unknown>[];
   budgetEntries: Record<string, unknown>[];
   budgetLimits: Record<string, unknown>[];
+  budgetLimitsByMonth?: Record<string, Record<string, unknown>[]>;
+  savingsGoals: Record<string, unknown>[];
+  assetAccounts: Record<string, unknown>[];
+  debtMilestones?: Record<string, unknown>;
+  payoffStrategy?: "custom" | "avalanche" | "snowball";
+  netWorthSnapshots: Record<string, unknown>[];
   user?: Record<string, unknown>;
 }
 
@@ -85,6 +107,11 @@ export interface ImportResult {
   payments: number;
   budgetEntries: number;
   budgetLimits: number;
+  savingsGoals: number;
+  assetAccounts: number;
+  debtMilestones: boolean;
+  payoffStrategy: boolean;
+  netWorthSnapshots: number;
   /** Number of days since the export was created, or undefined if no exportedAt timestamp */
   staleDays?: number;
 }
@@ -100,6 +127,18 @@ const LIMITS = {
 } as const;
 
 const VALID_CATEGORIES = new Set<string>(BUDGET_CATEGORIES);
+
+/**
+ * Categories where the app legitimately writes negative-amount entries
+ * (e.g. lowering a tracked savings reserve via Build Your Ark generates a
+ * correction entry with amount = newTotal - oldTotal, which can be negative).
+ * Round-trip safety requires the validator to accept these.
+ */
+const NEGATIVE_AMOUNT_CATEGORIES = new Set<string>([
+  "Savings",
+  "Retirement",
+  "Investing",
+]);
 
 const isValidDateValue = (value: unknown): value is string =>
   typeof value === "string" && !Number.isNaN(Date.parse(value));
@@ -149,11 +188,24 @@ const isBudgetEntryItem = (item: unknown): item is Record<string, unknown> => {
     (typeof item.description === "string" &&
       item.description.length <= LIMITS.MAX_DESCRIPTION_LENGTH);
 
+  // Savings/Retirement/Investing entries may legitimately be negative
+  // (the app writes correction entries when a tracked reserve goes down).
+  // For all other categories, require positive amount.
+  const allowsNegative =
+    typeof item.category === "string" &&
+    NEGATIVE_AMOUNT_CATEGORIES.has(item.category);
+  const amountValid = allowsNegative
+    ? isSafeNumber(item.amount, {
+        min: -LIMITS.MAX_MONEY,
+        max: LIMITS.MAX_MONEY,
+      }) && Math.abs(item.amount as number) >= 0.01
+    : isSafeNumber(item.amount, { min: 0.01 });
+
   return (
     isSafeText(item.id) &&
     typeValid &&
     categoryValid &&
-    isSafeNumber(item.amount, { min: 0.01 }) &&
+    amountValid &&
     descriptionValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt)
@@ -167,6 +219,106 @@ const isBudgetLimitItem = (item: unknown): item is Record<string, unknown> => {
     VALID_CATEGORIES.has(item.category) &&
     isSafeNumber(item.monthlyLimit, { min: 0.01, max: LIMITS.MAX_MONEY })
   );
+};
+
+const VALID_SAVINGS_GOAL_CATEGORIES = new Set([
+  "emergency_fund",
+  "travel",
+  "home",
+  "car",
+  "education",
+  "other",
+]);
+
+const isSavingsGoalItem = (item: unknown): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    isSafeText(item.name, 80) &&
+    typeof item.category === "string" &&
+    VALID_SAVINGS_GOAL_CATEGORIES.has(item.category) &&
+    isSafeNumber(item.targetAmount, { min: 0.01 }) &&
+    isSafeNumber(item.currentAmount, { min: 0 }) &&
+    (item.targetDate === undefined || isValidDateValue(item.targetDate)) &&
+    isValidDateValue(item.createdAt)
+  );
+};
+
+const VALID_ASSET_ACCOUNT_CATEGORIES = new Set<string>(ASSET_ACCOUNT_CATEGORIES);
+
+const isAssetAccountItem = (item: unknown): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    isSafeText(item.name, 80) &&
+    typeof item.category === "string" &&
+    VALID_ASSET_ACCOUNT_CATEGORIES.has(item.category) &&
+    isSafeNumber(item.balance, { min: 0 }) &&
+    isValidDateValue(item.createdAt)
+  );
+};
+
+const isNetWorthSnapshotItem = (item: unknown): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    typeof item.dayKey === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(item.dayKey) &&
+    isValidDateValue(item.capturedAt) &&
+    typeof item.totalAssets === "number" &&
+    Number.isFinite(item.totalAssets) &&
+    typeof item.totalDebt === "number" &&
+    Number.isFinite(item.totalDebt) &&
+    typeof item.netWorth === "number" &&
+    Number.isFinite(item.netWorth)
+  );
+};
+
+const VALID_PAYOFF_STRATEGIES = new Set(["custom", "avalanche", "snowball"]);
+
+const sanitizePayoffStrategy = (
+  raw: unknown
+): "custom" | "avalanche" | "snowball" | undefined => {
+  if (typeof raw !== "string") return undefined;
+  return VALID_PAYOFF_STRATEGIES.has(raw)
+    ? (raw as "custom" | "avalanche" | "snowball")
+    : undefined;
+};
+
+/**
+ * Loosely validates the imported debt milestone plan. The storage layer
+ * (`debtMilestoneStorage.normalizePlan`) re-derives any missing fields on
+ * read, so we only need to confirm the basic shape is right.
+ */
+const sanitizeDebtMilestones = (
+  raw: unknown
+): Record<string, unknown> | undefined => {
+  if (!isObject(raw)) return undefined;
+  if (!Array.isArray(raw.steps)) return undefined;
+  return raw;
+};
+
+const sanitizeBudgetLimitsByMonth = (
+  raw: unknown
+): Record<string, Record<string, unknown>[]> | undefined => {
+  if (!isObject(raw)) return undefined;
+  const out: Record<string, Record<string, unknown>[]> = {};
+  for (const [monthKey, value] of Object.entries(raw)) {
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) continue;
+    if (!Array.isArray(value)) continue;
+    if (value.length > LIMITS.MAX_COLLECTION_ITEMS) {
+      throw new Error(
+        `Too many budget limits in month ${monthKey}. Maximum is ${LIMITS.MAX_COLLECTION_ITEMS}.`
+      );
+    }
+    const valid = value.filter(isBudgetLimitItem);
+    if (valid.length !== value.length) {
+      throw new Error(
+        `Import rejected: budget limits for ${monthKey} contain invalid records.`
+      );
+    }
+    out[monthKey] = valid;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 };
 
 const sanitizeCollection = (
@@ -235,17 +387,58 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     "budget limits",
     isBudgetLimitItem
   );
+  const budgetLimitsByMonth = sanitizeBudgetLimitsByMonth(data.budgetLimitsByMonth);
+  const savingsGoals = sanitizeCollection(
+    data.savingsGoals,
+    "savings goals",
+    isSavingsGoalItem
+  );
+  const assetAccounts = sanitizeCollection(
+    data.assetAccounts,
+    "asset accounts",
+    isAssetAccountItem
+  );
+  const netWorthSnapshots = sanitizeCollection(
+    data.netWorthSnapshots,
+    "net worth snapshots",
+    isNetWorthSnapshotItem
+  );
+  const debtMilestones = sanitizeDebtMilestones(data.debtMilestones);
+  const payoffStrategy = sanitizePayoffStrategy(data.payoffStrategy);
   const user = sanitizeUser(data.user);
 
+  const limitsByMonthCount = budgetLimitsByMonth
+    ? Object.values(budgetLimitsByMonth).reduce((sum, arr) => sum + arr.length, 0)
+    : 0;
+
   const totalItems =
-    debts.length + payments.length + budgetEntries.length + budgetLimits.length;
+    debts.length +
+    payments.length +
+    budgetEntries.length +
+    budgetLimits.length +
+    limitsByMonthCount +
+    savingsGoals.length +
+    assetAccounts.length +
+    netWorthSnapshots.length;
   if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
     throw new Error(
       `Import rejected: payload is too large. Maximum total records is ${LIMITS.MAX_TOTAL_ITEMS}.`
     );
   }
 
-  return { debts, payments, budgetEntries, budgetLimits, user };
+  return {
+    debts,
+    payments,
+    budgetEntries,
+    budgetLimits,
+    budgetLimitsByMonth,
+    savingsGoals,
+    assetAccounts,
+    netWorthSnapshots,
+    debtMilestones,
+    payoffStrategy,
+    user,
+  };
 };
 
 /* ── Core import logic (shared by file-picker and paste paths) ── */
@@ -329,6 +522,11 @@ export const importFromString = async (
     payments: 0,
     budgetEntries: 0,
     budgetLimits: 0,
+    savingsGoals: 0,
+    assetAccounts: 0,
+    debtMilestones: false,
+    payoffStrategy: false,
+    netWorthSnapshots: 0,
     staleDays,
   };
 
@@ -420,11 +618,100 @@ export const importFromString = async (
     return { json: JSON.stringify(history), count: incoming.length };
   };
 
+  /**
+   * Compute merged budget-limit history in memory. Prefers the full
+   * `budgetLimitsByMonth` map when present. Falls back to the legacy
+   * single-month `budgetLimits` array when only the older field is sent.
+   */
+  const computeMergedLimitsHistory = async (): Promise<{
+    json: string;
+    monthCount: number;
+    totalItems: number;
+  } | null> => {
+    const incomingHistory = sanitized.budgetLimitsByMonth;
+
+    // Build the canonical incoming map. Falls back to wrapping
+    // legacy single-month limits under the current month key.
+    let incomingMap: Record<string, Record<string, unknown>[]> | null = null;
+    if (incomingHistory) {
+      incomingMap = incomingHistory;
+    } else if (sanitized.budgetLimits.length > 0) {
+      incomingMap = { [getCurrentMonthKey()]: sanitized.budgetLimits };
+    }
+    if (!incomingMap) return null;
+
+    if (mode === "replace") {
+      const totalItems = Object.values(incomingMap).reduce(
+        (sum, arr) => sum + arr.length,
+        0
+      );
+      return {
+        json: JSON.stringify(incomingMap),
+        monthCount: Object.keys(incomingMap).length,
+        totalItems,
+      };
+    }
+
+    const existingRaw = await EncryptedStorage.getItem(KEYS.BUDGET_LIMITS);
+    let parsed: unknown = {};
+    if (existingRaw) {
+      try {
+        parsed = JSON.parse(existingRaw);
+      } catch {
+        parsed = {};
+      }
+    }
+    const existing: Record<string, Record<string, unknown>[]> =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, Record<string, unknown>[]>)
+        : {};
+
+    let totalItems = 0;
+    for (const [monthKey, incomingArr] of Object.entries(incomingMap)) {
+      const existingForMonth = Array.isArray(existing[monthKey])
+        ? existing[monthKey]
+        : [];
+      const existingCategories = new Set(
+        existingForMonth.map((it: any) => it.category as string).filter(Boolean)
+      );
+      for (const item of incomingArr) {
+        const cat = (item as any)?.category;
+        if (cat && existingCategories.has(cat)) {
+          const idx = existingForMonth.findIndex(
+            (e: any) => e.category === cat
+          );
+          if (idx >= 0) existingForMonth[idx] = item;
+        } else {
+          existingForMonth.push(item);
+        }
+      }
+      existing[monthKey] = existingForMonth;
+      totalItems += incomingArr.length;
+    }
+
+    return {
+      json: JSON.stringify(existing),
+      monthCount: Object.keys(incomingMap).length,
+      totalItems,
+    };
+  };
+
   // Phase 1: Compute all merged results in memory
   const mergedDebts = await computeMergedById(KEYS.DEBTS, sanitized.debts);
   const mergedPayments = await computeMergedById(KEYS.PAYMENTS, sanitized.payments);
   const mergedBudgetEntries = await computeMergedById(KEYS.BUDGET_ENTRIES, sanitized.budgetEntries);
-  const mergedLimits = await computeMergedLimits(sanitized.budgetLimits);
+  const mergedLimits = await computeMergedLimitsHistory();
+  const mergedSavingsGoals = await computeMergedById(
+    KEYS.SAVINGS_GOALS,
+    sanitized.savingsGoals
+  );
+  const mergedAssetAccounts = await computeMergedById(
+    KEYS.ASSET_ACCOUNTS,
+    sanitized.assetAccounts
+  );
+  const mergedSnapshots = sanitized.netWorthSnapshots.length > 0
+    ? { json: JSON.stringify(sanitized.netWorthSnapshots), count: sanitized.netWorthSnapshots.length }
+    : null;
 
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
@@ -443,6 +730,24 @@ export const importFromString = async (
   if (mergedLimits) {
     tempWrites.push([KEYS.BUDGET_LIMITS + TEMP_SUFFIX, mergedLimits.json]);
   }
+  if (mergedSavingsGoals) {
+    tempWrites.push([KEYS.SAVINGS_GOALS + TEMP_SUFFIX, mergedSavingsGoals.json]);
+  }
+  if (mergedAssetAccounts) {
+    tempWrites.push([KEYS.ASSET_ACCOUNTS + TEMP_SUFFIX, mergedAssetAccounts.json]);
+  }
+  if (mergedSnapshots) {
+    tempWrites.push([KEYS.NET_WORTH_SNAPSHOTS + TEMP_SUFFIX, mergedSnapshots.json]);
+  }
+  if (sanitized.debtMilestones) {
+    tempWrites.push([
+      KEYS.DEBT_MILESTONES + TEMP_SUFFIX,
+      JSON.stringify(sanitized.debtMilestones),
+    ]);
+  }
+  if (sanitized.payoffStrategy) {
+    tempWrites.push([KEYS.PAYOFF_STRATEGY + TEMP_SUFFIX, sanitized.payoffStrategy]);
+  }
   if (sanitized.user && mode === "replace") {
     tempWrites.push([KEYS.USER + TEMP_SUFFIX, JSON.stringify(sanitized.user)]);
   }
@@ -458,7 +763,17 @@ export const importFromString = async (
   const backups: Array<[string, string | null]> = [];
   try {
     if (mode === "replace") {
-      const keysToRemove = [KEYS.DEBTS, KEYS.PAYMENTS, KEYS.BUDGET_ENTRIES, KEYS.BUDGET_LIMITS];
+      const keysToRemove = [
+        KEYS.DEBTS,
+        KEYS.PAYMENTS,
+        KEYS.BUDGET_ENTRIES,
+        KEYS.BUDGET_LIMITS,
+        KEYS.SAVINGS_GOALS,
+        KEYS.ASSET_ACCOUNTS,
+        KEYS.DEBT_MILESTONES,
+        KEYS.PAYOFF_STRATEGY,
+        KEYS.NET_WORTH_SNAPSHOTS,
+      ];
       for (const key of keysToRemove) {
         const original = await EncryptedStorage.getItem(key);
         backups.push([key, original]);
@@ -478,7 +793,12 @@ export const importFromString = async (
     counts.debts = mergedDebts?.count ?? 0;
     counts.payments = mergedPayments?.count ?? 0;
     counts.budgetEntries = mergedBudgetEntries?.count ?? 0;
-    counts.budgetLimits = mergedLimits?.count ?? 0;
+    counts.budgetLimits = mergedLimits?.totalItems ?? 0;
+    counts.savingsGoals = mergedSavingsGoals?.count ?? 0;
+    counts.assetAccounts = mergedAssetAccounts?.count ?? 0;
+    counts.netWorthSnapshots = mergedSnapshots?.count ?? 0;
+    counts.debtMilestones = !!sanitized.debtMilestones;
+    counts.payoffStrategy = !!sanitized.payoffStrategy;
   } catch (error) {
     // Rollback: restore original values, then clean up temp keys
     for (const [key, value] of backups) {

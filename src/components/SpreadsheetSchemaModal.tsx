@@ -98,7 +98,7 @@ const SHEETS: SheetSpec[] = [
   {
     title: "Savings Goals",
     xlsxOnly: true,
-    description: "Round-trip safe but not yet written back on import (v1 limitation).",
+    description: "Tracked savings goals.",
     columns: [
       { name: "ID", required: false, notes: "Auto-generated if missing." },
       { name: "Name", required: true, notes: "Up to 80 characters." },
@@ -108,12 +108,11 @@ const SHEETS: SheetSpec[] = [
       { name: "TargetDate", required: false, notes: "Optional target date." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
     ],
-    footer: "Note: this sheet exports correctly but is not yet imported in v1.",
   },
   {
     title: "Asset Accounts",
     xlsxOnly: true,
-    description: "Round-trip safe but not yet written back on import (v1 limitation).",
+    description: "Persistent account balances (savings, retirement, HSA, investment).",
     columns: [
       { name: "ID", required: false, notes: "Auto-generated if missing." },
       { name: "Name", required: true, notes: "Up to 80 characters." },
@@ -121,7 +120,6 @@ const SHEETS: SheetSpec[] = [
       { name: "Balance", required: true, notes: "Number, ≥ 0." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
     ],
-    footer: "Note: this sheet exports correctly but is not yet imported in v1.",
   },
 ];
 

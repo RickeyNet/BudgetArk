@@ -612,7 +612,22 @@ const ProfileScreen: React.FC = () => {
     try {
       const result = await importFn(password);
       if (!result) return;
-      let message = `${label} ${result.debts} debts, ${result.payments} payments, ${result.budgetEntries} budget entries, and ${result.budgetLimits} budget limits.`;
+      const parts = [
+        `${result.debts} debts`,
+        `${result.payments} payments`,
+        `${result.budgetEntries} budget entries`,
+        `${result.budgetLimits} budget limits`,
+      ];
+      if (result.savingsGoals > 0) parts.push(`${result.savingsGoals} savings goals`);
+      if (result.assetAccounts > 0) parts.push(`${result.assetAccounts} asset accounts`);
+      if (result.netWorthSnapshots > 0) parts.push(`${result.netWorthSnapshots} net worth snapshots`);
+      const extras: string[] = [];
+      if (result.debtMilestones) extras.push("milestone plan");
+      if (result.payoffStrategy) extras.push("payoff strategy");
+      let message = `${label} ${parts.join(", ")}.`;
+      if (extras.length > 0) {
+        message += `\nAlso restored: ${extras.join(", ")}.`;
+      }
       if (result.staleDays !== undefined && result.staleDays > 30) {
         message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
       }
@@ -710,7 +725,15 @@ const ProfileScreen: React.FC = () => {
       try {
         const result = await importSpreadsheet(mode);
         if (!result) return;
-        let message = `${label} ${result.budgetEntries} budget entries, ${result.budgetLimits} limits, ${result.debts} debts, and ${result.payments} payments from the spreadsheet.`;
+        const parts = [
+          `${result.budgetEntries} budget entries`,
+          `${result.budgetLimits} limits`,
+          `${result.debts} debts`,
+          `${result.payments} payments`,
+        ];
+        if (result.savingsGoals > 0) parts.push(`${result.savingsGoals} savings goals`);
+        if (result.assetAccounts > 0) parts.push(`${result.assetAccounts} asset accounts`);
+        let message = `${label} ${parts.join(", ")} from the spreadsheet.`;
         if (result.skippedRows > 0) {
           message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} were skipped because required fields were missing or invalid.`;
         }
