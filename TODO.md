@@ -306,7 +306,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Budget Rollover Mode — unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
 - [ ] Spending Velocity Alerts — passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
 - [ ] Partner Budget Visibility Controls — mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
-- [ ] Debt Payoff Celebration Screen — confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
+- [x] Debt Payoff Celebration Screen — confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
 - [ ] "What If I Stopped Spending on X" Projections — pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
 - [ ] Net Worth Timeline Graph — plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
 - [ ] Savings Streak Tracker — track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.

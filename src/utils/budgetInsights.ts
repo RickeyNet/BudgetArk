@@ -161,6 +161,54 @@ export const computeCategoryChanges = (
 
 /* ─── Category comparisons (current vs 3-month avg) ─── */
 
+const MIN_SIGNIFICANT_CATEGORY_SPEND = 20;
+const MIN_SIGNIFICANT_CATEGORY_DELTA = 10;
+const MAX_PERCENT_SCORE = 160;
+const MAX_DELTA_SCORE = 250;
+
+const getCategoryComparisonRankScore = (
+  comparison: CategorySpendingComparison
+): number => {
+  const { current, average, delta, percentChange } = comparison;
+  const absDelta = Math.abs(delta);
+  const materialSpend = Math.max(current, average);
+  const isIncrease = delta > 0;
+  const isNewCategory = average === 0 && current > 0;
+  const isStoppedCategory = current === 0 && average > 0;
+
+  if (
+    materialSpend < MIN_SIGNIFICANT_CATEGORY_SPEND &&
+    absDelta < MIN_SIGNIFICANT_CATEGORY_DELTA
+  ) {
+    return -1000;
+  }
+
+  const cappedPercent = Math.min(
+    Math.abs(percentChange ?? (isNewCategory || isStoppedCategory ? 100 : 0)),
+    MAX_PERCENT_SCORE
+  );
+  const cappedDelta = Math.min(absDelta, MAX_DELTA_SCORE);
+
+  let score = cappedPercent * 0.45 + cappedDelta * 0.35;
+
+  if (materialSpend >= 100) score += 18;
+  else if (materialSpend >= 50) score += 10;
+  else if (materialSpend >= MIN_SIGNIFICANT_CATEGORY_SPEND) score += 4;
+
+  if (absDelta >= 100) score += 16;
+  else if (absDelta >= 50) score += 9;
+  else if (absDelta >= MIN_SIGNIFICANT_CATEGORY_DELTA) score += 4;
+
+  if (isIncrease) score += 12;
+  else if (delta < 0) score += 2;
+
+  if (isNewCategory || isStoppedCategory) {
+    score -= materialSpend >= 75 ? 10 : 24;
+  }
+
+  return score;
+};
+
 export const computeCategorySpendingComparisons = (
   summaries: MonthSummary[],
   months: number = 3
@@ -208,10 +256,15 @@ export const computeCategorySpendingComparisons = (
   });
 
   comparisons.sort((a, b) => {
-    const aScore = a.percentChange == null ? Math.abs(a.delta) : Math.abs(a.percentChange);
-    const bScore = b.percentChange == null ? Math.abs(b.delta) : Math.abs(b.percentChange);
+    const aScore = getCategoryComparisonRankScore(a);
+    const bScore = getCategoryComparisonRankScore(b);
     if (bScore !== aScore) return bScore - aScore;
-    return Math.abs(b.delta) - Math.abs(a.delta);
+    if (Math.abs(b.delta) !== Math.abs(a.delta)) {
+      return Math.abs(b.delta) - Math.abs(a.delta);
+    }
+    const aPercent = Math.abs(a.percentChange ?? 0);
+    const bPercent = Math.abs(b.percentChange ?? 0);
+    return bPercent - aPercent;
   });
 
   return comparisons;

@@ -63,6 +63,7 @@ import DebtCard from "../components/DebtCard";
 import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
+import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal";
 import { simulatePayoffPlan } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -127,6 +128,23 @@ const getMilestoneBuildActionLabel = (key: DebtMilestoneKey): string => {
   return "Build";
 };
 
+const getNewlyPaidOffDebt = (
+  previousDebts: Debt[],
+  nextDebts: Debt[]
+): Debt | null => {
+  const previousById = new Map(previousDebts.map((debt) => [debt.id, debt]));
+
+  for (const nextDebt of nextDebts) {
+    const previousDebt = previousById.get(nextDebt.id);
+    if (!previousDebt) continue;
+    if (previousDebt.balance > 0 && nextDebt.balance <= 0) {
+      return nextDebt;
+    }
+  }
+
+  return null;
+};
+
 const DebtTrackerScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -166,6 +184,7 @@ const DebtTrackerScreen: React.FC = () => {
   });
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [savingsDraft, setSavingsDraft] = useState("");
+  const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
 
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -521,9 +540,13 @@ const DebtTrackerScreen: React.FC = () => {
       date: paymentNow,
       updatedAt: paymentNow,
     });
+    const paidOffDebt = getNewlyPaidOffDebt(debts, result.debts);
     setDebts(result.debts);
+    if (paidOffDebt) {
+      setCelebrationDebt(paidOffDebt);
+    }
     await syncNetWorthSnapshot(paymentNow);
-  }, []);
+  }, [debts]);
 
   /** Open edit modal for a debt */
   const handleEdit = useCallback((debt: Debt) => {
@@ -534,13 +557,15 @@ const DebtTrackerScreen: React.FC = () => {
   /** Save edits to an existing debt */
   const handleSaveEdit = useCallback(async (debtId: string, updates: Partial<Debt>) => {
     const updated = await updateDebt(debtId, updates);
-    if (updated) {
-      setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, ...updates } : d)));
-      await syncNetWorthSnapshot();
+    const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
+    setDebts(updated);
+    if (paidOffDebt) {
+      setCelebrationDebt(paidOffDebt);
     }
+    await syncNetWorthSnapshot();
     setShowModal(false);
     setEditingDebt(null);
-  }, []);
+  }, [debts]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -939,6 +964,15 @@ const DebtTrackerScreen: React.FC = () => {
         debts={debts}
       />
 
+      <DebtPayoffCelebrationModal
+        visible={celebrationDebt !== null}
+        debt={celebrationDebt}
+        onClose={() => setCelebrationDebt(null)}
+        onViewHistory={() => {
+          setCelebrationDebt(null);
+          setShowHistory(true);
+        }}
+      />
 
       <Modal
         visible={showMilestonesModal}

@@ -395,7 +395,12 @@ const BudgetScreen: React.FC = () => {
   const netWorth = netWorthTotals.netWorth;
 
   const topCategoryComparison = useMemo(
-    () => reviewPreviewData?.categoryComparisons[0] ?? null,
+    () =>
+      reviewPreviewData?.categoryComparisons.find(
+        (comparison) =>
+          Math.max(comparison.current, comparison.average) >= 20 ||
+          Math.abs(comparison.delta) >= 10
+      ) ?? null,
     [reviewPreviewData]
   );
 
