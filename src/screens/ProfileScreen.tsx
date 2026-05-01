@@ -54,6 +54,11 @@ import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
 import { importData, importFromString, isEncryptedExport, type ImportResult } from "../utils/importData";
 import {
+  exportSpreadsheet,
+  type SpreadsheetFormat,
+} from "../utils/spreadsheetExport";
+import { importSpreadsheet } from "../utils/spreadsheetImport";
+import {
   getUpdatePreferences,
   setLastUpdateCheckAt,
   setManualUpdateMode,
@@ -80,6 +85,7 @@ import {
 import type { PairingState, SyncStatus, SyncResult } from "../sync/types";
 import PairingModal from "../components/PairingModal";
 import FeedbackModal from "../components/FeedbackModal";
+import SpreadsheetSchemaModal from "../components/SpreadsheetSchemaModal";
 
 type UpdateMetadata = {
   id: string;
@@ -161,6 +167,15 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether the import merge/replace modal is visible (file path) */
   const [showImportModeModal, setShowImportModeModal] = useState(false);
+
+  /** Spreadsheet export format-picker modal */
+  const [showSpreadsheetExportModal, setShowSpreadsheetExportModal] = useState(false);
+
+  /** Spreadsheet import merge/replace modal */
+  const [showSpreadsheetImportModal, setShowSpreadsheetImportModal] = useState(false);
+
+  /** Spreadsheet format reference modal (shared by import and export flows) */
+  const [showSpreadsheetSchemaModal, setShowSpreadsheetSchemaModal] = useState(false);
 
   /** @deprecated How-to docs removed in v1.2.0 — help text moved inline */
 
@@ -643,6 +658,82 @@ const ProfileScreen: React.FC = () => {
   }, [executeImport]);
 
   /**
+   * Spreadsheet export — open the format-picker modal.
+   */
+  const handleExportSpreadsheet = useCallback(() => {
+    setShowSpreadsheetExportModal(true);
+  }, []);
+
+  /**
+   * Spreadsheet export — run with the chosen format.
+   */
+  const confirmSpreadsheetExport = useCallback(
+    async (format: SpreadsheetFormat) => {
+      setShowSpreadsheetExportModal(false);
+      try {
+        const result = await exportSpreadsheet(format);
+        const formatLabel = format === "csv" ? "CSV" : "Excel";
+        const note =
+          format === "csv"
+            ? "CSV exports include budget entries only. Use Excel format for a full backup."
+            : `Workbook saved with ${result.entryCount} budget entries plus debts, payments, savings goals, and asset accounts.`;
+        setInfoModal({
+          title: `${formatLabel} Export Ready`,
+          message: note,
+        });
+      } catch (error: any) {
+        setInfoModal({
+          title: "Export Failed",
+          message:
+            error?.message ||
+            "Something went wrong while exporting the spreadsheet.",
+        });
+      }
+    },
+    []
+  );
+
+  /**
+   * Spreadsheet import — show merge/replace prompt.
+   */
+  const handleImportSpreadsheet = useCallback(() => {
+    setShowSpreadsheetImportModal(true);
+  }, []);
+
+  /**
+   * Spreadsheet import — run with the chosen mode via the shared import pipeline.
+   */
+  const confirmSpreadsheetImport = useCallback(
+    async (mode: "merge" | "replace") => {
+      setShowSpreadsheetImportModal(false);
+      const label = mode === "merge" ? "Merged" : "Imported";
+      try {
+        const result = await importSpreadsheet(mode);
+        if (!result) return;
+        let message = `${label} ${result.budgetEntries} budget entries, ${result.budgetLimits} limits, ${result.debts} debts, and ${result.payments} payments from the spreadsheet.`;
+        if (result.skippedRows > 0) {
+          message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} were skipped because required fields were missing or invalid.`;
+        }
+        if (result.staleDays !== undefined && result.staleDays > 30) {
+          message += `\n\nNote: This file is ${result.staleDays} days old. Some data may be outdated.`;
+        }
+        setInfoModal({
+          title: "Import Complete",
+          message,
+        });
+      } catch (error: any) {
+        setInfoModal({
+          title: "Import Failed",
+          message:
+            error?.message ||
+            "Something went wrong while importing the spreadsheet.",
+        });
+      }
+    },
+    []
+  );
+
+  /**
    * Paste-text path: parse the pasted JSON and write to storage.
    */
   const handlePasteImport = useCallback(
@@ -898,6 +989,32 @@ const ProfileScreen: React.FC = () => {
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>Import</Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>From file or clipboard</Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleExportSpreadsheet}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Export Spreadsheet</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>CSV or Excel for Google Sheets / Excel</Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleImportSpreadsheet}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Import Spreadsheet</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>From a CSV or Excel file</Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
             </TouchableOpacity>
@@ -1582,6 +1699,144 @@ const ProfileScreen: React.FC = () => {
         </View>
       </Modal>
 
+      {/* ── Spreadsheet Export Format Modal ── */}
+      <Modal
+        visible={showSpreadsheetExportModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowSpreadsheetExportModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Export Spreadsheet
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              CSV exports budget entries only — easiest for Google Sheets and
+              quick edits. Excel exports a full multi-sheet workbook (Budget
+              Entries, Budget Limits, Debts, Payments, Savings Goals, Asset
+              Accounts) for a complete backup.
+            </Text>
+            <TouchableOpacity
+              style={styles.dialogLinkRow}
+              onPress={() => {
+                setShowSpreadsheetExportModal(false);
+                setShowSpreadsheetSchemaModal(true);
+              }}
+            >
+              <Text style={[styles.dialogLinkText, { color: colors.accent }]}>
+                View format reference →
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowSpreadsheetExportModal(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={() => confirmSpreadsheetExport("csv")}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  CSV
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={() => confirmSpreadsheetExport("xlsx")}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Excel
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Spreadsheet Import Mode Modal ── */}
+      <Modal
+        visible={showSpreadsheetImportModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowSpreadsheetImportModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Import Spreadsheet
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              Pick a .csv or .xlsx file. Required headers: Date, Type
+              (income/expense), Category, Amount. Merge keeps your existing
+              data; Replace wipes it first.
+            </Text>
+            <Text style={[styles.dialogTip, { color: colors.textMuted }]}>
+              Tip: tap Export Spreadsheet first to see the exact format, then
+              edit and re-import. IDs round-trip so existing rows update in
+              place.
+            </Text>
+            <TouchableOpacity
+              style={styles.dialogLinkRow}
+              onPress={() => {
+                setShowSpreadsheetImportModal(false);
+                setShowSpreadsheetSchemaModal(true);
+              }}
+            >
+              <Text style={[styles.dialogLinkText, { color: colors.accent }]}>
+                View format reference →
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowSpreadsheetImportModal(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.success }]}
+                onPress={() => confirmSpreadsheetImport("merge")}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  Merge
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.danger }]}
+                onPress={() => confirmSpreadsheetImport("replace")}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
+                  Replace
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Spreadsheet Schema Reference Modal ── */}
+      <SpreadsheetSchemaModal
+        visible={showSpreadsheetSchemaModal}
+        onClose={() => setShowSpreadsheetSchemaModal(false)}
+      />
+
       {/* ── Paste Import Modal ── */}
       <Modal
         visible={showPasteModal}
@@ -2194,6 +2449,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
     marginBottom: 20,
+  },
+  dialogTip: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: -10,
+    marginBottom: 14,
+    fontStyle: "italic",
+  },
+  dialogLinkRow: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  dialogLinkText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   /* Update modal */
   updateVersionBadge: {

@@ -334,6 +334,68 @@ Recommended first version:
 5. Save only after user taps confirm.
 
 
+- [x] Import / export Google Sheets and Excel files for budget data (v1: CSV + XLSX, fixed schema; multi-sheet workbook for XLSX, budget-entries-only for CSV; column-mapping UI deferred to v2). See `docs/SPREADSHEET_SCHEMA.md`.
+Goal: let users coming from spreadsheet-based budgeting (Google Sheets, Excel, Mint/YNAB exports) bring their data into BudgetArk and export back out.
+
+Scope: file-based only. No direct Google Sheets API integration in v1 — users export their sheet to CSV/XLSX and pick the file. Skip OAuth complexity.
+
+Tech stack:
+- `xlsx` (SheetJS) — pure JS, reads/writes .xlsx, .xls, .csv. No native deps. Bundles into JS bundle (no new EAS build required).
+- Reuse existing deps: `expo-document-picker` (already installed) for file picking, `expo-sharing` + `expo-file-system` for export.
+- All processing on-device — keeps offline-first/no-data-leaves-device promise intact.
+
+Data flow (import):
+1. User taps "Import Spreadsheet" in Profile or Budget screen.
+2. `expo-document-picker` opens with `type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv']`.
+3. Read file with `expo-file-system`, parse with `XLSX.read()`.
+4. Show sheet picker if workbook has multiple sheets.
+5. Show preview of first 5-10 rows.
+6. Column mapping UI — match each spreadsheet column to a BudgetArk field (Date, Amount, Category, Description, Type[income/expense]). Auto-suggest based on header names ("date" → Date, "amount"/"$" → Amount, etc.).
+7. Parse + validate each row: date formats (MM/DD/YYYY, DD/MM/YYYY, ISO, Excel serial), amount formats ($, commas, parens for negatives, minus signs), required fields.
+8. Show import summary (X rows ready, Y rows skipped with reasons).
+9. User confirms — write to budget storage using the existing transactional pattern from `importData.ts`.
+10. Apply same bounds/validation as JSON import (`MAX_MONEY`, character limits, etc.).
+
+Data flow (export):
+1. User taps "Export to Spreadsheet" in Profile.
+2. Pick format: .xlsx (recommended) or .csv.
+3. Generate workbook with sheets: `Budget Entries`, `Debts`, `Payments`, `Savings Goals`.
+4. Standard column headers so re-import is round-trip safe.
+5. `XLSX.write()` to base64, save with `expo-file-system`, share with `expo-sharing`.
+6. Add same encryption/confirmation prompt logic as existing JSON export (sensitive data warning).
+
+Column mapping UX (the hard part):
+- Header auto-detection: fuzzy match on common labels ("date"/"transaction date"/"posted", "amount"/"debit"/"credit"/"$", "category"/"type", "description"/"merchant"/"memo").
+- Manual override: dropdown per column to pick BudgetArk field, or "Skip column".
+- Sign convention: let user pick "Positive = expense" vs "Negative = expense" since banks/templates differ.
+- Save mapping presets per filename pattern for repeat imports.
+
+File structure (new):
+- `src/utils/spreadsheetImport.ts` — parse, map, validate
+- `src/utils/spreadsheetExport.ts` — generate workbook
+- `src/screens/ImportSpreadsheetScreen.tsx` — file pick → preview → mapping → confirm flow
+- `src/components/ColumnMapper.tsx` — mapping UI
+
+Validation / safety:
+- Same `MAX_RAW_CHARS` (500KB) cap as JSON import to avoid OOM on low-end devices.
+- Wrap all `XLSX.read()` calls in try-catch — malformed files must not crash app.
+- Reject files >5MB on disk before parsing.
+- Treat all imported strings as untrusted — apply existing control-char/null-byte sanitization.
+
+Recommended first version:
+1. CSV-only import to ship fast. CSV covers Google Sheets exports + most bank exports.
+2. Fixed column mapping (no UI mapper) — require users to rename headers to a documented schema. Ugly but fast.
+3. Export to CSV only.
+4. Iterate to .xlsx + auto-mapping UI in v2.
+
+Out of scope (v1):
+- Direct Google Sheets API / OAuth (revisit if user demand justifies overhead).
+- Real-time sync.
+- Formulas — read computed values only, never re-evaluate.
+
+OTA-shippable: yes. No native modules added, all deps already in current EAS build.
+
+
 - [x] Add original debt milestone program with progress tracking and actionable next steps
 Possible feature design (v1):
 - Feature name

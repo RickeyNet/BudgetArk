@@ -17,6 +17,9 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Fixed the OTA update prompt to show the correct incoming app version and matching release notes instead of falling back to the installed build version.",
       "Added a debt payoff celebration screen with confetti, payoff stats, and a quick shortcut to payment history when a balance reaches zero.",
       "Improved update metadata parsing so release notes resolve from update-specific version fields first.",
+      "Added Export Spreadsheet and Import Spreadsheet in Profile → Data so you can move budget data to and from Google Sheets, Excel, or CSV files. CSV covers budget entries; Excel exports a full multi-sheet backup including debts, payments, savings goals, and asset accounts.",
+      "Added an in-app format reference for spreadsheet imports so you can see the required columns and allowed categories before importing.",
+      "Updated build-time dependencies (postcss and uuid) to address two security advisories. Build tooling only — no in-app behavior changes.",
     ],
   },
   {
