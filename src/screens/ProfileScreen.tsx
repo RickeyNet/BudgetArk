@@ -93,6 +93,25 @@ type ReleaseNoteKey = string;
 
 import { sanitizeTextInput } from "../utils/sanitize";
 
+const SEMVER_REGEX = /\b\d+\.\d+\.\d+\b/;
+
+const normalizeVersionString = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const directMatch = trimmed.match(/^v?(\d+\.\d+\.\d+)$/i);
+  if (directMatch) return directMatch[1];
+  const semverMatch = trimmed.match(SEMVER_REGEX);
+  return semverMatch?.[0];
+};
+
+const findReleaseNoteForVersion = (version?: string): ReleaseNote | undefined => {
+  const normalizedVersion = normalizeVersionString(version);
+  return normalizedVersion
+    ? RELEASE_NOTES.find((release) => release.version === normalizedVersion)
+    : undefined;
+};
+
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
@@ -268,23 +287,36 @@ const ProfileScreen: React.FC = () => {
       data.description,
       data.message,
     ];
-    const message =
+    const rawMessage =
       messageCandidates.find((candidate) => typeof candidate === "string") ||
       "A new update is ready to install.";
+    const messageVersion = normalizeVersionString(rawMessage);
 
-    // Try to extract the app version from several manifest locations
+    // Prefer update-specific version metadata over installed binary version.
     const versionCandidates = [
-      expoClient.version,
-      extras.version,
-      metadata.version,
       metadata.appVersion,
+      metadata.version,
       eas.appVersion,
       data.version,
+      extras.version,
+      rawMessage,
+      expoClient.version,
     ];
-    const appVersion =
-      versionCandidates.find((candidate) => typeof candidate === "string") as string | undefined;
+    const appVersion = versionCandidates
+      .map((candidate) => normalizeVersionString(candidate))
+      .find((candidate) => !!candidate);
 
-    return { id, createdAt, runtimeVersion, message, appVersion };
+    const matchedRelease =
+      findReleaseNoteForVersion(appVersion) || findReleaseNoteForVersion(messageVersion);
+    const message = matchedRelease?.title || rawMessage;
+
+    return {
+      id,
+      createdAt,
+      runtimeVersion,
+      message,
+      appVersion: matchedRelease?.version || appVersion,
+    };
   }, []);
 
   const checkForUpdates = useCallback(
@@ -1633,10 +1665,10 @@ const ProfileScreen: React.FC = () => {
             ]}
           >
             {(() => {
-              const updateVersion = pendingUpdate?.appVersion;
-              const matchedRelease = updateVersion
-                ? RELEASE_NOTES.find((r) => r.version === updateVersion)
-                : undefined;
+              const matchedRelease =
+                findReleaseNoteForVersion(pendingUpdate?.appVersion) ||
+                findReleaseNoteForVersion(pendingUpdate?.message);
+              const updateVersion = matchedRelease?.version ?? pendingUpdate?.appVersion;
 
               return (
                 <>

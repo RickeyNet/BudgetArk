@@ -7,6 +7,16 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.1",
+    title: "Update Prompt Fix & Debt Celebration",
+    releasedAt: "2026-04-30",
+    highlights: [
+      "Fixed the OTA update prompt to show the correct incoming app version and matching release notes instead of falling back to the installed build version.",
+      "Added a debt payoff celebration screen with confetti, payoff stats, and a quick shortcut to payment history when a balance reaches zero.",
+      "Improved update metadata parsing so release notes resolve from update-specific version fields first.",
+    ],
+  },
+  {
     version: "1.4.0",
     title: "Net Worth History & Monthly Insights",
     releasedAt: "2026-04-30",
