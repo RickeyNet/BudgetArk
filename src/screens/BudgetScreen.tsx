@@ -172,6 +172,33 @@ const getCategoryComparisonSubtext = (
 ): string =>
   `${formatCurrency(comparison.current)} this month · ${formatCurrency(comparison.average)} avg over ${comparison.monthsAveraged} mo`;
 
+const CATEGORY_CHART_PALETTE = [
+  "#4E79A7",
+  "#F28E2B",
+  "#E15759",
+  "#76B7B2",
+  "#59A14F",
+  "#EDC949",
+  "#AF7AA1",
+  "#FF9DA7",
+  "#9C755F",
+  "#BAB0AC",
+  "#6F4E7C",
+  "#2A9D8F",
+  "#E76F51",
+  "#8AB17D",
+  "#577590",
+  "#F4A261",
+  "#43AA8B",
+  "#C77DFF",
+  "#277DA1",
+  "#90BE6D",
+  "#F94144",
+  "#F3722C",
+  "#F9844A",
+  "#7B6D8D",
+] as const;
+
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
@@ -496,28 +523,30 @@ const BudgetScreen: React.FC = () => {
     [expenseRows]
   );
 
-  const chartColors = useMemo(
-    () => [
+  const categoryChartColors = useMemo(() => {
+    const palette = [
       colors.accent,
       colors.teal,
       colors.success,
       colors.warning,
       colors.danger,
-      colors.textDim,
-      colors.textMuted,
-      colors.cardBorder,
-    ],
-    [colors]
-  );
+      ...CATEGORY_CHART_PALETTE,
+    ];
+
+    return BUDGET_CATEGORIES.reduce<Record<BudgetCategory, string>>((map, category, index) => {
+      map[category] = palette[index % palette.length];
+      return map;
+    }, {} as Record<BudgetCategory, string>);
+  }, [colors]);
 
   const pieData = useMemo<DonutSlice[]>(
     () =>
-      chartData.map((item, index) => ({
+      chartData.map((item) => ({
         label: item.category,
         value: item.amount,
-        color: chartColors[index % chartColors.length],
+        color: categoryChartColors[item.category],
       })),
-    [chartColors, chartData]
+    [categoryChartColors, chartData]
   );
 
   const adjustAssetAccounts = useCallback(
@@ -976,13 +1005,13 @@ const BudgetScreen: React.FC = () => {
           </View>
         )}
 
-        {expenseRows.map((item, index) => {
+        {expenseRows.map((item) => {
           const ratio = item.ratio;
           const progressPercent = ratio ? Math.min(ratio, 1) * 100 : null;
           const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
           const isOver = ratio != null && ratio >= 1;
           const statusColor = isOver ? colors.danger : hasWarning ? colors.warning : colors.success;
-          const dotColor = chartColors[index % chartColors.length];
+          const dotColor = categoryChartColors[item.category];
           const isExpanded = expandedCategories.has(item.category);
 
           return (

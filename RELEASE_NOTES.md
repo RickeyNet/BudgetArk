@@ -1,5 +1,23 @@
 # BudgetArk Release Notes
 
+## v1.4.1 - Update Prompt Fix, Bridge Tab & Celebration (2026-04-30)
+
+- Added **The Bridge**, a new default home tab centered in the navigation bar for net worth, account balances, and progress at a glance.
+- Moved net worth history and the Accounts section out of Budget into The Bridge so the Budget screen stays focused on income, expenses, and monthly review.
+- Fixed Budget spending chart colors so categories keep stable, distinct colors instead of starting to repeat after several slices.
+- Fixed the OTA update prompt to show the correct incoming app version and matching release notes instead of falling back to the installed build version.
+- Added a debt payoff celebration screen with confetti, payoff stats, and a quick shortcut to payment history when a balance reaches zero.
+- Improved update metadata parsing so release notes resolve from update-specific version fields first.
+
+## v1.4.0 - Net Worth History & Monthly Insights (2026-04-30)
+
+- Added net worth history to the top of the Budget screen with current net worth, assets, debt, and 7D / 30D / All timeline views.
+- Net worth now saves daily snapshots automatically so your history graph starts building from current balances and keeps updating over time.
+- Added a Monthly Insight spotlight card on the Budget screen so the biggest spending trend shows before opening the full review.
+- Added Category Spending Comparison in Monthly Review to compare this month's category spend against the trailing 3-month average.
+- Fixed linked account balances so deleting or editing linked budget entries properly reverses and reapplies account contributions.
+- Fixed debt payment handling so recorded payments no longer risk double-applying balance changes.
+
 ## v1.3.3 - Utilities Hub & Asset Tracking (2026-04-01)
 
 ### Utilities Tab

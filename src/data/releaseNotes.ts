@@ -13,6 +13,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     highlights: [
       "Added The Bridge, a new default home tab centered in the navigation bar for net worth, account balances, and progress at a glance.",
       "Moved net worth history and the Accounts section out of Budget into The Bridge so the Budget screen stays focused on income, expenses, and monthly review.",
+      "Fixed Budget spending chart colors so categories keep stable, distinct colors instead of starting to repeat after several slices.",
       "Fixed the OTA update prompt to show the correct incoming app version and matching release notes instead of falling back to the installed build version.",
       "Added a debt payoff celebration screen with confetti, payoff stats, and a quick shortcut to payment history when a balance reaches zero.",
       "Improved update metadata parsing so release notes resolve from update-specific version fields first.",
