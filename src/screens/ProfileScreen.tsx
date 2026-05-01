@@ -86,6 +86,8 @@ import type { PairingState, SyncStatus, SyncResult } from "../sync/types";
 import PairingModal from "../components/PairingModal";
 import FeedbackModal from "../components/FeedbackModal";
 import SpreadsheetSchemaModal from "../components/SpreadsheetSchemaModal";
+import { triggerHaptic, setHapticsCache } from "../utils/haptics";
+import { getHapticsEnabled, setHapticsEnabled } from "../storage/hapticsStorage";
 
 type UpdateMetadata = {
   id: string;
@@ -198,6 +200,9 @@ const ProfileScreen: React.FC = () => {
   /** Privacy mode — blocks screenshots/screen recording when enabled */
   const [privacyMode, setPrivacyModeState] = useState(false);
 
+  /** Haptic feedback toggle */
+  const [hapticsEnabled, setHapticsState] = useState(true);
+
   /** Partner sync state */
   const [pairing, setPairing] = useState<PairingState | null>(null);
   const [showPairingModal, setShowPairingModal] = useState(false);
@@ -211,10 +216,11 @@ const ProfileScreen: React.FC = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [u, prefs, privacy, pairState, syncMeta] = await Promise.all([
+        const [u, prefs, privacy, haptics, pairState, syncMeta] = await Promise.all([
           getOrCreateUser(),
           getUpdatePreferences(),
           getPrivacyMode(),
+          getHapticsEnabled(),
           getPairingState(),
           getSyncMetadata(),
         ]);
@@ -223,6 +229,8 @@ const ProfileScreen: React.FC = () => {
         setEditName(u.displayName);
         setUpdatePrefs(prefs);
         setPrivacyModeState(privacy);
+        setHapticsState(haptics);
+        setHapticsCache(haptics);
         setPairing(pairState);
         setLastSyncTime(syncMeta.lastSyncTimestamp);
         if (pairState?.autoSyncEnabled) {
@@ -415,6 +423,17 @@ const ProfileScreen: React.FC = () => {
     });
   }, [updatePrefs.manualUpdateMode]);
 
+  const toggleHaptics = useCallback(async () => {
+    const next = !hapticsEnabled;
+    await setHapticsEnabled(next);
+    setHapticsCache(next);
+    setHapticsState(next);
+    if (next) {
+      // Fire a short tick so the user can feel the change immediately.
+      triggerHaptic("selection");
+    }
+  }, [hapticsEnabled]);
+
   const togglePrivacyMode = useCallback(async () => {
     const next = !privacyMode;
     await setPrivacyMode(next);
@@ -545,6 +564,7 @@ const ProfileScreen: React.FC = () => {
 
   const confirmReset = useCallback(async () => {
     setShowResetModal(false);
+    triggerHaptic("warning");
     await clearAllData();
     await clearPairingState();
     stopMonitoring();
@@ -576,7 +596,9 @@ const ProfileScreen: React.FC = () => {
     setShowExportModal(false);
     try {
       await exportAllData(exportEncrypt ? exportPassword : undefined);
+      triggerHaptic("success");
     } catch (error: any) {
+      triggerHaptic("error");
       setInfoModal({
         title: "Export Failed",
         message: error?.message || "Something went wrong while exporting your data.",
@@ -631,6 +653,7 @@ const ProfileScreen: React.FC = () => {
       if (result.staleDays !== undefined && result.staleDays > 30) {
         message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
       }
+      triggerHaptic("success");
       setInfoModal({
         title: "Import Complete",
         message,
@@ -644,6 +667,7 @@ const ProfileScreen: React.FC = () => {
         setImportPassword("");
         setShowImportPasswordModal(true);
       } else {
+        triggerHaptic("error");
         setInfoModal({
           title: "Import Failed",
           message: error?.message || "Something went wrong while importing your data.",
@@ -692,11 +716,13 @@ const ProfileScreen: React.FC = () => {
           format === "csv"
             ? "CSV exports include budget entries only. Use Excel format for a full backup."
             : `Workbook saved with ${result.entryCount} budget entries plus debts, payments, savings goals, and asset accounts.`;
+        triggerHaptic("success");
         setInfoModal({
           title: `${formatLabel} Export Ready`,
           message: note,
         });
       } catch (error: any) {
+        triggerHaptic("error");
         setInfoModal({
           title: "Export Failed",
           message:
@@ -740,11 +766,13 @@ const ProfileScreen: React.FC = () => {
         if (result.staleDays !== undefined && result.staleDays > 30) {
           message += `\n\nNote: This file is ${result.staleDays} days old. Some data may be outdated.`;
         }
+        triggerHaptic("success");
         setInfoModal({
           title: "Import Complete",
           message,
         });
       } catch (error: any) {
+        triggerHaptic("error");
         setInfoModal({
           title: "Import Failed",
           message:
@@ -1090,6 +1118,22 @@ const ProfileScreen: React.FC = () => {
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
                 {privacyMode ? "On" : "Off"}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity style={styles.groupedRow} onPress={toggleHaptics}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Haptic Feedback</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {hapticsEnabled
+                    ? "Subtle vibrations on key actions"
+                    : "Vibrations disabled"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                {hapticsEnabled ? "On" : "Off"}
               </Text>
             </TouchableOpacity>
 

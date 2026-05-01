@@ -13,6 +13,7 @@ import { Debt } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import { triggerHaptic } from "../utils/haptics";
 
 interface DebtPayoffCelebrationModalProps {
   visible: boolean;
@@ -62,6 +63,8 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
       pulse.setValue(0);
       return;
     }
+
+    triggerHaptic("success");
 
     const confettiLoop = Animated.loop(
       Animated.timing(progress, {

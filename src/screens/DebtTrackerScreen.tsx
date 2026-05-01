@@ -64,6 +64,7 @@ import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
 import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal";
+import { triggerHaptic } from "../utils/haptics";
 import { simulatePayoffPlan } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -544,6 +545,8 @@ const DebtTrackerScreen: React.FC = () => {
     setDebts(result.debts);
     if (paidOffDebt) {
       setCelebrationDebt(paidOffDebt);
+    } else {
+      triggerHaptic("success");
     }
     await syncNetWorthSnapshot(paymentNow);
   }, [debts]);
@@ -561,6 +564,8 @@ const DebtTrackerScreen: React.FC = () => {
     setDebts(updated);
     if (paidOffDebt) {
       setCelebrationDebt(paidOffDebt);
+    } else {
+      triggerHaptic("success");
     }
     await syncNetWorthSnapshot();
     setShowModal(false);
@@ -581,6 +586,7 @@ const DebtTrackerScreen: React.FC = () => {
     await saveDebts(updated);
     await syncNetWorthSnapshot();
     setPendingDeleteDebt(null);
+    triggerHaptic("warning");
   }, [debts, pendingDeleteDebt]);
 
   const openClassifyModal = useCallback(() => {

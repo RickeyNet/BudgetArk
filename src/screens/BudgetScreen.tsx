@@ -53,6 +53,7 @@ import {
   saveAssetAccounts,
 } from "../storage/assetAccountStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
+import { triggerHaptic } from "../utils/haptics";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -604,6 +605,7 @@ const BudgetScreen: React.FC = () => {
       refreshMonthlyReview(nextEntries),
     ]);
     setShowAddModal(false);
+    triggerHaptic("success");
   }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleEditEntry = useCallback((entryId: string) => {
@@ -645,6 +647,7 @@ const BudgetScreen: React.FC = () => {
       refreshMonthlyReview(nextEntries),
     ]);
     setEditingEntry(null);
+    triggerHaptic("success");
   }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
@@ -668,6 +671,7 @@ const BudgetScreen: React.FC = () => {
       refreshMonthlyReview(nextEntries),
     ]);
     setEditingEntry(null);
+    triggerHaptic("warning");
   }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const foodEntriesToSplit = useMemo(

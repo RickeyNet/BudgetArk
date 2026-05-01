@@ -14,6 +14,7 @@
 - Backup export and import are now a complete round-trip — savings goals, asset accounts, milestone progress, payoff strategy, net worth history, and full per-month budget limit history are all preserved.
 - **Reset All Data** now actually clears everything — asset accounts and milestone progress are no longer left behind.
 - Fixed a quiet bug where lowering a tracked savings reserve created a correction entry that couldn't be re-imported from a backup. Backups now round-trip cleanly even after savings adjustments.
+- Added subtle haptic feedback on key actions (recording payments, saving entries, completing imports/exports, payoff celebrations). Toggle in **Profile → Settings → Haptic Feedback** if you'd rather keep it silent.
 - Updated build-time dependencies (postcss and uuid) to address two security advisories. Build tooling only — no in-app behavior changes.
 
 ## v1.4.0 - Net Worth History & Monthly Insights (2026-04-30)
