@@ -836,16 +836,6 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
       </View>
 
-      <NetWorthHistoryCard
-        snapshots={netWorthSnapshots}
-        netWorth={netWorth}
-        totalAssets={totalSavings}
-        totalDebt={totalDebt}
-        formatCurrency={formatCurrency}
-        formatCompactCurrency={formatCompactCurrency}
-        colors={colors}
-      />
-
       <View style={styles.monthSwitchRow}>
         <TouchableOpacity
           style={[styles.monthSwitchBtn, selectedMonthIndex >= monthKeys.length - 1 && styles.monthSwitchBtnDisabled]}
@@ -903,7 +893,7 @@ const BudgetScreen: React.FC = () => {
         {automaticDebtMonthlyCost > 0 && (
           <Text style={styles.autoDebtHint}>Includes {formatCurrency(automaticDebtMonthlyCost)} auto debt minimums</Text>
         )}
-        {(incomeEntries.length > 0 || emergencyFundGoal) && (
+        {incomeEntries.length > 0 && (
           <View style={styles.incomeSummaryList}>
             {incomeEntries.map((entry) => (
               <TouchableOpacity
@@ -925,94 +915,7 @@ const BudgetScreen: React.FC = () => {
                 </View>
               </TouchableOpacity>
             ))}
-            {emergencyFundGoal && (
-              <TouchableOpacity
-                style={styles.incomeSummaryRow}
-                onPress={() => {
-                  setEfContribAmount("");
-                  setShowEfContribModal(true);
-                }}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
-                  Emergency Fund (Keel)
-                </Text>
-                <View style={styles.incomeSummaryRight}>
-                  <Text style={[styles.incomeSummaryTag, { color: colors.teal }]}>Saved</Text>
-                  <Text style={[styles.incomeSummaryAmount, { color: colors.teal }]}>
-                    {formatCurrency(emergencyFundGoal.currentAmount)}
-                    {emergencyFundGoal.targetAmount > 0
-                      ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
-                      : ""}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
           </View>
-        )}
-      </View>
-
-      {/* Accounts card */}
-      <View style={styles.accountsCard}>
-        <View style={styles.accountsHeaderRow}>
-          <Text style={styles.accountsTitle}>Accounts</Text>
-          <TouchableOpacity onPress={openAddAssetModal}>
-            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add</Text>
-          </TouchableOpacity>
-        </View>
-        {assetAccounts.length === 0 && !emergencyFundGoal ? (
-          <Text style={styles.accountsEmpty}>
-            Track your savings, 401k, HSA, and other account balances here.
-          </Text>
-        ) : (
-          <>
-            {emergencyFundGoal && (
-              <TouchableOpacity
-                style={styles.accountRow}
-                onPress={() => {
-                  setEfContribAmount("");
-                  setShowEfContribModal(true);
-                }}
-                activeOpacity={0.6}
-              >
-                <View style={styles.accountRowLeft}>
-                  <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
-                  <Text style={styles.accountCategory}>
-                    {emergencyFundGoal.targetAmount > 0
-                      ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
-                      : "Savings Goal"}
-                  </Text>
-                </View>
-                <Text style={[styles.accountBalance, { color: colors.teal }]}>
-                  {formatCurrency(emergencyFundGoal.currentAmount)}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {assetAccounts.map((account) => (
-              <TouchableOpacity
-                key={account.id}
-                style={styles.accountRow}
-                onPress={() => openEditAssetModal(account)}
-                activeOpacity={0.6}
-              >
-                <View style={styles.accountRowLeft}>
-                  <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
-                  <Text style={styles.accountCategory}>
-                    {ASSET_ACCOUNT_CATEGORY_LABELS[account.category]}
-                  </Text>
-                </View>
-                <Text style={[styles.accountBalance, { color: colors.success }]}>
-                  {formatCurrency(account.balance)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            <View style={styles.accountTotalRow}>
-              <Text style={styles.accountTotalLabel}>Total</Text>
-              <Text style={[styles.accountTotalValue, { color: colors.success }]}>
-                {formatCurrency(totalAssetBalance + (emergencyFundGoal?.currentAmount ?? 0))}
-              </Text>
-            </View>
-          </>
         )}
       </View>
 

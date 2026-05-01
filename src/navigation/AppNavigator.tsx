@@ -3,17 +3,19 @@
  * File: src/navigation/AppNavigator.tsx
  *
  * Sets up the bottom tab navigation for the app.
- * Contains 4 tabs:
- *   1. Debt Tracker (⛓️) — default/home screen
+ * Contains 5 tabs:
+ *   1. Debt Tracker (⛓️) — debt payoff planning
  *   2. Budget (💰)       — income & expense tracking
- *   3. Utilities (🧰)   — financial tools & calculators
- *   4. Profile (👤)      — anonymous account & settings
+ *   3. Bridge (🧭)       — net worth, accounts, and progress
+ *   4. Utilities (🧰)    — financial tools & calculators
+ *   5. Profile (👤)      — anonymous account & settings
  *
  * Design decisions:
  * - Uses @react-navigation/bottom-tabs for native tab bar behavior
  * - Tab bar is styled to match the dark theme with a frosted glass effect
  * - Icons are emoji-based for now (swap for vector icons later if desired)
  * - headerShown: false on all screens — each screen manages its own header
+ * - Bridge tab is centered and opens by default
  *
  * Performance:
  * - lazy: true (default) — screens only mount when first visited
@@ -31,6 +33,7 @@ import type { ThemeColors } from "../theme/themes";
 /* ── Screen Imports ── */
 import DebtTrackerScreen from "../screens/DebtTrackerScreen";
 import BudgetScreen from "../screens/BudgetScreen";
+import BridgeScreen from "../screens/BridgeScreen";
 import UtilitiesScreen from "../screens/UtilitiesScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
@@ -45,6 +48,7 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 const TAB_ICONS: Record<keyof RootTabParamList, string> = {
   DebtTracker: "⛓️",
   Budget: "💰",
+  Bridge: "🧭",
   Utilities: "🧰",
   Profile: "👤",
 };
@@ -56,6 +60,7 @@ const TAB_ICONS: Record<keyof RootTabParamList, string> = {
 const TAB_LABELS: Record<keyof RootTabParamList, string> = {
   DebtTracker: "Debts",
   Budget: "Budget",
+  Bridge: "Bridge",
   Utilities: "Utilities",
   Profile: "Profile",
 };
@@ -67,7 +72,7 @@ const AppNavigator: React.FC = () => {
 
   return (
     <Tab.Navigator
-      initialRouteName="DebtTracker"
+      initialRouteName="Bridge"
       screenOptions={({ route }) => ({
         /** Hide the default header — each screen has its own */
         headerShown: false,
@@ -96,6 +101,7 @@ const AppNavigator: React.FC = () => {
     >
       <Tab.Screen name="DebtTracker" component={DebtTrackerScreen} />
       <Tab.Screen name="Budget" component={BudgetScreen} />
+      <Tab.Screen name="Bridge" component={BridgeScreen} />
       <Tab.Screen name="Utilities" component={UtilitiesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

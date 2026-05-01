@@ -379,6 +379,7 @@ export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
 export type RootTabParamList = {
   DebtTracker: undefined;
   Budget: undefined;
+  Bridge: undefined;
   Utilities: undefined;
   Profile: {
     openReleaseNotes?: boolean;
