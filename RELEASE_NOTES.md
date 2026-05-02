@@ -1,5 +1,16 @@
 # BudgetArk Release Notes
 
+## v1.4.7 - Spreadsheet Export Fixes (2026-05-02)
+
+- Recurring entries linked to an asset account now preserve their `lastAppliedMonth` stamp across spreadsheet round-trips. Earlier, importing a spreadsheet stripped that field, so the app re-applied the monthly delta for every month between the entry's start date and today on the next Budget screen open — silently doubling (or worse) the tracked deposits in the linked AssetAccount. New `LastAppliedMonth` column on the Budget Entries sheet round-trips the value, validated as YYYY-MM on import.
+- Per-month Income / Expense / Net subtotals on the Budget Entries sheet are now live `SUMIFS` formulas filtering by date range, not static cached numbers. Editing an Amount cell in the spreadsheet updates the month subtotal and the grand total in lockstep, so they can no longer disagree silently.
+- Savings Goals total now excludes the synthetic Emergency Fund row when one is present. Earlier, `appendTotalRow` summed every row including the synthetic one, so the same user's TargetAmount/CurrentAmount totals shifted depending on whether they tracked their EF explicitly or implicitly. The total uses a `SUMIF` with a `<>__derived_emergency_fund__` criterion so the formula stays live but the synthetic row is skipped.
+
+## v1.4.6 - Recurring Income on Every Month (2026-05-02)
+
+- Spreadsheet exports now project recurring entries (paycheck, monthly bills, subscriptions) into every month from their start through the latest month in your data. Earlier, a recurring paycheck appeared only in its start month, so every later month's Income subtotal looked like $0 even though the app counted it correctly.
+- Projected rows carry an internal sentinel ID (`__projected_recurring__:`) so re-importing the exported workbook still creates exactly one underlying entry per recurring item — no duplication on round-trip.
+
 ## v1.4.5 - Per-Month Budget Entries Export (2026-05-02)
 
 - Excel and CSV exports now sort the Budget Entries sheet by date and insert an Income / Expense / Net subtotal block after each month - labeled with the YYYY-MM key in the Description column - so you can cross-check the app's per-screen monthly totals without filtering or pivoting yourself. The grand-total block stays at the bottom with live SUMIF formulas. Subtotal rows are import-safe and drop silently on re-import.

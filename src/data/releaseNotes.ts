@@ -7,6 +7,25 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.7",
+    title: "Spreadsheet Export Fixes",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Recurring entries linked to an asset account now keep their last-applied month across spreadsheet round-trips. Earlier, importing a spreadsheet stripped that field, so the next time you opened the Budget screen the app would re-credit the linked account for every month between the entry's start date and today — silently doubling tracked deposits over the months you'd already counted.",
+      "Per-month Income / Expense / Net subtotals on the Budget Entries sheet are now live SUMIFS formulas instead of static numbers. Editing an Amount cell in the spreadsheet updates the month subtotal and the grand total in lockstep, so they can no longer disagree.",
+      "The Savings Goals total no longer counts the synthetic Emergency Fund row when you don't have an explicit goal — the total stays consistent whether or not the row is present.",
+    ],
+  },
+  {
+    version: "1.4.6",
+    title: "Recurring Income on Every Month",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Spreadsheet exports now project recurring entries (your paycheck, monthly bills, subscriptions) into every month from their start through the latest month in your data. Earlier, a recurring paycheck showed up only in its start month, which made every later month's Income subtotal look like $0 even though the app counted it correctly.",
+      "Projected rows carry an internal sentinel ID so re-importing the exported workbook still creates exactly one underlying entry per recurring item — no duplication on round-trip.",
+    ],
+  },
+  {
     version: "1.4.5",
     title: "Per-Month Budget Entries Export",
     releasedAt: "2026-05-02",

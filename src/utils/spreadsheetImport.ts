@@ -25,7 +25,10 @@ import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile } from "expo-file-system";
 import * as XLSX from "xlsx";
 import { importFromString, type ImportResult } from "./importData";
-import { DERIVED_EMERGENCY_FUND_ID } from "./spreadsheetExport";
+import {
+  DERIVED_EMERGENCY_FUND_ID,
+  DERIVED_RECURRING_PREFIX,
+} from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
 import {
   BUDGET_CATEGORIES,
@@ -250,9 +253,22 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
   }
 
   const id = parseString(get(row, "ID", "Id", "id"), 80) || generateUUID();
+  // Drop projected copies the exporter writes for recurring entries. The
+  // original row exports without this prefix and imports normally.
+  if (id.startsWith(DERIVED_RECURRING_PREFIX)) {
+    return null;
+  }
   const description = parseString(get(row, "Description", "Notes", "Memo"));
   const recurring = parseBoolean(get(row, "Recurring"));
   const linkedAccountId = parseString(get(row, "LinkedAccountId", "LinkedAccount"), 80);
+  // Preserve the recurring/linked-account "last applied" stamp so the app
+  // doesn't re-credit the linked AssetAccount for every month between the
+  // entry's start and today on the first BudgetScreen open after import.
+  // Validate the YYYY-MM shape; anything else is dropped to undefined.
+  const lastAppliedRaw = parseString(get(row, "LastAppliedMonth", "Last Applied Month"), 7);
+  const lastAppliedMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(lastAppliedRaw)
+    ? lastAppliedRaw
+    : undefined;
 
   const now = new Date().toISOString();
   return {
@@ -266,6 +282,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     updatedAt: now,
     recurring: recurring || undefined,
     linkedAccountId: linkedAccountId || undefined,
+    lastAppliedMonth,
   };
 };
 

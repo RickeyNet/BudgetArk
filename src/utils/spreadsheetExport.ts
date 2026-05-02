@@ -50,6 +50,19 @@ export const SPREADSHEET_SCHEMA_VERSION = 1;
  */
 export const DERIVED_EMERGENCY_FUND_ID = "__derived_emergency_fund__";
 
+/**
+ * Sentinel ID prefix for projected copies of recurring budget entries written
+ * to the Budget Entries sheet. The app treats `recurring: true` entries as
+ * appearing in every month from their start month onward (see
+ * BudgetScreen.isRecurringInMonth), but we only persist the original row.
+ * Without expansion, an export shows a recurring paycheck in its start month
+ * only, so per-month income subtotals collapse to zero after that.
+ *
+ * spreadsheetImport drops rows whose ID begins with this prefix, so projected
+ * copies don't multiply the original entry on round-trip.
+ */
+export const DERIVED_RECURRING_PREFIX = "__projected_recurring__:";
+
 /* ── Sheet column definitions (single source of truth, mirrored in import) ── */
 
 const BUDGET_ENTRY_COLUMNS = [
@@ -61,6 +74,13 @@ const BUDGET_ENTRY_COLUMNS = [
   "Description",
   "Recurring",
   "LinkedAccountId",
+  // Year-month key (YYYY-MM) of the last month a recurring entry was applied
+  // to its linked AssetAccount. The app uses it to avoid double-applying the
+  // monthly delta on subsequent BudgetScreen opens; if it's lost on import
+  // the asset balance gets re-credited for every month between the entry's
+  // start and today. Round-tripping this column is therefore required for
+  // data integrity, not just convenience.
+  "LastAppliedMonth",
 ] as const;
 
 const BUDGET_LIMIT_COLUMNS = ["Category", "MonthlyLimit"] as const;
@@ -116,6 +136,7 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
   Description: entry.description ?? "",
   Recurring: entry.recurring ? "yes" : "no",
   LinkedAccountId: entry.linkedAccountId ?? "",
+  LastAppliedMonth: entry.lastAppliedMonth ?? "",
 });
 
 const budgetLimitToRow = (limit: CategoryBudgetLimit) => ({
@@ -200,6 +221,87 @@ const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
 };
 
 /**
+ * Expands recurring entries across the full reporting window so per-month
+ * income/expense subtotals match what the app shows on each month's screen.
+ *
+ * The app treats a `recurring: true` entry as appearing in every month from
+ * its start month onward (see BudgetScreen.isRecurringInMonth). The exporter
+ * persists only the original row, so without this expansion a recurring
+ * paycheck would show up in the start month only and every later month would
+ * report $0 income.
+ *
+ * Window:
+ *   start  = the recurring entry's own month
+ *   end    = max(latest month seen in data, current month)
+ *
+ * Projected copies use:
+ *   - a sentinel ID prefixed with DERIVED_RECURRING_PREFIX so they are
+ *     dropped on import (no duplication on round-trip)
+ *   - a date in the projected month with the original day-of-month, clamped
+ *     to that month's last valid day (Jan 31 → Feb 28 / Feb 29)
+ */
+const expandRecurringRows = (
+  rows: ReadonlyArray<Record<string, unknown>>
+): Record<string, unknown>[] => {
+  if (rows.length === 0) return [];
+
+  const monthsInData: string[] = [];
+  for (const row of rows) {
+    const dateStr = String(row.Date ?? "");
+    if (/^\d{4}-\d{2}/.test(dateStr)) monthsInData.push(dateStr.slice(0, 7));
+  }
+  if (monthsInData.length === 0) return [...rows];
+
+  monthsInData.sort();
+  const latestMonth = monthsInData[monthsInData.length - 1];
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const endMonth = latestMonth > currentMonth ? latestMonth : currentMonth;
+
+  const nextMonth = (ym: string): string => {
+    const [yStr, mStr] = ym.split("-");
+    let y = Number(yStr);
+    let m = Number(mStr) + 1;
+    if (m > 12) {
+      y += 1;
+      m = 1;
+    }
+    return `${y}-${String(m).padStart(2, "0")}`;
+  };
+
+  // last day of a YYYY-MM (1-indexed month)
+  const lastDayOfMonth = (ym: string): number => {
+    const [yStr, mStr] = ym.split("-");
+    return new Date(Number(yStr), Number(mStr), 0).getDate();
+  };
+
+  const out: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    out.push(row);
+    if (row.Recurring !== "yes") continue;
+    const dateStr = String(row.Date ?? "");
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) continue;
+    const startMonth = `${match[1]}-${match[2]}`;
+    const day = Number(match[3]);
+    if (startMonth >= endMonth) continue;
+
+    const baseId = String(row.ID ?? "");
+    let m = nextMonth(startMonth);
+    while (m <= endMonth) {
+      const dd = String(Math.min(day, lastDayOfMonth(m))).padStart(2, "0");
+      out.push({
+        ...row,
+        ID: `${DERIVED_RECURRING_PREFIX}${baseId}:${m}`,
+        Date: `${m}-${dd}`,
+      });
+      m = nextMonth(m);
+    }
+  }
+  return out;
+};
+
+/**
  * Builds the Budget Entries sheet from scratch:
  *   1. Sort entries by Date ascending so months stay contiguous.
  *   2. After each month's rows, write an Income / Expense / Net subtotal
@@ -215,11 +317,12 @@ const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
  * rowToBudgetEntry returns null and drops them silently. Re-importing the
  * exported workbook does not duplicate or corrupt budget entries.
  *
- * Grand-total Amount cells use SUMIF formulas (plus cached numeric values)
- * so Excel/Sheets recompute live on edits and CSV export still emits real
- * numbers. Per-month subtotals use cached values only — formulas would
- * have to encode each month's exact row range, which adds complexity for
- * little gain.
+ * Both per-month subtotals and the grand-total block use live formulas
+ * (SUMIFS for per-month, SUMIF for grand) plus cached numeric values, so
+ * editing an Amount cell in the spreadsheet recalculates both blocks in
+ * lockstep. Per-month formulas filter on the Date column with a YYYY-MM-01
+ * to YYYY-(MM+1)-01 range; subtotal rows have a blank Date and are
+ * naturally excluded from the per-month and grand-total ranges they sit in.
  */
 const buildBudgetEntriesSheet = (
   rows: ReadonlyArray<Record<string, unknown>>
@@ -239,6 +342,7 @@ const buildBudgetEntriesSheet = (
   }
 
   const idColIdx = BUDGET_ENTRY_COLUMNS.indexOf("ID");
+  const dateColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Date");
   const typeColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Type");
   const amountColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Amount");
   const descColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Description");
@@ -286,19 +390,29 @@ const buildBudgetEntriesSheet = (
   let monthIncome = 0;
   let monthExpense = 0;
 
+  // Per-month subtotal cells get tracked here and have their formulas
+  // patched in after the data loop, once we know the final data range
+  // (firstDataExcelRow .. lastDataExcelRow). Tracking by row index lets the
+  // formulas reference the full data range — Excel doesn't care about
+  // evaluation order, only that the range is valid when the file is opened.
+  type MonthSubtotal = {
+    row0: number; // 0-indexed sheet row of the Amount cell
+    monthKey: string;
+    kind: "income" | "expense" | "net";
+  };
+  const monthSubtotals: MonthSubtotal[] = [];
+
   const flushMonthSubtotals = () => {
     if (currentMonth === null) return;
-    writeSubtotalRow(writeIdx++, `Income Total - ${currentMonth}`, monthIncome);
-    writeSubtotalRow(
-      writeIdx++,
-      `Expense Total - ${currentMonth}`,
-      monthExpense
-    );
-    writeSubtotalRow(
-      writeIdx++,
-      `Net - ${currentMonth}`,
-      monthIncome - monthExpense
-    );
+    writeSubtotalRow(writeIdx, `Income Total - ${currentMonth}`, monthIncome);
+    monthSubtotals.push({ row0: writeIdx, monthKey: currentMonth, kind: "income" });
+    writeIdx++;
+    writeSubtotalRow(writeIdx, `Expense Total - ${currentMonth}`, monthExpense);
+    monthSubtotals.push({ row0: writeIdx, monthKey: currentMonth, kind: "expense" });
+    writeIdx++;
+    writeSubtotalRow(writeIdx, `Net - ${currentMonth}`, monthIncome - monthExpense);
+    monthSubtotals.push({ row0: writeIdx, monthKey: currentMonth, kind: "net" });
+    writeIdx++;
     monthIncome = 0;
     monthExpense = 0;
   };
@@ -339,10 +453,41 @@ const buildBudgetEntriesSheet = (
   const firstDataExcelRow = 2;
   const lastDataExcelRow = writeIdx; // writeIdx is 0-based next-row, so the
   // last filled row in 0-index = writeIdx - 1, which is writeIdx in 1-index.
+  const dateColLetter = XLSX.utils.encode_col(dateColIdx);
   const typeColLetter = XLSX.utils.encode_col(typeColIdx);
   const amountColLetter = XLSX.utils.encode_col(amountColIdx);
   const typeRange = `${typeColLetter}${firstDataExcelRow}:${typeColLetter}${lastDataExcelRow}`;
   const amountRange = `${amountColLetter}${firstDataExcelRow}:${amountColLetter}${lastDataExcelRow}`;
+  const dateRange = `${dateColLetter}${firstDataExcelRow}:${dateColLetter}${lastDataExcelRow}`;
+
+  // Patch per-month subtotal Amount cells with live SUMIFS formulas now
+  // that we know the full data range. Date column is YYYY-MM-DD text, so
+  // string comparison with ">="&"YYYY-MM-01" / "<"&"YYYY-(MM+1)-01" sorts
+  // correctly. "Unknown" buckets stay as cached values only — there's no
+  // valid date range to filter on.
+  const nextMonthFirstDay = (ym: string): string => {
+    const [yStr, mStr] = ym.split("-");
+    let y = Number(yStr);
+    let m = Number(mStr) + 1;
+    if (m > 12) {
+      y += 1;
+      m = 1;
+    }
+    return `${y}-${String(m).padStart(2, "0")}-01`;
+  };
+  for (const sub of monthSubtotals) {
+    if (sub.monthKey === "Unknown") continue;
+    const firstDay = `${sub.monthKey}-01`;
+    const nextFirst = nextMonthFirstDay(sub.monthKey);
+    const incomeFormula = `SUMIFS(${amountRange},${typeRange},"income",${dateRange},">="&"${firstDay}",${dateRange},"<"&"${nextFirst}")`;
+    const expenseFormula = `SUMIFS(${amountRange},${typeRange},"expense",${dateRange},">="&"${firstDay}",${dateRange},"<"&"${nextFirst}")`;
+    const cellRef = XLSX.utils.encode_cell({ r: sub.row0, c: amountColIdx });
+    const cell = sheet[cellRef];
+    if (!cell) continue;
+    if (sub.kind === "income") cell.f = incomeFormula;
+    else if (sub.kind === "expense") cell.f = expenseFormula;
+    else cell.f = `${incomeFormula}-${expenseFormula}`;
+  }
 
   writeSubtotalRow(
     writeIdx++,
@@ -375,13 +520,27 @@ const appendTotalRow = (
   sheet: XLSX.WorkSheet,
   rows: ReadonlyArray<Record<string, unknown>>,
   columns: readonly string[],
-  sumColumns: readonly string[]
+  sumColumns: readonly string[],
+  options?: {
+    /**
+     * When set, rows whose first-column value (column A) equals this string
+     * are excluded from both the cached sum and the SUMIF formula. Used to
+     * keep the synthetic Emergency Fund row out of the Savings Goals total
+     * — otherwise the totals shift depending on whether the user has an
+     * explicit emergency_fund goal or only the Keel-derived synthetic one.
+     */
+    excludeFirstColumnEquals?: string;
+  }
 ): void => {
   if (rows.length === 0) return;
 
   const totalRowIdx = rows.length + 1; // 0-indexed: header at 0, data 1..N, total at N+1
   const firstDataExcelRow = 2;
   const lastDataExcelRow = rows.length + 1;
+  const excludeValue = options?.excludeFirstColumnEquals;
+  const idColumnName = columns[0];
+  const idColLetter = XLSX.utils.encode_col(0);
+  const idRange = `${idColLetter}${firstDataExcelRow}:${idColLetter}${lastDataExcelRow}`;
 
   columns.forEach((colName, colIdx) => {
     const cellRef = XLSX.utils.encode_cell({ r: totalRowIdx, c: colIdx });
@@ -392,14 +551,22 @@ const appendTotalRow = (
     if (!sumColumns.includes(colName)) return;
 
     const colLetter = XLSX.utils.encode_col(colIdx);
+    const sumRange = `${colLetter}${firstDataExcelRow}:${colLetter}${lastDataExcelRow}`;
     const sum = rows.reduce<number>((acc, row) => {
+      if (excludeValue !== undefined && row[idColumnName] === excludeValue) {
+        return acc;
+      }
       const v = row[colName];
       return typeof v === "number" && Number.isFinite(v) ? acc + v : acc;
     }, 0);
+    const formula =
+      excludeValue !== undefined
+        ? `SUMIF(${idRange},"<>"&"${excludeValue}",${sumRange})`
+        : `SUM(${sumRange})`;
     sheet[cellRef] = {
       t: "n",
       v: sum,
-      f: `SUM(${colLetter}${firstDataExcelRow}:${colLetter}${lastDataExcelRow})`,
+      f: formula,
     };
   });
 
@@ -496,7 +663,7 @@ export const exportSpreadsheet = async (
   // Budget Entries is built by hand (not via json_to_sheet + appendTotalRow)
   // so we can sort by date, interleave per-month Income / Expense / Net
   // subtotals, and finish with a grand-total block. See buildBudgetEntriesSheet.
-  const entryRows = budgetEntries.map(budgetEntryToRow);
+  const entryRows = expandRecurringRows(budgetEntries.map(budgetEntryToRow));
   const entrySheet = buildBudgetEntriesSheet(entryRows);
   XLSX.utils.book_append_sheet(wb, entrySheet, "Budget Entries");
 
@@ -540,7 +707,8 @@ export const exportSpreadsheet = async (
       goalsSheet,
       goalRows,
       SAVINGS_GOAL_COLUMNS,
-      SHEET_SUM_COLUMNS["Savings Goals"]
+      SHEET_SUM_COLUMNS["Savings Goals"],
+      { excludeFirstColumnEquals: DERIVED_EMERGENCY_FUND_ID }
     );
     XLSX.utils.book_append_sheet(wb, goalsSheet, "Savings Goals");
 
