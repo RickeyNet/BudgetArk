@@ -185,11 +185,11 @@ type SheetName =
   | "Savings Goals"
   | "Asset Accounts";
 
-// Budget Entries intentionally has no sum column. Income and expense rows are
-// both stored as positive numbers, so a raw SUM(Amount) lumps them together
-// into a meaningless total. Users who want a breakdown can add SUMIF formulas
-// keyed on the Type column. The Total row is still emitted (label only) for
-// visual consistency with other sheets and to act as the import-filter sentinel.
+// Budget Entries' Amount column gets a special-cased net total written after
+// appendTotalRow runs (see writeBudgetEntriesNetTotal below). Income and
+// expense rows are both stored as positive numbers, so a plain SUM(Amount)
+// would lump them together as a meaningless figure — the net total uses
+// SUMIF on Type instead.
 const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
   "Budget Entries": [],
   "Budget Limits": ["MonthlyLimit"],
@@ -197,6 +197,49 @@ const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
   Payments: ["Amount"],
   "Savings Goals": ["TargetAmount", "CurrentAmount"],
   "Asset Accounts": ["Balance"],
+};
+
+/**
+ * Writes a net total (income − expense) into the Amount cell of the Budget
+ * Entries Total row. Uses SUMIF so the formula stays live in Excel/Sheets
+ * if the user edits rows, and a cached numeric value so CSV export and any
+ * non-formula-evaluating reader still sees a real number.
+ *
+ * Assumes appendTotalRow has already written the "Total" label and extended
+ * the sheet range; this function only touches the Amount cell.
+ */
+const writeBudgetEntriesNetTotal = (
+  sheet: XLSX.WorkSheet,
+  rows: ReadonlyArray<Record<string, unknown>>
+): void => {
+  if (rows.length === 0) return;
+
+  const typeColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Type");
+  const amountColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Amount");
+  if (typeColIdx < 0 || amountColIdx < 0) return;
+
+  const totalRowIdx = rows.length + 1;
+  const firstDataExcelRow = 2;
+  const lastDataExcelRow = rows.length + 1;
+  const typeCol = XLSX.utils.encode_col(typeColIdx);
+  const amountCol = XLSX.utils.encode_col(amountColIdx);
+  const typeRange = `${typeCol}${firstDataExcelRow}:${typeCol}${lastDataExcelRow}`;
+  const amountRange = `${amountCol}${firstDataExcelRow}:${amountCol}${lastDataExcelRow}`;
+
+  const net = rows.reduce<number>((acc, row) => {
+    const amount = row.Amount;
+    if (typeof amount !== "number" || !Number.isFinite(amount)) return acc;
+    if (row.Type === "income") return acc + amount;
+    if (row.Type === "expense") return acc - amount;
+    return acc;
+  }, 0);
+
+  const cellRef = XLSX.utils.encode_cell({ r: totalRowIdx, c: amountColIdx });
+  sheet[cellRef] = {
+    t: "n",
+    v: net,
+    f: `SUMIF(${typeRange},"income",${amountRange})-SUMIF(${typeRange},"expense",${amountRange})`,
+  };
 };
 
 const appendTotalRow = (
@@ -331,6 +374,7 @@ export const exportSpreadsheet = async (
     BUDGET_ENTRY_COLUMNS,
     SHEET_SUM_COLUMNS["Budget Entries"]
   );
+  writeBudgetEntriesNetTotal(entrySheet, entryRows);
   XLSX.utils.book_append_sheet(wb, entrySheet, "Budget Entries");
 
   if (format === "xlsx") {
