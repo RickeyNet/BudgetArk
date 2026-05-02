@@ -170,6 +170,24 @@ const findSheet = (
 };
 
 /**
+ * Detects the sentinel "Total" row that the exporter appends to every sheet.
+ *
+ * The label sits in the first column, which `sheet_to_json` preserves as the
+ * first key of each row object. Filtering total rows before mapping keeps them
+ * from inflating `skippedRows` (otherwise a clean round-trip would always
+ * report N skipped rows = number of sheets).
+ */
+const isTotalRow = (row: Record<string, unknown>): boolean => {
+  const keys = Object.keys(row);
+  if (keys.length === 0) return false;
+  const firstVal = row[keys[0]];
+  return (
+    typeof firstVal === "string" &&
+    firstVal.trim().toLowerCase() === "total"
+  );
+};
+
+/**
  * Treat the workbook as either a multi-sheet xlsx or a single CSV sheet.
  *
  * For CSVs, the only sheet is the budget entries sheet — so we map the first
@@ -186,7 +204,7 @@ const sheetToRows = (sheet: XLSX.WorkSheet | undefined): Record<string, unknown>
       `Spreadsheet has too many rows (${rows.length}). Maximum is ${MAX_ROWS_PER_SHEET}.`
     );
   }
-  return rows;
+  return rows.filter((r) => !isTotalRow(r));
 };
 
 /**

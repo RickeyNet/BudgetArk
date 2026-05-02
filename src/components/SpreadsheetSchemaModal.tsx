@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Spreadsheet Schema Reference Modal
+ * BudgetArk - Spreadsheet Schema Reference Modal
  * File: src/components/SpreadsheetSchemaModal.tsx
  *
  * Mobile-friendly read-only reference for the CSV / XLSX import schema.
@@ -45,7 +45,7 @@ const SHEETS: SheetSpec[] = [
   {
     title: "Budget Entries",
     description:
-      "The core sheet — required for both CSV and Excel imports. CSVs only contain this sheet.",
+      "The core sheet - required for both CSV and Excel imports. CSVs only contain this sheet.",
     columns: [
       { name: "ID", required: false, notes: "Auto-generated UUID if missing. Keep it for round-trip safety." },
       { name: "Date", required: true, notes: "ISO YYYY-MM-DD, full ISO timestamp, US M/D/YYYY, or Excel native date." },
@@ -157,9 +157,11 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
               <Text style={styles.tipLabel}>TIP</Text>
               <Text style={styles.tipText}>
                 Easiest way to learn the format: tap{" "}
-                <Text style={styles.tipBold}>Export Spreadsheet</Text>, open the
-                file in Excel or Google Sheets, edit, then re-import. IDs round-trip
-                so existing rows update in place.
+                <Text style={styles.tipBold}>Export Spreadsheet</Text> (XLSX),
+                open the file in Excel or Google Sheets, edit, then re-import.
+                IDs round-trip so existing rows update in place. Even with an
+                empty app, the export is a ready-made blank template - every
+                sheet has the correct headers, just no rows yet.
               </Text>
             </View>
 

@@ -1,4 +1,4 @@
-# BudgetArk — Windows 11 Development Setup Guide
+# BudgetArk - Windows 11 Development Setup Guide
 
 ## Prerequisites & Installation (in order)
 
@@ -10,7 +10,7 @@ Node.js is the JavaScript runtime that powers everything.
 
 1. Go to: **https://nodejs.org**
 2. Download the **LTS** version (currently 20.x or higher)
-3. Run the installer — accept all defaults
+3. Run the installer - accept all defaults
 4. **Check "Automatically install necessary tools"** when prompted
 5. Verify in a **new** terminal (PowerShell or Command Prompt):
 
@@ -38,7 +38,7 @@ git --version
 
 ---
 
-### Step 3: Install a Code Editor — VS Code
+### Step 3: Install a Code Editor - VS Code
 
 1. Go to: **https://code.visualstudio.com**
 2. Download and install
@@ -53,7 +53,7 @@ git --version
 
 ### Step 4: Install Expo CLI
 
-Expo simplifies React Native development — no Android Studio or Xcode needed to start.
+Expo simplifies React Native development - no Android Studio or Xcode needed to start.
 
 Open PowerShell and run:
 
@@ -172,13 +172,13 @@ If you want to test without a physical phone:
 
 ```
 BudgetArk/
-├── App.tsx                    # Entry point — sets up navigation
+├── App.tsx                    # Entry point - sets up navigation
 ├── babel.config.js            # Babel config with reanimated plugin
 ├── src/
 │   ├── navigation/
 │   │   └── AppNavigator.tsx   # Bottom tab navigation setup
 │   ├── screens/
-│   │   ├── DebtTrackerScreen.tsx    # Phase 1 — we start here
+│   │   ├── DebtTrackerScreen.tsx    # Phase 1 - we start here
 │   │   ├── BudgetScreen.tsx         # Phase 2
 │   │   └── InvestmentScreen.tsx     # Phase 3
 │   ├── components/
@@ -206,7 +206,7 @@ BudgetArk/
 | QR code won't scan | Make sure phone and PC are on the same Wi-Fi network |
 | Module not found errors | Run `npm install` again, then restart with `npx expo start --clear` |
 | Reanimated errors | Make sure the babel plugin is added, then restart with `--clear` |
-| Slow first load | Normal — subsequent loads are faster due to caching |
+| Slow first load | Normal - subsequent loads are faster due to caching |
 
 ---
 

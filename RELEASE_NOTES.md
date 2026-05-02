@@ -9,13 +9,13 @@
 - Added a debt payoff celebration screen with confetti, payoff stats, and a quick shortcut to payment history when a balance reaches zero.
 - Improved update metadata parsing so release notes resolve from update-specific version fields first.
 - Added **Export Spreadsheet** and **Import Spreadsheet** in Profile → Data so you can move budget data to and from Google Sheets, Excel, or CSV files. CSV covers budget entries; Excel exports a full multi-sheet backup including debts, payments, savings goals, and asset accounts.
-- Spreadsheet imports now also restore savings goals and asset accounts — the Excel format is a full round-trip backup.
+- Spreadsheet imports now also restore savings goals and asset accounts - the Excel format is a full round-trip backup.
 - Added an in-app format reference for spreadsheet imports so you can see the required columns and allowed categories before importing.
-- Backup export and import are now a complete round-trip — savings goals, asset accounts, milestone progress, payoff strategy, net worth history, and full per-month budget limit history are all preserved.
-- **Reset All Data** now actually clears everything — asset accounts and milestone progress are no longer left behind.
+- Backup export and import are now a complete round-trip - savings goals, asset accounts, milestone progress, payoff strategy, net worth history, and full per-month budget limit history are all preserved.
+- **Reset All Data** now actually clears everything - asset accounts and milestone progress are no longer left behind.
 - Fixed a quiet bug where lowering a tracked savings reserve created a correction entry that couldn't be re-imported from a backup. Backups now round-trip cleanly even after savings adjustments.
 - Added subtle haptic feedback on key actions (recording payments, saving entries, completing imports/exports, payoff celebrations). Toggle in **Profile → Settings → Haptic Feedback** if you'd rather keep it silent.
-- Updated build-time dependencies (postcss and uuid) to address two security advisories. Build tooling only — no in-app behavior changes.
+- Updated build-time dependencies (postcss and uuid) to address two security advisories. Build tooling only - no in-app behavior changes.
 
 ## v1.4.0 - Net Worth History & Monthly Insights (2026-04-30)
 
@@ -30,47 +30,47 @@
 
 ### Utilities Tab
 - Replaced the Investments tab with a new Utilities hub containing collapsible financial tools.
-- **Compound Interest Calculator** — now includes S&P 500 return presets (Savings 2%, Bonds 4%, S&P 500 7%, Aggressive 10%), a "Why 7%?" educational card explaining inflation-adjusted returns, and a Rule of 72 insight showing how quickly your money doubles.
-- **Loan/Mortgage Calculator** — enter loan amount, interest rate, and term to see monthly payments with a principal vs interest breakdown and visual ratio bar. Includes 15, 20, and 30-year term presets.
-- **Emergency Fund Calculator** — automatically pulls your average monthly expenses from the last 6 months of budget data. Shows progress toward 3-month and 6-month savings targets with a monthly savings slider and time-to-reach estimates.
+- **Compound Interest Calculator** - now includes S&P 500 return presets (Savings 2%, Bonds 4%, S&P 500 7%, Aggressive 10%), a "Why 7%?" educational card explaining inflation-adjusted returns, and a Rule of 72 insight showing how quickly your money doubles.
+- **Loan/Mortgage Calculator** - enter loan amount, interest rate, and term to see monthly payments with a principal vs interest breakdown and visual ratio bar. Includes 15, 20, and 30-year term presets.
+- **Emergency Fund Calculator** - automatically pulls your average monthly expenses from the last 6 months of budget data. Shows progress toward 3-month and 6-month savings targets with a monthly savings slider and time-to-reach estimates.
 
 ### Asset Account Tracking
 - Added asset accounts on the Budget screen for tracking savings, 401k/retirement, HSA, investment, and other account balances.
 - Asset accounts are persistent balances that don't count as monthly budget entries but are included in net worth calculations.
 - Asset accounts sync between paired devices via the existing peer-to-peer sync system.
 - Emergency fund savings goal now appears automatically in the Accounts section on the Budget screen.
-- Savings, Retirement, and Investing budget entries can now be linked to a specific asset account — contributions are added to the account balance on save.
+- Savings, Retirement, and Investing budget entries can now be linked to a specific asset account - contributions are added to the account balance on save.
 - Recurring budget entries linked to an account automatically contribute to that account's balance each month.
 
 ### Bug Fixes & Polish
-- Fixed scroll freeze when opening the edit budget entry modal — form rendering is now deferred until the modal animation completes.
+- Fixed scroll freeze when opening the edit budget entry modal - form rendering is now deferred until the modal animation completes.
 - Centered page titles and subtitles across all screens (Debt Tracker, Budget, Utilities, Profile).
 - Updated onboarding to reflect the new Utilities tab.
 
 ### Security & Reliability
 - Added 5-second timeout protection on all storage operations to prevent app freezes from degraded flash storage or backed-up I/O queues.
-- Hardened OTA update version guard — updates with missing version metadata are now blocked (fail-closed) to prevent downgrade attacks. Fresh installs without version metadata are still allowed.
-- Importing a backup older than 30 days now shows a staleness warning so you know the data may be outdated. The import still proceeds — the warning is informational only.
+- Hardened OTA update version guard - updates with missing version metadata are now blocked (fail-closed) to prevent downgrade attacks. Fresh installs without version metadata are still allowed.
+- Importing a backup older than 30 days now shows a staleness warning so you know the data may be outdated. The import still proceeds - the warning is informational only.
 - Added explicit bounds checks on all financial calculation inputs (balance capped at $1B, rate at 200%, payments at $1M, years at 100) to prevent Infinity/NaN from cascading into the UI.
 
 ## v1.2.2 - Bug Fixes & Ark Build Expansion (2026-03-31)
 
 ### Bug Fixes
 - Fixed Keel savings not reflecting in the Budget screen total savings display.
-- Fixed Build Your Ark plan requiring a long-press to open — now opens on a single tap.
-- Fixed savings log only allowing additions — you can now set an exact savings amount or adjust down with -$50 / -$100 quick buttons.
+- Fixed Build Your Ark plan requiring a long-press to open - now opens on a single tap.
+- Fixed savings log only allowing additions - you can now set an exact savings amount or adjust down with -$50 / -$100 quick buttons.
 
 ### Ark Build Expansion
 - Expanded Build Your Ark from 5 steps to 7, following a complete financial milestone journey:
-  1. **Keel** — Save $1,000 for a starter emergency fund.
-  2. **Hull** — Pay off all debt except the house using the debt snowball.
-  3. **Deck** — Save 3 to 6 months of living expenses for a fully funded emergency fund.
-  4. **Supplies** — Invest 15% of household income for retirement.
-  5. **Gather Animals** — Save for your children's college education.
-  6. **Moorings** — Pay off your home early.
-  7. **Sail** — Build wealth and give.
+  1. **Keel** - Save $1,000 for a starter emergency fund.
+  2. **Hull** - Pay off all debt except the house using the debt snowball.
+  3. **Deck** - Save 3 to 6 months of living expenses for a fully funded emergency fund.
+  4. **Supplies** - Invest 15% of household income for retirement.
+  5. **Gather Animals** - Save for your children's college education.
+  6. **Moorings** - Pay off your home early.
+  7. **Sail** - Build wealth and give.
 - Moved payoff strategy comparison (Avalanche vs Snowball) into the Hull milestone step so planning and progress live in one place.
-- Existing milestone progress is automatically preserved when upgrading — new steps are added without losing any data.
+- Existing milestone progress is automatically preserved when upgrading - new steps are added without losing any data.
 - Added monthly budget summary graph showing income vs expenses across recent months.
 - Emergency fund balance now reflects consistently across Budget and Debt Tracker tabs.
 
@@ -78,38 +78,38 @@
 
 - Fixed edit budget modal scroll freeze after selecting a category pill.
 - Fixed extra bottom padding in edit budget modal on devices without a navigation bar.
-- Debt cards now collapse by default — only the priority payoff debt is expanded based on your chosen strategy.
+- Debt cards now collapse by default - only the priority payoff debt is expanded based on your chosen strategy.
 - Income entries moved inline into the summary card for a cleaner budget layout.
-- Spending section redesigned — donut chart and category rows in one card, tap any row to expand entries.
-- Profile screen reorganized — Send Feedback at top, Data/Settings/About sections consolidated.
+- Spending section redesigned - donut chart and category rows in one card, tap any row to expand entries.
+- Profile screen reorganized - Send Feedback at top, Data/Settings/About sections consolidated.
 - Restored missing Auto Updates toggle in Profile settings.
 
 ## v1.2.0 - Minimalist UI Redesign (2026-03-28)
 
-- Redesigned Debt Tracker — owner summary row now doubles as a filter (tap to filter and see amounts), milestone bar absorbs strategy label and Deck/Supplies chips into one row, and the progress ring opens payment history on tap.
-- Redesigned Budget — donut chart and category list merged into one unified section with color-coded rows. Long-press any category to set a spending limit. Split Food action moved to a compact link in the section header instead of a full-width button.
-- Redesigned Profile — grouped Theme, Currency, and Privacy Mode into a single Appearance card. Compressed Partner Sync from five rows to three (partner info, sync now, unpair). Consolidated Updates, Release Notes, Feedback, and Reset into an About card. Removed standalone How-To Docs, Feedback, Privacy, and What's New sections.
+- Redesigned Debt Tracker - owner summary row now doubles as a filter (tap to filter and see amounts), milestone bar absorbs strategy label and Deck/Supplies chips into one row, and the progress ring opens payment history on tap.
+- Redesigned Budget - donut chart and category list merged into one unified section with color-coded rows. Long-press any category to set a spending limit. Split Food action moved to a compact link in the section header instead of a full-width button.
+- Redesigned Profile - grouped Theme, Currency, and Privacy Mode into a single Appearance card. Compressed Partner Sync from five rows to three (partner info, sync now, unpair). Consolidated Updates, Release Notes, Feedback, and Reset into an About card. Removed standalone How-To Docs, Feedback, Privacy, and What's New sections.
 - Added floating action buttons (FAB) on Debt Tracker and Budget screens for quick access to adding entries, replacing the inline header buttons.
 - OTA update prompt now shows the app version and what's new from the release notes instead of raw update metadata (ID, runtime version).
-- Removed the standalone How-To Docs modal — help guidance will be added inline to Export, Import, and Sync flows in a future update.
+- Removed the standalone How-To Docs modal - help guidance will be added inline to Export, Import, and Sync flows in a future update.
 
 ## v1.1.0 - Partner Sync & Feedback (2026-03-23)
 
-- Added peer-to-peer sync for couples — share budgets, debts, and savings goals directly between phones over WiFi with no server or account required.
+- Added peer-to-peer sync for couples - share budgets, debts, and savings goals directly between phones over WiFi with no server or account required.
 - One-time device pairing with a 6-digit code and PBKDF2 key exchange. All sync traffic is AES-256 encrypted with HMAC integrity verification.
-- Sync Now button for on-demand data exchange — both devices see the same debts, payments, budget entries, savings goals, and milestone progress.
+- Sync Now button for on-demand data exchange - both devices see the same debts, payments, budget entries, savings goals, and milestone progress.
 - Optional auto-sync when both phones are on your home WiFi network. Set your home network once and syncing happens automatically in the foreground.
-- Added in-app feedback — report bugs or suggest features directly from Profile. Your message is sent via your email app with device info auto-attached.
+- Added in-app feedback - report bugs or suggest features directly from Profile. Your message is sent via your email app with device info auto-attached.
 - Added a link to GitHub Issues for public bug tracking and feature requests.
 - Added updatedAt timestamps to all record types for accurate conflict resolution using last-write-wins per record.
-- Existing data is automatically migrated to include timestamps on first launch — no action needed.
+- Existing data is automatically migrated to include timestamps on first launch - no action needed.
 - Squashed some bugs and improved overall stability.
 
 ## v1.0.6 - Security & Encryption (2026-03-12)
 
-- Added AES-256 encryption for all on-device data with HMAC-SHA256 integrity verification — your financial data is now encrypted at rest.
+- Added AES-256 encryption for all on-device data with HMAC-SHA256 integrity verification - your financial data is now encrypted at rest.
 - Encryption keys are stored in the platform secure vault (iOS Keychain / Android Keystore) and cleared from memory when the app is backgrounded.
-- Existing data from previous versions is automatically migrated to the encrypted format on first launch — no action needed.
+- Existing data from previous versions is automatically migrated to the encrypted format on first launch - no action needed.
 - Added privacy mode toggle in Profile settings to mask sensitive balances on screen.
 - Added version guard to prevent downgrade attacks via OTA updates.
 - Upgraded to cryptographically strong UUID generation for all identifiers.
@@ -148,7 +148,7 @@
 ## v1.0.2 - Payment History & Localization (2026-03-07)
 
 - Added Payment History view accessible from the Debt Tracker summary card, showing all recorded payments grouped by month with totals.
-- Added "The Ark" theme — a warm cream and brown parchment-inspired color scheme.
+- Added "The Ark" theme - a warm cream and brown parchment-inspired color scheme.
 - Added multiple currency and locale presets in Settings (USD, EUR, GBP, CAD, JPY).
 - Applied locale-aware money formatting across Debt, Budget, Investment, and Payment History screens.
 - Persisted currency preference in user profile and included it in data export/import backups.

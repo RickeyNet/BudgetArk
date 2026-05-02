@@ -13,7 +13,7 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 | `Date`            | Yes      | ISO `YYYY-MM-DD`, full ISO timestamp, US `M/D/YYYY`, or Excel native date.             |
 | `Type`            | Yes      | `income` or `expense` (case-insensitive).                                              |
 | `Category`        | Yes      | Must match one of the BudgetArk categories (see list below).                           |
-| `Amount`          | Yes      | Positive number for most categories. Strips `$`, commas, and treats `(50.00)` as `-50.00`. Exception: `Savings`, `Retirement`, and `Investing` accept negative amounts — these represent app-generated correction entries when a tracked reserve is lowered. |
+| `Amount`          | Yes      | Positive number for most categories. Strips `$`, commas, and treats `(50.00)` as `-50.00`. Exception: `Savings`, `Retirement`, and `Investing` accept negative amounts - these represent app-generated correction entries when a tracked reserve is lowered. |
 | `Description`     | No       | Free-form note (max 220 chars).                                                        |
 | `Recurring`       | No       | `yes` / `no` / `true` / `false` / `1` / `0`.                                           |
 | `LinkedAccountId` | No       | UUID of an asset account (used for savings entries).                                   |
@@ -70,7 +70,7 @@ Imported limits land in the current month's limit set.
 | `TargetDate`    | No       | Optional target date.                                                                |
 | `CreatedAt`     | No       | ISO timestamp; defaults to now.                                                      |
 
-> Imported on Excel imports — full round-trip with the export utility.
+> Imported on Excel imports - full round-trip with the export utility.
 
 ## Sheet: Asset Accounts (xlsx only)
 
@@ -82,7 +82,7 @@ Imported limits land in the current month's limit set.
 | `Balance`   | Yes      | Number, ≥ 0.                                                         |
 | `CreatedAt` | No       | ISO timestamp; defaults to now.                                      |
 
-> Imported on Excel imports — full round-trip with the export utility.
+> Imported on Excel imports - full round-trip with the export utility.
 
 ## Limits
 
@@ -90,6 +90,33 @@ Imported limits land in the current month's limit set.
 - Rows per sheet: 5,000 max
 - Total records (across all sheets): 6,000 max (inherited from JSON import)
 
+## Total Row
+
+Every exported sheet ends with a **Total** row: the label `Total` in the first column, and live `SUM(...)` formulas in the numeric columns. Excel and Google Sheets evaluate the formulas live; CSV exports include the computed totals as static values.
+
+Summed columns by sheet:
+
+| Sheet          | Summed columns                                |
+| -------------- | --------------------------------------------- |
+| Budget Entries | *(label only — see note below)*               |
+| Budget Limits  | `MonthlyLimit`                                |
+| Debts          | `Balance`, `OriginalBalance`, `MinPayment`    |
+| Payments       | `Amount`                                      |
+| Savings Goals  | `TargetAmount`, `CurrentAmount`               |
+| Asset Accounts | `Balance`                                     |
+
+The Budget Entries Total row deliberately leaves the numeric column blank: income and expense rows both store positive amounts, so a raw `SUM(Amount)` mixes the two into a misleading number. Add your own `SUMIF` formulas keyed on the `Type` column if you want income / expense subtotals.
+
+The `SUM` ranges are bounded to the data rows present at export time. Excel and Google Sheets auto-extend these ranges when you **insert** rows above the Total row; rows **appended** below it are not included.
+
+The importer ignores the total row automatically — you don't need to delete it before re-importing. If you add your own summary row, give it the label `Total` (case-insensitive) in the first column and it will be skipped the same way.
+
+> **Reserved value:** `Total` (case-insensitive) is a reserved sentinel in the **first column** of every sheet. Any row whose first cell equals `Total` is dropped silently on import. Don't use `Total` as a user-supplied `ID` or `Category` value — your row will disappear.
+
 ## Round-Trip Tip
 
 To preserve IDs (and thus avoid duplicating rows when you re-import a file you exported), keep the `ID` column intact. If you export from BudgetArk, edit in Excel/Sheets, and re-import as a Merge, rows with matching IDs are updated in place; rows without matching IDs are added.
+
+## Quickest Way to Get a Blank Template
+
+You don't need to retype this schema by hand. Even with no data in the app, **Export Spreadsheet (XLSX)** produces a workbook with all six sheets and the correct column headers already in place - just empty rows below them. Use that file as your starting template: fill in your rows, save, and import. CSV exports the Budget Entries headers the same way.

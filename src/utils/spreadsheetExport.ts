@@ -149,6 +149,81 @@ const assetAccountToRow = (account: AssetAccount) => ({
   CreatedAt: account.createdAt,
 });
 
+/* ── Total row ──
+ *
+ * Each sheet ends with a "Total" row: "Total" label in column A, SUM formulas
+ * in the configured numeric columns. Both `f` (formula) and `v` (cached sum)
+ * are set so Excel/Sheets recompute live, and so sheet_to_csv (which reads `v`,
+ * not `f`) still emits a real number.
+ *
+ * The label sits in the first column of every sheet by design — that column is
+ * always either an `ID` (UUID) or a `Category` (enum). The string "Total" never
+ * passes those validators on import, so the row is silently rejected even if
+ * the import-side filter is missed.
+ */
+
+const TOTAL_LABEL = "Total";
+
+type SheetName =
+  | "Budget Entries"
+  | "Budget Limits"
+  | "Debts"
+  | "Payments"
+  | "Savings Goals"
+  | "Asset Accounts";
+
+// Budget Entries intentionally has no sum column. Income and expense rows are
+// both stored as positive numbers, so a raw SUM(Amount) lumps them together
+// into a meaningless total. Users who want a breakdown can add SUMIF formulas
+// keyed on the Type column. The Total row is still emitted (label only) for
+// visual consistency with other sheets and to act as the import-filter sentinel.
+const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
+  "Budget Entries": [],
+  "Budget Limits": ["MonthlyLimit"],
+  Debts: ["Balance", "OriginalBalance", "MinPayment"],
+  Payments: ["Amount"],
+  "Savings Goals": ["TargetAmount", "CurrentAmount"],
+  "Asset Accounts": ["Balance"],
+};
+
+const appendTotalRow = (
+  sheet: XLSX.WorkSheet,
+  rows: ReadonlyArray<Record<string, unknown>>,
+  columns: readonly string[],
+  sumColumns: readonly string[]
+): void => {
+  if (rows.length === 0) return;
+
+  const totalRowIdx = rows.length + 1; // 0-indexed: header at 0, data 1..N, total at N+1
+  const firstDataExcelRow = 2;
+  const lastDataExcelRow = rows.length + 1;
+
+  columns.forEach((colName, colIdx) => {
+    const cellRef = XLSX.utils.encode_cell({ r: totalRowIdx, c: colIdx });
+    if (colIdx === 0) {
+      sheet[cellRef] = { t: "s", v: TOTAL_LABEL };
+      return;
+    }
+    if (!sumColumns.includes(colName)) return;
+
+    const colLetter = XLSX.utils.encode_col(colIdx);
+    const sum = rows.reduce<number>((acc, row) => {
+      const v = row[colName];
+      return typeof v === "number" && Number.isFinite(v) ? acc + v : acc;
+    }, 0);
+    sheet[cellRef] = {
+      t: "n",
+      v: sum,
+      f: `SUM(${colLetter}${firstDataExcelRow}:${colLetter}${lastDataExcelRow})`,
+    };
+  });
+
+  const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1");
+  range.e.r = Math.max(range.e.r, totalRowIdx);
+  range.e.c = Math.max(range.e.c, columns.length - 1);
+  sheet["!ref"] = XLSX.utils.encode_range(range);
+};
+
 /* ── Filename helpers ── */
 
 const buildFilename = (format: SpreadsheetFormat): string => {
@@ -192,35 +267,71 @@ export const exportSpreadsheet = async (
 
   const wb = XLSX.utils.book_new();
 
-  const entrySheet = XLSX.utils.json_to_sheet(budgetEntries.map(budgetEntryToRow), {
+  const entryRows = budgetEntries.map(budgetEntryToRow);
+  const entrySheet = XLSX.utils.json_to_sheet(entryRows, {
     header: [...BUDGET_ENTRY_COLUMNS],
   });
+  appendTotalRow(
+    entrySheet,
+    entryRows,
+    BUDGET_ENTRY_COLUMNS,
+    SHEET_SUM_COLUMNS["Budget Entries"]
+  );
   XLSX.utils.book_append_sheet(wb, entrySheet, "Budget Entries");
 
   if (format === "xlsx") {
-    const limitsSheet = XLSX.utils.json_to_sheet(budgetLimits.map(budgetLimitToRow), {
+    const limitRows = budgetLimits.map(budgetLimitToRow);
+    const limitsSheet = XLSX.utils.json_to_sheet(limitRows, {
       header: [...BUDGET_LIMIT_COLUMNS],
     });
+    appendTotalRow(
+      limitsSheet,
+      limitRows,
+      BUDGET_LIMIT_COLUMNS,
+      SHEET_SUM_COLUMNS["Budget Limits"]
+    );
     XLSX.utils.book_append_sheet(wb, limitsSheet, "Budget Limits");
 
-    const debtsSheet = XLSX.utils.json_to_sheet(debts.map(debtToRow), {
+    const debtRows = debts.map(debtToRow);
+    const debtsSheet = XLSX.utils.json_to_sheet(debtRows, {
       header: [...DEBT_COLUMNS],
     });
+    appendTotalRow(debtsSheet, debtRows, DEBT_COLUMNS, SHEET_SUM_COLUMNS["Debts"]);
     XLSX.utils.book_append_sheet(wb, debtsSheet, "Debts");
 
-    const paymentsSheet = XLSX.utils.json_to_sheet(payments.map(paymentToRow), {
+    const paymentRows = payments.map(paymentToRow);
+    const paymentsSheet = XLSX.utils.json_to_sheet(paymentRows, {
       header: [...PAYMENT_COLUMNS],
     });
+    appendTotalRow(
+      paymentsSheet,
+      paymentRows,
+      PAYMENT_COLUMNS,
+      SHEET_SUM_COLUMNS["Payments"]
+    );
     XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
 
-    const goalsSheet = XLSX.utils.json_to_sheet(savingsGoals.map(savingsGoalToRow), {
+    const goalRows = savingsGoals.map(savingsGoalToRow);
+    const goalsSheet = XLSX.utils.json_to_sheet(goalRows, {
       header: [...SAVINGS_GOAL_COLUMNS],
     });
+    appendTotalRow(
+      goalsSheet,
+      goalRows,
+      SAVINGS_GOAL_COLUMNS,
+      SHEET_SUM_COLUMNS["Savings Goals"]
+    );
     XLSX.utils.book_append_sheet(wb, goalsSheet, "Savings Goals");
 
-    const accountsSheet = XLSX.utils.json_to_sheet(
-      assetAccounts.map(assetAccountToRow),
-      { header: [...ASSET_ACCOUNT_COLUMNS] }
+    const accountRows = assetAccounts.map(assetAccountToRow);
+    const accountsSheet = XLSX.utils.json_to_sheet(accountRows, {
+      header: [...ASSET_ACCOUNT_COLUMNS],
+    });
+    appendTotalRow(
+      accountsSheet,
+      accountRows,
+      ASSET_ACCOUNT_COLUMNS,
+      SHEET_SUM_COLUMNS["Asset Accounts"]
     );
     XLSX.utils.book_append_sheet(wb, accountsSheet, "Asset Accounts");
   }
