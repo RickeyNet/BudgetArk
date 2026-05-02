@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.8",
+    title: "Real Date Columns in Exports",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Excel exports now write date columns (Budget Entries Date, Debts GoalDate / CreatedAt, Payments Date, Savings Goals TargetDate / CreatedAt, Asset Accounts CreatedAt) as real Excel date cells instead of plain text. You can now sort, filter, and use date functions on these columns directly without running Text-to-Columns first.",
+      "The synthetic Emergency Fund row no longer shows a negative Current Amount when correction entries net the tracked reserve below zero — it's clamped at $0 to match what the import-side validators would accept anyway.",
+    ],
+  },
+  {
     version: "1.4.7",
     title: "Spreadsheet Export Fixes",
     releasedAt: "2026-05-02",

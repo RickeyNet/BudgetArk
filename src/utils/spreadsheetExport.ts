@@ -127,6 +127,58 @@ const formatDateOnly = (iso: string): string => {
   return idx > 0 ? iso.slice(0, idx) : iso;
 };
 
+/**
+ * Parses a YYYY-MM-DD string into a JS Date pinned to local noon. Local noon
+ * sidesteps DST/timezone edge cases that would otherwise let the date display
+ * shift by a day depending on the user's locale, while still producing the
+ * expected serial number for Excel's date system.
+ *
+ * Returns undefined for empty / unparseable input so the caller can leave the
+ * cell blank.
+ */
+const toExcelDate = (yyyymmdd: string): Date | undefined => {
+  if (!yyyymmdd) return undefined;
+  const m = yyyymmdd.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return undefined;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+};
+
+/**
+ * Converts string-typed YYYY-MM-DD cells in the listed columns into native
+ * Excel date cells (t:"d") with a yyyy-mm-dd display format. Used after
+ * json_to_sheet to give the user real date columns they can sort/filter
+ * with, instead of left-aligned text dates.
+ *
+ * Cells that are already typed (numeric, date, etc.) or that don't match the
+ * date pattern are left alone — the Total row label, blank cells, and CSV-
+ * style numeric inputs all pass through untouched.
+ */
+const promoteStringDateCells = (
+  sheet: XLSX.WorkSheet,
+  columns: readonly string[],
+  dateColumnNames: readonly string[]
+): void => {
+  if (!sheet["!ref"]) return;
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  for (const dateColName of dateColumnNames) {
+    const colIdx = columns.indexOf(dateColName);
+    if (colIdx === -1) continue;
+    for (let r = 1; r <= range.e.r; r++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c: colIdx });
+      const cell = sheet[cellRef];
+      if (!cell || cell.t !== "s" || typeof cell.v !== "string") continue;
+      const dateObj = toExcelDate(cell.v);
+      if (!dateObj) continue;
+      sheet[cellRef] = {
+        t: "d",
+        v: dateObj,
+        z: "yyyy-mm-dd",
+        w: cell.v.slice(0, 10),
+      };
+    }
+  }
+};
+
 const budgetEntryToRow = (entry: BudgetEntry) => ({
   ID: entry.id,
   Date: formatDateOnly(entry.date),
@@ -358,6 +410,17 @@ const buildBudgetEntriesSheet = (
       const value = row[col];
       if (value === undefined || value === null || value === "") return;
       const ref = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+      if (col === "Date" && typeof value === "string") {
+        // Promote YYYY-MM-DD strings to native Excel date cells so users
+        // get real date sorting/filtering. The SUMIFS month-bucket
+        // formulas rely on this typing too — they compare against
+        // DATE(...) serial values, not text.
+        const dateObj = toExcelDate(value);
+        sheet[ref] = dateObj
+          ? { t: "d", v: dateObj, z: "yyyy-mm-dd", w: value.slice(0, 10) }
+          : { t: "s", v: value };
+        return;
+      }
       if (typeof value === "number") {
         sheet[ref] = Number.isFinite(value) ? { t: "n", v: value } : { t: "s", v: "" };
       } else {
@@ -461,11 +524,12 @@ const buildBudgetEntriesSheet = (
   const dateRange = `${dateColLetter}${firstDataExcelRow}:${dateColLetter}${lastDataExcelRow}`;
 
   // Patch per-month subtotal Amount cells with live SUMIFS formulas now
-  // that we know the full data range. Date column is YYYY-MM-DD text, so
-  // string comparison with ">="&"YYYY-MM-01" / "<"&"YYYY-(MM+1)-01" sorts
-  // correctly. "Unknown" buckets stay as cached values only — there's no
-  // valid date range to filter on.
-  const nextMonthFirstDay = (ym: string): string => {
+  // that we know the full data range. Date cells are typed as Excel dates
+  // (serial numbers), so the criteria use DATE(y,m,1) to do a numeric
+  // comparison — text comparisons would silently fail against date-typed
+  // cells. "Unknown" buckets stay as cached values only — there's no
+  // valid month to anchor a DATE() range on.
+  const nextMonthYM = (ym: string): { year: number; month: number } => {
     const [yStr, mStr] = ym.split("-");
     let y = Number(yStr);
     let m = Number(mStr) + 1;
@@ -473,14 +537,18 @@ const buildBudgetEntriesSheet = (
       y += 1;
       m = 1;
     }
-    return `${y}-${String(m).padStart(2, "0")}-01`;
+    return { year: y, month: m };
   };
   for (const sub of monthSubtotals) {
     if (sub.monthKey === "Unknown") continue;
-    const firstDay = `${sub.monthKey}-01`;
-    const nextFirst = nextMonthFirstDay(sub.monthKey);
-    const incomeFormula = `SUMIFS(${amountRange},${typeRange},"income",${dateRange},">="&"${firstDay}",${dateRange},"<"&"${nextFirst}")`;
-    const expenseFormula = `SUMIFS(${amountRange},${typeRange},"expense",${dateRange},">="&"${firstDay}",${dateRange},"<"&"${nextFirst}")`;
+    const [yStr, mStr] = sub.monthKey.split("-");
+    const startY = Number(yStr);
+    const startM = Number(mStr);
+    const { year: nextY, month: nextM } = nextMonthYM(sub.monthKey);
+    const startDate = `DATE(${startY},${startM},1)`;
+    const nextDate = `DATE(${nextY},${nextM},1)`;
+    const incomeFormula = `SUMIFS(${amountRange},${typeRange},"income",${dateRange},">="&${startDate},${dateRange},"<"&${nextDate})`;
+    const expenseFormula = `SUMIFS(${amountRange},${typeRange},"expense",${dateRange},">="&${startDate},${dateRange},"<"&${nextDate})`;
     const cellRef = XLSX.utils.encode_cell({ r: sub.row0, c: amountColIdx });
     const cell = sheet[cellRef];
     if (!cell) continue;
@@ -651,7 +719,11 @@ export const exportSpreadsheet = async (
         name: "Emergency Fund",
         category: "emergency_fund",
         targetAmount: keelTarget,
-        currentAmount: savingsReserve,
+        // Clamp to zero. A net-negative reserve can happen if the user has
+        // logged correction entries that exceed their tracked deposits;
+        // showing a negative current amount would look like a bug, and
+        // import-side validators would reject the row anyway.
+        currentAmount: Math.max(0, savingsReserve),
         createdAt: "",
         updatedAt: "",
       });
@@ -685,6 +757,7 @@ export const exportSpreadsheet = async (
       header: [...DEBT_COLUMNS],
     });
     appendTotalRow(debtsSheet, debtRows, DEBT_COLUMNS, SHEET_SUM_COLUMNS["Debts"]);
+    promoteStringDateCells(debtsSheet, DEBT_COLUMNS, ["GoalDate", "CreatedAt"]);
     XLSX.utils.book_append_sheet(wb, debtsSheet, "Debts");
 
     const paymentRows = payments.map(paymentToRow);
@@ -697,6 +770,7 @@ export const exportSpreadsheet = async (
       PAYMENT_COLUMNS,
       SHEET_SUM_COLUMNS["Payments"]
     );
+    promoteStringDateCells(paymentsSheet, PAYMENT_COLUMNS, ["Date"]);
     XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
 
     const goalRows = goalsForSheet.map(savingsGoalToRow);
@@ -710,6 +784,7 @@ export const exportSpreadsheet = async (
       SHEET_SUM_COLUMNS["Savings Goals"],
       { excludeFirstColumnEquals: DERIVED_EMERGENCY_FUND_ID }
     );
+    promoteStringDateCells(goalsSheet, SAVINGS_GOAL_COLUMNS, ["TargetDate", "CreatedAt"]);
     XLSX.utils.book_append_sheet(wb, goalsSheet, "Savings Goals");
 
     const accountRows = assetAccounts.map(assetAccountToRow);
@@ -722,6 +797,7 @@ export const exportSpreadsheet = async (
       ASSET_ACCOUNT_COLUMNS,
       SHEET_SUM_COLUMNS["Asset Accounts"]
     );
+    promoteStringDateCells(accountsSheet, ASSET_ACCOUNT_COLUMNS, ["CreatedAt"]);
     XLSX.utils.book_append_sheet(wb, accountsSheet, "Asset Accounts");
   }
 

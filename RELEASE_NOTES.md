@@ -1,5 +1,11 @@
 # BudgetArk Release Notes
 
+## v1.4.8 - Real Date Columns in Exports (2026-05-02)
+
+- Excel exports now write date columns as native Excel date cells (`t:"d"` with `yyyy-mm-dd` format) instead of left-aligned text. Affects Budget Entries `Date`, Debts `GoalDate`/`CreatedAt`, Payments `Date`, Savings Goals `TargetDate`/`CreatedAt`, Asset Accounts `CreatedAt`. Users can now sort/filter/use date functions on these columns directly without a manual Text-to-Columns pass.
+- SUMIFS month-bucket criteria on the Budget Entries sheet switched from text comparison (`">="&"YYYY-MM-01"`) to numeric date comparison (`">="&DATE(y,m,1)`) so the live per-month subtotals continue to work against the new date-typed cells.
+- Synthetic Emergency Fund row's `CurrentAmount` is now clamped to zero. A net-negative tracked reserve (rare — only happens when correction entries exceed deposits) used to display a negative number that import-side validators would reject anyway. Cleaner display, no behavior change on round-trip.
+
 ## v1.4.7 - Spreadsheet Export Fixes (2026-05-02)
 
 - Recurring entries linked to an asset account now preserve their `lastAppliedMonth` stamp across spreadsheet round-trips. Earlier, importing a spreadsheet stripped that field, so the app re-applied the monthly delta for every month between the entry's start date and today on the next Budget screen open — silently doubling (or worse) the tracked deposits in the linked AssetAccount. New `LastAppliedMonth` column on the Budget Entries sheet round-trips the value, validated as YYYY-MM on import.
