@@ -23,6 +23,7 @@ import {
 } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
+import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   AssetAccount,
   BudgetEntry,
@@ -36,6 +37,18 @@ export type SpreadsheetFormat = "csv" | "xlsx";
 
 /** Schema version. Bump if column shape changes incompatibly. */
 export const SPREADSHEET_SCHEMA_VERSION = 1;
+
+/**
+ * Sentinel ID for the synthetic Emergency Fund row written to the Savings
+ * Goals sheet when the user tracks their emergency fund implicitly (via the
+ * Keel milestone reserve + Savings/Retirement/Investing budget entries) but
+ * has no explicit `emergency_fund` SavingsGoal record. Mirrors the synthetic
+ * goal that BridgeScreen surfaces in the Accounts UI.
+ *
+ * spreadsheetImport.ts skips rows with this ID so round-trip exports don't
+ * silently materialize the synthetic goal as a real persisted record.
+ */
+export const DERIVED_EMERGENCY_FUND_ID = "__derived_emergency_fund__";
 
 /* ── Sheet column definitions (single source of truth, mirrored in import) ── */
 
@@ -255,15 +268,56 @@ export interface SpreadsheetExportResult {
 export const exportSpreadsheet = async (
   format: SpreadsheetFormat
 ): Promise<SpreadsheetExportResult> => {
-  const [budgetEntries, budgetLimits, debts, payments, savingsGoals, assetAccounts] =
-    await Promise.all([
-      getBudgetEntries(),
-      getCategoryBudgetLimits(),
-      getDebts(),
-      getPayments(),
-      getSavingsGoals(),
-      getAssetAccounts(),
-    ]);
+  const [
+    budgetEntries,
+    budgetLimits,
+    debts,
+    payments,
+    savingsGoals,
+    assetAccounts,
+    milestonePlan,
+  ] = await Promise.all([
+    getBudgetEntries(),
+    getCategoryBudgetLimits(),
+    getDebts(),
+    getPayments(),
+    getSavingsGoals(),
+    getAssetAccounts(),
+    getDebtMilestonePlan(),
+  ]);
+
+  // Build the savings-goal list shown in the spreadsheet. If the user has no
+  // explicit emergency_fund goal but is tracking one via the Keel milestone
+  // and Savings/Retirement/Investing budget entries (the same derivation
+  // BridgeScreen runs), synthesize a row so the spreadsheet matches what the
+  // Accounts UI displays. The synthetic row carries DERIVED_EMERGENCY_FUND_ID
+  // so spreadsheetImport.rowToSavingsGoal can skip it on round-trip.
+  const goalsForSheet: SavingsGoal[] = [...savingsGoals];
+  const hasExplicitEmergencyFund = savingsGoals.some(
+    (goal) => goal.category === "emergency_fund"
+  );
+  if (!hasExplicitEmergencyFund) {
+    const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
+    const keelTarget = keelStep?.targetAmount ?? 0;
+    const savingsReserve = budgetEntries
+      .filter(
+        (entry) =>
+          entry.type === "expense" &&
+          ["Savings", "Retirement", "Investing"].includes(entry.category)
+      )
+      .reduce((sum, entry) => sum + entry.amount, 0);
+    if (keelTarget > 0 || savingsReserve > 0) {
+      goalsForSheet.push({
+        id: DERIVED_EMERGENCY_FUND_ID,
+        name: "Emergency Fund",
+        category: "emergency_fund",
+        targetAmount: keelTarget,
+        currentAmount: savingsReserve,
+        createdAt: "",
+        updatedAt: "",
+      });
+    }
+  }
 
   const wb = XLSX.utils.book_new();
 
@@ -311,7 +365,7 @@ export const exportSpreadsheet = async (
     );
     XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
 
-    const goalRows = savingsGoals.map(savingsGoalToRow);
+    const goalRows = goalsForSheet.map(savingsGoalToRow);
     const goalsSheet = XLSX.utils.json_to_sheet(goalRows, {
       header: [...SAVINGS_GOAL_COLUMNS],
     });

@@ -25,6 +25,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile } from "expo-file-system";
 import * as XLSX from "xlsx";
 import { importFromString, type ImportResult } from "./importData";
+import { DERIVED_EMERGENCY_FUND_ID } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
 import {
   BUDGET_CATEGORIES,
@@ -368,6 +369,12 @@ const rowToSavingsGoal = (row: Record<string, unknown>) => {
   }
 
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
+  // Skip the synthetic Emergency Fund row that the exporter writes when a
+  // user tracks their EF implicitly through Keel + Savings entries. Importing
+  // it would materialize a duplicate explicit goal on every round-trip.
+  if (id === DERIVED_EMERGENCY_FUND_ID) {
+    return null;
+  }
   const targetDate = parseDate(get(row, "TargetDate", "Target Date"));
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
   return {
