@@ -7,6 +7,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.5",
+    title: "Per-Month Budget Entries Export",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Excel and CSV exports now sort the Budget Entries sheet by date and add an Income / Expense / Net subtotal block after each month — labeled with the YYYY-MM key — so you can cross-check the app's per-screen monthly totals without filtering or pivoting yourself. The grand-total block stays at the bottom with live SUMIF formulas.",
+    ],
+  },
+  {
     version: "1.4.4",
     title: "Budget Entries Totals Breakdown",
     releasedAt: "2026-05-02",
