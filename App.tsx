@@ -304,16 +304,11 @@ const AppContent: React.FC = () => {
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              v{latestRelease.version} — {latestRelease.title}
+              {pendingUpdate?.message ?? "A new update is ready to install."}
             </Text>
-            {latestRelease.highlights.slice(0, 3).map((line, i) => (
-              <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
-                {"\u2022"} {line}
-              </Text>
-            ))}
-            {latestRelease.highlights.length > 3 && (
+            {pendingUpdate?.createdAt && (
               <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                +{latestRelease.highlights.length - 3} more
+                Published {formatDateTime(pendingUpdate.createdAt)}
               </Text>
             )}
             <View style={styles.dialogActions}>

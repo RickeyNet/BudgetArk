@@ -63,6 +63,7 @@ import {
   setLastUpdateCheckAt,
   setManualUpdateMode,
 } from "../storage/updatePreferencesStorage";
+import { setOtaUpdateInstalled } from "../storage/releaseNotesStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -536,6 +537,11 @@ const ProfileScreen: React.FC = () => {
 
   const installPendingUpdate = useCallback(async () => {
     try {
+      // Mark the OTA install so the post-reload bootstrap suppresses the
+      // "what's new" prompt — the install dialog already showed it. The
+      // auto-install path in App.tsx sets the same flag; without this the
+      // manual install path would re-show release notes after reload.
+      await setOtaUpdateInstalled();
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error: any) {

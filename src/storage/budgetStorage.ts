@@ -13,8 +13,23 @@ const getMonthKey = (date: Date): string => {
   return `${date.getFullYear()}-${month}`;
 };
 
+/**
+ * Records persisted before `updatedAt` existed default to the epoch. That way
+ * any fresh edit wins last-write-wins on the next sync and we don't need a
+ * separate migration pass.
+ */
+const LIMIT_LEGACY_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+
+const normalizeLimit = (limit: CategoryBudgetLimit): CategoryBudgetLimit => ({
+  ...limit,
+  updatedAt:
+    typeof limit.updatedAt === "string" && limit.updatedAt
+      ? limit.updatedAt
+      : LIMIT_LEGACY_TIMESTAMP,
+});
+
 const cloneLimits = (limits: CategoryBudgetLimit[]): CategoryBudgetLimit[] =>
-  limits.map((limit) => ({ ...limit }));
+  limits.map((limit) => ({ ...normalizeLimit(limit) }));
 
 const getLimitHistory = async (): Promise<BudgetLimitHistory> => {
   const raw = await EncryptedStorage.getItem(BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH);
@@ -22,7 +37,13 @@ const getLimitHistory = async (): Promise<BudgetLimitHistory> => {
   try {
     const parsed = JSON.parse(raw) as BudgetLimitHistory;
     if (parsed && typeof parsed === "object") {
-      return parsed;
+      const normalized: BudgetLimitHistory = {};
+      for (const [monthKey, limits] of Object.entries(parsed)) {
+        if (Array.isArray(limits)) {
+          normalized[monthKey] = limits.map(normalizeLimit);
+        }
+      }
+      return normalized;
     }
     return {};
   } catch {

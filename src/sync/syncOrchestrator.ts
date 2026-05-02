@@ -18,85 +18,124 @@ import type { SyncResult, SyncStatus, SyncDiff } from "./types";
 
 export type SyncStatusCallback = (status: SyncStatus) => void;
 
+interface ServerSyncHandle {
+  result: Promise<SyncResult>;
+  cancel: () => void;
+}
+
 /**
  * Runs a full sync cycle as the server (waits for partner to connect).
  * Used when this device is discovered first.
+ *
+ * Returns a handle so the caller can cancel a pending server-mode sync —
+ * e.g. when the fallback path in `syncNow` discovers the partner mid-wait
+ * and switches to client mode. Cancelling tears down the TCP server and
+ * stops Zeroconf advertising so they don't leak.
  */
-const syncAsServer = async (
-  onStatus: SyncStatusCallback
-): Promise<SyncResult> => {
-  const pairing = await getPairingState();
-  if (!pairing) throw new Error("Not paired");
+const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
+  let cancelHandler: () => void = () => {
+    Discovery.stop();
+  };
+  let cancelled = false;
 
-  const user = await getOrCreateUser();
-  const syncMeta = await getSyncMetadata();
+  const result = (async (): Promise<SyncResult> => {
+    const pairing = await getPairingState();
+    if (!pairing) throw new Error("Not paired");
 
-  onStatus("connecting");
+    const user = await getOrCreateUser();
+    const syncMeta = await getSyncMetadata();
 
-  // Start TCP server — publish via Zeroconf as soon as the port is assigned
-  // (before any client connects) so the partner can discover us.
-  const { connection, port } = await Transport.startServer(
-    user.id,
-    pairing.partnerId,
-    pairing.sharedSecret,
-    (listenPort) => {
-      Discovery.publish(user.id, listenPort);
-    }
-  );
+    onStatus("connecting");
 
-  return new Promise((resolve, reject) => {
-    let partnerDiff: SyncDiff | null = null;
-    const timeout = setTimeout(() => {
+    // Start TCP server — publish via Zeroconf as soon as the port is assigned
+    // (before any client connects) so the partner can discover us.
+    const { connection, port } = await Transport.startServer(
+      user.id,
+      pairing.partnerId,
+      pairing.sharedSecret,
+      (listenPort, closeServer) => {
+        // While we're waiting for a partner, cancel = close the listening
+        // server (which rejects the startServer promise) and stop discovery.
+        cancelHandler = () => {
+          closeServer();
+          Discovery.stop();
+        };
+        if (cancelled) {
+          cancelHandler();
+          return;
+        }
+        Discovery.publish(user.id, listenPort);
+      }
+    );
+
+    // After a partner has connected, cancel = tear down the live connection
+    // (which also closes the underlying server) and stop discovery.
+    cancelHandler = () => {
       connection.close();
       Discovery.stop();
-      reject(new Error("Sync timed out waiting for partner"));
-    }, 30_000);
+    };
 
-    connection.onMessage(async (msg, payload) => {
-      try {
-        if (msg.type === "SYNC_REQUEST") {
-          // Received partner's diff
-          partnerDiff = JSON.parse(payload) as SyncDiff;
-
-          onStatus("syncing");
-
-          // Apply incoming diff
-          const received = await applyIncomingDiff(partnerDiff);
-
-          // Compute and send our diff
-          const ourDiff = await computeOutgoingDiff(syncMeta.lastSyncTimestamp);
-          connection.send("SYNC_RESPONSE", ourDiff);
-
-          // Wait for ACK
-          connection.onMessage(async (ackMsg) => {
-            if (ackMsg.type === "SYNC_ACK") {
-              clearTimeout(timeout);
-
-              const now = new Date().toISOString();
-              await updateSyncMetadata(now);
-
-              connection.close();
-              Discovery.stop();
-              Transport.resetReplayProtection();
-
-              onStatus("complete");
-              resolve({
-                success: true,
-                recordsSent: countDiffEntries(ourDiff),
-                recordsReceived: received,
-                timestamp: now,
-              });
-            }
-          });
-        }
-      } catch (err) {
-        clearTimeout(timeout);
+    return new Promise<SyncResult>((resolve, reject) => {
+      const timeout = setTimeout(() => {
         connection.close();
         Discovery.stop();
-        reject(err);
-      }
+        reject(new Error("Sync timed out waiting for partner"));
+      }, 30_000);
+
+      connection.onMessage(async (msg, payload) => {
+        try {
+          if (msg.type === "SYNC_REQUEST") {
+            // Received partner's diff
+            const partnerDiff = JSON.parse(payload) as SyncDiff;
+
+            onStatus("syncing");
+
+            // Apply incoming diff
+            const received = await applyIncomingDiff(partnerDiff);
+
+            // Compute and send our diff
+            const ourDiff = await computeOutgoingDiff(syncMeta.lastSyncTimestamp);
+            connection.send("SYNC_RESPONSE", ourDiff);
+
+            // Wait for ACK
+            connection.onMessage(async (ackMsg) => {
+              if (ackMsg.type === "SYNC_ACK") {
+                clearTimeout(timeout);
+
+                const now = new Date().toISOString();
+                await updateSyncMetadata(now);
+
+                connection.close();
+                Discovery.stop();
+                Transport.resetReplayProtection();
+
+                onStatus("complete");
+                resolve({
+                  success: true,
+                  recordsSent: countDiffEntries(ourDiff),
+                  recordsReceived: received,
+                  timestamp: now,
+                });
+              }
+            });
+          }
+        } catch (err) {
+          clearTimeout(timeout);
+          connection.close();
+          Discovery.stop();
+          reject(err);
+        }
+      });
     });
-  });
+  })();
+
+  return {
+    result,
+    cancel: () => {
+      cancelled = true;
+      cancelHandler();
+    },
+  };
 };
 
 /**
@@ -204,19 +243,21 @@ export const syncNow = async (
     // Partner not found — start server and advertise, but also keep
     // scanning in case the partner starts their server around the same time.
     // This avoids the deadlock where both devices become servers.
-    const serverPromise = syncAsServer(onStatus);
+    const serverHandle = syncAsServer(onStatus);
 
     // Scan again — if partner also started a server we'll find them.
     const retryPeer = await Discovery.discoverPartner(pairing.partnerId, 8_000);
     if (retryPeer) {
-      // Found partner's server — connect as client instead.
-      // Let the abandoned server promise timeout silently.
-      serverPromise.catch(() => {});
+      // Found partner's server — tear down our own server + advertising
+      // before switching to client mode, so we don't leak a listening TCP
+      // socket and a stale Zeroconf publish.
+      serverHandle.cancel();
+      serverHandle.result.catch(() => {});
       return await syncAsClient(retryPeer.host, retryPeer.port, onStatus);
     }
 
     // No luck — wait for partner to connect to our server
-    return await serverPromise;
+    return await serverHandle.result;
   } catch (err) {
     onStatus("error");
     Discovery.stop();
@@ -238,6 +279,7 @@ const countDiffEntries = (diff: SyncDiff): number => {
     diff.payments.length +
     diff.budgetEntries.length +
     diff.savingsGoals.length +
+    (diff.assetAccounts?.length ?? 0) +
     diff.budgetLimits.length +
     (diff.debtMilestonePlan ? 1 : 0) +
     (diff.payoffStrategy ? 1 : 0)

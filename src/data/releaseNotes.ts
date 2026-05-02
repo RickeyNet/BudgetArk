@@ -7,6 +7,19 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.2",
+    title: "Sync & UI Reliability Fixes",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Fixed paired-device sync so a freshly edited budget limit on one device no longer gets rolled back by stale data syncing in later from the other. Limits now resolve last-write-wins per category.",
+      "Fixed the sync fallback path so retrying mid-discovery cleanly tears down the local listener instead of leaving an orphaned TCP server and Zeroconf advertisement running in the background.",
+      "Fixed sync success messaging so the count includes asset account changes — earlier the success toast under-reported how much actually moved.",
+      "Fixed debt cards so the expanded card follows your payoff strategy — switching between Avalanche and Snowball now correctly opens the new priority debt and collapses the previous one.",
+      "Fixed the OTA update prompt so it shows the message bundled with the fetched update rather than highlights from the version you're already running.",
+      "Fixed manual OTA installs from Profile → Updates so the release notes prompt no longer reappears after the reload — matching the auto-install flow.",
+    ],
+  },
+  {
     version: "1.4.1",
     title: "Update Prompt Fix & Debt Celebration",
     releasedAt: "2026-04-30",

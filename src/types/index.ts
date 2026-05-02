@@ -160,6 +160,12 @@ export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt" | "update
 export interface CategoryBudgetLimit {
   category: BudgetCategory;
   monthlyLimit: number;
+  /**
+   * Last-write-wins timestamp for sync conflict resolution. Limits saved
+   * before this field existed are normalized to the epoch on read, so any
+   * fresh edit will win over them on the first paired sync.
+   */
+  updatedAt: string;
 }
 
 /* ─── Savings Goal Types ─── */

@@ -7,7 +7,11 @@
  */
 
 import { getDebts, saveDebts, getPayments } from "../storage/debtStorage";
-import { getBudgetEntries, saveBudgetEntries } from "../storage/budgetStorage";
+import {
+  getBudgetEntries,
+  saveBudgetEntries,
+  getAllLimitsByMonth,
+} from "../storage/budgetStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts, saveAssetAccounts } from "../storage/assetAccountStorage";
 import {
@@ -26,6 +30,7 @@ import type {
   SavingsGoal,
   AssetAccount,
   DebtMilestonePlan,
+  CategoryBudgetLimit,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
@@ -62,19 +67,20 @@ export const computeOutgoingDiff = async (
       .map((item) => ({ action: "upsert" as const, record: item }));
   };
 
-  // Load full budget limits history
+  // Load full budget limits history. On first sync we send everything;
+  // otherwise filter per-category by updatedAt so unchanged limits don't
+  // get re-broadcast every sync. Storage normalizes missing updatedAt to
+  // the epoch — those still ride along on first sync, then get superseded
+  // by any fresh remote edit.
   const budgetLimits: BudgetLimitDiff[] = [];
-  const limitsRaw = await EncryptedStorage.getItem(BUDGET_LIMITS_KEY);
-  if (limitsRaw) {
-    try {
-      const history = JSON.parse(limitsRaw) as Record<string, any[]>;
-      for (const [monthKey, limits] of Object.entries(history)) {
-        if (Array.isArray(limits)) {
-          budgetLimits.push({ monthKey, limits });
-        }
-      }
-    } catch {
-      // Skip corrupt data
+  const history = await getAllLimitsByMonth();
+  const isFirstSync = !lastSyncTimestamp;
+  for (const [monthKey, limits] of Object.entries(history)) {
+    const changed = isFirstSync
+      ? limits
+      : limits.filter((limit) => new Date(limit.updatedAt).getTime() > since);
+    if (changed.length > 0) {
+      budgetLimits.push({ monthKey, limits: changed });
     }
   }
 
@@ -181,35 +187,36 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     changedCount += diff.assetAccounts.length;
   }
 
-  // Merge budget limits (union of months, per-month union of categories)
+  // Merge budget limits (union of months, per-category last-write-wins).
+  // Use getAllLimitsByMonth so legacy local rows are normalized to the epoch
+  // and lose to any incoming row carrying a real timestamp.
   if (diff.budgetLimits.length > 0) {
-    const limitsRaw = await EncryptedStorage.getItem(BUDGET_LIMITS_KEY);
-    let localHistory: Record<string, any[]> = {};
-    if (limitsRaw) {
-      try {
-        localHistory = JSON.parse(limitsRaw);
-      } catch {
-        localHistory = {};
-      }
-    }
+    const localHistory = (await getAllLimitsByMonth()) as Record<
+      string,
+      CategoryBudgetLimit[]
+    >;
+    const merged: Record<string, CategoryBudgetLimit[]> = { ...localHistory };
+
+    const limitTime = (limit: CategoryBudgetLimit | undefined): number =>
+      limit ? new Date(limit.updatedAt).getTime() : -Infinity;
 
     for (const incoming of diff.budgetLimits) {
-      const localLimits = Array.isArray(localHistory[incoming.monthKey])
-        ? localHistory[incoming.monthKey]
+      const localLimits = Array.isArray(merged[incoming.monthKey])
+        ? merged[incoming.monthKey]
         : [];
-      const localCatMap = new Map(
-        localLimits.map((l: any) => [l.category, l])
+      const localCatMap = new Map<string, CategoryBudgetLimit>(
+        localLimits.map((l) => [l.category, l])
       );
-      for (const limit of incoming.limits) {
-        localCatMap.set(limit.category, limit);
+      for (const remote of incoming.limits) {
+        const local = localCatMap.get(remote.category);
+        if (limitTime(remote) >= limitTime(local)) {
+          localCatMap.set(remote.category, remote);
+        }
       }
-      localHistory[incoming.monthKey] = Array.from(localCatMap.values());
+      merged[incoming.monthKey] = Array.from(localCatMap.values());
     }
 
-    await EncryptedStorage.setItem(
-      BUDGET_LIMITS_KEY,
-      JSON.stringify(localHistory)
-    );
+    await EncryptedStorage.setItem(BUDGET_LIMITS_KEY, JSON.stringify(merged));
     changedCount += diff.budgetLimits.length;
   }
 

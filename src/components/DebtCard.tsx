@@ -17,7 +17,7 @@
  * when sibling debt cards update.
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -67,6 +67,13 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   const [expanded, setExpanded] = useState(isFocusDebt);
   const [showPayInput, setShowPayInput] = useState(false);
   const [payAmount, setPayAmount] = useState("");
+
+  // Keep expanded state in sync with focus changes — when the avalanche/snowball
+  // strategy switches the focus debt, the previously-focused card should
+  // collapse and the newly-focused card should open.
+  useEffect(() => {
+    setExpanded(isFocusDebt);
+  }, [isFocusDebt]);
 
   /** Derived calculations */
   const percentPaid = debt.originalBalance > 0

@@ -126,6 +126,7 @@ export const startServer = (
 ): Promise<{ connection: TransportConnection; port: number }> => {
   return new Promise((resolve, reject) => {
     let messageCallback: ((msg: SyncMessage, payload: string) => void) | null = null;
+    let connected = false;
 
     const server = TcpSocket.createServer((socket: any) => {
       let buffer = Buffer.alloc(0);
@@ -162,11 +163,19 @@ export const startServer = (
         server.close();
       });
 
+      connected = true;
       resolve({ connection, port: (server.address() as any)?.port ?? 0 });
     });
 
     server.on("error", (err: any) => {
-      reject(err);
+      if (!connected) reject(err);
+    });
+
+    // Reject the promise if the server is closed before any client connects.
+    // Lets callers cancel a pending server-mode sync (e.g. when fallback path
+    // discovers the partner mid-wait and switches to client mode).
+    server.on("close", () => {
+      if (!connected) reject(new Error("Sync server closed before partner connected"));
     });
 
     // Listen on port 0 to let the OS assign an available port.

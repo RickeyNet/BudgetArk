@@ -1,5 +1,14 @@
 # BudgetArk Release Notes
 
+## v1.4.2 - Sync & UI Reliability Fixes (2026-05-02)
+
+- Fixed paired-device sync so a freshly edited budget limit on one device no longer gets rolled back by stale data syncing in later from the other. Limits now resolve last-write-wins per category, matching how debts and payments already merge.
+- Fixed the sync fallback path so retrying mid-discovery cleanly tears down the local listener instead of leaving an orphaned TCP server and Zeroconf advertisement running in the background.
+- Fixed sync success messaging so the count includes asset account changes - earlier the success toast under-reported how much actually moved between devices.
+- Fixed debt cards so the expanded card follows your payoff strategy - switching between Avalanche and Snowball now correctly opens the new priority debt and collapses the previous one.
+- Fixed the OTA update prompt so it shows the message bundled with the fetched update rather than highlights from the version you're already running.
+- Fixed manual OTA installs from **Profile → Updates** so the release notes prompt no longer reappears after the reload - matching the auto-install flow.
+
 ## v1.4.1 - Update Prompt Fix, Bridge Tab & Celebration (2026-04-30)
 
 - Added **The Bridge**, a new default home tab centered in the navigation bar for net worth, account balances, and progress at a glance.

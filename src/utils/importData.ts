@@ -214,10 +214,14 @@ const isBudgetEntryItem = (item: unknown): item is Record<string, unknown> => {
 
 const isBudgetLimitItem = (item: unknown): item is Record<string, unknown> => {
   if (!isObject(item)) return false;
+  // updatedAt is optional here so older exports and spreadsheet rows still
+  // import. The merge step below stamps a real timestamp on rows that lack
+  // one so they carry conflict-resolution metadata going forward.
   return (
     typeof item.category === "string" &&
     VALID_CATEGORIES.has(item.category) &&
-    isSafeNumber(item.monthlyLimit, { min: 0.01, max: LIMITS.MAX_MONEY })
+    isSafeNumber(item.monthlyLimit, { min: 0.01, max: LIMITS.MAX_MONEY }) &&
+    (item.updatedAt === undefined || isValidDateValue(item.updatedAt))
   );
 };
 
@@ -639,6 +643,20 @@ export const importFromString = async (
       incomingMap = { [getCurrentMonthKey()]: sanitized.budgetLimits };
     }
     if (!incomingMap) return null;
+
+    // Stamp a real updatedAt on imported rows that lack one (older exports,
+    // spreadsheet rows). Without this, later paired-device sync would treat
+    // these as epoch-time and any stale remote write could overwrite a
+    // freshly imported limit. Using `now` keeps the import authoritative
+    // until the user (or partner) edits it again.
+    const importStampIso = new Date().toISOString();
+    for (const limits of Object.values(incomingMap)) {
+      for (const limit of limits) {
+        if (typeof (limit as any).updatedAt !== "string" || !(limit as any).updatedAt) {
+          (limit as any).updatedAt = importStampIso;
+        }
+      }
+    }
 
     if (mode === "replace") {
       const totalItems = Object.values(incomingMap).reduce(

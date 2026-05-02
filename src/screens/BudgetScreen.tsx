@@ -736,12 +736,15 @@ const BudgetScreen: React.FC = () => {
     const parsedLimit = parseFloat(limitInput);
     const withoutCategory = limits.filter((item) => item.category !== limitModalCategory);
 
+    // Stamp the edit so paired-device sync can resolve last-write-wins per
+    // category. Untouched limits keep their existing updatedAt.
+    const now = new Date().toISOString();
     const updatedLimits =
       Number.isNaN(parsedLimit) || parsedLimit <= 0
         ? withoutCategory
         : [
             ...withoutCategory,
-            { category: limitModalCategory, monthlyLimit: parsedLimit },
+            { category: limitModalCategory, monthlyLimit: parsedLimit, updatedAt: now },
           ];
 
     setLimits(updatedLimits);
