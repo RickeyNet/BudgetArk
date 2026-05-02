@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.4",
+    title: "Budget Entries Totals Breakdown",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Excel exports now end the Budget Entries sheet with three labeled Total rows — Income Total, Expense Total, and Net (Income − Expense) — so you can cross-check against the app's per-screen numbers without doing the gross math yourself. Earlier the Total row showed only a single Net figure, which made it hard to reconcile against the app's Total Expenses display.",
+      "Each total uses a live SUMIF formula so Excel/Sheets recompute as you edit rows, with a cached numeric value alongside so CSV export still shows real numbers.",
+    ],
+  },
+  {
     version: "1.4.3",
     title: "Spreadsheet Export Polish",
     releasedAt: "2026-05-02",
