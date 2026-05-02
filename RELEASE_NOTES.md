@@ -1,5 +1,10 @@
 # BudgetArk Release Notes
 
+## v1.4.3 - Spreadsheet Export Polish (2026-05-02)
+
+- Excel exports now include your Emergency Fund on the Savings Goals sheet even when you're tracking it implicitly through the Keel milestone and Savings/Retirement/Investing entries - earlier it only appeared if you'd created an explicit emergency fund goal. The synthetic row carries a sentinel ID so re-importing the same workbook does not materialize a duplicate persisted goal.
+- Budget Entries sheet now shows a real net total (income minus expense) in the Total row's Amount cell, with a live SUMIF formula so Excel/Sheets recompute as you edit. Earlier the Total row was label-only because a plain sum would have mixed income and expense into a meaningless figure.
+
 ## v1.4.2 - Sync & UI Reliability Fixes (2026-05-02)
 
 - Fixed paired-device sync so a freshly edited budget limit on one device no longer gets rolled back by stale data syncing in later from the other. Limits now resolve last-write-wins per category, matching how debts and payments already merge.

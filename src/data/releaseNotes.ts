@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.3",
+    title: "Spreadsheet Export Polish",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Excel exports now include your Emergency Fund on the Savings Goals sheet even when you're tracking it implicitly through the Keel milestone and Savings/Retirement/Investing entries — earlier it only appeared if you'd created an explicit emergency fund goal.",
+      "Budget Entries sheet now shows a real net total (income minus expense) in the Total row's Amount cell, with a live SUMIF formula so Excel/Sheets recompute as you edit. Earlier the Total row was label-only because a plain sum mixed income and expense.",
+    ],
+  },
+  {
     version: "1.4.2",
     title: "Sync & UI Reliability Fixes",
     releasedAt: "2026-05-02",
