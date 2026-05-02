@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.9",
+    title: "Hardened Partner Sync",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Incoming sync diffs from a paired partner are now fully validated record-by-record before anything is written to your local data. A malformed or out-of-range record (bad amount, unknown category, missing id, etc.) causes the entire sync to be rejected, so a compromised or misbehaving partner device can't silently overwrite your debts, balances, payments, or budgets with garbage.",
+      "Same shape/range checks the JSON import already uses — now shared between import and sync so both trust boundaries enforce the same rules.",
+    ],
+  },
+  {
     version: "1.4.8",
     title: "Real Date Columns in Exports",
     releasedAt: "2026-05-02",

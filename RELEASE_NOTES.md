@@ -1,5 +1,11 @@
 # BudgetArk Release Notes
 
+## v1.4.9 - Hardened Partner Sync (2026-05-02)
+
+- Incoming sync diffs from a paired partner are now fully validated per-record before any storage write. `applyIncomingDiff` runs the same `is*Item` validators the JSON-import path uses — debts, payments, budget entries, savings goals, asset accounts, budget limits, debt milestone plan, payoff strategy, month keys. Any malformed or out-of-range record causes the whole diff to be rejected, so storage stays consistent.
+- Closes a real attack path: a paired peer (compromised partner device, or an attacker who recovered the pairing secret) could previously deliver a `SyncDiff` whose records had any shape — `mergeById` only checked `id` and `updatedAt`. Crafted records could silently zero out balances, inject NaN/Infinity into UI math, or wipe collections by upserting blanked rows with `updatedAt = now`. Validation gate now blocks all of these before the merge step runs.
+- Validators extracted to `src/utils/recordValidators.ts` so import and sync share one source of truth — fixing a validation gap on one side fixes both.
+
 ## v1.4.8 - Real Date Columns in Exports (2026-05-02)
 
 - Excel exports now write date columns as native Excel date cells (`t:"d"` with `yyyy-mm-dd` format) instead of left-aligned text. Affects Budget Entries `Date`, Debts `GoalDate`/`CreatedAt`, Payments `Date`, Savings Goals `TargetDate`/`CreatedAt`, Asset Accounts `CreatedAt`. Users can now sort/filter/use date functions on these columns directly without a manual Text-to-Columns pass.

@@ -34,6 +34,18 @@ import type {
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
+import {
+  isObject,
+  isDebtItem,
+  isPaymentItem,
+  isBudgetEntryItem,
+  isBudgetLimitItem,
+  isSavingsGoalItem,
+  isAssetAccountItem,
+  isMonthKey,
+  sanitizeDebtMilestones,
+  VALID_PAYOFF_STRATEGIES,
+} from "../utils/recordValidators";
 
 const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
 
@@ -138,10 +150,82 @@ const mergeById = <T extends { id: string; updatedAt: string }>(
 };
 
 /**
+ * Per-record validation for an incoming SyncDiff.
+ *
+ * A paired peer is *semi*-trusted (same LAN, knows the shared secret) but
+ * not fully trusted: a compromised partner device or a malicious actor
+ * who recovered the pairing secret can deliver arbitrary records.
+ * Without this gate, `applyIncomingDiff` would write any well-typed JSON
+ * into authoritative storage. We reuse the same validators the JSON-import
+ * path uses, and reject the entire diff on any failure so an attacker
+ * can't smuggle one bad record alongside good ones.
+ */
+const validateDiffEntries = <T,>(
+  entries: DiffEntry<T>[] | undefined,
+  label: string,
+  validator: (item: unknown) => boolean
+): void => {
+  if (!entries) return;
+  for (const entry of entries) {
+    if (!isObject(entry) || (entry.action !== "upsert" && entry.action !== "delete")) {
+      throw new Error(`Sync rejected: malformed ${label} entry`);
+    }
+    if (!validator(entry.record)) {
+      throw new Error(`Sync rejected: invalid ${label} record`);
+    }
+  }
+};
+
+const validateIncomingDiff = (diff: SyncDiff): void => {
+  if (!isObject(diff)) {
+    throw new Error("Sync rejected: diff is not an object");
+  }
+
+  validateDiffEntries(diff.debts, "debt", isDebtItem);
+  validateDiffEntries(diff.payments, "payment", isPaymentItem);
+  validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem);
+  validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem);
+  validateDiffEntries(diff.assetAccounts, "asset account", isAssetAccountItem);
+
+  if (Array.isArray(diff.budgetLimits)) {
+    for (const bucket of diff.budgetLimits) {
+      if (!isObject(bucket) || !isMonthKey(bucket.monthKey) || !Array.isArray(bucket.limits)) {
+        throw new Error("Sync rejected: malformed budget limit bucket");
+      }
+      for (const limit of bucket.limits) {
+        if (!isBudgetLimitItem(limit)) {
+          throw new Error("Sync rejected: invalid budget limit record");
+        }
+      }
+    }
+  }
+
+  if (diff.debtMilestonePlan !== undefined) {
+    if (!sanitizeDebtMilestones(diff.debtMilestonePlan)) {
+      throw new Error("Sync rejected: invalid debt milestone plan");
+    }
+  }
+
+  if (diff.payoffStrategy !== undefined) {
+    if (
+      typeof diff.payoffStrategy !== "string" ||
+      !VALID_PAYOFF_STRATEGIES.has(diff.payoffStrategy)
+    ) {
+      throw new Error("Sync rejected: invalid payoff strategy");
+    }
+  }
+};
+
+/**
  * Applies an incoming SyncDiff to local storage.
  * Returns the number of records that were changed.
+ *
+ * Validates every record before any storage write. If validation fails,
+ * the entire diff is rejected and storage is left untouched.
  */
 export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
+  validateIncomingDiff(diff);
+
   let changedCount = 0;
 
   // Merge debts
