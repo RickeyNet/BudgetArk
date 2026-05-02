@@ -185,10 +185,11 @@ type SheetName =
   | "Savings Goals"
   | "Asset Accounts";
 
-// Budget Entries gets its own dedicated totals block (Income / Expense /
-// Net via SUMIF) — see writeBudgetEntriesTotalsBlock — because income and
-// expense are stored as positive amounts on different Type values, so a
-// plain SUM of the Amount column would lump them together.
+// Budget Entries is built by buildBudgetEntriesSheet — see that function
+// for the per-month subtotal layout and grand-total block. The generic
+// appendTotalRow doesn't apply here because income and expense are stored
+// as positive amounts on different Type values, so a plain SUM of the
+// Amount column would lump them together.
 const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
   "Budget Entries": [],
   "Budget Limits": ["MonthlyLimit"],
@@ -199,90 +200,175 @@ const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
 };
 
 /**
- * Writes three Total rows below the Budget Entries data: Income subtotal,
- * Expense subtotal, and Net (Income − Expense). Income and expense are kept
- * separate so the user can cross-check against the app's per-screen totals
- * without doing the gross math themselves; net is included for at-a-glance
- * sense of monthly direction.
+ * Builds the Budget Entries sheet from scratch:
+ *   1. Sort entries by Date ascending so months stay contiguous.
+ *   2. After each month's rows, write an Income / Expense / Net subtotal
+ *      block tagged with the YYYY-MM key in the Description column.
+ *   3. After all months, write the same three totals as a grand total.
  *
- * Each row is import-safe: ID="Total" trips the import filter on its own,
- * and the rows leave Type/Category/Date blank so spreadsheetImport's
- * rowToBudgetEntry returns null and drops them silently.
+ * The per-month split lets users cross-check the app's per-screen totals
+ * (which are always for one month) without filtering or pivoting in
+ * Excel themselves.
  *
- * The Amount cell uses a SUMIF formula plus a cached numeric value so
- * Excel/Sheets recompute live on edits while CSV export (which reads the
- * cached `v`) still emits a real number.
+ * Subtotal rows are import-safe: each one carries the "Total" sentinel in
+ * the ID column and leaves Type/Category/Date blank, so spreadsheetImport's
+ * rowToBudgetEntry returns null and drops them silently. Re-importing the
+ * exported workbook does not duplicate or corrupt budget entries.
+ *
+ * Grand-total Amount cells use SUMIF formulas (plus cached numeric values)
+ * so Excel/Sheets recompute live on edits and CSV export still emits real
+ * numbers. Per-month subtotals use cached values only — formulas would
+ * have to encode each month's exact row range, which adds complexity for
+ * little gain.
  */
-const writeBudgetEntriesTotalsBlock = (
-  sheet: XLSX.WorkSheet,
+const buildBudgetEntriesSheet = (
   rows: ReadonlyArray<Record<string, unknown>>
-): void => {
-  if (rows.length === 0) return;
+): XLSX.WorkSheet => {
+  const sheet: XLSX.WorkSheet = {};
+
+  BUDGET_ENTRY_COLUMNS.forEach((col, colIdx) => {
+    sheet[XLSX.utils.encode_cell({ r: 0, c: colIdx })] = { t: "s", v: col };
+  });
+
+  if (rows.length === 0) {
+    sheet["!ref"] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: 0, c: BUDGET_ENTRY_COLUMNS.length - 1 },
+    });
+    return sheet;
+  }
 
   const idColIdx = BUDGET_ENTRY_COLUMNS.indexOf("ID");
   const typeColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Type");
   const amountColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Amount");
   const descColIdx = BUDGET_ENTRY_COLUMNS.indexOf("Description");
-  if (idColIdx < 0 || typeColIdx < 0 || amountColIdx < 0 || descColIdx < 0) return;
 
-  const firstDataExcelRow = 2;
-  const lastDataExcelRow = rows.length + 1;
-  const typeColLetter = XLSX.utils.encode_col(typeColIdx);
-  const amountColLetter = XLSX.utils.encode_col(amountColIdx);
-  const typeRange = `${typeColLetter}${firstDataExcelRow}:${typeColLetter}${lastDataExcelRow}`;
-  const amountRange = `${amountColLetter}${firstDataExcelRow}:${amountColLetter}${lastDataExcelRow}`;
+  // Date column is YYYY-MM-DD (see formatDateOnly), so a string compare
+  // sorts correctly.
+  const sortedRows = [...rows].sort((a, b) =>
+    String(a.Date ?? "").localeCompare(String(b.Date ?? ""))
+  );
 
-  const incomeSum = rows.reduce<number>((acc, row) => {
-    if (row.Type !== "income") return acc;
-    const amount = row.Amount;
-    return typeof amount === "number" && Number.isFinite(amount) ? acc + amount : acc;
-  }, 0);
-  const expenseSum = rows.reduce<number>((acc, row) => {
-    if (row.Type !== "expense") return acc;
-    const amount = row.Amount;
-    return typeof amount === "number" && Number.isFinite(amount) ? acc + amount : acc;
-  }, 0);
+  const writeDataRow = (rowIdx: number, row: Record<string, unknown>) => {
+    BUDGET_ENTRY_COLUMNS.forEach((col, colIdx) => {
+      const value = row[col];
+      if (value === undefined || value === null || value === "") return;
+      const ref = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+      if (typeof value === "number") {
+        sheet[ref] = Number.isFinite(value) ? { t: "n", v: value } : { t: "s", v: "" };
+      } else {
+        sheet[ref] = { t: "s", v: String(value) };
+      }
+    });
+  };
 
-  const totals = [
-    {
-      label: "Income Total",
-      value: incomeSum,
-      formula: `SUMIF(${typeRange},"income",${amountRange})`,
-    },
-    {
-      label: "Expense Total",
-      value: expenseSum,
-      formula: `SUMIF(${typeRange},"expense",${amountRange})`,
-    },
-    {
-      label: "Net (Income - Expense)",
-      value: incomeSum - expenseSum,
-      formula: `SUMIF(${typeRange},"income",${amountRange})-SUMIF(${typeRange},"expense",${amountRange})`,
-    },
-  ];
-
-  const firstTotalRowIdx = rows.length + 1; // 0-based; data ends at rows.length
-  totals.forEach((entry, offset) => {
-    const rowIdx = firstTotalRowIdx + offset;
+  const writeSubtotalRow = (
+    rowIdx: number,
+    label: string,
+    value: number,
+    formula?: string
+  ): void => {
     sheet[XLSX.utils.encode_cell({ r: rowIdx, c: idColIdx })] = {
       t: "s",
       v: TOTAL_LABEL,
     };
     sheet[XLSX.utils.encode_cell({ r: rowIdx, c: descColIdx })] = {
       t: "s",
-      v: entry.label,
+      v: label,
     };
-    sheet[XLSX.utils.encode_cell({ r: rowIdx, c: amountColIdx })] = {
-      t: "n",
-      v: entry.value,
-      f: entry.formula,
-    };
+    const cell: XLSX.CellObject = { t: "n", v: value };
+    if (formula) cell.f = formula;
+    sheet[XLSX.utils.encode_cell({ r: rowIdx, c: amountColIdx })] = cell;
+  };
+
+  let writeIdx = 1; // 0-indexed sheet row; header at 0.
+  let currentMonth: string | null = null;
+  let monthIncome = 0;
+  let monthExpense = 0;
+
+  const flushMonthSubtotals = () => {
+    if (currentMonth === null) return;
+    writeSubtotalRow(writeIdx++, `Income Total - ${currentMonth}`, monthIncome);
+    writeSubtotalRow(
+      writeIdx++,
+      `Expense Total - ${currentMonth}`,
+      monthExpense
+    );
+    writeSubtotalRow(
+      writeIdx++,
+      `Net - ${currentMonth}`,
+      monthIncome - monthExpense
+    );
+    monthIncome = 0;
+    monthExpense = 0;
+  };
+
+  for (const row of sortedRows) {
+    const dateStr = String(row.Date ?? "");
+    const month = /^\d{4}-\d{2}/.test(dateStr) ? dateStr.slice(0, 7) : "Unknown";
+
+    if (currentMonth !== null && month !== currentMonth) {
+      flushMonthSubtotals();
+    }
+    currentMonth = month;
+
+    writeDataRow(writeIdx++, row);
+
+    const amount = row.Amount;
+    if (typeof amount === "number" && Number.isFinite(amount)) {
+      if (row.Type === "income") monthIncome += amount;
+      else if (row.Type === "expense") monthExpense += amount;
+    }
+  }
+  flushMonthSubtotals();
+
+  // Grand total — SUMIF across the entire data + per-month-subtotal range.
+  // Subtotal rows have Type blank, so SUMIF on "income"/"expense" naturally
+  // skips them. The cached numeric value below mirrors that math.
+  const grandIncome = sortedRows.reduce<number>((acc, row) => {
+    if (row.Type !== "income") return acc;
+    const amount = row.Amount;
+    return typeof amount === "number" && Number.isFinite(amount) ? acc + amount : acc;
+  }, 0);
+  const grandExpense = sortedRows.reduce<number>((acc, row) => {
+    if (row.Type !== "expense") return acc;
+    const amount = row.Amount;
+    return typeof amount === "number" && Number.isFinite(amount) ? acc + amount : acc;
+  }, 0);
+
+  const firstDataExcelRow = 2;
+  const lastDataExcelRow = writeIdx; // writeIdx is 0-based next-row, so the
+  // last filled row in 0-index = writeIdx - 1, which is writeIdx in 1-index.
+  const typeColLetter = XLSX.utils.encode_col(typeColIdx);
+  const amountColLetter = XLSX.utils.encode_col(amountColIdx);
+  const typeRange = `${typeColLetter}${firstDataExcelRow}:${typeColLetter}${lastDataExcelRow}`;
+  const amountRange = `${amountColLetter}${firstDataExcelRow}:${amountColLetter}${lastDataExcelRow}`;
+
+  writeSubtotalRow(
+    writeIdx++,
+    "Income Total",
+    grandIncome,
+    `SUMIF(${typeRange},"income",${amountRange})`
+  );
+  writeSubtotalRow(
+    writeIdx++,
+    "Expense Total",
+    grandExpense,
+    `SUMIF(${typeRange},"expense",${amountRange})`
+  );
+  writeSubtotalRow(
+    writeIdx++,
+    "Net (Income - Expense)",
+    grandIncome - grandExpense,
+    `SUMIF(${typeRange},"income",${amountRange})-SUMIF(${typeRange},"expense",${amountRange})`
+  );
+
+  sheet["!ref"] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: writeIdx - 1, c: BUDGET_ENTRY_COLUMNS.length - 1 },
   });
 
-  const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1");
-  range.e.r = Math.max(range.e.r, firstTotalRowIdx + totals.length - 1);
-  range.e.c = Math.max(range.e.c, BUDGET_ENTRY_COLUMNS.length - 1);
-  sheet["!ref"] = XLSX.utils.encode_range(range);
+  return sheet;
 };
 
 const appendTotalRow = (
@@ -407,15 +493,11 @@ export const exportSpreadsheet = async (
 
   const wb = XLSX.utils.book_new();
 
+  // Budget Entries is built by hand (not via json_to_sheet + appendTotalRow)
+  // so we can sort by date, interleave per-month Income / Expense / Net
+  // subtotals, and finish with a grand-total block. See buildBudgetEntriesSheet.
   const entryRows = budgetEntries.map(budgetEntryToRow);
-  const entrySheet = XLSX.utils.json_to_sheet(entryRows, {
-    header: [...BUDGET_ENTRY_COLUMNS],
-  });
-  // Budget Entries has its own three-row totals block (Income / Expense /
-  // Net) instead of the generic single-row appendTotalRow, since income and
-  // expense are stored as positive amounts on different Type values and a
-  // plain SUM of the Amount column would mix them.
-  writeBudgetEntriesTotalsBlock(entrySheet, entryRows);
+  const entrySheet = buildBudgetEntriesSheet(entryRows);
   XLSX.utils.book_append_sheet(wb, entrySheet, "Budget Entries");
 
   if (format === "xlsx") {
