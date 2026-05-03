@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.11",
+    title: "Backup Reminder After Upgrades",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Profile now shows a one-time banner after each app upgrade reminding you to take a fresh backup. The banner clears as soon as you export (JSON or spreadsheet) and won't reappear until the next version. If you've never taken a backup, it nudges you on first open of Profile.",
+      "Tap Back up now to jump straight into the encrypted JSON export flow, or Dismiss to hide the banner until the next upgrade.",
+    ],
+  },
+  {
     version: "1.4.10",
     title: "Stronger Pairing",
     releasedAt: "2026-05-02",

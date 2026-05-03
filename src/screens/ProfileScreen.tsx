@@ -64,6 +64,12 @@ import {
   setManualUpdateMode,
 } from "../storage/updatePreferencesStorage";
 import { setOtaUpdateInstalled } from "../storage/releaseNotesStorage";
+import {
+  getBackupReminderState,
+  dismissBackupReminder,
+  shouldShowBackupReminder,
+  type BackupReminderState,
+} from "../storage/backupReminderStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -212,19 +218,29 @@ const ProfileScreen: React.FC = () => {
   const [showUnpairConfirm, setShowUnpairConfirm] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
+  /** Backup reminder banner state */
+  const [backupState, setBackupState] = useState<BackupReminderState>({});
+
+  const refreshBackupState = useCallback(async () => {
+    const state = await getBackupReminderState();
+    setBackupState(state);
+  }, []);
+
   /** Load user on mount */
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [u, prefs, privacy, haptics, pairState, syncMeta] = await Promise.all([
-          getOrCreateUser(),
-          getUpdatePreferences(),
-          getPrivacyMode(),
-          getHapticsEnabled(),
-          getPairingState(),
-          getSyncMetadata(),
-        ]);
+        const [u, prefs, privacy, haptics, pairState, syncMeta, backup] =
+          await Promise.all([
+            getOrCreateUser(),
+            getUpdatePreferences(),
+            getPrivacyMode(),
+            getHapticsEnabled(),
+            getPairingState(),
+            getSyncMetadata(),
+            getBackupReminderState(),
+          ]);
         if (cancelled) return;
         setUser(u);
         setEditName(u.displayName);
@@ -234,6 +250,7 @@ const ProfileScreen: React.FC = () => {
         setHapticsCache(haptics);
         setPairing(pairState);
         setLastSyncTime(syncMeta.lastSyncTimestamp);
+        setBackupState(backup);
         if (pairState?.autoSyncEnabled) {
           startMonitoring((result) => {
             if (result.success) {
@@ -603,6 +620,7 @@ const ProfileScreen: React.FC = () => {
     try {
       await exportAllData(exportEncrypt ? exportPassword : undefined);
       triggerHaptic("success");
+      await refreshBackupState();
     } catch (error: any) {
       triggerHaptic("error");
       setInfoModal({
@@ -611,7 +629,7 @@ const ProfileScreen: React.FC = () => {
       });
     }
     setExportPassword("");
-  }, [exportEncrypt, exportPassword]);
+  }, [exportEncrypt, exportPassword, refreshBackupState]);
 
   /**
    * First step: show a themed modal to choose import source.
@@ -727,6 +745,7 @@ const ProfileScreen: React.FC = () => {
           title: `${formatLabel} Export Ready`,
           message: note,
         });
+        await refreshBackupState();
       } catch (error: any) {
         triggerHaptic("error");
         setInfoModal({
@@ -737,7 +756,7 @@ const ProfileScreen: React.FC = () => {
         });
       }
     },
-    []
+    [refreshBackupState]
   );
 
   /**
@@ -829,6 +848,48 @@ const ProfileScreen: React.FC = () => {
         style={[styles.screen, { backgroundColor: colors.bg }]}
         contentContainerStyle={styles.content}
       >
+        {/* ── Backup reminder banner ── */}
+        {shouldShowBackupReminder(backupState, CURRENT_APP_VERSION) && (
+          <View
+            style={[
+              styles.backupBanner,
+              { backgroundColor: colors.card, borderColor: colors.accent },
+            ]}
+          >
+            <Text style={[styles.backupBannerTitle, { color: colors.text }]}>
+              {backupState.lastBackupVersion
+                ? `You upgraded to v${CURRENT_APP_VERSION}`
+                : "No backup yet"}
+            </Text>
+            <Text style={[styles.backupBannerBody, { color: colors.textDim }]}>
+              {backupState.lastBackupVersion
+                ? `Your last backup was on v${backupState.lastBackupVersion}. Take a fresh one so you can always restore from this version.`
+                : "Export your data so you have a recovery point if anything ever happens to your device."}
+            </Text>
+            <View style={styles.backupBannerActions}>
+              <TouchableOpacity
+                style={[styles.backupBannerPrimary, { backgroundColor: colors.accent }]}
+                onPress={handleExportData}
+              >
+                <Text style={[styles.backupBannerPrimaryText, { color: colors.white }]}>
+                  Back up now
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.backupBannerSecondary}
+                onPress={async () => {
+                  await dismissBackupReminder(CURRENT_APP_VERSION);
+                  await refreshBackupState();
+                }}
+              >
+                <Text style={[styles.backupBannerSecondaryText, { color: colors.textDim }]}>
+                  Dismiss
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* ── Header ── */}
         <View style={styles.titleSection}>
           <Text style={[styles.appLabel, { color: colors.textDim }]}>
@@ -2181,6 +2242,47 @@ const styles = StyleSheet.create({
   screenSubtitle: {
     fontSize: 14,
     textAlign: "center",
+  },
+
+  /* Backup reminder banner */
+  backupBanner: {
+    marginTop: 56,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+    gap: 8,
+  },
+  backupBannerTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  backupBannerBody: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  backupBannerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 12,
+  },
+  backupBannerPrimary: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  backupBannerPrimaryText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  backupBannerSecondary: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  backupBannerSecondaryText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 
   /* Profile Card */

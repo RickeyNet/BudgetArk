@@ -1,5 +1,12 @@
 # BudgetArk Release Notes
 
+## v1.4.11 - Backup Reminder After Upgrades (2026-05-02)
+
+- New banner at the top of the Profile screen prompts the user to take a fresh backup whenever the app version has changed since their last successful export. Stamps `lastBackupVersion` + `lastBackupAt` on every successful export (JSON via `exportAllData`, spreadsheet via `exportSpreadsheet`) and surfaces the banner via `shouldShowBackupReminder(state, CURRENT_APP_VERSION)`. Tap **Back up now** opens the existing encrypted-JSON export flow; tap **Dismiss** stamps `dismissedVersion` so the banner stays hidden until the next version bump.
+- Closes the practical concern that an old backup might no longer round-trip cleanly after a schema change. Even when nothing in the import format has actually broken, a user who hasn't backed up since several versions ago is one device-loss away from losing all their data — the reminder makes "take a fresh backup after every app update" the default habit.
+- Banner also shows on first run for users who have never exported, with copy that frames it as "no recovery point yet" rather than "you upgraded".
+- Storage shape (`@budgetark_backup_reminder` in encrypted storage): `{ lastBackupVersion, lastBackupAt, dismissedVersion }`. All optional; missing fields treated as no-state. Recording a new backup clears `dismissedVersion` so the next upgrade will re-show the banner regardless of past dismissals.
+
 ## v1.4.10 - Stronger Pairing (2026-05-02)
 
 - Pairing code bumped from 6 numeric digits (~20 bits, ~10⁶ codes) to 8 Crockford base32 characters (~40 bits, ~10¹² codes), formatted `XXXX-XXXX`. Closes the offline brute-force path on the pairing handshake: a passive sniffer on the same LAN who captured the encrypted `PAIR_OFFER` could previously recover the long-term `sharedSecret` in roughly a day on a single GPU (PBKDF2-SHA1 100k iters × 10⁶ codes ≈ 10¹¹ ops). The new code length raises that work factor by ~10⁶× — centuries on equivalent hardware. Crockford's alphabet excludes I/L/O/U; user-typed `I`/`L` get folded to `1`, `O` to `0` so mis-typed codes still work.

@@ -25,6 +25,7 @@ import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
+import { recordBackup } from "../storage/backupReminderStorage";
 
 /** Prefix used to identify password-encrypted export payloads */
 export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
@@ -99,8 +100,14 @@ export const exportAllData = async (password?: string): Promise<void> => {
     message = json;
   }
 
-  await Share.share({
+  const result = await Share.share({
     title: "BudgetArk Data Export",
     message,
   });
+
+  // Stamp the backup version only when the user actually completed the
+  // share sheet — dismissing without sharing leaves the reminder visible.
+  if (result.action === Share.sharedAction) {
+    await recordBackup(CURRENT_APP_VERSION);
+  }
 };

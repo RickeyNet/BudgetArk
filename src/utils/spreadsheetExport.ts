@@ -24,6 +24,8 @@ import {
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
+import { recordBackup } from "../storage/backupReminderStorage";
+import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import {
   AssetAccount,
   BudgetEntry,
@@ -829,6 +831,13 @@ export const exportSpreadsheet = async (
     dialogTitle: "Export BudgetArk Spreadsheet",
     UTI: format === "csv" ? "public.comma-separated-values-text" : "org.openxmlformats.spreadsheetml.sheet",
   });
+
+  // Stamp the backup version so the Profile reminder banner clears.
+  // expo-sharing's shareAsync resolves on share-sheet dismissal regardless
+  // of the user's choice, so this is a best-effort marker — a user who
+  // opens the sheet and cancels will still clear the reminder. Worth the
+  // tradeoff vs nagging users who did successfully save the file.
+  await recordBackup(CURRENT_APP_VERSION);
 
   return {
     format,
