@@ -46,14 +46,12 @@ const Spotlight: React.FC<SpotlightProps> = ({
   const [rect, setRect] = useState<AnchorRect | null>(null);
   const [measureToken, setMeasureToken] = useState(0);
 
-  // Re-measure whenever the step changes or visibility flips on. Tiny delay
-  // gives RN a chance to paint the underlying screen (especially after a
-  // tab focus change).
+  // Re-measure whenever the step changes or visibility flips on. Clear the
+  // previous rect first so the old highlight doesn't linger over the new
+  // step's text while we wait for scroll-into-view + measure to settle.
   useEffect(() => {
-    if (!visible || !step?.anchorId) {
-      setRect(null);
-      return;
-    }
+    setRect(null);
+    if (!visible || !step?.anchorId) return;
     let cancelled = false;
     const id = step.anchorId;
     const tick = setTimeout(async () => {

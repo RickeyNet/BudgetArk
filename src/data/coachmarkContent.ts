@@ -76,25 +76,25 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
     intro: "Bridge — your net worth",
     steps: [
       {
+        id: "bridge-history",
+        anchorId: "bridge-history-card",
+        title: "Your Net Worth",
+        body:
+          "Net Worth = everything you own minus everything you owe. The big number rolls up debts, savings, retirement, investments, and tracked accounts. The chart below it plots Net Worth over time — snapshots save automatically when balances change.",
+      },
+      {
         id: "bridge-overview",
         anchorId: "bridge-overview-card",
-        title: "Total assets minus debt",
+        title: "Tracked balances at a glance",
         body:
-          "Net Worth = everything you own, minus everything you owe. The big number rolls up debts, savings, retirement, investments, and tracked accounts.",
+          "Tracked Accounts and Emergency Fund roll up here. They feed straight into the Net Worth total above.",
       },
       {
         id: "bridge-accounts",
         anchorId: "bridge-accounts-card",
-        title: "Track asset accounts",
+        title: "Manage your accounts",
         body:
-          "Add savings, retirement, brokerage, or any account you want counted toward Net Worth. Update balances any time — the changes flow into your Bridge view.",
-      },
-      {
-        id: "bridge-history",
-        anchorId: "bridge-history-card",
-        title: "History over time",
-        body:
-          "Once you have a few snapshots, the history graph plots Net Worth over time. Snapshots auto-save when you change a balance.",
+          "Add savings, retirement, brokerage, or any account you want counted toward Net Worth. Tap a row to update its balance any time — the changes flow back into the Bridge view.",
       },
     ],
   },

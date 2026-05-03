@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -209,8 +209,9 @@ const BudgetScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Budget");
-  const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card");
-  const anchorBudgetSpending = useCoachmarkAnchor("budget-spending-card");
+  const listRef = useRef<FlatList>(null);
+  const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card", { scrollRef: listRef });
+  const anchorBudgetSpending = useCoachmarkAnchor("budget-spending-card", { scrollRef: listRef });
   const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
@@ -1112,6 +1113,7 @@ const BudgetScreen: React.FC = () => {
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       {isLoaded && (
         <FlatList
+          ref={listRef}
           data={[]}
           renderItem={null}
           ListHeaderComponent={listHeader}

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -43,9 +43,10 @@ const BridgeScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Bridge");
-  const anchorBridgeOverview = useCoachmarkAnchor("bridge-overview-card");
-  const anchorBridgeAccounts = useCoachmarkAnchor("bridge-accounts-card");
-  const anchorBridgeHistory = useCoachmarkAnchor("bridge-history-card");
+  const listRef = useRef<FlatList>(null);
+  const anchorBridgeOverview = useCoachmarkAnchor("bridge-overview-card", { scrollRef: listRef });
+  const anchorBridgeAccounts = useCoachmarkAnchor("bridge-accounts-card", { scrollRef: listRef });
+  const anchorBridgeHistory = useCoachmarkAnchor("bridge-history-card", { scrollRef: listRef });
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -393,6 +394,7 @@ const BridgeScreen: React.FC = () => {
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       {isLoaded ? (
         <FlatList
+          ref={listRef}
           data={[]}
           renderItem={() => null}
           ListHeaderComponent={listHeader}

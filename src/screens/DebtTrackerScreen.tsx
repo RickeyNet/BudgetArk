@@ -14,7 +14,7 @@
  * - Uses useCallback extensively to prevent unnecessary child re-renders
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -218,8 +218,9 @@ const DebtTrackerScreen: React.FC = () => {
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
   const coachmark = useTabCoachmark("DebtTracker");
-  const anchorSummary = useCoachmarkAnchor("debts-summary-card");
-  const anchorMilestones = useCoachmarkAnchor("debts-milestones-card");
+  const listRef = useRef<FlatList<Debt>>(null);
+  const anchorSummary = useCoachmarkAnchor("debts-summary-card", { scrollRef: listRef });
+  const anchorMilestones = useCoachmarkAnchor("debts-milestones-card", { scrollRef: listRef });
   const anchorFab = useCoachmarkAnchor("debts-fab");
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -992,6 +993,7 @@ const DebtTrackerScreen: React.FC = () => {
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <FlatList
+        ref={listRef}
         data={sortedDebts}
         keyExtractor={keyExtractor}
         renderItem={renderDebtCard}

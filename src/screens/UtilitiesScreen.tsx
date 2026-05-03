@@ -7,7 +7,7 @@
  * S&P 500 educational context and return rate presets.
  */
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
@@ -234,7 +234,8 @@ const UtilitiesScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Utilities");
-  const anchorUtilitiesTool = useCoachmarkAnchor("utilities-tool-header");
+  const scrollRef = useRef<ScrollView>(null);
+  const anchorUtilitiesTool = useCoachmarkAnchor("utilities-tool-header", { scrollRef });
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   /* Compound interest calculator state */
@@ -635,7 +636,7 @@ const UtilitiesScreen: React.FC = () => {
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.titleSection}>
           <Text style={styles.appLabel}>BudgetArk</Text>

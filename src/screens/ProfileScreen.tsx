@@ -16,7 +16,7 @@
  * - All data is stored locally on the device
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -147,8 +147,9 @@ const ProfileScreen: React.FC = () => {
   } = useDensity();
   const coachmark = useTabCoachmark("Profile");
   const { replay: replayCoachmarks } = useCoachmarks();
-  const anchorAppearance = useCoachmarkAnchor("profile-appearance-card");
-  const anchorHelp = useCoachmarkAnchor("profile-help-card");
+  const scrollRef = useRef<ScrollView>(null);
+  const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", { scrollRef });
+  const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
   const styles = React.useMemo(() => makeStyles(tokens), [tokens]);
   const {
     preference,
@@ -875,6 +876,7 @@ const ProfileScreen: React.FC = () => {
   return (
     <>
       <ScrollView
+        ref={scrollRef}
         style={[styles.screen, { backgroundColor: colors.bg }]}
         contentContainerStyle={styles.content}
       >
@@ -1323,11 +1325,10 @@ const ProfileScreen: React.FC = () => {
               onPress={async () => {
                 triggerHaptic("selection");
                 await replayCoachmarks();
-                setInfoModal({
-                  title: "Walkthrough reset",
-                  message:
-                    "The first-launch tips will replay the next time you open each tab.",
-                });
+                // No info modal — the spotlight starts immediately on the
+                // current tab as visual confirmation. Stacking a confirmation
+                // Modal on top of the Spotlight Modal causes RN to queue/hide
+                // one of them.
               }}
             >
               <View style={{ flex: 1 }}>
@@ -1746,14 +1747,16 @@ const ProfileScreen: React.FC = () => {
             <View style={{ flexDirection: "row", gap: tokens.gapSm, marginTop: tokens.gapSm }}>
               <TouchableOpacity
                 style={[styles.dialogBtn, { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, flex: 1 }]}
-                onPress={async () => {
+                onPress={() => {
                   triggerHaptic("selection");
-                  await replayCoachmarks();
                   setShowHowToModal(false);
-                  setInfoModal({
-                    title: "Walkthrough reset",
-                    message: "The first-launch tips will replay the next time you open each tab.",
-                  });
+                  // Wait for the How-To Modal close animation before resetting
+                  // the coachmark state. Otherwise RN tries to present the
+                  // Spotlight Modal on top of the still-dismissing How-To
+                  // Modal and queues/hides one of them.
+                  setTimeout(() => {
+                    void replayCoachmarks();
+                  }, 350);
                 }}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>Replay tour</Text>

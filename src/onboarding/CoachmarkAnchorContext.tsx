@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import type { View } from "react-native";
+import { findNodeHandle, type View } from "react-native";
 
 export type AnchorRect = {
   x: number;
@@ -14,53 +14,146 @@ export type AnchorRect = {
   height: number;
 };
 
+export type CoachmarkScrollRef = React.RefObject<any>;
+
 type AnchorEntry = {
   ref: View | null;
+  scrollRef: CoachmarkScrollRef | null;
 };
 
 type AnchorRegistry = Map<string, AnchorEntry>;
 
 type CoachmarkAnchorContextValue = Readonly<{
-  register: (id: string, view: View | null) => void;
+  register: (id: string, view: View | null, scrollRef: CoachmarkScrollRef | null) => void;
   measure: (id: string) => Promise<AnchorRect | null>;
 }>;
 
 const CoachmarkAnchorContext = createContext<CoachmarkAnchorContextValue | null>(null);
 
+/**
+ * How much room to leave between the top of the screen and the scrolled-to
+ * anchor. Big enough to clear safe-area + screen title section so the anchor
+ * doesn't end up jammed against the status bar.
+ */
+const SCROLL_TOP_MARGIN = 110;
+/**
+ * Extra delay after firing the scroll command, to let the animation settle
+ * before measureInWindow runs. RN's default scroll animation is ~250ms.
+ */
+const SCROLL_SETTLE_MS = 320;
+
+const measureInWindowAsync = (view: View): Promise<AnchorRect | null> =>
+  new Promise((resolve) => {
+    try {
+      view.measureInWindow((x, y, width, height) => {
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height) ||
+          width <= 0 ||
+          height <= 0
+        ) {
+          resolve(null);
+          return;
+        }
+        resolve({ x, y, width, height });
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+
+const measureLayoutAsync = (view: View, parentNodeHandle: number): Promise<number | null> =>
+  new Promise((resolve) => {
+    try {
+      // RN's measureLayout is `(relativeToNativeNode, onSuccess, onFail)`.
+      (view as unknown as {
+        measureLayout?: (
+          handle: number,
+          onSuccess: (x: number, y: number) => void,
+          onFail?: () => void,
+        ) => void;
+      }).measureLayout?.(
+        parentNodeHandle,
+        (_x, y) => {
+          resolve(Number.isFinite(y) ? y : null);
+        },
+        () => resolve(null),
+      );
+    } catch {
+      resolve(null);
+    }
+  });
+
+const scrollAnchorIntoView = async (entry: AnchorEntry): Promise<void> => {
+  const view = entry.ref;
+  const scrollRef = entry.scrollRef?.current;
+  if (!view || !scrollRef) return;
+
+  // FlatList wraps an internal ScrollView; its native node lives behind
+  // getScrollableNode/getNativeScrollRef. ScrollView refs already point at the
+  // native node directly.
+  const nativeScrollNode = (() => {
+    if (typeof scrollRef.getScrollableNode === "function") {
+      try {
+        const node = scrollRef.getScrollableNode();
+        if (node) return node;
+      } catch {
+        /* fall through */
+      }
+    }
+    if (typeof scrollRef.getNativeScrollRef === "function") {
+      try {
+        const node = scrollRef.getNativeScrollRef();
+        if (node) return node;
+      } catch {
+        /* fall through */
+      }
+    }
+    return scrollRef;
+  })();
+
+  const handle = findNodeHandle(nativeScrollNode);
+  if (handle == null) return;
+
+  const layoutY = await measureLayoutAsync(view, handle);
+  if (layoutY == null) return;
+
+  const offset = Math.max(0, layoutY - SCROLL_TOP_MARGIN);
+
+  try {
+    if (typeof scrollRef.scrollToOffset === "function") {
+      scrollRef.scrollToOffset({ offset, animated: true });
+    } else if (typeof scrollRef.scrollTo === "function") {
+      scrollRef.scrollTo({ y: offset, animated: true });
+    }
+  } catch {
+    /* swallow — fall back to whatever measureInWindow returns */
+  }
+
+  await new Promise<void>((r) => setTimeout(r, SCROLL_SETTLE_MS));
+};
+
 export const CoachmarkAnchorProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const registryRef = useRef<AnchorRegistry>(new Map());
 
-  const register = useCallback((id: string, view: View | null) => {
-    if (view) {
-      registryRef.current.set(id, { ref: view });
-    } else {
-      registryRef.current.delete(id);
-    }
-  }, []);
-
-  const measure = useCallback((id: string): Promise<AnchorRect | null> => {
-    const entry = registryRef.current.get(id);
-    if (!entry || !entry.ref) return Promise.resolve(null);
-    return new Promise((resolve) => {
-      try {
-        entry.ref?.measureInWindow((x, y, width, height) => {
-          if (
-            !Number.isFinite(x) ||
-            !Number.isFinite(y) ||
-            !Number.isFinite(width) ||
-            !Number.isFinite(height) ||
-            width <= 0 ||
-            height <= 0
-          ) {
-            resolve(null);
-            return;
-          }
-          resolve({ x, y, width, height });
-        });
-      } catch {
-        resolve(null);
+  const register = useCallback(
+    (id: string, view: View | null, scrollRef: CoachmarkScrollRef | null) => {
+      if (view) {
+        registryRef.current.set(id, { ref: view, scrollRef });
+      } else {
+        registryRef.current.delete(id);
       }
-    });
+    },
+    [],
+  );
+
+  const measure = useCallback(async (id: string): Promise<AnchorRect | null> => {
+    const entry = registryRef.current.get(id);
+    if (!entry || !entry.ref) return null;
+    await scrollAnchorIntoView(entry);
+    return measureInWindowAsync(entry.ref);
   }, []);
 
   const value = useMemo<CoachmarkAnchorContextValue>(
@@ -79,18 +172,30 @@ const useCoachmarkAnchorContext = (): CoachmarkAnchorContextValue => {
   return ctx;
 };
 
+type AnchorOptions = {
+  /**
+   * Optional ref to the parent ScrollView/FlatList. When supplied, the
+   * spotlight scrolls the anchor into view before measuring it.
+   */
+  scrollRef?: CoachmarkScrollRef;
+};
+
 /**
  * Returns a callback ref that registers a View as a coachmark anchor under the
  * given id. Pass it as `ref={...}` on the element you want the spotlight to
  * highlight.
  */
-export const useCoachmarkAnchor = (id: string): ((view: View | null) => void) => {
+export const useCoachmarkAnchor = (
+  id: string,
+  options?: AnchorOptions,
+): ((view: View | null) => void) => {
   const { register } = useCoachmarkAnchorContext();
+  const scrollRef = options?.scrollRef ?? null;
   return useCallback(
     (view: View | null) => {
-      register(id, view);
+      register(id, view, scrollRef);
     },
-    [id, register]
+    [id, register, scrollRef],
   );
 };
 
