@@ -1002,15 +1002,24 @@ const DebtTrackerScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
-      {/* FAB — Add Debt */}
-      <TouchableOpacity
+      {/* FAB — Add Debt. Outer <View> exists purely so the coachmark
+          anchor measures a plain native node with predictable
+          measureInWindow output. Putting the ref on TouchableOpacity
+          directly was returning bounds of the wrong element on iOS. */}
+      <View
         ref={anchorFab}
-        style={styles.fab}
-        onPress={() => setShowModal(true)}
-        activeOpacity={0.8}
+        collapsable={false}
+        style={styles.fabAnchor}
+        pointerEvents="box-none"
       >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setShowModal(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      </View>
 
       <AddDebtModal
         visible={showModal}
@@ -2177,10 +2186,14 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
 
   /* FAB */
-  fab: {
+  fabAnchor: {
     position: "absolute",
     bottom: 90,
     right: 20,
+    width: 52,
+    height: 52,
+  },
+  fab: {
     width: 52,
     height: 52,
     borderRadius: tokens.radius,

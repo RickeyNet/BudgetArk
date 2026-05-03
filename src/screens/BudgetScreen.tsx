@@ -1122,15 +1122,23 @@ const BudgetScreen: React.FC = () => {
         />
       )}
 
-      {/* FAB — Add Income / Expense */}
-      <TouchableOpacity
+      {/* FAB — Add Income / Expense. Outer <View> exists so the coachmark
+          anchor measures a plain native node — putting the ref on the
+          TouchableOpacity directly returned bounds of a different element. */}
+      <View
         ref={anchorBudgetFab}
-        style={styles.fab}
-        onPress={() => setShowAddModal(true)}
-        activeOpacity={0.8}
+        collapsable={false}
+        style={styles.fabAnchor}
+        pointerEvents="box-none"
       >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setShowAddModal(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      </View>
 
       <AddBudgetEntryModal
         visible={showAddModal}
@@ -2034,10 +2042,14 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* FAB */
-    fab: {
+    fabAnchor: {
       position: "absolute",
       bottom: 90,
       right: 20,
+      width: 52,
+      height: 52,
+    },
+    fab: {
       width: 52,
       height: 52,
       borderRadius: tokens.radius,
