@@ -1,5 +1,12 @@
 # BudgetArk Release Notes
 
+## v1.4.10 - Stronger Pairing (2026-05-02)
+
+- Pairing code bumped from 6 numeric digits (~20 bits, ~10⁶ codes) to 8 Crockford base32 characters (~40 bits, ~10¹² codes), formatted `XXXX-XXXX`. Closes the offline brute-force path on the pairing handshake: a passive sniffer on the same LAN who captured the encrypted `PAIR_OFFER` could previously recover the long-term `sharedSecret` in roughly a day on a single GPU (PBKDF2-SHA1 100k iters × 10⁶ codes ≈ 10¹¹ ops). The new code length raises that work factor by ~10⁶× — centuries on equivalent hardware. Crockford's alphabet excludes I/L/O/U; user-typed `I`/`L` get folded to `1`, `O` to `0` so mis-typed codes still work.
+- Added a fingerprint-comparison step to the pairing flow. After the key exchange completes, both devices compute `SHA256(sharedSecret)` and display the first 6 Crockford chars (formatted `XXX-XXX`). The user must confirm both screens show the same fingerprint before either device commits the pairing to encrypted storage. If a wrong code (or an active MITM injecting a different shared secret to each side) caused the two devices to derive different `sharedSecret` values, the fingerprints will differ and the user can cancel — no pairing state is ever written. This is the same TOFU-style verification PAKE protocols give for free; doing it explicitly here keeps the protocol simple while closing the active-MITM gap.
+- PBKDF2 salt label bumped to `budgetark-pairing-v2`. A v1 (6-digit) `PAIR_OFFER` recorded earlier and replayed against a v2 device cannot pass HMAC validation — different derivation, different keys.
+- All changes are pure JS. Pre-existing pairings are unaffected (only new pairings use the new code length and salt). `runtimeVersion` stays at `1.4.1` so this ships as an OTA update.
+
 ## v1.4.9 - Hardened Partner Sync (2026-05-02)
 
 - Incoming sync diffs from a paired partner are now fully validated per-record before any storage write. `applyIncomingDiff` runs the same `is*Item` validators the JSON-import path uses — debts, payments, budget entries, savings goals, asset accounts, budget limits, debt milestone plan, payoff strategy, month keys. Any malformed or out-of-range record causes the whole diff to be rejected, so storage stays consistent.

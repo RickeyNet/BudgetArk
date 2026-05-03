@@ -55,18 +55,88 @@ const getLocalIp = async (): Promise<string | null> => {
   return null;
 };
 
-/** Generate a random 6-digit pairing code */
-export const generatePairingCode = (): string => {
-  const array = new Uint32Array(1);
-  // Use crypto-js random as a fallback-safe source
-  const random = CryptoJS.lib.WordArray.random(4);
-  const num = parseInt(random.toString(CryptoJS.enc.Hex).slice(0, 8), 16);
-  return String(num % 1_000_000).padStart(6, "0");
+/**
+ * Crockford base32 alphabet — 32 unambiguous chars (no I, L, O, U).
+ * Codes are normalized before use so users typing "I" / "L" / "O" still
+ * land on the canonical "1" / "1" / "0" sibling characters.
+ */
+const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+const CODE_RAW_LENGTH = 8; // 8 chars × 5 bits = 40 bits of entropy
+const FINGERPRINT_RAW_LENGTH = 6; // 6 chars × 5 bits = 30 bits, ~1-in-1B coincidence
+
+const wordArrayToCrockford = (random: CryptoJS.lib.WordArray, chars: number): string => {
+  const hex = random.toString(CryptoJS.enc.Hex);
+  let bits = "";
+  for (let i = 0; i < chars; i++) {
+    // 5 bits per char → need ceil(chars * 5 / 4) hex digits
+    bits += parseInt(hex[i], 16).toString(2).padStart(4, "0");
+  }
+  // Pull additional hex if needed to cover the bit budget
+  const neededHex = Math.ceil((chars * 5) / 4);
+  for (let i = chars; i < neededHex; i++) {
+    bits += parseInt(hex[i], 16).toString(2).padStart(4, "0");
+  }
+  let out = "";
+  for (let i = 0; i < chars * 5; i += 5) {
+    out += CROCKFORD_ALPHABET[parseInt(bits.slice(i, i + 5), 2)];
+  }
+  return out;
 };
 
-/** Derive a temporary key from the 6-digit code using PBKDF2 */
+/**
+ * Generate a random pairing code. Format: `XXXX-XXXX` (8 Crockford
+ * base32 chars, ~40 bits of entropy). Earlier versions used a 6-digit
+ * numeric code (~20 bits), which a passive LAN observer who captured
+ * the encrypted PAIR_OFFER could brute-force offline against the
+ * fixed-salt PBKDF2 in roughly a day on a single GPU. 40 bits raises
+ * that to centuries on the same hardware.
+ */
+export const generatePairingCode = (): string => {
+  const random = CryptoJS.lib.WordArray.random(5); // 40 bits raw
+  const raw = wordArrayToCrockford(random, CODE_RAW_LENGTH);
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
+};
+
+/**
+ * Normalize a user-typed pairing code: uppercase, strip whitespace and
+ * dashes, fold Crockford-confusable characters (I/L → 1, O → 0).
+ * Returns the canonical 8-char form (or shorter if the user hasn't
+ * finished typing).
+ */
+export const normalizePairingCode = (input: string): string => {
+  return input
+    .toUpperCase()
+    .replace(/[\s-]/g, "")
+    .replace(/[IL]/g, "1")
+    .replace(/O/g, "0")
+    .slice(0, CODE_RAW_LENGTH);
+};
+
+/**
+ * Compute the short fingerprint of an established sharedSecret. Both
+ * devices display this after the key exchange so the user can verify
+ * the secrets match — if a wrong code or a MITM produced two different
+ * `sharedSecret` values, the fingerprints will differ and the user
+ * cancels before the pairing is committed to storage.
+ *
+ * Format: `XXX-XXX` (6 Crockford chars = 30 bits).
+ */
+export const computeFingerprint = (sharedSecret: string): string => {
+  const hash = CryptoJS.SHA256(sharedSecret);
+  const raw = wordArrayToCrockford(hash, FINGERPRINT_RAW_LENGTH);
+  return `${raw.slice(0, 3)}-${raw.slice(3, 6)}`;
+};
+
+/**
+ * Derive a temporary key from the pairing code using PBKDF2.
+ * The salt label is bumped to v2 so any captured v1 (6-digit) frames
+ * cannot be replayed against a v2 handshake — different keys, different
+ * HMACs, validation rejects.
+ */
 const deriveKeyFromCode = (code: string): string => {
-  const key = CryptoJS.PBKDF2(code, "budgetark-pairing-salt", {
+  const normalized = normalizePairingCode(code);
+  const key = CryptoJS.PBKDF2(normalized, "budgetark-pairing-v2", {
     keySize: 256 / 32,
     iterations: 100_000,
   });
@@ -81,14 +151,30 @@ const generateSharedSecret = (): string => {
 const PAIRING_TIMEOUT_MS = 60_000;
 
 /**
+ * Result of a successful key exchange. The pairing is *not* yet persisted —
+ * the UI must show the fingerprint to the user, ask them to confirm it
+ * matches the partner device, and then call `commit()`. If the user reports
+ * a mismatch (or just dismisses), the caller drops the result and nothing
+ * is written to storage.
+ */
+export interface PendingPairing {
+  pairingState: PairingState;
+  /** 6-char Crockford fingerprint, formatted `XXX-XXX`, displayed on both devices */
+  fingerprint: string;
+  /** Persist the pairing to encrypted storage */
+  commit: () => Promise<void>;
+}
+
+/**
  * Initiator flow: generate code, advertise, wait for partner to connect.
- * Returns the established PairingState.
+ * Resolves with a PendingPairing once the key exchange completes; the
+ * caller must call `commit()` after the user confirms the fingerprint.
  */
 export const startPairingAsInitiator = (
   code: string,
   onTimeout?: () => void,
   onServerReady?: (ip: string | null, port: number, closeServer: (() => void) | null) => void
-): Promise<PairingState> => {
+): Promise<PendingPairing> => {
   return new Promise(async (resolve, reject) => {
     const user = await getOrCreateUser();
     const tempKey = deriveKeyFromCode(code);
@@ -136,7 +222,8 @@ export const startPairingAsInitiator = (
             };
             connection.send("PAIR_ACCEPT", accept);
 
-            // Save pairing state
+            // Build the pending pairing — caller must call commit()
+            // after the user confirms the fingerprint matches.
             const pairingState: PairingState = {
               partnerId: offer.userId,
               partnerName: offer.displayName,
@@ -144,7 +231,6 @@ export const startPairingAsInitiator = (
               pairedAt: new Date().toISOString(),
               autoSyncEnabled: false,
             };
-            await savePairingState(pairingState);
 
             clearTimeout(timer);
             settled = true;
@@ -155,7 +241,11 @@ export const startPairingAsInitiator = (
               Discovery.stop();
             }, 500);
 
-            resolve(pairingState);
+            resolve({
+              pairingState,
+              fingerprint: computeFingerprint(offer.sharedSecret),
+              commit: () => savePairingState(pairingState),
+            });
           } catch (err) {
             // Invalid offer payload
           }
@@ -172,12 +262,13 @@ export const startPairingAsInitiator = (
 
 /**
  * Joiner flow: enter code, discover partner, connect and exchange keys.
- * Returns the established PairingState.
+ * Resolves with a PendingPairing; caller must call `commit()` after the
+ * user confirms the fingerprint matches.
  */
 export const joinPairing = async (
   code: string,
   manualAddress?: { host: string; port: number }
-): Promise<PairingState> => {
+): Promise<PendingPairing> => {
   const user = await getOrCreateUser();
   const tempKey = deriveKeyFromCode(code);
   const sharedSecret = generateSharedSecret();
@@ -238,10 +329,13 @@ export const joinPairing = async (
             pairedAt: new Date().toISOString(),
             autoSyncEnabled: false,
           };
-          await savePairingState(pairingState);
 
           setTimeout(() => connection.close(), 500);
-          resolve(pairingState);
+          resolve({
+            pairingState,
+            fingerprint: computeFingerprint(sharedSecret),
+            commit: () => savePairingState(pairingState),
+          });
         } catch (err) {
           connection.close();
           reject(new Error("Invalid pairing response"));

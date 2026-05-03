@@ -23,9 +23,17 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
-import { generatePairingCode, startPairingAsInitiator, joinPairing } from "../sync/pairingService";
+import {
+  generatePairingCode,
+  normalizePairingCode,
+  startPairingAsInitiator,
+  joinPairing,
+  type PendingPairing,
+} from "../sync/pairingService";
 import * as Discovery from "../sync/discoveryService";
 import type { PairingState, PairingRole } from "../sync/types";
+
+const CODE_LENGTH = 8;
 
 /** Parse "host:port" string, returns null if invalid */
 const parseAddress = (input: string): { host: string; port: number } | null => {
@@ -56,8 +64,11 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
   const [code, setCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [countdown, setCountdown] = useState(TIMEOUT_SECONDS);
-  const [status, setStatus] = useState<"idle" | "waiting" | "connecting" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "waiting" | "connecting" | "verify" | "error">(
+    "idle"
+  );
   const [error, setError] = useState("");
+  const [pending, setPending] = useState<PendingPairing | null>(null);
   const [serverAddress, setServerAddress] = useState("");
   const [serverPort, setServerPort] = useState(0);
   const [manualIp, setManualIp] = useState("");
@@ -80,6 +91,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       setServerPort(0);
       setManualIp("");
       setShowManualIp(false);
+      setPending(null);
       if (timerRef.current) clearInterval(timerRef.current);
       // Clean up TCP server and Zeroconf immediately
       if (serverCloseRef.current) {
@@ -127,18 +139,20 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       );
       if (cancelledRef.current) return;
       if (timerRef.current) clearInterval(timerRef.current);
-      onPaired(result);
+      setPending(result);
+      setStatus("verify");
     } catch (err) {
       if (cancelledRef.current) return;
       if (timerRef.current) clearInterval(timerRef.current);
       setStatus("error");
       setError(err instanceof Error ? err.message : "Pairing failed");
     }
-  }, [onPaired]);
+  }, []);
 
   const startJoiner = useCallback(async () => {
-    if (joinCode.length !== 6) {
-      setError("Please enter the 6-digit code from your partner's device.");
+    const normalized = normalizePairingCode(joinCode);
+    if (normalized.length !== CODE_LENGTH) {
+      setError(`Please enter the ${CODE_LENGTH}-character code from your partner's device.`);
       return;
     }
 
@@ -152,13 +166,32 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
         setError("Enter a valid address (e.g. 192.168.1.5:12345)");
         return;
       }
-      const result = await joinPairing(joinCode, manual ?? undefined);
-      onPaired(result);
+      const result = await joinPairing(normalized, manual ?? undefined);
+      setPending(result);
+      setStatus("verify");
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Failed to connect");
     }
-  }, [joinCode, onPaired, showManualIp, manualIp]);
+  }, [joinCode, showManualIp, manualIp]);
+
+  const confirmFingerprint = useCallback(async () => {
+    if (!pending) return;
+    try {
+      await pending.commit();
+      onPaired(pending.pairingState);
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Failed to save pairing");
+    }
+  }, [pending, onPaired]);
+
+  const rejectFingerprint = useCallback(() => {
+    // No commit ran — nothing to undo. Close the modal so the user can
+    // restart pairing from scratch with a fresh code.
+    setPending(null);
+    onClose();
+  }, [onClose]);
 
   if (!visible) return null;
 
@@ -204,7 +237,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
               )}
 
               {/* Initiator: show code */}
-              {role === "initiator" && (
+              {role === "initiator" && status !== "verify" && (
                 <View style={styles.codeContainer}>
                   <Text style={styles.codeDisplay}>{code}</Text>
                   {serverAddress ? (
@@ -235,16 +268,22 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
               )}
 
               {/* Joiner: enter code */}
-              {role === "joiner" && (
+              {role === "joiner" && status !== "verify" && (
                 <View style={styles.joinContainer}>
                   <TextInput
                     style={styles.codeInput}
-                    placeholder="000000"
+                    placeholder="XXXX-XXXX"
                     placeholderTextColor={colors.textMuted}
                     value={joinCode}
-                    onChangeText={(text) => setJoinCode(text.replace(/\D/g, "").slice(0, 6))}
-                    keyboardType="number-pad"
-                    maxLength={6}
+                    onChangeText={(text) => {
+                      const norm = normalizePairingCode(text);
+                      setJoinCode(
+                        norm.length > 4 ? `${norm.slice(0, 4)}-${norm.slice(4)}` : norm
+                      );
+                    }}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    maxLength={CODE_LENGTH + 1}
                     autoFocus
                     editable={status !== "connecting"}
                   />
@@ -269,15 +308,43 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                   <TouchableOpacity
                     style={[
                       styles.connectButton,
-                      (joinCode.length !== 6 || status === "connecting") &&
+                      (normalizePairingCode(joinCode).length !== CODE_LENGTH ||
+                        status === "connecting") &&
                         styles.connectButtonDisabled,
                     ]}
                     onPress={startJoiner}
-                    disabled={joinCode.length !== 6 || status === "connecting"}
+                    disabled={
+                      normalizePairingCode(joinCode).length !== CODE_LENGTH ||
+                      status === "connecting"
+                    }
                   >
                     <Text style={styles.connectButtonText}>
                       {status === "connecting" ? "Connecting..." : "Connect"}
                     </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Verify fingerprint — both devices land here after key exchange */}
+              {status === "verify" && pending && (
+                <View style={styles.verifyContainer}>
+                  <Text style={styles.verifyHeading}>Verify your partner</Text>
+                  <Text style={styles.verifyHint}>
+                    Both devices should show the same code below. If they don't,
+                    cancel and try pairing again.
+                  </Text>
+                  <Text style={styles.fingerprintDisplay}>{pending.fingerprint}</Text>
+                  <TouchableOpacity
+                    style={styles.connectButton}
+                    onPress={confirmFingerprint}
+                  >
+                    <Text style={styles.connectButtonText}>Codes match — finish pairing</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.verifyRejectButton}
+                    onPress={rejectFingerprint}
+                  >
+                    <Text style={styles.verifyRejectText}>Codes don't match</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -352,10 +419,11 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 16,
     },
     codeDisplay: {
-      fontSize: 48,
+      fontSize: 40,
       fontWeight: "800",
       color: colors.accent,
-      letterSpacing: 12,
+      letterSpacing: 6,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     },
     addressText: {
       fontSize: 14,
@@ -403,11 +471,45 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: 12,
       paddingHorizontal: 16,
       paddingVertical: 14,
-      fontSize: 28,
+      fontSize: 24,
       fontWeight: "700",
       color: colors.text,
       textAlign: "center",
-      letterSpacing: 8,
+      letterSpacing: 4,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    },
+    verifyContainer: {
+      gap: 12,
+      alignItems: "center",
+      paddingVertical: 8,
+    },
+    verifyHeading: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    verifyHint: {
+      fontSize: 13,
+      color: colors.textDim,
+      textAlign: "center",
+      lineHeight: 18,
+    },
+    fingerprintDisplay: {
+      fontSize: 36,
+      fontWeight: "800",
+      color: colors.accent,
+      letterSpacing: 4,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+      marginVertical: 8,
+    },
+    verifyRejectButton: {
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    verifyRejectText: {
+      color: colors.danger,
+      fontSize: 14,
+      fontWeight: "600",
     },
     connectButton: {
       backgroundColor: colors.accent,

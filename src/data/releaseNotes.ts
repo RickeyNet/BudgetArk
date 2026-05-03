@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.10",
+    title: "Stronger Pairing",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Pairing codes are now 8 alphanumeric characters (XXXX-XXXX) instead of 6 digits. Earlier the code was short enough that someone who recorded the encrypted pairing exchange on the same WiFi could brute-force it offline in roughly a day on a single GPU. The new code raises that to centuries on the same hardware. Codes use Crockford's character set, so I/L/O get auto-corrected to 1/1/0 if you mistype.",
+      "Added a verify step to the pairing flow: after the key exchange, both devices show a short 6-character fingerprint. If the codes don't match on both screens, you can cancel before anything is saved — protects against someone on your network trying to insert themselves between you and your partner.",
+    ],
+  },
+  {
     version: "1.4.9",
     title: "Hardened Partner Sync",
     releasedAt: "2026-05-02",
