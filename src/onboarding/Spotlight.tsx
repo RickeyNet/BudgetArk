@@ -23,12 +23,22 @@ type SpotlightProps = {
   onSkipAll: () => void;
 };
 
-/** Screen-edge padding around the spotlight cutout itself. */
-const CUTOUT_PADDING = 8;
+/**
+ * Padding around the spotlight cutout. Set generously so drop-shadows on
+ * elevated elements (FABs especially) sit inside the highlight ring instead
+ * of looking like the button extends below the highlight.
+ */
+const CUTOUT_PADDING = 14;
 /** Min height the tooltip card needs — used to choose above/below placement. */
 const TOOLTIP_MIN_HEIGHT = 180;
 /** Margin between the cutout and the tooltip card. */
 const TOOLTIP_GAP = 16;
+/**
+ * Wait long enough after the Modal opens that its fade animation has settled
+ * and the underlying view has stopped moving before we measure. 80 ms wasn't
+ * always enough on iOS, so the ring landed slightly off the anchor.
+ */
+const INITIAL_MEASURE_DELAY_MS = 200;
 
 const Spotlight: React.FC<SpotlightProps> = ({
   visible,
@@ -57,7 +67,7 @@ const Spotlight: React.FC<SpotlightProps> = ({
     const tick = setTimeout(async () => {
       const measured = await measure(id);
       if (!cancelled) setRect(measured);
-    }, 80);
+    }, INITIAL_MEASURE_DELAY_MS);
     return () => {
       cancelled = true;
       clearTimeout(tick);
