@@ -71,6 +71,7 @@ import {
   type BackupReminderState,
 } from "../storage/backupReminderStorage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
@@ -134,6 +135,11 @@ const ProfileScreen: React.FC = () => {
   /** Current theme context */
   const { colors, presets, themeId, setThemeId } = useTheme();
   const {
+    densityId,
+    presets: densityPresets,
+    setDensityId,
+  } = useDensity();
+  const {
     preference,
     options: currencyOptions,
     setPreferenceId,
@@ -150,6 +156,7 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether theme selector modal is visible */
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showDensityModal, setShowDensityModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
 
   /** Whether the paste-import modal is visible */
@@ -290,6 +297,13 @@ const ProfileScreen: React.FC = () => {
       await setThemeId(id);
     },
     [setThemeId]
+  );
+
+  const handleDensitySelect = useCallback(
+    async (id: string) => {
+      await setDensityId(id);
+    },
+    [setDensityId]
   );
 
   const handleCurrencySelect = useCallback(
@@ -840,6 +854,7 @@ const ProfileScreen: React.FC = () => {
 
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
+  const currentDensity = densityPresets.find((p) => p.id === densityId);
   const latestRelease: ReleaseNote = RELEASE_NOTES[0];
 
   return (
@@ -990,6 +1005,23 @@ const ProfileScreen: React.FC = () => {
                 </Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
                   {currentTheme?.name || "Forest Gold"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowDensityModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Layout Density
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {currentDensity?.name || "Comfortable"}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
@@ -1374,6 +1406,87 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity
               style={[styles.closeBtn, { backgroundColor: colors.accent }]}
               onPress={() => setShowThemeModal(false)}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Density Selection Modal ── */}
+      <Modal
+        visible={showDensityModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowDensityModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Layout Density
+            </Text>
+
+            <ScrollView style={styles.themeList}>
+              {densityPresets.map((preset) => {
+                const selected = densityId === preset.id;
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        backgroundColor: colors.bg,
+                      },
+                    ]}
+                    onPress={() => handleDensitySelect(preset.id)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.themeOptionText,
+                          { color: colors.text },
+                        ]}
+                      >
+                        {preset.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsRowSubtext,
+                          { color: colors.textDim, marginTop: 4 },
+                        ]}
+                      >
+                        {preset.description}
+                      </Text>
+                    </View>
+
+                    {selected && (
+                      <View
+                        style={[
+                          styles.checkMark,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      >
+                        <Text style={[styles.checkMarkText, { color: colors.white }]}>
+                          ✓
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowDensityModal(false)}
             >
               <Text style={[styles.closeBtnText, { color: colors.white }]}>
                 Done

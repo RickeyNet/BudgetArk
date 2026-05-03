@@ -23,6 +23,7 @@ import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
+import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
@@ -381,9 +382,11 @@ export default function App(): React.JSX.Element {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <CurrencyProvider>
-            <AppContent />
-          </CurrencyProvider>
+          <DensityProvider>
+            <CurrencyProvider>
+              <AppContent />
+            </CurrencyProvider>
+          </DensityProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

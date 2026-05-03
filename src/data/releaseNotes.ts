@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.12",
+    title: "Layout Density Selector",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Profile → Appearance now has a Layout Density picker with three presets — Compact, Comfortable, and Spacious. Compact tightens spacing and font sizes for more content per screen; Spacious gives larger touch targets and roomier text for easier reading.",
+      "First screen wired up is Investments — you'll see the difference immediately on card padding, font sizes, and slider button size. Other screens will adopt the tokens incrementally and keep rendering at the Comfortable default until they do.",
+    ],
+  },
+  {
     version: "1.4.11",
     title: "Backup Reminder After Upgrades",
     releasedAt: "2026-05-02",

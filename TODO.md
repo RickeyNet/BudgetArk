@@ -309,6 +309,45 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [x] Debt Payoff Celebration Screen — confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
 - [ ] "What If I Stopped Spending on X" Projections — pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
 - [ ] Net Worth Timeline Graph — plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
+- [ ] Live Stock Holdings & Quote Feed — let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
+
+  Data model:
+  - New `Holding` record: `{ id, symbol, shares, costBasis?, accountId? }`. Either nest under existing `AssetAccount` or add a new top-level collection that aggregates into Net Worth the same way Asset Accounts do.
+  - Cache last-fetched quote in AsyncStorage: `{ symbol, price, asOf, source }`. Net Worth math reads from cache, never blocks on network.
+
+  Refresh strategy (privacy-friendly default):
+  - Auto-refresh once per day on first app open of the calendar day.
+  - Manual "Refresh prices" button with 1-hour cooldown. Disabled outside US market hours (9:30am–4:00pm ET, weekdays) with copy "Markets closed — prices update at next open."
+  - Manual override on cooldown shows "Last updated 12 min ago" rather than firing the call.
+  - Per-day cap means free API tiers are viable. Per-user fetch volume stays under 25 calls/day worst case.
+
+  Provider options (free tiers, no backend needed):
+  - Finnhub free: 60 calls/min, single-symbol endpoint. Fine for <10 tickers/user.
+  - Twelve Data free: 800 calls/day, batched up to 120 symbols/call. Best fit for this app.
+  - Alpha Vantage free: 25/day. Too tight unless one user.
+  - Avoid yfinance scraping — breaks unpredictably.
+
+  Cloudflare Worker proxy (optional, only if app scales):
+  - Free tier covers ~330 daily-active users at 300 req/user/day. Paid $5/mo covers 33k DAU.
+  - Real reason to add it: hide API key, add device-ID-hashed throttle so a tampered client can't burn shared quota.
+  - Skip until user count warrants it. Embed key in app to start; daily call cap makes scraping the key low-impact.
+
+  Privacy / UX implications:
+  - First feature in the app that sends data off-device. Add a one-time disclosure on Holdings screen: "Symbols you hold are sent to <provider> to fetch prices. Share counts and cost basis stay on your device."
+  - Make the whole feature opt-in via a toggle in Profile so users who want pure offline can skip it.
+  - Label it "Daily portfolio value" in copy — never claim "live" or "real-time" with delayed-quote providers.
+  - Apple/Google may require provider attribution in store listing per data ToS — check before submission.
+
+  Files (proposed):
+  - `src/types/index.ts` — add `Holding`, `Quote` types.
+  - `src/storage/holdingsStorage.ts` — CRUD via EncryptedStorage, follows existing pattern.
+  - `src/services/quotesService.ts` — provider abstraction, throttle, cache TTL, market-hours gate.
+  - `src/screens/HoldingsScreen.tsx` or new tab in Asset Accounts — list + add/edit holdings, refresh button.
+  - Net Worth aggregator — pull `holdings.reduce((s, h) => s + h.shares * cachedPrice(h.symbol), 0)`.
+
+  OTA-eligible: yes if no new native modules. `fetch` is already available; no SDK changes needed.
+
+  Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
 - [ ] Savings Streak Tracker — track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
 - [ ] Quick-Entry Home Screen Widget — minimal widget to log an expense (category + amount) without opening the full app.
 - [ ] Bill Calendar View — monthly calendar showing when recurring expenses hit. Visual cash flow timing.
@@ -317,6 +356,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Ark Journey Timeline — visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
 - [x] Category Spending Comparison — "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
 - [ ] Dark Mode Schedule — auto-switch themes based on time of day (lighter during day, dark at night).
+- [ ] Layout density selector — Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental — screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
 - [x] fix theme selection so it doesn't close option window until you hit done
 - [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
 - [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.

@@ -22,6 +22,8 @@ import {
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import { useDensity } from "../theme/DensityProvider";
+import type { DensityTokens } from "../theme/density";
 import { calcInvestmentTimeline } from "../utils/calculations";
 import { useCurrency } from "../currency/CurrencyProvider";
 import SmoothSlider from "../components/SmoothSlider";
@@ -167,8 +169,9 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
 
 const InvestmentScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [contribution, setContribution] = useState(500);
   const [returnRate, setReturnRate] = useState(7);
@@ -432,37 +435,38 @@ const InvestmentScreen: React.FC = () => {
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     screen: {
       flex: 1,
       backgroundColor: colors.bg,
     },
     content: {
-      paddingHorizontal: 16,
+      paddingHorizontal: tokens.pad,
       paddingBottom: 110,
     },
     titleSection: {
       paddingTop: 56,
-      paddingBottom: 20,
+      paddingBottom: tokens.gap,
       alignItems: "center",
     },
     appLabel: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
       letterSpacing: 2,
       marginBottom: 4,
       textAlign: "center",
     },
     screenTitle: {
-      fontSize: 28,
+      fontSize: scale(28),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
       textAlign: "center",
     },
     screenSubtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textMuted,
       textAlign: "center",
     },
@@ -472,26 +476,26 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: `${colors.accent}30`,
-      borderRadius: 20,
-      padding: 24,
+      borderRadius: tokens.radius + 4,
+      padding: tokens.padLg,
       alignItems: "center",
-      marginBottom: 16,
+      marginBottom: tokens.gap,
     },
     resultLabel: {
-      fontSize: 10,
+      fontSize: scale(10),
       color: colors.textMuted,
       letterSpacing: 1.5,
       marginBottom: 8,
     },
     resultValue: {
-      fontSize: 32,
+      fontSize: scale(32),
       fontWeight: "700",
       color: colors.accent,
       fontVariant: ["tabular-nums"],
       marginBottom: 4,
     },
     resultSub: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textDim,
     },
 
@@ -500,13 +504,13 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 18,
-      marginBottom: 16,
-      gap: 18,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
+      gap: tokens.gap,
     },
     sliderGroup: {
-      gap: 8,
+      gap: tokens.gapSm + 2,
     },
     sliderHeader: {
       flexDirection: "row",
@@ -514,12 +518,12 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     sliderLabel: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textDim,
       fontWeight: "500",
     },
     sliderValue: {
-      fontSize: 15,
+      fontSize: scale(15),
       color: colors.text,
       fontWeight: "700",
       fontVariant: ["tabular-nums"],
@@ -553,9 +557,9 @@ const makeStyles = (colors: ThemeColors) =>
       gap: 10,
     },
     sliderBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+      width: tokens.rowHeight - 16,
+      height: tokens.rowHeight - 16,
+      borderRadius: tokens.radiusSm + 2,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       backgroundColor: colors.bg,
@@ -563,10 +567,10 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     sliderBtnText: {
-      fontSize: 20,
+      fontSize: scale(20),
       color: colors.text,
       fontWeight: "600",
-      lineHeight: 22,
+      lineHeight: scale(22),
     },
     sliderBtnDisabled: {
       opacity: 0.2,
@@ -574,15 +578,15 @@ const makeStyles = (colors: ThemeColors) =>
     
     presetRow: {
       flexDirection: "row",
-      gap: 10,
+      gap: tokens.gapSm + 4,
       marginTop: 4,
     },
     presetBtn: {
       flex: 1,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingVertical: 10,
+      borderRadius: tokens.radiusSm + 2,
+      paddingVertical: tokens.padSm,
       alignItems: "center",
       backgroundColor: colors.bg,
     },
@@ -591,7 +595,7 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: `${colors.accent}20`,
     },
     presetBtnText: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textDim,
       fontWeight: "600",
     },
@@ -605,12 +609,12 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
     },
     chartTitle: {
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
       color: colors.text,
       marginBottom: 12,
@@ -635,7 +639,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: 5,
     },
     legendText: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
     },
 
@@ -644,12 +648,12 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 18,
-      marginBottom: 16,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
     },
     breakdownTitle: {
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
       color: colors.text,
       marginBottom: 14,
@@ -663,13 +667,13 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     breakdownValue: {
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "700",
       fontVariant: ["tabular-nums"],
       marginBottom: 4,
     },
     breakdownLabel: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
     },
     breakdownDivider: {
@@ -693,11 +697,12 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.accent,
     },
     ratioText: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
       textAlign: "center",
       marginTop: 10,
     },
   });
+};
 
 export default InvestmentScreen;

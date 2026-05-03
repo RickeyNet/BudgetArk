@@ -1,5 +1,12 @@
 # BudgetArk Release Notes
 
+## v1.4.12 - Layout Density Selector (2026-05-02)
+
+- New Layout Density picker in Profile → Appearance with three presets: Compact, Comfortable (default), Spacious. Plumbing mirrors the existing theme system — `DensityProvider` wraps the app, `useDensity()` returns a `tokens` object with `pad`, `padSm`, `padLg`, `gap`, `gapSm`, `gapLg`, `radius`, `radiusSm`, `fontScale`, and `rowHeight`. Persists to encrypted storage under `@budgetark_density_id`.
+- Migration is incremental. Investments is the first screen wired up — its `makeStyles` factory now accepts `tokens` and references them for card padding, border radius, inter-card spacing, slider button size, and a `scale(n)` helper applied to font sizes. Other screens still use hardcoded values and render at the Comfortable default until they migrate.
+- Comfortable preset deliberately matches the existing default visuals (`pad: 16`, `gap: 16`, `radius: 16`) so users who don't change the setting see no shift after upgrading. Compact pulls those down to 12/10/12 with a 0.92× font scale; Spacious pushes them up to 20/22/18 with a 1.08× font scale.
+- All changes are pure JS. `runtimeVersion` stays at `1.4.1`, so this ships as an OTA update.
+
 ## v1.4.11 - Backup Reminder After Upgrades (2026-05-02)
 
 - New banner at the top of the Profile screen prompts the user to take a fresh backup whenever the app version has changed since their last successful export. Stamps `lastBackupVersion` + `lastBackupAt` on every successful export (JSON via `exportAllData`, spreadsheet via `exportSpreadsheet`) and surfaces the banner via `shouldShowBackupReminder(state, CURRENT_APP_VERSION)`. Tap **Back up now** opens the existing encrypted-JSON export flow; tap **Dismiss** stamps `dismissedVersion` so the banner stays hidden until the next version bump.
