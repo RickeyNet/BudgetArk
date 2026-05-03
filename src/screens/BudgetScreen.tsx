@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Dimensions,
   FlatList,
   Modal,
   StatusBar,
@@ -58,7 +59,19 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
-import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
+import {
+  useCoachmarkAnchor,
+  useCoachmarkComputedAnchor,
+} from "../onboarding/CoachmarkAnchorContext";
+
+/**
+ * FAB layout constants — kept here so the coachmark can compute a
+ * window-relative rect for the spotlight without going through a ref +
+ * measureInWindow round-trip. Keep these in sync with styles.fab.
+ */
+const FAB_BOTTOM = 90;
+const FAB_RIGHT = 20;
+const FAB_SIZE = 52;
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { calculateNetWorthTotals } from "../utils/netWorth";
@@ -212,7 +225,16 @@ const BudgetScreen: React.FC = () => {
   const listRef = useRef<FlatList>(null);
   const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card", { scrollRef: listRef });
   const anchorBudgetSpending = useCoachmarkAnchor("budget-spending-card", { scrollRef: listRef });
-  const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
+  // FAB rect computed from layout constants — see DebtTrackerScreen for why.
+  useCoachmarkComputedAnchor("budget-fab", () => {
+    const { width, height } = Dimensions.get("window");
+    return {
+      x: width - FAB_RIGHT - FAB_SIZE,
+      y: height - FAB_BOTTOM - FAB_SIZE,
+      width: FAB_SIZE,
+      height: FAB_SIZE,
+    };
+  });
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -1122,23 +1144,16 @@ const BudgetScreen: React.FC = () => {
         />
       )}
 
-      {/* FAB — Add Income / Expense. Outer <View> exists so the coachmark
-          anchor measures a plain native node — putting the ref on the
-          TouchableOpacity directly returned bounds of a different element. */}
-      <View
-        ref={anchorBudgetFab}
-        collapsable={false}
-        style={styles.fabAnchor}
-        pointerEvents="box-none"
+      {/* FAB — Add Income / Expense. Spotlight anchor is registered above
+          via useCoachmarkComputedAnchor; its rect comes from FAB_BOTTOM /
+          FAB_RIGHT / FAB_SIZE, so keep those in sync with styles.fab. */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowAddModal(true)}
+        activeOpacity={0.8}
       >
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setShowAddModal(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      </View>
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
 
       <AddBudgetEntryModal
         visible={showAddModal}
@@ -2042,16 +2057,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* FAB */
-    fabAnchor: {
-      position: "absolute",
-      bottom: 90,
-      right: 20,
-      width: 52,
-      height: 52,
-    },
     fab: {
-      width: 52,
-      height: 52,
+      position: "absolute",
+      bottom: FAB_BOTTOM,
+      right: FAB_RIGHT,
+      width: FAB_SIZE,
+      height: FAB_SIZE,
       borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       justifyContent: "center",

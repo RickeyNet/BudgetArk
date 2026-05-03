@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
 } from "react";
@@ -16,15 +17,31 @@ export type AnchorRect = {
 
 export type CoachmarkScrollRef = React.RefObject<any>;
 
+/** Returns a window-relative rect for a known-position element. */
+export type AnchorRectProvider = () => AnchorRect | null;
+
 type AnchorEntry = {
   ref: View | null;
   scrollRef: CoachmarkScrollRef | null;
+  /**
+   * Overrides measureInWindow when set. Use for elements whose on-screen
+   * position is deterministic (FABs, fixed overlays) — measureInWindow on RN
+   * sometimes returns bounds for the wrong native node when the ref sits on a
+   * Touchable wrapper, so we compute the rect directly from layout constants
+   * instead.
+   */
+  getRect: AnchorRectProvider | null;
 };
 
 type AnchorRegistry = Map<string, AnchorEntry>;
 
 type CoachmarkAnchorContextValue = Readonly<{
-  register: (id: string, view: View | null, scrollRef: CoachmarkScrollRef | null) => void;
+  register: (
+    id: string,
+    view: View | null,
+    scrollRef: CoachmarkScrollRef | null,
+    getRect: AnchorRectProvider | null,
+  ) => void;
   measure: (id: string) => Promise<AnchorRect | null>;
 }>;
 
@@ -139,9 +156,14 @@ export const CoachmarkAnchorProvider: React.FC<React.PropsWithChildren> = ({ chi
   const registryRef = useRef<AnchorRegistry>(new Map());
 
   const register = useCallback(
-    (id: string, view: View | null, scrollRef: CoachmarkScrollRef | null) => {
-      if (view) {
-        registryRef.current.set(id, { ref: view, scrollRef });
+    (
+      id: string,
+      view: View | null,
+      scrollRef: CoachmarkScrollRef | null,
+      getRect: AnchorRectProvider | null,
+    ) => {
+      if (view || getRect) {
+        registryRef.current.set(id, { ref: view, scrollRef, getRect });
       } else {
         registryRef.current.delete(id);
       }
@@ -151,7 +173,9 @@ export const CoachmarkAnchorProvider: React.FC<React.PropsWithChildren> = ({ chi
 
   const measure = useCallback(async (id: string): Promise<AnchorRect | null> => {
     const entry = registryRef.current.get(id);
-    if (!entry || !entry.ref) return null;
+    if (!entry) return null;
+    if (entry.getRect) return entry.getRect();
+    if (!entry.ref) return null;
     await scrollAnchorIntoView(entry);
     return measureInWindowAsync(entry.ref);
   }, []);
@@ -193,10 +217,40 @@ export const useCoachmarkAnchor = (
   const scrollRef = options?.scrollRef ?? null;
   return useCallback(
     (view: View | null) => {
-      register(id, view, scrollRef);
+      register(id, view, scrollRef, null);
     },
     [id, register, scrollRef],
   );
+};
+
+/**
+ * Registers a coachmark anchor whose on-screen rect is computed at measure
+ * time rather than read from the rendered native view. Use this for elements
+ * with a deterministic absolute position (FABs, fixed overlays) where putting
+ * a ref on the rendered node returned wrong bounds.
+ *
+ * The provider runs on every measure, so it can read live values like
+ * Dimensions.get("window") and any hook-derived constants captured in its
+ * closure.
+ */
+export const useCoachmarkComputedAnchor = (
+  id: string,
+  getRect: AnchorRectProvider,
+): void => {
+  const { register } = useCoachmarkAnchorContext();
+  // Hold the latest provider in a ref so re-renders that change `getRect`
+  // identity don't trigger re-register churn. The wrapper we hand the registry
+  // is stable; it forwards to the latest closure.
+  const providerRef = useRef(getRect);
+  providerRef.current = getRect;
+
+  useEffect(() => {
+    const stable: AnchorRectProvider = () => providerRef.current();
+    register(id, null, null, stable);
+    return () => {
+      register(id, null, null, null);
+    };
+  }, [id, register]);
 };
 
 export const useMeasureAnchor = () => {

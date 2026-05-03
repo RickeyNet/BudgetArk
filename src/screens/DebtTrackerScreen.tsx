@@ -26,6 +26,7 @@ import {
   ScrollView,
   TextInput,
   Platform,
+  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -70,7 +71,20 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
-import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
+import {
+  useCoachmarkAnchor,
+  useCoachmarkComputedAnchor,
+} from "../onboarding/CoachmarkAnchorContext";
+
+/**
+ * FAB layout constants — kept here so the coachmark can compute a
+ * window-relative rect for the spotlight without going through a ref +
+ * measureInWindow round-trip (which was returning bounds for the wrong
+ * native node). Keep these in sync with styles.fab below.
+ */
+const FAB_BOTTOM = 90;
+const FAB_RIGHT = 20;
+const FAB_SIZE = 52;
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 
@@ -221,7 +235,18 @@ const DebtTrackerScreen: React.FC = () => {
   const listRef = useRef<FlatList<Debt>>(null);
   const anchorSummary = useCoachmarkAnchor("debts-summary-card", { scrollRef: listRef });
   const anchorMilestones = useCoachmarkAnchor("debts-milestones-card", { scrollRef: listRef });
-  const anchorFab = useCoachmarkAnchor("debts-fab");
+  // FAB rect is computed from layout constants (FAB_* above) rather than
+  // measured via ref — measureInWindow returned the wrong bounds when the
+  // ref was on the TouchableOpacity, even after wrapping it in a plain View.
+  useCoachmarkComputedAnchor("debts-fab", () => {
+    const { width, height } = Dimensions.get("window");
+    return {
+      x: width - FAB_RIGHT - FAB_SIZE,
+      y: height - FAB_BOTTOM - FAB_SIZE,
+      width: FAB_SIZE,
+      height: FAB_SIZE,
+    };
+  });
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
@@ -1002,24 +1027,17 @@ const DebtTrackerScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
-      {/* FAB — Add Debt. Outer <View> exists purely so the coachmark
-          anchor measures a plain native node with predictable
-          measureInWindow output. Putting the ref on TouchableOpacity
-          directly was returning bounds of the wrong element on iOS. */}
-      <View
-        ref={anchorFab}
-        collapsable={false}
-        style={styles.fabAnchor}
-        pointerEvents="box-none"
+      {/* FAB — Add Debt. The spotlight anchor for this button is registered
+          via useCoachmarkComputedAnchor above, which computes the window
+          rect from FAB_BOTTOM / FAB_RIGHT / FAB_SIZE — keep the style and
+          those constants in sync. */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowModal(true)}
+        activeOpacity={0.8}
       >
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setShowModal(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      </View>
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
 
       <AddDebtModal
         visible={showModal}
@@ -2186,16 +2204,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
 
   /* FAB */
-  fabAnchor: {
-    position: "absolute",
-    bottom: 90,
-    right: 20,
-    width: 52,
-    height: 52,
-  },
   fab: {
-    width: 52,
-    height: 52,
+    position: "absolute",
+    bottom: FAB_BOTTOM,
+    right: FAB_RIGHT,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
     borderRadius: tokens.radius,
     backgroundColor: colors.accent,
     justifyContent: "center",
