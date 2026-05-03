@@ -11,8 +11,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     title: "Walkthrough Polish",
     releasedAt: "2026-05-03",
     highlights: [
-      "Replay walkthrough actually plays back now. Tapping it (or Replay tour from the How-To screen) starts the spotlight cleanly instead of getting stuck behind a confirmation pop-up.",
-      "The walkthrough now scrolls for you. When a tooltip points at something further down the page, the screen brings that card into view so the highlight lines up neatly with what the tip is talking about.",
+      "Replay walkthrough now plays the whole thing end-to-end. Tap it on Profile (or Replay tour from the How-To screen) and the tour starts on Profile, then automatically jumps to Debts, Budget, Bridge, and Utilities as you finish each tab — one continuous walkthrough instead of just the current tab.",
+      "The walkthrough now scrolls for you. When a tip points at something further down the page, the screen brings that card into view so the highlight lines up neatly with what the tip is talking about.",
       "Rewrote the Bridge tour so each step's text matches the card under the spotlight: your Net Worth and chart, then the tracked balances summary, then your accounts list.",
     ],
   },

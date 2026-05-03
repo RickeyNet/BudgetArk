@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { useCoachmarks } from "./CoachmarksProvider";
 import Spotlight from "./Spotlight";
 import { COACHMARKS, type CoachmarkTabId } from "../data/coachmarkContent";
@@ -10,11 +10,20 @@ import { COACHMARKS, type CoachmarkTabId } from "../data/coachmarkContent";
  * step in COACHMARKS[tabId].steps via the spotlight overlay. Marks the tab as
  * seen after the last step.
  *
+ * If a guided tour is active (Profile's "Replay walkthrough" or the How-To
+ * "Replay tour" button kicks one off), completing the last step pops the next
+ * tab off the queue and navigates there — so the user gets a chained tour
+ * across every tab without having to switch them by hand.
+ *
  * Returns a React node the screen renders near its root.
  */
 export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
-  const { ready, hasSeen, skippedAll, markSeen, skipAll } = useCoachmarks();
+  const { ready, hasSeen, skippedAll, markSeen, skipAll, advanceGuidedTour } = useCoachmarks();
   const isFocused = useIsFocused();
+  // `useNavigation<any>` because tab navigators don't share a typed param
+  // list with the coachmark module — coercing here is cleaner than threading
+  // RootTabParamList into onboarding/.
+  const navigation = useNavigation<any>();
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
 
@@ -43,15 +52,27 @@ export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
   const handleNext = useCallback(() => {
     if (stepIndex >= totalSteps - 1) {
       setActive(false);
-      markSeen(tabId);
+      void markSeen(tabId);
+      const nextTab = advanceGuidedTour();
+      if (nextTab) {
+        // Brief pause so the spotlight Modal close animation doesn't fight
+        // the tab switch — RN handles concurrent dismissals poorly.
+        setTimeout(() => {
+          try {
+            navigation.navigate(nextTab as never);
+          } catch (err) {
+            if (__DEV__) console.warn("Coachmark guided nav failed:", err);
+          }
+        }, 220);
+      }
       return;
     }
     setStepIndex((i) => i + 1);
-  }, [stepIndex, totalSteps, markSeen, tabId]);
+  }, [stepIndex, totalSteps, markSeen, tabId, advanceGuidedTour, navigation]);
 
   const handleSkipAll = useCallback(() => {
     setActive(false);
-    skipAll();
+    void skipAll();
   }, [skipAll]);
 
   const step = totalSteps > 0 ? tour.steps[Math.min(stepIndex, totalSteps - 1)] : null;

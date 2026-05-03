@@ -146,7 +146,7 @@ const ProfileScreen: React.FC = () => {
     setDensityId,
   } = useDensity();
   const coachmark = useTabCoachmark("Profile");
-  const { replay: replayCoachmarks } = useCoachmarks();
+  const { replay: replayCoachmarks, startGuidedTour } = useCoachmarks();
   const scrollRef = useRef<ScrollView>(null);
   const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", { scrollRef });
   const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
@@ -1325,10 +1325,10 @@ const ProfileScreen: React.FC = () => {
               onPress={async () => {
                 triggerHaptic("selection");
                 await replayCoachmarks();
-                // No info modal — the spotlight starts immediately on the
-                // current tab as visual confirmation. Stacking a confirmation
-                // Modal on top of the Spotlight Modal causes RN to queue/hide
-                // one of them.
+                // Profile fires its own tour on focus; queue the rest so each
+                // tab auto-navigates after "Got it" on its last step. User
+                // gets a single chained walkthrough across all five tabs.
+                startGuidedTour(["DebtTracker", "Budget", "Bridge", "Utilities"]);
               }}
             >
               <View style={{ flex: 1 }}>
@@ -1755,7 +1755,9 @@ const ProfileScreen: React.FC = () => {
                   // Spotlight Modal on top of the still-dismissing How-To
                   // Modal and queues/hides one of them.
                   setTimeout(() => {
-                    void replayCoachmarks();
+                    void replayCoachmarks().then(() => {
+                      startGuidedTour(["DebtTracker", "Budget", "Bridge", "Utilities"]);
+                    });
                   }, 350);
                 }}
               >
