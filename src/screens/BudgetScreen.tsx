@@ -57,6 +57,7 @@ import { triggerHaptic } from "../utils/haptics";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { calculateNetWorthTotals } from "../utils/netWorth";
@@ -206,6 +207,7 @@ const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const coachmark = useTabCoachmark("Budget");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -1376,6 +1378,7 @@ const BudgetScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      {coachmark}
     </View>
   );
 };

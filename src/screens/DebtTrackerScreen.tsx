@@ -69,6 +69,7 @@ import { simulatePayoffPlan } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 
@@ -193,6 +194,7 @@ const DebtTrackerScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
+  const coachmark = useTabCoachmark("DebtTracker");
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
@@ -1400,6 +1402,7 @@ const DebtTrackerScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      {coachmark}
     </View>
   );
 };

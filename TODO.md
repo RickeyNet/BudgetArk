@@ -300,6 +300,25 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Data confidence tools (last backup badge + backup reminders)
 - [ ] Accessibility improvements (larger text mode + better screen reader labels)
 - [ ] Onboarding quick-start templates (single, couple, debt-heavy, zero-based)
+- [ ] First-launch coachmark walkthrough + always-on How-To reference page
+
+  Purpose: new users currently land on Bridge with no idea what each tab does. Replace cold-start with a guided tour, and keep an always-available reference for users who skip or forget.
+
+  Two parts:
+  1. **Coachmark tour** — first time the user lands on each of the 5 tabs (Debts, Budget, Bridge, Utilities, Profile), show a darkened-backdrop overlay with a tooltip card explaining the tab's primary purpose and one or two key actions ("Tap + to add a debt", "Tap a milestone to set targets"). Persist `seenTabs: string[]` to encrypted storage so the same user never sees a step twice. Skip-all and Next buttons. Theme + density aware (uses existing `useTheme()` + `useDensity()` hooks).
+  2. **How-To reference** — extend the existing FAQ section in Profile into a richer "How to use BudgetArk" block. Cover one section per tab with the same content the coachmark teaches, plus deeper notes (recurring entries, milestone editing, payoff strategies, partner sync, density/theme toggles). Add a "Replay walkthrough" button that clears `seenTabs` and re-runs the tour the next time each tab is opened.
+
+  Files (proposed):
+  - `src/storage/coachmarksStorage.ts` — CRUD for `seenTabs` set, `walkthroughSkipped` flag.
+  - `src/onboarding/CoachmarksProvider.tsx` — Context exposing `markSeen(tabId)`, `replay()`, `seenTabs`.
+  - `src/onboarding/Coachmark.tsx` — Modal overlay with backdrop + tooltip card. No spotlight cutout in v1; just darkens the screen and shows a card pinned to the relevant region (top/middle/bottom).
+  - `src/data/coachmarkContent.ts` — content per tab.
+  - `src/screens/*.tsx` — each tab calls `useCoachmark("tabId")` on focus.
+  - `src/screens/ProfileScreen.tsx` — How-To section + Replay button.
+
+  Storage: `@budgetark_coachmarks` in EncryptedStorage. `{ seenTabs: string[], skippedAll: boolean, version: number }`. Bump version to invalidate the seen list when content changes meaningfully (e.g. a 6th tab gets added).
+
+  No new deps. Uses React Native `Modal` + the existing theme/density tokens. OTA-eligible.
 - [ ] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage
 - [ ] Debt-Free Countdown Timer — live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
 - [ ] Annual Financial Report — end-of-year summary: total debt paid, total saved, net worth change, biggest spending category, months under budget. Shareable as an image (percentages and milestones only, no PII).

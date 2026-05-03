@@ -73,6 +73,9 @@ import {
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
+import { useTabCoachmark } from "../onboarding/useTabCoachmark";
+import { useCoachmarks } from "../onboarding/CoachmarksProvider";
+import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
@@ -141,6 +144,8 @@ const ProfileScreen: React.FC = () => {
     presets: densityPresets,
     setDensityId,
   } = useDensity();
+  const coachmark = useTabCoachmark("Profile");
+  const { replay: replayCoachmarks } = useCoachmarks();
   const styles = React.useMemo(() => makeStyles(tokens), [tokens]);
   const {
     preference,
@@ -202,6 +207,10 @@ const ProfileScreen: React.FC = () => {
   const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
   const [expandedReleaseNote, setExpandedReleaseNote] =
     useState<ReleaseNoteKey | null>(RELEASE_NOTES[0]?.version || null);
+
+  /** How-To reference modal */
+  const [showHowToModal, setShowHowToModal] = useState(false);
+  const [expandedHowTo, setExpandedHowTo] = useState<string | null>(null);
 
   /** Generic themed info/alert modal (replaces all Alert.alert) */
   const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
@@ -1278,6 +1287,59 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* ── Help (how-to + replay walkthrough) ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            HELP
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                triggerHaptic("selection");
+                setExpandedHowTo(null);
+                setShowHowToModal(true);
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  How to use BudgetArk
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  Per-tab quick reference
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={async () => {
+                triggerHaptic("selection");
+                await replayCoachmarks();
+                setInfoModal({
+                  title: "Walkthrough reset",
+                  message:
+                    "The first-launch tips will replay the next time you open each tab.",
+                });
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Replay walkthrough
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  Show the first-launch tour again
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>↺</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* ── About (release notes, github) ── */}
         <View style={styles.settingsSection}>
           <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
@@ -1618,6 +1680,88 @@ const ProfileScreen: React.FC = () => {
             >
               <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── How-To Reference Modal ── */}
+      <Modal
+        visible={showHowToModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowHowToModal(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "85%" },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>How to use BudgetArk</Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              Tap a tab to see how it works.
+            </Text>
+
+            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
+              {COACHMARK_TAB_IDS.map((tabId) => {
+                const item = COACHMARKS[tabId];
+                const isExpanded = expandedHowTo === tabId;
+                return (
+                  <TouchableOpacity
+                    key={tabId}
+                    style={[
+                      styles.faqItem,
+                      { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                    ]}
+                    onPress={() => {
+                      triggerHaptic("selection");
+                      setExpandedHowTo(isExpanded ? null : tabId);
+                    }}
+                  >
+                    <View style={styles.faqHeader}>
+                      <Text style={[styles.faqQuestion, { color: colors.text }]}>{item.title}</Text>
+                      <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                        {isExpanded ? "v" : ">"}
+                      </Text>
+                    </View>
+                    {isExpanded ? (
+                      <>
+                        <Text style={[styles.faqAnswer, { color: colors.textDim }]}>{item.body}</Text>
+                        {item.tip ? (
+                          <Text style={[styles.faqAnswer, { color: colors.textMuted }]}>
+                            Tip: {item.tip}
+                          </Text>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={{ flexDirection: "row", gap: tokens.gapSm, marginTop: tokens.gapSm }}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, flex: 1 }]}
+                onPress={async () => {
+                  triggerHaptic("selection");
+                  await replayCoachmarks();
+                  setShowHowToModal(false);
+                  setInfoModal({
+                    title: "Walkthrough reset",
+                    message: "The first-launch tips will replay the next time you open each tab.",
+                  });
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>Replay tour</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent, flex: 1 }]}
+                onPress={() => setShowHowToModal(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2326,6 +2470,7 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      {coachmark}
     </>
   );
 };

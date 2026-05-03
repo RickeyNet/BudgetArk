@@ -24,6 +24,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
+import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { calcInvestmentTimeline, calcPaymentForGoalDate } from "../utils/calculations";
@@ -231,6 +232,7 @@ const UtilitiesScreen: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const coachmark = useTabCoachmark("Utilities");
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   /* Compound interest calculator state */
@@ -1038,6 +1040,7 @@ const UtilitiesScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+      {coachmark}
     </View>
   );
 };

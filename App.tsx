@@ -25,6 +25,7 @@ import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
+import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
@@ -384,7 +385,9 @@ export default function App(): React.JSX.Element {
         <ThemeProvider>
           <DensityProvider>
             <CurrencyProvider>
-              <AppContent />
+              <CoachmarksProvider>
+                <AppContent />
+              </CoachmarksProvider>
             </CurrencyProvider>
           </DensityProvider>
         </ThemeProvider>

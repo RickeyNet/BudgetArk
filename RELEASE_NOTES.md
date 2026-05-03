@@ -1,12 +1,14 @@
 # BudgetArk Release Notes
 
-## v1.4.13 - Density Tokens Across All Screens (2026-05-02)
+## v1.4.13 - Density Everywhere + Guided Walkthrough (2026-05-03)
 
 - Layout Density now applies app-wide. `DebtTrackerScreen`, `BudgetScreen`, `UtilitiesScreen`, `BridgeScreen`, `ProfileScreen`, and `OnboardingScreen` all consume `useDensity()` tokens through their `makeStyles(colors, tokens)` factories with a `scale(n)` helper for font sizes. Switching presets in Profile → Appearance now resizes card padding, border radius, inter-card spacing, and font sizes everywhere instead of only Bridge.
 - `ProfileScreen.tsx` had a module-level `StyleSheet.create` — lifted into a `makeStyles(tokens)` factory and consumed via `useMemo`. Settings rows and grouped-card rows now also pick up `tokens.rowHeight` as a `minHeight`, so Compact tightens row height and Spacious enlarges the touch targets.
 - `NetWorthHistoryCard.tsx` (rendered inside Bridge) was the last module-level offender — now also a factory consuming `useDensity()` directly. Card padding, border radius, font sizes, and meta-row spacing reflect the preset.
 - Comfortable preset still matches the previous default visuals exactly, so users who don't change the setting won't notice anything different after upgrading.
-- All changes are pure JS. `runtimeVersion` stays at `1.4.1`, so this ships as an OTA update.
+- New first-launch coachmark walkthrough. The first time the user lands on each of the 5 tabs, a darkened-overlay tooltip card explains what the tab does plus one key action and tip. State persists to encrypted storage under `@budgetark_coachmarks` so every tab is shown at most once. Built from `CoachmarksProvider` + `useTabCoachmark(tabId)` hook + `Coachmark` modal — no new dependencies; uses the existing theme + density token system so tooltip cards inherit the app's visual language.
+- New "Help" section in Profile with a "How to use BudgetArk" per-tab reference modal and a "Replay walkthrough" button that resets the seen-tabs state so the tour can be replayed at any time.
+- All changes are pure JS — no new native modules. `runtimeVersion` stays at `1.4.1`, so this ships as an OTA update reachable by all existing devices.
 
 ## v1.4.12 - Layout Density Selector (2026-05-02)
 

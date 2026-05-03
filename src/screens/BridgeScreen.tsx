@@ -32,6 +32,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
@@ -40,6 +41,7 @@ const BridgeScreen: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const coachmark = useTabCoachmark("Bridge");
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -509,6 +511,7 @@ const BridgeScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      {coachmark}
     </View>
   );
 };
