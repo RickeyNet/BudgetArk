@@ -67,8 +67,10 @@ import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal
 import { triggerHaptic } from "../utils/haptics";
 import { simulatePayoffPlan } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 
 
 type PayoffStrategy = "custom" | "avalanche" | "snowball";
@@ -188,10 +190,11 @@ const DebtTrackerScreen: React.FC = () => {
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
 
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
 
-  const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const primeMilestonesModal = useCallback((plan: DebtMilestonePlan) => {
     setTargetDraftByStep((prev) => {
@@ -1401,29 +1404,30 @@ const DebtTrackerScreen: React.FC = () => {
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bg },
-    listContent: { paddingHorizontal: 16, paddingBottom: 100 },
+    listContent: { paddingHorizontal: tokens.pad, paddingBottom: 100 },
 
-    titleSection: { paddingTop: 56, paddingBottom: 20, alignItems: "center" as const },
-    appLabel: { fontSize: 12, color: colors.textDim, letterSpacing: 2, marginBottom: 4, textAlign: "center" as const },
-    screenTitle: { fontSize: 28, fontWeight: "700" as const, color: colors.text, marginBottom: 4, textAlign: "center" as const },
-    screenSubtitle: { fontSize: 14, color: colors.textMuted, textAlign: "center" as const },
+    titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const },
+    appLabel: { fontSize: scale(12), color: colors.textDim, letterSpacing: 2, marginBottom: 4, textAlign: "center" as const },
+    screenTitle: { fontSize: scale(28), fontWeight: "700" as const, color: colors.text, marginBottom: 4, textAlign: "center" as const },
+    screenSubtitle: { fontSize: scale(14), color: colors.textMuted, textAlign: "center" as const },
 
     summaryCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: `${colors.accent}30`,
-      borderRadius: 20,
-      padding: 24,
-      marginBottom: 20,
+      borderRadius: tokens.radius + 4,
+      padding: tokens.padLg,
+      marginBottom: tokens.gapLg,
     },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   summaryLeft: { flex: 1 },
-  summaryLabel: { fontSize: 11, color: colors.textDim, letterSpacing: 1, marginBottom: 4 },
-  summaryAmount: { fontSize: 32, fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] },
-  paidText: { fontSize: 14, color: colors.success, fontWeight: "600", marginTop: 4 },
+  summaryLabel: { fontSize: scale(11), color: colors.textDim, letterSpacing: 1, marginBottom: 4 },
+  summaryAmount: { fontSize: scale(32), fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] },
+  paidText: { fontSize: scale(14), color: colors.success, fontWeight: "600", marginTop: 4 },
   summaryRingWrap: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
   summaryRingLabel: { position: "absolute", fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
 
@@ -1474,10 +1478,10 @@ const makeStyles = (colors: ThemeColors) =>
     fontWeight: "700",
    },
     milestonesCard: {
-      marginTop: 12,
+      marginTop: tokens.gapSm,
       borderWidth: 1,
-      borderRadius: 12,
-      paddingHorizontal: 12,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padSm,
       paddingVertical: 7,
       flexDirection: "row",
       justifyContent: "space-between",
@@ -1506,13 +1510,13 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.3,
     },
 
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
-  sectionTitle: { fontSize: 16, fontWeight: "600", color: colors.text },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: tokens.gap },
+  sectionTitle: { fontSize: scale(16), fontWeight: "600", color: colors.text },
   sectionActions: { flexDirection: "row", gap: 8, alignItems: "center" },
   addBtn: {
     backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingHorizontal: 16,
+    borderRadius: tokens.radiusSm,
+    paddingHorizontal: tokens.pad,
     paddingVertical: 8,
     shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
@@ -1535,7 +1539,7 @@ const makeStyles = (colors: ThemeColors) =>
   ownerFilterRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 12,
+    marginBottom: tokens.gapSm,
   },
   ownerFilterBtn: {
     borderWidth: 1,
@@ -1549,7 +1553,7 @@ const makeStyles = (colors: ThemeColors) =>
   },
 
   strategyRow: {
-    marginBottom: 14,
+    marginBottom: tokens.gap,
   },
   strategyHeaderRow: {
     flexDirection: "row",
@@ -1717,9 +1721,9 @@ const makeStyles = (colors: ThemeColors) =>
   /* ── Milestone step cards (full-screen) ── */
   msStepCard: {
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
+    borderRadius: tokens.radius - 2,
+    padding: tokens.padSm,
+    gap: tokens.gapSm,
     backgroundColor: colors.card,
   },
   msStepHeaderRow: {
@@ -1730,7 +1734,7 @@ const makeStyles = (colors: ThemeColors) =>
   },
   msStepName: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: scale(17),
     fontWeight: "700",
     flexShrink: 1,
   },
@@ -1999,9 +2003,9 @@ const makeStyles = (colors: ThemeColors) =>
   },
 
   emptyWrap: { alignItems: "center", paddingVertical: 48 },
-  emptyEmoji: { fontSize: 40, marginBottom: 12 },
-  emptyTitle: { fontSize: 16, fontWeight: "600", color: colors.text, marginBottom: 4 },
-  emptySub: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
+  emptyEmoji: { fontSize: scale(40), marginBottom: 12 },
+  emptyTitle: { fontSize: scale(16), fontWeight: "600", color: colors.text, marginBottom: 4 },
+  emptySub: { fontSize: scale(13), color: colors.textMuted, textAlign: "center" },
   emptyActionBtn: {
     marginTop: 14,
     borderWidth: 1,
@@ -2025,8 +2029,8 @@ const makeStyles = (colors: ThemeColors) =>
     width: "100%",
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: tokens.radius + 4,
+    padding: tokens.padLg,
     backgroundColor: colors.card,
   },
   dialogTitle: {
@@ -2125,7 +2129,7 @@ const makeStyles = (colors: ThemeColors) =>
     right: 20,
     width: 52,
     height: 52,
-    borderRadius: 16,
+    borderRadius: tokens.radius,
     backgroundColor: colors.accent,
     justifyContent: "center",
     alignItems: "center",
@@ -2136,11 +2140,12 @@ const makeStyles = (colors: ThemeColors) =>
     shadowRadius: 8,
   },
   fabText: {
-    fontSize: 26,
+    fontSize: scale(26),
     fontWeight: "300",
     color: colors.accentButtonText || colors.bg,
     lineHeight: 28,
   },
 });
+};
 
 export default DebtTrackerScreen;

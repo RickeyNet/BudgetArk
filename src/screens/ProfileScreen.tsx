@@ -72,6 +72,7 @@ import {
 } from "../storage/backupReminderStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
+import type { DensityTokens } from "../theme/density";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
@@ -136,9 +137,11 @@ const ProfileScreen: React.FC = () => {
   const { colors, presets, themeId, setThemeId } = useTheme();
   const {
     densityId,
+    tokens,
     presets: densityPresets,
     setDensityId,
   } = useDensity();
+  const styles = React.useMemo(() => makeStyles(tokens), [tokens]);
   const {
     preference,
     options: currencyOptions,
@@ -2327,33 +2330,35 @@ const ProfileScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
   screen: {
     flex: 1,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: tokens.pad,
     paddingBottom: 100,
   },
   titleSection: {
     paddingTop: 56,
-    paddingBottom: 20,
+    paddingBottom: tokens.gap,
     alignItems: "center",
   },
   appLabel: {
-    fontSize: 12,
+    fontSize: scale(12),
     letterSpacing: 2,
     marginBottom: 4,
     textAlign: "center",
   },
   screenTitle: {
-    fontSize: 28,
+    fontSize: scale(28),
     fontWeight: "700",
     marginBottom: 4,
     textAlign: "center",
   },
   screenSubtitle: {
-    fontSize: 14,
+    fontSize: scale(14),
     textAlign: "center",
   },
 
@@ -2467,20 +2472,21 @@ const styles = StyleSheet.create({
   },
   settingsRow: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderRadius: tokens.radiusSm,
+    paddingHorizontal: tokens.pad,
     paddingVertical: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
+    minHeight: tokens.rowHeight,
   },
   settingsRowText: {
-    fontSize: 15,
+    fontSize: scale(15),
     fontWeight: "500",
   },
   settingsRowSubtext: {
-    fontSize: 13,
+    fontSize: scale(13),
     marginTop: 2,
   },
   settingsRowArrow: {
@@ -2493,15 +2499,16 @@ const styles = StyleSheet.create({
   /* Grouped Card */
   groupedCard: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: tokens.radius - 2,
     overflow: "hidden",
   },
   groupedRow: {
-    paddingHorizontal: 16,
+    paddingHorizontal: tokens.pad,
     paddingVertical: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    minHeight: tokens.rowHeight,
   },
   groupedDivider: {
     height: StyleSheet.hairlineWidth,
@@ -2542,11 +2549,11 @@ const styles = StyleSheet.create({
   /* What's New */
   newsCard: {
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: tokens.radius,
     overflow: "hidden",
   },
   newsItem: {
-    padding: 16,
+    padding: tokens.pad,
   },
   newsBadge: {
     alignSelf: "flex-start",
@@ -2602,18 +2609,18 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: tokens.radius + 8,
+    borderTopRightRadius: tokens.radius + 8,
     borderWidth: 1,
-    paddingTop: 24,
+    paddingTop: tokens.padLg,
     paddingBottom: 40,
-    paddingHorizontal: 20,
+    paddingHorizontal: tokens.padLg,
     maxHeight: "70%",
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: scale(22),
     fontWeight: "700",
-    marginBottom: 20,
+    marginBottom: tokens.gap,
     textAlign: "center",
   },
   themeList: {
@@ -2621,9 +2628,9 @@ const styles = StyleSheet.create({
   },
   themeOption: {
     borderWidth: 2,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: tokens.radiusSm,
+    padding: tokens.pad,
+    marginBottom: tokens.gapSm,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -2638,7 +2645,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   themeOptionText: {
-    fontSize: 16,
+    fontSize: scale(16),
     fontWeight: "600",
     flex: 1,
   },
@@ -2797,9 +2804,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dialogBtnText: {
-    fontSize: 15,
+    fontSize: scale(15),
     fontWeight: "700",
   },
-});
+  });
+};
 
 export default ProfileScreen;

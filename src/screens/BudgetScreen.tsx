@@ -55,8 +55,10 @@ import {
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 
 type ExpenseCategoryEntry = {
@@ -202,8 +204,9 @@ const CATEGORY_CHART_PALETTE = [
 
 const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
-  const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -1377,37 +1380,38 @@ const BudgetScreen: React.FC = () => {
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     screen: {
       flex: 1,
       backgroundColor: colors.bg,
     },
     listContent: {
-      paddingHorizontal: 16,
+      paddingHorizontal: tokens.pad,
       paddingBottom: 110,
     },
     titleSection: {
       paddingTop: 56,
-      paddingBottom: 20,
+      paddingBottom: tokens.gap,
       alignItems: "center",
     },
     appLabel: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
       letterSpacing: 2,
       marginBottom: 4,
       textAlign: "center",
     },
     screenTitle: {
-      fontSize: 28,
+      fontSize: scale(28),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
       textAlign: "center",
     },
     screenSubtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textMuted,
       textAlign: "center",
     },
@@ -1447,17 +1451,17 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: `${colors.accent}30`,
-      borderRadius: 20,
-      padding: 20,
-      marginBottom: 14,
+      borderRadius: tokens.radius + 4,
+      padding: tokens.pad + 4,
+      marginBottom: tokens.gap,
     },
     netWorthCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 18,
-      marginBottom: 14,
+      borderRadius: tokens.radius,
+      padding: tokens.pad + 2,
+      marginBottom: tokens.gap,
       alignItems: "center",
     },
     netWorthTitle: {
@@ -1467,7 +1471,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 4,
     },
     netWorthValue: {
-      fontSize: 24,
+      fontSize: scale(24),
       fontWeight: "700",
       fontVariant: ["tabular-nums"],
       marginBottom: 14,
@@ -1524,8 +1528,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
     addBtn: {
       backgroundColor: colors.accent,
-      borderRadius: 10,
-      paddingHorizontal: 16,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.pad,
       paddingVertical: 11,
       alignItems: "center",
     },
@@ -1587,10 +1591,10 @@ const makeStyles = (colors: ThemeColors) =>
       fontVariant: ["tabular-nums"] as any,
     },
     section: {
-      marginBottom: 20,
+      marginBottom: tokens.gapLg,
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: scale(16),
       fontWeight: "600",
       color: colors.text,
       marginBottom: 10,
@@ -1599,10 +1603,10 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: `${colors.accent}30`,
-      borderRadius: 16,
-      paddingVertical: 16,
-      paddingHorizontal: 18,
-      marginBottom: 12,
+      borderRadius: tokens.radius,
+      paddingVertical: tokens.pad,
+      paddingHorizontal: tokens.pad + 2,
+      marginBottom: tokens.gapSm,
     },
     reviewSpotlightEyebrow: {
       fontSize: 11,
@@ -1613,7 +1617,7 @@ const makeStyles = (colors: ThemeColors) =>
       textTransform: "uppercase",
     },
     reviewSpotlightTitle: {
-      fontSize: 17,
+      fontSize: scale(17),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 6,
@@ -1652,8 +1656,8 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 16,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
     },
     spendingHeaderRow: {
       flexDirection: "row",
@@ -1662,7 +1666,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 12,
     },
     spendingTitle: {
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "700",
       color: colors.text,
     },
@@ -2026,7 +2030,7 @@ const makeStyles = (colors: ThemeColors) =>
       right: 20,
       width: 52,
       height: 52,
-      borderRadius: 16,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       justifyContent: "center",
       alignItems: "center",
@@ -2037,11 +2041,12 @@ const makeStyles = (colors: ThemeColors) =>
       shadowRadius: 8,
     },
     fabText: {
-      fontSize: 26,
+      fontSize: scale(26),
       fontWeight: "300",
       color: colors.accentButtonText || colors.bg,
       lineHeight: 28,
     },
   });
+};
 
 export default BudgetScreen;

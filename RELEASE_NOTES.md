@@ -1,5 +1,13 @@
 # BudgetArk Release Notes
 
+## v1.4.13 - Density Tokens Across All Screens (2026-05-02)
+
+- Layout Density now applies app-wide. `DebtTrackerScreen`, `BudgetScreen`, `UtilitiesScreen`, `BridgeScreen`, `ProfileScreen`, and `OnboardingScreen` all consume `useDensity()` tokens through their `makeStyles(colors, tokens)` factories with a `scale(n)` helper for font sizes. Switching presets in Profile → Appearance now resizes card padding, border radius, inter-card spacing, and font sizes everywhere instead of only Bridge.
+- `ProfileScreen.tsx` had a module-level `StyleSheet.create` — lifted into a `makeStyles(tokens)` factory and consumed via `useMemo`. Settings rows and grouped-card rows now also pick up `tokens.rowHeight` as a `minHeight`, so Compact tightens row height and Spacious enlarges the touch targets.
+- `NetWorthHistoryCard.tsx` (rendered inside Bridge) was the last module-level offender — now also a factory consuming `useDensity()` directly. Card padding, border radius, font sizes, and meta-row spacing reflect the preset.
+- Comfortable preset still matches the previous default visuals exactly, so users who don't change the setting won't notice anything different after upgrading.
+- All changes are pure JS. `runtimeVersion` stays at `1.4.1`, so this ships as an OTA update.
+
 ## v1.4.12 - Layout Density Selector (2026-05-02)
 
 - New Layout Density picker in Profile → Appearance with three presets: Compact, Comfortable (default), Spacious. Plumbing mirrors the existing theme system — `DensityProvider` wraps the app, `useDensity()` returns a `tokens` object with `pad`, `padSm`, `padLg`, `gap`, `gapSm`, `gapLg`, `radius`, `radiusSm`, `fontScale`, and `rowHeight`. Persists to encrypted storage under `@budgetark_density_id`.

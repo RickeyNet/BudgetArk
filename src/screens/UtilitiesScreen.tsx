@@ -23,7 +23,9 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import { calcInvestmentTimeline, calcPaymentForGoalDate } from "../utils/calculations";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
@@ -227,8 +229,9 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
 
 const UtilitiesScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   /* Compound interest calculator state */
   const [calcOpen, setCalcOpen] = useState(true);
@@ -1039,37 +1042,38 @@ const UtilitiesScreen: React.FC = () => {
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     screen: {
       flex: 1,
       backgroundColor: colors.bg,
     },
     content: {
-      paddingHorizontal: 16,
+      paddingHorizontal: tokens.pad,
       paddingBottom: 110,
     },
     titleSection: {
       paddingTop: 56,
-      paddingBottom: 20,
+      paddingBottom: tokens.gap,
       alignItems: "center",
     },
     appLabel: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
       letterSpacing: 2,
       marginBottom: 4,
       textAlign: "center",
     },
     screenTitle: {
-      fontSize: 28,
+      fontSize: scale(28),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
       textAlign: "center",
     },
     screenSubtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textMuted,
       textAlign: "center",
     },
@@ -1079,16 +1083,16 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: `${colors.accent}30`,
-      borderRadius: 16,
-      paddingVertical: 16,
-      paddingHorizontal: 18,
-      marginBottom: 12,
+      borderRadius: tokens.radius,
+      paddingVertical: tokens.pad,
+      paddingHorizontal: tokens.pad + 2,
+      marginBottom: tokens.gapSm,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
     },
     toolTitle: {
-      fontSize: 16,
+      fontSize: scale(16),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 2,
@@ -1104,7 +1108,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginLeft: 12,
     },
     toolBody: {
-      gap: 12,
+      gap: tokens.gapSm,
     },
 
     /* Result Card */
@@ -1112,18 +1116,18 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: `${colors.accent}30`,
-      borderRadius: 20,
-      padding: 24,
+      borderRadius: tokens.radius + 4,
+      padding: tokens.padLg,
       alignItems: "center",
     },
     resultLabel: {
-      fontSize: 10,
+      fontSize: scale(10),
       color: colors.textMuted,
       letterSpacing: 1.5,
       marginBottom: 8,
     },
     resultValue: {
-      fontSize: 32,
+      fontSize: scale(32),
       fontWeight: "700",
       color: colors.accent,
       fontVariant: ["tabular-nums"],
@@ -1162,9 +1166,9 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 14,
-      padding: 16,
-      gap: 10,
+      borderRadius: tokens.radius - 2,
+      padding: tokens.pad,
+      gap: tokens.gapSm,
     },
     whyCardTitle: {
       fontSize: 15,
@@ -1191,9 +1195,9 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 18,
-      gap: 18,
+      borderRadius: tokens.radius,
+      padding: tokens.pad + 2,
+      gap: tokens.gapLg,
     },
     sliderGroup: {
       gap: 8,
@@ -1491,10 +1495,11 @@ const makeStyles = (colors: ThemeColors) =>
       fontVariant: ["tabular-nums"],
     },
     efTimeEstimate: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textMuted,
       textAlign: "center",
     },
   });
+};
 
 export default UtilitiesScreen;

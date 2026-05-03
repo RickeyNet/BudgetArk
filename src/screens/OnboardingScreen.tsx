@@ -29,7 +29,9 @@ import {
   Dimensions,
 } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import { ThemePreset } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import { completeOnboarding } from "../storage/userStorage";
 
 const { width } = Dimensions.get("window");
@@ -128,11 +130,12 @@ import { sanitizeTextInput } from "../utils/sanitize";
 
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { colors, presets, themeId, setThemeId } = useTheme();
+  const { tokens } = useDensity();
   const [step, setStep] = useState<OnboardingStep>("theme");
   const [displayName, setDisplayName] = useState("");
 
   /** Memoized styles based on current theme */
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   /**
    * Handle theme selection - updates theme immediately for preview
@@ -367,14 +370,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
  * Style factory function - creates styles based on current theme colors
  * Memoization happens at call site to prevent recreation on every render
  */
-const makeStyles = (colors: ThemePreset["colors"]) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     screen: {
       flex: 1,
     },
     scrollContent: {
       flexGrow: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: tokens.padLg,
       paddingTop: 60,
       paddingBottom: 40,
     },
@@ -383,28 +387,28 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
       alignItems: "center",
     },
     stepNumber: {
-      fontSize: 11,
+      fontSize: scale(11),
       color: colors.textMuted,
       letterSpacing: 1.5,
       marginBottom: 12,
     },
     stepTitle: {
-      fontSize: 28,
+      fontSize: scale(28),
       fontWeight: "700",
       color: colors.text,
       textAlign: "center",
       marginBottom: 8,
     },
     stepSubtitle: {
-      fontSize: 15,
+      fontSize: scale(15),
       color: colors.textDim,
       textAlign: "center",
       lineHeight: 22,
       marginBottom: 32,
-      paddingHorizontal: 16,
+      paddingHorizontal: tokens.pad,
     },
     heroEmoji: {
-      fontSize: 64,
+      fontSize: scale(64),
       marginBottom: 16,
     },
 
@@ -414,14 +418,14 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
       width: "100%",
     },
     themeGridContent: {
-      gap: 12,
+      gap: tokens.gapSm,
       paddingBottom: 20,
     },
     themeCard: {
       backgroundColor: colors.card,
       borderWidth: 2,
-      borderRadius: 16,
-      padding: 20,
+      borderRadius: tokens.radius,
+      padding: tokens.padLg,
       width: "100%",
       position: "relative",
     },
@@ -443,7 +447,7 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
       borderRadius: 8,
     },
     themeName: {
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "600",
     },
     selectedBadge: {
@@ -479,13 +483,13 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
       flex: 1,
     },
     featureTitle: {
-      fontSize: 17,
+      fontSize: scale(17),
       fontWeight: "600",
       color: colors.text,
       marginBottom: 4,
     },
     featureDesc: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textDim,
       lineHeight: 20,
     },
@@ -497,10 +501,10 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
     },
     nameInput: {
       borderWidth: 1,
-      borderRadius: 12,
-      paddingHorizontal: 16,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.pad,
       paddingVertical: 14,
-      fontSize: 16,
+      fontSize: scale(16),
       textAlign: "center",
       marginBottom: 8,
     },
@@ -512,8 +516,8 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
 
     /* Privacy card */
     privacyCard: {
-      borderRadius: 12,
-      padding: 20,
+      borderRadius: tokens.radiusSm,
+      padding: tokens.padLg,
       marginBottom: 32,
       width: "100%",
     },
@@ -529,8 +533,8 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
       lineHeight: 20,
     },
     arkCard: {
-      borderRadius: 12,
-      padding: 18,
+      borderRadius: tokens.radiusSm,
+      padding: tokens.pad + 2,
       marginBottom: 20,
       width: "100%",
     },
@@ -583,9 +587,10 @@ const makeStyles = (colors: ThemePreset["colors"]) =>
       alignItems: "center",
     },
     completeBtnText: {
-      fontSize: 16,
+      fontSize: scale(16),
       fontWeight: "700",
     },
   });
+};
 
 export default OnboardingScreen;

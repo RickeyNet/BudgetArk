@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.13",
+    title: "Density Tokens Across All Screens",
+    releasedAt: "2026-05-02",
+    highlights: [
+      "Layout Density now applies app-wide. Debts, Budget, Bridge, Utilities, Profile, and Onboarding all read padding, border radius, and font sizes from the chosen preset — so picking Compact tightens the entire app and Spacious roomies it everywhere, not just one screen.",
+      "Net Worth History card on Bridge and the grouped settings rows on Profile now resize with the preset too. Comfortable still matches the previous default visuals, so existing users won't see anything change unless they pick a new density.",
+    ],
+  },
+  {
     version: "1.4.12",
     title: "Layout Density Selector",
     releasedAt: "2026-05-02",

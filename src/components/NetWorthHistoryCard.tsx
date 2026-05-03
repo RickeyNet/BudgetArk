@@ -10,6 +10,8 @@ import Svg, {
 } from "react-native-svg";
 import type { NetWorthSnapshot } from "../types";
 import type { ThemeColors } from "../theme/themes";
+import { useDensity } from "../theme/DensityProvider";
+import type { DensityTokens } from "../theme/density";
 
 type NetWorthHistoryCardProps = {
   snapshots: NetWorthSnapshot[];
@@ -61,6 +63,8 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = Math.max(240, Math.min(320, windowWidth - 68));
   const chartInnerWidth = chartWidth - PAD_L - PAD_R;
+  const { tokens } = useDensity();
+  const styles = useMemo(() => makeStyles(tokens), [tokens]);
 
   const sortedSnapshots = useMemo(
     () => [...snapshots].sort((a, b) => a.dayKey.localeCompare(b.dayKey)),
@@ -321,82 +325,85 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  headerTextWrap: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  subtext: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  netWorthValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-    textAlign: "right",
-    flexShrink: 1,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    marginTop: 14,
-    marginBottom: 12,
-  },
-  trendText: {
-    fontSize: 12,
-    fontWeight: "700",
-    flex: 1,
-  },
-  rangeRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  rangeChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  rangeChipText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  chartWrap: {
-    alignItems: "center",
-  },
-  emptyWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 24,
-  },
-  emptyText: {
-    fontSize: 13,
-    textAlign: "center",
-  },
-  footerHint: {
-    fontSize: 11,
-    marginTop: 8,
-    textAlign: "center",
-  },
-});
+const makeStyles = (tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
+    card: {
+      borderWidth: 1,
+      borderRadius: tokens.radius + 4,
+      padding: tokens.pad + 2,
+      marginBottom: tokens.gap,
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    headerTextWrap: {
+      flex: 1,
+    },
+    title: {
+      fontSize: scale(18),
+      fontWeight: "700",
+      marginBottom: 4,
+    },
+    subtext: {
+      fontSize: scale(12),
+      lineHeight: 18,
+    },
+    netWorthValue: {
+      fontSize: scale(24),
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+      textAlign: "right",
+      flexShrink: 1,
+    },
+    metaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      marginTop: 14,
+      marginBottom: tokens.gapSm,
+    },
+    trendText: {
+      fontSize: scale(12),
+      fontWeight: "700",
+      flex: 1,
+    },
+    rangeRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    rangeChip: {
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    rangeChipText: {
+      fontSize: scale(11),
+      fontWeight: "700",
+    },
+    chartWrap: {
+      alignItems: "center",
+    },
+    emptyWrap: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 24,
+    },
+    emptyText: {
+      fontSize: scale(13),
+      textAlign: "center",
+    },
+    footerHint: {
+      fontSize: scale(11),
+      marginTop: 8,
+      textAlign: "center",
+    },
+  });
+};
 
 export default React.memo(NetWorthHistoryCard);
