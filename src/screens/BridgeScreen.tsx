@@ -33,6 +33,7 @@ import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
+import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
@@ -42,6 +43,9 @@ const BridgeScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Bridge");
+  const anchorBridgeOverview = useCoachmarkAnchor("bridge-overview-card");
+  const anchorBridgeAccounts = useCoachmarkAnchor("bridge-accounts-card");
+  const anchorBridgeHistory = useCoachmarkAnchor("bridge-history-card");
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -280,17 +284,19 @@ const BridgeScreen: React.FC = () => {
         <Text style={styles.screenSubtitle}>Net worth, accounts, and progress.</Text>
       </View>
 
-      <NetWorthHistoryCard
-        snapshots={netWorthSnapshots}
-        netWorth={netWorthTotals.netWorth}
-        totalAssets={netWorthTotals.totalAssets}
-        totalDebt={netWorthTotals.totalDebt}
-        formatCurrency={formatCurrency}
-        formatCompactCurrency={formatCompactCurrency}
-        colors={colors}
-      />
+      <View ref={anchorBridgeHistory} collapsable={false}>
+        <NetWorthHistoryCard
+          snapshots={netWorthSnapshots}
+          netWorth={netWorthTotals.netWorth}
+          totalAssets={netWorthTotals.totalAssets}
+          totalDebt={netWorthTotals.totalDebt}
+          formatCurrency={formatCurrency}
+          formatCompactCurrency={formatCompactCurrency}
+          colors={colors}
+        />
+      </View>
 
-      <View style={styles.overviewCard}>
+      <View ref={anchorBridgeOverview} collapsable={false} style={styles.overviewCard}>
         <View style={styles.overviewRow}>
           <View style={styles.overviewStat}>
             <Text style={styles.overviewLabel}>Tracked Accounts</Text>
@@ -314,7 +320,7 @@ const BridgeScreen: React.FC = () => {
         )}
       </View>
 
-      <View style={styles.accountsCard}>
+      <View ref={anchorBridgeAccounts} collapsable={false} style={styles.accountsCard}>
         <View style={styles.accountsHeaderRow}>
           <Text style={styles.accountsTitle}>Accounts</Text>
           <TouchableOpacity onPress={openAddAssetModal}>

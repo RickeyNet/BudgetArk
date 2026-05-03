@@ -25,6 +25,7 @@ import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-na
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
+import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { calcInvestmentTimeline, calcPaymentForGoalDate } from "../utils/calculations";
@@ -233,6 +234,7 @@ const UtilitiesScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Utilities");
+  const anchorUtilitiesTool = useCoachmarkAnchor("utilities-tool-header");
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   /* Compound interest calculator state */
@@ -644,7 +646,7 @@ const UtilitiesScreen: React.FC = () => {
         </View>
 
         {/* ── Compound Interest Calculator Tool ── */}
-        <TouchableOpacity style={styles.toolHeader} onPress={toggleCalc} activeOpacity={0.7}>
+        <TouchableOpacity ref={anchorUtilitiesTool} style={styles.toolHeader} onPress={toggleCalc} activeOpacity={0.7}>
           <View>
             <Text style={styles.toolTitle}>Compound Interest Calculator</Text>
             <Text style={styles.toolHint}>Project your investment growth over time</Text>

@@ -1,48 +1,134 @@
-export type CoachmarkContent = {
+export type CoachmarkStep = {
   id: string;
+  /** Anchor id that the spotlight should focus on. If missing or unmeasurable, falls back to a centered card. */
+  anchorId?: string;
   title: string;
   body: string;
-  tip?: string;
+};
+
+export type CoachmarkTour = {
+  tabId: string;
+  intro: string;
+  steps: CoachmarkStep[];
 };
 
 export const COACHMARK_TAB_IDS = ["DebtTracker", "Budget", "Bridge", "Utilities", "Profile"] as const;
 
 export type CoachmarkTabId = (typeof COACHMARK_TAB_IDS)[number];
 
-export const COACHMARKS: Record<CoachmarkTabId, CoachmarkContent> = {
+export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
   DebtTracker: {
-    id: "DebtTracker",
-    title: "Debts — your payoff plan",
-    body:
-      "List every debt you owe (cards, loans, mortgage). Tap + to add one. Each card shows balance, APR, and progress; tap it to record a payment. The summary ring at top totals your overall payoff progress.",
-    tip: "Tap the milestones card to set targets for the 7 Build-Your-Ark steps — starter cushion, debt-free, emergency fund, retirement, and beyond.",
+    tabId: "DebtTracker",
+    intro: "Debts — your payoff plan",
+    steps: [
+      {
+        id: "debts-summary",
+        anchorId: "debts-summary-card",
+        title: "Your debt at a glance",
+        body:
+          "Total balance, total paid, and overall progress live here. The ring on the right tracks your % paid off across every debt.",
+      },
+      {
+        id: "debts-fab",
+        anchorId: "debts-fab",
+        title: "Add a debt with +",
+        body:
+          "Tap the + button to add a credit card, loan, or mortgage. You set the balance, APR, and minimum payment — payments you record reduce the balance.",
+      },
+      {
+        id: "debts-milestones",
+        anchorId: "debts-milestones-card",
+        title: "Build Your Ark milestones",
+        body:
+          "Tap the milestones card to set targets for the 7 financial milestones — starter cushion, debt-free, emergency fund, retirement, and beyond.",
+      },
+    ],
   },
   Budget: {
-    id: "Budget",
-    title: "Budget — what comes in, what goes out",
-    body:
-      "Add income and expenses with the + button. Mark anything that repeats as Recurring and it auto-fills every month. The donut shows category breakdown; tap a category to set a monthly limit.",
-    tip: "The Monthly Review card surfaces month-over-month spending changes. Tap it any time to see what shifted.",
+    tabId: "Budget",
+    intro: "Budget — what comes in, what goes out",
+    steps: [
+      {
+        id: "budget-summary",
+        anchorId: "budget-summary-card",
+        title: "Income vs expense",
+        body:
+          "Top card shows this month's income, expenses, and net. Use the < > arrows above it to look at past months — six months of history are kept.",
+      },
+      {
+        id: "budget-spending",
+        anchorId: "budget-spending-card",
+        title: "Category breakdown",
+        body:
+          "The donut chart breaks down spending by category. Tap any category to see the entries inside or set a monthly limit.",
+      },
+      {
+        id: "budget-fab",
+        anchorId: "budget-fab",
+        title: "Add an entry with +",
+        body:
+          "Income, expense, or savings entry. Mark anything that repeats as Recurring and it auto-fills every month.",
+      },
+    ],
   },
   Bridge: {
-    id: "Bridge",
-    title: "Bridge — your net worth at a glance",
-    body:
-      "Bridge ties everything together: total assets minus total debt. Add your savings, retirement, and investment accounts here so they roll into Net Worth.",
-    tip: "The history graph plots Net Worth over time once you have a few snapshots. Snapshots auto-save when you change a balance.",
+    tabId: "Bridge",
+    intro: "Bridge — your net worth",
+    steps: [
+      {
+        id: "bridge-overview",
+        anchorId: "bridge-overview-card",
+        title: "Total assets minus debt",
+        body:
+          "Net Worth = everything you own, minus everything you owe. The big number rolls up debts, savings, retirement, investments, and tracked accounts.",
+      },
+      {
+        id: "bridge-accounts",
+        anchorId: "bridge-accounts-card",
+        title: "Track asset accounts",
+        body:
+          "Add savings, retirement, brokerage, or any account you want counted toward Net Worth. Update balances any time — the changes flow into your Bridge view.",
+      },
+      {
+        id: "bridge-history",
+        anchorId: "bridge-history-card",
+        title: "History over time",
+        body:
+          "Once you have a few snapshots, the history graph plots Net Worth over time. Snapshots auto-save when you change a balance.",
+      },
+    ],
   },
   Utilities: {
-    id: "Utilities",
-    title: "Utilities — financial calculators",
-    body:
-      "Compound interest, loan payment, and emergency fund calculators. Use the sliders to explore 'what if' scenarios. The S&P 500 preset on the compound calculator gives you a realistic 7% baseline.",
-    tip: "These are read-only tools — nothing here writes to your data.",
+    tabId: "Utilities",
+    intro: "Utilities — financial calculators",
+    steps: [
+      {
+        id: "utilities-tool",
+        anchorId: "utilities-tool-header",
+        title: "Compound interest, loan, and emergency fund",
+        body:
+          "Tap a tool header to expand it. Use the sliders to explore 'what if' scenarios — for example, the S&P 500 preset on the compound calculator gives a realistic 7% baseline. These tools never write to your data.",
+      },
+    ],
   },
   Profile: {
-    id: "Profile",
-    title: "Profile — your settings",
-    body:
-      "Theme, layout density, partner sync, import/export, and the How-To reference all live here. Your data stays on your device unless you explicitly export or pair with a partner.",
-    tip: "Tap 'How to use BudgetArk' any time to replay these tips or read deeper how-to notes per tab.",
+    tabId: "Profile",
+    intro: "Profile — your settings",
+    steps: [
+      {
+        id: "profile-appearance",
+        anchorId: "profile-appearance-card",
+        title: "Theme + Layout Density",
+        body:
+          "Pick a theme palette and a density preset (Compact, Comfortable, Spacious). Density resizes padding and font sizes app-wide.",
+      },
+      {
+        id: "profile-help",
+        anchorId: "profile-help-card",
+        title: "Help and the walkthrough",
+        body:
+          "Tap How to use BudgetArk any time to read this tour again, or Replay walkthrough to see the spotlight tips on the next tab visit.",
+      },
+    ],
   },
 };

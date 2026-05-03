@@ -75,6 +75,7 @@ import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import { useCoachmarks } from "../onboarding/CoachmarksProvider";
+import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -146,6 +147,8 @@ const ProfileScreen: React.FC = () => {
   } = useDensity();
   const coachmark = useTabCoachmark("Profile");
   const { replay: replayCoachmarks } = useCoachmarks();
+  const anchorAppearance = useCoachmarkAnchor("profile-appearance-card");
+  const anchorHelp = useCoachmarkAnchor("profile-help-card");
   const styles = React.useMemo(() => makeStyles(tokens), [tokens]);
   const {
     preference,
@@ -1006,7 +1009,7 @@ const ProfileScreen: React.FC = () => {
             APPEARANCE
           </Text>
 
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View ref={anchorAppearance} collapsable={false} style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => setShowThemeModal(true)}
@@ -1293,7 +1296,7 @@ const ProfileScreen: React.FC = () => {
             HELP
           </Text>
 
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View ref={anchorHelp} collapsable={false} style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => {
@@ -1705,7 +1708,7 @@ const ProfileScreen: React.FC = () => {
 
             <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
               {COACHMARK_TAB_IDS.map((tabId) => {
-                const item = COACHMARKS[tabId];
+                const tour = COACHMARKS[tabId];
                 const isExpanded = expandedHowTo === tabId;
                 return (
                   <TouchableOpacity
@@ -1720,21 +1723,21 @@ const ProfileScreen: React.FC = () => {
                     }}
                   >
                     <View style={styles.faqHeader}>
-                      <Text style={[styles.faqQuestion, { color: colors.text }]}>{item.title}</Text>
+                      <Text style={[styles.faqQuestion, { color: colors.text }]}>{tour.intro}</Text>
                       <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
                         {isExpanded ? "v" : ">"}
                       </Text>
                     </View>
-                    {isExpanded ? (
-                      <>
-                        <Text style={[styles.faqAnswer, { color: colors.textDim }]}>{item.body}</Text>
-                        {item.tip ? (
-                          <Text style={[styles.faqAnswer, { color: colors.textMuted }]}>
-                            Tip: {item.tip}
-                          </Text>
-                        ) : null}
-                      </>
-                    ) : null}
+                    {isExpanded
+                      ? tour.steps.map((step, idx) => (
+                          <View key={step.id} style={{ marginTop: idx === 0 ? 8 : 6 }}>
+                            <Text style={[styles.faqAnswer, { color: colors.text, fontWeight: "700" }]}>
+                              {idx + 1}. {step.title}
+                            </Text>
+                            <Text style={[styles.faqAnswer, { color: colors.textDim }]}>{step.body}</Text>
+                          </View>
+                        ))
+                      : null}
                   </TouchableOpacity>
                 );
               })}

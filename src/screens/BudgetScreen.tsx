@@ -58,6 +58,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
+import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { calculateNetWorthTotals } from "../utils/netWorth";
@@ -208,6 +209,9 @@ const BudgetScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Budget");
+  const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card");
+  const anchorBudgetSpending = useCoachmarkAnchor("budget-spending-card");
+  const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -905,7 +909,7 @@ const BudgetScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.summaryCard}>
+      <View ref={anchorBudgetSummary} collapsable={false} style={styles.summaryCard}>
         <View style={styles.summaryTopRow}>
           <View style={styles.summaryStat}>
             <Text style={styles.summaryStatLabel}>Income</Text>
@@ -994,7 +998,7 @@ const BudgetScreen: React.FC = () => {
       </TouchableOpacity>
 
       {/* Spending card — donut chart + category rows in one card */}
-      <View style={styles.spendingCard}>
+      <View ref={anchorBudgetSpending} collapsable={false} style={styles.spendingCard}>
         <View style={styles.spendingHeaderRow}>
           <Text style={styles.spendingTitle}>Spending</Text>
           {foodEntriesToSplit.length > 0 ? (
@@ -1118,6 +1122,7 @@ const BudgetScreen: React.FC = () => {
 
       {/* FAB — Add Income / Expense */}
       <TouchableOpacity
+        ref={anchorBudgetFab}
         style={styles.fab}
         onPress={() => setShowAddModal(true)}
         activeOpacity={0.8}

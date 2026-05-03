@@ -2,7 +2,7 @@ import * as EncryptedStorage from "./encryptedStorage";
 
 const COACHMARKS_KEY = "@budgetark_coachmarks" as const;
 
-export const COACHMARK_VERSION = 1;
+export const COACHMARK_VERSION = 2;
 
 export type CoachmarkState = {
   seenTabs: string[];

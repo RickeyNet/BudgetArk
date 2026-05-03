@@ -13,7 +13,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     highlights: [
       "Layout Density now applies app-wide. Debts, Budget, Bridge, Utilities, Profile, and Onboarding all read padding, border radius, and font sizes from the chosen preset — so picking Compact tightens the entire app and Spacious roomies it everywhere, not just one screen.",
       "Net Worth History card on Bridge and the grouped settings rows on Profile now resize with the preset too. Comfortable still matches the previous default visuals, so existing users won't see anything change unless they pick a new density.",
-      "First-launch walkthrough: the first time you land on each tab (Debts, Budget, Bridge, Utilities, Profile) you'll see a short card explaining what the tab is for and one or two key actions. Skip-all is one tap away. Profile → Help has a 'How to use BudgetArk' reference and a 'Replay walkthrough' button if you want to see them again.",
+      "First-launch walkthrough: the first time you land on each tab (Debts, Budget, Bridge, Utilities, Profile) you'll see a guided spotlight tour that highlights specific UI elements — the summary card, the + button, the milestones row — with a tooltip explaining each one. Step counter shows progress (1 of 3, 2 of 3...) and you can skip the entire tour from any step. Profile → Help has a 'How to use BudgetArk' reference listing all steps per tab and a 'Replay walkthrough' button if you want to see them again.",
     ],
   },
   {

@@ -26,6 +26,7 @@ import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
 import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
+import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
@@ -386,7 +387,9 @@ export default function App(): React.JSX.Element {
           <DensityProvider>
             <CurrencyProvider>
               <CoachmarksProvider>
-                <AppContent />
+                <CoachmarkAnchorProvider>
+                  <AppContent />
+                </CoachmarkAnchorProvider>
               </CoachmarksProvider>
             </CurrencyProvider>
           </DensityProvider>

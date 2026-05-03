@@ -70,6 +70,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
+import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 
@@ -195,6 +196,9 @@ const DebtTrackerScreen: React.FC = () => {
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
   const coachmark = useTabCoachmark("DebtTracker");
+  const anchorSummary = useCoachmarkAnchor("debts-summary-card");
+  const anchorMilestones = useCoachmarkAnchor("debts-milestones-card");
+  const anchorFab = useCoachmarkAnchor("debts-fab");
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
@@ -828,7 +832,7 @@ const DebtTrackerScreen: React.FC = () => {
         </Text>
       </View>
 
-      <View style={styles.summaryCard}>
+      <View ref={anchorSummary} collapsable={false} style={styles.summaryCard}>
         <View style={styles.summaryRow}>
           <View style={styles.summaryLeft}>
             <Text style={styles.summaryLabel}>TOTAL REMAINING</Text>
@@ -890,6 +894,7 @@ const DebtTrackerScreen: React.FC = () => {
 
         {/* Milestone bar — tap opens milestones */}
         <TouchableOpacity
+          ref={anchorMilestones}
           style={[styles.milestonesCard, { backgroundColor: colors.bg, borderColor: colors.cardBorder }]}
           onPress={openMilestonesModal}
         >
@@ -954,6 +959,7 @@ const DebtTrackerScreen: React.FC = () => {
       />
       {/* FAB — Add Debt */}
       <TouchableOpacity
+        ref={anchorFab}
         style={styles.fab}
         onPress={() => setShowModal(true)}
         activeOpacity={0.8}
