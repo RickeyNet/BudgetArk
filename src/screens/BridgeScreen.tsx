@@ -29,6 +29,8 @@ import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getAssetAccounts, saveAssetAccounts } from "../storage/assetAccountStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
+import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
@@ -36,8 +38,9 @@ import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedA
 
 const BridgeScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -510,37 +513,38 @@ const BridgeScreen: React.FC = () => {
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     screen: {
       flex: 1,
       backgroundColor: colors.bg,
     },
     listContent: {
-      paddingHorizontal: 16,
+      paddingHorizontal: tokens.pad,
       paddingBottom: 110,
     },
     titleSection: {
       paddingTop: 56,
-      paddingBottom: 20,
+      paddingBottom: tokens.gap,
       alignItems: "center",
     },
     appLabel: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
       letterSpacing: 2,
       marginBottom: 4,
       textAlign: "center",
     },
     screenTitle: {
-      fontSize: 28,
+      fontSize: scale(28),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
       textAlign: "center",
     },
     screenSubtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textMuted,
       textAlign: "center",
     },
@@ -548,66 +552,66 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: `${colors.accent}30`,
-      borderRadius: 16,
-      padding: 18,
-      marginBottom: 14,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
     },
     overviewRow: {
       flexDirection: "row",
-      gap: 10,
-      marginBottom: 10,
+      gap: tokens.gapSm + 4,
+      marginBottom: tokens.gapSm + 4,
     },
     overviewStat: {
       flex: 1,
     },
     overviewLabel: {
-      fontSize: 11,
+      fontSize: scale(11),
       color: colors.textDim,
       marginBottom: 3,
     },
     overviewValue: {
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "700",
       fontVariant: ["tabular-nums"] as any,
     },
     overviewHint: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
     },
     accountsCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 14,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
     },
     accountsHeaderRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 10,
+      marginBottom: tokens.gapSm + 4,
     },
     accountsTitle: {
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "700",
       color: colors.text,
     },
     accountsAddBtn: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "700",
     },
     accountsEmpty: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textDim,
       textAlign: "center",
-      paddingVertical: 8,
+      paddingVertical: tokens.padSm - 4,
     },
     accountRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 10,
+      paddingVertical: tokens.padSm - 2,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
@@ -616,17 +620,17 @@ const makeStyles = (colors: ThemeColors) =>
       marginRight: 8,
     },
     accountName: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       color: colors.text,
     },
     accountCategory: {
-      fontSize: 11,
+      fontSize: scale(11),
       color: colors.textDim,
       marginTop: 1,
     },
     accountBalance: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "700",
       fontVariant: ["tabular-nums"] as any,
     },
@@ -634,17 +638,17 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 10,
+      paddingVertical: tokens.padSm - 2,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     accountTotalLabel: {
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "700",
       color: colors.textDim,
     },
     accountTotalValue: {
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
       fontVariant: ["tabular-nums"] as any,
     },
@@ -652,23 +656,23 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       backgroundColor: "rgba(0, 0, 0, 0.8)",
       justifyContent: "center",
-      paddingHorizontal: 20,
+      paddingHorizontal: tokens.padLg,
     },
     modalCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 18,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
     },
     modalTitle: {
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
     },
     modalSub: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textDim,
       marginBottom: 12,
     },
@@ -676,63 +680,64 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      borderRadius: tokens.radiusSm + 2,
+      paddingHorizontal: tokens.padSm + 2,
+      paddingVertical: tokens.padSm,
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
       marginBottom: 8,
     },
     modalHint: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textMuted,
     },
     modalActions: {
       flexDirection: "row",
-      gap: 10,
-      marginTop: 16,
+      gap: tokens.gapSm + 4,
+      marginTop: tokens.gap,
     },
     modalCancelBtn: {
       flex: 1,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingVertical: 12,
+      borderRadius: tokens.radiusSm + 2,
+      paddingVertical: tokens.padSm,
       alignItems: "center",
     },
     modalCancelText: {
       color: colors.textDim,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
     },
     modalSaveBtn: {
       flex: 1,
       backgroundColor: colors.accent,
-      borderRadius: 10,
-      paddingVertical: 12,
+      borderRadius: tokens.radiusSm + 2,
+      paddingVertical: tokens.padSm,
       alignItems: "center",
     },
     modalSaveText: {
       color: colors.white,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "700",
     },
     assetCategoryRow: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: 8,
+      gap: tokens.gapSm + 2,
       marginBottom: 8,
     },
     assetCategoryChip: {
       borderWidth: 1,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padSm - 2,
+      paddingVertical: tokens.padSm - 5,
     },
     assetCategoryChipText: {
-      fontSize: 12,
+      fontSize: scale(12),
       fontWeight: "600",
     },
   });
+};
 
 export default BridgeScreen;

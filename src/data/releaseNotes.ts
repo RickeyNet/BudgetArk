@@ -12,7 +12,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     releasedAt: "2026-05-02",
     highlights: [
       "Profile → Appearance now has a Layout Density picker with three presets — Compact, Comfortable, and Spacious. Compact tightens spacing and font sizes for more content per screen; Spacious gives larger touch targets and roomier text for easier reading.",
-      "First screen wired up is Investments — you'll see the difference immediately on card padding, font sizes, and slider button size. Other screens will adopt the tokens incrementally and keep rendering at the Comfortable default until they do.",
+      "First screen wired up is Bridge — you'll see the difference immediately on overview/accounts card padding, font sizes, and modal sizing. Other screens will adopt the tokens incrementally and keep rendering at the Comfortable default until they do.",
     ],
   },
   {
