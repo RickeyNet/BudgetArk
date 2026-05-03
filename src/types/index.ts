@@ -62,7 +62,7 @@ export type NewDebtInput = Omit<Debt, "id" | "createdAt" | "updatedAt">;
 
 export type DebtOwner = "mine" | "partner" | "joint";
 
-export type DebtClass = "personal_credit" | "car_house";
+export type DebtClass = "personal_credit" | "car" | "house";
 
 export type DebtClassSource = "manual" | "inferred";
 
@@ -71,7 +71,8 @@ export const DEBT_CLASS_OPTIONS: ReadonlyArray<{
   label: string;
 }> = [
   { id: "personal_credit", label: "Credit / Personal" },
-  { id: "car_house", label: "Car / House" },
+  { id: "car", label: "Car" },
+  { id: "house", label: "House / Mortgage" },
 ];
 
 export const DEBT_OWNER_OPTIONS: ReadonlyArray<{

@@ -59,7 +59,19 @@ const VALID_SAVINGS_CATEGORIES = new Set([
   "other",
 ]);
 const VALID_DEBT_OWNERS = new Set(["mine", "partner", "joint"]);
-const VALID_DEBT_CLASSES = new Set(["personal_credit", "car_house"]);
+const VALID_DEBT_CLASSES = new Set(["personal_credit", "car", "house"]);
+
+const HOUSE_NAME_KEYWORDS = ["mortgage", "house", "home loan", "home"];
+
+/**
+ * Migrates a legacy "car_house" cell on import. Splits to "house" when the
+ * debt name suggests a mortgage; defaults to "car" otherwise.
+ */
+const splitLegacyCarHouse = (name: string): "car" | "house" => {
+  const normalized = name.toLowerCase();
+  if (HOUSE_NAME_KEYWORDS.some((keyword) => normalized.includes(keyword))) return "house";
+  return "car";
+};
 const VALID_DEBT_CLASS_SOURCES = new Set(["manual", "inferred"]);
 
 /* ── Cell value coercion ── */
@@ -323,7 +335,14 @@ const rowToDebt = (row: Record<string, unknown>) => {
   const ownerRaw = parseString(get(row, "Owner")).toLowerCase();
   const owner = VALID_DEBT_OWNERS.has(ownerRaw) ? ownerRaw : "mine";
   const debtClassRaw = parseString(get(row, "DebtClass", "Debt Class")).toLowerCase();
-  const debtClass = VALID_DEBT_CLASSES.has(debtClassRaw) ? debtClassRaw : "personal_credit";
+  let debtClass: "personal_credit" | "car" | "house";
+  if (VALID_DEBT_CLASSES.has(debtClassRaw)) {
+    debtClass = debtClassRaw as "personal_credit" | "car" | "house";
+  } else if (debtClassRaw === "car_house") {
+    debtClass = splitLegacyCarHouse(name);
+  } else {
+    debtClass = "personal_credit";
+  }
   const debtClassSourceRaw = parseString(
     get(row, "DebtClassSource", "Debt Class Source")
   ).toLowerCase();

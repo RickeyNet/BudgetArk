@@ -78,7 +78,7 @@ const SHEETS: SheetSpec[] = [
       { name: "Rate", required: true, notes: "APR as a percentage, 0–200." },
       { name: "MinPayment", required: true, notes: "Minimum monthly payment, ≥ 0." },
       { name: "Owner", required: false, notes: "mine / partner / joint. Defaults to mine." },
-      { name: "DebtClass", required: false, notes: "personal_credit / car_house." },
+      { name: "DebtClass", required: false, notes: "personal_credit / car / house. (Legacy car_house splits to house when the name mentions a mortgage, otherwise car.)" },
       { name: "DebtClassSource", required: false, notes: "manual / inferred." },
       { name: "GoalDate", required: false, notes: "Optional payoff target date." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },

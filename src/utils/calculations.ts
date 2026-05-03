@@ -44,8 +44,11 @@ export type PayoffSimulationResult = {
   isPayoffPossible: boolean;
 };
 
-const getSnowballPriority = (debtClass?: DebtClass): number =>
-  debtClass === "car_house" ? 1 : 0;
+const getSnowballPriority = (debtClass?: DebtClass): number => {
+  if (debtClass === "house") return 2;
+  if (debtClass === "car") return 1;
+  return 0;
+};
 
 const pickTargetDebtIndex = (
   debts: Array<{ balance: number; rate: number; debtClass?: DebtClass }>,

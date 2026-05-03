@@ -34,30 +34,52 @@ const isDebtOwner = (value: unknown): value is DebtOwner =>
   value === "mine" || value === "partner" || value === "joint";
 
 const isDebtClass = (value: unknown): value is DebtClass =>
-  value === "personal_credit" || value === "car_house";
+  value === "personal_credit" || value === "car" || value === "house";
 
 const isDebtClassSource = (value: unknown): value is DebtClassSource =>
   value === "manual" || value === "inferred";
 
-const inferDebtClassFromName = (name: string): DebtClass => {
+const HOUSE_KEYWORDS = ["mortgage", "house", "home loan", "home"];
+const CAR_KEYWORDS = ["car", "auto", "vehicle", "truck"];
+
+export const inferDebtClassFromName = (name: string): DebtClass => {
   const normalized = name.toLowerCase();
-  const securedKeywords = ["car", "auto", "vehicle", "mortgage", "house", "home loan", "home"];
-  return securedKeywords.some((keyword) => normalized.includes(keyword))
-    ? "car_house"
-    : "personal_credit";
+  if (HOUSE_KEYWORDS.some((keyword) => normalized.includes(keyword))) return "house";
+  if (CAR_KEYWORDS.some((keyword) => normalized.includes(keyword))) return "car";
+  return "personal_credit";
 };
 
-const normalizeDebt = (debt: Debt): Debt => ({
-  ...debt,
-  owner: isDebtOwner(debt.owner) ? debt.owner : "mine",
-  debtClass: isDebtClass(debt.debtClass)
-    ? debt.debtClass
-    : inferDebtClassFromName(debt.name),
-  debtClassSource: isDebtClassSource(debt.debtClassSource)
-    ? debt.debtClassSource
-    : "inferred",
-  updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
-});
+/**
+ * Splits the legacy "car_house" value introduced before BudgetArk separated
+ * cars from mortgages. House keywords win; otherwise falls back to "car"
+ * (the more common secured-debt case for most users).
+ */
+const splitLegacyCarHouse = (name: string): DebtClass => {
+  const normalized = name.toLowerCase();
+  if (HOUSE_KEYWORDS.some((keyword) => normalized.includes(keyword))) return "house";
+  return "car";
+};
+
+const normalizeDebt = (debt: Debt): Debt => {
+  const rawClass = (debt as { debtClass?: unknown }).debtClass;
+  let nextClass: DebtClass;
+  if (isDebtClass(rawClass)) {
+    nextClass = rawClass;
+  } else if (rawClass === "car_house") {
+    nextClass = splitLegacyCarHouse(debt.name);
+  } else {
+    nextClass = inferDebtClassFromName(debt.name);
+  }
+  return {
+    ...debt,
+    owner: isDebtOwner(debt.owner) ? debt.owner : "mine",
+    debtClass: nextClass,
+    debtClassSource: isDebtClassSource(debt.debtClassSource)
+      ? debt.debtClassSource
+      : "inferred",
+    updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
+  };
+};
 
 /**
  * Retrieves all stored debts from device storage.

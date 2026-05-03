@@ -100,8 +100,30 @@ const ESSENTIAL_CATEGORIES = [
 
 const KEEL_MAX_TARGET = 2000;
 
-const getSnowballPriority = (debt: Debt): number => {
-  return debt.debtClass === "car_house" ? 1 : 0;
+/**
+ * Tier ordering for the debt list. Lower tier = listed first.
+ *
+ * Default: credit cards / personal loans first, then car loans, then house.
+ *
+ * Promotion gate: car and mortgage only move to the top of the list once
+ * (a) the Hull milestone is marked complete and (b) every credit /
+ * personal-loan debt has a zero balance. Both checks are required — Hull
+ * being marked complete while credit still carries a balance shouldn't
+ * bury those entries behind the mortgage. When the gate opens, car comes
+ * before house (smaller balance, naturally tackled first).
+ */
+const getDebtTier = (
+  debt: Debt,
+  promoteSecured: boolean
+): number => {
+  if (promoteSecured) {
+    if (debt.debtClass === "car") return 0;
+    if (debt.debtClass === "house") return 1;
+    return 2; // personal_credit (paid off in this state, but ordered last)
+  }
+  if (debt.debtClass === "personal_credit") return 0;
+  if (debt.debtClass === "car") return 1;
+  return 2; // house
 };
 
 const formatPayoffMonths = (months: number): string => {
@@ -350,7 +372,9 @@ const DebtTrackerScreen: React.FC = () => {
     .filter((debt) => debt.owner === "joint")
     .reduce((sum, debt) => sum + debt.balance, 0);
 
-  const nonMortgageDebts = debts.filter((debt) => debt.debtClass === "personal_credit");
+  // Hull (Build Your Ark step "Clear Non-Mortgage Debt") covers credit cards,
+  // personal loans, and car loans — anything that isn't the mortgage.
+  const nonMortgageDebts = debts.filter((debt) => debt.debtClass !== "house");
   const nonMortgageRemaining = nonMortgageDebts.reduce(
     (sum, debt) => sum + debt.balance,
     0
@@ -360,9 +384,10 @@ const DebtTrackerScreen: React.FC = () => {
     0
   );
 
-  const securedDebts = debts.filter((debt) => debt.debtClass === "car_house");
-  const securedRemaining = securedDebts.reduce((sum, debt) => sum + debt.balance, 0);
-  const securedOriginal = securedDebts.reduce(
+  // Moorings (pay down the house) is keyed only on house debts.
+  const mortgageDebts = debts.filter((debt) => debt.debtClass === "house");
+  const mortgageRemaining = mortgageDebts.reduce((sum, debt) => sum + debt.balance, 0);
+  const mortgageOriginal = mortgageDebts.reduce(
     (sum, debt) => sum + debt.originalBalance,
     0
   );
@@ -435,14 +460,14 @@ const DebtTrackerScreen: React.FC = () => {
 
       if (step.key === "moorings") {
         const progress =
-          securedOriginal > 0
-            ? Math.min((securedOriginal - securedRemaining) / securedOriginal, 1)
+          mortgageOriginal > 0
+            ? Math.min((mortgageOriginal - mortgageRemaining) / mortgageOriginal, 1)
             : 0;
         return {
           ...step,
           progress,
-          metricLabel: securedRemaining > 0
-            ? `${formatCurrency(securedRemaining)} remaining`
+          metricLabel: mortgageRemaining > 0
+            ? `${formatCurrency(mortgageRemaining)} remaining`
             : "No mortgage debt tracked",
           nextAction: "Make extra principal payments on your mortgage when possible.",
         };
@@ -474,8 +499,8 @@ const DebtTrackerScreen: React.FC = () => {
     retirementInvestingMonthly,
     savingsGoals,
     savingsReserve,
-    securedOriginal,
-    securedRemaining,
+    mortgageOriginal,
+    mortgageRemaining,
   ]);
 
   const currentMilestone =
@@ -501,8 +526,15 @@ const DebtTrackerScreen: React.FC = () => {
     return emergencyGoal || openGoals[0];
   }, [savingsGoals]);
 
-  // Payoff comparison calculations for Hull step
-  const payoffActiveDebts = React.useMemo(() => debts.filter((d) => d.balance > 0), [debts]);
+  // Payoff comparison calculations for Hull step.
+  // Hull covers non-mortgage debt (credit + car), so the simulator should
+  // not roll the mortgage into the projection — feeding it the house would
+  // make the months-to-payoff and total-interest numbers reflect a full
+  // mortgage payoff instead of the Hull goal.
+  const payoffActiveDebts = React.useMemo(
+    () => debts.filter((d) => d.balance > 0 && d.debtClass !== "house"),
+    [debts]
+  );
   const hullExtraAmount = React.useMemo(() => {
     const parsed = parseFloat(hullExtraDraft);
     return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
@@ -739,21 +771,32 @@ const DebtTrackerScreen: React.FC = () => {
     [savingsReserve]
   );
 
-  /** Sort debts based on payoff strategy */
+  /** Sort debts based on payoff strategy.
+   *
+   * Tier order is applied first (credit/personal → car → house). Car and
+   * mortgage only promote above credit once Hull is complete AND every
+   * credit / personal-loan debt has a zero balance. Within each tier the
+   * chosen strategy decides ordering: avalanche by APR desc, snowball by
+   * balance asc, custom by creation order. */
+  const hullCompleted =
+    milestonePlan?.steps.find((step) => step.key === "hull")?.isCompleted === true;
+  const allCreditCleared = !debts.some(
+    (debt) => debt.debtClass === "personal_credit" && debt.balance > 0
+  );
+  const promoteSecured = hullCompleted && allCreditCleared;
+
   const sortedDebts = React.useMemo(() => {
     const active = filteredDebts.filter((d) => d.balance > 0);
     const paidOff = filteredDebts.filter((d) => d.balance <= 0);
-    if (strategy === "avalanche") {
-      active.sort((a, b) => b.rate - a.rate);
-    } else if (strategy === "snowball") {
-      active.sort((a, b) => {
-        const priorityDiff = getSnowballPriority(a) - getSnowballPriority(b);
-        if (priorityDiff !== 0) return priorityDiff;
-        return a.balance - b.balance;
-      });
-    }
+    active.sort((a, b) => {
+      const tierDiff = getDebtTier(a, promoteSecured) - getDebtTier(b, promoteSecured);
+      if (tierDiff !== 0) return tierDiff;
+      if (strategy === "avalanche") return b.rate - a.rate;
+      if (strategy === "snowball") return a.balance - b.balance;
+      return 0;
+    });
     return [...active, ...paidOff];
-  }, [filteredDebts, strategy]);
+  }, [filteredDebts, strategy, promoteSecured]);
 
   const handleChangeStrategy = useCallback(async (nextStrategy: PayoffStrategy) => {
     setStrategy(nextStrategy);

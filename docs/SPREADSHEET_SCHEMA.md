@@ -44,7 +44,7 @@ Imported limits land in the current month's limit set.
 | `Rate`            | Yes      | APR as a percentage, 0–200.                   |
 | `MinPayment`      | Yes      | Number, ≥ 0.                                  |
 | `Owner`           | No       | `mine` / `partner` / `joint`. Default `mine`. |
-| `DebtClass`       | No       | `personal_credit` / `car_house`.              |
+| `DebtClass`       | No       | `personal_credit` / `car` / `house`. Legacy `car_house` is accepted on import and split to `house` when the name mentions mortgage/house/home, otherwise `car`. |
 | `DebtClassSource` | No       | `manual` / `inferred`.                        |
 | `GoalDate`        | No       | Optional payoff target date.                  |
 | `CreatedAt`       | No       | ISO timestamp; defaults to now.               |

@@ -8,12 +8,13 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.4.13",
-    title: "Density Everywhere + Guided Walkthrough",
+    title: "Density Everywhere, Guided Walkthrough + Car/House Split",
     releasedAt: "2026-05-03",
     highlights: [
       "Layout Density now applies app-wide. Debts, Budget, Bridge, Utilities, Profile, and Onboarding all read padding, border radius, and font sizes from the chosen preset — so picking Compact tightens the entire app and Spacious roomies it everywhere, not just one screen.",
       "Net Worth History card on Bridge and the grouped settings rows on Profile now resize with the preset too. Comfortable still matches the previous default visuals, so existing users won't see anything change unless they pick a new density.",
       "First-launch walkthrough: the first time you land on each tab (Debts, Budget, Bridge, Utilities, Profile) you'll see a guided spotlight tour that highlights specific UI elements — the summary card, the + button, the milestones row — with a tooltip explaining each one. Step counter shows progress (1 of 3, 2 of 3...) and you can skip the entire tour from any step. Profile → Help has a 'How to use BudgetArk' reference listing all steps per tab and a 'Replay walkthrough' button if you want to see them again.",
+      "Add Debt now has a Car category separate from House. The debt list always groups credit cards / personal loans first, car loans next, and house loans last. Once the Hull milestone is marked complete AND every credit / personal-loan balance is at zero, car and mortgage promote above any remaining credit entries (with car ahead of house, since cars are typically smaller). Existing 'car / house' debts auto-split based on the name (anything with 'mortgage', 'house', 'home' becomes house; everything else becomes car). The Hull milestone (clear non-mortgage debt) now correctly counts car loans as non-mortgage.",
     ],
   },
   {
