@@ -190,10 +190,12 @@ const decryptV2 = (stored: string, key: string): string | null => {
     return null;
   }
 
-  // HMAC matches - safe to decrypt
+  // HMAC matches - safe to decrypt. We trust the bytes here (HMAC just
+  // validated them) so an empty plaintext is a legitimate value, not a
+  // failure. Returning `plaintext || null` previously collapsed the empty
+  // string into a tampering throw at the call site.
   const bytes = CryptoJS.AES.decrypt(ciphertext, key);
-  const plaintext = bytes.toString(CryptoJS.enc.Utf8);
-  return plaintext || null;
+  return bytes.toString(CryptoJS.enc.Utf8);
 };
 
 /**
@@ -278,31 +280,76 @@ export const getItem = async (key: string): Promise<string | null> => {
 };
 
 /**
+ * Per-key write queue. Concurrent saves to the same storage key (e.g.
+ * `recordPayment` mutating debts while `applyIncomingDiff` also writes
+ * debts) used to race because each call did `getX → mutate → saveX` on its
+ * own snapshot, so the second writer would overwrite the first writer's
+ * changes. Serializing per key ensures the second write reads-after-write
+ * the first completes — at the storage layer at least, the load-mutate-save
+ * pattern in callers still has its own race window between load and save.
+ *
+ * The map only tracks the *latest* tail of the chain per key. A finished
+ * write that's no longer at the tail can be garbage-collected; while the
+ * tail Promise is pending, all subsequent enqueues chain off of it.
+ */
+const writeQueues = new Map<string, Promise<void>>();
+
+const enqueueWrite = (key: string, run: () => Promise<void>): Promise<void> => {
+  const previous = writeQueues.get(key) ?? Promise.resolve();
+  // Run after previous resolves OR rejects — a failed write shouldn't block
+  // the next attempt forever.
+  const next = previous.catch(() => {}).then(run);
+  writeQueues.set(key, next);
+  // Best-effort cleanup: if this is still the tail when it settles, drop it
+  // so the map doesn't grow unbounded.
+  next.finally(() => {
+    if (writeQueues.get(key) === next) {
+      writeQueues.delete(key);
+    }
+  });
+  return next;
+};
+
+/**
  * Encrypts and stores a value in AsyncStorage using V2 format (AES + HMAC).
+ * Writes for the same key are serialized — see writeQueues comment above.
  */
 export const setItem = async (
   key: string,
   value: string
 ): Promise<void> => {
-  const encKey = await getEncryptionKey();
-  if (encKey === null) {
-    // SecureStore unavailable - store as plaintext to avoid data loss
-    await withTimeout(AsyncStorage.setItem(key, value), `setItem(${key})`);
-    return;
-  }
-  await withTimeout(AsyncStorage.setItem(key, encrypt(value, encKey)), `setItem(${key})`);
+  return enqueueWrite(key, async () => {
+    const encKey = await getEncryptionKey();
+    if (encKey === null) {
+      // SecureStore unavailable - store as plaintext to avoid data loss
+      await withTimeout(AsyncStorage.setItem(key, value), `setItem(${key})`);
+      return;
+    }
+    await withTimeout(AsyncStorage.setItem(key, encrypt(value, encKey)), `setItem(${key})`);
+  });
 };
 
 /**
  * Removes a value from AsyncStorage (no encryption needed for deletion).
+ * Serialized through the same per-key queue as setItem.
  */
 export const removeItem = async (key: string): Promise<void> => {
-  await withTimeout(AsyncStorage.removeItem(key), `removeItem(${key})`);
+  return enqueueWrite(key, () =>
+    withTimeout(AsyncStorage.removeItem(key), `removeItem(${key})`)
+  );
 };
 
 /**
- * Removes multiple values from AsyncStorage.
+ * Removes multiple values from AsyncStorage. Each key is enqueued through its
+ * own write chain so a multiRemove serializes correctly against any in-flight
+ * setItem on the same keys.
  */
 export const multiRemove = async (keys: string[]): Promise<void> => {
-  await withTimeout(AsyncStorage.multiRemove(keys), `multiRemove(${keys.length} keys)`);
+  await Promise.all(
+    keys.map((key) =>
+      enqueueWrite(key, () =>
+        withTimeout(AsyncStorage.removeItem(key), `multiRemove(${key})`)
+      )
+    )
+  );
 };

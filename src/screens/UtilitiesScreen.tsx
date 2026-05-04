@@ -438,11 +438,13 @@ const UtilitiesScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      let cancelled = false;
       const loadEfData = async () => {
         const [entries, goals] = await Promise.all([
           getBudgetEntries(),
           getSavingsGoals(),
         ]);
+        if (cancelled) return;
 
         const avg = calcAvgMonthlyExpenses(entries);
         setAvgExpenses(avg);
@@ -453,6 +455,9 @@ const UtilitiesScreen: React.FC = () => {
         setEfDataLoaded(true);
       };
       loadEfData();
+      return () => {
+        cancelled = true;
+      };
     }, [])
   );
 

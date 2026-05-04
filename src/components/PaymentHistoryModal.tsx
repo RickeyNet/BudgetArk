@@ -94,13 +94,23 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   /** Load payments when modal becomes visible */
   useEffect(() => {
     if (!visible) return;
+    let cancelled = false;
     setIsLoading(true);
     getPayments()
       .then((payments) => {
+        if (cancelled) return;
         setSections(groupByMonth(payments, preference.locale));
       })
-      .catch(() => setSections([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setSections([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [preference.locale, visible]);
 
   const totalAll = React.useMemo(

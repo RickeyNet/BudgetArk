@@ -7,6 +7,20 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.15",
+    title: "Stability + Math Fixes",
+    releasedAt: "2026-05-03",
+    highlights: [
+      "Emergency Fund and the Keel/Supplies milestones on Build Your Ark now only count your Savings category. Retirement and Investing entries no longer roll into your emergency fund total — they still count toward Gather Animals (retirement) and your overall Net Worth, just not as liquid emergency money.",
+      "Net Worth math on Bridge no longer double-counts contributions that already credited a tracked asset account, and now matches the savings reserve numbers you see on Build Your Ark.",
+      "Payments and recurring contributions can no longer race or double-apply when sync runs at the same time as a save, or when you switch tabs quickly.",
+      "Switching budget months quickly no longer flashes the previous month's data while the new month is still loading.",
+      "Spreadsheet export/import now preserves entry timestamps, so re-importing a backup doesn't accidentally overwrite your partner's edits on the next sync.",
+      "After paying off a debt, View History from the celebration screen now opens reliably on iOS instead of leaving you on a dimmed background.",
+      "Payoff plans that aren't solvable (minimum payment can't cover monthly interest) now correctly say 'Not solvable' instead of misleading '1 mo'.",
+    ],
+  },
+  {
     version: "1.4.14",
     title: "Walkthrough Polish",
     releasedAt: "2026-05-03",

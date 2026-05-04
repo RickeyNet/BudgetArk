@@ -284,6 +284,10 @@ const BudgetScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      // Guard every setState after an await so that a fast tab/month switch
+      // doesn't let a slower load resolve last and overwrite the newer one's
+      // data.
+      let cancelled = false;
       const loadBudgetData = async () => {
         const [
           storedEntries,
@@ -302,6 +306,7 @@ const BudgetScreen: React.FC = () => {
           getDebtMilestonePlan(),
           getAllLimitsByMonth(),
         ]);
+        if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
         setKeelTarget(keelStep?.targetAmount ?? 1000);
         // Process recurring contributions for linked accounts
@@ -325,6 +330,12 @@ const BudgetScreen: React.FC = () => {
           entriesModified = true;
         }
 
+        // Save entries first (commits the lastAppliedMonth marker), then
+        // assets (commits the new balance). Doing the asset save first or
+        // running them concurrently allows a reader on another tab to see
+        // (newBalance, oldLastApplied) and re-apply the same contribution,
+        // silently double-crediting the asset. Same protection sits in
+        // BridgeScreen's auto-apply path.
         if (entriesModified) {
           await saveBudgetEntries(storedEntries);
         }
@@ -340,6 +351,7 @@ const BudgetScreen: React.FC = () => {
           await saveAssetAccounts(storedAssets);
         }
 
+        if (cancelled) return;
         const nextReviewData = buildMonthlyReview(storedEntries, allLimitsByMonth);
 
         setEntries(storedEntries);
@@ -349,10 +361,14 @@ const BudgetScreen: React.FC = () => {
         setAssetAccounts(storedAssets);
         setReviewPreviewData(nextReviewData);
         await refreshNetWorthSnapshots();
+        if (cancelled) return;
         setIsLoaded(true);
       };
 
       loadBudgetData();
+      return () => {
+        cancelled = true;
+      };
     }, [refreshNetWorthSnapshots, selectedMonthKey])
   );
 
@@ -404,13 +420,15 @@ const BudgetScreen: React.FC = () => {
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
 
+  // Emergency-fund derived current amount. Only the "Savings" category
+  // counts toward the EF; Retirement and Investing aren't liquid emergency
+  // money. Kept in sync with the same narrowing in BridgeScreen and
+  // DebtTrackerScreen.
   const savingsReserve = useMemo(
     () =>
       entries
         .filter(
-          (e) =>
-            e.type === "expense" &&
-            ["Savings", "Retirement", "Investing"].includes(e.category)
+          (e) => e.type === "expense" && e.category === "Savings"
         )
         .reduce((sum, e) => sum + e.amount, 0),
     [entries]

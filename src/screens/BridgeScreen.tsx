@@ -73,6 +73,9 @@ const BridgeScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      // Cancellation flag — prevents a slower load from overwriting a newer
+      // one's state when the user re-focuses the tab quickly.
+      let cancelled = false;
       const loadBridgeData = async () => {
         try {
           const [storedEntries, storedDebts, storedGoals, storedAssets, milestonePlan] =
@@ -83,6 +86,7 @@ const BridgeScreen: React.FC = () => {
               getAssetAccounts(),
               getDebtMilestonePlan(),
             ]);
+          if (cancelled) return;
 
           const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
           const processed = applyMissedRecurringLinkedAccountContributions(
@@ -91,11 +95,17 @@ const BridgeScreen: React.FC = () => {
           );
 
           if (processed.changed) {
-            await Promise.all([
-              saveBudgetEntries(processed.entries),
-              saveAssetAccounts(processed.assetAccounts),
-            ]);
+            // Sequence the two saves: commit the lastAppliedMonth marker on
+            // the entries first, *then* the asset balance. Reversing this
+            // (or running them concurrently) opens a race window where
+            // another reader (e.g. BudgetScreen on a quick tab switch) can
+            // see the new asset balance with the OLD lastAppliedMonth and
+            // re-apply the contribution — silently double-crediting the
+            // asset.
+            await saveBudgetEntries(processed.entries);
+            await saveAssetAccounts(processed.assetAccounts);
           }
+          if (cancelled) return;
 
           setEntries(processed.entries);
           setDebts(storedDebts);
@@ -103,7 +113,9 @@ const BridgeScreen: React.FC = () => {
           setAssetAccounts(processed.assetAccounts);
           setKeelTarget(keelStep?.targetAmount ?? 1000);
           await refreshNetWorthSnapshots();
+          if (cancelled) return;
         } catch (error) {
+          if (cancelled) return;
           if (__DEV__) console.error("Failed to load bridge:", error);
           setEntries([]);
           setDebts([]);
@@ -112,20 +124,25 @@ const BridgeScreen: React.FC = () => {
           setNetWorthSnapshots([]);
           setKeelTarget(0);
         }
-        setIsLoaded(true);
+        if (!cancelled) setIsLoaded(true);
       };
 
       loadBridgeData();
+      return () => {
+        cancelled = true;
+      };
     }, [refreshNetWorthSnapshots])
   );
 
+  // Emergency-fund derived current amount. Only the "Savings" category
+  // counts toward the EF; Retirement and Investing aren't liquid emergency
+  // money and feed the Gather Animals milestone separately.
   const savingsReserve = useMemo(
     () =>
       entries
         .filter(
           (entry) =>
-            entry.type === "expense" &&
-            ["Savings", "Retirement", "Investing"].includes(entry.category)
+            entry.type === "expense" && entry.category === "Savings"
         )
         .reduce((sum, entry) => sum + entry.amount, 0),
     [entries]

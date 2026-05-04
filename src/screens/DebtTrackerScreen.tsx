@@ -277,6 +277,9 @@ const DebtTrackerScreen: React.FC = () => {
   /** Load debts from device storage whenever this tab is focused */
   useFocusEffect(
     useCallback(() => {
+      // Cancellation flag — guards every setState after an await so a stale
+      // load can't overwrite a newer one's state on rapid tab thrash.
+      let cancelled = false;
       const loadDebts = async () => {
         try {
           const [
@@ -294,6 +297,7 @@ const DebtTrackerScreen: React.FC = () => {
             getSavingsGoals(),
             consumeArkSetupPromptRequest(),
           ]);
+          if (cancelled) return;
           // Filter out any corrupted entries from earlier sessions
           const valid = stored.filter(
             (d) =>
@@ -307,6 +311,7 @@ const DebtTrackerScreen: React.FC = () => {
             // Clean up corrupted data
             await saveDebts(valid);
           }
+          if (cancelled) return;
           setDebts(valid);
           setMilestonePlan(storedMilestones);
           if (shouldOpenArkSetup) {
@@ -318,11 +323,14 @@ const DebtTrackerScreen: React.FC = () => {
           }
           setSavingsGoals(storedGoals);
 
+          // Emergency-fund / keel reserve. Only the "Savings" category
+          // counts here — Retirement and Investing flow into the
+          // gather_animals milestone via retirementInvestingMonthly below
+          // because those funds aren't liquid emergency money.
           const savings = budgetEntries
             .filter(
               (entry) =>
-                entry.type === "expense" &&
-                ["Savings", "Retirement", "Investing"].includes(entry.category)
+                entry.type === "expense" && entry.category === "Savings"
             )
             .reduce((sum, entry) => sum + entry.amount, 0);
           setSavingsReserve(savings);
@@ -368,12 +376,16 @@ const DebtTrackerScreen: React.FC = () => {
               : 3000;
           setMonthlyEssentialsEstimate(essentialsAverage);
         } catch (error) {
+          if (cancelled) return;
           if (__DEV__) console.error("Failed to load debts:", error);
           setDebts([]);
         }
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       };
       loadDebts();
+      return () => {
+        cancelled = true;
+      };
     }, [primeMilestonesModal])
   );
 
@@ -629,14 +641,17 @@ const DebtTrackerScreen: React.FC = () => {
     const updated = await updateDebt(debtId, updates);
     const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
     setDebts(updated);
-    if (paidOffDebt) {
-      setCelebrationDebt(paidOffDebt);
-    } else {
-      triggerHaptic("success");
-    }
     await syncNetWorthSnapshot();
     setShowModal(false);
     setEditingDebt(null);
+    if (paidOffDebt) {
+      // Defer the celebration Modal so the edit Modal's close animation
+      // finishes first — RN can't stack two Modal presentations in the
+      // same frame on iOS without one being queued or visually clipped.
+      setTimeout(() => setCelebrationDebt(paidOffDebt), 250);
+    } else {
+      triggerHaptic("success");
+    }
   }, [debts]);
 
   /** Delete a debt */
@@ -1058,8 +1073,11 @@ const DebtTrackerScreen: React.FC = () => {
         debt={celebrationDebt}
         onClose={() => setCelebrationDebt(null)}
         onViewHistory={() => {
+          // Wait for the celebration Modal close animation before presenting
+          // the history Modal — iOS doesn't reliably handle dismiss-then-
+          // present in the same frame and one of the two ends up hidden.
           setCelebrationDebt(null);
-          setShowHistory(true);
+          setTimeout(() => setShowHistory(true), 250);
         }}
       />
 

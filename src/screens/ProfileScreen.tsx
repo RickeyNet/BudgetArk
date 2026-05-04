@@ -252,6 +252,7 @@ const ProfileScreen: React.FC = () => {
   /** Load user on mount */
   useEffect(() => {
     let cancelled = false;
+    let didStartMonitoring = false;
     const load = async () => {
       try {
         const [u, prefs, privacy, haptics, pairState, syncMeta, backup] =
@@ -280,13 +281,20 @@ const ProfileScreen: React.FC = () => {
               setLastSyncTime(result.timestamp);
             }
           });
+          didStartMonitoring = true;
         }
       } catch (error) {
         if (__DEV__) console.error("Failed to load profile:", error);
       }
     };
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Stop the auto-sync listener we registered above so it doesn't fire
+      // setLastSyncTime against a torn-down component or leak the native
+      // NetInfo subscription.
+      if (didStartMonitoring) stopMonitoring();
+    };
   }, []);
 
   useEffect(() => {

@@ -17,6 +17,9 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 | `Description`     | No       | Free-form note (max 220 chars).                                                        |
 | `Recurring`       | No       | `yes` / `no` / `true` / `false` / `1` / `0`.                                           |
 | `LinkedAccountId` | No       | UUID of an asset account (used for savings entries).                                   |
+| `LastAppliedMonth`| No       | `YYYY-MM` of the last month a recurring entry was credited to its linked account. Round-tripped to avoid double-applying contributions. |
+| `CreatedAt`       | No       | ISO timestamp the entry was created. Round-tripped so re-importing doesn't reset history. |
+| `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
 
 ### Allowed Budget Categories
 

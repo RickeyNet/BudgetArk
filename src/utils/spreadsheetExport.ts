@@ -83,6 +83,14 @@ const BUDGET_ENTRY_COLUMNS = [
   // start and today. Round-tripping this column is therefore required for
   // data integrity, not just convenience.
   "LastAppliedMonth",
+  // ISO timestamp the entry was created. Round-tripped so re-importing an
+  // exported file doesn't reset history.
+  "CreatedAt",
+  // ISO timestamp of last edit. Critical for paired-device sync: without it
+  // the importer stamps every entry with import-time `now`, and the next
+  // sync treats every row as "freshly edited" and overwrites the partner's
+  // data via last-write-wins. See Potentialbugs.md P0 #6.
+  "UpdatedAt",
 ] as const;
 
 const BUDGET_LIMIT_COLUMNS = ["Category", "MonthlyLimit"] as const;
@@ -191,6 +199,8 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
   Recurring: entry.recurring ? "yes" : "no",
   LinkedAccountId: entry.linkedAccountId ?? "",
   LastAppliedMonth: entry.lastAppliedMonth ?? "",
+  CreatedAt: entry.createdAt ?? "",
+  UpdatedAt: entry.updatedAt ?? "",
 });
 
 const budgetLimitToRow = (limit: CategoryBudgetLimit) => ({
@@ -708,11 +718,14 @@ export const exportSpreadsheet = async (
   if (!hasExplicitEmergencyFund) {
     const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
     const keelTarget = keelStep?.targetAmount ?? 0;
+    // Only the "Savings" category counts toward the derived emergency fund.
+    // Retirement and Investing aren't liquid emergency money — they feed
+    // the gather_animals milestone separately. Kept in sync with the same
+    // narrowing on BridgeScreen / BudgetScreen / DebtTrackerScreen.
     const savingsReserve = budgetEntries
       .filter(
         (entry) =>
-          entry.type === "expense" &&
-          ["Savings", "Retirement", "Investing"].includes(entry.category)
+          entry.type === "expense" && entry.category === "Savings"
       )
       .reduce((sum, entry) => sum + entry.amount, 0);
     if (keelTarget > 0 || savingsReserve > 0) {

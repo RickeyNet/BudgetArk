@@ -199,9 +199,12 @@ export const simulatePayoffPlan = (
     }
 
     if (afterBalance >= beforeBalance - 0.000001) {
+      // Plan is unsolvable — minimum payment doesn't cover monthly interest.
+      // Return Infinity for monthsToPayoff so formatPayoffMonths/UI render
+      // "Not solvable" instead of showing the misleading early-exit month.
       return {
         method,
-        monthsToPayoff,
+        monthsToPayoff: Infinity,
         totalInterestPaid,
         totalPaid,
         debtsClearedInFirstYear,
@@ -210,9 +213,12 @@ export const simulatePayoffPlan = (
     }
   }
 
+  // Hit the simulation cap (MAX_MONTHS) without paying everything off — also
+  // an unsolvable / impractical plan, surface it as Infinity for the same
+  // reason as above.
   return {
     method,
-    monthsToPayoff,
+    monthsToPayoff: Infinity,
     totalInterestPaid,
     totalPaid,
     debtsClearedInFirstYear,

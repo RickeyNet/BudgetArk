@@ -283,6 +283,20 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     : undefined;
 
   const now = new Date().toISOString();
+  // Preserve original timestamps when round-tripping through xlsx/csv. If
+  // they're missing or unparseable, fall back to `now` — but prefer carrying
+  // them forward so paired-device sync doesn't treat every imported row as
+  // "freshly edited" and overwrite the partner's data.
+  const parseIsoOrNull = (value: string): string | null => {
+    if (!value) return null;
+    const ts = Date.parse(value);
+    return Number.isFinite(ts) ? new Date(ts).toISOString() : null;
+  };
+  const createdAtRaw = parseString(get(row, "CreatedAt", "Created At"), 40);
+  const updatedAtRaw = parseString(get(row, "UpdatedAt", "Updated At"), 40);
+  const createdAt = parseIsoOrNull(createdAtRaw) ?? now;
+  const updatedAt = parseIsoOrNull(updatedAtRaw) ?? createdAt;
+
   return {
     id,
     type,
@@ -290,8 +304,8 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     amount,
     description: description || undefined,
     date: dateIso,
-    createdAt: now,
-    updatedAt: now,
+    createdAt,
+    updatedAt,
     recurring: recurring || undefined,
     linkedAccountId: linkedAccountId || undefined,
     lastAppliedMonth,
