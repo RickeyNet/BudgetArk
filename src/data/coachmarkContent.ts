@@ -19,7 +19,7 @@ export type CoachmarkTabId = (typeof COACHMARK_TAB_IDS)[number];
 export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
   DebtTracker: {
     tabId: "DebtTracker",
-    intro: "Debts — your payoff plan",
+    intro: "Debts - your payoff plan",
     steps: [
       {
         id: "debts-summary",
@@ -33,27 +33,27 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         anchorId: "debts-fab",
         title: "Add a debt with +",
         body:
-          "Tap the + button to add a credit card, loan, or mortgage. You set the balance, APR, and minimum payment — payments you record reduce the balance.",
+          "Tap the + button to add a credit card, loan, or mortgage. You set the balance, APR, and minimum payment - payments you record reduce the balance.",
       },
       {
         id: "debts-milestones",
         anchorId: "debts-milestones-card",
         title: "Build Your Ark milestones",
         body:
-          "Tap the milestones card to set targets for the 7 financial milestones — starter cushion, debt-free, emergency fund, retirement, and beyond.",
+          "Tap the milestones card to set targets for the 7 financial milestones - starter cushion, debt-free, emergency fund, retirement, and beyond.",
       },
     ],
   },
   Budget: {
     tabId: "Budget",
-    intro: "Budget — what comes in, what goes out",
+    intro: "Budget - what comes in, what goes out",
     steps: [
       {
         id: "budget-summary",
         anchorId: "budget-summary-card",
         title: "Income vs expense",
         body:
-          "Top card shows this month's income, expenses, and net. Use the < > arrows above it to look at past months — six months of history are kept.",
+          "Top card shows this month's income, expenses, and net. Use the < > arrows above it to look at past months - six months of history are kept.",
       },
       {
         id: "budget-spending",
@@ -73,14 +73,14 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
   },
   Bridge: {
     tabId: "Bridge",
-    intro: "Bridge — your net worth",
+    intro: "Bridge - your net worth",
     steps: [
       {
         id: "bridge-history",
         anchorId: "bridge-history-card",
         title: "Your Net Worth",
         body:
-          "Net Worth = everything you own minus everything you owe. The big number rolls up debts, savings, retirement, investments, and tracked accounts. The chart below it plots Net Worth over time — snapshots save automatically when balances change.",
+          "Net Worth = everything you own minus everything you owe. The big number rolls up debts, savings, retirement, investments, and tracked accounts. The chart below it plots Net Worth over time - snapshots save automatically when balances change.",
       },
       {
         id: "bridge-overview",
@@ -94,26 +94,26 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         anchorId: "bridge-accounts-card",
         title: "Manage your accounts",
         body:
-          "Add savings, retirement, brokerage, or any account you want counted toward Net Worth. Tap a row to update its balance any time — the changes flow back into the Bridge view.",
+          "Add savings, retirement, brokerage, or any account you want counted toward Net Worth. Tap a row to update its balance any time - the changes flow back into the Bridge view.",
       },
     ],
   },
   Utilities: {
     tabId: "Utilities",
-    intro: "Utilities — financial calculators",
+    intro: "Utilities - financial calculators",
     steps: [
       {
         id: "utilities-tool",
         anchorId: "utilities-tool-header",
         title: "Compound interest, loan, and emergency fund",
         body:
-          "Tap a tool header to expand it. Use the sliders to explore 'what if' scenarios — for example, the S&P 500 preset on the compound calculator gives a realistic 7% baseline. These tools never write to your data.",
+          "Tap a tool header to expand it. Use the sliders to explore 'what if' scenarios - for example, the S&P 500 preset on the compound calculator gives a realistic 7% baseline. These tools never write to your data.",
       },
     ],
   },
   Profile: {
     tabId: "Profile",
-    intro: "Profile — your settings",
+    intro: "Profile - your settings",
     steps: [
       {
         id: "profile-appearance",

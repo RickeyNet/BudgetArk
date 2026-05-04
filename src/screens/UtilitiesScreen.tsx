@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Utilities Screen
+ * BudgetArk - Utilities Screen
  * File: src/screens/UtilitiesScreen.tsx
  *
  * Hub for financial tools and calculators.
@@ -597,7 +597,7 @@ const UtilitiesScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Return rate presets — shown only for the returnRate slider */}
+        {/* Return rate presets - shown only for the returnRate slider */}
         {key === "returnRate" && (
           <View style={styles.ratePresetRow}>
             {RATE_PRESETS.map((preset) => (
@@ -902,7 +902,7 @@ const UtilitiesScreen: React.FC = () => {
                 </Text>
               ) : efDataLoaded ? (
                 <Text style={styles.efAutoHint}>
-                  No budget data yet — enter your monthly expenses below
+                  No budget data yet - enter your monthly expenses below
                 </Text>
               ) : null}
               <TextInput
@@ -1084,7 +1084,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       textAlign: "center",
     },
 
-    /* Tool header — collapsible */
+    /* Tool header - collapsible */
     toolHeader: {
       backgroundColor: colors.card,
       borderWidth: 1,

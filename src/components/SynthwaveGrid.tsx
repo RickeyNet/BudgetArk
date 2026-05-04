@@ -9,7 +9,7 @@ interface SynthwaveGridProps {
 /**
  * Retro synthwave floor grid with perspective convergence.
  * Square tiles that recede toward a horizon vanishing point.
- * No gradient overlay — just the lines.
+ * No gradient overlay - just the lines.
  */
 const SynthwaveGrid: React.FC<SynthwaveGridProps> = ({
   color = "#c44a90",

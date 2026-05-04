@@ -1,11 +1,11 @@
 /**
- * BudgetArk — Density Presets
+ * BudgetArk - Density Presets
  * File: src/theme/density.ts
  *
  * Defines layout density presets (Compact / Comfortable / Spacious).
  * Tokens scale spacing, card padding, corner radius, and font sizes.
  *
- * Migration is incremental — screens can swap hardcoded `padding: 16` for
+ * Migration is incremental - screens can swap hardcoded `padding: 16` for
  * `tokens.pad` over time without breaking existing layouts.
  */
 
@@ -50,7 +50,7 @@ const COMPACT: DensityPreset = {
 const COMFORTABLE: DensityPreset = {
   id: "comfortable",
   name: "Comfortable",
-  description: "Balanced spacing — the default look.",
+  description: "Balanced spacing - the default look.",
   tokens: {
     pad: 16,
     padSm: 12,

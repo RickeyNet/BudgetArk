@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Pairing Modal
+ * BudgetArk - Pairing Modal
  * File: src/components/PairingModal.tsx
  *
  * Two-mode modal for the one-time device pairing flow.
@@ -187,7 +187,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
   }, [pending, onPaired]);
 
   const rejectFingerprint = useCallback(() => {
-    // No commit ran — nothing to undo. Close the modal so the user can
+    // No commit ran - nothing to undo. Close the modal so the user can
     // restart pairing from scratch with a fresh code.
     setPending(null);
     onClose();
@@ -246,7 +246,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                     </Text>
                   ) : serverPort > 0 ? (
                     <Text style={styles.ipHintText}>
-                      Port: {serverPort} — check your IP in WiFi settings{"\n"}
+                      Port: {serverPort} - check your IP in WiFi settings{"\n"}
                       and share your IP:{serverPort} with your partner
                     </Text>
                   ) : null}
@@ -325,7 +325,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                 </View>
               )}
 
-              {/* Verify fingerprint — both devices land here after key exchange */}
+              {/* Verify fingerprint - both devices land here after key exchange */}
               {status === "verify" && pending && (
                 <View style={styles.verifyContainer}>
                   <Text style={styles.verifyHeading}>Verify your partner</Text>
@@ -338,7 +338,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                     style={styles.connectButton}
                     onPress={confirmFingerprint}
                   >
-                    <Text style={styles.connectButtonText}>Codes match — finish pairing</Text>
+                    <Text style={styles.connectButtonText}>Codes match - finish pairing</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.verifyRejectButton}

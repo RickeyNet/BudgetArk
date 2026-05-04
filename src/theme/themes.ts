@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Theme Presets
+ * BudgetArk - Theme Presets
  * File: src/theme/themes.ts
  *
  * Defines all user-selectable color scheme presets.

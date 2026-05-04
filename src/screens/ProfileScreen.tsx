@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Profile Screen
+ * BudgetArk - Profile Screen
  * File: src/screens/ProfileScreen.tsx
  *
  * Displays the anonymous user's profile and app settings.
@@ -205,7 +205,7 @@ const ProfileScreen: React.FC = () => {
   /** Spreadsheet format reference modal (shared by import and export flows) */
   const [showSpreadsheetSchemaModal, setShowSpreadsheetSchemaModal] = useState(false);
 
-  /** @deprecated How-to docs removed in v1.2.0 — help text moved inline */
+  /** @deprecated How-to docs removed in v1.2.0 - help text moved inline */
 
   /** Release notes modal and accordion state */
   const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
@@ -227,7 +227,7 @@ const ProfileScreen: React.FC = () => {
   const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(null);
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
 
-  /** Privacy mode — blocks screenshots/screen recording when enabled */
+  /** Privacy mode - blocks screenshots/screen recording when enabled */
   const [privacyMode, setPrivacyModeState] = useState(false);
 
   /** Haptic feedback toggle */
@@ -555,7 +555,7 @@ const ProfileScreen: React.FC = () => {
       setInfoModal({
         title: "No WiFi Detected",
         message: Platform.OS === "ios"
-          ? "Unable to read your WiFi network name. Make sure you are connected to WiFi, then check:\n\n1. Settings > Privacy & Security > Location Services — turn on for BudgetArk (\"While Using\")\n2. Settings > Privacy & Security > Local Network — turn on for BudgetArk\n\niOS requires location access to read the WiFi name. Your location is never stored or shared."
+          ? "Unable to read your WiFi network name. Make sure you are connected to WiFi, then check:\n\n1. Settings > Privacy & Security > Location Services - turn on for BudgetArk (\"While Using\")\n2. Settings > Privacy & Security > Local Network - turn on for BudgetArk\n\niOS requires location access to read the WiFi name. Your location is never stored or shared."
           : "Connect to your home WiFi first, then try again.",
       });
       return;
@@ -585,7 +585,7 @@ const ProfileScreen: React.FC = () => {
   const installPendingUpdate = useCallback(async () => {
     try {
       // Mark the OTA install so the post-reload bootstrap suppresses the
-      // "what's new" prompt — the install dialog already showed it. The
+      // "what's new" prompt - the install dialog already showed it. The
       // auto-install path in App.tsx sets the same flag; without this the
       // manual install path would re-show release notes after reload.
       await setOtaUpdateInstalled();
@@ -714,7 +714,7 @@ const ProfileScreen: React.FC = () => {
       });
     } catch (error: any) {
       if (error?.message?.includes("password-encrypted")) {
-        // Need password — show the password prompt
+        // Need password - show the password prompt
         setPendingImportAction(() => (pw: string) =>
           executeImport(importFn, label, pw)
         );
@@ -751,14 +751,14 @@ const ProfileScreen: React.FC = () => {
   }, [executeImport]);
 
   /**
-   * Spreadsheet export — open the format-picker modal.
+   * Spreadsheet export - open the format-picker modal.
    */
   const handleExportSpreadsheet = useCallback(() => {
     setShowSpreadsheetExportModal(true);
   }, []);
 
   /**
-   * Spreadsheet export — run with the chosen format.
+   * Spreadsheet export - run with the chosen format.
    */
   const confirmSpreadsheetExport = useCallback(
     async (format: SpreadsheetFormat) => {
@@ -790,14 +790,14 @@ const ProfileScreen: React.FC = () => {
   );
 
   /**
-   * Spreadsheet import — show merge/replace prompt.
+   * Spreadsheet import - show merge/replace prompt.
    */
   const handleImportSpreadsheet = useCallback(() => {
     setShowSpreadsheetImportModal(true);
   }, []);
 
   /**
-   * Spreadsheet import — run with the chosen mode via the shared import pipeline.
+   * Spreadsheet import - run with the chosen mode via the shared import pipeline.
    */
   const confirmSpreadsheetImport = useCallback(
     async (mode: "merge" | "replace") => {
@@ -948,7 +948,7 @@ const ProfileScreen: React.FC = () => {
               </Text>
             </View>
 
-            {/* Display name — tap to edit */}
+            {/* Display name - tap to edit */}
             <View style={styles.profileInfo}>
               {isEditing ? (
                 <View style={styles.editRow}>
@@ -1059,7 +1059,7 @@ const ProfileScreen: React.FC = () => {
                 <View>
                   <Text style={[styles.settingsRowText, { color: colors.text }]}>Pair with Partner</Text>
                   <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                    Sync budgets over WiFi — no account needed
+                    Sync budgets over WiFi - no account needed
                   </Text>
                 </View>
                 <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
@@ -1282,7 +1282,7 @@ const ProfileScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>Auto Updates</Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                  {updatePrefs.manualUpdateMode ? "Off — manual checks only" : "On — checks automatically"}
+                  {updatePrefs.manualUpdateMode ? "Off - manual checks only" : "On - checks automatically"}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -1357,7 +1357,7 @@ const ProfileScreen: React.FC = () => {
             >
               <View style={{ flex: 1 }}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  v{latestRelease.version} — {latestRelease.title}
+                  v{latestRelease.version} - {latestRelease.title}
                 </Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
                   Tap for release notes
@@ -2119,7 +2119,7 @@ const ProfileScreen: React.FC = () => {
               Export Spreadsheet
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              CSV exports budget entries only — easiest for Google Sheets and
+              CSV exports budget entries only - easiest for Google Sheets and
               quick edits. Excel exports a full multi-sheet workbook (Budget
               Entries, Budget Limits, Debts, Payments, Savings Goals, Asset
               Accounts) for a complete backup.

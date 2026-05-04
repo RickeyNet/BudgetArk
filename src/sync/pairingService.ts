@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Pairing Service
+ * BudgetArk - Pairing Service
  * File: src/sync/pairingService.ts
  *
  * Handles the one-time pairing flow between two devices.
@@ -44,7 +44,7 @@ const getLocalIp = async (): Promise<string | null> => {
         }
       }
     } catch {
-      // Fall through — try NetInfo anyway
+      // Fall through - try NetInfo anyway
     }
   }
 
@@ -56,7 +56,7 @@ const getLocalIp = async (): Promise<string | null> => {
 };
 
 /**
- * Crockford base32 alphabet — 32 unambiguous chars (no I, L, O, U).
+ * Crockford base32 alphabet - 32 unambiguous chars (no I, L, O, U).
  * Codes are normalized before use so users typing "I" / "L" / "O" still
  * land on the canonical "1" / "1" / "0" sibling characters.
  */
@@ -116,7 +116,7 @@ export const normalizePairingCode = (input: string): string => {
 /**
  * Compute the short fingerprint of an established sharedSecret. Both
  * devices display this after the key exchange so the user can verify
- * the secrets match — if a wrong code or a MITM produced two different
+ * the secrets match - if a wrong code or a MITM produced two different
  * `sharedSecret` values, the fingerprints will differ and the user
  * cancels before the pairing is committed to storage.
  *
@@ -131,7 +131,7 @@ export const computeFingerprint = (sharedSecret: string): string => {
 /**
  * Derive a temporary key from the pairing code using PBKDF2.
  * The salt label is bumped to v2 so any captured v1 (6-digit) frames
- * cannot be replayed against a v2 handshake — different keys, different
+ * cannot be replayed against a v2 handshake - different keys, different
  * HMACs, validation rejects.
  */
 const deriveKeyFromCode = (code: string): string => {
@@ -151,7 +151,7 @@ const generateSharedSecret = (): string => {
 const PAIRING_TIMEOUT_MS = 60_000;
 
 /**
- * Result of a successful key exchange. The pairing is *not* yet persisted —
+ * Result of a successful key exchange. The pairing is *not* yet persisted -
  * the UI must show the fingerprint to the user, ask them to confirm it
  * matches the partner device, and then call `commit()`. If the user reports
  * a mismatch (or just dismisses), the caller drops the result and nothing
@@ -191,7 +191,7 @@ export const startPairingAsInitiator = (
     }, PAIRING_TIMEOUT_MS);
 
     try {
-      // Start TCP server — onListening fires as soon as the port is assigned,
+      // Start TCP server - onListening fires as soon as the port is assigned,
       // BEFORE any client connects, so we can advertise and show the address.
       const { connection, port } = await Transport.startServer(
         user.id,
@@ -222,7 +222,7 @@ export const startPairingAsInitiator = (
             };
             connection.send("PAIR_ACCEPT", accept);
 
-            // Build the pending pairing — caller must call commit()
+            // Build the pending pairing - caller must call commit()
             // after the user confirms the fingerprint matches.
             const pairingState: PairingState = {
               partnerId: offer.userId,
@@ -277,7 +277,7 @@ export const joinPairing = async (
   let port: number;
 
   if (manualAddress) {
-    // Manual IP:port provided — skip mDNS discovery
+    // Manual IP:port provided - skip mDNS discovery
     host = manualAddress.host;
     port = manualAddress.port;
   } else {

@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Version Guard
+ * BudgetArk - Version Guard
  * File: src/utils/versionGuard.ts
  *
  * Compares semver-style version strings to prevent downgrade attacks
@@ -52,9 +52,9 @@ export const isUpdateSafe = (
   currentRuntimeVersion: string | undefined,
   incomingRuntimeVersion: string | undefined
 ): boolean => {
-  // Incoming version missing — block the update (fail-closed)
+  // Incoming version missing - block the update (fail-closed)
   if (!incomingRuntimeVersion) return false;
-  // Current version missing — allow the update (fail-open)
+  // Current version missing - allow the update (fail-open)
   if (!currentRuntimeVersion) return true;
   return compareVersions(incomingRuntimeVersion, currentRuntimeVersion) >= 0;
 };

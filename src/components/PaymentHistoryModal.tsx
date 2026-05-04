@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Payment History Modal
+ * BudgetArk - Payment History Modal
  * File: src/components/PaymentHistoryModal.tsx
  *
  * Displays a scrollable list of all recorded payments, grouped by month.

@@ -65,7 +65,7 @@ import {
 } from "../onboarding/CoachmarkAnchorContext";
 
 /**
- * FAB layout constants — kept here so the coachmark can compute a
+ * FAB layout constants - kept here so the coachmark can compute a
  * window-relative rect for the spotlight without going through a ref +
  * measureInWindow round-trip. Keep these in sync with styles.fab.
  */
@@ -225,7 +225,7 @@ const BudgetScreen: React.FC = () => {
   const listRef = useRef<FlatList>(null);
   const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card", { scrollRef: listRef });
   const anchorBudgetSpending = useCoachmarkAnchor("budget-spending-card", { scrollRef: listRef });
-  // FAB rect computed from layout constants — see DebtTrackerScreen for why.
+  // FAB rect computed from layout constants - see DebtTrackerScreen for why.
   useCoachmarkComputedAnchor("budget-fab", () => {
     const { width, height } = Dimensions.get("window");
     return {
@@ -1020,7 +1020,7 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.reviewBtnHint}>Trends, changes, streaks, comparisons</Text>
       </TouchableOpacity>
 
-      {/* Spending card — donut chart + category rows in one card */}
+      {/* Spending card - donut chart + category rows in one card */}
       <View ref={anchorBudgetSpending} collapsable={false} style={styles.spendingCard}>
         <View style={styles.spendingHeaderRow}>
           <Text style={styles.spendingTitle}>Spending</Text>
@@ -1088,7 +1088,7 @@ const BudgetScreen: React.FC = () => {
               {isExpanded && item.entries.length > 0 && (
                 <View style={styles.expandedEntries}>
                   <Text style={styles.expandedHeader}>
-                    Expanded — {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
+                    Expanded - {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
                   </Text>
                   {item.entries.map((entry) => {
                     const isAutoDebtPayment = entry.id.startsWith("auto-debt-");
@@ -1105,7 +1105,7 @@ const BudgetScreen: React.FC = () => {
                         <View style={styles.expandedEntryLeft}>
                           <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
                           {entry.description ? (
-                            <Text style={styles.entryDesc} numberOfLines={1}> — {entry.description}</Text>
+                            <Text style={styles.entryDesc} numberOfLines={1}> - {entry.description}</Text>
                           ) : null}
                         </View>
                         <View style={styles.expandedEntryRight}>
@@ -1144,7 +1144,7 @@ const BudgetScreen: React.FC = () => {
         />
       )}
 
-      {/* FAB — Add Income / Expense. Spotlight anchor is registered above
+      {/* FAB - Add Income / Expense. Spotlight anchor is registered above
           via useCoachmarkComputedAnchor; its rect comes from FAB_BOTTOM /
           FAB_RIGHT / FAB_SIZE, so keep those in sync with styles.fab. */}
       <TouchableOpacity

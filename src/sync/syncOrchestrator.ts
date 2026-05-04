@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Sync Orchestrator
+ * BudgetArk - Sync Orchestrator
  * File: src/sync/syncOrchestrator.ts
  *
  * Coordinates the full P2P sync flow:
@@ -27,7 +27,7 @@ interface ServerSyncHandle {
  * Runs a full sync cycle as the server (waits for partner to connect).
  * Used when this device is discovered first.
  *
- * Returns a handle so the caller can cancel a pending server-mode sync —
+ * Returns a handle so the caller can cancel a pending server-mode sync -
  * e.g. when the fallback path in `syncNow` discovers the partner mid-wait
  * and switches to client mode. Cancelling tears down the TCP server and
  * stops Zeroconf advertising so they don't leak.
@@ -47,7 +47,7 @@ const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
 
     onStatus("connecting");
 
-    // Start TCP server — publish via Zeroconf as soon as the port is assigned
+    // Start TCP server - publish via Zeroconf as soon as the port is assigned
     // (before any client connects) so the partner can discover us.
     const { connection, port } = await Transport.startServer(
       user.id,
@@ -240,15 +240,15 @@ export const syncNow = async (
       return await syncAsClient(peer.host, peer.port, onStatus);
     }
 
-    // Partner not found — start server and advertise, but also keep
+    // Partner not found - start server and advertise, but also keep
     // scanning in case the partner starts their server around the same time.
     // This avoids the deadlock where both devices become servers.
     const serverHandle = syncAsServer(onStatus);
 
-    // Scan again — if partner also started a server we'll find them.
+    // Scan again - if partner also started a server we'll find them.
     const retryPeer = await Discovery.discoverPartner(pairing.partnerId, 8_000);
     if (retryPeer) {
-      // Found partner's server — tear down our own server + advertising
+      // Found partner's server - tear down our own server + advertising
       // before switching to client mode, so we don't leak a listening TCP
       // socket and a stale Zeroconf publish.
       serverHandle.cancel();
@@ -256,7 +256,7 @@ export const syncNow = async (
       return await syncAsClient(retryPeer.host, retryPeer.port, onStatus);
     }
 
-    // No luck — wait for partner to connect to our server
+    // No luck - wait for partner to connect to our server
     return await serverHandle.result;
   } catch (err) {
     onStatus("error");

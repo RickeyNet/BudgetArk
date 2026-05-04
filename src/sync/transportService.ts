@@ -1,5 +1,5 @@
 /**
- * BudgetArk — TCP Transport Service
+ * BudgetArk - TCP Transport Service
  * File: src/sync/transportService.ts
  *
  * Manages encrypted TCP connections between paired devices.

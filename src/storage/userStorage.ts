@@ -1,9 +1,9 @@
 /**
- * BudgetArk — User Storage Utility
+ * BudgetArk - User Storage Utility
  * File: src/storage/userStorage.ts
  *
  * Manages anonymous user accounts.
- * Users are identified by a UUID generated on first launch — no email,
+ * Users are identified by a UUID generated on first launch - no email,
  * phone number, or any personal information is required.
  *
  * Flow:
@@ -33,9 +33,9 @@ const USER_KEY = "@budgetark_user" as const;
 
 /**
  * Retrieves the existing user account, or creates a new anonymous one.
- * This is the primary entry point — call it on app startup.
+ * This is the primary entry point - call it on app startup.
  *
- * @returns Promise<UserAccount> — the current user (existing or newly created)
+ * @returns Promise<UserAccount> - the current user (existing or newly created)
  */
 export const getOrCreateUser = async (): Promise<UserAccount> => {
   const raw = await EncryptedStorage.getItem(USER_KEY);
@@ -46,7 +46,7 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
     try {
       parsed = JSON.parse(raw) as Partial<UserAccount>;
     } catch {
-      // Stored data is corrupted — create a fresh user instead of crashing
+      // Stored data is corrupted - create a fresh user instead of crashing
       parsed = {};
     }
     const normalized: UserAccount = {
@@ -66,7 +66,7 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
     return normalized;
   }
 
-  /* First launch — create anonymous account */
+  /* First launch - create anonymous account */
   const newUser: UserAccount = {
     id: generateUUID(),
     displayName: "Buddy",
@@ -99,8 +99,8 @@ export const getUser = async (): Promise<UserAccount | null> => {
  * Updates the user's display name.
  * Merges the new name into the existing user object.
  *
- * @param name — the new display name
- * @returns Promise<UserAccount> — the updated user
+ * @param name - the new display name
+ * @returns Promise<UserAccount> - the updated user
  */
 export const updateDisplayName = async (
   name: string
@@ -115,7 +115,7 @@ export const updateDisplayName = async (
  * Marks the onboarding flow as complete.
  * Called after the user finishes the initial walkthrough.
  *
- * @returns Promise<UserAccount> — the updated user
+ * @returns Promise<UserAccount> - the updated user
  */
 export const completeOnboarding = async (
   displayName?: string
@@ -145,7 +145,7 @@ export const updateCurrencyPreference = async (
 
 /**
  * Deletes the user account and all associated data.
- * This is a full reset — the next launch will create a fresh account.
+ * This is a full reset - the next launch will create a fresh account.
  *
  * WARNING: Destructive and irreversible.
  */

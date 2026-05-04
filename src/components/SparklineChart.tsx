@@ -38,7 +38,7 @@ const SparklineChart: React.FC<SparklineChartProps> = ({
 
   const resolvedDotColor = dotColor ?? lineColor;
 
-  // Single data point — render centered dot with value
+  // Single data point - render centered dot with value
   if (data.length === 1) {
     const cx = width / 2;
     const cy = paddingTop + chartH * 0.4;

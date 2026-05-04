@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Shared Record Validators
+ * BudgetArk - Shared Record Validators
  * File: src/utils/recordValidators.ts
  *
  * Per-record shape/range validators reused by the JSON import path

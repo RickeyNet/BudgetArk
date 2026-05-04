@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Debt Storage Utility
+ * BudgetArk - Debt Storage Utility
  * File: src/storage/debtStorage.ts
  *
  * Handles all persistent storage operations for debt data.
@@ -7,7 +7,7 @@
  *
  * Design decisions:
  * - All debts are stored as a single JSON array under one key for fast reads.
- * - Writes are atomic — the entire array is replaced on each update.
+ * - Writes are atomic - the entire array is replaced on each update.
  * - This is efficient for typical use (< 50 debts) and avoids key fragmentation.
  */
 
@@ -16,7 +16,7 @@ import { Debt, DebtClass, DebtClassSource, DebtOwner, Payment } from "../types";
 
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
 
-/** Storage keys — centralized to prevent typos */
+/** Storage keys - centralized to prevent typos */
 const STORAGE_KEYS = {
   DEBTS: "@budgetark_debts",
   PAYMENTS: "@budgetark_payments",
@@ -85,7 +85,7 @@ const normalizeDebt = (debt: Debt): Debt => {
  * Retrieves all stored debts from device storage.
  * Returns an empty array if no debts exist yet.
  *
- * @returns Promise<Debt[]> — array of all debt entries
+ * @returns Promise<Debt[]> - array of all debt entries
  */
 export const getDebts = async (): Promise<Debt[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEYS.DEBTS);
@@ -104,9 +104,9 @@ export const getDebts = async (): Promise<Debt[]> => {
 
 /**
  * Persists the full debts array to device storage.
- * Overwrites any existing data — always pass the complete array.
+ * Overwrites any existing data - always pass the complete array.
  *
- * @param debts — the full array of debts to save
+ * @param debts - the full array of debts to save
  */
 export const saveDebts = async (debts: Debt[]): Promise<void> => {
   await EncryptedStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
@@ -116,8 +116,8 @@ export const saveDebts = async (debts: Debt[]): Promise<void> => {
  * Adds a single new debt to storage.
  * Appends to the existing array and saves.
  *
- * @param debt — the new debt to add (must include all required fields)
- * @returns Promise<Debt[]> — the updated debts array
+ * @param debt - the new debt to add (must include all required fields)
+ * @returns Promise<Debt[]> - the updated debts array
  */
 export const addDebt = async (debt: Debt): Promise<Debt[]> => {
   const debts = await getDebts();
@@ -130,8 +130,8 @@ export const addDebt = async (debt: Debt): Promise<Debt[]> => {
  * Removes a debt by its ID.
  * Filters the array and saves the result.
  *
- * @param id — the unique ID of the debt to remove
- * @returns Promise<Debt[]> — the updated debts array
+ * @param id - the unique ID of the debt to remove
+ * @returns Promise<Debt[]> - the updated debts array
  */
 export const deleteDebt = async (id: string): Promise<Debt[]> => {
   const debts = await getDebts();
@@ -144,9 +144,9 @@ export const deleteDebt = async (id: string): Promise<Debt[]> => {
  * Updates a specific debt entry by replacing it in the array.
  * Matches by ID and merges the partial update.
  *
- * @param id — the debt ID to update
- * @param updates — partial debt object with only the fields to change
- * @returns Promise<Debt[]> — the updated debts array
+ * @param id - the debt ID to update
+ * @param updates - partial debt object with only the fields to change
+ * @returns Promise<Debt[]> - the updated debts array
  */
 export const updateDebt = async (
   id: string,
@@ -166,7 +166,7 @@ export const updateDebt = async (
 /**
  * Retrieves all payment records from storage.
  *
- * @returns Promise<Payment[]> — array of all payments
+ * @returns Promise<Payment[]> - array of all payments
  */
 const normalizePayment = (payment: Payment): Payment => ({
   ...payment,
@@ -193,10 +193,10 @@ export const getPayments = async (): Promise<Payment[]> => {
 
 /**
  * Records a new payment and updates the associated debt's balance.
- * This is a compound operation — it modifies both payments and debts.
+ * This is a compound operation - it modifies both payments and debts.
  *
- * @param payment — the payment to record
- * @returns Promise<{ debts: Debt[]; payments: Payment[] }> — updated state
+ * @param payment - the payment to record
+ * @returns Promise<{ debts: Debt[]; payments: Payment[] }> - updated state
  */
 export const recordPayment = async (
   payment: Payment

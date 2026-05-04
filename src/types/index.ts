@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Type Definitions
+ * BudgetArk - Type Definitions
  * File: src/types/index.ts
  *
  * Central type definitions for the entire app.
@@ -17,7 +17,7 @@
  * and the current remaining balance.
  */
 export interface Debt {
-  /** Unique identifier — generated via uuid */
+  /** Unique identifier - generated via uuid */
   id: string;
 
   /** User-friendly name, e.g. "Chase Visa" or "Student Loan" */
@@ -26,7 +26,7 @@ export interface Debt {
   /** Current remaining balance in dollars */
   balance: number;
 
-  /** Original balance when the debt was first added — never changes */
+  /** Original balance when the debt was first added - never changes */
   originalBalance: number;
 
   /** Annual Percentage Rate (APR) as a whole number, e.g. 19.9 = 19.9% */
@@ -278,11 +278,11 @@ export const DEFAULT_CURRENCY_PREFERENCE_ID: CurrencyPreferenceId = "usd_us";
 
 /**
  * Represents an anonymous user account.
- * No email or phone required — the user is identified solely by UUID.
+ * No email or phone required - the user is identified solely by UUID.
  * An optional display name can be set for personalization.
  */
 export interface UserAccount {
-  /** Unique user identifier — generated on first launch */
+  /** Unique user identifier - generated on first launch */
   id: string;
 
   /** Optional display name (defaults to "Buddy") */

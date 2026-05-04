@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Onboarding Screen
+ * BudgetArk - Onboarding Screen
  * File: src/screens/OnboardingScreen.tsx
  *
  * First-launch onboarding flow that guides users through:

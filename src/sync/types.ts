@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Sync Type Definitions
+ * BudgetArk - Sync Type Definitions
  * File: src/sync/types.ts
  *
  * Types used by the P2P LAN sync system.

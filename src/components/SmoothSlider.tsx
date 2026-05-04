@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Smooth Slider Component
+ * BudgetArk - Smooth Slider Component
  * File: src/components/SmoothSlider.tsx
  *
  * A performant slider built on react-native-gesture-handler (Pan gesture)
@@ -39,7 +39,7 @@ interface SmoothSliderProps {
   step: number;
   /** Called with the snapped value on every gesture change */
   onValueChange: (value: number) => void;
-  /** Colors — passed from the theme so the slider stays theme-aware */
+  /** Colors - passed from the theme so the slider stays theme-aware */
   trackColor: string;
   fillColor: string;
   thumbColor: string;
@@ -58,7 +58,7 @@ const SmoothSlider: React.FC<SmoothSliderProps> = React.memo(
     thumbColor,
     thumbBorderColor,
   }) => {
-    /* Shared values — live on the UI thread */
+    /* Shared values - live on the UI thread */
     const trackWidth = useSharedValue(0);
     const progress = useSharedValue((value - min) / (max - min));
 

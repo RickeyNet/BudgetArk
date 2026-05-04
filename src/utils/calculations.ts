@@ -1,9 +1,9 @@
 /**
- * BudgetArk — Financial Calculations
+ * BudgetArk - Financial Calculations
  * File: src/utils/calculations.ts
  *
  * Pure math functions for debt payoff and investment projections.
- * All functions are stateless and have zero side effects — they take
+ * All functions are stateless and have zero side effects - they take
  * numbers in and return numbers out, making them easy to test.
  *
  * Performance note: All calculations run in O(1) time using closed-form
@@ -228,9 +228,9 @@ export const simulatePayoffPlan = (
  *   n = -ln(1 - (B * r) / P) / ln(1 + r)
  * where B = balance, r = monthly rate, P = payment
  *
- * @param balance — current remaining balance ($)
- * @param annualRate — APR as a percentage (e.g. 19.9 for 19.9%)
- * @param monthlyPayment — fixed monthly payment amount ($)
+ * @param balance - current remaining balance ($)
+ * @param annualRate - APR as a percentage (e.g. 19.9 for 19.9%)
+ * @param monthlyPayment - fixed monthly payment amount ($)
  * @returns number of months to payoff, or Infinity if payment is too low
  */
 export const calcMonthsToPayoff = (
@@ -262,9 +262,9 @@ export const calcMonthsToPayoff = (
 /**
  * Calculates total interest paid over the life of a debt.
  *
- * @param balance — current remaining balance ($)
- * @param annualRate — APR as a percentage
- * @param monthlyPayment — fixed monthly payment ($)
+ * @param balance - current remaining balance ($)
+ * @param annualRate - APR as a percentage
+ * @param monthlyPayment - fixed monthly payment ($)
  * @returns total interest paid in dollars
  */
 export const calcTotalInterest = (
@@ -288,9 +288,9 @@ export const calcTotalInterest = (
  * Generates a month-by-month amortization schedule.
  * NOTE: This is O(n) where n = number of months. Use sparingly for charts.
  *
- * @param balance — starting balance ($)
- * @param annualRate — APR as a percentage
- * @param monthlyPayment — fixed monthly payment ($)
+ * @param balance - starting balance ($)
+ * @param annualRate - APR as a percentage
+ * @param monthlyPayment - fixed monthly payment ($)
  * @returns array of { month, balance, interestPaid, principalPaid }
  */
 export const generatePayoffSchedule = (
@@ -347,9 +347,9 @@ export const generatePayoffSchedule = (
  * Formula: FV = P * [((1 + r)^n - 1) / r]
  * where P = monthly contribution, r = monthly rate, n = total months
  *
- * @param monthlyContribution — amount invested per month ($)
- * @param annualReturn — expected annual return as a percentage (e.g. 7 for 7%)
- * @param years — number of years to project
+ * @param monthlyContribution - amount invested per month ($)
+ * @param annualReturn - expected annual return as a percentage (e.g. 7 for 7%)
+ * @param years - number of years to project
  * @returns future value in dollars
  */
 export const calcInvestmentGrowth = (
@@ -412,9 +412,9 @@ export const calcInvestmentTimeline = (
  *   P = B * r / (1 - (1 + r)^(-n))
  * where B = balance, r = monthly rate, n = months remaining
  *
- * @param balance — current remaining balance ($)
- * @param annualRate — APR as a percentage (e.g. 19.9 for 19.9%)
- * @param monthsRemaining — number of months until goal date
+ * @param balance - current remaining balance ($)
+ * @param annualRate - APR as a percentage (e.g. 19.9 for 19.9%)
+ * @param monthsRemaining - number of months until goal date
  * @returns required monthly payment in dollars, or Infinity if impossible
  */
 export const calcPaymentForGoalDate = (
@@ -442,7 +442,7 @@ export const calcPaymentForGoalDate = (
 /**
  * Calculates the number of months between now and a target date.
  *
- * @param goalDateISO — ISO date string for the target date
+ * @param goalDateISO - ISO date string for the target date
  * @returns number of months remaining (minimum 0)
  */
 export const calcMonthsUntilDate = (goalDateISO: string): number => {
@@ -457,9 +457,9 @@ export const calcMonthsUntilDate = (goalDateISO: string): number => {
 /**
  * Formats a number as a localized currency string.
  *
- * @param amount — number to format
- * @param locale — optional locale (defaults to en-US)
- * @param currencyCode — optional currency code (defaults to USD)
+ * @param amount - number to format
+ * @param locale - optional locale (defaults to en-US)
+ * @param currencyCode - optional currency code (defaults to USD)
  */
 export const formatCurrency = (
   amount: number,

@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Spreadsheet Import Utility
+ * BudgetArk - Spreadsheet Import Utility
  * File: src/utils/spreadsheetImport.ts
  *
  * Reads .csv or .xlsx files via expo-document-picker, parses with SheetJS,
@@ -115,7 +115,7 @@ const parseAmount = (raw: unknown): number => {
  * Normalizes a date cell into ISO 8601.
  *
  * Accepts:
- *   - Excel serial dates (numbers — XLSX with cellDates:true converts to Date)
+ *   - Excel serial dates (numbers - XLSX with cellDates:true converts to Date)
  *   - JS Date objects (from cellDates:true)
  *   - ISO strings ("2026-04-30", "2026-04-30T12:00:00Z")
  *   - US-format strings ("4/30/2026", "04/30/2026")
@@ -206,7 +206,7 @@ const isTotalRow = (row: Record<string, unknown>): boolean => {
 /**
  * Treat the workbook as either a multi-sheet xlsx or a single CSV sheet.
  *
- * For CSVs, the only sheet is the budget entries sheet — so we map the first
+ * For CSVs, the only sheet is the budget entries sheet - so we map the first
  * sheet to "Budget Entries" regardless of its actual name.
  */
 const sheetToRows = (sheet: XLSX.WorkSheet | undefined): Record<string, unknown>[] => {

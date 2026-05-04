@@ -1,5 +1,5 @@
 /**
- * BudgetArk — DebtCard Component
+ * BudgetArk - DebtCard Component
  * File: src/components/DebtCard.tsx
  *
  * Displays a single debt entry as an interactive card.
@@ -41,10 +41,10 @@ interface DebtCardProps {
   /** The debt data to display */
   debt: Debt;
 
-  /** Callback when user submits a payment — receives (debtId, amount) */
+  /** Callback when user submits a payment - receives (debtId, amount) */
   onPayment: (debtId: string, amount: number) => void;
 
-  /** Callback when user deletes this debt — receives debtId */
+  /** Callback when user deletes this debt - receives debtId */
   onDelete: (debtId: string) => void;
 
   /** Callback when user wants to edit this debt */
@@ -68,7 +68,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   const [showPayInput, setShowPayInput] = useState(false);
   const [payAmount, setPayAmount] = useState("");
 
-  // Keep expanded state in sync with focus changes — when the avalanche/snowball
+  // Keep expanded state in sync with focus changes - when the avalanche/snowball
   // strategy switches the focus debt, the previously-focused card should
   // collapse and the newly-focused card should open.
   useEffect(() => {

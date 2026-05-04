@@ -146,7 +146,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
         behavior="padding"
         style={styles.overlay}
       >
-        {/* Modal sheet — fills from near top to bottom */}
+        {/* Modal sheet - fills from near top to bottom */}
         <View style={styles.modalSheet}>
           {/* Scrollable form content */}
           <ScrollView
@@ -326,7 +326,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
             )}
           </ScrollView>
 
-          {/* ── Action Buttons — pinned at bottom, always visible above keyboard ── */}
+          {/* ── Action Buttons - pinned at bottom, always visible above keyboard ── */}
           <View
             style={[
               styles.buttonRow,
@@ -601,7 +601,7 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 12,
     },
 
-    /* Buttons — outside ScrollView so they stay above keyboard */
+    /* Buttons - outside ScrollView so they stay above keyboard */
     buttonRow: {
       flexDirection: "row",
       gap: 12,

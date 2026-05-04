@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Spreadsheet Export Utility
+ * BudgetArk - Spreadsheet Export Utility
  * File: src/utils/spreadsheetExport.ts
  *
  * Exports user data to .csv or .xlsx via expo-file-system + expo-sharing.
@@ -9,7 +9,7 @@
  * Savings Goals, Asset Accounts).
  *
  * Schema is documented in SPREADSHEET_SCHEMA.md and is round-trip safe with
- * spreadsheetImport.ts — column headers must not change without bumping the
+ * spreadsheetImport.ts - column headers must not change without bumping the
  * schema version in both files.
  */
 
@@ -121,7 +121,7 @@ const ASSET_ACCOUNT_COLUMNS = [
   "CreatedAt",
 ] as const;
 
-/* ── Row builders — convert app types to flat row objects ── */
+/* ── Row builders - convert app types to flat row objects ── */
 
 const formatDateOnly = (iso: string): string => {
   if (!iso) return "";
@@ -152,7 +152,7 @@ const toExcelDate = (yyyymmdd: string): Date | undefined => {
  * with, instead of left-aligned text dates.
  *
  * Cells that are already typed (numeric, date, etc.) or that don't match the
- * date pattern are left alone — the Total row label, blank cells, and CSV-
+ * date pattern are left alone - the Total row label, blank cells, and CSV-
  * style numeric inputs all pass through untouched.
  */
 const promoteStringDateCells = (
@@ -244,7 +244,7 @@ const assetAccountToRow = (account: AssetAccount) => ({
  * are set so Excel/Sheets recompute live, and so sheet_to_csv (which reads `v`,
  * not `f`) still emits a real number.
  *
- * The label sits in the first column of every sheet by design — that column is
+ * The label sits in the first column of every sheet by design - that column is
  * always either an `ID` (UUID) or a `Category` (enum). The string "Total" never
  * passes those validators on import, so the row is silently rejected even if
  * the import-side filter is missed.
@@ -260,7 +260,7 @@ type SheetName =
   | "Savings Goals"
   | "Asset Accounts";
 
-// Budget Entries is built by buildBudgetEntriesSheet — see that function
+// Budget Entries is built by buildBudgetEntriesSheet - see that function
 // for the per-month subtotal layout and grand-total block. The generic
 // appendTotalRow doesn't apply here because income and expense are stored
 // as positive amounts on different Type values, so a plain SUM of the
@@ -415,7 +415,7 @@ const buildBudgetEntriesSheet = (
       if (col === "Date" && typeof value === "string") {
         // Promote YYYY-MM-DD strings to native Excel date cells so users
         // get real date sorting/filtering. The SUMIFS month-bucket
-        // formulas rely on this typing too — they compare against
+        // formulas rely on this typing too - they compare against
         // DATE(...) serial values, not text.
         const dateObj = toExcelDate(value);
         sheet[ref] = dateObj
@@ -458,7 +458,7 @@ const buildBudgetEntriesSheet = (
   // Per-month subtotal cells get tracked here and have their formulas
   // patched in after the data loop, once we know the final data range
   // (firstDataExcelRow .. lastDataExcelRow). Tracking by row index lets the
-  // formulas reference the full data range — Excel doesn't care about
+  // formulas reference the full data range - Excel doesn't care about
   // evaluation order, only that the range is valid when the file is opened.
   type MonthSubtotal = {
     row0: number; // 0-indexed sheet row of the Amount cell
@@ -501,7 +501,7 @@ const buildBudgetEntriesSheet = (
   }
   flushMonthSubtotals();
 
-  // Grand total — SUMIF across the entire data + per-month-subtotal range.
+  // Grand total - SUMIF across the entire data + per-month-subtotal range.
   // Subtotal rows have Type blank, so SUMIF on "income"/"expense" naturally
   // skips them. The cached numeric value below mirrors that math.
   const grandIncome = sortedRows.reduce<number>((acc, row) => {
@@ -528,8 +528,8 @@ const buildBudgetEntriesSheet = (
   // Patch per-month subtotal Amount cells with live SUMIFS formulas now
   // that we know the full data range. Date cells are typed as Excel dates
   // (serial numbers), so the criteria use DATE(y,m,1) to do a numeric
-  // comparison — text comparisons would silently fail against date-typed
-  // cells. "Unknown" buckets stay as cached values only — there's no
+  // comparison - text comparisons would silently fail against date-typed
+  // cells. "Unknown" buckets stay as cached values only - there's no
   // valid month to anchor a DATE() range on.
   const nextMonthYM = (ym: string): { year: number; month: number } => {
     const [yStr, mStr] = ym.split("-");
@@ -596,7 +596,7 @@ const appendTotalRow = (
      * When set, rows whose first-column value (column A) equals this string
      * are excluded from both the cached sum and the SUMIF formula. Used to
      * keep the synthetic Emergency Fund row out of the Savings Goals total
-     * — otherwise the totals shift depending on whether the user has an
+     * - otherwise the totals shift depending on whether the user has an
      * explicit emergency_fund goal or only the Keel-derived synthetic one.
      */
     excludeFirstColumnEquals?: string;
@@ -672,7 +672,7 @@ export interface SpreadsheetExportResult {
 /**
  * Builds the workbook, writes it to a cache file, and opens the share sheet.
  *
- * @param format — "csv" (budget entries only) or "xlsx" (full multi-sheet workbook)
+ * @param format - "csv" (budget entries only) or "xlsx" (full multi-sheet workbook)
  */
 export const exportSpreadsheet = async (
   format: SpreadsheetFormat
@@ -834,7 +834,7 @@ export const exportSpreadsheet = async (
 
   // Stamp the backup version so the Profile reminder banner clears.
   // expo-sharing's shareAsync resolves on share-sheet dismissal regardless
-  // of the user's choice, so this is a best-effort marker — a user who
+  // of the user's choice, so this is a best-effort marker - a user who
   // opens the sheet and cancels will still clear the reminder. Worth the
   // tradeoff vs nagging users who did successfully save the file.
   await recordBackup(CURRENT_APP_VERSION);

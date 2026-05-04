@@ -1,5 +1,5 @@
 /**
- * BudgetArk — UUID Utility
+ * BudgetArk - UUID Utility
  * File: src/utils/uuid.ts
  *
  * Cryptographically strong UUID v4 generator via the `uuid` package,

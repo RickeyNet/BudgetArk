@@ -29,7 +29,7 @@ type SpotlightProps = {
  * of looking like the button extends below the highlight.
  */
 const CUTOUT_PADDING = 14;
-/** Min height the tooltip card needs — used to choose above/below placement. */
+/** Min height the tooltip card needs - used to choose above/below placement. */
 const TOOLTIP_MIN_HEIGHT = 180;
 /** Margin between the cutout and the tooltip card. */
 const TOOLTIP_GAP = 16;

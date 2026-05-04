@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Data Export Utility
+ * BudgetArk - Data Export Utility
  * File: src/utils/exportData.ts
  *
  * Collects all user data from AsyncStorage and exports it
@@ -34,7 +34,7 @@ export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
  * Gathers all app data into a single object and opens
  * the native share sheet so the user can copy, save, or send it.
  *
- * @param password — if provided, the export is AES-encrypted with this password
+ * @param password - if provided, the export is AES-encrypted with this password
  * @returns Promise<void>
  */
 export const exportAllData = async (password?: string): Promise<void> => {
@@ -106,7 +106,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
   });
 
   // Stamp the backup version only when the user actually completed the
-  // share sheet — dismissing without sharing leaves the reminder visible.
+  // share sheet - dismissing without sharing leaves the reminder visible.
   if (result.action === Share.sharedAction) {
     await recordBackup(CURRENT_APP_VERSION);
   }

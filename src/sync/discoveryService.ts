@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Zeroconf Discovery Service
+ * BudgetArk - Zeroconf Discovery Service
  * File: src/sync/discoveryService.ts
  *
  * Wraps react-native-zeroconf for mDNS publish/browse.
@@ -77,7 +77,7 @@ export const discoverPartner = (
 
     zc.on("resolved", (service: any) => {
       const txt = service.txt || {};
-      // During pairing partnerId is "" — accept any budgetark service.
+      // During pairing partnerId is "" - accept any budgetark service.
       // During sync we match the specific partner.
       const isMatch =
         partnerId === ""

@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Backup Reminder Storage
+ * BudgetArk - Backup Reminder Storage
  * File: src/storage/backupReminderStorage.ts
  *
  * Tracks the last successful export so the Profile banner can nudge

@@ -1,11 +1,11 @@
 /**
- * BudgetArk — Haptic feedback wrapper
+ * BudgetArk - Haptic feedback wrapper
  * File: src/utils/haptics.ts
  *
  * Thin wrapper around expo-haptics that:
  *   - Caches the user's haptics preference in memory so we don't hit
  *     storage on every fire.
- *   - Fails silently — haptics are progressive enhancement, never block UX.
+ *   - Fails silently - haptics are progressive enhancement, never block UX.
  *   - Centralizes the small vocabulary of "moments" we want to trigger.
  *
  * Usage:

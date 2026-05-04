@@ -1,24 +1,24 @@
 /**
- * BudgetArk — App Navigator
+ * BudgetArk - App Navigator
  * File: src/navigation/AppNavigator.tsx
  *
  * Sets up the bottom tab navigation for the app.
  * Contains 5 tabs:
- *   1. Debt Tracker (⛓️) — debt payoff planning
- *   2. Budget (💰)       — income & expense tracking
- *   3. Bridge (🧭)       — net worth, accounts, and progress
- *   4. Utilities (🧰)    — financial tools & calculators
- *   5. Profile (👤)      — anonymous account & settings
+ *   1. Debt Tracker (⛓️) - debt payoff planning
+ *   2. Budget (💰)       - income & expense tracking
+ *   3. Bridge (🧭)       - net worth, accounts, and progress
+ *   4. Utilities (🧰)    - financial tools & calculators
+ *   5. Profile (👤)      - anonymous account & settings
  *
  * Design decisions:
  * - Uses @react-navigation/bottom-tabs for native tab bar behavior
  * - Tab bar is styled to match the dark theme with a frosted glass effect
  * - Icons are emoji-based for now (swap for vector icons later if desired)
- * - headerShown: false on all screens — each screen manages its own header
+ * - headerShown: false on all screens - each screen manages its own header
  * - Bridge tab is centered and opens by default
  *
  * Performance:
- * - lazy: true (default) — screens only mount when first visited
+ * - lazy: true (default) - screens only mount when first visited
  * - Tab bar uses dynamic theme colors that update when theme changes
  */
 
@@ -74,10 +74,10 @@ const AppNavigator: React.FC = () => {
     <Tab.Navigator
       initialRouteName="Bridge"
       screenOptions={({ route }) => ({
-        /** Hide the default header — each screen has its own */
+        /** Hide the default header - each screen has its own */
         headerShown: false,
 
-        /** Tab bar icon — emoji based */
+        /** Tab bar icon - emoji based */
         tabBarIcon: ({ focused }) => (
           <Text style={[styles.icon, !focused && styles.iconInactive]}>
             {TAB_ICONS[route.name as keyof RootTabParamList]}
@@ -91,7 +91,7 @@ const AppNavigator: React.FC = () => {
           </Text>
         ),
 
-        /** Tab bar styling — dark theme with subtle border */
+        /** Tab bar styling - dark theme with subtle border */
         tabBarStyle: styles.tabBar,
 
         /** Active indicator color (used on some platforms) */

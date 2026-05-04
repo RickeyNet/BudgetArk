@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Feedback Modal
+ * BudgetArk - Feedback Modal
  * File: src/components/FeedbackModal.tsx
  *
  * In-app form for bug reports and feature suggestions.
@@ -83,7 +83,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
         message: "Your feedback helps make BudgetArk better.",
       });
     } catch {
-      // No email app found — fall back to mailto: link
+      // No email app found - fall back to mailto: link
       const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       try {
         await Linking.openURL(mailto);
@@ -179,7 +179,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
                   style={styles.textArea}
                   placeholder={
                     feedbackType === "bug"
-                      ? "Describe the bug — what you expected vs what happened..."
+                      ? "Describe the bug - what you expected vs what happened..."
                       : "Describe the feature you'd like..."
                   }
                   placeholderTextColor={colors.textMuted}

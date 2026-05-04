@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Auto-Sync Manager
+ * BudgetArk - Auto-Sync Manager
  * File: src/sync/autoSyncManager.ts
  *
  * Monitors WiFi network changes and triggers automatic sync
@@ -15,7 +15,7 @@ import type { SyncResult } from "./types";
 
 const COOLDOWN_MS = 30_000;
 
-// Configure NetInfo at module load — must happen before any NetInfo.fetch()
+// Configure NetInfo at module load - must happen before any NetInfo.fetch()
 // or addEventListener call anywhere in the app, so SSID is available on iOS.
 NetInfo.configure({ shouldFetchWiFiSSID: true });
 
@@ -72,7 +72,7 @@ const attemptAutoSync = async (): Promise<void> => {
     const result = await syncNow();
     onSyncComplete?.(result);
   } catch {
-    // Silently fail for auto-sync — user didn't explicitly request it
+    // Silently fail for auto-sync - user didn't explicitly request it
   }
 };
 

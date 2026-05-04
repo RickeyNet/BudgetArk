@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Diff Engine
+ * BudgetArk - Diff Engine
  * File: src/sync/diffEngine.ts
  *
  * Computes outgoing diffs and applies incoming diffs for P2P sync.
@@ -82,7 +82,7 @@ export const computeOutgoingDiff = async (
   // Load full budget limits history. On first sync we send everything;
   // otherwise filter per-category by updatedAt so unchanged limits don't
   // get re-broadcast every sync. Storage normalizes missing updatedAt to
-  // the epoch — those still ride along on first sync, then get superseded
+  // the epoch - those still ride along on first sync, then get superseded
   // by any fresh remote edit.
   const budgetLimits: BudgetLimitDiff[] = [];
   const history = await getAllLimitsByMonth();

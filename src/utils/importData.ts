@@ -1,10 +1,10 @@
 /**
- * BudgetArk — Data Import Utility
+ * BudgetArk - Data Import Utility
  * File: src/utils/importData.ts
  *
  * Two import paths:
- *   1. importData()       — opens a document picker to select a JSON file
- *   2. importFromString() — accepts a raw JSON string (e.g. pasted text)
+ *   1. importData()       - opens a document picker to select a JSON file
+ *   2. importFromString() - accepts a raw JSON string (e.g. pasted text)
  *
  * Both validate the payload and write into AsyncStorage.
  */
@@ -56,7 +56,7 @@ const getCurrentMonthKey = (): string => {
 
 /**
  * Validates that the parsed JSON looks like a BudgetArk export.
- * We intentionally keep this loose — we check top-level keys and that
+ * We intentionally keep this loose - we check top-level keys and that
  * arrays are arrays, but we don't deep-validate every field so that
  * older/newer export versions still work.
  */
@@ -278,8 +278,8 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
 /**
  * Parses, validates, and writes an import payload into AsyncStorage.
  *
- * @param raw  — the raw JSON string to import
- * @param mode — "merge" keeps existing data, "replace" wipes first
+ * @param raw  - the raw JSON string to import
+ * @param mode - "merge" keeps existing data, "replace" wipes first
  * @returns ImportResult with counts of imported items
  */
 /**
@@ -379,7 +379,7 @@ export const importFromString = async (
       try {
         existing = JSON.parse(existingRaw);
       } catch {
-        existing = []; // corrupted storage — treat as empty
+        existing = []; // corrupted storage - treat as empty
       }
     }
 
@@ -420,7 +420,7 @@ export const importFromString = async (
       try {
         parsed = JSON.parse(existingRaw);
       } catch {
-        parsed = {}; // corrupted storage — treat as empty
+        parsed = {}; // corrupted storage - treat as empty
       }
     }
     const history =

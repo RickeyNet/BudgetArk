@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Pairing Storage
+ * BudgetArk - Pairing Storage
  * File: src/sync/pairingStorage.ts
  *
  * Persists pairing state and sync metadata to encrypted storage.

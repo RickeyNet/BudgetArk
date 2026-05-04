@@ -25,7 +25,7 @@ type AnchorEntry = {
   scrollRef: CoachmarkScrollRef | null;
   /**
    * Overrides measureInWindow when set. Use for elements whose on-screen
-   * position is deterministic (FABs, fixed overlays) — measureInWindow on RN
+   * position is deterministic (FABs, fixed overlays) - measureInWindow on RN
    * sometimes returns bounds for the wrong native node when the ref sits on a
    * Touchable wrapper, so we compute the rect directly from layout constants
    * instead.
@@ -146,7 +146,7 @@ const scrollAnchorIntoView = async (entry: AnchorEntry): Promise<void> => {
       scrollRef.scrollTo({ y: offset, animated: true });
     }
   } catch {
-    /* swallow — fall back to whatever measureInWindow returns */
+    /* swallow - fall back to whatever measureInWindow returns */
   }
 
   await new Promise<void>((r) => setTimeout(r, SCROLL_SETTLE_MS));

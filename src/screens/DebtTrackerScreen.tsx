@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Debt Tracker Screen
+ * BudgetArk - Debt Tracker Screen
  * File: src/screens/DebtTrackerScreen.tsx
  *
  * The primary screen of the app. Displays:
@@ -77,7 +77,7 @@ import {
 } from "../onboarding/CoachmarkAnchorContext";
 
 /**
- * FAB layout constants — kept here so the coachmark can compute a
+ * FAB layout constants - kept here so the coachmark can compute a
  * window-relative rect for the spotlight without going through a ref +
  * measureInWindow round-trip (which was returning bounds for the wrong
  * native node). Keep these in sync with styles.fab below.
@@ -121,7 +121,7 @@ const KEEL_MAX_TARGET = 2000;
  *
  * Promotion gate: car and mortgage only move to the top of the list once
  * (a) the Hull milestone is marked complete and (b) every credit /
- * personal-loan debt has a zero balance. Both checks are required — Hull
+ * personal-loan debt has a zero balance. Both checks are required - Hull
  * being marked complete while credit still carries a balance shouldn't
  * bury those entries behind the mortgage. When the gate opens, car comes
  * before house (smaller balance, naturally tackled first).
@@ -236,7 +236,7 @@ const DebtTrackerScreen: React.FC = () => {
   const anchorSummary = useCoachmarkAnchor("debts-summary-card", { scrollRef: listRef });
   const anchorMilestones = useCoachmarkAnchor("debts-milestones-card", { scrollRef: listRef });
   // FAB rect is computed from layout constants (FAB_* above) rather than
-  // measured via ref — measureInWindow returned the wrong bounds when the
+  // measured via ref - measureInWindow returned the wrong bounds when the
   // ref was on the TouchableOpacity, even after wrapping it in a plain View.
   useCoachmarkComputedAnchor("debts-fab", () => {
     const { width, height } = Dimensions.get("window");
@@ -399,7 +399,7 @@ const DebtTrackerScreen: React.FC = () => {
     .reduce((sum, debt) => sum + debt.balance, 0);
 
   // Hull (Build Your Ark step "Clear Non-Mortgage Debt") covers credit cards,
-  // personal loans, and car loans — anything that isn't the mortgage.
+  // personal loans, and car loans - anything that isn't the mortgage.
   const nonMortgageDebts = debts.filter((debt) => debt.debtClass !== "house");
   const nonMortgageRemaining = nonMortgageDebts.reduce(
     (sum, debt) => sum + debt.balance,
@@ -554,7 +554,7 @@ const DebtTrackerScreen: React.FC = () => {
 
   // Payoff comparison calculations for Hull step.
   // Hull covers non-mortgage debt (credit + car), so the simulator should
-  // not roll the mortgage into the projection — feeding it the house would
+  // not roll the mortgage into the projection - feeding it the house would
   // make the months-to-payoff and total-interest numbers reflect a full
   // mortgage payoff instead of the Hull goal.
   const payoffActiveDebts = React.useMemo(
@@ -579,7 +579,7 @@ const DebtTrackerScreen: React.FC = () => {
     if (snowballWhatIf.totalInterestPaid < avalancheWhatIf.totalInterestPaid) {
       return "Lowest interest: Snowball.";
     }
-    return "Tie — both methods cost the same interest.";
+    return "Tie - both methods cost the same interest.";
   }, [avalancheWhatIf, snowballWhatIf]);
 
   /** Add a new debt */
@@ -931,7 +931,7 @@ const DebtTrackerScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Owner summary row doubles as filter — tap to filter */}
+        {/* Owner summary row doubles as filter - tap to filter */}
         <View style={styles.ownerSummaryRow}>
           {([
             { id: "all" as DebtOwnerFilter, label: "All", value: totalMine + totalPartner + totalJoint },
@@ -961,7 +961,7 @@ const DebtTrackerScreen: React.FC = () => {
           })}
         </View>
 
-        {/* Milestone bar — tap opens milestones */}
+        {/* Milestone bar - tap opens milestones */}
         <TouchableOpacity
           ref={anchorMilestones}
           style={[styles.milestonesCard, { backgroundColor: colors.bg, borderColor: colors.cardBorder }]}
@@ -983,7 +983,7 @@ const DebtTrackerScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Section header — just title + sort hint */}
+      {/* Section header - just title + sort hint */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Debts</Text>
         <Text style={[styles.strategyHint, { marginBottom: 0 }]}>
@@ -1027,9 +1027,9 @@ const DebtTrackerScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
-      {/* FAB — Add Debt. The spotlight anchor for this button is registered
+      {/* FAB - Add Debt. The spotlight anchor for this button is registered
           via useCoachmarkComputedAnchor above, which computes the window
-          rect from FAB_BOTTOM / FAB_RIGHT / FAB_SIZE — keep the style and
+          rect from FAB_BOTTOM / FAB_RIGHT / FAB_SIZE - keep the style and
           those constants in sync. */}
       <TouchableOpacity
         style={styles.fab}

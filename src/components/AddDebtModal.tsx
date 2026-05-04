@@ -1,5 +1,5 @@
 /**
- * BudgetArk — AddDebtModal Component
+ * BudgetArk - AddDebtModal Component
  * File: src/components/AddDebtModal.tsx
  *
  * A full-screen modal that presents a form for adding a new debt.
@@ -75,10 +75,10 @@ interface AddDebtModalProps {
   /** Callback to close the modal */
   onClose: () => void;
 
-  /** Callback when user submits a valid debt — receives the form data */
+  /** Callback when user submits a valid debt - receives the form data */
   onAdd: (debt: NewDebtInput) => void;
 
-  /** Optional existing debt to edit — when set, modal acts as an editor */
+  /** Optional existing debt to edit - when set, modal acts as an editor */
   editDebt?: Debt | null;
 
   /** Callback when user saves edits to an existing debt */
@@ -242,7 +242,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
         behavior="padding"
         style={styles.overlay}
       >
-        {/* Modal sheet — fills from near top to bottom */}
+        {/* Modal sheet - fills from near top to bottom */}
         <View style={styles.modalSheet}>
           {/* Scrollable form content */}
           <ScrollView
@@ -405,14 +405,14 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 )}
                 {goalPaymentInfo && !isFinite(goalPaymentInfo.required) && (
                   <Text style={[styles.goalHint, { color: colors.danger || "#ff5252" }]}>
-                    Goal date is too soon — not achievable
+                    Goal date is too soon - not achievable
                   </Text>
                 )}
               </View>
             </View>
           </ScrollView>
 
-          {/* ── Action Buttons — pinned at bottom, always visible above keyboard ── */}
+          {/* ── Action Buttons - pinned at bottom, always visible above keyboard ── */}
           <View
             style={[
               styles.buttonRow,
@@ -631,7 +631,7 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.accent,
     },
 
-    /* Buttons — outside ScrollView so they stay above keyboard */
+    /* Buttons - outside ScrollView so they stay above keyboard */
     buttonRow: {
       flexDirection: "row",
       gap: 12,

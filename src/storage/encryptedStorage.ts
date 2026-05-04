@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Encrypted Storage Wrapper
+ * BudgetArk - Encrypted Storage Wrapper
  * File: src/storage/encryptedStorage.ts
  *
  * Drop-in replacement for AsyncStorage.getItem/setItem that encrypts
@@ -12,10 +12,10 @@
  *      be scrambled so nobody can read it if they access the device storage.
  *   2. We generate a random "key" (a long secret string) and store it in the
  *      phone's secure vault (iOS Keychain / Android Keystore). This vault is
- *      hardware-protected — even other apps can't read it.
+ *      hardware-protected - even other apps can't read it.
  *   3. We use AES-256 encryption (a military-grade algorithm) to scramble the
  *      data using that key. The result looks like random gibberish.
- *   4. We then create an HMAC — a "digital signature" of the encrypted data
+ *   4. We then create an HMAC - a "digital signature" of the encrypted data
  *      using the same key. This lets us detect if anyone tampered with the
  *      stored data (explained more below).
  *   5. We store: prefix + HMAC + "." + encrypted data in AsyncStorage.
@@ -24,13 +24,13 @@
  *   1. We read the stored value and split it into the HMAC and encrypted data.
  *   2. We recalculate what the HMAC *should* be for that encrypted data.
  *   3. If our calculated HMAC doesn't match the stored HMAC, someone has
- *      tampered with the data — we reject it and return null (safe fallback).
+ *      tampered with the data - we reject it and return null (safe fallback).
  *   4. If the HMAC matches, we decrypt and return the original data.
  *
  * WHY HMAC MATTERS:
  *   Without HMAC, an attacker with filesystem access could modify the
  *   encrypted data (e.g. change a debt balance) and the app would happily
- *   decrypt the corrupted result. HMAC acts like a tamper-evident seal —
+ *   decrypt the corrupted result. HMAC acts like a tamper-evident seal -
  *   if anything changes, the seal breaks and we know not to trust the data.
  *
  * LEGACY MIGRATION:
@@ -50,7 +50,7 @@ const ENCRYPTION_KEY_ALIAS = "budgetark_encryption_key";
 /**
  * Prefix markers to identify encrypted data in storage.
  * __ENCV2__: = current format (AES + HMAC integrity check)
- * __ENC__:   = old format (AES only, no HMAC) — still readable for migration
+ * __ENC__:   = old format (AES only, no HMAC) - still readable for migration
  */
 const ENCRYPTED_V2_PREFIX = "__ENCV2__:";
 const ENCRYPTED_V1_PREFIX = "__ENC__:";
@@ -129,7 +129,7 @@ const getEncryptionKey = async (): Promise<string | null> => {
   } catch (error) {
     // SecureStore can fail on sideloaded APKs with mismatched signing keys
     // or on devices with broken Keystore. Return null to signal that
-    // encryption is unavailable — callers will fall back to plaintext.
+    // encryption is unavailable - callers will fall back to plaintext.
     if (__DEV__) console.error("SecureStore access failed:", error);
     return null;
   }
@@ -147,8 +147,8 @@ const getEncryptionKey = async (): Promise<string | null> => {
  *      will be completely different.
  *   3. We combine them as: prefix + hmac + "." + ciphertext
  *
- * @param plaintext — the original data to protect
- * @param key — the encryption key from the secure vault
+ * @param plaintext - the original data to protect
+ * @param key - the encryption key from the secure vault
  * @returns the encrypted string with integrity signature
  */
 const encrypt = (plaintext: string, key: string): string => {
@@ -186,18 +186,18 @@ const decryptV2 = (stored: string, key: string): string | null => {
   );
 
   if (storedHmac !== calculatedHmac) {
-    // Integrity check failed — data has been tampered with
+    // Integrity check failed - data has been tampered with
     return null;
   }
 
-  // HMAC matches — safe to decrypt
+  // HMAC matches - safe to decrypt
   const bytes = CryptoJS.AES.decrypt(ciphertext, key);
   const plaintext = bytes.toString(CryptoJS.enc.Utf8);
   return plaintext || null;
 };
 
 /**
- * Decrypts a V1 encrypted value (no HMAC — legacy format).
+ * Decrypts a V1 encrypted value (no HMAC - legacy format).
  * Used only for migrating data from the old encryption format to V2.
  */
 const decryptV1 = (stored: string, key: string): string | null => {
@@ -229,9 +229,9 @@ export class DecryptionError extends Error {
  * Reads and decrypts a value from AsyncStorage.
  *
  * Handles three cases:
- *   1. V2 encrypted (current) — verify HMAC, then decrypt.
- *   2. V1 encrypted (old format without HMAC) — decrypt and re-encrypt as V2.
- *   3. Legacy plaintext (pre-encryption) — re-encrypt as V2.
+ *   1. V2 encrypted (current) - verify HMAC, then decrypt.
+ *   2. V1 encrypted (old format without HMAC) - decrypt and re-encrypt as V2.
+ *   3. Legacy plaintext (pre-encryption) - re-encrypt as V2.
  *
  * Returns null only when the key does not exist in storage.
  * Throws DecryptionError if HMAC verification or decryption fails (tampered/corrupted data).
@@ -246,14 +246,14 @@ export const getItem = async (key: string): Promise<string | null> => {
   // Don't encrypt data we can't decrypt later.
   if (encKey === null) {
     if (isEncryptedV2(raw) || isEncryptedV1(raw)) {
-      // Data was encrypted but we can't access the key — treat as unreadable
+      // Data was encrypted but we can't access the key - treat as unreadable
       throw new DecryptionError(key);
     }
-    // Legacy plaintext — return as-is without encrypting
+    // Legacy plaintext - return as-is without encrypting
     return raw;
   }
 
-  // Case 1: Current V2 format — verify integrity then decrypt
+  // Case 1: Current V2 format - verify integrity then decrypt
   if (isEncryptedV2(raw)) {
     const result = decryptV2(raw, encKey);
     if (result === null) {
@@ -262,7 +262,7 @@ export const getItem = async (key: string): Promise<string | null> => {
     return result;
   }
 
-  // Case 2: Old V1 format (no HMAC) — decrypt and upgrade to V2
+  // Case 2: Old V1 format (no HMAC) - decrypt and upgrade to V2
   if (isEncryptedV1(raw)) {
     const plaintext = decryptV1(raw, encKey);
     if (plaintext === null) {
@@ -272,7 +272,7 @@ export const getItem = async (key: string): Promise<string | null> => {
     return plaintext;
   }
 
-  // Case 3: Legacy plaintext — encrypt as V2 for future reads
+  // Case 3: Legacy plaintext - encrypt as V2 for future reads
   await withTimeout(AsyncStorage.setItem(key, encrypt(raw, encKey)), `setItem(${key})`);
   return raw;
 };
@@ -286,7 +286,7 @@ export const setItem = async (
 ): Promise<void> => {
   const encKey = await getEncryptionKey();
   if (encKey === null) {
-    // SecureStore unavailable — store as plaintext to avoid data loss
+    // SecureStore unavailable - store as plaintext to avoid data loss
     await withTimeout(AsyncStorage.setItem(key, value), `setItem(${key})`);
     return;
   }

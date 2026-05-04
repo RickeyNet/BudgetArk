@@ -1,5 +1,5 @@
 /**
- * BudgetArk — Density Provider
+ * BudgetArk - Density Provider
  * File: src/theme/DensityProvider.tsx
  *
  * Mirrors ThemeProvider for layout density (Compact / Comfortable / Spacious).
