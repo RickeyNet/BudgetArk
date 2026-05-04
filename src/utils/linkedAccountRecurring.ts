@@ -1,8 +1,18 @@
 import { AssetAccount, BudgetEntry } from "../types";
 
+// UTC, not local. ISO date strings like "2026-06-01" parse as UTC midnight;
+// using `getMonth()` against that for users west of UTC was reading the
+// previous month and credited recurring contributions one month early.
 const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${month}`;
+};
+
+// For arbitrary ISO date strings, slice the YYYY-MM prefix directly when
+// possible — that avoids a Date round-trip entirely.
+const monthKeyFromISO = (iso: string): string => {
+  if (/^\d{4}-\d{2}/.test(iso)) return iso.slice(0, 7);
+  return getMonthKey(new Date(iso));
 };
 
 const getMonthKeysBetween = (from: string, to: string): string[] => {
@@ -47,7 +57,7 @@ export const applyMissedRecurringLinkedAccountContributions = (
   for (const entry of nextEntries) {
     if (!entry.recurring || !entry.linkedAccountId) continue;
 
-    const entryStartMonth = getMonthKey(new Date(entry.date));
+    const entryStartMonth = monthKeyFromISO(entry.date);
     const lastApplied = entry.lastAppliedMonth ?? entryStartMonth;
     if (lastApplied >= currentMonth) continue;
 

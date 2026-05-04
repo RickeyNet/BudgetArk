@@ -89,6 +89,14 @@ export interface SyncDiff {
   assetAccounts: DiffEntry<AssetAccount>[];
   debtMilestonePlan?: DebtMilestonePlan;
   payoffStrategy?: PayoffStrategyPreference;
+  /**
+   * ISO timestamp paired with `payoffStrategy` so the receiver can apply
+   * last-write-wins instead of accepting whatever value arrived last (which
+   * caused the strategy to flip-flop across paired devices). Optional for
+   * back-compat with peers running pre-LWW versions; missing values are
+   * treated as legacy and superseded by any envelope-stamped local value.
+   */
+  payoffStrategyUpdatedAt?: string;
   syncTimestamp: string;
 }
 

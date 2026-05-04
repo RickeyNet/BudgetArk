@@ -23,6 +23,12 @@ let lastSyncAttempt = 0;
 let unsubscribeNetInfo: (() => void) | null = null;
 let appStateListener: any = null;
 let isMonitoring = false;
+// Defense-in-depth against the NetInfo + AppState double-fire on foreground:
+// even though `lastSyncAttempt` is updated synchronously below, leaving both
+// callers gated only by COOLDOWN_MS lets the second one start a parallel
+// sync if the first call's `await getPairingState()` suspended. This flag
+// short-circuits any second entry while a sync is mid-flight.
+let syncInProgress = false;
 
 type AutoSyncCallback = (result: SyncResult) => void;
 let onSyncComplete: AutoSyncCallback | null = null;
@@ -51,6 +57,8 @@ export const requestLocationPermission = async (): Promise<boolean> => {
 };
 
 const attemptAutoSync = async (): Promise<void> => {
+  if (syncInProgress) return;
+
   // Rate limit
   const now = Date.now();
   if (now - lastSyncAttempt < COOLDOWN_MS) return;
@@ -68,11 +76,14 @@ const attemptAutoSync = async (): Promise<void> => {
   if (!currentSSID || currentSSID !== pairing.homeSSID) return;
 
   // Attempt sync
+  syncInProgress = true;
   try {
     const result = await syncNow();
     onSyncComplete?.(result);
   } catch {
     // Silently fail for auto-sync - user didn't explicitly request it
+  } finally {
+    syncInProgress = false;
   }
 };
 

@@ -13,8 +13,26 @@
 
 import * as EncryptedStorage from "./encryptedStorage";
 import { Debt, DebtClass, DebtClassSource, DebtOwner, Payment } from "../types";
+import {
+  filterLive,
+  purgeExpiredTombstones,
+  tombstone,
+} from "./tombstones";
 
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
+
+/**
+ * On-disk envelope for the payoff strategy preference. The bare value used
+ * to be persisted directly (and over the wire) which gave sync no way to
+ * resolve conflicts — the value flip-flopped on every sync direction. The
+ * envelope lets us LWW the strategy like every other syncable field.
+ */
+export interface PayoffStrategyEnvelope {
+  value: PayoffStrategyPreference;
+  updatedAt: string;
+}
+
+const PAYOFF_LEGACY_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 
 /** Storage keys - centralized to prevent typos */
 const STORAGE_KEYS = {
@@ -82,31 +100,41 @@ const normalizeDebt = (debt: Debt): Debt => {
 };
 
 /**
- * Retrieves all stored debts from device storage.
- * Returns an empty array if no debts exist yet.
+ * Retrieves all stored debts (excluding tombstones — those are an
+ * implementation detail of sync; UI never sees them).
  *
- * @returns Promise<Debt[]> - array of all debt entries
+ * @returns Promise<Debt[]> - array of live debt entries
  */
 export const getDebts = async (): Promise<Debt[]> => {
+  const all = await getDebtsIncludingDeleted();
+  return filterLive(all);
+};
+
+/**
+ * Sync-only: returns every debt including soft-deleted tombstones, so the
+ * diff engine can emit `action: "delete"` for tombstones the partner
+ * doesn't yet know about. Tombstones older than the TTL are purged here.
+ */
+export const getDebtsIncludingDeleted = async (): Promise<Debt[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEYS.DEBTS);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as Debt[];
     const normalized = parsed.map(normalizeDebt);
-    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      await saveDebts(normalized);
+    const purged = purgeExpiredTombstones(normalized);
+    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
+      await saveDebts(purged);
     }
-    return normalized;
+    return purged;
   } catch {
     return [];
   }
 };
 
 /**
- * Persists the full debts array to device storage.
- * Overwrites any existing data - always pass the complete array.
- *
- * @param debts - the full array of debts to save
+ * Persists the full debts array (live + tombstones) to device storage.
+ * Sync writes go through this so tombstones survive merges; user code
+ * should prefer `addDebt`, `updateDebt`, or `deleteDebt`.
  */
 export const saveDebts = async (debts: Debt[]): Promise<void> => {
   await EncryptedStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
@@ -120,24 +148,28 @@ export const saveDebts = async (debts: Debt[]): Promise<void> => {
  * @returns Promise<Debt[]> - the updated debts array
  */
 export const addDebt = async (debt: Debt): Promise<Debt[]> => {
-  const debts = await getDebts();
+  const debts = await getDebtsIncludingDeleted();
   debts.push(debt);
   await saveDebts(debts);
-  return debts;
+  return filterLive(debts);
 };
 
 /**
- * Removes a debt by its ID.
- * Filters the array and saves the result.
+ * Soft-deletes a debt by marking it with `deletedAt: now` and keeping the
+ * record in storage. The next paired sync emits `action: "delete"` for
+ * this tombstone so the partner removes it locally too. Without the
+ * tombstone, the partner would just upsert the record back on its next
+ * sync — silently resurrecting the deletion.
  *
  * @param id - the unique ID of the debt to remove
- * @returns Promise<Debt[]> - the updated debts array
+ * @returns Promise<Debt[]> - live (non-tombstoned) debts after the delete
  */
 export const deleteDebt = async (id: string): Promise<Debt[]> => {
-  const debts = await getDebts();
-  const filtered = debts.filter((d) => d.id !== id);
-  await saveDebts(filtered);
-  return filtered;
+  const debts = await getDebtsIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = debts.map((d) => (d.id === id ? tombstone(d, now) : d));
+  await saveDebts(next);
+  return filterLive(next);
 };
 
 /**
@@ -146,19 +178,19 @@ export const deleteDebt = async (id: string): Promise<Debt[]> => {
  *
  * @param id - the debt ID to update
  * @param updates - partial debt object with only the fields to change
- * @returns Promise<Debt[]> - the updated debts array
+ * @returns Promise<Debt[]> - live (non-tombstoned) debts after the update
  */
 export const updateDebt = async (
   id: string,
   updates: Partial<Debt>
 ): Promise<Debt[]> => {
-  const debts = await getDebts();
+  const debts = await getDebtsIncludingDeleted();
   const now = new Date().toISOString();
   const updated = debts.map((d) =>
     d.id === id ? { ...d, ...updates, updatedAt: now } : d
   );
   await saveDebts(updated);
-  return updated;
+  return filterLive(updated);
 };
 
 /* ─── Payment History Operations ─── */
@@ -174,18 +206,30 @@ const normalizePayment = (payment: Payment): Payment => ({
 });
 
 export const getPayments = async (): Promise<Payment[]> => {
+  const all = await getPaymentsIncludingDeleted();
+  return filterLive(all);
+};
+
+/**
+ * Sync-only: like `getPayments` but returns tombstones too. There's no
+ * UI delete for payments today, but the sync layer still needs the
+ * tombstone-aware path for symmetry with debts/budget entries — and so
+ * a future delete feature plugs in without changing the sync wiring.
+ */
+export const getPaymentsIncludingDeleted = async (): Promise<Payment[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYMENTS);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as Payment[];
     const normalized = parsed.map(normalizePayment);
-    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+    const purged = purgeExpiredTombstones(normalized);
+    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
       await EncryptedStorage.setItem(
         STORAGE_KEYS.PAYMENTS,
-        JSON.stringify(normalized)
+        JSON.stringify(purged)
       );
     }
-    return normalized;
+    return purged;
   } catch {
     return [];
   }
@@ -195,63 +239,166 @@ export const getPayments = async (): Promise<Payment[]> => {
  * Records a new payment and updates the associated debt's balance.
  * This is a compound operation - it modifies both payments and debts.
  *
+ * Both keys are written through a single `multiSet` so a write timeout
+ * can't leave the debt's balance reduced without a matching payment row
+ * (or vice versa). The per-key write queue inside `EncryptedStorage` also
+ * keeps this serialized against any concurrent `setItem`/`removeItem` on
+ * either key, including incoming sync diffs that touch debts/payments.
+ *
  * @param payment - the payment to record
  * @returns Promise<{ debts: Debt[]; payments: Payment[] }> - updated state
  */
 export const recordPayment = async (
   payment: Payment
 ): Promise<{ debts: Debt[]; payments: Payment[] }> => {
-  /* Load current state */
-  const [debts, payments] = await Promise.all([getDebts(), getPayments()]);
+  /* Load full state including tombstones so we don't overwrite them. */
+  const [debts, payments] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+  ]);
 
-  /* Calculate updated debt balance */
+  /* Calculate updated debt balance — only matches a live debt, never a
+   * tombstone (UI couldn't have surfaced a deleted debt to pay). */
   const now = new Date().toISOString();
   const updatedDebts = debts.map((d) => {
-    if (d.id === payment.debtId) {
+    if (d.id === payment.debtId && !d.deletedAt) {
       return { ...d, balance: Math.max(0, d.balance - payment.amount), updatedAt: now };
     }
     return d;
   });
 
-  /* Append the new payment */
+  /* Append the new payment, preserving any existing tombstones. */
   const updatedPayments = [...payments, payment];
 
-  /* Save both atomically (back-to-back to minimize race window) */
-  await saveDebts(updatedDebts);
-  await EncryptedStorage.setItem(
-    STORAGE_KEYS.PAYMENTS,
-    JSON.stringify(updatedPayments)
-  );
+  /* Save both in one native AsyncStorage call to shrink the partial-state window. */
+  await EncryptedStorage.multiSet([
+    [STORAGE_KEYS.DEBTS, JSON.stringify(updatedDebts)],
+    [STORAGE_KEYS.PAYMENTS, JSON.stringify(updatedPayments)],
+  ]);
 
-  return { debts: updatedDebts, payments: updatedPayments };
+  return {
+    debts: filterLive(updatedDebts),
+    payments: filterLive(updatedPayments),
+  };
 };
 
 /**
  * Clears all stored data. Used for account reset / logout.
  * WARNING: This is destructive and cannot be undone.
+ *
+ * AsyncStorage's `multiRemove` isn't atomic on Android, so a transient
+ * I/O failure (or `withTimeout` rejection) can leave the device with some
+ * keys cleared and others intact. We use `allSettled` + a single retry
+ * pass per key so partial-failure cases get a second chance to complete,
+ * and surface a `FailedKeysError` if any key still hasn't cleared. The
+ * caller (Profile reset confirm) can then warn the user that the reset
+ * is incomplete instead of silently presenting "Done."
  */
+const RESET_KEYS = [
+  STORAGE_KEYS.DEBTS,
+  STORAGE_KEYS.PAYMENTS,
+  STORAGE_KEYS.PAYOFF_STRATEGY,
+  "@budgetark_budget_entries",
+  "@budgetark_budget_limits_by_month",
+  "@budgetark_savings_goals",
+  "@budgetark_net_worth_snapshots",
+  "@budgetark_asset_accounts",
+  "@budgetark_debt_milestones",
+  "@budgetark_open_ark_setup_once",
+] as const;
+
+export class ResetIncompleteError extends Error {
+  constructor(public readonly failedKeys: readonly string[]) {
+    super(`Reset incomplete: ${failedKeys.length} key(s) failed to clear`);
+    this.name = "ResetIncompleteError";
+  }
+}
+
+const removeAllSettled = async (
+  keys: readonly string[]
+): Promise<string[]> => {
+  const results = await Promise.allSettled(
+    keys.map((key) => EncryptedStorage.removeItem(key))
+  );
+  const failed: string[] = [];
+  results.forEach((result, idx) => {
+    if (result.status === "rejected") failed.push(keys[idx]);
+  });
+  return failed;
+};
+
 export const clearAllData = async (): Promise<void> => {
-  await EncryptedStorage.multiRemove([
-    STORAGE_KEYS.DEBTS,
-    STORAGE_KEYS.PAYMENTS,
-    STORAGE_KEYS.PAYOFF_STRATEGY,
-    "@budgetark_budget_entries",
-    "@budgetark_budget_limits_by_month",
-    "@budgetark_savings_goals",
-    "@budgetark_net_worth_snapshots",
-    "@budgetark_asset_accounts",
-    "@budgetark_debt_milestones",
-    "@budgetark_open_ark_setup_once",
-  ]);
+  let failed = await removeAllSettled(RESET_KEYS);
+  if (failed.length > 0) {
+    // Single retry — handles transient timeouts where the underlying
+    // AsyncStorage call eventually flushed but our `withTimeout` wrapper
+    // already rejected.
+    failed = await removeAllSettled(failed);
+  }
+  if (failed.length > 0) {
+    throw new ResetIncompleteError(failed);
+  }
+};
+
+/**
+ * Reads the strategy + the timestamp it was set. New writes go through
+ * `savePayoffStrategyPreference`, which stamps `updatedAt: now`. Legacy
+ * data persisted as a bare string (no envelope) is normalized to the epoch
+ * so any fresh remote edit wins LWW on the next sync.
+ */
+export const getPayoffStrategyEnvelope = async (): Promise<PayoffStrategyEnvelope | null> => {
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
+  if (raw === null) return null;
+  // Legacy: bare string was written directly to encrypted storage before
+  // the envelope existed.
+  if (isPayoffStrategyPreference(raw)) {
+    return { value: raw, updatedAt: PAYOFF_LEGACY_TIMESTAMP };
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      isPayoffStrategyPreference((parsed as Record<string, unknown>).value) &&
+      typeof (parsed as Record<string, unknown>).updatedAt === "string"
+    ) {
+      return parsed as PayoffStrategyEnvelope;
+    }
+  } catch {
+    // fallthrough — treat as missing
+  }
+  return null;
 };
 
 export const getPayoffStrategyPreference = async (): Promise<PayoffStrategyPreference | null> => {
-  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
-  return isPayoffStrategyPreference(raw) ? raw : null;
+  const env = await getPayoffStrategyEnvelope();
+  return env?.value ?? null;
 };
 
 export const savePayoffStrategyPreference = async (
   strategy: PayoffStrategyPreference
 ): Promise<void> => {
-  await EncryptedStorage.setItem(STORAGE_KEYS.PAYOFF_STRATEGY, strategy);
+  const envelope: PayoffStrategyEnvelope = {
+    value: strategy,
+    updatedAt: new Date().toISOString(),
+  };
+  await EncryptedStorage.setItem(
+    STORAGE_KEYS.PAYOFF_STRATEGY,
+    JSON.stringify(envelope)
+  );
+};
+
+/**
+ * Sync-only setter that preserves an incoming peer's `updatedAt` instead of
+ * stamping it `now`. Lets `applyIncomingDiff` honour LWW correctly: if Bob
+ * later sends a sync without changing strategy, his value loses to Alice's
+ * because Alice's stamp is older only if hers really is older.
+ */
+export const savePayoffStrategyEnvelope = async (
+  envelope: PayoffStrategyEnvelope
+): Promise<void> => {
+  await EncryptedStorage.setItem(
+    STORAGE_KEYS.PAYOFF_STRATEGY,
+    JSON.stringify(envelope)
+  );
 };

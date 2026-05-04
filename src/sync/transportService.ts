@@ -13,11 +13,26 @@ import CryptoJS from "crypto-js";
 import { generateUUID } from "../utils/uuid";
 import type { SyncMessage, SyncMessageType } from "./types";
 
-/** Set of nonces seen this session for replay protection */
-const seenNonces = new Set<string>();
-
 /** Max age of a message timestamp before it's rejected (5 minutes) */
 const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000;
+
+/**
+ * Replay-protection map: nonce → timestamp the nonce was first seen.
+ * A `Set<string>` would grow unboundedly as a peer sent more frames; this
+ * map gets pruned on every insert so any nonce older than `MAX_MESSAGE_AGE_MS`
+ * is dropped (the timestamp validator already rejects messages that old, so
+ * those nonces can't be replayed successfully anyway).
+ */
+const seenNonces = new Map<string, number>();
+const NONCE_PRUNE_THRESHOLD = 1024;
+
+const pruneSeenNonces = (now: number): void => {
+  for (const [nonce, seenAt] of seenNonces) {
+    if (now - seenAt > MAX_MESSAGE_AGE_MS) {
+      seenNonces.delete(nonce);
+    }
+  }
+};
 
 /* ─── Encryption helpers (mirrors encryptedStorage pattern) ─── */
 
@@ -99,13 +114,17 @@ const validateAndDecrypt = (
   // Verify sender (skip check during pairing when partner ID is unknown)
   if (expectedSenderId && msg.senderId !== expectedSenderId) return null;
 
-  // Replay protection: reject seen nonces
-  if (seenNonces.has(msg.nonce)) return null;
-  seenNonces.add(msg.nonce);
-
-  // Reject stale messages
-  const age = Date.now() - new Date(msg.timestamp).getTime();
+  // Reject stale messages first so we never insert nonces we'd just have to
+  // prune anyway.
+  const now = Date.now();
+  const age = now - new Date(msg.timestamp).getTime();
   if (Math.abs(age) > MAX_MESSAGE_AGE_MS) return null;
+
+  // Replay protection: reject seen nonces. Prune the map first if it's grown
+  // past the threshold so the working set stays bounded.
+  if (seenNonces.size > NONCE_PRUNE_THRESHOLD) pruneSeenNonces(now);
+  if (seenNonces.has(msg.nonce)) return null;
+  seenNonces.set(msg.nonce, now);
 
   // Decrypt and verify integrity
   const payload = decryptPayload(msg.payload, msg.hmac, key);

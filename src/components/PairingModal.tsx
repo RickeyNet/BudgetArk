@@ -77,9 +77,14 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
   const serverCloseRef = useRef<(() => void) | null>(null);
   const cancelledRef = useRef(false);
 
-  // Reset state when modal opens/closes
+  // Reset state when modal opens/closes. The teardown body lives in a single
+  // function so it also runs on parent unmount via the effect's return —
+  // without that, a parent that unmounts the modal while it's still `visible`
+  // would leak the countdown interval, the listening TCP server, and the
+  // Zeroconf publish. Fixes a bug where retry attempts wedged on the same
+  // port because the prior session was still bound.
   useEffect(() => {
-    if (!visible) {
+    const teardown = () => {
       cancelledRef.current = true;
       setRole(null);
       setCode("");
@@ -92,16 +97,26 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       setManualIp("");
       setShowManualIp(false);
       setPending(null);
-      if (timerRef.current) clearInterval(timerRef.current);
-      // Clean up TCP server and Zeroconf immediately
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       if (serverCloseRef.current) {
         serverCloseRef.current();
         serverCloseRef.current = null;
       }
       Discovery.stop();
+    };
+
+    if (!visible) {
+      teardown();
     } else {
       cancelledRef.current = false;
     }
+
+    return () => {
+      teardown();
+    };
   }, [visible]);
 
   const startInitiator = useCallback(async () => {

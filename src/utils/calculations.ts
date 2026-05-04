@@ -448,6 +448,11 @@ export const calcPaymentForGoalDate = (
 /**
  * Calculates the number of months between now and a target date.
  *
+ * Uses UTC getters on both ends. ISO dates like `"2026-06-01"` parse as UTC
+ * midnight; mixing that with `getMonth()` (local TZ) used to flip the month
+ * back by one for users west of UTC, making `calcPaymentForGoalDate` round
+ * to `Infinity` on the boundary.
+ *
  * @param goalDateISO - ISO date string for the target date
  * @returns number of months remaining (minimum 0)
  */
@@ -455,8 +460,8 @@ export const calcMonthsUntilDate = (goalDateISO: string): number => {
   const now = new Date();
   const goal = new Date(goalDateISO);
   const months =
-    (goal.getFullYear() - now.getFullYear()) * 12 +
-    (goal.getMonth() - now.getMonth());
+    (goal.getUTCFullYear() - now.getUTCFullYear()) * 12 +
+    (goal.getUTCMonth() - now.getUTCMonth());
   return Math.max(0, months);
 };
 

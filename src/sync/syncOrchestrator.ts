@@ -260,8 +260,6 @@ export const syncNow = async (
     return await serverHandle.result;
   } catch (err) {
     onStatus("error");
-    Discovery.stop();
-    Transport.resetReplayProtection();
     return {
       success: false,
       recordsSent: 0,
@@ -269,6 +267,14 @@ export const syncNow = async (
       timestamp: new Date().toISOString(),
       error: err instanceof Error ? err.message : "Sync failed",
     };
+  } finally {
+    // Always tear down discovery + the replay-protection nonce set so the
+    // next sync starts from a clean slate. Inner happy paths also call
+    // these — calling twice is idempotent. The finally form covers timeout
+    // closures and other internal failures that don't bubble through the
+    // outer catch.
+    Discovery.stop();
+    Transport.resetReplayProtection();
   }
 };
 

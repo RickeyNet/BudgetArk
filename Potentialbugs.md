@@ -168,7 +168,7 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - **Impact:** On the next paired-device sync, every entry overwrites the partner's data because the import-time stamp wins LWW.
   - **Fix:** Add `UpdatedAt` to budget entry column set; preserve on import; if absent, fall back to `createdAt` not `now`.
 
-- [ ] **`mergeById` cannot delete records — silent resurrection across paired devices**
+- [x] **`mergeById` cannot delete records — silent resurrection across paired devices**
   - **Priority:** P0
   - **Files:** `src/sync/diffEngine.ts:121-150` and every `filterChanged` site (74-80)
   - **What:** `computeOutgoingDiff` only ever emits `action: "upsert"`. When Alice deletes a debt, the next sync sends nothing for it. Bob still has the record, his next sync upserts it back to Alice — resurrecting the deletion.
@@ -191,14 +191,14 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - **Impact:** Tap month switcher fast on Budget → see the wrong month's data because the older async load resolves last.
   - **Fix:** Standard cancel-flag pattern in every async loader.
 
-- [ ] **PairingModal + ProfileScreen leak listeners on unmount**
+- [x] **PairingModal + ProfileScreen leak listeners on unmount**
   - **Priority:** P1
   - **Files:** `src/components/PairingModal.tsx:81-105`, `src/screens/ProfileScreen.tsx:253-290`
   - **What:** PairingModal cleanup runs only on `visible` flip, not on parent unmount — leaves countdown interval, TCP server, and Zeroconf advert running. ProfileScreen registers `startMonitoring` on mount with no `stopMonitoring()` in cleanup.
   - **Impact:** Resource leak; can wedge subsequent pair attempts on the same port.
   - **Fix:** Move cleanup body into the effect's `return () => { ... }`.
 
-- [ ] **Storage timeouts leave cross-key partial state**
+- [x] **Storage timeouts leave cross-key partial state**
   - **Priority:** P1
   - **Files:** `src/storage/encryptedStorage.ts:79-92, 270-294`, `src/storage/debtStorage.ts:202-227`, `src/utils/importData.ts:610-637`
   - **What:** `withTimeout` doesn't cancel the underlying native write. If `recordPayment` times out between `saveDebts` and `savePayments`, balance is reduced with no payment row. Import's Phase 3 promotion has the same shape — rollback writes use the same timeout.
@@ -212,7 +212,7 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - **Impact:** UI shows "1 mo" for a debt where the minimum payment doesn't cover monthly interest.
   - **Fix:** Set `monthsToPayoff: Infinity` when `isPayoffPossible: false`.
 
-- [ ] **Timezone bugs in `calcMonthsUntilDate` and recurring auto-apply**
+- [x] **Timezone bugs in `calcMonthsUntilDate` and recurring auto-apply**
   - **Priority:** P1
   - **Files:** `src/utils/calculations.ts:448-455`, `src/utils/linkedAccountRecurring.ts:15-19`
   - **What:** `new Date(isoString)` parses as UTC midnight; `getMonth()` runs in local TZ. For users west of UTC, a date stored as `"2026-06-01T00:00:00Z"` reads as May.
@@ -228,43 +228,43 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
 
 ## P2 — Medium: state consistency, sync edge cases
 
-- [ ] **Auto-sync race fires `syncNow` twice on app foreground**
+- [x] **Auto-sync race fires `syncNow` twice on app foreground**
   - **Priority:** P2
   - **Files:** `src/sync/autoSyncManager.ts:53-77`
   - **What:** NetInfo change + AppState→active fire <1ms apart. Both pass cooldown check before storage `lastSyncAttempt` is updated.
   - **Fix:** Update `lastSyncAttempt` synchronously before any await; add `syncInProgress` boolean guard.
 
-- [ ] **Discovery `zc.stop()` tears down both browse and publish channels**
+- [x] **Discovery `zc.stop()` tears down both browse and publish channels**
   - **Priority:** P2
   - **Files:** `src/sync/discoveryService.ts:23-31, 65-71, 112-121`
   - **What:** Single Zeroconf instance shared between publish and browse. `discoverPartner` cleanup calls `zc.stop()`, killing publish too.
   - **Fix:** Separate publish/browse instances; refcount before `stop()`.
 
-- [ ] **`seenNonces` set is unbounded — memory DoS path**
+- [x] **`seenNonces` set is unbounded — memory DoS path**
   - **Priority:** P2
   - **Files:** `src/sync/transportService.ts:17, 103-111`
   - **What:** Module-level `seenNonces` Set grows unbounded. A peer that can send valid frames repeatedly causes unbounded memory growth.
   - **Fix:** Bound with TTL/LRU matching `MAX_MESSAGE_AGE_MS`.
 
-- [ ] **Replay nonce set not reset on every error path**
+- [x] **Replay nonce set not reset on every error path**
   - **Priority:** P2
   - **File:** `src/sync/syncOrchestrator.ts:122-127, 205-208`
   - **What:** `Transport.resetReplayProtection()` only fires from outer `syncNow` catch. Internal failures + timeout closures don't reset.
   - **Fix:** Always reset in `finally` blocks.
 
-- [ ] **`payoffStrategy` flip-flops on every sync direction**
+- [x] **`payoffStrategy` flip-flops on every sync direction**
   - **Priority:** P2
   - **File:** `src/sync/diffEngine.ts:319-323`
   - **What:** Resolution comment says "accept remote since we can't timestamp a bare string." Each sync overwrites with whoever's preference is sent last.
   - **Fix:** Wrap strategy in `{value, updatedAt}` and apply LWW.
 
-- [ ] **ThemeProvider / DensityProvider flash of default on cold launch**
+- [x] **ThemeProvider / DensityProvider flash of default on cold launch**
   - **Priority:** P2
   - **Files:** `src/theme/ThemeProvider.tsx:31-37`, `src/theme/DensityProvider.tsx:34-40`
   - **What:** First render returns defaults before storage resolves. No `ready` gate.
   - **Fix:** Track `ready` boolean; show splash or hold render until both providers are ready. (Compare CoachmarksProvider's `ready` flag pattern.)
 
-- [ ] **`clearAllData` `multiRemove` isn't atomic on Android**
+- [x] **`clearAllData` `multiRemove` isn't atomic on Android**
   - **Priority:** P2
   - **File:** `src/storage/debtStorage.ts:233-246`
   - **What:** AsyncStorage `multiRemove` isn't transactional on Android. Slow flash + `withTimeout` can produce partial reset state.
@@ -272,11 +272,11 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
 
 ## P3 — Lower
 
-- [ ] **`getBudgetEntries` rewrites all entries on every read where any normalization changes anything** — startup latency, no integrity issue. `src/storage/budgetStorage.ts:69-82`.
-- [ ] **`useTabCoachmark.handleNext` setTimeout has no cleanup on unmount** — defensive only. `src/onboarding/useTabCoachmark.tsx:52-71`.
-- [ ] **`CoachmarksProvider.markSeen` calls async `persist` from inside setState updater** — fire-and-forget, no observed failure. `src/onboarding/CoachmarksProvider.tsx:73-84`.
-- [ ] **`calcAvgMonthlyExpenses` excludes zero-spend months — biases the average upward** — affects EF target calculation. `src/screens/UtilitiesScreen.tsx:104`.
-- [ ] **`calcInvestmentGrowth` clamps negative rates to 0** — silently suppresses deflationary scenarios. `src/utils/calculations.ts:355-376`.
+- [ ] **`getBudgetEntries` rewrites all entries on every read where any normalization changes anything** — startup latency, no integrity issue. `src/storage/budgetStorage.ts:69-82`. *(deferred — only fires when normalization changes data, which is rare after first migration)*
+- [x] **`useTabCoachmark.handleNext` setTimeout has no cleanup on unmount** — defensive only. `src/onboarding/useTabCoachmark.tsx:52-71`.
+- [x] **`CoachmarksProvider.markSeen` calls async `persist` from inside setState updater** — fire-and-forget, no observed failure. `src/onboarding/CoachmarksProvider.tsx:73-84`.
+- [x] **`calcAvgMonthlyExpenses` excludes zero-spend months — biases the average upward** — affects EF target calculation. `src/screens/UtilitiesScreen.tsx:104`.
+- [ ] **`calcInvestmentGrowth` clamps negative rates to 0** — silently suppresses deflationary scenarios. `src/utils/calculations.ts:355-376`. *(deferred — would need UI changes to expose negative rates)*
 
 ## Suggested manual test list
 

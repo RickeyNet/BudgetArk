@@ -6,21 +6,31 @@
  * Uses last-write-wins conflict resolution based on updatedAt timestamps.
  */
 
-import { getDebts, saveDebts, getPayments } from "../storage/debtStorage";
 import {
-  getBudgetEntries,
+  getDebtsIncludingDeleted,
+  saveDebts,
+  getPaymentsIncludingDeleted,
+} from "../storage/debtStorage";
+import {
+  getBudgetEntriesIncludingDeleted,
   saveBudgetEntries,
   getAllLimitsByMonth,
 } from "../storage/budgetStorage";
-import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
-import { getAssetAccounts, saveAssetAccounts } from "../storage/assetAccountStorage";
+import {
+  getSavingsGoalsIncludingDeleted,
+  saveSavingsGoals,
+} from "../storage/savingsGoalStorage";
+import {
+  getAssetAccountsIncludingDeleted,
+  saveAssetAccounts,
+} from "../storage/assetAccountStorage";
 import {
   getDebtMilestonePlan,
   saveDebtMilestonePlan,
 } from "../storage/debtMilestoneStorage";
 import {
-  getPayoffStrategyPreference,
-  savePayoffStrategyPreference,
+  getPayoffStrategyEnvelope,
+  savePayoffStrategyEnvelope,
 } from "../storage/debtStorage";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import type {
@@ -58,25 +68,33 @@ const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
 export const computeOutgoingDiff = async (
   lastSyncTimestamp: string | null
 ): Promise<SyncDiff> => {
-  const [debts, payments, budgetEntries, savingsGoals, assetAccounts, milestonePlan, strategy] =
+  const [debts, payments, budgetEntries, savingsGoals, assetAccounts, milestonePlan, strategyEnvelope] =
     await Promise.all([
-      getDebts(),
-      getPayments(),
-      getBudgetEntries(),
-      getSavingsGoals(),
-      getAssetAccounts(),
+      getDebtsIncludingDeleted(),
+      getPaymentsIncludingDeleted(),
+      getBudgetEntriesIncludingDeleted(),
+      getSavingsGoalsIncludingDeleted(),
+      getAssetAccountsIncludingDeleted(),
       getDebtMilestonePlan(),
-      getPayoffStrategyPreference(),
+      getPayoffStrategyEnvelope(),
     ]);
 
   const since = lastSyncTimestamp ? new Date(lastSyncTimestamp).getTime() : 0;
 
-  const filterChanged = <T extends { updatedAt: string }>(
+  // Records flow through here as either upserts (live records updated since
+  // the last sync) or deletes (tombstoned records the partner needs to
+  // remove locally). Without the delete branch the partner would silently
+  // resurrect any record we deleted — its next sync would upsert it back to
+  // us, since we wouldn't even mention the deletion.
+  const filterChanged = <T extends { updatedAt: string; deletedAt?: string }>(
     items: T[]
   ): DiffEntry<T>[] => {
     return items
       .filter((item) => new Date(item.updatedAt).getTime() > since)
-      .map((item) => ({ action: "upsert" as const, record: item }));
+      .map((item) => ({
+        action: item.deletedAt ? ("delete" as const) : ("upsert" as const),
+        record: item,
+      }));
   };
 
   // Load full budget limits history. On first sync we send everything;
@@ -108,7 +126,8 @@ export const computeOutgoingDiff = async (
       new Date(milestonePlan.updatedAt).getTime() > since
         ? milestonePlan
         : undefined,
-    payoffStrategy: strategy ?? undefined,
+    payoffStrategy: strategyEnvelope?.value,
+    payoffStrategyUpdatedAt: strategyEnvelope?.updatedAt,
     syncTimestamp: new Date().toISOString(),
   };
 };
@@ -117,33 +136,39 @@ export const computeOutgoingDiff = async (
 
 /**
  * Merges a collection by ID using last-write-wins on updatedAt.
+ *
+ * Tombstone-aware:
+ *  - On `delete`: we *replace* the local entry with the incoming tombstone
+ *    (rather than `localMap.delete(id)`). Keeping the tombstone locally is
+ *    what blocks a stale third device from later upserting the record back
+ *    — it can compare against our tombstone's updatedAt and lose LWW.
+ *  - On `upsert`: if the local record is already a tombstone with a newer
+ *    updatedAt, we ignore the incoming upsert. That's the resurrection
+ *    case the audit flagged.
+ *
+ * The caller saves the full merged array (live + tombstones) via the
+ * tombstone-aware setters; UI consumers see only live records via
+ * `filterLive`.
  */
-const mergeById = <T extends { id: string; updatedAt: string }>(
+const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string }>(
   local: T[],
   incoming: DiffEntry<T>[]
 ): T[] => {
   const localMap = new Map(local.map((item) => [item.id, item]));
 
   for (const entry of incoming) {
-    if (entry.action === "delete") {
-      const localItem = localMap.get(entry.record.id);
-      if (
-        !localItem ||
-        new Date(entry.record.updatedAt).getTime() >=
-          new Date(localItem.updatedAt).getTime()
-      ) {
-        localMap.delete(entry.record.id);
-      }
-    } else {
-      const localItem = localMap.get(entry.record.id);
-      if (
-        !localItem ||
-        new Date(entry.record.updatedAt).getTime() >=
-          new Date(localItem.updatedAt).getTime()
-      ) {
-        localMap.set(entry.record.id, entry.record);
-      }
+    const localItem = localMap.get(entry.record.id);
+    const incomingTime = new Date(entry.record.updatedAt).getTime();
+    const localTime = localItem
+      ? new Date(localItem.updatedAt).getTime()
+      : -Infinity;
+
+    if (incomingTime >= localTime) {
+      localMap.set(entry.record.id, entry.record);
     }
+    // else: local is newer — keep it. If local is a tombstone and incoming
+    // is an upsert, the tombstone wins (no resurrection). If local is live
+    // and incoming is a stale delete, the live record wins.
   }
 
   return Array.from(localMap.values());
@@ -214,6 +239,15 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
       throw new Error("Sync rejected: invalid payoff strategy");
     }
   }
+
+  if (diff.payoffStrategyUpdatedAt !== undefined) {
+    if (
+      typeof diff.payoffStrategyUpdatedAt !== "string" ||
+      Number.isNaN(Date.parse(diff.payoffStrategyUpdatedAt))
+    ) {
+      throw new Error("Sync rejected: invalid payoff strategy timestamp");
+    }
+  }
 };
 
 /**
@@ -228,9 +262,11 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   let changedCount = 0;
 
-  // Merge debts
+  // Merge debts. Read+write via the tombstone-aware getters/setters so
+  // local tombstones survive the merge and stop a stale partner from
+  // resurrecting the deleted record.
   if (diff.debts.length > 0) {
-    const localDebts = await getDebts();
+    const localDebts = await getDebtsIncludingDeleted();
     const merged = mergeById(localDebts, diff.debts);
     await saveDebts(merged);
     changedCount += diff.debts.length;
@@ -238,7 +274,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   // Merge payments
   if (diff.payments.length > 0) {
-    const localPayments = await getPayments();
+    const localPayments = await getPaymentsIncludingDeleted();
     const merged = mergeById(localPayments, diff.payments);
     await EncryptedStorage.setItem(
       "@budgetark_payments",
@@ -249,7 +285,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   // Merge budget entries
   if (diff.budgetEntries.length > 0) {
-    const localEntries = await getBudgetEntries();
+    const localEntries = await getBudgetEntriesIncludingDeleted();
     const merged = mergeById(localEntries, diff.budgetEntries);
     await saveBudgetEntries(merged);
     changedCount += diff.budgetEntries.length;
@@ -257,7 +293,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   // Merge savings goals
   if (diff.savingsGoals.length > 0) {
-    const localGoals = await getSavingsGoals();
+    const localGoals = await getSavingsGoalsIncludingDeleted();
     const merged = mergeById(localGoals, diff.savingsGoals);
     await saveSavingsGoals(merged);
     changedCount += diff.savingsGoals.length;
@@ -265,7 +301,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   // Merge asset accounts
   if (diff.assetAccounts && diff.assetAccounts.length > 0) {
-    const localAccounts = await getAssetAccounts();
+    const localAccounts = await getAssetAccountsIncludingDeleted();
     const merged = mergeById(localAccounts, diff.assetAccounts);
     await saveAssetAccounts(merged);
     changedCount += diff.assetAccounts.length;
@@ -316,10 +352,23 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     }
   }
 
-  // Merge payoff strategy (accept remote since we can't timestamp a bare string)
+  // Merge payoff strategy with last-write-wins on the envelope timestamp.
+  // Peers without `payoffStrategyUpdatedAt` (older versions) are treated as
+  // having sent at the epoch — so any locally-stamped envelope wins, and
+  // the strategy stops flip-flopping every sync direction.
   if (diff.payoffStrategy) {
-    await savePayoffStrategyPreference(diff.payoffStrategy);
-    changedCount++;
+    const localEnv = await getPayoffStrategyEnvelope();
+    const localTime = localEnv ? new Date(localEnv.updatedAt).getTime() : -Infinity;
+    const incomingStamp =
+      diff.payoffStrategyUpdatedAt ?? "1970-01-01T00:00:00.000Z";
+    const incomingTime = new Date(incomingStamp).getTime();
+    if (incomingTime >= localTime) {
+      await savePayoffStrategyEnvelope({
+        value: diff.payoffStrategy,
+        updatedAt: incomingStamp,
+      });
+      changedCount++;
+    }
   }
 
   return changedCount;

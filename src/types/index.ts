@@ -52,6 +52,13 @@ export interface Debt {
 
   /** Optional ISO date string for payoff goal date */
   goalDate?: string;
+
+  /**
+   * Tombstone marker. When set, the record is soft-deleted: hidden from
+   * the UI but kept in storage so the next paired sync can propagate the
+   * deletion. Tombstones older than `TOMBSTONE_TTL_MS` are purged on read.
+   */
+  deletedAt?: string;
 }
 
 /**
@@ -105,6 +112,9 @@ export interface Payment {
 
   /** ISO timestamp of when this payment was last modified */
   updatedAt: string;
+
+  /** Tombstone marker — see Debt.deletedAt. */
+  deletedAt?: string;
 }
 
 /* ─── Budget Types ─── */
@@ -154,6 +164,8 @@ export interface BudgetEntry {
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
   lastAppliedMonth?: string;
+  /** Tombstone marker — see Debt.deletedAt. */
+  deletedAt?: string;
 }
 
 export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt" | "updatedAt">;
@@ -188,6 +200,8 @@ export interface SavingsGoal {
   targetDate?: string;
   createdAt: string;
   updatedAt: string;
+  /** Tombstone marker — see Debt.deletedAt. */
+  deletedAt?: string;
 }
 
 /* ─── Asset Account Types ─── */
@@ -217,6 +231,8 @@ export interface AssetAccount {
   balance: number;
   createdAt: string;
   updatedAt: string;
+  /** Tombstone marker — see Debt.deletedAt. */
+  deletedAt?: string;
 }
 
 export interface NetWorthSnapshot {

@@ -626,7 +626,23 @@ const ProfileScreen: React.FC = () => {
   const confirmReset = useCallback(async () => {
     setShowResetModal(false);
     triggerHaptic("warning");
-    await clearAllData();
+    try {
+      await clearAllData();
+    } catch (err) {
+      // `clearAllData` throws `ResetIncompleteError` when a non-atomic
+      // multi-key clear leaves some keys behind. Surface that to the user
+      // instead of pretending the reset succeeded — the leftover keys could
+      // make the next session look corrupt or partially-onboarded.
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Some data could not be cleared. Try again or reinstall the app to complete the reset.";
+      setInfoModal({
+        title: "Reset incomplete",
+        message: `${message} Please try Reset All Data again.`,
+      });
+      return;
+    }
     await clearPairingState();
     stopMonitoring();
     await deleteAccount();

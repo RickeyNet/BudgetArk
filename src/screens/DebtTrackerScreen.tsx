@@ -46,12 +46,17 @@ import {
 import {
   getDebts,
   saveDebts,
+  deleteDebt,
   recordPayment,
   updateDebt,
   getPayoffStrategyPreference,
   savePayoffStrategyPreference,
 } from "../storage/debtStorage";
-import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
+import {
+  getSavingsGoals,
+  saveSavingsGoals,
+  deleteSavingsGoal,
+} from "../storage/savingsGoalStorage";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
@@ -663,13 +668,15 @@ const DebtTrackerScreen: React.FC = () => {
   const confirmDelete = useCallback(async () => {
     if (!pendingDeleteDebt) return;
     const debtId = pendingDeleteDebt.id;
-    const updated = debts.filter((debt) => debt.id !== debtId);
+    // Soft-delete via the storage helper so a tombstone gets persisted —
+    // a paired partner needs that to remove the debt locally on next sync,
+    // otherwise their stale upsert would resurrect this deletion.
+    const updated = await deleteDebt(debtId);
     setDebts(updated);
-    await saveDebts(updated);
     await syncNetWorthSnapshot();
     setPendingDeleteDebt(null);
     triggerHaptic("warning");
-  }, [debts, pendingDeleteDebt]);
+  }, [pendingDeleteDebt]);
 
   const openClassifyModal = useCallback(() => {
     const nextDraft: Record<string, DebtClass> = {};
@@ -875,12 +882,12 @@ const DebtTrackerScreen: React.FC = () => {
 
   const handleDeleteSavingsGoal = useCallback(
     async (goalId: string) => {
-      const updated = savingsGoals.filter((goal) => goal.id !== goalId);
+      // Soft-delete so the partner sees the deletion on next sync.
+      const updated = await deleteSavingsGoal(goalId);
       setSavingsGoals(updated);
-      await saveSavingsGoals(updated);
       await syncNetWorthSnapshot();
     },
-    [savingsGoals]
+    []
   );
 
   const handleUpdateEssentialsEstimate = useCallback((value: number) => {

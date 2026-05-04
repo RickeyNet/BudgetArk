@@ -1,5 +1,10 @@
 import * as EncryptedStorage from "./encryptedStorage";
 import { BudgetEntry, CategoryBudgetLimit } from "../types";
+import {
+  filterLive,
+  purgeExpiredTombstones,
+  tombstone,
+} from "./tombstones";
 
 export const BUDGET_STORAGE_KEYS = {
   ENTRIES: "@budgetark_budget_entries",
@@ -67,36 +72,59 @@ const normalizeBudgetEntry = (entry: BudgetEntry): BudgetEntry => ({
 });
 
 export const getBudgetEntries = async (): Promise<BudgetEntry[]> => {
+  const all = await getBudgetEntriesIncludingDeleted();
+  return filterLive(all);
+};
+
+/**
+ * Sync-only: returns every budget entry including soft-deleted tombstones
+ * so `computeOutgoingDiff` can emit `action: "delete"` for them. UI code
+ * should always use `getBudgetEntries`.
+ */
+export const getBudgetEntriesIncludingDeleted = async (): Promise<BudgetEntry[]> => {
   const raw = await EncryptedStorage.getItem(BUDGET_STORAGE_KEYS.ENTRIES);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as BudgetEntry[];
     const normalized = parsed.map(normalizeBudgetEntry);
-    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      await saveBudgetEntries(normalized);
+    const purged = purgeExpiredTombstones(normalized);
+    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
+      await saveBudgetEntries(purged);
     }
-    return normalized;
+    return purged;
   } catch {
     return [];
   }
 };
 
+/**
+ * Persists the full entries array (live + tombstones). Sync writes go
+ * through this. UI screens that need to splice/delete should use the CRUD
+ * helpers below — calling `saveBudgetEntries(filtered)` to delete would
+ * silently drop the tombstone the next sync needs to propagate the delete.
+ */
 export const saveBudgetEntries = async (entries: BudgetEntry[]): Promise<void> => {
   await EncryptedStorage.setItem(BUDGET_STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
 };
 
 export const addBudgetEntry = async (entry: BudgetEntry): Promise<BudgetEntry[]> => {
-  const entries = await getBudgetEntries();
+  const entries = await getBudgetEntriesIncludingDeleted();
   entries.push(entry);
   await saveBudgetEntries(entries);
-  return entries;
+  return filterLive(entries);
 };
 
+/**
+ * Soft-deletes a budget entry. See debtStorage.deleteDebt for rationale.
+ */
 export const deleteBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
-  const entries = await getBudgetEntries();
-  const filtered = entries.filter((entry) => entry.id !== id);
-  await saveBudgetEntries(filtered);
-  return filtered;
+  const entries = await getBudgetEntriesIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = entries.map((entry) =>
+    entry.id === id ? tombstone(entry, now) : entry
+  );
+  await saveBudgetEntries(next);
+  return filterLive(next);
 };
 
 export const getAllLimitsByMonth = async (): Promise<BudgetLimitHistory> =>

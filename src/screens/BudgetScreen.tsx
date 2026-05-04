@@ -38,6 +38,7 @@ import {
   getCategoryBudgetLimits,
   saveBudgetEntries,
   saveCategoryBudgetLimits,
+  deleteBudgetEntry,
 } from "../storage/budgetStorage";
 import {
   buildMonthlyReview,
@@ -53,6 +54,7 @@ import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
   saveAssetAccounts,
+  deleteAssetAccount,
 } from "../storage/assetAccountStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
@@ -409,11 +411,18 @@ const BudgetScreen: React.FC = () => {
   // from the Payment collection (created by `recordPayment` on the Debt
   // Tracker screen). Surfacing them on Budget closes the gap where past
   // months previously showed $0 for "Debt Payments" because the screen only
-  // ever saw the synthetic minimum forecast below.
-  const recordedDebtPaymentsForMonth = useMemo(
-    () => payments.filter((p) => isDateInMonthKey(p.date, selectedMonthKey)),
-    [payments, selectedMonthKey]
-  );
+  // ever saw the synthetic minimum forecast below. Payments whose parent
+  // debt has since been deleted are excluded — `deleteDebt` does not
+  // cascade-delete payments, and a user who created a test debt, paid it
+  // off, and deleted it should not see those test payments lingering on
+  // their Budget for past months.
+  const recordedDebtPaymentsForMonth = useMemo(() => {
+    const liveDebtIds = new Set(debts.map((d) => d.id));
+    return payments.filter(
+      (p) =>
+        liveDebtIds.has(p.debtId) && isDateInMonthKey(p.date, selectedMonthKey)
+    );
+  }, [debts, payments, selectedMonthKey]);
   const recordedDebtPaymentsTotal = useMemo(
     () => recordedDebtPaymentsForMonth.reduce((sum, p) => sum + p.amount, 0),
     [recordedDebtPaymentsForMonth]
@@ -756,18 +765,17 @@ const BudgetScreen: React.FC = () => {
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
-    const nextEntries = entries.filter((entry) => entry.id !== id);
     const nextAssets = target?.linkedAccountId
       ? adjustAssetAccounts(assetAccounts, [{ accountId: target.linkedAccountId, amount: -target.amount }])
       : assetAccounts;
 
+    // Soft-delete the entry so a paired partner removes its copy on next
+    // sync. `deleteBudgetEntry` returns only live entries, which is what
+    // the screen renders.
+    const nextEntries = await deleteBudgetEntry(id);
     setEntries(nextEntries);
     if (nextAssets !== assetAccounts) {
       setAssetAccounts(nextAssets);
-    }
-
-    await saveBudgetEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
       await saveAssetAccounts(nextAssets);
     }
     await Promise.all([
@@ -922,12 +930,12 @@ const BudgetScreen: React.FC = () => {
   }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, refreshNetWorthSnapshots]);
 
   const deleteAsset = useCallback(async (id: string) => {
-    const nextAccounts = assetAccounts.filter((account) => account.id !== id);
+    // Soft-delete so the partner's next sync removes this account locally.
+    const nextAccounts = await deleteAssetAccount(id);
     setAssetAccounts(nextAccounts);
-    await saveAssetAccounts(nextAccounts);
     await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [assetAccounts, closeAssetModal, refreshNetWorthSnapshots]);
+  }, [closeAssetModal, refreshNetWorthSnapshots]);
 
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);

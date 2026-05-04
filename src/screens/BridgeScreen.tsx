@@ -26,7 +26,11 @@ import { getBudgetEntries, saveBudgetEntries } from "../storage/budgetStorage";
 import { getDebts } from "../storage/debtStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
-import { getAssetAccounts, saveAssetAccounts } from "../storage/assetAccountStorage";
+import {
+  getAssetAccounts,
+  saveAssetAccounts,
+  deleteAssetAccount,
+} from "../storage/assetAccountStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -247,12 +251,12 @@ const BridgeScreen: React.FC = () => {
   }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, refreshNetWorthSnapshots]);
 
   const deleteAsset = useCallback(async (id: string) => {
-    const nextAccounts = assetAccounts.filter((account) => account.id !== id);
+    // Soft-delete so the partner's next sync removes this account locally.
+    const nextAccounts = await deleteAssetAccount(id);
     setAssetAccounts(nextAccounts);
-    await saveAssetAccounts(nextAccounts);
     await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [assetAccounts, closeAssetModal, refreshNetWorthSnapshots]);
+  }, [closeAssetModal, refreshNetWorthSnapshots]);
 
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);

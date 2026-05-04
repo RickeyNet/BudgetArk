@@ -72,15 +72,17 @@ export const CoachmarksProvider: React.FC<React.PropsWithChildren> = ({ children
 
   const markSeen = useCallback(
     async (tabId: string) => {
-      setSeenTabs((prev) => {
-        if (prev.has(tabId)) return prev;
-        const next = new Set(prev);
-        next.add(tabId);
-        persist({ seenTabs: next, skippedAll });
-        return next;
-      });
+      // setState updaters must be pure — calling the async `persist` from
+      // inside the updater meant a re-render could fire it twice and we
+      // couldn't await it. Read seenTabs directly so persist runs once,
+      // sequentially, with the value we just committed.
+      if (seenTabs.has(tabId)) return;
+      const next = new Set(seenTabs);
+      next.add(tabId);
+      setSeenTabs(next);
+      await persist({ seenTabs: next, skippedAll });
     },
-    [persist, skippedAll]
+    [persist, seenTabs, skippedAll]
   );
 
   const skipAll = useCallback(async () => {

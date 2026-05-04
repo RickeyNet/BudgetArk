@@ -23,17 +23,32 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
  * ThemeProvider wraps the app so every screen/component can read colors.
+ *
+ * Children render `null` until the persisted theme has been read from
+ * storage. Without this gate, the first frame paints with `DEFAULT_THEME_ID`,
+ * and a user with a non-default saved theme sees a brief flash of the
+ * default before their theme swaps in.
  */
 export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [themeId, setThemeIdState] = useState<ThemePreset["id"]>(DEFAULT_THEME_ID);
+  const [ready, setReady] = useState(false);
 
   /** Load saved theme on app start */
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      const stored = await EncryptedStorage.getItem(THEME_KEY);
-      if (stored && THEME_BY_ID[stored]) setThemeIdState(stored);
+      try {
+        const stored = await EncryptedStorage.getItem(THEME_KEY);
+        if (cancelled) return;
+        if (stored && THEME_BY_ID[stored]) setThemeIdState(stored);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     };
     load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /** Persist theme selection */
@@ -55,7 +70,11 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     [themeId, colors, setThemeId]
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      {ready ? children : null}
+    </ThemeContext.Provider>
+  );
 };
 
 /**

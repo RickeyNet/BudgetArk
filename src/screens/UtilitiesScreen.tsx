@@ -77,6 +77,7 @@ const getMonthKey = (date: Date): string => {
 const calcAvgMonthlyExpenses = (entries: BudgetEntry[]): number => {
   const now = new Date();
   const monthTotals: Record<string, number> = {};
+  const monthsTracked = new Set<string>();
 
   // Look at the last 6 months (excluding current since it may be incomplete)
   for (let i = 1; i <= 6; i++) {
@@ -85,25 +86,33 @@ const calcAvgMonthlyExpenses = (entries: BudgetEntry[]): number => {
   }
 
   for (const entry of entries) {
-    if (entry.type !== "expense") continue;
     const entryMonthKey = getMonthKey(new Date(entry.date));
 
+    // A month with *any* entry (expense or income, recurring or not) is a
+    // month the user was actively tracking. We previously only counted
+    // months with expense > 0, which biased the average upward — a month
+    // where the user paid $0 in expenses but logged income still says "I
+    // was tracking, my expenses really were zero," and dropping it from
+    // the denominator made historical EF targets larger than necessary.
     if (entry.recurring) {
-      // Recurring entries apply to their start month and all future months
       for (const mk of Object.keys(monthTotals)) {
         if (mk >= entryMonthKey) {
-          monthTotals[mk] += entry.amount;
+          monthsTracked.add(mk);
+          if (entry.type === "expense") monthTotals[mk] += entry.amount;
         }
       }
     } else if (entryMonthKey in monthTotals) {
-      monthTotals[entryMonthKey] += entry.amount;
+      monthsTracked.add(entryMonthKey);
+      if (entry.type === "expense") monthTotals[entryMonthKey] += entry.amount;
     }
   }
 
-  // Average only months that have data
-  const monthsWithData = Object.values(monthTotals).filter((t) => t > 0);
-  if (monthsWithData.length === 0) return 0;
-  return Math.round(monthsWithData.reduce((s, v) => s + v, 0) / monthsWithData.length);
+  if (monthsTracked.size === 0) return 0;
+  const sum = Array.from(monthsTracked).reduce(
+    (acc, mk) => acc + (monthTotals[mk] ?? 0),
+    0
+  );
+  return Math.round(sum / monthsTracked.size);
 };
 
 /* ── Return Rate Presets ── */

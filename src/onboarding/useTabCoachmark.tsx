@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { useCoachmarks } from "./CoachmarksProvider";
 import Spotlight from "./Spotlight";
@@ -26,6 +26,19 @@ export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
   const navigation = useNavigation<any>();
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  // Tracks the post-tour navigation timer so we can clear it if the screen
+  // unmounts mid-delay (otherwise we'd call `navigation.navigate` against a
+  // stale screen ref, occasionally throwing in dev).
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (navTimerRef.current) {
+        clearTimeout(navTimerRef.current);
+        navTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const tour = COACHMARKS[tabId];
   const totalSteps = tour.steps.length;
@@ -57,7 +70,9 @@ export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
       if (nextTab) {
         // Brief pause so the spotlight Modal close animation doesn't fight
         // the tab switch - RN handles concurrent dismissals poorly.
-        setTimeout(() => {
+        if (navTimerRef.current) clearTimeout(navTimerRef.current);
+        navTimerRef.current = setTimeout(() => {
+          navTimerRef.current = null;
           try {
             navigation.navigate(nextTab as never);
           } catch (err) {

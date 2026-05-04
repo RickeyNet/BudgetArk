@@ -30,13 +30,26 @@ const DensityContext = createContext<DensityContextValue | null>(null);
 
 export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [densityId, setDensityIdState] = useState<DensityPreset["id"]>(DEFAULT_DENSITY_ID);
+  // Gate children on the same `ready` pattern as ThemeProvider so a user with
+  // a non-default density doesn't see a brief Comfortable layout snap before
+  // their saved Compact/Spacious tokens load.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      const stored = await EncryptedStorage.getItem(DENSITY_KEY);
-      if (stored && DENSITY_BY_ID[stored]) setDensityIdState(stored);
+      try {
+        const stored = await EncryptedStorage.getItem(DENSITY_KEY);
+        if (cancelled) return;
+        if (stored && DENSITY_BY_ID[stored]) setDensityIdState(stored);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     };
     load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const setDensityId = useCallback(async (id: DensityPreset["id"]) => {
@@ -57,7 +70,11 @@ export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children })
     [densityId, tokens, setDensityId]
   );
 
-  return <DensityContext.Provider value={value}>{children}</DensityContext.Provider>;
+  return (
+    <DensityContext.Provider value={value}>
+      {ready ? children : null}
+    </DensityContext.Provider>
+  );
 };
 
 export const useDensity = (): DensityContextValue => {

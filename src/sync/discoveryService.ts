@@ -20,14 +20,23 @@ export interface DiscoveredPeer {
   userId: string;
 }
 
-let zeroconf: Zeroconf | null = null;
+// Separate Zeroconf instances for publish vs browse. Sharing a single
+// instance meant `discoverPartner`'s cleanup `zc.stop()` also tore down the
+// publish channel, so a fallback-mode device that started its own server +
+// publish, then ran a second discovery scan, would silently lose its
+// advertisement and the partner could never find it.
+let publishZc: Zeroconf | null = null;
+let browseZc: Zeroconf | null = null;
 let publishedServiceName: string | null = null;
 
-const getZeroconf = (): Zeroconf => {
-  if (!zeroconf) {
-    zeroconf = new Zeroconf();
-  }
-  return zeroconf;
+const getPublishZc = (): Zeroconf => {
+  if (!publishZc) publishZc = new Zeroconf();
+  return publishZc;
+};
+
+const getBrowseZc = (): Zeroconf => {
+  if (!browseZc) browseZc = new Zeroconf();
+  return browseZc;
 };
 
 /**
@@ -38,7 +47,7 @@ export const publish = (
   userId: string,
   port: number
 ): void => {
-  const zc = getZeroconf();
+  const zc = getPublishZc();
   publishedServiceName = `BudgetArk-${userId.slice(0, 8)}`;
   zc.publishService(
     SERVICE_TYPE,
@@ -59,7 +68,7 @@ export const discoverPartner = (
   timeoutMs: number = DISCOVERY_TIMEOUT_MS
 ): Promise<DiscoveredPeer | null> => {
   return new Promise((resolve) => {
-    const zc = getZeroconf();
+    const zc = getBrowseZc();
     let resolved = false;
 
     const cleanup = () => {
@@ -67,6 +76,8 @@ export const discoverPartner = (
       resolved = true;
       zc.removeAllListeners("resolved");
       zc.removeAllListeners("error");
+      // Only stop the browse instance — the publish instance keeps
+      // advertising independently.
       zc.stop();
     };
 
@@ -110,12 +121,16 @@ export const discoverPartner = (
  * Stop all publishing and scanning.
  */
 export const stop = (): void => {
-  if (zeroconf) {
+  if (publishZc) {
     if (publishedServiceName) {
-      zeroconf.unpublishService(publishedServiceName);
+      publishZc.unpublishService(publishedServiceName);
       publishedServiceName = null;
     }
-    zeroconf.stop();
-    zeroconf.removeAllListeners();
+    publishZc.stop();
+    publishZc.removeAllListeners();
+  }
+  if (browseZc) {
+    browseZc.stop();
+    browseZc.removeAllListeners();
   }
 };

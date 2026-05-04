@@ -353,3 +353,56 @@ export const multiRemove = async (keys: string[]): Promise<void> => {
     )
   );
 };
+
+/**
+ * Writes multiple key/value pairs in one AsyncStorage `multiSet` call so a
+ * compound update (e.g. `recordPayment` saving debts and payments) hits a
+ * single native write rather than two sequential ones. This shrinks the
+ * window where a timeout can leave one key updated and the other stale.
+ *
+ * Each pair is enqueued through its own per-key write chain *before* the
+ * combined `multiSet` runs, so it still serializes correctly against any
+ * in-flight `setItem`/`removeItem` on the same keys. We don't promise
+ * atomicity at the platform layer (AsyncStorage's `multiSet` isn't a
+ * transaction on Android), but a single I/O is meaningfully safer than two.
+ *
+ * Throws on failure — callers must handle the inconsistency rather than
+ * silently leaving partial state.
+ */
+export const multiSet = async (
+  pairs: ReadonlyArray<readonly [string, string]>
+): Promise<void> => {
+  if (pairs.length === 0) return;
+
+  const encKey = await getEncryptionKey();
+  const encrypted: Array<[string, string]> = pairs.map(([key, value]) => [
+    key,
+    encKey === null ? value : encrypt(value, encKey),
+  ]);
+
+  // Take the tail of every per-key chain so this multiSet runs after any
+  // in-flight write for those keys. We splice ourselves in as the new tail
+  // for each so subsequent setItem calls on those keys queue behind us.
+  const previousTails = pairs.map(
+    ([key]) => writeQueues.get(key) ?? Promise.resolve()
+  );
+
+  let resolveTail: () => void = () => {};
+  const tail = new Promise<void>((resolve) => {
+    resolveTail = resolve;
+  });
+  pairs.forEach(([key]) => writeQueues.set(key, tail));
+
+  try {
+    await Promise.all(previousTails.map((p) => p.catch(() => {})));
+    await withTimeout(
+      AsyncStorage.multiSet(encrypted),
+      `multiSet(${pairs.map(([k]) => k).join(",")})`
+    );
+  } finally {
+    resolveTail();
+    pairs.forEach(([key]) => {
+      if (writeQueues.get(key) === tail) writeQueues.delete(key);
+    });
+  }
+};
