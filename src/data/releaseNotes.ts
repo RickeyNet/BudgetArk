@@ -11,6 +11,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     title: "Stability + Math Fixes",
     releasedAt: "2026-05-03",
     highlights: [
+      "Debt payments you record from the Debt Tracker now show up on the Budget screen for every month they were paid in — past months no longer show $0 for Debt Payments while still actually being paid. Each payment also appears as its own row in the category drilldown so you can see exactly what cleared.",
       "Emergency Fund and the Keel/Supplies milestones on Build Your Ark now only count your Savings category. Retirement and Investing entries no longer roll into your emergency fund total — they still count toward Gather Animals (retirement) and your overall Net Worth, just not as liquid emergency money.",
       "Net Worth math on Bridge no longer double-counts contributions that already credited a tracked asset account, and now matches the savings reserve numbers you see on Build Your Ark.",
       "Payments and recurring contributions can no longer race or double-apply when sync runs at the same time as a save, or when you switch tabs quickly.",

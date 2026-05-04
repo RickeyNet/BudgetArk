@@ -24,6 +24,7 @@ import {
   CategoryBudgetLimit,
   Debt,
   NewBudgetEntryInput,
+  Payment,
   SavingsGoal,
   AssetAccount,
   AssetAccountCategory,
@@ -43,7 +44,7 @@ import {
   type CategorySpendingComparison,
   type MonthlyReviewData,
 } from "../utils/budgetInsights";
-import { getDebts } from "../storage/debtStorage";
+import { getDebts, getPayments } from "../storage/debtStorage";
 import {
   getSavingsGoals,
   saveSavingsGoals,
@@ -239,6 +240,7 @@ const BudgetScreen: React.FC = () => {
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -293,6 +295,7 @@ const BudgetScreen: React.FC = () => {
           storedEntries,
           storedLimits,
           storedDebts,
+          storedPayments,
           storedGoals,
           storedAssets,
           milestonePlan,
@@ -301,6 +304,7 @@ const BudgetScreen: React.FC = () => {
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
+          getPayments(),
           getSavingsGoals(),
           getAssetAccounts(),
           getDebtMilestonePlan(),
@@ -357,6 +361,7 @@ const BudgetScreen: React.FC = () => {
         setEntries(storedEntries);
         setLimits(storedLimits);
         setDebts(storedDebts);
+        setPayments(storedPayments);
         setSavingsGoals(storedGoals);
         setAssetAccounts(storedAssets);
         setReviewPreviewData(nextReviewData);
@@ -400,12 +405,34 @@ const BudgetScreen: React.FC = () => {
     [debts]
   );
 
+  // Actual recorded debt payments that fall in the selected month. Sourced
+  // from the Payment collection (created by `recordPayment` on the Debt
+  // Tracker screen). Surfacing them on Budget closes the gap where past
+  // months previously showed $0 for "Debt Payments" because the screen only
+  // ever saw the synthetic minimum forecast below.
+  const recordedDebtPaymentsForMonth = useMemo(
+    () => payments.filter((p) => isDateInMonthKey(p.date, selectedMonthKey)),
+    [payments, selectedMonthKey]
+  );
+  const recordedDebtPaymentsTotal = useMemo(
+    () => recordedDebtPaymentsForMonth.reduce((sum, p) => sum + p.amount, 0),
+    [recordedDebtPaymentsForMonth]
+  );
+
+  // Synthetic minimum-payment forecast. Kept only for the NEXT month — the
+  // user hasn't recorded actuals yet, so the forecast helps with planning.
+  // For the current month and any past month we use `recordedDebtPaymentsTotal`
+  // instead; mixing forecast with actuals there would either double-count
+  // (real payment + still-shown forecast) or under-count (forecast suppressed
+  // mid-month while actuals come in piecemeal).
   const automaticDebtMonthlyCost = useMemo(() => {
-    if (selectedMonthKey !== currentMonthKey && selectedMonthKey !== nextMonthKey) {
-      return 0;
-    }
+    if (selectedMonthKey !== nextMonthKey) return 0;
     return activeDebts.reduce((sum, debt) => sum + debt.minPayment, 0);
-  }, [activeDebts, currentMonthKey, nextMonthKey, selectedMonthKey]);
+  }, [activeDebts, nextMonthKey, selectedMonthKey]);
+
+  // Combined "Debt Payments" total used by expensesByCategory + the monthly
+  // summary. Past/current months pull from actuals; next month from forecast.
+  const debtPaymentsTotal = recordedDebtPaymentsTotal + automaticDebtMonthlyCost;
 
   const monthlyExpenses = useMemo(
     () => {
@@ -413,9 +440,9 @@ const BudgetScreen: React.FC = () => {
         .filter((entry) => entry.type === "expense")
         .reduce((sum, entry) => sum + entry.amount, 0);
 
-      return manualExpenses + automaticDebtMonthlyCost;
+      return manualExpenses + debtPaymentsTotal;
     },
-    [automaticDebtMonthlyCost, monthlyEntries]
+    [debtPaymentsTotal, monthlyEntries]
   );
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
@@ -499,12 +526,12 @@ const BudgetScreen: React.FC = () => {
         map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
       });
 
-    if (automaticDebtMonthlyCost > 0) {
-      map["Debt Payments"] = (map["Debt Payments"] ?? 0) + automaticDebtMonthlyCost;
+    if (debtPaymentsTotal > 0) {
+      map["Debt Payments"] = (map["Debt Payments"] ?? 0) + debtPaymentsTotal;
     }
 
     return map;
-  }, [automaticDebtMonthlyCost, monthlyEntries]);
+  }, [debtPaymentsTotal, monthlyEntries]);
 
   const incomeByCategory = useMemo(() => {
     const map: Partial<Record<BudgetCategory, number>> = {};
@@ -552,19 +579,46 @@ const BudgetScreen: React.FC = () => {
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         if (category === "Debt Payments") {
-          const debtPaymentRows: ExpenseCategoryEntry[] = activeDebts.map((debt) => ({
-            id: `auto-debt-${debt.id}`,
-            amount: debt.minPayment,
-            description: `${debt.name} minimum payment`,
-            date: selectedMonthDate.toISOString(),
-          }));
-          entries.push(...debtPaymentRows);
+          if (recordedDebtPaymentsForMonth.length > 0) {
+            // Actual recorded payments — show one row per payment so the
+            // drilldown matches what the user did on the Debt Tracker.
+            const debtNamesById = new Map(debts.map((d) => [d.id, d.name]));
+            const recordedRows: ExpenseCategoryEntry[] = recordedDebtPaymentsForMonth.map(
+              (payment) => ({
+                id: `payment-${payment.id}`,
+                amount: payment.amount,
+                description: `${debtNamesById.get(payment.debtId) ?? "Debt"} payment`,
+                date: payment.date,
+              })
+            );
+            entries.push(...recordedRows);
+          } else if (automaticDebtMonthlyCost > 0) {
+            // No actuals (next-month forecast view) — synthesize one row per
+            // active debt at its minimum payment so the user sees the
+            // forthcoming obligation.
+            const forecastRows: ExpenseCategoryEntry[] = activeDebts.map((debt) => ({
+              id: `auto-debt-${debt.id}`,
+              amount: debt.minPayment,
+              description: `${debt.name} minimum payment`,
+              date: selectedMonthDate.toISOString(),
+            }));
+            entries.push(...forecastRows);
+          }
         }
 
         return { category, spent, limit, ratio, entries };
       })
       .sort((a, b) => b.spent - a.spent);
-  }, [activeDebts, expensesByCategory, limitByCategory, monthlyEntries, selectedMonthDate]);
+  }, [
+    activeDebts,
+    automaticDebtMonthlyCost,
+    debts,
+    expensesByCategory,
+    limitByCategory,
+    monthlyEntries,
+    recordedDebtPaymentsForMonth,
+    selectedMonthDate,
+  ]);
 
   const chartData = useMemo(
     () =>
