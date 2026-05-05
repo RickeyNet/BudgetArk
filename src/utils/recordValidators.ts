@@ -76,6 +76,7 @@ export const isDebtItem = (item: unknown): item is Record<string, unknown> => {
     isSafeNumber(item.rate, { min: 0, max: VALIDATOR_LIMITS.MAX_RATE }) &&
     isSafeNumber(item.minPayment) &&
     isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)
   );
 };
@@ -89,6 +90,7 @@ export const isPaymentItem = (
     isSafeText(item.debtId) &&
     isSafeNumber(item.amount, { min: 0.01 }) &&
     isValidDateValue(item.date) &&
+    isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)
   );
 };
@@ -123,6 +125,7 @@ export const isBudgetEntryItem = (
     descriptionValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)
   );
 };
@@ -164,6 +167,7 @@ export const isSavingsGoalItem = (
     isSafeNumber(item.currentAmount, { min: 0 }) &&
     (item.targetDate === undefined || isValidDateValue(item.targetDate)) &&
     isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)
   );
 };
@@ -181,6 +185,7 @@ export const isAssetAccountItem = (
     VALID_ASSET_ACCOUNT_CATEGORIES.has(item.category) &&
     isSafeNumber(item.balance, { min: 0 }) &&
     isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)
   );
 };

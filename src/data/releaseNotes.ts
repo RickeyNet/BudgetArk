@@ -13,7 +13,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     highlights: [
       "Deleting a debt, budget entry, savings goal, or asset account now sticks across paired devices. Before, your partner's device could quietly bring deleted records back on the next sync — now the deletion is honored on both sides.",
       "Test debts you create, pay off, and delete no longer leave their payments behind on past months of the Budget screen.",
-      "Spreadsheet round-trips now preserve the original edit timestamps on debts, payments, savings goals, and asset accounts. Re-importing a backup no longer accidentally overwrites your partner's recent edits on the next sync.",
+      "Spreadsheet round-trips now preserve the original edit timestamps on debts, payments, savings goals, asset accounts, and budget limits. Re-importing a backup no longer accidentally overwrites your partner's recent edits on the next sync.",
+      "JSON backup exports now also preserve the timestamp on your chosen payoff strategy (Avalanche / Snowball / Custom), so restoring a backup on one device no longer flips your partner's strategy on the next sync.",
       "Debt payments now save more reliably — the balance update and the payment record write together as a single operation, so a slow disk can't leave you with one but not the other.",
       "Reset All Data now tells you if any data couldn't be cleared, instead of saying 'Done' and leaving you in a partial state.",
       "App theme and density no longer flash the default for a frame on cold start — your saved preset is loaded before the first render.",

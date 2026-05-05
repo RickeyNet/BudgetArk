@@ -374,6 +374,15 @@ export const multiSet = async (
 ): Promise<void> => {
   if (pairs.length === 0) return;
 
+  // Duplicate keys would silently last-write-wins at the platform layer while
+  // the per-key write-queue tail map only retains one entry, so any earlier
+  // queued write for that key could resolve *after* this multiSet and clobber
+  // it. Cheap to detect; nightmare to debug if it ever happened.
+  const keys = pairs.map(([k]) => k);
+  if (new Set(keys).size !== keys.length) {
+    throw new Error("multiSet: duplicate keys are not allowed");
+  }
+
   const encKey = await getEncryptionKey();
   const encrypted: Array<[string, string]> = pairs.map(([key, value]) => [
     key,

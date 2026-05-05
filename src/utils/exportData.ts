@@ -12,7 +12,7 @@ import CryptoJS from "crypto-js";
 import {
   getDebtsIncludingDeleted,
   getPaymentsIncludingDeleted,
-  getPayoffStrategyPreference,
+  getPayoffStrategyEnvelope,
 } from "../storage/debtStorage";
 import {
   getBudgetEntriesIncludingDeleted,
@@ -73,7 +73,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
     savingsGoals,
     assetAccounts,
     debtMilestones,
-    payoffStrategy,
+    payoffStrategyEnvelope,
     netWorthSnapshots,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
@@ -89,7 +89,12 @@ export const exportAllData = async (password?: string): Promise<void> => {
     getSavingsGoalsIncludingDeleted(),
     getAssetAccountsIncludingDeleted(),
     getDebtMilestonePlan(),
-    getPayoffStrategyPreference(),
+    // Pull the full envelope (value + updatedAt) rather than the bare value.
+    // Without `updatedAt`, a re-import on this or a paired device stamps the
+    // strategy with import-time `now`, which the next sync's LWW treats as a
+    // fresh edit and propagates over whichever choice the partner had. Same
+    // ping-pong we fixed for sync; export-then-import was opening it back up.
+    getPayoffStrategyEnvelope(),
     getNetWorthSnapshots(),
   ]);
 
@@ -114,7 +119,8 @@ export const exportAllData = async (password?: string): Promise<void> => {
     savingsGoals,
     assetAccounts,
     debtMilestones,
-    payoffStrategy,
+    payoffStrategy: payoffStrategyEnvelope?.value,
+    payoffStrategyUpdatedAt: payoffStrategyEnvelope?.updatedAt,
     netWorthSnapshots,
   };
 

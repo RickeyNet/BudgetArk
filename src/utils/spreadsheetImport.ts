@@ -322,7 +322,14 @@ const rowToBudgetLimit = (row: Record<string, unknown>) => {
   if (!category || !Number.isFinite(monthlyLimit) || monthlyLimit <= 0) {
     return null;
   }
-  return { category, monthlyLimit };
+  // Preserve `updatedAt` so a paired sync doesn't treat every imported limit
+  // as "freshly edited" and clobber the partner's data via LWW. Importer
+  // (`computeMergedLimitsHistory`) stamps `now` for rows that lack it, so
+  // legacy spreadsheets without the column still import safely.
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  return updatedAtIso
+    ? { category, monthlyLimit, updatedAt: updatedAtIso }
+    : { category, monthlyLimit };
 };
 
 const rowToDebt = (row: Record<string, unknown>) => {

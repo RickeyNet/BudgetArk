@@ -93,6 +93,7 @@ interface ImportPayload {
   assetAccounts?: unknown[];
   debtMilestones?: Record<string, unknown>;
   payoffStrategy?: unknown;
+  payoffStrategyUpdatedAt?: unknown;
   netWorthSnapshots?: unknown[];
   user?: Record<string, unknown>;
   [key: string]: unknown;
@@ -108,6 +109,7 @@ interface SanitizedImportPayload {
   assetAccounts: Record<string, unknown>[];
   debtMilestones?: Record<string, unknown>;
   payoffStrategy?: "custom" | "avalanche" | "snowball";
+  payoffStrategyUpdatedAt?: string;
   netWorthSnapshots: Record<string, unknown>[];
   user?: Record<string, unknown>;
 }
@@ -240,6 +242,9 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   );
   const debtMilestones = sanitizeDebtMilestones(data.debtMilestones);
   const payoffStrategy = sanitizePayoffStrategy(data.payoffStrategy);
+  const payoffStrategyUpdatedAt = isValidDateValue(data.payoffStrategyUpdatedAt)
+    ? data.payoffStrategyUpdatedAt
+    : undefined;
   const user = sanitizeUser(data.user);
 
   const limitsByMonthCount = budgetLimitsByMonth
@@ -272,6 +277,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     netWorthSnapshots,
     debtMilestones,
     payoffStrategy,
+    payoffStrategyUpdatedAt,
     user,
   };
 };
@@ -674,7 +680,17 @@ export const importFromString = async (
     ]);
   }
   if (sanitized.payoffStrategy) {
-    tempWrites.push([KEYS.PAYOFF_STRATEGY + TEMP_SUFFIX, sanitized.payoffStrategy]);
+    // When the export includes `payoffStrategyUpdatedAt` (v1.4.16+), persist
+    // the envelope shape so paired-device LWW can resolve it correctly.
+    // Older exports without the timestamp fall through to the bare-string
+    // legacy format, which `getPayoffStrategyEnvelope` upgrades on first read.
+    const payoffPayload = sanitized.payoffStrategyUpdatedAt
+      ? JSON.stringify({
+          value: sanitized.payoffStrategy,
+          updatedAt: sanitized.payoffStrategyUpdatedAt,
+        })
+      : sanitized.payoffStrategy;
+    tempWrites.push([KEYS.PAYOFF_STRATEGY + TEMP_SUFFIX, payoffPayload]);
   }
   if (sanitized.user && mode === "replace") {
     tempWrites.push([KEYS.USER + TEMP_SUFFIX, JSON.stringify(sanitized.user)]);

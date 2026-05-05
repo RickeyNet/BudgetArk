@@ -60,6 +60,15 @@ A focused parallel-agent re-audit of the changes turned up four more concrete is
 
 `docs/SPREADSHEET_SCHEMA.md` updated with the new `UpdatedAt` columns for Debts / Payments / Savings Goals / Asset Accounts.
 
+### Audit follow-up after third pass
+
+A third-pass audit found four more concrete issues — three were the same shape as bugs we'd already fixed (`updatedAt` getting stripped on a round-trip path that paired-sync's LWW depends on), one defense-in-depth on the new compound-write helper.
+
+- **JSON export drops `payoffStrategyUpdatedAt`** — `exportData.ts` was calling `getPayoffStrategyPreference()` (returns the bare value), so the JSON payload had `payoffStrategy` but no timestamp. A backup-restore on this or a paired device stamped the strategy with import-time `now`, which sync's LWW then propagated over whichever choice the partner had — same ping-pong the v1.4.16 P2 fix closed for the sync wire format. Switched to `getPayoffStrategyEnvelope`, exports both `payoffStrategy` and `payoffStrategyUpdatedAt`. `importData.computeMergedById` already LWW's correctly; the import path now also persists the proper `{value, updatedAt}` envelope to disk when both fields are present (older exports without the timestamp keep falling through to the legacy bare-string format, which `getPayoffStrategyEnvelope` upgrades on first read).
+- **Budget-limits sheet missed the spreadsheet `UpdatedAt` round-trip** — the v1.4.16 second-pass fix added `UpdatedAt` columns to debts / payments / savings goals / asset accounts but missed budget limits. `BUDGET_LIMIT_COLUMNS` now includes `UpdatedAt`; `budgetLimitToRow` writes `limit.updatedAt`; `rowToBudgetLimit` parses and preserves it. Without this a spreadsheet round-trip silently re-stamped every limit at import time, clobbering partner edits via LWW the same way the other four entities used to.
+- **`updatedAt` not enforced at the trust boundary** — pre-existing gap, but bigger now that we lean entirely on LWW for delete propagation. All five entity validators (`isDebtItem`, `isPaymentItem`, `isBudgetEntryItem`, `isSavingsGoalItem`, `isAssetAccountItem`) now call `isOptionalIso(item.updatedAt)`. Missing field is still allowed (older peers stay compatible — they just lose LWW to the local record, which is the safe default), but a peer sending garbage in `updatedAt` is rejected at the validator instead of silently producing a `tsOf === 0` that then loses every comparison.
+- **`EncryptedStorage.multiSet` duplicate-key guard** — no current caller passes the same key twice, but the silent last-write-wins behavior at the platform layer combined with the per-key write-queue tail map only retaining one entry meant any earlier queued write for that key could resolve *after* the multiSet and clobber it. Now throws on duplicate keys; cheap to detect, nightmare to debug if it ever happened.
+
 ### Deferred
 
 - `getBudgetEntries` rewrite-on-read — only fires when normalization changes data; rare after the first migration pass.

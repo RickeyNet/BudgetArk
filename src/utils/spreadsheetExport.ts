@@ -93,7 +93,10 @@ const BUDGET_ENTRY_COLUMNS = [
   "UpdatedAt",
 ] as const;
 
-const BUDGET_LIMIT_COLUMNS = ["Category", "MonthlyLimit"] as const;
+// UpdatedAt is round-tripped for the same reason as the other entities: the
+// importer preserves it so paired-device sync's LWW doesn't treat every
+// imported row as freshly edited and clobber the partner's data.
+const BUDGET_LIMIT_COLUMNS = ["Category", "MonthlyLimit", "UpdatedAt"] as const;
 
 // CreatedAt + UpdatedAt are round-tripped on every entity for the same
 // reason as Budget Entries: the importer must preserve `updatedAt`, or
@@ -213,6 +216,7 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
 const budgetLimitToRow = (limit: CategoryBudgetLimit) => ({
   Category: limit.category,
   MonthlyLimit: limit.monthlyLimit,
+  UpdatedAt: limit.updatedAt ?? "",
 });
 
 const debtToRow = (debt: Debt) => ({
