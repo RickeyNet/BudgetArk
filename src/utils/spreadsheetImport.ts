@@ -365,8 +365,13 @@ const rowToDebt = (row: Record<string, unknown>) => {
     : "inferred";
   const goalDate = parseDate(get(row, "GoalDate", "Goal Date"));
   const createdAtIso = parseDate(get(row, "CreatedAt", "Created At"));
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   const now = new Date().toISOString();
 
+  // Preserve `updatedAt` so a paired sync doesn't treat every imported row
+  // as "freshly edited" and clobber the partner's data. Falls back to
+  // CreatedAt (the row pre-existed but the export was older than the
+  // UpdatedAt column) and finally to `now` (no timestamp at all).
   return {
     id,
     name,
@@ -379,7 +384,7 @@ const rowToDebt = (row: Record<string, unknown>) => {
     debtClassSource,
     goalDate: goalDate || undefined,
     createdAt: createdAtIso || now,
-    updatedAt: now,
+    updatedAt: updatedAtIso || createdAtIso || now,
   };
 };
 
@@ -391,12 +396,14 @@ const rowToPayment = (row: Record<string, unknown>) => {
     return null;
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return {
     id,
     debtId,
     amount,
     date: dateIso,
-    updatedAt: new Date().toISOString(),
+    updatedAt: updatedAtIso || dateIso || new Date().toISOString(),
   };
 };
 
@@ -427,6 +434,8 @@ const rowToSavingsGoal = (row: Record<string, unknown>) => {
   }
   const targetDate = parseDate(get(row, "TargetDate", "Target Date"));
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return {
     id,
     name,
@@ -435,7 +444,7 @@ const rowToSavingsGoal = (row: Record<string, unknown>) => {
     currentAmount,
     targetDate: targetDate || undefined,
     createdAt,
-    updatedAt: new Date().toISOString(),
+    updatedAt: updatedAtIso || createdAt,
   };
 };
 
@@ -452,13 +461,15 @@ const rowToAssetAccount = (row: Record<string, unknown>) => {
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return {
     id,
     name,
     category,
     balance,
     createdAt,
-    updatedAt: new Date().toISOString(),
+    updatedAt: updatedAtIso || createdAt,
   };
 };
 

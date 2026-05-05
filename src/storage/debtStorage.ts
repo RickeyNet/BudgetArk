@@ -294,6 +294,11 @@ export const recordPayment = async (
  * caller (Profile reset confirm) can then warn the user that the reset
  * is incomplete instead of silently presenting "Done."
  */
+// Keys cleared on Reset All Data. User account, pairing state, and sync
+// metadata are wiped separately by `confirmReset` (deleteAccount +
+// clearPairingState) — they live in different modules. Visual preferences
+// (theme, density, haptics, privacy mode) intentionally survive a reset
+// since they're cosmetic, not user data.
 const RESET_KEYS = [
   STORAGE_KEYS.DEBTS,
   STORAGE_KEYS.PAYMENTS,
@@ -305,6 +310,19 @@ const RESET_KEYS = [
   "@budgetark_asset_accounts",
   "@budgetark_debt_milestones",
   "@budgetark_open_ark_setup_once",
+  // Walkthrough state — without this, a fresh reset wouldn't re-show the
+  // first-launch tour even though all the user's data is gone.
+  "@budgetark_coachmarks",
+  // Backup-reminder version — survives reset would mean the user wouldn't
+  // see the "take a backup" nudge again until the next app upgrade.
+  "@budgetark_backup_reminder",
+  // Release-notes seen state + OTA-installed flag — fresh reset should
+  // re-show the latest release notes the same way a fresh install would.
+  "@budgetark_last_seen_release_notes_version",
+  "@budgetark_ota_update_installed",
+  // Update-check preferences — auto vs manual choice belongs to the user
+  // identity, not the device, so it should reset with everything else.
+  "@budgetark_update_preferences",
 ] as const;
 
 export class ResetIncompleteError extends Error {
@@ -350,9 +368,18 @@ export const getPayoffStrategyEnvelope = async (): Promise<PayoffStrategyEnvelop
   const raw = await EncryptedStorage.getItem(STORAGE_KEYS.PAYOFF_STRATEGY);
   if (raw === null) return null;
   // Legacy: bare string was written directly to encrypted storage before
-  // the envelope existed.
+  // the envelope existed. Synthesize an epoch-stamped envelope and write
+  // it back so subsequent reads skip this branch.
   if (isPayoffStrategyPreference(raw)) {
-    return { value: raw, updatedAt: PAYOFF_LEGACY_TIMESTAMP };
+    const legacy: PayoffStrategyEnvelope = {
+      value: raw,
+      updatedAt: PAYOFF_LEGACY_TIMESTAMP,
+    };
+    await EncryptedStorage.setItem(
+      STORAGE_KEYS.PAYOFF_STRATEGY,
+      JSON.stringify(legacy)
+    );
+    return legacy;
   }
   try {
     const parsed = JSON.parse(raw) as unknown;

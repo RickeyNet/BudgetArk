@@ -10,25 +10,49 @@
 import { Share } from "react-native";
 import CryptoJS from "crypto-js";
 import {
-  getDebts,
-  getPayments,
+  getDebtsIncludingDeleted,
+  getPaymentsIncludingDeleted,
   getPayoffStrategyPreference,
 } from "../storage/debtStorage";
 import {
-  getBudgetEntries,
+  getBudgetEntriesIncludingDeleted,
   getAllLimitsByMonth,
   getCategoryBudgetLimits,
 } from "../storage/budgetStorage";
 import { getOrCreateUser } from "../storage/userStorage";
-import { getSavingsGoals } from "../storage/savingsGoalStorage";
-import { getAssetAccounts } from "../storage/assetAccountStorage";
+import { getSavingsGoalsIncludingDeleted } from "../storage/savingsGoalStorage";
+import { getAssetAccountsIncludingDeleted } from "../storage/assetAccountStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
-/** Prefix used to identify password-encrypted export payloads */
+/**
+ * Legacy v1 prefix — `CryptoJS.AES.encrypt(json, password).toString()` with
+ * the default OpenSSL EVP_BytesToKey KDF (single-round MD5). Brute-forceable
+ * offline in seconds for short passwords. Still readable on import for users
+ * with old backups, but the export path now produces v2 only.
+ */
 export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
+
+/**
+ * Current v2 prefix. Format after the prefix:
+ *   <salt-hex (32 chars)> "." <iv-hex (32 chars)> "." <ciphertext-base64>
+ *
+ * Salt: 16 random bytes per export (so the KDF produces a different key
+ * even for the same password). IV: 16 random bytes (AES-256-CBC needs a
+ * fresh IV per ciphertext or two exports with the same password leak the
+ * XOR of their first plaintext blocks). KDF: PBKDF2-SHA256 with 250k
+ * iterations — slow enough that a 4-char password takes hours instead of
+ * seconds to brute-force, while still keeping a single export decrypt
+ * under ~200ms on a low-end device.
+ */
+export const ENCRYPTED_EXPORT_PREFIX_V2 = "__BUDGETARK_ENC2__:";
+
+const PBKDF2_ITERATIONS = 250_000;
+const PBKDF2_KEY_SIZE_WORDS = 256 / 32; // 256-bit key
+const SALT_BYTES = 16;
+const IV_BYTES = 16;
 
 /**
  * Gathers all app data into a single object and opens
@@ -52,14 +76,18 @@ export const exportAllData = async (password?: string): Promise<void> => {
     payoffStrategy,
     netWorthSnapshots,
   ] = await Promise.all([
-    getDebts(),
-    getPayments(),
-    getBudgetEntries(),
+    // Tombstoned records are intentionally included so a `replace`-mode
+    // restore on this device, or another paired device, doesn't accidentally
+    // resurrect data the user already deleted. Sync still applies LWW; the
+    // backup just preserves the full state at export time.
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+    getBudgetEntriesIncludingDeleted(),
     getCategoryBudgetLimits(),
     getAllLimitsByMonth(),
     getOrCreateUser(),
-    getSavingsGoals(),
-    getAssetAccounts(),
+    getSavingsGoalsIncludingDeleted(),
+    getAssetAccountsIncludingDeleted(),
     getDebtMilestonePlan(),
     getPayoffStrategyPreference(),
     getNetWorthSnapshots(),
@@ -94,8 +122,26 @@ export const exportAllData = async (password?: string): Promise<void> => {
 
   let message: string;
   if (password) {
-    const ciphertext = CryptoJS.AES.encrypt(json, password).toString();
-    message = ENCRYPTED_EXPORT_PREFIX + ciphertext;
+    // v2 envelope: salt | iv | ciphertext, all base16/base64. PBKDF2 derives
+    // the AES key so a short password isn't a few seconds of offline brute
+    // force. v1 path (insecure default KDF) is still decryptable on import
+    // for legacy backups but no longer produced here.
+    const salt = CryptoJS.lib.WordArray.random(SALT_BYTES);
+    const iv = CryptoJS.lib.WordArray.random(IV_BYTES);
+    const key = CryptoJS.PBKDF2(password, salt, {
+      keySize: PBKDF2_KEY_SIZE_WORDS,
+      iterations: PBKDF2_ITERATIONS,
+      hasher: CryptoJS.algo.SHA256,
+    });
+    const cipherParams = CryptoJS.AES.encrypt(json, key, {
+      iv,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7,
+    });
+    const saltHex = salt.toString(CryptoJS.enc.Hex);
+    const ivHex = iv.toString(CryptoJS.enc.Hex);
+    const ctB64 = cipherParams.ciphertext.toString(CryptoJS.enc.Base64);
+    message = `${ENCRYPTED_EXPORT_PREFIX_V2}${saltHex}.${ivHex}.${ctB64}`;
   } else {
     message = json;
   }

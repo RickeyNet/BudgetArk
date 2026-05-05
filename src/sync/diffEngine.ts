@@ -26,7 +26,7 @@ import {
 } from "../storage/assetAccountStorage";
 import {
   getDebtMilestonePlan,
-  saveDebtMilestonePlan,
+  saveDebtMilestonePlanFromSync,
 } from "../storage/debtMilestoneStorage";
 import {
   getPayoffStrategyEnvelope,
@@ -347,7 +347,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
       new Date(diff.debtMilestonePlan.updatedAt).getTime() >=
       new Date(localPlan.updatedAt).getTime()
     ) {
-      await saveDebtMilestonePlan(diff.debtMilestonePlan);
+      await saveDebtMilestonePlanFromSync(diff.debtMilestonePlan);
       changedCount++;
     }
   }

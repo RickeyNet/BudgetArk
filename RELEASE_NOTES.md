@@ -1,5 +1,78 @@
 # BudgetArk Release Notes
 
+## v1.4.16 - Sync Reliability + Cleanup (2026-05-04)
+
+Round 2 audit follow-up — closes every remaining `Potentialbugs.md` Round 2 item except the two explicitly deferred low-impact P3s. Pure JS — `runtimeVersion` stays at `1.4.14`, ships as OTA against the v1.4.14 native binary.
+
+### Tombstone-based soft delete for sync (P0)
+
+- New `src/storage/tombstones.ts` module: `tombstone(record, now)`, `filterLive(records)`, `purgeExpiredTombstones(records)`. `TOMBSTONE_TTL_MS = 90 days` — old tombstones GC'd on read once every paired device has had time to converge.
+- `Debt`, `Payment`, `BudgetEntry`, `SavingsGoal`, `AssetAccount` types each gained an optional `deletedAt: string`.
+- Each storage module now exposes `getXIncludingDeleted` for sync consumers; the public `getX` filters tombstones via `filterLive`. `deleteX` soft-deletes by stamping `deletedAt` + `updatedAt` to the same `now`. `addX` / `updateX` route through the tombstone-aware getters so an in-flight tombstone isn't accidentally overwritten by a new save.
+- `src/sync/diffEngine.ts`: `computeOutgoingDiff` reads via the `*IncludingDeleted` getters; `filterChanged` now emits `action: "delete"` for any record whose `updatedAt > since` AND has `deletedAt` set, `upsert` otherwise. `mergeById` is tombstone-aware: it always replaces by LWW timestamp instead of `localMap.delete()`-ing on the delete branch, which keeps the tombstone locally so a stale third device's later upsert loses LWW. `applyIncomingDiff` now reads + saves through the `*IncludingDeleted` helpers so tombstones survive merge.
+- `recordPayment` reads via `getDebtsIncludingDeleted` + `getPaymentsIncludingDeleted` and only mutates non-tombstoned debts, then writes both through the new `multiSet` (see below) so tombstones don't get clobbered.
+- Screens that previously deleted via `arr.filter(x => x.id !== id)` + `saveX(filtered)` now route through the soft-delete CRUD: `DebtTrackerScreen.confirmDelete` → `deleteDebt(id)`; `DebtTrackerScreen.handleDeleteSavingsGoal` → `deleteSavingsGoal(id)`; `BudgetScreen.handleDeleteEntry` → `deleteBudgetEntry(id)`; `BudgetScreen.deleteAsset` → `deleteAssetAccount(id)`; `BridgeScreen.deleteAsset` → `deleteAssetAccount(id)`.
+
+### P1 fixes
+
+- **PairingModal unmount cleanup**: teardown body extracted into a single function used by both the `!visible` branch and the effect's return. A parent that unmounted the modal while it was still `visible: true` used to leak the countdown setInterval, listening TCP server, and Zeroconf publish — wedging the next pair attempt on the same port.
+- **Cross-key compound writes**: new `EncryptedStorage.multiSet([[k,v],...])` encrypts each value, splices a single tail Promise into every per-key queue, then issues one `AsyncStorage.multiSet`. `recordPayment` refactored onto it so a `withTimeout` rejection between debts and payments no longer leaves the balance reduced without a matching payment row.
+- **Timezone bugs**: `calcMonthsUntilDate` (`src/utils/calculations.ts`) now uses UTC getters on both ends. `linkedAccountRecurring.getMonthKey` switched to UTC; new `monthKeyFromISO` slices the YYYY-MM prefix directly when possible. ISO date strings parse as UTC midnight; mixing that with `getMonth()` for users west of UTC was reading the previous month and either rounding `calcPaymentForGoalDate` to `Infinity` on the boundary or crediting recurring contributions a month early.
+
+### P2 fixes
+
+- **Auto-sync double-fire**: new `syncInProgress` boolean in `autoSyncManager`. The cooldown check still gates entry, but two listeners that pass cooldown nearly simultaneously and the first one suspends on `await getPairingState()` no longer race into a parallel sync.
+- **Discovery teardown**: `discoveryService` split into separate `publishZc` / `browseZc` instances. `discoverPartner.cleanup`'s `zc.stop()` was killing the publish channel too — a fallback-mode device that started its own server + publish, then ran a second discovery scan, was silently losing its advertisement.
+- **`seenNonces` bound**: now `Map<nonce, ts>`. Pruning runs when size > 1024, drops entries older than `MAX_MESSAGE_AGE_MS` (5 min). Age check moved before the insert so we never spend a slot on a nonce we'd just have to prune. Also removes the unbounded session-lifetime growth.
+- **Replay reset on every error path**: `syncNow` calls `Discovery.stop()` + `Transport.resetReplayProtection()` from a `finally` block instead of only on the catch path. Inner happy paths still call them too — calling twice is idempotent. Covers timeout closures and other internal failures that don't bubble through the outer catch.
+- **PayoffStrategy LWW**: strategy now stored as `{ value, updatedAt }` envelope. New `getPayoffStrategyEnvelope` and `savePayoffStrategyEnvelope` for sync use; legacy bare-string data normalized to the epoch on read AND written back so subsequent reads skip the migration branch. `SyncDiff` carries `payoffStrategyUpdatedAt` alongside `payoffStrategy` (back-compat: missing timestamp from older peers treated as epoch). `applyIncomingDiff` resolves with proper LWW; the strategy no longer flip-flops on every sync direction.
+- **Theme + Density flash**: both providers track a `ready: boolean` and render `null` until storage resolves. Adds ~10–30 ms blank screen on cold start but eliminates the flash of `DEFAULT_THEME_ID` / `DEFAULT_DENSITY_ID` for users with non-default presets.
+- **`clearAllData` non-atomic on Android**: new `ResetIncompleteError`. `clearAllData` uses `Promise.allSettled` + one retry pass per key; throws if any still hasn't cleared. `ProfileScreen.confirmReset` catches it and shows a "Reset incomplete" modal instead of pretending success.
+
+### P3 cleanups
+
+- `useTabCoachmark.handleNext` setTimeout tracked in `navTimerRef`, cleared on unmount so we don't fire `navigation.navigate` against a stale screen ref.
+- `CoachmarksProvider.markSeen` reads `seenTabs` directly and awaits `persist` outside the setState updater (updaters must be pure; old code could fire the async persist twice on a re-render).
+- `calcAvgMonthlyExpenses` denominator counts months with *any* entry, not just months with `expense > 0`. Was inflating the average upward by dropping legitimate zero-expense months from the divisor.
+
+### Audit follow-up after second pass
+
+A final-pass audit found six more issues. Top-three fixed:
+
+- **Password-encrypted export KDF (P1, security)** — old format used `CryptoJS.AES.encrypt(json, password).toString()`, which falls back to OpenSSL's EVP_BytesToKey (single-round MD5). A 4-character password was brute-forceable in seconds offline. New v2 envelope uses PBKDF2-SHA256 with 250k iterations, a random 16-byte salt per export, and a random 16-byte IV: `__BUDGETARK_ENC2__:<salt-hex>.<iv-hex>.<ct-base64>`. The import path detects the prefix and dispatches to the v2 decrypt; the legacy `__BUDGETARK_ENC__:` prefix is still readable for old backups (no migration needed — users keep using the same password).
+- **`clearAllData` storage key coverage (P1)** — `RESET_KEYS` now also wipes `@budgetark_coachmarks` (so the walkthrough re-shows after a reset), `@budgetark_backup_reminder` (so the post-upgrade nudge doesn't carry over), `@budgetark_last_seen_release_notes_version` + `@budgetark_ota_update_installed` (so the latest release notes show again), and `@budgetark_update_preferences`. User account, pairing state, and sync metadata were already wiped via `confirmReset` in ProfileScreen. Visual prefs (theme, density, haptics, privacy mode) intentionally survive — they're cosmetic, not user data.
+- **Import LWW gap (P2, silent data loss)** — `computeMergedById` in `importData.ts` previously did `existing[idx] = item` unconditionally on ID collision, which contradicted the LWW semantics `applyIncomingDiff` carefully implements. A backup-restore could (a) silently flip a tombstoned record back to live, or (b) silently delete a recent edit because the imported tombstone was older. Now compares `updatedAt` and only replaces when `incoming.updatedAt >= existing.updatedAt`. Ties go to the incoming record since the user explicitly chose to import.
+
+Plus three smaller fixes:
+
+- **Import rollback partial state (P2)** — Phase 3 rollback in `importData.ts` previously did sequential `await` on each restore; if a single restore timed out, the loop aborted and remaining backups stayed un-restored, leaving storage in a torn state. Now uses `Promise.allSettled`, collects failed keys, and throws a distinct error message asking the user to reinstall + re-import a recent backup if any restore failed. Best-effort temp-key cleanup runs regardless.
+- **`debtMilestone` sync ping-pong (P3)** — `applyIncomingDiff` was calling `saveDebtMilestonePlan` on a remote-merged plan, which clobbered the incoming `updatedAt` with `now`. Next outbound diff then re-broadcast it as a fresh edit. New `saveDebtMilestonePlanFromSync` setter preserves the incoming timestamp, mirroring the `savePayoffStrategyEnvelope` pattern.
+- **Spreadsheet schema doc** — already updated in the first audit pass; covers `UpdatedAt` for Debts / Payments / Savings Goals / Asset Accounts.
+
+### Audit follow-up after first pass
+
+A focused parallel-agent re-audit of the changes turned up four more concrete issues, all fixed before commit:
+
+- **Validator gap on `deletedAt`**: `recordValidators.ts` now requires `deletedAt` to be a parseable ISO string when present (new `isOptionalIso` helper applied to all five record validators). Without this a malicious peer could send `deletedAt: "garbage"` past the diff-engine validator and create a permanent un-purgeable tombstone (the GC's `Number.isFinite(now - NaN)` is false, so the age-out branch never fires).
+- **Spreadsheet round-trip wipes `updatedAt` for non-budget-entry types**: same shape as the v1.4.15 P0 fix that only covered budget entries. `DEBT_COLUMNS`, `PAYMENT_COLUMNS`, `SAVINGS_GOAL_COLUMNS`, `ASSET_ACCOUNT_COLUMNS` now include `UpdatedAt`. Row builders write `entity.updatedAt`. Importers preserve it (fall back to `CreatedAt` then `now`). Without this, debts/payments/savings/assets imported from xlsx all stamped `now`, then the next paired sync would clobber the partner's data via LWW.
+- **JSON export drops tombstones**: `exportData.ts` switched to `getXIncludingDeleted` for the five tombstoned collections. Replace-mode imports now preserve tombstones across backup-restore. Without this, restoring a backup wiped the user's local tombstones and only the partner's tombstones (next sync) would keep things consistent — a state that breaks if the partner hasn't synced yet.
+- **Legacy payoff strategy re-pays JSON.parse on every cold start**: `getPayoffStrategyEnvelope` now writes back the synthesized envelope on first read of a legacy bare-string value. Subsequent reads skip the migration branch.
+
+`docs/SPREADSHEET_SCHEMA.md` updated with the new `UpdatedAt` columns for Debts / Payments / Savings Goals / Asset Accounts.
+
+### Deferred
+
+- `getBudgetEntries` rewrite-on-read — only fires when normalization changes data; rare after the first migration pass.
+- `calcInvestmentGrowth` negative-rate clamp — would need UI changes to expose negative rates; behavior change risk.
+- Theme/Density null-render flicker (~10–30 ms blank frame) — would need a splash background or coordinated `ready` gate at the App level.
+- Merge-mode JSON import resurrection of locally-tombstoned records — sync corrects on next round-trip via LWW (partner's tombstone wins). Annoying intermediate state but self-corrects.
+
+### Verification
+
+- `npx tsc --noEmit` clean.
+- No `app.json` / `eas.json` / native module changes.
+- `runtimeVersion` stays at `1.4.14` — ships OTA on the v1.4.14 binary in TestFlight / Play.
+
 ## v1.4.15 - Stability + Math Fixes (2026-05-03)
 
 Round of audit-driven fixes against a static-review pass over the codebase. All P0 items from `Potentialbugs.md` round 2 plus the P1 items that were single-file changes; architectural fixes (delete tombstones, multiSet for compound writes) stay deferred. Pure JS — runtimeVersion stays at `1.4.14`, ships as OTA against the v1.4.14 native binary already in TestFlight / Play.

@@ -51,15 +51,17 @@ Imported limits land in the current month's limit set.
 | `DebtClassSource` | No       | `manual` / `inferred`.                        |
 | `GoalDate`        | No       | Optional payoff target date.                  |
 | `CreatedAt`       | No       | ISO timestamp; defaults to now.               |
+| `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
 
 ## Sheet: Payments (xlsx only)
 
-| Column   | Required | Notes                            |
-| -------- | -------- | -------------------------------- |
-| `ID`     | No       | Auto-generated if missing.       |
-| `DebtID` | Yes      | Must match a debt's `ID`.        |
-| `Amount` | Yes      | Positive number, ≥ 0.01.         |
-| `Date`   | Yes      | ISO date or US `M/D/YYYY` style. |
+| Column      | Required | Notes                            |
+| ----------- | -------- | -------------------------------- |
+| `ID`        | No       | Auto-generated if missing.       |
+| `DebtID`    | Yes      | Must match a debt's `ID`.        |
+| `Amount`    | Yes      | Positive number, ≥ 0.01.         |
+| `Date`      | Yes      | ISO date or US `M/D/YYYY` style. |
+| `UpdatedAt` | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
 
 ## Sheet: Savings Goals (xlsx only)
 
@@ -72,6 +74,7 @@ Imported limits land in the current month's limit set.
 | `CurrentAmount` | Yes      | Number, ≥ 0.                                                                         |
 | `TargetDate`    | No       | Optional target date.                                                                |
 | `CreatedAt`     | No       | ISO timestamp; defaults to now.                                                      |
+| `UpdatedAt`     | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness.              |
 
 > Imported on Excel imports - full round-trip with the export utility.
 
@@ -84,6 +87,7 @@ Imported limits land in the current month's limit set.
 | `Category`  | Yes      | One of `savings`, `retirement`, `hsa`, `investment`, `other`.        |
 | `Balance`   | Yes      | Number, ≥ 0.                                                         |
 | `CreatedAt` | No       | ISO timestamp; defaults to now.                                      |
+| `UpdatedAt` | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
 
 > Imported on Excel imports - full round-trip with the export utility.
 

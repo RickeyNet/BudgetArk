@@ -56,6 +56,16 @@ export const NEGATIVE_AMOUNT_CATEGORIES = new Set<string>([
   "Investing",
 ]);
 
+/**
+ * Tombstone marker validator. Records carrying a `deletedAt` field MUST
+ * have it as a parseable ISO date — otherwise the on-read tombstone GC
+ * (`purgeExpiredTombstones`) can't compute an age and the tombstone never
+ * expires, polluting storage forever. Allowed because a malicious peer
+ * could send `deletedAt: "garbage"` past the rest of the validator gate.
+ */
+const isOptionalIso = (value: unknown): boolean =>
+  value === undefined || isValidDateValue(value);
+
 export const isDebtItem = (item: unknown): item is Record<string, unknown> => {
   if (!isObject(item)) return false;
   return (
@@ -65,7 +75,8 @@ export const isDebtItem = (item: unknown): item is Record<string, unknown> => {
     isSafeNumber(item.originalBalance, { min: 0.01 }) &&
     isSafeNumber(item.rate, { min: 0, max: VALIDATOR_LIMITS.MAX_RATE }) &&
     isSafeNumber(item.minPayment) &&
-    isValidDateValue(item.createdAt)
+    isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.deletedAt)
   );
 };
 
@@ -77,7 +88,8 @@ export const isPaymentItem = (
     isSafeText(item.id) &&
     isSafeText(item.debtId) &&
     isSafeNumber(item.amount, { min: 0.01 }) &&
-    isValidDateValue(item.date)
+    isValidDateValue(item.date) &&
+    isOptionalIso(item.deletedAt)
   );
 };
 
@@ -110,7 +122,8 @@ export const isBudgetEntryItem = (
     amountValid &&
     descriptionValid &&
     isValidDateValue(item.date) &&
-    isValidDateValue(item.createdAt)
+    isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.deletedAt)
   );
 };
 
@@ -150,7 +163,8 @@ export const isSavingsGoalItem = (
     isSafeNumber(item.targetAmount, { min: 0.01 }) &&
     isSafeNumber(item.currentAmount, { min: 0 }) &&
     (item.targetDate === undefined || isValidDateValue(item.targetDate)) &&
-    isValidDateValue(item.createdAt)
+    isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.deletedAt)
   );
 };
 
@@ -166,7 +180,8 @@ export const isAssetAccountItem = (
     typeof item.category === "string" &&
     VALID_ASSET_ACCOUNT_CATEGORIES.has(item.category) &&
     isSafeNumber(item.balance, { min: 0 }) &&
-    isValidDateValue(item.createdAt)
+    isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.deletedAt)
   );
 };
 

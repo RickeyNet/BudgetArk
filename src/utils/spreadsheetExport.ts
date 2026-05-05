@@ -95,6 +95,10 @@ const BUDGET_ENTRY_COLUMNS = [
 
 const BUDGET_LIMIT_COLUMNS = ["Category", "MonthlyLimit"] as const;
 
+// CreatedAt + UpdatedAt are round-tripped on every entity for the same
+// reason as Budget Entries: the importer must preserve `updatedAt`, or
+// the next paired sync treats every imported row as freshly edited and
+// overwrites the partner's data via last-write-wins.
 const DEBT_COLUMNS = [
   "ID",
   "Name",
@@ -107,9 +111,10 @@ const DEBT_COLUMNS = [
   "DebtClassSource",
   "GoalDate",
   "CreatedAt",
+  "UpdatedAt",
 ] as const;
 
-const PAYMENT_COLUMNS = ["ID", "DebtID", "Amount", "Date"] as const;
+const PAYMENT_COLUMNS = ["ID", "DebtID", "Amount", "Date", "UpdatedAt"] as const;
 
 const SAVINGS_GOAL_COLUMNS = [
   "ID",
@@ -119,6 +124,7 @@ const SAVINGS_GOAL_COLUMNS = [
   "CurrentAmount",
   "TargetDate",
   "CreatedAt",
+  "UpdatedAt",
 ] as const;
 
 const ASSET_ACCOUNT_COLUMNS = [
@@ -127,6 +133,7 @@ const ASSET_ACCOUNT_COLUMNS = [
   "Category",
   "Balance",
   "CreatedAt",
+  "UpdatedAt",
 ] as const;
 
 /* ── Row builders - convert app types to flat row objects ── */
@@ -220,6 +227,7 @@ const debtToRow = (debt: Debt) => ({
   DebtClassSource: debt.debtClassSource,
   GoalDate: debt.goalDate ? formatDateOnly(debt.goalDate) : "",
   CreatedAt: debt.createdAt,
+  UpdatedAt: debt.updatedAt ?? "",
 });
 
 const paymentToRow = (payment: Payment) => ({
@@ -227,6 +235,7 @@ const paymentToRow = (payment: Payment) => ({
   DebtID: payment.debtId,
   Amount: payment.amount,
   Date: formatDateOnly(payment.date),
+  UpdatedAt: payment.updatedAt ?? "",
 });
 
 const savingsGoalToRow = (goal: SavingsGoal) => ({
@@ -237,6 +246,7 @@ const savingsGoalToRow = (goal: SavingsGoal) => ({
   CurrentAmount: goal.currentAmount,
   TargetDate: goal.targetDate ? formatDateOnly(goal.targetDate) : "",
   CreatedAt: goal.createdAt,
+  UpdatedAt: goal.updatedAt ?? "",
 });
 
 const assetAccountToRow = (account: AssetAccount) => ({
@@ -245,6 +255,7 @@ const assetAccountToRow = (account: AssetAccount) => ({
   Category: account.category,
   Balance: account.balance,
   CreatedAt: account.createdAt,
+  UpdatedAt: account.updatedAt ?? "",
 });
 
 /* ── Total row ──

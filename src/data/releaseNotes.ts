@@ -7,6 +7,25 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.4.16",
+    title: "Sync Reliability + Cleanup",
+    releasedAt: "2026-05-04",
+    highlights: [
+      "Deleting a debt, budget entry, savings goal, or asset account now sticks across paired devices. Before, your partner's device could quietly bring deleted records back on the next sync — now the deletion is honored on both sides.",
+      "Test debts you create, pay off, and delete no longer leave their payments behind on past months of the Budget screen.",
+      "Spreadsheet round-trips now preserve the original edit timestamps on debts, payments, savings goals, and asset accounts. Re-importing a backup no longer accidentally overwrites your partner's recent edits on the next sync.",
+      "Debt payments now save more reliably — the balance update and the payment record write together as a single operation, so a slow disk can't leave you with one but not the other.",
+      "Reset All Data now tells you if any data couldn't be cleared, instead of saying 'Done' and leaving you in a partial state.",
+      "App theme and density no longer flash the default for a frame on cold start — your saved preset is loaded before the first render.",
+      "Recurring contributions and goal date math now use the right month near midnight in non-US timezones — recurring credits no longer fire a month early.",
+      "Auto-sync now refuses to start a second sync while the first is still running, even if WiFi flips and the app foregrounds at almost the same time.",
+      "Several smaller fixes around how the app handles a paired partner that's running an older version, how the pairing screen cleans up if you back out, and a couple of memory cleanups in the sync layer.",
+      "Password-protected exports are now much harder to brute-force. Old encrypted backup files still open with the same password — only newly created ones use the stronger format.",
+      "Reset All Data now also clears the walkthrough state, the backup-reminder banner, and a couple of other one-time flags, so a reset device starts as cleanly as a fresh install.",
+      "Importing a backup over the top of existing data no longer accidentally overwrites edits you made after taking the backup, and no longer brings back records you've since deleted.",
+    ],
+  },
+  {
     version: "1.4.15",
     title: "Stability + Math Fixes",
     releasedAt: "2026-05-03",

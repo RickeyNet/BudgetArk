@@ -15,7 +15,10 @@ import CryptoJS from "crypto-js";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import { DEFAULT_CURRENCY_PREFERENCE_ID } from "../types";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
-import { ENCRYPTED_EXPORT_PREFIX } from "./exportData";
+import {
+  ENCRYPTED_EXPORT_PREFIX,
+  ENCRYPTED_EXPORT_PREFIX_V2,
+} from "./exportData";
 import {
   isObject,
   isValidDateValue,
@@ -283,10 +286,39 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
  * @returns ImportResult with counts of imported items
  */
 /**
- * Returns true if the raw string is a password-encrypted BudgetArk export.
+ * Returns true if the raw string is a password-encrypted BudgetArk export
+ * (either format — v1 legacy or v2 PBKDF2).
  */
-export const isEncryptedExport = (raw: string): boolean =>
-  raw.trimStart().startsWith(ENCRYPTED_EXPORT_PREFIX);
+export const isEncryptedExport = (raw: string): boolean => {
+  const head = raw.trimStart();
+  return (
+    head.startsWith(ENCRYPTED_EXPORT_PREFIX_V2) ||
+    head.startsWith(ENCRYPTED_EXPORT_PREFIX)
+  );
+};
+
+/** Decrypts a v2 envelope: salt-hex "." iv-hex "." ciphertext-base64. */
+const decryptV2Envelope = (envelope: string, password: string): string => {
+  const parts = envelope.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Decryption failed. The encrypted export is malformed.");
+  }
+  const [saltHex, ivHex, ctB64] = parts;
+  const salt = CryptoJS.enc.Hex.parse(saltHex);
+  const iv = CryptoJS.enc.Hex.parse(ivHex);
+  const ciphertext = CryptoJS.enc.Base64.parse(ctB64);
+  const key = CryptoJS.PBKDF2(password, salt, {
+    keySize: 256 / 32,
+    iterations: 250_000,
+    hasher: CryptoJS.algo.SHA256,
+  });
+  const decrypted = CryptoJS.AES.decrypt(
+    CryptoJS.lib.CipherParams.create({ ciphertext }),
+    key,
+    { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+  );
+  return decrypted.toString(CryptoJS.enc.Utf8);
+};
 
 export const importFromString = async (
   raw: string,
@@ -299,15 +331,33 @@ export const importFromString = async (
     );
   }
 
-  /* 0. Decrypt if this is a password-encrypted export */
+  /* 0. Decrypt if this is a password-encrypted export. v2 uses PBKDF2 +
+   * explicit salt/iv; v1 uses CryptoJS's weak default EVP_BytesToKey KDF
+   * and is still readable here for backward-compat with older backups. */
   let jsonString = raw;
-  if (isEncryptedExport(raw)) {
+  const trimmed = raw.trimStart();
+  if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)) {
     if (!password) {
       throw new Error(
         "This export is password-encrypted. Please enter the password to decrypt it."
       );
     }
-    const ciphertext = raw.trimStart().slice(ENCRYPTED_EXPORT_PREFIX.length);
+    const envelope = trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V2.length);
+    try {
+      jsonString = decryptV2Envelope(envelope, password);
+    } catch {
+      throw new Error("Decryption failed. The password may be incorrect.");
+    }
+    if (!jsonString) {
+      throw new Error("Decryption failed. The password may be incorrect.");
+    }
+  } else if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX)) {
+    if (!password) {
+      throw new Error(
+        "This export is password-encrypted. Please enter the password to decrypt it."
+      );
+    }
+    const ciphertext = trimmed.slice(ENCRYPTED_EXPORT_PREFIX.length);
     try {
       const bytes = CryptoJS.AES.decrypt(ciphertext, password);
       jsonString = bytes.toString(CryptoJS.enc.Utf8);
@@ -362,7 +412,19 @@ export const importFromString = async (
     staleDays,
   };
 
-  // Helper: merge arrays by id in memory (no storage writes)
+  // Helper: merge arrays by id in memory (no storage writes).
+  //
+  // Respects last-write-wins on `updatedAt` so that:
+  //  1. An incoming live record can't resurrect a locally-tombstoned record
+  //     unless its updatedAt is at least as new as the tombstone's.
+  //  2. An incoming tombstone can't delete a locally-edited record unless
+  //     its updatedAt beats the local edit.
+  // Without this guard `computeMergedById` blindly replaced existing rows
+  // with whatever the import contained, which contradicted the LWW semantics
+  // the sync diff engine carefully implements. A backup taken before a
+  // delete + re-import would silently flip the user's deleted records back
+  // to live, and any partner-tombstone relayed via sync would lose to a
+  // fresh import.
   const computeMergedById = async (
     storageKey: string,
     incoming: unknown[] | undefined
@@ -383,23 +445,43 @@ export const importFromString = async (
       }
     }
 
-    const existingIds = new Set(
-      existing.map((item) => (item as any).id as string).filter(Boolean)
-    );
+    const tsOf = (record: Record<string, unknown> | undefined): number => {
+      if (!record) return -Infinity;
+      const raw = record.updatedAt;
+      if (typeof raw !== "string") return 0;
+      const t = Date.parse(raw);
+      return Number.isFinite(t) ? t : 0;
+    };
 
-    let added = 0;
-    for (const item of incoming) {
-      const id = (item as any)?.id;
-      if (id && existingIds.has(id)) {
-        const idx = existing.findIndex((e) => (e as any).id === id);
-        if (idx >= 0) existing[idx] = item as Record<string, unknown>;
-      } else {
-        existing.push(item as Record<string, unknown>);
+    const indexById = new Map<string, number>();
+    existing.forEach((item, idx) => {
+      const id = (item as any).id;
+      if (typeof id === "string") indexById.set(id, idx);
+    });
+
+    let touched = 0;
+    for (const rawItem of incoming) {
+      const item = rawItem as Record<string, unknown>;
+      const id = item.id as string | undefined;
+      if (!id) continue;
+
+      const existingIdx = indexById.get(id);
+      if (existingIdx === undefined) {
+        existing.push(item);
+        indexById.set(id, existing.length - 1);
+        touched++;
+        continue;
       }
-      added++;
+
+      // Both rows present. LWW on updatedAt; ties go to the incoming record
+      // since the user explicitly chose to import.
+      if (tsOf(item) >= tsOf(existing[existingIdx])) {
+        existing[existingIdx] = item;
+        touched++;
+      }
     }
 
-    return { json: JSON.stringify(existing), count: added };
+    return { json: JSON.stringify(existing), count: touched };
   };
 
   // Compute merged budget limits in memory
@@ -646,17 +728,37 @@ export const importFromString = async (
     counts.debtMilestones = !!sanitized.debtMilestones;
     counts.payoffStrategy = !!sanitized.payoffStrategy;
   } catch (error) {
-    // Rollback: restore original values, then clean up temp keys
-    for (const [key, value] of backups) {
-      if (value !== null) {
-        await EncryptedStorage.setItem(key, value);
-      } else {
-        await EncryptedStorage.removeItem(key);
-      }
-    }
+    // Rollback: restore original values, then clean up temp keys.
+    // We use `allSettled` and collect failures rather than awaiting each
+    // restore in sequence — if a restore itself times out, the original
+    // sequential `await` in a for-loop would abort and leave the remaining
+    // backups un-restored, silently corrupting state. With allSettled we
+    // attempt every restore and surface any that didn't make it.
+    const restoreResults = await Promise.allSettled(
+      backups.map(([key, value]) =>
+        value !== null
+          ? EncryptedStorage.setItem(key, value)
+          : EncryptedStorage.removeItem(key)
+      )
+    );
+    const restoreFailures = restoreResults
+      .map((result, idx) => (result.status === "rejected" ? backups[idx][0] : null))
+      .filter((key): key is string => key !== null);
+
     if (tempKeys.length > 0) {
-      await EncryptedStorage.multiRemove(tempKeys);
+      // Best-effort temp cleanup; don't let it mask the rollback report.
+      await EncryptedStorage.multiRemove(tempKeys).catch(() => {});
     }
+
+    if (restoreFailures.length > 0) {
+      throw new Error(
+        `Import failed during write and rollback could not restore all data ` +
+          `(failed keys: ${restoreFailures.length}). ` +
+          `Some records may be in an inconsistent state — please reinstall ` +
+          `the app and re-import your most recent backup before adding new data.`
+      );
+    }
+
     throw new Error(
       "Import failed during write. Your existing data has been restored."
     );
