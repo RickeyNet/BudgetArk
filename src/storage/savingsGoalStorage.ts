@@ -23,7 +23,10 @@ export const getSavingsGoalsIncludingDeleted = async (): Promise<SavingsGoal[]> 
   try {
     const parsed = JSON.parse(raw) as SavingsGoal[];
     const purged = purgeExpiredTombstones(parsed);
-    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
+    // Ref equality: `purgeExpiredTombstones` returns the original array
+    // when nothing was dropped, so the steady-state read costs O(1) here
+    // instead of the previous O(n × record-size) JSON.stringify diff.
+    if (purged !== parsed) {
       await saveSavingsGoals(purged);
     }
     return purged;

@@ -66,10 +66,18 @@ const pruneLimitHistory = (history: BudgetLimitHistory): BudgetLimitHistory => {
   return next;
 };
 
-const normalizeBudgetEntry = (entry: BudgetEntry): BudgetEntry => ({
-  ...entry,
-  updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),
-});
+/**
+ * Returns the same ref when the entry already has `updatedAt`, so the
+ * common (post-migration) read path doesn't allocate a new spread per
+ * entry just to copy identical data.
+ */
+const normalizeBudgetEntry = (entry: BudgetEntry): BudgetEntry => {
+  if (entry.updatedAt) return entry;
+  return {
+    ...entry,
+    updatedAt: entry.createdAt || new Date().toISOString(),
+  };
+};
 
 export const getBudgetEntries = async (): Promise<BudgetEntry[]> => {
   const all = await getBudgetEntriesIncludingDeleted();
@@ -86,9 +94,20 @@ export const getBudgetEntriesIncludingDeleted = async (): Promise<BudgetEntry[]>
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as BudgetEntry[];
-    const normalized = parsed.map(normalizeBudgetEntry);
+    let normalizeChanged = false;
+    const normalized = parsed.map((entry) => {
+      const next = normalizeBudgetEntry(entry);
+      if (next !== entry) normalizeChanged = true;
+      return next;
+    });
     const purged = purgeExpiredTombstones(normalized);
-    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
+    // `purgeExpiredTombstones` returns the same ref when nothing was
+    // dropped, and `normalizeBudgetEntry` returns the same element refs
+    // when no field needed filling. Together that means a steady-state
+    // read (every entry already normalized, no tombstones over TTL) costs
+    // O(1) here instead of the previous O(n × entry-size) JSON.stringify
+    // diff against itself.
+    if (normalizeChanged || purged !== normalized) {
       await saveBudgetEntries(purged);
     }
     return purged;

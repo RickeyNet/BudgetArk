@@ -272,11 +272,15 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
 
 ## P3 — Lower
 
-- [ ] **`getBudgetEntries` rewrites all entries on every read where any normalization changes anything** — startup latency, no integrity issue. `src/storage/budgetStorage.ts:69-82`. *(deferred — only fires when normalization changes data, which is rare after first migration)*
+- [x] **`getBudgetEntries` rewrites all entries on every read where any normalization changes anything** — startup latency, no integrity issue. `src/storage/budgetStorage.ts:69-82`. Same opt applied to `getDebtsIncludingDeleted`, `getPaymentsIncludingDeleted`, `getSavingsGoalsIncludingDeleted`, `getAssetAccountsIncludingDeleted`. Normalize helpers now return the same ref when nothing needs filling; the read path uses ref equality against `purgeExpiredTombstones` (which already returns the original array on no-op) instead of an O(n × record-size) `JSON.stringify` self-diff.
 - [x] **`useTabCoachmark.handleNext` setTimeout has no cleanup on unmount** — defensive only. `src/onboarding/useTabCoachmark.tsx:52-71`.
 - [x] **`CoachmarksProvider.markSeen` calls async `persist` from inside setState updater** — fire-and-forget, no observed failure. `src/onboarding/CoachmarksProvider.tsx:73-84`.
 - [x] **`calcAvgMonthlyExpenses` excludes zero-spend months — biases the average upward** — affects EF target calculation. `src/screens/UtilitiesScreen.tsx:104`.
-- [ ] **`calcInvestmentGrowth` clamps negative rates to 0** — silently suppresses deflationary scenarios. `src/utils/calculations.ts:355-376`. *(deferred — would need UI changes to expose negative rates)*
+- [x] **`calcInvestmentGrowth` clamps negative rates to 0** — silently suppresses deflationary scenarios. `src/utils/calculations.ts:355-376`. Math now allows `[-MAX_RATE, MAX_RATE]` — formula is well-defined for any monthly r > -1 and -200% annual maps to monthly ≈ -0.167. Same clamp widened in `calcInvestmentTimeline`. UI still defaults to positive input; this just makes the function correct if a future scenario picker exposes losses.
+
+## Round 3 — Self-audit findings on the v1.4.16 changes themselves
+
+- [x] **`linkedAccountRecurring` orphan stamping when a linked asset account is deleted** — entry's `lastAppliedMonth` advanced to "now" even when the linked account no longer existed in the live array, so the credit silently vanished and every subsequent month treated the entry as already applied. Now skips entries pointing to a non-live account so they stay in catch-up state if the user later relinks.
 
 ## Suggested manual test list
 

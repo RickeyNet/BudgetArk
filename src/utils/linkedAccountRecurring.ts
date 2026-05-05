@@ -52,10 +52,21 @@ export const applyMissedRecurringLinkedAccountContributions = (
   const currentMonth = getMonthKey(fromDate);
   const nextEntries = entries.map((entry) => ({ ...entry }));
   const totalsByAccountId = new Map<string, number>();
+  // Callers pass live (non-tombstoned) accounts. An entry pointing to an
+  // account that no longer exists used to still advance its `lastAppliedMonth`
+  // here even though the credit silently vanished (the missing account isn't
+  // in the map below) — so the user lost one month's contribution at delete
+  // time and every subsequent month the entry was treated as "already
+  // applied" with nothing to apply against. Skipping orphans keeps the
+  // entry in "needs catch-up" state so a future fix-up (relink to a
+  // different account) can apply the missed months instead of stranding
+  // them.
+  const liveAccountIds = new Set(assetAccounts.map((a) => a.id));
   let changed = false;
 
   for (const entry of nextEntries) {
     if (!entry.recurring || !entry.linkedAccountId) continue;
+    if (!liveAccountIds.has(entry.linkedAccountId)) continue;
 
     const entryStartMonth = monthKeyFromISO(entry.date);
     const lastApplied = entry.lastAppliedMonth ?? entryStartMonth;

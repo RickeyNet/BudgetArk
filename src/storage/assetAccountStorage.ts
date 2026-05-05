@@ -23,7 +23,10 @@ export const getAssetAccountsIncludingDeleted = async (): Promise<AssetAccount[]
   try {
     const parsed = JSON.parse(raw) as AssetAccount[];
     const purged = purgeExpiredTombstones(parsed);
-    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
+    // Ref equality: `purgeExpiredTombstones` returns the original array
+    // when nothing was dropped, so the steady-state read costs O(1) here
+    // instead of the previous O(n × record-size) JSON.stringify diff.
+    if (purged !== parsed) {
       await saveAssetAccounts(purged);
     }
     return purged;

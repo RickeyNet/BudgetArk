@@ -69,11 +69,17 @@ A third-pass audit found four more concrete issues — three were the same shape
 - **`updatedAt` not enforced at the trust boundary** — pre-existing gap, but bigger now that we lean entirely on LWW for delete propagation. All five entity validators (`isDebtItem`, `isPaymentItem`, `isBudgetEntryItem`, `isSavingsGoalItem`, `isAssetAccountItem`) now call `isOptionalIso(item.updatedAt)`. Missing field is still allowed (older peers stay compatible — they just lose LWW to the local record, which is the safe default), but a peer sending garbage in `updatedAt` is rejected at the validator instead of silently producing a `tsOf === 0` that then loses every comparison.
 - **`EncryptedStorage.multiSet` duplicate-key guard** — no current caller passes the same key twice, but the silent last-write-wins behavior at the platform layer combined with the per-key write-queue tail map only retaining one entry meant any earlier queued write for that key could resolve *after* the multiSet and clobber it. Now throws on duplicate keys; cheap to detect, nightmare to debug if it ever happened.
 
+### Final cleanup pass
+
+Picked up the previously-deferred items from `Potentialbugs.md` plus one self-audit finding on the v1.4.16 changes themselves.
+
+- **`getBudgetEntries` rewrite-on-read churn** (and the matching `getDebtsIncludingDeleted` / `getPaymentsIncludingDeleted` / `getSavingsGoalsIncludingDeleted` / `getAssetAccountsIncludingDeleted` paths). The previous pattern was `parsed.map(normalizeX) → purgeExpiredTombstones → JSON.stringify(parsed) !== JSON.stringify(purged)` for the gate, which allocated a new spread per record on every read and ran an O(n × record-size) self-diff on data that almost always hadn't changed. Normalize helpers now return the same element ref when no field needs filling; the read path tracks a `normalizeChanged` boolean and compares array identity against `purgeExpiredTombstones`'s "returns original ref on no-op" semantics. Steady-state reads (post-migration, no expired tombstones) cost O(1) instead of O(n).
+- **`calcInvestmentGrowth` clamps negative rates to 0** — silently turned a deflationary / loss scenario into a 0%-return one. Math accepts any monthly r > −1, so widened to `[-MAX_RATE, MAX_RATE]`. UI still defaults to positive input — this just makes the function correct if a future loss-scenario picker exposes negative rates. Same widening applied to `calcInvestmentTimeline`.
+- **`linkedAccountRecurring` orphan stamping (self-audit finding)** — when an asset account got soft-deleted, recurring budget entries linked to it still advanced their `lastAppliedMonth` on the next focus catch-up even though the missing account never received the credit. Result: the user silently lost one month's contribution at delete time, and the entry was thereafter treated as already applied with nothing to apply against. Catch-up now skips entries whose `linkedAccountId` isn't in the live-account set, leaving them in needs-catch-up state so a future relink can apply the missed months.
+
 ### Deferred
 
-- `getBudgetEntries` rewrite-on-read — only fires when normalization changes data; rare after the first migration pass.
-- `calcInvestmentGrowth` negative-rate clamp — would need UI changes to expose negative rates; behavior change risk.
-- Theme/Density null-render flicker (~10–30 ms blank frame) — would need a splash background or coordinated `ready` gate at the App level.
+- Theme/Density null-render flicker (~10–30 ms blank frame) — already gated on a `ready` boolean above; collapsing the blank frame to zero would need a splash background or a coordinated `ready` gate at the App level.
 - Merge-mode JSON import resurrection of locally-tombstoned records — sync corrects on next round-trip via LWW (partner's tombstone wins). Annoying intermediate state but self-corrects.
 
 ### Verification

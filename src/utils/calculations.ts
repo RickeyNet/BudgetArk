@@ -364,7 +364,12 @@ export const calcInvestmentGrowth = (
   years: number
 ): number => {
   monthlyContribution = clamp(monthlyContribution, 0, MAX_PAYMENT);
-  annualReturn = clamp(annualReturn, 0, MAX_RATE);
+  // Allow negative annual returns so deflationary / loss scenarios produce
+  // a real number instead of the silently-suppressed `0` the old `clamp(_, 0, …)`
+  // gave. The annuity formula `((1+r)^n − 1) / r` is well-defined for any
+  // monthly r > −1; the lower bound here is −MAX_RATE = −200% annual, which
+  // maps to monthly r = −1/6 ≈ −0.167, well clear of that singularity.
+  annualReturn = clamp(annualReturn, -MAX_RATE, MAX_RATE);
   years = clamp(years, 0, MAX_YEARS);
 
   if (monthlyContribution <= 0 || years <= 0) return 0;
@@ -392,7 +397,9 @@ export const calcInvestmentTimeline = (
   years: number
 ): { year: number; total: number; contributed: number; interest: number }[] => {
   monthlyContribution = clamp(monthlyContribution, 0, MAX_PAYMENT);
-  annualReturn = clamp(annualReturn, 0, MAX_RATE);
+  // Match calcInvestmentGrowth — negative annual returns are valid input
+  // for deflationary / loss scenarios; previously clamped to 0 here too.
+  annualReturn = clamp(annualReturn, -MAX_RATE, MAX_RATE);
   years = clamp(years, 0, MAX_YEARS);
 
   const timeline: { year: number; total: number; contributed: number; interest: number }[] = [];

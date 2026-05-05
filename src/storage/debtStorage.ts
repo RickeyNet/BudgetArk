@@ -78,11 +78,22 @@ const splitLegacyCarHouse = (name: string): DebtClass => {
   return "car";
 };
 
+/**
+ * Returns the same ref when every field is already in canonical shape, so
+ * the steady-state read path (post-migration) doesn't spread + reallocate
+ * every debt record on every getDebts call.
+ */
 const normalizeDebt = (debt: Debt): Debt => {
   const rawClass = (debt as { debtClass?: unknown }).debtClass;
+  const ownerOk = isDebtOwner(debt.owner);
+  const classOk = isDebtClass(rawClass);
+  const sourceOk = isDebtClassSource(debt.debtClassSource);
+  const stampOk = !!debt.updatedAt;
+  if (ownerOk && classOk && sourceOk && stampOk) return debt;
+
   let nextClass: DebtClass;
-  if (isDebtClass(rawClass)) {
-    nextClass = rawClass;
+  if (classOk) {
+    nextClass = rawClass as DebtClass;
   } else if (rawClass === "car_house") {
     nextClass = splitLegacyCarHouse(debt.name);
   } else {
@@ -90,11 +101,9 @@ const normalizeDebt = (debt: Debt): Debt => {
   }
   return {
     ...debt,
-    owner: isDebtOwner(debt.owner) ? debt.owner : "mine",
+    owner: ownerOk ? debt.owner : "mine",
     debtClass: nextClass,
-    debtClassSource: isDebtClassSource(debt.debtClassSource)
-      ? debt.debtClassSource
-      : "inferred",
+    debtClassSource: sourceOk ? debt.debtClassSource : "inferred",
     updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
   };
 };
@@ -120,9 +129,14 @@ export const getDebtsIncludingDeleted = async (): Promise<Debt[]> => {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as Debt[];
-    const normalized = parsed.map(normalizeDebt);
+    let normalizeChanged = false;
+    const normalized = parsed.map((debt) => {
+      const next = normalizeDebt(debt);
+      if (next !== debt) normalizeChanged = true;
+      return next;
+    });
     const purged = purgeExpiredTombstones(normalized);
-    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
+    if (normalizeChanged || purged !== normalized) {
       await saveDebts(purged);
     }
     return purged;
@@ -200,10 +214,13 @@ export const updateDebt = async (
  *
  * @returns Promise<Payment[]> - array of all payments
  */
-const normalizePayment = (payment: Payment): Payment => ({
-  ...payment,
-  updatedAt: payment.updatedAt || payment.date || new Date().toISOString(),
-});
+const normalizePayment = (payment: Payment): Payment => {
+  if (payment.updatedAt) return payment;
+  return {
+    ...payment,
+    updatedAt: payment.date || new Date().toISOString(),
+  };
+};
 
 export const getPayments = async (): Promise<Payment[]> => {
   const all = await getPaymentsIncludingDeleted();
@@ -221,9 +238,14 @@ export const getPaymentsIncludingDeleted = async (): Promise<Payment[]> => {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as Payment[];
-    const normalized = parsed.map(normalizePayment);
+    let normalizeChanged = false;
+    const normalized = parsed.map((payment) => {
+      const next = normalizePayment(payment);
+      if (next !== payment) normalizeChanged = true;
+      return next;
+    });
     const purged = purgeExpiredTombstones(normalized);
-    if (JSON.stringify(parsed) !== JSON.stringify(purged)) {
+    if (normalizeChanged || purged !== normalized) {
       await EncryptedStorage.setItem(
         STORAGE_KEYS.PAYMENTS,
         JSON.stringify(purged)
