@@ -246,6 +246,67 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - **Option C — Output validation:** Don't restrict inputs, but check outputs. If any result is `NaN`, `Infinity`, or unexpectedly negative, return a safe fallback.
 - Recommended: **Option A** — prevents the issue at the source. Bounds match `importData.ts` limits (`MAX_MONEY: 1_000_000_000`, `MAX_RATE: 200`). Clamping is silent and non-disruptive.
 
+### v1.4.16 Audit Follow-ups
+
+#### High
+- [ ] Add app-launch biometric / PIN gate
+  Files: new screen + `App.tsx`, `package.json` (add `expo-local-authentication`)
+  No auth between device unlock and full financial data. Anyone past the lockscreen sees balances, debts, payments. Biggest user-facing gap for a finance app.
+  - **Option A — Biometric required, PIN fallback:** Gate first render on `LocalAuthentication.authenticateAsync({ disableDeviceFallback: false })`. Falls back to device passcode if Face/Touch ID enrollment is missing.
+  - **Option B — Optional, off by default:** Setting in ProfileScreen; default off so existing users aren't surprised on update. Lower friction, lower protection.
+  - **Option C — Optional, prompt on first launch after update:** One-shot opt-in modal explaining the trade-off, default to enabled if the user dismisses.
+  - Recommended: **Option C** — best mix of security and not breaking expectations for existing installs.
+
+#### Medium
+- [ ] Add MAC to encrypted exports (or switch to AES-GCM)
+  File: `src/utils/exportData.ts`, `src/utils/importData.ts`
+  v2 encrypted export uses AES-CBC with no integrity tag. JSON-parse failure is the only "tamper" signal. No realistic padding-oracle exposure today (user decrypts locally), but a missing MAC is an audit flag every time.
+  - **Option A — AES-GCM:** Replace CBC with GCM; auth tag is built in. Cleanest. CryptoJS doesn't ship GCM though — would need `expo-crypto`/native or a vetted JS GCM lib.
+  - **Option B — Encrypt-then-MAC envelope:** Keep CBC, append `HMAC-SHA256(salt | iv | ciphertext)` to the v2 prefix as a new `__BUDGETARK_ENC3__:` format. Stays inside CryptoJS. Mirrors the storage-layer pattern.
+  - **Option C — Leave as-is, document the threat model:** Note in code that integrity is JSON-parse only and any tampering corrupts decrypt → user re-imports.
+  - Recommended: **Option B** — matches what `encryptedStorage.ts` already does, no new dep, bumps prefix so legacy v2 stays decryptable.
+
+- [ ] Pin `expo-secure-store` to device-only accessibility
+  File: `src/storage/encryptedStorage.ts:124`
+  `SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key)` uses no options, so iOS default is `WHEN_UNLOCKED` — included in iCloud Keychain sync. The master encryption key for all on-device data could end up in iCloud.
+  - **Option A — `WHEN_UNLOCKED_THIS_DEVICE_ONLY`:** Pass `{ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }`. Key never leaves the device, but a device restore to a new phone loses access — user has to re-import.
+  - **Option B — `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`:** Same iCloud-blocked guarantee, but readable after first unlock post-boot (lets a future background sync work). Slightly weaker at-rest posture.
+  - **Option C — Leave default + document trade-off:** Easier device migration via iCloud Keychain restore, at the cost of the key existing off-device.
+  - Recommended: **Option A** — finance data shouldn't quietly ride iCloud. Pair with a clear "back up your encrypted JSON before switching phones" note in the restore flow.
+
+#### Low
+- [ ] Pass crypto keys as `WordArray`, not hex string passphrases
+  Files: `src/storage/encryptedStorage.ts:154-198`, `src/sync/transportService.ts:39-51`
+  `CryptoJS.AES.encrypt(plaintext, hexKeyString)` triggers OpenSSL's EVP_BytesToKey (single-round MD5) to re-derive the AES key + IV from a string treated as a passphrase. Inputs already have full 256-bit entropy so it's not exploitable, but the weak-KDF flag will surface on every audit. `exportData.ts` already does this right.
+  - **Option A — Switch both call sites to `CryptoJS.enc.Hex.parse(key)` + explicit random IV:** Mirrors the v2 export path. Storage stays backward-compatible if we bump to a `__ENCV3__:` prefix and migrate-on-read.
+  - **Option B — Leave as-is, add a comment explaining why it's safe:** Cheapest. Keeps the audit-flag treadmill.
+  - Recommended: **Option A** — same pattern as exports, eliminates the recurring audit comment, migration-on-read is the same shape we already used for V1→V2.
+
+- [ ] Use HKDF (or distinct random keys) so HMAC and AES don't share a key
+  Files: `src/storage/encryptedStorage.ts`, `src/sync/transportService.ts`
+  Both at-rest and on-the-wire formats use the same key for `AES.encrypt` and `HmacSHA256`. With a 256-bit random root key it's not breakable, but key-separation is standard hygiene and would isolate any future weakness in either primitive.
+  - **Option A — HKDF-SHA256 from the root key into `encKey || macKey`:** Derive both subkeys lazily on first use; cache. CryptoJS lacks HKDF but it's ~20 lines on top of `HmacSHA256`.
+  - **Option B — Generate two independent keys at SecureStore-init time:** Simpler, no derivation. Adds a second SecureStore entry; migration on first launch.
+  - Recommended: **Option A** — single root key keeps SecureStore footprint small and pairing/export envelopes don't need to plumb a second secret.
+
+- [ ] Constant-time HMAC comparison
+  Files: `src/storage/encryptedStorage.ts:188`, `src/sync/transportService.ts:47`
+  `storedHmac !== calculatedHmac` is short-circuiting string compare. No realistic remote-timing exposure (storage is local, sync is LAN TCP through the JS bridge), but trivial to fix.
+  - **Option A — Length-checked XOR-accumulate compare:** `if (a.length !== b.length) return false; let d=0; for (i) d |= a.charCodeAt(i)^b.charCodeAt(i); return d===0`.
+  - Recommended: **Option A** — five lines, removes the audit nit.
+
+- [ ] Document the no-forward-secrecy model for sync
+  Files: `src/sync/transportService.ts`, `docs/`
+  Sync is pre-shared-key with no per-session ephemeral exchange. If `sharedSecret` ever leaks (compromised device, leaked backup), every captured past sync frame is decryptable. Acceptable for the threat model, but not currently called out.
+  - **Option A — Comment in `transportService.ts` + paragraph in security docs:** Explains the choice and the ratchet-style upgrade path if it ever matters.
+  - **Option B — Add an ephemeral key exchange (X25519 ECDH per session):** Real forward secrecy. Big lift; CryptoJS doesn't ship curve25519. Probably overkill for a LAN sync between two paired devices.
+  - Recommended: **Option A** — match the reality of the threat model rather than over-engineer.
+
+#### Info
+- [ ] Pairing listens on `0.0.0.0` — note in security docs
+  File: `src/sync/pairingService.ts:203`
+  During the 60s pairing window the TCP server accepts from any LAN host. Mitigated by the 40-bit Crockford code + 100k-iter PBKDF2 + user-confirmed fingerprint, so a successful attack requires both code guess and fingerprint trick. Worth a doc line so future contributors don't tighten the bind without understanding the discovery flow needs it.
+
 ---
 
 ## Code Quality & Crash Prevention
