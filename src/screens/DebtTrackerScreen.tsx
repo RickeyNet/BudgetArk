@@ -946,21 +946,30 @@ const DebtTrackerScreen: React.FC = () => {
             style={styles.summaryRingWrap}
             onPress={() => setShowHistory(true)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Payoff ${overallPercent} percent. Tap to view payment history.`}
           >
-            <ProgressRing
-              percent={overallPercent}
-              size={80}
-              strokeWidth={6}
-              color={overallPercent >= 60 ? colors.success : colors.accent}
-            />
-            <Text
-              style={[
-                styles.summaryRingLabel,
-                { color: overallPercent >= 60 ? colors.success : colors.accent },
-              ]}
-            >
-              {overallPercent}%
-            </Text>
+            <View style={styles.summaryRingInner}>
+              <ProgressRing
+                percent={overallPercent}
+                size={80}
+                strokeWidth={6}
+                color={overallPercent >= 60 ? colors.success : colors.accent}
+              />
+              <Text
+                style={[
+                  styles.summaryRingLabel,
+                  { color: overallPercent >= 60 ? colors.success : colors.accent },
+                ]}
+              >
+                {overallPercent}%
+              </Text>
+            </View>
+            <View style={[styles.summaryRingHint, { backgroundColor: `${colors.accent}20` }]}>
+              <Text style={[styles.summaryRingHintText, { color: colors.accent }]}>
+                🕐 View history
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -1545,8 +1554,11 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   summaryLabel: { fontSize: scale(11), color: colors.textDim, letterSpacing: 1, marginBottom: 4 },
   summaryAmount: { fontSize: scale(32), fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] },
   paidText: { fontSize: scale(14), color: colors.success, fontWeight: "600", marginTop: 4 },
-  summaryRingWrap: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
+  summaryRingWrap: { alignItems: "center", justifyContent: "center" },
+  summaryRingInner: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
   summaryRingLabel: { position: "absolute", fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  summaryRingHint: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  summaryRingHintText: { fontSize: scale(10), fontWeight: "700", letterSpacing: 0.2 },
 
    badgeRow: { flexDirection: "row", gap: 8, marginTop: 14 },
    badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
