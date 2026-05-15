@@ -71,6 +71,7 @@ import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
 import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal";
 import { triggerHaptic } from "../utils/haptics";
+import { useAchievements } from "../achievements/AchievementsProvider";
 import { simulatePayoffPlan } from "../utils/calculations";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -192,6 +193,7 @@ const getNewlyPaidOffDebt = (
 };
 
 const DebtTrackerScreen: React.FC = () => {
+  const { runCheck: notifyAchievementCheck } = useAchievements();
   const [debts, setDebts] = useState<Debt[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
@@ -613,7 +615,8 @@ const DebtTrackerScreen: React.FC = () => {
     await saveDebts(updated);
     await syncNetWorthSnapshot();
     setShowModal(false);
-  }, [debts]);
+    void notifyAchievementCheck();
+  }, [debts, notifyAchievementCheck]);
 
   /** Record a payment against a debt */
   const handlePayment = useCallback(async (debtId: string, amount: number) => {
@@ -633,7 +636,8 @@ const DebtTrackerScreen: React.FC = () => {
       triggerHaptic("success");
     }
     await syncNetWorthSnapshot(paymentNow);
-  }, [debts]);
+    void notifyAchievementCheck();
+  }, [debts, notifyAchievementCheck]);
 
   /** Open edit modal for a debt */
   const handleEdit = useCallback((debt: Debt) => {
@@ -657,7 +661,8 @@ const DebtTrackerScreen: React.FC = () => {
     } else {
       triggerHaptic("success");
     }
-  }, [debts]);
+    void notifyAchievementCheck();
+  }, [debts, notifyAchievementCheck]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -728,8 +733,9 @@ const DebtTrackerScreen: React.FC = () => {
       }
 
       setMilestonePlan(nextPlan);
+      void notifyAchievementCheck();
     },
-    []
+    [notifyAchievementCheck]
   );
 
   const handleSetCurrentMilestone = useCallback(
@@ -742,8 +748,9 @@ const DebtTrackerScreen: React.FC = () => {
       };
       setMilestonePlan(nextPlan);
       await saveDebtMilestonePlan(nextPlan);
+      void notifyAchievementCheck();
     },
-    [milestonePlan]
+    [milestonePlan, notifyAchievementCheck]
   );
 
   const openMilestonesModal = useCallback(() => {
@@ -791,8 +798,9 @@ const DebtTrackerScreen: React.FC = () => {
         ...current,
         [key]: String(Math.round(normalized)),
       }));
+      void notifyAchievementCheck();
     },
-    [targetDraftByStep]
+    [notifyAchievementCheck, targetDraftByStep]
   );
 
   const handleSetSavingsReserve = useCallback(
@@ -815,8 +823,9 @@ const DebtTrackerScreen: React.FC = () => {
       await syncNetWorthSnapshot();
       setSavingsReserve(targetAmount);
       setSavingsDraft("");
+      void notifyAchievementCheck();
     },
-    [savingsReserve]
+    [notifyAchievementCheck, savingsReserve]
   );
 
   /** Sort debts based on payoff strategy.
@@ -858,8 +867,9 @@ const DebtTrackerScreen: React.FC = () => {
       setSavingsGoals(updated);
       await saveSavingsGoals(updated);
       await syncNetWorthSnapshot();
+      void notifyAchievementCheck();
     },
-    [savingsGoals]
+    [notifyAchievementCheck, savingsGoals]
   );
 
   const handleUpdateSavingsGoal = useCallback(
@@ -876,8 +886,9 @@ const DebtTrackerScreen: React.FC = () => {
       setSavingsGoals(updated);
       await saveSavingsGoals(updated);
       await syncNetWorthSnapshot();
+      void notifyAchievementCheck();
     },
-    [savingsGoals]
+    [notifyAchievementCheck, savingsGoals]
   );
 
   const handleDeleteSavingsGoal = useCallback(

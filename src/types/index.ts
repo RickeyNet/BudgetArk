@@ -393,6 +393,34 @@ export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
   },
 ];
 
+/* ─── Achievement Types ─── */
+
+export type AchievementTier = "bronze" | "silver" | "gold" | "legendary";
+
+export interface Achievement {
+  id: string;
+  glyph: string;
+  tier: AchievementTier;
+  title: string;
+  description: string;
+  /** Shown when locked, e.g. "Pay 50% of original debt" */
+  hint: string;
+}
+
+export interface UnlockedAchievements {
+  /** Map of achievement id → ISO timestamp when it was first unlocked */
+  unlocked: Record<string, number>;
+  /**
+   * Timestamp of the first `evaluateAchievements` call after install.
+   * Used to suppress celebration popups for retroactive unlocks on a
+   * user's first open of the feature; later evaluations celebrate.
+   */
+  firstEvaluatedAt?: number;
+  version: number;
+}
+
+export const ACHIEVEMENTS_STORAGE_VERSION = 1;
+
 /* ─── Navigation Types ─── */
 
 /**

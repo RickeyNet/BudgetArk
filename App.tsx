@@ -27,6 +27,7 @@ import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
 import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
 import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
+import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
@@ -388,7 +389,9 @@ export default function App(): React.JSX.Element {
             <CurrencyProvider>
               <CoachmarksProvider>
                 <CoachmarkAnchorProvider>
-                  <AppContent />
+                  <AchievementsProvider>
+                    <AppContent />
+                  </AchievementsProvider>
                 </CoachmarkAnchorProvider>
               </CoachmarksProvider>
             </CurrencyProvider>

@@ -12,6 +12,10 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
+import Medal from "../components/Medal";
+import AchievementsScreen from "./AchievementsScreen";
+import { ACHIEVEMENT_DEFS } from "../data/achievementDefs";
+import { useAchievements } from "../achievements/AchievementsProvider";
 import {
   AssetAccount,
   AssetAccountCategory,
@@ -68,12 +72,24 @@ const BridgeScreen: React.FC = () => {
   const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
+  const [showAchievements, setShowAchievements] = useState(false);
+  const {
+    unlocked: achievementUnlocked,
+    totalCount: totalAchievements,
+    runCheck: refreshAchievements,
+  } = useAchievements();
 
   const refreshNetWorthSnapshots = useCallback(async () => {
     const nextSnapshots = await syncNetWorthSnapshot();
     setNetWorthSnapshots(nextSnapshots);
     return nextSnapshots;
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshAchievements();
+    }, [refreshAchievements])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -248,7 +264,8 @@ const BridgeScreen: React.FC = () => {
     await saveAssetAccounts(nextAccounts);
     await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, refreshNetWorthSnapshots]);
+    void refreshAchievements();
+  }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, refreshAchievements, refreshNetWorthSnapshots]);
 
   const deleteAsset = useCallback(async (id: string) => {
     // Soft-delete so the partner's next sync removes this account locally.
@@ -256,7 +273,8 @@ const BridgeScreen: React.FC = () => {
     setAssetAccounts(nextAccounts);
     await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [closeAssetModal, refreshNetWorthSnapshots]);
+    void refreshAchievements();
+  }, [closeAssetModal, refreshAchievements, refreshNetWorthSnapshots]);
 
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);
@@ -296,7 +314,8 @@ const BridgeScreen: React.FC = () => {
     await refreshNetWorthSnapshots();
     setShowEfContribModal(false);
     setEfContribAmount("");
-  }, [efContribAmount, keelTarget, refreshNetWorthSnapshots, savingsGoals]);
+    void refreshAchievements();
+  }, [efContribAmount, keelTarget, refreshAchievements, refreshNetWorthSnapshots, savingsGoals]);
 
   const listHeader = (
     <View>
@@ -407,6 +426,34 @@ const BridgeScreen: React.FC = () => {
           </>
         )}
       </View>
+
+      <TouchableOpacity
+        style={styles.shipsLogCard}
+        onPress={() => setShowAchievements(true)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Open Ship's Log achievements"
+      >
+        <View style={styles.shipsLogPreview}>
+          {ACHIEVEMENT_DEFS.slice(0, 4).map((def) => (
+            <View key={def.id} style={styles.shipsLogMedal}>
+              <Medal
+                tier={def.tier}
+                glyph={def.glyph}
+                locked={achievementUnlocked[def.id] === undefined}
+                size={44}
+              />
+            </View>
+          ))}
+        </View>
+        <View style={styles.shipsLogTextBlock}>
+          <Text style={styles.shipsLogTitle}>Ship's Log</Text>
+          <Text style={styles.shipsLogSubtitle}>
+            {`${Object.keys(achievementUnlocked).length}/${totalAchievements} earned`}
+          </Text>
+        </View>
+        <Text style={[styles.shipsLogChevron, { color: colors.accent }]}>›</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -540,6 +587,14 @@ const BridgeScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      <AchievementsScreen
+        visible={showAchievements}
+        onClose={() => {
+          setShowAchievements(false);
+          void refreshAchievements();
+        }}
+      />
+
       {coachmark}
     </View>
   );
@@ -768,6 +823,42 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     assetCategoryChipText: {
       fontSize: scale(12),
       fontWeight: "600",
+    },
+    shipsLogCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
+      gap: tokens.gapSm + 4,
+    },
+    shipsLogPreview: {
+      flexDirection: "row",
+    },
+    shipsLogMedal: {
+      marginRight: -10,
+    },
+    shipsLogTextBlock: {
+      flex: 1,
+      marginLeft: 14,
+    },
+    shipsLogTitle: {
+      fontSize: scale(16),
+      fontWeight: "700",
+      color: colors.text,
+    },
+    shipsLogSubtitle: {
+      fontSize: scale(12),
+      color: colors.textDim,
+      marginTop: 2,
+    },
+    shipsLogChevron: {
+      fontSize: scale(28),
+      fontWeight: "300",
+      paddingHorizontal: 4,
     },
   });
 };

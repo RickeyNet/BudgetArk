@@ -429,6 +429,74 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
 - [ ] Savings Streak Tracker — track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
+- [ ] Trophy Room / Ark Achievements — gamification layer built entirely on existing data. Auto-unlocks retroactively for current users on first open.
+
+  Purpose: add a dopamine-rich progress surface without changing how data is entered. Every badge is derived from debts, payments, savings goals, budget entries, milestones, and net worth that the app already stores. No new write paths, no behavior shift.
+
+  Visual approach (matches existing emoji-icon style in `AppNavigator.tsx:48`):
+  - Each badge = `react-native-svg` medal ring (already a dep) + a centered emoji glyph.
+  - Tier rings: Bronze `#A87445` (easy), Silver `#C7CBD1` (sustained), Gold `#E8C66E` (milestone-grade), Legendary gradient (capstones, via `LinearGradient` from `react-native-svg`).
+  - Locked state: same ring at 30% opacity, glyph replaced with `🔒` (or grayscale silhouette).
+  - Theme-aware: ring stroke reads from `useTheme()` tokens so Forest Gold/Synthwave/Slate each tint differently.
+  - Reuse the existing debt-payoff celebration animation when a new badge unlocks.
+
+  v1 badge list (~16-20 — sweet spot before it feels grindy):
+
+  | Achievement | Glyph | Tier | Unlock condition |
+  |---|---|---|---|
+  | First Steps | ⚓ | Bronze | First debt logged |
+  | Patched the Hull | 🔨 | Bronze | First payment recorded |
+  | Cartographer | 🗺️ | Bronze | Exported data at least once |
+  | Crow's Nest | 🔭 | Bronze | Opened Monthly Review 3 times |
+  | Steady Crew | ⚖️ | Silver | 3 consecutive months budget met |
+  | Galley Stocked | 🍞 | Silver | Emergency fund hits $1,000 |
+  | Half Mast | 🚩 | Silver | 50% of original debt total paid |
+  | Sextant Sharp | 🧭 | Silver | First savings goal completed |
+  | Lighthouse Keeper | 🗼 | Silver | 30-day app-open streak |
+  | First Mate | 🤝 | Silver | Partner sync paired successfully |
+  | Treasure Hoard I | 🪙 | Bronze | Net worth crosses $10k |
+  | Treasure Hoard II | 💎 | Silver | Net worth crosses $25k |
+  | Treasure Hoard III | 👑 | Gold | Net worth crosses $100k |
+  | Debt-Free Captain | 🏴‍☠️ | Gold | All non-mortgage debt cleared |
+  | Ark Builder | 🛠️ | Gold | Hull/Deck/Supplies milestone completed |
+  | All Sails Set | ⛵ | Gold | Every budget category under limit for a month |
+  | Doubloon Streak | 🔥 | Gold | 12-month savings streak |
+  | Admiral | 👑 | Legendary | All milestones complete |
+
+  Data model:
+  - `Achievement` type: `{ id: string, unlockedAt: number, tier: 'bronze' | 'silver' | 'gold' | 'legendary' }`
+  - Storage key `@budgetark_achievements` in EncryptedStorage: `{ unlocked: Record<string, number>, version: number }` — `unlocked[id]` is the timestamp.
+  - `version` bump invalidates definitions when badge set changes meaningfully.
+
+  Files (proposed):
+  - `src/data/achievementDefs.ts` — array of `{ id, glyph, tier, title, description, check: (ctx) => boolean }`. `ctx` is `{ debts, payments, savingsGoals, budgetEntries, milestones, user }`.
+  - `src/utils/achievements.ts` — `evaluateAchievements(ctx)` walks defs, returns newly-unlocked IDs since last evaluation. Compares against stored `unlocked` map and persists new ones.
+  - `src/storage/achievementsStorage.ts` — CRUD for the unlocked map.
+  - `src/components/Medal.tsx` — SVG ring + glyph component. Props: `{ tier, glyph, locked, size }`.
+  - `src/screens/AchievementsScreen.tsx` — grid of medals, tap for detail sheet (title, description, unlock date, "How to earn" if locked). Filter chips: All / Earned / Locked.
+  - Entry point: card on Bridge ("Ship's Log — 8/18 earned") + button in Profile.
+  - Hook into existing celebration component for unlock animation; trigger from a `useEffect` on the screen that just performed the unlocking action (payment recorded, goal completed, etc.).
+
+  Evaluation strategy:
+  - Pure derivation from existing storage — never trust user input to "set" an achievement.
+  - Run `evaluateAchievements()` lazily: on app foreground, after each major write (payment, goal contribution, debt update), and on Achievements screen mount.
+  - Cheap because it's all in-memory loops over already-loaded data. No re-reading storage in the loop.
+
+  Retroactive unlock on first open after update:
+  - Existing users immediately get every badge their current data already qualifies for, all timestamped with "now."
+  - Pleasant surprise; no migration needed beyond first evaluation.
+
+  Out of scope (v1):
+  - XP / rank system (covered separately if added later).
+  - Weekly rotating quests.
+  - Custom user-defined achievements.
+  - Sharing badges as images (revisit if Annual Financial Report ships).
+
+  Upgrade path:
+  - v1.5: replace top-tier emoji glyphs (Admiral, Debt-Free Captain) with hand-drawn SVGs from a free set (Lucide/Tabler/Phosphor). Keep emoji for tiers 1-2. No layout change.
+  - v2: commissioned art set if traction warrants.
+
+  OTA-eligible: yes. No new deps. Uses `react-native-svg` (already in app) + emoji.
 - [ ] Quick-Entry Home Screen Widget — minimal widget to log an expense (category + amount) without opening the full app.
 - [ ] Bill Calendar View — monthly calendar showing when recurring expenses hit. Visual cash flow timing.
 - [ ] Spending Heatmap — calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.

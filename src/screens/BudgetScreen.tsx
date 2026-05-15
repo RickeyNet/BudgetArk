@@ -58,6 +58,7 @@ import {
 } from "../storage/assetAccountStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
+import { useAchievements } from "../achievements/AchievementsProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -224,6 +225,7 @@ const BudgetScreen: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const { runCheck: notifyAchievementCheck } = useAchievements();
   const coachmark = useTabCoachmark("Budget");
   const listRef = useRef<FlatList>(null);
   const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card", { scrollRef: listRef });
@@ -719,7 +721,8 @@ const BudgetScreen: React.FC = () => {
     ]);
     setShowAddModal(false);
     triggerHaptic("success");
-  }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
+    void notifyAchievementCheck();
+  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
@@ -761,7 +764,8 @@ const BudgetScreen: React.FC = () => {
     ]);
     setEditingEntry(null);
     triggerHaptic("success");
-  }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
+    void notifyAchievementCheck();
+  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
@@ -927,7 +931,8 @@ const BudgetScreen: React.FC = () => {
     await saveAssetAccounts(nextAccounts);
     await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, refreshNetWorthSnapshots]);
+    void notifyAchievementCheck();
+  }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, notifyAchievementCheck, refreshNetWorthSnapshots]);
 
   const deleteAsset = useCallback(async (id: string) => {
     // Soft-delete so the partner's next sync removes this account locally.
@@ -974,7 +979,8 @@ const BudgetScreen: React.FC = () => {
     await refreshNetWorthSnapshots();
     setShowEfContribModal(false);
     setEfContribAmount("");
-  }, [efContribAmount, keelTarget, refreshNetWorthSnapshots, savingsGoals]);
+    void notifyAchievementCheck();
+  }, [efContribAmount, keelTarget, notifyAchievementCheck, refreshNetWorthSnapshots, savingsGoals]);
 
   const listHeader = (
     <View>
