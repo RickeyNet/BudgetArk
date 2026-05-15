@@ -382,7 +382,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   No new deps. Uses React Native `Modal` + the existing theme/density tokens. OTA-eligible.
 - [ ] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage
 - [ ] Debt-Free Countdown Timer — live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
-- [ ] Annual Financial Report — end-of-year summary: total debt paid, total saved, net worth change, biggest spending category, months under budget. Shareable as an image (percentages and milestones only, no PII).
+- [x] Annual Financial Report — selectable calendar-year summary: total debt paid, total set aside, net worth change, top spending category, months under budget, cash flow + savings rate + monthly spending sparkline. Entry card on Bridge → AnnualReportModal. Shareable as aggregates/percentages-only text (no PII). Image capture deferred to v2 (would need a native view-shot dep + EAS rebuild; kept OTA-safe per request).
 - [ ] Budget Rollover Mode — unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
 - [ ] Spending Velocity Alerts — passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
 - [ ] Partner Budget Visibility Controls — mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.

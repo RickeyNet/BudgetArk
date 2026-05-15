@@ -14,6 +14,7 @@ import { generateUUID } from "../utils/uuid";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import Medal from "../components/Medal";
 import AchievementsScreen from "./AchievementsScreen";
+import AnnualReportModal from "../components/AnnualReportModal";
 import { ACHIEVEMENT_DEFS } from "../data/achievementDefs";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import {
@@ -73,6 +74,7 @@ const BridgeScreen: React.FC = () => {
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
   const [showAchievements, setShowAchievements] = useState(false);
+  const [showAnnualReport, setShowAnnualReport] = useState(false);
   const {
     unlocked: achievementUnlocked,
     totalCount: totalAchievements,
@@ -454,6 +456,23 @@ const BridgeScreen: React.FC = () => {
         </View>
         <Text style={[styles.shipsLogChevron, { color: colors.accent }]}>›</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.annualReportCard}
+        onPress={() => setShowAnnualReport(true)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Open your annual financial report"
+      >
+        <Text style={styles.annualReportGlyph}>📅</Text>
+        <View style={styles.annualReportTextBlock}>
+          <Text style={styles.annualReportTitle}>Annual Report</Text>
+          <Text style={styles.annualReportSubtitle}>
+            Your {new Date().getFullYear()} year in review
+          </Text>
+        </View>
+        <Text style={[styles.shipsLogChevron, { color: colors.accent }]}>›</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -593,6 +612,10 @@ const BridgeScreen: React.FC = () => {
           setShowAchievements(false);
           void refreshAchievements();
         }}
+      />
+      <AnnualReportModal
+        visible={showAnnualReport}
+        onClose={() => setShowAnnualReport(false)}
       />
 
       {coachmark}
@@ -859,6 +882,34 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(28),
       fontWeight: "300",
       paddingHorizontal: 4,
+    },
+    annualReportCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
+      gap: tokens.gapSm + 4,
+    },
+    annualReportGlyph: {
+      fontSize: scale(30),
+    },
+    annualReportTextBlock: {
+      flex: 1,
+      marginLeft: 6,
+    },
+    annualReportTitle: {
+      fontSize: scale(16),
+      fontWeight: "700",
+      color: colors.text,
+    },
+    annualReportSubtitle: {
+      fontSize: scale(12),
+      color: colors.textDim,
+      marginTop: 2,
     },
   });
 };
