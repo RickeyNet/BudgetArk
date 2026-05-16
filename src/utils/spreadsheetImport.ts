@@ -30,18 +30,15 @@ import {
   DERIVED_RECURRING_PREFIX,
 } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
+import { normalizeImportCategory } from "./recordValidators";
 import {
-  BUDGET_CATEGORIES,
   ASSET_ACCOUNT_CATEGORIES,
-  type BudgetCategory,
   type AssetAccountCategory,
 } from "../types";
 
 /** Cap raw spreadsheet file size (uncompressed bytes for csv, on-disk size for xlsx). */
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_ROWS_PER_SHEET = 5000;
-
-const VALID_BUDGET_CATEGORIES = new Set<string>(BUDGET_CATEGORIES);
 
 /** Categories where the app legitimately writes negative-amount correction entries. */
 const NEGATIVE_AMOUNT_CATEGORIES = new Set<string>([
@@ -244,9 +241,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
   const typeRaw = parseString(get(row, "Type")).toLowerCase();
   const type = typeRaw === "income" ? "income" : typeRaw === "expense" ? "expense" : null;
   const categoryRaw = parseString(get(row, "Category"), 60);
-  const category: BudgetCategory | null = VALID_BUDGET_CATEGORIES.has(categoryRaw)
-    ? (categoryRaw as BudgetCategory)
-    : null;
+  const category: string | null = normalizeImportCategory(categoryRaw);
   const amount = parseAmount(get(row, "Amount"));
   const dateIso = parseDate(get(row, "Date"));
 
@@ -314,9 +309,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
 
 const rowToBudgetLimit = (row: Record<string, unknown>) => {
   const categoryRaw = parseString(get(row, "Category"), 60);
-  const category: BudgetCategory | null = VALID_BUDGET_CATEGORIES.has(categoryRaw)
-    ? (categoryRaw as BudgetCategory)
-    : null;
+  const category: string | null = normalizeImportCategory(categoryRaw);
   const monthlyLimit = parseAmount(get(row, "MonthlyLimit", "Monthly Limit", "Limit"));
 
   if (!category || !Number.isFinite(monthlyLimit) || monthlyLimit <= 0) {

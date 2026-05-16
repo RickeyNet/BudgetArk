@@ -13,7 +13,12 @@ import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile } from "expo-file-system";
 import CryptoJS from "crypto-js";
 import * as EncryptedStorage from "../storage/encryptedStorage";
-import { DEFAULT_CURRENCY_PREFERENCE_ID } from "../types";
+import {
+  DEFAULT_CURRENCY_PREFERENCE_ID,
+  CUSTOM_CATEGORY_STORAGE_VERSION,
+} from "../types";
+import { isBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
+import { generateUUID } from "./uuid";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
 import {
   ENCRYPTED_EXPORT_PREFIX,
@@ -30,6 +35,7 @@ import {
   isSavingsGoalItem,
   isAssetAccountItem,
   isNetWorthSnapshotItem,
+  isCustomCategoryItem,
   isMonthKey,
   sanitizePayoffStrategy,
   sanitizeDebtMilestones,
@@ -47,6 +53,7 @@ const KEYS = {
   DEBT_MILESTONES: "@budgetark_debt_milestones",
   PAYOFF_STRATEGY: "@budgetark_payoff_strategy",
   NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
+  CUSTOM_CATEGORIES: "@budgetark_custom_categories",
 } as const;
 
 const getCurrentMonthKey = (): string => {
@@ -78,7 +85,8 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     Array.isArray(data.assetAccounts) ||
     isObject(data.debtMilestones) ||
     typeof data.payoffStrategy === "string" ||
-    Array.isArray(data.netWorthSnapshots);
+    Array.isArray(data.netWorthSnapshots) ||
+    Array.isArray(data.customCategories);
 
   return hasAny;
 };
@@ -95,6 +103,7 @@ interface ImportPayload {
   payoffStrategy?: unknown;
   payoffStrategyUpdatedAt?: unknown;
   netWorthSnapshots?: unknown[];
+  customCategories?: unknown[];
   user?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -111,6 +120,7 @@ interface SanitizedImportPayload {
   payoffStrategy?: "custom" | "avalanche" | "snowball";
   payoffStrategyUpdatedAt?: string;
   netWorthSnapshots: Record<string, unknown>[];
+  customCategories: Record<string, unknown>[];
   user?: Record<string, unknown>;
 }
 
@@ -124,6 +134,7 @@ export interface ImportResult {
   debtMilestones: boolean;
   payoffStrategy: boolean;
   netWorthSnapshots: number;
+  customCategories: number;
   /** Number of days since the export was created, or undefined if no exportedAt timestamp */
   staleDays?: number;
 }
@@ -240,6 +251,11 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     "net worth snapshots",
     isNetWorthSnapshotItem
   );
+  const customCategories = sanitizeCollection(
+    data.customCategories,
+    "custom categories",
+    isCustomCategoryItem
+  );
   const debtMilestones = sanitizeDebtMilestones(data.debtMilestones);
   const payoffStrategy = sanitizePayoffStrategy(data.payoffStrategy);
   const payoffStrategyUpdatedAt = isValidDateValue(data.payoffStrategyUpdatedAt)
@@ -259,7 +275,8 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     limitsByMonthCount +
     savingsGoals.length +
     assetAccounts.length +
-    netWorthSnapshots.length;
+    netWorthSnapshots.length +
+    customCategories.length;
   if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
     throw new Error(
       `Import rejected: payload is too large. Maximum total records is ${LIMITS.MAX_TOTAL_ITEMS}.`
@@ -275,6 +292,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     savingsGoals,
     assetAccounts,
     netWorthSnapshots,
+    customCategories,
     debtMilestones,
     payoffStrategy,
     payoffStrategyUpdatedAt,
@@ -415,6 +433,7 @@ export const importFromString = async (
     debtMilestones: false,
     payoffStrategy: false,
     netWorthSnapshots: 0,
+    customCategories: 0,
     staleDays,
   };
 
@@ -630,6 +649,137 @@ export const importFromString = async (
     };
   };
 
+  /**
+   * Compute the merged custom-category store in memory.
+   *
+   * Two sources feed it, so the feature round-trips AND older/foreign
+   * exports stay usable:
+   *   1. The explicit `customCategories` collection (new exports).
+   *   2. Names derived from imported budget entries / limits that aren't
+   *      built-in and aren't already defined — covers pre-feature backups
+   *      and sync-relayed entries that carry a custom name but no
+   *      definition. Derived ones get the default icon until the user
+   *      edits them.
+   * Merge is LWW-by-id (like the other collections); names are de-duped
+   * case-insensitively and any that shadow a built-in are dropped. Replace
+   * mode starts from an empty base but is still seeded by both sources, so
+   * a replace-from-old-backup never silently loses custom categories that
+   * the imported entries still reference.
+   */
+  const computeMergedCustomCategories = async (): Promise<{
+    json: string;
+    count: number;
+  } | null> => {
+    const tsOf = (v: unknown): number => {
+      if (typeof v !== "string") return 0;
+      const t = Date.parse(v);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    // Names referenced by imported entries / limits.
+    const referenced = new Set<string>();
+    for (const e of sanitized.budgetEntries) {
+      const c = (e as any).category;
+      if (typeof c === "string" && !isBuiltInCategory(c)) referenced.add(c);
+    }
+    const allLimitArrays: Record<string, unknown>[][] = [
+      sanitized.budgetLimits,
+      ...(sanitized.budgetLimitsByMonth
+        ? Object.values(sanitized.budgetLimitsByMonth)
+        : []),
+    ];
+    for (const arr of allLimitArrays) {
+      for (const l of arr) {
+        const c = (l as any).category;
+        if (typeof c === "string" && !isBuiltInCategory(c)) referenced.add(c);
+      }
+    }
+
+    const hasExplicit = sanitized.customCategories.length > 0;
+    if (!hasExplicit && referenced.size === 0) return null;
+
+    // Base: existing store (merge) or empty (replace).
+    let base: Record<string, unknown>[] = [];
+    if (mode !== "replace") {
+      const existingRaw = await EncryptedStorage.getItem(KEYS.CUSTOM_CATEGORIES);
+      if (existingRaw) {
+        try {
+          const parsed = JSON.parse(existingRaw);
+          if (Array.isArray(parsed?.categories)) base = parsed.categories;
+          else if (Array.isArray(parsed)) base = parsed; // legacy bare array
+        } catch {
+          base = [];
+        }
+      }
+    }
+
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const c of base) {
+      const id = (c as any).id;
+      if (typeof id === "string") byId.set(id, c);
+    }
+
+    let touched = 0;
+
+    // 1. Explicit imported definitions — LWW by id.
+    for (const incoming of sanitized.customCategories) {
+      const id = (incoming as any).id as string;
+      const existing = byId.get(id);
+      if (!existing || tsOf((incoming as any).updatedAt) >= tsOf((existing as any).updatedAt)) {
+        byId.set(id, incoming);
+        touched++;
+      }
+    }
+
+    // De-dupe by lowercased name (keep newest updatedAt) and drop any that
+    // shadow a built-in category.
+    const nameWinner = new Map<string, string>(); // lowerName -> id
+    for (const [id, rec] of byId) {
+      const name = (rec as any).name;
+      if (typeof name !== "string" || isBuiltInCategory(name)) {
+        byId.delete(id);
+        continue;
+      }
+      const key = name.toLowerCase();
+      const prevId = nameWinner.get(key);
+      if (prevId === undefined) {
+        nameWinner.set(key, id);
+      } else {
+        const prev = byId.get(prevId)!;
+        if (tsOf((rec as any).updatedAt) >= tsOf((prev as any).updatedAt)) {
+          byId.delete(prevId);
+          nameWinner.set(key, id);
+        } else {
+          byId.delete(id);
+        }
+      }
+    }
+
+    // 2. Derive definitions for referenced-but-undefined names.
+    const now = new Date().toISOString();
+    for (const name of referenced) {
+      if (nameWinner.has(name.toLowerCase())) continue;
+      const id = generateUUID();
+      byId.set(id, {
+        id,
+        name,
+        icon: DEFAULT_CATEGORY_ICON,
+        createdAt: now,
+        updatedAt: now,
+      });
+      nameWinner.set(name.toLowerCase(), id);
+      touched++;
+    }
+
+    if (touched === 0 && mode !== "replace") return null;
+
+    const store = {
+      categories: Array.from(byId.values()),
+      version: CUSTOM_CATEGORY_STORAGE_VERSION,
+    };
+    return { json: JSON.stringify(store), count: touched };
+  };
+
   // Phase 1: Compute all merged results in memory
   const mergedDebts = await computeMergedById(KEYS.DEBTS, sanitized.debts);
   const mergedPayments = await computeMergedById(KEYS.PAYMENTS, sanitized.payments);
@@ -646,6 +796,7 @@ export const importFromString = async (
   const mergedSnapshots = sanitized.netWorthSnapshots.length > 0
     ? { json: JSON.stringify(sanitized.netWorthSnapshots), count: sanitized.netWorthSnapshots.length }
     : null;
+  const mergedCustomCategories = await computeMergedCustomCategories();
 
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
@@ -672,6 +823,12 @@ export const importFromString = async (
   }
   if (mergedSnapshots) {
     tempWrites.push([KEYS.NET_WORTH_SNAPSHOTS + TEMP_SUFFIX, mergedSnapshots.json]);
+  }
+  if (mergedCustomCategories) {
+    tempWrites.push([
+      KEYS.CUSTOM_CATEGORIES + TEMP_SUFFIX,
+      mergedCustomCategories.json,
+    ]);
   }
   if (sanitized.debtMilestones) {
     tempWrites.push([
@@ -741,6 +898,7 @@ export const importFromString = async (
     counts.savingsGoals = mergedSavingsGoals?.count ?? 0;
     counts.assetAccounts = mergedAssetAccounts?.count ?? 0;
     counts.netWorthSnapshots = mergedSnapshots?.count ?? 0;
+    counts.customCategories = mergedCustomCategories?.count ?? 0;
     counts.debtMilestones = !!sanitized.debtMilestones;
     counts.payoffStrategy = !!sanitized.payoffStrategy;
   } catch (error) {

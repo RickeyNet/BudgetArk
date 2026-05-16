@@ -9,6 +9,7 @@
  */
 
 import { ASSET_ACCOUNT_CATEGORIES, BUDGET_CATEGORIES } from "../types";
+import { sanitizeTextInput } from "./sanitize";
 
 export const VALIDATOR_LIMITS = {
   MAX_TEXT_LENGTH: 120,
@@ -44,6 +45,41 @@ export const isSafeNumber = (
   value <= max;
 
 const VALID_CATEGORIES = new Set<string>(BUDGET_CATEGORIES);
+
+/**
+ * Max custom-category name length accepted on import / sync. Mirrors
+ * MAX_CATEGORY_NAME_LENGTH in customCategoriesStorage.ts — kept as a local
+ * literal so this module stays free of storage-layer imports (it's also on
+ * the LAN-sync receive path, which must not pull in EncryptedStorage).
+ */
+export const MAX_IMPORTED_CATEGORY_NAME_LENGTH = 24;
+
+/**
+ * A category reference is valid if it's a built-in name OR a safe
+ * user-defined custom name: a non-empty string with no control/null bytes
+ * (equal to its sanitized form) within the custom-name length cap. This
+ * keeps import/sync backward compatible — built-ins still pass unchanged —
+ * while letting custom-category entries/limits through the same bounded
+ * gate instead of being rejected at the trust boundary.
+ */
+export const isValidImportCategory = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  if (VALID_CATEGORIES.has(value)) return true;
+  if (value !== sanitizeTextInput(value)) return false;
+  const trimmed = value.trim();
+  return (
+    trimmed.length > 0 &&
+    trimmed.length <= MAX_IMPORTED_CATEGORY_NAME_LENGTH
+  );
+};
+
+/**
+ * For the spreadsheet importer: returns the category string if acceptable
+ * (built-in or safe custom), else null so the row is skipped — same gate
+ * as the JSON path, just non-throwing.
+ */
+export const normalizeImportCategory = (raw: string): string | null =>
+  isValidImportCategory(raw) ? raw : null;
 
 /**
  * Categories where the app legitimately writes negative-amount entries
@@ -100,8 +136,7 @@ export const isBudgetEntryItem = (
 ): item is Record<string, unknown> => {
   if (!isObject(item)) return false;
   const typeValid = item.type === "income" || item.type === "expense";
-  const categoryValid =
-    typeof item.category === "string" && VALID_CATEGORIES.has(item.category);
+  const categoryValid = isValidImportCategory(item.category);
   const descriptionValid =
     item.description === undefined ||
     (typeof item.description === "string" &&
@@ -135,12 +170,34 @@ export const isBudgetLimitItem = (
 ): item is Record<string, unknown> => {
   if (!isObject(item)) return false;
   return (
-    typeof item.category === "string" &&
-    VALID_CATEGORIES.has(item.category) &&
+    isValidImportCategory(item.category) &&
     isSafeNumber(item.monthlyLimit, {
       min: 0.01,
       max: VALIDATOR_LIMITS.MAX_MONEY,
     }) &&
+    (item.updatedAt === undefined || isValidDateValue(item.updatedAt))
+  );
+};
+
+/**
+ * A custom-category definition record (the export `customCategories`
+ * collection). Name must be a safe custom name that does NOT shadow a
+ * built-in; icon is a short non-empty glyph string (emoji ZWJ sequences
+ * run a few code units, hence the small ceiling rather than length 1).
+ */
+export const isCustomCategoryItem = (
+  item: unknown
+): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    typeof item.name === "string" &&
+    !VALID_CATEGORIES.has(item.name) &&
+    isValidImportCategory(item.name) &&
+    typeof item.icon === "string" &&
+    item.icon.length > 0 &&
+    item.icon.length <= 8 &&
+    isValidDateValue(item.createdAt) &&
     (item.updatedAt === undefined || isValidDateValue(item.updatedAt))
   );
 };

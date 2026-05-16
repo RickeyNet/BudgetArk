@@ -24,6 +24,7 @@ import { getSavingsGoalsIncludingDeleted } from "../storage/savingsGoalStorage";
 import { getAssetAccountsIncludingDeleted } from "../storage/assetAccountStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
+import { getCustomCategories } from "../storage/customCategoriesStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
@@ -75,6 +76,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
     debtMilestones,
     payoffStrategyEnvelope,
     netWorthSnapshots,
+    customCategories,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
     // restore on this device, or another paired device, doesn't accidentally
@@ -96,6 +98,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
     // ping-pong we fixed for sync; export-then-import was opening it back up.
     getPayoffStrategyEnvelope(),
     getNetWorthSnapshots(),
+    getCustomCategories(),
   ]);
 
   const exportPayload = {
@@ -122,6 +125,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
     payoffStrategy: payoffStrategyEnvelope?.value,
     payoffStrategyUpdatedAt: payoffStrategyEnvelope?.updatedAt,
     netWorthSnapshots,
+    customCategories,
   };
 
   const json = JSON.stringify(exportPayload, null, 2);

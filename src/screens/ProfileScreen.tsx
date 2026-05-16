@@ -171,7 +171,8 @@ const ProfileScreen: React.FC = () => {
   /** Whether the Ship's Log (achievements) screen is visible */
   const [showAchievements, setShowAchievements] = useState(false);
 
-  const { customCategories } = useCustomCategories();
+  const { customCategories, refresh: refreshCustomCategories } =
+    useCustomCategories();
   /** Whether the manage-custom-categories modal is visible */
   const [showManageCategories, setShowManageCategories] = useState(false);
 
@@ -741,6 +742,7 @@ const ProfileScreen: React.FC = () => {
       if (result.savingsGoals > 0) parts.push(`${result.savingsGoals} savings goals`);
       if (result.assetAccounts > 0) parts.push(`${result.assetAccounts} asset accounts`);
       if (result.netWorthSnapshots > 0) parts.push(`${result.netWorthSnapshots} net worth snapshots`);
+      if (result.customCategories > 0) parts.push(`${result.customCategories} custom categories`);
       const extras: string[] = [];
       if (result.debtMilestones) extras.push("milestone plan");
       if (result.payoffStrategy) extras.push("payoff strategy");
@@ -751,6 +753,7 @@ const ProfileScreen: React.FC = () => {
       if (result.staleDays !== undefined && result.staleDays > 30) {
         message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
       }
+      void refreshCustomCategories();
       triggerHaptic("success");
       setInfoModal({
         title: "Import Complete",
@@ -772,7 +775,7 @@ const ProfileScreen: React.FC = () => {
         });
       }
     }
-  }, []);
+  }, [refreshCustomCategories]);
 
   const confirmImportPassword = useCallback(() => {
     if (!pendingImportAction) return;
