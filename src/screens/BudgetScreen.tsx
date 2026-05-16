@@ -231,7 +231,7 @@ const CATEGORY_CHART_PALETTE = [
 ] as const;
 
 const BudgetScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, themeId } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
@@ -703,6 +703,17 @@ const BudgetScreen: React.FC = () => {
     [colorForCategory, chartData]
   );
 
+  const spendingTotal = useMemo(
+    () => chartData.reduce((sum, item) => sum + item.amount, 0),
+    [chartData]
+  );
+
+  // Scale denominator for limit-less category bars (kept ≥1 to avoid /0).
+  const maxCategorySpent = useMemo(
+    () => Math.max(1, ...expenseRows.map((row) => row.spent)),
+    [expenseRows]
+  );
+
   const adjustAssetAccounts = useCallback(
     (
       accounts: AssetAccount[],
@@ -1024,39 +1035,58 @@ const BudgetScreen: React.FC = () => {
 
   const listHeader = (
     <View>
-      <View style={styles.titleSection}>
-        <Text style={styles.appLabel}>BudgetArk</Text>
-        <Text style={styles.screenTitle}>Budget</Text>
-        <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
-      </View>
+      <View style={styles.headerRow}>
+        <View style={styles.titleSection}>
+          <Text style={styles.appLabel}>BudgetArk</Text>
+          <Text style={styles.screenTitle}>Budget</Text>
+        </View>
 
-      <View style={styles.monthSwitchRow}>
+      <View style={styles.monthPill}>
         <TouchableOpacity
-          style={[styles.monthSwitchBtn, selectedMonthIndex >= monthKeys.length - 1 && styles.monthSwitchBtnDisabled]}
+          style={styles.monthPillArrowBtn}
           onPress={() => {
             if (selectedMonthIndex < monthKeys.length - 1) {
               setSelectedMonthKey(monthKeys[selectedMonthIndex + 1]);
             }
           }}
           disabled={selectedMonthIndex >= monthKeys.length - 1}
+          accessibilityLabel="Previous month"
         >
-          <Text style={styles.monthSwitchBtnText}>← Older</Text>
+          <Text
+            style={[
+              styles.monthPillArrow,
+              selectedMonthIndex >= monthKeys.length - 1 && styles.monthPillArrowDisabled,
+            ]}
+          >
+            ‹
+          </Text>
         </TouchableOpacity>
 
-        <Text style={styles.monthSwitchLabel}>{formatMonthLabel(selectedMonthKey)}</Text>
+        <Text style={styles.monthPillLabel}>{formatMonthLabel(selectedMonthKey)}</Text>
 
         <TouchableOpacity
-          style={[styles.monthSwitchBtn, selectedMonthIndex <= 0 && styles.monthSwitchBtnDisabled]}
+          style={styles.monthPillArrowBtn}
           onPress={() => {
             if (selectedMonthIndex > 0) {
               setSelectedMonthKey(monthKeys[selectedMonthIndex - 1]);
             }
           }}
           disabled={selectedMonthIndex <= 0}
+          accessibilityLabel="Next month"
         >
-          <Text style={styles.monthSwitchBtnText}>Newer →</Text>
+          <Text
+            style={[
+              styles.monthPillArrow,
+              selectedMonthIndex <= 0 && styles.monthPillArrowDisabled,
+            ]}
+          >
+            ›
+          </Text>
         </TouchableOpacity>
       </View>
+      </View>
+
+      <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
 
       <View ref={anchorBudgetSummary} collapsable={false} style={styles.summaryCard}>
         <View style={styles.summaryTopRow}>
@@ -1066,12 +1096,14 @@ const BudgetScreen: React.FC = () => {
               {formatCurrency(monthlyIncome)}
             </Text>
           </View>
+          <View style={styles.statDivider} />
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryStatLabel}>Expenses</Text>
+            <Text style={styles.summaryStatLabel}>Spent</Text>
             <Text style={[styles.summaryStatValue, { color: colors.warning }]}>
               {formatCurrency(monthlyExpenses)}
             </Text>
           </View>
+          <View style={styles.statDivider} />
           <View style={styles.summaryStat}>
             <Text style={styles.summaryStatLabel}>Net</Text>
             <Text
@@ -1148,6 +1180,7 @@ const BudgetScreen: React.FC = () => {
 
       {/* Spending card - donut chart + category rows in one card */}
       <View ref={anchorBudgetSpending} collapsable={false} style={styles.spendingCard}>
+        <View style={styles.topHairline} />
         <View style={styles.spendingHeaderRow}>
           <Text style={styles.spendingTitle}>Spending</Text>
           {foodEntriesToSplit.length > 0 ? (
@@ -1160,8 +1193,35 @@ const BudgetScreen: React.FC = () => {
         </View>
 
         {chartData.length > 0 ? (
-          <View style={styles.spendingChartWrap}>
-            <DonutChart data={pieData} size={160} strokeWidth={26} />
+          <View style={styles.donutSection}>
+            <View style={styles.donutWrap}>
+              <DonutChart data={pieData} size={92} strokeWidth={14} />
+              <View style={styles.donutCenter}>
+                <Text style={styles.donutLabel}>Total</Text>
+                <Text style={styles.donutTotal}>
+                  {formatCompactCurrency(monthlyExpenses)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.legend}>
+              {pieData.slice(0, 6).map((slice) => {
+                const pct =
+                  spendingTotal > 0
+                    ? Math.round((slice.value / spendingTotal) * 100)
+                    : 0;
+                return (
+                  <View key={slice.label} style={styles.legendItem}>
+                    <View
+                      style={[styles.legendDot, { backgroundColor: slice.color }]}
+                    />
+                    <Text style={styles.legendName} numberOfLines={1}>
+                      {slice.label}
+                    </Text>
+                    <Text style={styles.legendPct}>{pct}%</Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
         ) : (
           <View style={styles.spendingEmptyWrap}>
@@ -1172,46 +1232,57 @@ const BudgetScreen: React.FC = () => {
 
         {expenseRows.map((item) => {
           const ratio = item.ratio;
-          const progressPercent = ratio ? Math.min(ratio, 1) * 100 : null;
           const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
           const isOver = ratio != null && ratio >= 1;
-          const statusColor = isOver ? colors.danger : hasWarning ? colors.warning : colors.success;
           const dotColor = colorForCategory(item.category);
           const isExpanded = expandedCategories.has(item.category);
+          // With a limit, the track represents the limit (100% = at limit).
+          // Without one, it scales against the biggest category this month so
+          // the bars stay comparable.
+          const fillPercent = item.limit
+            ? Math.min(ratio ?? 0, 1) * 100
+            : Math.min(1, item.spent / maxCategorySpent) * 100;
+          const fillColor = item.limit
+            ? isOver
+              ? colors.danger
+              : hasWarning
+                ? colors.warning
+                : dotColor
+            : dotColor;
 
           return (
             <View key={item.category}>
               <TouchableOpacity
-                style={styles.categoryRow}
+                style={styles.spendRow}
                 activeOpacity={0.7}
                 onPress={() => toggleCategory(item.category)}
                 onLongPress={() => openLimitModal(item.category)}
               >
-                <View style={styles.categoryRowLeft}>
-                  <View style={[styles.categoryDot, { backgroundColor: dotColor }]} />
-                  <Text style={styles.rowCategory}>
-                    {getCategoryIcon(item.category, customCategories)} {item.category}
-                  </Text>
-                </View>
-                <View style={styles.categoryRowRight}>
-                  <Text style={styles.rowSpent}>
-                    {formatCurrency(item.spent)}
-                    {item.limit ? ` / ${formatCurrency(item.limit)}` : ""}
-                  </Text>
-                  <Text style={styles.categoryChevron}>{isExpanded ? "▾" : "›"}</Text>
-                </View>
-              </TouchableOpacity>
-
-              {item.limit ? (
-                <View style={styles.categoryProgressTrack}>
+                <View style={[styles.spendDot, { backgroundColor: dotColor }]} />
+                <Text style={styles.spendName} numberOfLines={1}>
+                  {getCategoryIcon(item.category, customCategories)} {item.category}
+                </Text>
+                <View style={styles.spendBarTrack}>
                   <View
                     style={[
-                      styles.progressFill,
-                      { width: `${progressPercent ?? 0}%`, backgroundColor: statusColor },
+                      styles.spendBarFill,
+                      { width: `${fillPercent}%`, backgroundColor: fillColor },
                     ]}
                   />
+                  {item.limit ? (
+                    <View style={styles.spendLimitMark} />
+                  ) : null}
                 </View>
-              ) : null}
+                <Text
+                  style={[
+                    styles.spendAmount,
+                    isOver ? { color: colors.danger } : null,
+                  ]}
+                >
+                  {formatCurrency(item.spent)}
+                </Text>
+                <Text style={styles.spendChevron}>{isExpanded ? "▾" : "›"}</Text>
+              </TouchableOpacity>
 
               {isExpanded && item.entries.length > 0 && (
                 <View style={styles.expandedEntries}>
@@ -1259,7 +1330,12 @@ const BudgetScreen: React.FC = () => {
   );
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        themeId === "deep_space" && styles.screenTransparent,
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       {isLoaded && (
         <FlatList
@@ -1550,73 +1626,97 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       flex: 1,
       backgroundColor: colors.bg,
     },
+    screenTransparent: {
+      backgroundColor: "transparent",
+    },
     listContent: {
       paddingHorizontal: tokens.pad,
       paddingBottom: 110,
     },
-    titleSection: {
-      paddingTop: 56,
-      paddingBottom: tokens.gap,
-      alignItems: "center",
-    },
-    appLabel: {
-      fontSize: scale(12),
-      color: colors.textDim,
-      letterSpacing: 2,
-      marginBottom: 4,
-      textAlign: "center",
-    },
-    screenTitle: {
-      fontSize: scale(28),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 4,
-      textAlign: "center",
-    },
-    screenSubtitle: {
-      fontSize: scale(14),
-      color: colors.textMuted,
-      textAlign: "center",
-    },
-    monthSwitchRow: {
+    headerRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 12,
-      gap: 8,
+      paddingTop: 50,
+      paddingBottom: tokens.gapSm + 2,
     },
-    monthSwitchBtn: {
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-      minWidth: 84,
+    titleSection: {
+      alignItems: "flex-start",
+      flexShrink: 1,
+    },
+    appLabel: {
+      fontSize: scale(10),
+      fontWeight: "600",
+      color: colors.textDim,
+      letterSpacing: 3,
+      marginBottom: 3,
+      textTransform: "uppercase",
+    },
+    screenTitle: {
+      fontSize: scale(28),
+      fontWeight: "800",
+      color: colors.text,
+      letterSpacing: -0.5,
+    },
+    screenSubtitle: {
+      fontSize: scale(13),
+      color: colors.textMuted,
+      marginBottom: tokens.gap,
+    },
+    monthPill: {
+      flexDirection: "row",
       alignItems: "center",
+      gap: 6,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: `${colors.accent}26`,
       backgroundColor: colors.card,
     },
-    monthSwitchBtnDisabled: {
-      opacity: 0.45,
+    monthPillArrowBtn: {
+      paddingHorizontal: 4,
+      paddingVertical: 2,
     },
-    monthSwitchBtnText: {
-      color: colors.text,
-      fontSize: 12,
-      fontWeight: "600",
+    monthPillArrow: {
+      color: colors.accent,
+      fontSize: scale(18),
+      fontWeight: "800",
+      lineHeight: scale(20),
     },
-    monthSwitchLabel: {
+    monthPillArrowDisabled: {
+      color: colors.textMuted,
+      opacity: 0.5,
+    },
+    monthPillLabel: {
       color: colors.text,
-      fontSize: 14,
+      fontSize: scale(12),
       fontWeight: "700",
-      flex: 1,
+      minWidth: 86,
       textAlign: "center",
+    },
+    statDivider: {
+      width: 1,
+      marginVertical: 6,
+      backgroundColor: colors.cardBorder,
+    },
+    topHairline: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 1,
+      backgroundColor: colors.accent,
+      opacity: 0.18,
     },
     summaryCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
-      borderColor: `${colors.accent}30`,
-      borderRadius: tokens.radius + 4,
-      padding: tokens.pad + 4,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
       marginBottom: tokens.gap,
+      overflow: "hidden",
     },
     netWorthCard: {
       backgroundColor: colors.card,
@@ -1672,21 +1772,25 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     summaryTopRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
-      gap: 8,
-      marginBottom: 16,
+      alignItems: "center",
     },
     summaryStat: {
       flex: 1,
+      alignItems: "center",
+      paddingVertical: 4,
     },
     summaryStatLabel: {
       color: colors.textDim,
-      fontSize: 11,
-      marginBottom: 3,
+      fontSize: scale(9),
+      fontWeight: "600",
+      letterSpacing: 1.5,
+      textTransform: "uppercase",
+      marginBottom: 4,
     },
     summaryStatValue: {
-      fontSize: 16,
-      fontWeight: "700",
+      fontSize: scale(16),
+      fontWeight: "800",
+      letterSpacing: -0.5,
       fontVariant: ["tabular-nums"],
     },
     addBtn: {
@@ -1821,6 +1925,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderColor: colors.cardBorder,
       borderRadius: tokens.radius,
       padding: tokens.pad,
+      overflow: "hidden",
     },
     spendingHeaderRow: {
       flexDirection: "row",
@@ -1830,8 +1935,120 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     spendingTitle: {
       fontSize: scale(18),
-      fontWeight: "700",
+      fontWeight: "800",
       color: colors.text,
+    },
+    donutSection: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      marginBottom: 8,
+      paddingBottom: 8,
+    },
+    donutWrap: {
+      width: 92,
+      height: 92,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    donutCenter: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    donutLabel: {
+      fontSize: scale(7),
+      fontWeight: "600",
+      letterSpacing: 1,
+      color: colors.textDim,
+      textTransform: "uppercase",
+    },
+    donutTotal: {
+      fontSize: scale(12),
+      fontWeight: "800",
+      color: colors.text,
+      fontVariant: ["tabular-nums"] as any,
+    },
+    legend: {
+      flex: 1,
+      gap: 5,
+    },
+    legendItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+    },
+    legendDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 2,
+    },
+    legendName: {
+      flex: 1,
+      fontSize: scale(11),
+      color: colors.textDim,
+    },
+    legendPct: {
+      fontSize: scale(10),
+      fontWeight: "600",
+      color: colors.textMuted,
+      fontVariant: ["tabular-nums"] as any,
+    },
+    spendRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      paddingVertical: 9,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    spendDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 2,
+    },
+    spendName: {
+      width: 96,
+      fontSize: scale(12),
+      fontWeight: "600",
+      color: colors.text,
+    },
+    spendBarTrack: {
+      flex: 1,
+      height: 6,
+      borderRadius: 4,
+      backgroundColor: `${colors.textMuted}33`,
+      overflow: "hidden",
+      justifyContent: "center",
+    },
+    spendBarFill: {
+      height: "100%",
+      borderRadius: 4,
+      minWidth: 2,
+    },
+    spendLimitMark: {
+      position: "absolute",
+      right: 0,
+      top: -2,
+      bottom: -2,
+      width: 2,
+      backgroundColor: colors.textDim,
+      opacity: 0.6,
+    },
+    spendAmount: {
+      minWidth: 56,
+      textAlign: "right",
+      fontSize: scale(11),
+      fontWeight: "700",
+      color: colors.textDim,
+      fontVariant: ["tabular-nums"] as any,
+    },
+    spendChevron: {
+      fontSize: scale(14),
+      color: colors.textMuted,
+      fontWeight: "600",
+      width: 12,
+      textAlign: "center",
     },
     spendingHint: {
       fontSize: 11,

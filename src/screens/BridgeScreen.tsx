@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
+import CashFlowChart, { type CashFlowPoint } from "../components/CashFlowChart";
 import Medal from "../components/Medal";
 import AchievementsScreen from "./AchievementsScreen";
 import AnnualReportModal from "../components/AnnualReportModal";
@@ -47,8 +48,20 @@ import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
 
+/** Emoji glyph per asset category for the concept's account-row icon chip. */
+const ACCOUNT_ICONS: Record<string, string> = {
+  savings: "💰",
+  retirement: "📈",
+  investing: "📊",
+  hsa: "🏥",
+  cash: "💵",
+  other: "💼",
+};
+const iconForCategory = (category: string): string =>
+  ACCOUNT_ICONS[category] ?? "💼";
+
 const BridgeScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, themeId } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Bridge");
@@ -205,6 +218,39 @@ const BridgeScreen: React.FC = () => {
 
   const trackedAccountsTotal = totalAssetBalance + (emergencyFundGoal?.currentAmount ?? 0);
 
+  // Trailing 6 months of income vs expense, oldest → newest, for the cash
+  // flow panel. Recurring entries are counted in every month from their
+  // start onward (mirrors how the Budget screen rolls them forward).
+  const cashFlow = useMemo<CashFlowPoint[]>(() => {
+    const now = new Date();
+    const buckets: CashFlowPoint[] = [];
+    for (let offset = 5; offset >= 0; offset--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      let income = 0;
+      let expense = 0;
+      for (const entry of entries) {
+        const entryMonth = `${new Date(entry.date).getFullYear()}-${String(
+          new Date(entry.date).getMonth() + 1
+        ).padStart(2, "0")}`;
+        const counts = entry.recurring
+          ? entryMonth <= monthKey
+          : entryMonth === monthKey;
+        if (!counts) continue;
+        if (entry.type === "income") income += entry.amount;
+        else expense += entry.amount;
+      }
+      buckets.push({
+        label: d.toLocaleDateString(undefined, { month: "short" }),
+        income,
+        expense,
+      });
+    }
+    return buckets;
+  }, [entries]);
+
+  const hasCashFlow = cashFlow.some((m) => m.income > 0 || m.expense > 0);
+
   const openAddAssetModal = useCallback(() => {
     setEditingAsset(null);
     setAssetName("");
@@ -339,17 +385,26 @@ const BridgeScreen: React.FC = () => {
         />
       </View>
 
-      <View ref={anchorBridgeOverview} collapsable={false} style={styles.overviewCard}>
-        <View style={styles.overviewRow}>
-          <View style={styles.overviewStat}>
-            <Text style={styles.overviewLabel}>Tracked Accounts</Text>
-            <Text style={[styles.overviewValue, { color: colors.success }]}>
+      {hasCashFlow ? (
+        <CashFlowChart
+          data={cashFlow}
+          colors={colors}
+          formatCompactCurrency={formatCompactCurrency}
+        />
+      ) : null}
+
+      <View ref={anchorBridgeOverview} collapsable={false}>
+        <View style={styles.statsStrip}>
+          <View style={styles.statCell}>
+            <Text style={styles.statLabel}>Tracked Accounts</Text>
+            <Text style={[styles.statValue, { color: colors.success }]}>
               {formatCurrency(trackedAccountsTotal)}
             </Text>
           </View>
-          <View style={styles.overviewStat}>
-            <Text style={styles.overviewLabel}>Emergency Fund</Text>
-            <Text style={[styles.overviewValue, { color: colors.teal }]}>
+          <View style={styles.statDivider} />
+          <View style={styles.statCell}>
+            <Text style={styles.statLabel}>Emergency Fund</Text>
+            <Text style={[styles.statValue, { color: colors.teal }]}>
               {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
             </Text>
           </View>
@@ -364,6 +419,7 @@ const BridgeScreen: React.FC = () => {
       </View>
 
       <View ref={anchorBridgeAccounts} collapsable={false} style={styles.accountsCard}>
+        <View style={styles.topHairline} />
         <View style={styles.accountsHeaderRow}>
           <Text style={styles.accountsTitle}>Accounts</Text>
           <TouchableOpacity onPress={openAddAssetModal}>
@@ -386,6 +442,9 @@ const BridgeScreen: React.FC = () => {
                 }}
                 activeOpacity={0.7}
               >
+                <View style={[styles.accountIcon, { backgroundColor: colors.tealDim }]}>
+                  <Text style={styles.accountIconGlyph}>🛡️</Text>
+                </View>
                 <View style={styles.accountRowLeft}>
                   <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
                   <Text style={styles.accountCategory}>
@@ -407,6 +466,9 @@ const BridgeScreen: React.FC = () => {
                 onPress={() => openEditAssetModal(account)}
                 activeOpacity={0.7}
               >
+                <View style={[styles.accountIcon, { backgroundColor: `${colors.accent}1f` }]}>
+                  <Text style={styles.accountIconGlyph}>{iconForCategory(account.category)}</Text>
+                </View>
                 <View style={styles.accountRowLeft}>
                   <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
                   <Text style={styles.accountCategory}>
@@ -477,7 +539,12 @@ const BridgeScreen: React.FC = () => {
   );
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        themeId === "deep_space" && styles.screenTransparent,
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       {isLoaded ? (
         <FlatList
@@ -630,6 +697,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       flex: 1,
       backgroundColor: colors.bg,
     },
+    screenTransparent: {
+      backgroundColor: "transparent",
+    },
     listContent: {
       paddingHorizontal: tokens.pad,
       paddingBottom: 110,
@@ -637,56 +707,85 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     titleSection: {
       paddingTop: 56,
       paddingBottom: tokens.gap,
-      alignItems: "center",
+      alignItems: "flex-start",
     },
     appLabel: {
-      fontSize: scale(12),
+      fontSize: scale(10),
+      fontWeight: "600",
       color: colors.textDim,
-      letterSpacing: 2,
-      marginBottom: 4,
-      textAlign: "center",
+      letterSpacing: 3,
+      marginBottom: 3,
+      textTransform: "uppercase",
     },
     screenTitle: {
       fontSize: scale(28),
-      fontWeight: "700",
+      fontWeight: "800",
       color: colors.text,
       marginBottom: 4,
-      textAlign: "center",
+      letterSpacing: -0.5,
     },
     screenSubtitle: {
-      fontSize: scale(14),
+      fontSize: scale(13),
       color: colors.textMuted,
-      textAlign: "center",
     },
-    overviewCard: {
+    statsStrip: {
+      flexDirection: "row",
       backgroundColor: colors.card,
       borderWidth: 1,
-      borderColor: `${colors.accent}30`,
+      borderColor: colors.cardBorder,
       borderRadius: tokens.radius,
-      padding: tokens.pad,
-      marginBottom: tokens.gap,
+      overflow: "hidden",
+      marginBottom: tokens.gapSm + 2,
     },
-    overviewRow: {
-      flexDirection: "row",
-      gap: tokens.gapSm + 4,
-      marginBottom: tokens.gapSm + 4,
-    },
-    overviewStat: {
+    statCell: {
       flex: 1,
+      alignItems: "center",
+      paddingVertical: tokens.padSm + 2,
+      paddingHorizontal: 8,
     },
-    overviewLabel: {
-      fontSize: scale(11),
+    statDivider: {
+      width: 1,
+      marginVertical: tokens.padSm,
+      backgroundColor: colors.cardBorder,
+    },
+    statLabel: {
+      fontSize: scale(9),
+      fontWeight: "600",
+      letterSpacing: 1.5,
+      textTransform: "uppercase",
       color: colors.textDim,
-      marginBottom: 3,
+      marginBottom: 4,
     },
-    overviewValue: {
-      fontSize: scale(18),
-      fontWeight: "700",
+    statValue: {
+      fontSize: scale(16),
+      fontWeight: "800",
+      letterSpacing: -0.5,
       fontVariant: ["tabular-nums"] as any,
     },
     overviewHint: {
       fontSize: scale(12),
       color: colors.textDim,
+      marginBottom: tokens.gap,
+      paddingHorizontal: 2,
+    },
+    topHairline: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 1,
+      backgroundColor: colors.accent,
+      opacity: 0.18,
+    },
+    accountIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    accountIconGlyph: {
+      fontSize: scale(15),
     },
     accountsCard: {
       backgroundColor: colors.card,
@@ -695,6 +794,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: tokens.radius,
       padding: tokens.pad,
       marginBottom: tokens.gap,
+      overflow: "hidden",
     },
     accountsHeaderRow: {
       flexDirection: "row",
@@ -720,14 +820,13 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     accountRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: tokens.padSm - 2,
+      gap: 10,
+      paddingVertical: tokens.padSm,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     accountRowLeft: {
       flex: 1,
-      marginRight: 8,
     },
     accountName: {
       fontSize: scale(14),

@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RootTabParamList } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import SpaceBackground from "../components/SpaceBackground";
 
 /* ── Screen Imports ── */
 import DebtTrackerScreen from "../screens/DebtTrackerScreen";
@@ -66,16 +67,22 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
 };
 
 const AppNavigator: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, themeId } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const isDeepSpace = themeId === "deep_space";
 
   return (
+    <>
+      {isDeepSpace ? <SpaceBackground /> : null}
     <Tab.Navigator
       initialRouteName="Bridge"
       screenOptions={({ route }) => ({
         /** Hide the default header - each screen has its own */
         headerShown: false,
+
+        /** Let the global SpaceBackground show through on the Deep Space theme */
+        sceneStyle: isDeepSpace ? styles.transparentScene : undefined,
 
         /** Tab bar icon - emoji based */
         tabBarIcon: ({ focused }) => (
@@ -105,13 +112,20 @@ const AppNavigator: React.FC = () => {
       <Tab.Screen name="Utilities" component={UtilitiesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
+    </>
   );
 };
 
 const makeStyles = (colors: ThemeColors, bottomInset: number) =>
   StyleSheet.create({
+    transparentScene: {
+      backgroundColor: "transparent",
+    },
     tabBar: {
-      backgroundColor: `${colors.card}ee`,
+      // Hex cards get an "ee" alpha for the frosted look; rgba()/named cards
+      // (e.g. Deep Space's translucent card) are already alpha-aware and
+      // would produce an invalid "rgba(...)ee" string if suffixed.
+      backgroundColor: colors.card.startsWith("#") ? `${colors.card}ee` : colors.card,
       borderTopColor: colors.cardBorder,
       borderTopWidth: 1,
       height: 58 + bottomInset,

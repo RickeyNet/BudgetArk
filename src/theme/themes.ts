@@ -226,7 +226,39 @@ const OCEAN_CORAL: ThemePreset = {
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL] as const;
+/**
+ * Deep Space — the "trading terminal" concept palette.
+ *
+ * `card`/`cardBorder` are intentionally translucent so the SpaceBackground
+ * starfield reads through the glass. `bg` is a near-black base; the actual
+ * gradient + stars are painted by <SpaceBackground/>, which mounts only when
+ * this theme is active (see AppNavigator).
+ */
+const DEEP_SPACE: ThemePreset = {
+  id: "deep_space",
+  name: "Deep Space",
+  colors: {
+    bg: "#04060f",
+    card: "rgba(10, 16, 32, 0.55)",
+    cardBorder: "rgba(60, 120, 220, 0.14)",
+    accent: "#5b9ef0",
+    success: "#34d399",
+    successDim: "rgba(52, 211, 153, 0.14)",
+    warning: "#f0a050",
+    warningDim: "rgba(240, 160, 80, 0.14)",
+    danger: "#ef6060",
+    dangerDim: "rgba(239, 96, 96, 0.14)",
+    text: "#e4ecf8",
+    textDim: "#8fa6c8",
+    textMuted: "#5a6d8c",
+    white: "#ffffff",
+    teal: "#2dd4bf",
+    tealDim: "rgba(45, 212, 191, 0.14)",
+    accentButtonText: "#ffffff",
+  },
+};
+
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, DEEP_SPACE] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";
