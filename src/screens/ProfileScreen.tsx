@@ -25,6 +25,7 @@ import {
   StyleSheet,
   ScrollView,
   Modal,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -204,6 +205,15 @@ const ProfileScreen: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportEncrypt, setExportEncrypt] = useState(true);
   const [exportPassword, setExportPassword] = useState("");
+  /**
+   * True while an export is generating/sharing. Drives a blocking spinner
+   * overlay. Encrypted export runs 250k PBKDF2 rounds in pure JS on the JS
+   * thread, freezing the UI for several seconds on real devices; without
+   * feedback the app looks hung, users walk away, and the phone auto-locks
+   * mid-export. The ActivityIndicator animates on the native thread so it
+   * keeps spinning even while JS is blocked.
+   */
+  const [isExporting, setIsExporting] = useState(false);
 
   /** Import password modal state (for encrypted exports) */
   const [showImportPasswordModal, setShowImportPasswordModal] = useState(false);
@@ -701,20 +711,37 @@ const ProfileScreen: React.FC = () => {
       return;
     }
     setShowExportModal(false);
+    setIsExporting(true);
+    // Yield a frame so the export modal dismisses and the spinner overlay
+    // actually mounts before the synchronous PBKDF2 freeze begins.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    let exported = false;
     try {
       await exportAllData(exportEncrypt ? exportPassword : undefined);
       triggerHaptic("success");
       await refreshBackupState();
       await recordExport();
-      void refreshAchievements();
+      exported = true;
     } catch (error: any) {
       triggerHaptic("error");
       setInfoModal({
         title: "Export Failed",
         message: error?.message || "Something went wrong while exporting your data.",
       });
+    } finally {
+      setIsExporting(false);
     }
     setExportPassword("");
+    if (exported) {
+      // Defer the achievement check until the spinner overlay AND the OS
+      // share sheet have fully dismissed. The unlock celebration is a RN
+      // <Modal>; asking it to present while another modal/share sheet is
+      // still transitioning fails silently on iOS — which is why the
+      // Cartographer badge "never showed up" after exporting.
+      setTimeout(() => {
+        void refreshAchievements();
+      }, 500);
+    }
   }, [exportEncrypt, exportPassword, refreshBackupState, refreshAchievements]);
 
   /**
@@ -821,6 +848,9 @@ const ProfileScreen: React.FC = () => {
   const confirmSpreadsheetExport = useCallback(
     async (format: SpreadsheetFormat) => {
       setShowSpreadsheetExportModal(false);
+      setIsExporting(true);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      let exported = false;
       try {
         const result = await exportSpreadsheet(format);
         const formatLabel = format === "csv" ? "CSV" : "Excel";
@@ -835,7 +865,7 @@ const ProfileScreen: React.FC = () => {
         });
         await refreshBackupState();
         await recordExport();
-        void refreshAchievements();
+        exported = true;
       } catch (error: any) {
         triggerHaptic("error");
         setInfoModal({
@@ -844,6 +874,15 @@ const ProfileScreen: React.FC = () => {
             error?.message ||
             "Something went wrong while exporting the spreadsheet.",
         });
+      } finally {
+        setIsExporting(false);
+      }
+      if (exported) {
+        // Same deferral as JSON export — let the spinner + share sheet
+        // dismiss so the achievement <Modal> can actually present.
+        setTimeout(() => {
+          void refreshAchievements();
+        }, 500);
       }
     },
     [refreshBackupState, refreshAchievements]
@@ -1999,6 +2038,54 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Exporting Spinner Overlay ──
+          Blocking, non-dismissable. The native ActivityIndicator keeps
+          animating on the UI thread even while the JS thread is frozen by
+          the synchronous PBKDF2 key derivation, so the user sees clear
+          "working" feedback instead of a dead screen. */}
+      <Modal visible={isExporting} animationType="fade" transparent>
+        <View
+          style={[
+            styles.modalOverlay,
+            { alignItems: "center", justifyContent: "center" },
+          ]}
+        >
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.cardBorder,
+              borderWidth: 1,
+              borderRadius: 16,
+              paddingVertical: 28,
+              paddingHorizontal: 36,
+              alignItems: "center",
+            }}
+          >
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 15,
+                fontWeight: "600",
+                marginTop: 16,
+              }}
+            >
+              Preparing your export…
+            </Text>
+            <Text
+              style={{
+                color: colors.textDim,
+                fontSize: 12,
+                marginTop: 6,
+                textAlign: "center",
+              }}
+            >
+              Encrypting can take a few seconds. Keep the app open.
+            </Text>
           </View>
         </View>
       </Modal>
