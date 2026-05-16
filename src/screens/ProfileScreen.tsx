@@ -52,6 +52,9 @@ import {
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { exportAllData } from "../utils/exportData";
+import { recordExport } from "../storage/achievementStatsStorage";
+import { useAchievements } from "../achievements/AchievementsProvider";
+import AchievementsScreen from "./AchievementsScreen";
 import { importData, importFromString, isEncryptedExport, type ImportResult } from "../utils/importData";
 import {
   exportSpreadsheet,
@@ -156,6 +159,15 @@ const ProfileScreen: React.FC = () => {
     options: currencyOptions,
     setPreferenceId,
   } = useCurrency();
+
+  const {
+    unlocked: achievementUnlocked,
+    totalCount: totalAchievements,
+    runCheck: refreshAchievements,
+  } = useAchievements();
+
+  /** Whether the Ship's Log (achievements) screen is visible */
+  const [showAchievements, setShowAchievements] = useState(false);
 
   /** Current user account state */
   const [user, setUser] = useState<UserAccount | null>(null);
@@ -675,6 +687,8 @@ const ProfileScreen: React.FC = () => {
       await exportAllData(exportEncrypt ? exportPassword : undefined);
       triggerHaptic("success");
       await refreshBackupState();
+      await recordExport();
+      void refreshAchievements();
     } catch (error: any) {
       triggerHaptic("error");
       setInfoModal({
@@ -683,7 +697,7 @@ const ProfileScreen: React.FC = () => {
       });
     }
     setExportPassword("");
-  }, [exportEncrypt, exportPassword, refreshBackupState]);
+  }, [exportEncrypt, exportPassword, refreshBackupState, refreshAchievements]);
 
   /**
    * First step: show a themed modal to choose import source.
@@ -800,6 +814,8 @@ const ProfileScreen: React.FC = () => {
           message: note,
         });
         await refreshBackupState();
+        await recordExport();
+        void refreshAchievements();
       } catch (error: any) {
         triggerHaptic("error");
         setInfoModal({
@@ -810,7 +826,7 @@ const ProfileScreen: React.FC = () => {
         });
       }
     },
-    [refreshBackupState]
+    [refreshBackupState, refreshAchievements]
   );
 
   /**
@@ -1151,6 +1167,35 @@ const ProfileScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           )}
+        </View>
+
+        {/* ── Progress (Ship's Log achievements) ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            PROGRESS
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                triggerHaptic("selection");
+                setShowAchievements(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open Ship's Log achievements"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Ship's Log
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {`${Object.keys(achievementUnlocked).length}/${totalAchievements} achievements earned`}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ── Data (Export, Import, Reset) ── */}
@@ -2502,6 +2547,12 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Ship's Log (achievements) ── */}
+      <AchievementsScreen
+        visible={showAchievements}
+        onClose={() => setShowAchievements(false)}
+      />
       {coachmark}
     </>
   );

@@ -329,7 +329,8 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                   </Text>
                   <Text style={styles.cardHint}>
                     Months where every category with a limit stayed under it.
-                    Older months aren't shown if their limits have aged out.
+                    A full year of limits is kept, so the current year is
+                    fully covered; older years may have aged-out limits.
                   </Text>
                 </View>
               )}

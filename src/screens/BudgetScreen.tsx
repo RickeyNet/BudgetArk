@@ -59,6 +59,7 @@ import {
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
+import { recordMonthlyReviewOpen } from "../storage/achievementStatsStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -139,15 +140,20 @@ const getMonthKeyOffset = (offset: number, fromDate: Date = new Date()): string 
   return getMonthKey(cursor);
 };
 
-const getBudgetMonthKeys = (): string[] => [
-  getMonthKeyOffset(1),
-  getMonthKeyOffset(0),
-  getMonthKeyOffset(-1),
-  getMonthKeyOffset(-2),
-  getMonthKeyOffset(-3),
-  getMonthKeyOffset(-4),
-  getMonthKeyOffset(-5),
-];
+/**
+ * Selectable months: next month (forecast) + current + a full trailing
+ * year of history. Matches the 13-month limit-history retention in
+ * budgetStorage so every navigable month still has its saved limits.
+ */
+const BUDGET_HISTORY_MONTHS = 12;
+
+const getBudgetMonthKeys = (): string[] => {
+  const keys = [getMonthKeyOffset(1)];
+  for (let offset = 0; offset >= -BUDGET_HISTORY_MONTHS; offset--) {
+    keys.push(getMonthKeyOffset(offset));
+  }
+  return keys;
+};
 
 const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
   getMonthKey(new Date(dateISO)) === monthKey;
@@ -873,7 +879,9 @@ const BudgetScreen: React.FC = () => {
     const data = reviewPreviewData ?? (await refreshMonthlyReview(entries));
     setReviewData(data);
     setShowReviewModal(true);
-  }, [entries, refreshMonthlyReview, reviewPreviewData]);
+    await recordMonthlyReviewOpen();
+    void notifyAchievementCheck();
+  }, [entries, refreshMonthlyReview, reviewPreviewData, notifyAchievementCheck]);
 
   const openAddAssetModal = useCallback(() => {
     setEditingAsset(null);

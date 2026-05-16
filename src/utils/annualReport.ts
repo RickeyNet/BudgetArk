@@ -262,9 +262,10 @@ export const buildAnnualReport = (
   }
 
   // Months under budget: only months that actually have saved limits count
-  // toward the denominator. Per-category limit history is pruned to ~6
-  // months, so older months in a past-year report simply won't be checkable —
-  // we report "X / Y" against the months we can verify.
+  // toward the denominator. Limit history retains a full trailing year (13
+  // months), so the current calendar year is fully checkable; years older
+  // than that have aged-out limits — we report "X / Y" against the months
+  // we can still verify.
   let monthsUnderBudget = 0;
   let monthsWithLimits = 0;
   for (let m = 0; m < 12; m++) {

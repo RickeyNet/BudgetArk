@@ -429,7 +429,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
 - [ ] Savings Streak Tracker — track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
-- [ ] Trophy Room / Ark Achievements — gamification layer built entirely on existing data. Auto-unlocks retroactively for current users on first open.
+- [x] Trophy Room / Ark Achievements — gamification layer built entirely on existing data. Auto-unlocks retroactively for current users on first open. Shipped as "Ship's Log": 18 badges, retroactive silent first-eval, global unlock celebration modal, Bridge card + Profile → PROGRESS entry. Three badges (Cartographer/export, Crow's Nest/review opens, Lighthouse Keeper/30-day app-open streak) are backed by a new `achievementStatsStorage.ts` counter; Steady Crew + All Sails Set derive from budget limits vs. recurring-aware monthly spend. App-open streak is recorded idempotently per calendar day inside `evaluateAchievements`. OTA-safe — no native deps.
 
   Purpose: add a dopamine-rich progress surface without changing how data is entered. Every badge is derived from debts, payments, savings goals, budget entries, milestones, and net worth that the app already stores. No new write paths, no behavior shift.
 

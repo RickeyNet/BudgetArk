@@ -56,9 +56,17 @@ const getLimitHistory = async (): Promise<BudgetLimitHistory> => {
   }
 };
 
+/**
+ * Months of category-limit history to retain. 13 = a full trailing year
+ * plus the current month, so a calendar-year Annual Report and the
+ * year-spanning achievements (Steady Crew, All Sails Set) can verify every
+ * month. ~13 small records is negligible storage.
+ */
+const LIMIT_HISTORY_MONTHS = 13;
+
 const pruneLimitHistory = (history: BudgetLimitHistory): BudgetLimitHistory => {
   const keys = Object.keys(history).sort();
-  const keep = keys.slice(-6);
+  const keep = keys.slice(-LIMIT_HISTORY_MONTHS);
   const next: BudgetLimitHistory = {};
   keep.forEach((key) => {
     next[key] = history[key];

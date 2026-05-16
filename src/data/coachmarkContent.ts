@@ -53,7 +53,7 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         anchorId: "budget-summary-card",
         title: "Income vs expense",
         body:
-          "Top card shows this month's income, expenses, and net. Use the < > arrows above it to look at past months - six months of history are kept.",
+          "Top card shows this month's income, expenses, and net. Use the < > arrows above it to look at past months - a full year of history is kept.",
       },
       {
         id: "budget-spending",

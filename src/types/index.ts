@@ -421,6 +421,28 @@ export interface UnlockedAchievements {
 
 export const ACHIEVEMENTS_STORAGE_VERSION = 1;
 
+/**
+ * Counters that back achievements which can't be derived from the user's
+ * financial data alone (export taps, Monthly Review opens, app-open streak).
+ * Kept separate from `UnlockedAchievements` so the unlock map stays a pure
+ * id → timestamp record.
+ */
+export interface AchievementStats {
+  /** Times the user has exported their data (JSON or spreadsheet). */
+  exportCount: number;
+  /** Times the user has opened the Monthly Review. */
+  monthlyReviewOpens: number;
+  /** Current consecutive-day app-open streak. */
+  appOpenStreak: number;
+  /** Best app-open streak ever reached (badges check this). */
+  longestAppOpenStreak: number;
+  /** YYYY-MM-DD of the last day the app was opened, or null on first run. */
+  lastAppOpenDay: string | null;
+  version: number;
+}
+
+export const ACHIEVEMENT_STATS_VERSION = 1;
+
 /* ─── Navigation Types ─── */
 
 /**

@@ -22,10 +22,14 @@ import {
 } from "../storage/achievementsStorage";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
-import { getBudgetEntries } from "../storage/budgetStorage";
+import { getBudgetEntries, getAllLimitsByMonth } from "../storage/budgetStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { getPairingState } from "../sync/pairingStorage";
+import {
+  getAchievementStats,
+  recordAppOpenForStreak,
+} from "../storage/achievementStatsStorage";
 
 export interface EvaluationResult {
   /** Full id → unlocked-timestamp map after this run. */
@@ -49,6 +53,8 @@ const loadContext = async (): Promise<AchievementContext> => {
     milestonePlan,
     netWorthSnapshots,
     pairing,
+    stats,
+    limitsByMonth,
   ] = await Promise.all([
     getDebts(),
     getPayments(),
@@ -57,6 +63,8 @@ const loadContext = async (): Promise<AchievementContext> => {
     getDebtMilestonePlan(),
     getNetWorthSnapshots(),
     getPairingState(),
+    getAchievementStats(),
+    getAllLimitsByMonth(),
   ]);
 
   return {
@@ -67,10 +75,16 @@ const loadContext = async (): Promise<AchievementContext> => {
     milestonePlan,
     netWorthSnapshots,
     isPaired: pairing !== null,
+    stats,
+    limitsByMonth,
   };
 };
 
 export const evaluateAchievements = async (): Promise<EvaluationResult> => {
+  // Idempotent per calendar day, so it's safe to run on every pass; this
+  // keeps the app-open streak current before the Lighthouse Keeper check.
+  await recordAppOpenForStreak();
+
   const [ctx, state] = await Promise.all([
     loadContext(),
     getUnlockedAchievements(),
