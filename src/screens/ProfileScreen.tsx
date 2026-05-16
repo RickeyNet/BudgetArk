@@ -149,6 +149,9 @@ const ProfileScreen: React.FC = () => {
     tokens,
     presets: densityPresets,
     setDensityId,
+    textSizeId,
+    textSizePresets,
+    setTextSizeId,
   } = useDensity();
   const coachmark = useTabCoachmark("Profile");
   const { replay: replayCoachmarks, startGuidedTour } = useCoachmarks();
@@ -188,6 +191,7 @@ const ProfileScreen: React.FC = () => {
   /** Whether theme selector modal is visible */
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showDensityModal, setShowDensityModal] = useState(false);
+  const [showTextSizeModal, setShowTextSizeModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
 
   /** Whether the paste-import modal is visible */
@@ -347,6 +351,13 @@ const ProfileScreen: React.FC = () => {
       await setDensityId(id);
     },
     [setDensityId]
+  );
+
+  const handleTextSizeSelect = useCallback(
+    async (id: string) => {
+      await setTextSizeId(id);
+    },
+    [setTextSizeId]
   );
 
   const handleCurrencySelect = useCallback(
@@ -920,6 +931,7 @@ const ProfileScreen: React.FC = () => {
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
   const currentDensity = densityPresets.find((p) => p.id === densityId);
+  const currentTextSize = textSizePresets.find((p) => p.id === textSizeId);
   const latestRelease: ReleaseNote = RELEASE_NOTES[0];
 
   return (
@@ -1088,6 +1100,26 @@ const ProfileScreen: React.FC = () => {
                 </Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
                   {currentDensity?.name || "Comfortable"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowTextSizeModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Text Size, currently ${currentTextSize?.name || "Default"}`}
+              accessibilityHint="Opens text size options for the whole app"
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Text Size
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {currentTextSize?.name || "Default"}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
@@ -1665,6 +1697,94 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity
               style={[styles.closeBtn, { backgroundColor: colors.accent }]}
               onPress={() => setShowDensityModal(false)}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Text Size Selection Modal ── */}
+      <Modal
+        visible={showTextSizeModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowTextSizeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Text Size
+            </Text>
+
+            <ScrollView style={styles.themeList}>
+              {textSizePresets.map((preset) => {
+                const selected = textSizeId === preset.id;
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        backgroundColor: colors.bg,
+                      },
+                    ]}
+                    onPress={() => handleTextSizeSelect(preset.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${preset.name}. ${preset.description}`}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.themeOptionText,
+                          {
+                            color: colors.text,
+                            // Preview the size right in its own row.
+                            fontSize: Math.round(16 * preset.multiplier),
+                          },
+                        ]}
+                      >
+                        {preset.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsRowSubtext,
+                          { color: colors.textDim, marginTop: 4 },
+                        ]}
+                      >
+                        {preset.description}
+                      </Text>
+                    </View>
+
+                    {selected && (
+                      <View
+                        style={[
+                          styles.checkMark,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      >
+                        <Text style={[styles.checkMarkText, { color: colors.white }]}>
+                          ✓
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowTextSizeModal(false)}
             >
               <Text style={[styles.closeBtnText, { color: colors.white }]}>
                 Done

@@ -359,7 +359,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Undo actions and bulk edit/delete operations
 - [ ] Data confidence tools (last backup badge + backup reminders)
-- [ ] Accessibility improvements (larger text mode + better screen reader labels)
+- [~] Accessibility improvements (larger text mode + better screen reader labels) — Larger text mode SHIPPED: app-wide "Text Size" axis (Small / Default / Large / Extra Large) in Profile → Appearance, persisted in EncryptedStorage, multiplies the active Density's `fontScale` so every screen using `tokens.fontScale` scales for free without ballooning spacing (`src/theme/textSize.ts` + extended `DensityProvider`). Budget Spending donut + bars now also scale with it so the section zooms, not just text. Remaining: a systematic pass of `accessibilityLabel`/`accessibilityRole`/`accessibilityState` across all screens (only the new Text Size controls got labels so far).
 - [ ] Onboarding quick-start templates (single, couple, debt-heavy, zero-based)
 - [ ] First-launch coachmark walkthrough + always-on How-To reference page
 

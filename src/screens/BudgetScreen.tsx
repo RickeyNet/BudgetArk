@@ -250,6 +250,10 @@ const BudgetScreen: React.FC = () => {
     };
   });
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  // Spending donut scales with the effective font scale (Density × Text Size)
+  // so the accessibility Text Size setting zooms the chart too, not just text.
+  const donutSize = Math.round(108 * tokens.fontScale);
+  const donutStroke = Math.round(16 * tokens.fontScale);
 
   const { customCategories } = useCustomCategories();
   const customCategoryNames = useMemo(
@@ -1193,8 +1197,8 @@ const BudgetScreen: React.FC = () => {
 
         {chartData.length > 0 ? (
           <View style={styles.donutSection}>
-            <View style={styles.donutWrap}>
-              <DonutChart data={pieData} size={92} strokeWidth={14} />
+            <View style={[styles.donutWrap, { width: donutSize, height: donutSize }]}>
+              <DonutChart data={pieData} size={donutSize} strokeWidth={donutStroke} />
               <View style={styles.donutCenter}>
                 <Text style={styles.donutLabel}>Total</Text>
                 <Text style={styles.donutTotal}>
@@ -2004,19 +2008,19 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderTopColor: colors.cardBorder,
     },
     spendDot: {
-      width: 8,
-      height: 8,
+      width: scale(9),
+      height: scale(9),
       borderRadius: 2,
     },
     spendName: {
-      width: 96,
-      fontSize: scale(12),
+      width: scale(98),
+      fontSize: scale(13),
       fontWeight: "600",
       color: colors.text,
     },
     spendBarTrack: {
       flex: 1,
-      height: 6,
+      height: scale(8),
       borderRadius: 4,
       backgroundColor: `${colors.textMuted}33`,
       overflow: "hidden",
@@ -2037,9 +2041,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       opacity: 0.6,
     },
     spendAmount: {
-      minWidth: 56,
+      minWidth: scale(58),
       textAlign: "right",
-      fontSize: scale(11),
+      fontSize: scale(12),
       fontWeight: "700",
       color: colors.textDim,
       fontVariant: ["tabular-nums"] as any,
