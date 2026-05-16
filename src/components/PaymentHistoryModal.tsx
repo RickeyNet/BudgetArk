@@ -17,7 +17,12 @@ import {
   StyleSheet,
 } from "react-native";
 import { Payment, Debt } from "../types";
-import { getPayments } from "../storage/debtStorage";
+import {
+  getPayments,
+  deletePayment,
+  restorePayment,
+} from "../storage/debtStorage";
+import { triggerHaptic } from "../utils/haptics";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -26,6 +31,12 @@ interface PaymentHistoryModalProps {
   visible: boolean;
   onClose: () => void;
   debts: Debt[];
+  /**
+   * Called after payments are bulk-deleted or that delete is undone.
+   * Deleting a payment also re-adjusts its debt's balance, so the parent
+   * must refresh its debts/net-worth state.
+   */
+  onPaymentsChanged?: () => void;
 }
 
 interface MonthSection {
@@ -74,6 +85,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   visible,
   onClose,
   debts,
+  onPaymentsChanged,
 }) => {
   const { colors } = useTheme();
   const { formatCurrency, preference } = useCurrency();
@@ -81,6 +93,82 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
   const [sections, setSections] = useState<MonthSection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Local undo: the global UndoProvider snackbar renders at the app root
+  // and would be occluded by this RN Modal, so payments need their own
+  // in-modal undo affordance.
+  const [undoBatch, setUndoBatch] = useState<string[] | null>(null);
+  const undoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearUndoTimer = useCallback(() => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+  }, []);
+
+  const reloadPayments = useCallback(async () => {
+    try {
+      const payments = await getPayments();
+      setSections(groupByMonth(payments, preference.locale));
+    } catch {
+      setSections([]);
+    }
+  }, [preference.locale]);
+
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      exitSelection();
+      return;
+    }
+    // deletePayment is compound (tombstones the payment AND restores the
+    // debt balance); run sequentially so the multiSet writes serialize.
+    for (const id of ids) {
+      await deletePayment(id);
+    }
+    await reloadPayments();
+    exitSelection();
+    onPaymentsChanged?.();
+    triggerHaptic("warning");
+    clearUndoTimer();
+    setUndoBatch(ids);
+    undoTimerRef.current = setTimeout(() => setUndoBatch(null), 5000);
+  }, [
+    clearUndoTimer,
+    exitSelection,
+    onPaymentsChanged,
+    reloadPayments,
+    selectedIds,
+  ]);
+
+  const handleUndo = useCallback(async () => {
+    if (!undoBatch) return;
+    const ids = undoBatch;
+    clearUndoTimer();
+    setUndoBatch(null);
+    for (const id of ids) {
+      await restorePayment(id);
+    }
+    await reloadPayments();
+    onPaymentsChanged?.();
+    triggerHaptic("success");
+  }, [clearUndoTimer, onPaymentsChanged, reloadPayments, undoBatch]);
 
   /** Build a debtId → name lookup map */
   const debtNameMap = React.useMemo(() => {
@@ -91,9 +179,17 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     return map;
   }, [debts]);
 
-  /** Load payments when modal becomes visible */
+  /** Load payments when modal becomes visible; reset transient UI on close. */
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      // Closing the sheet abandons any in-flight selection/undo so it
+      // doesn't reappear on next open.
+      clearUndoTimer();
+      setUndoBatch(null);
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+      return;
+    }
     let cancelled = false;
     setIsLoading(true);
     getPayments()
@@ -111,7 +207,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [preference.locale, visible]);
+  }, [clearUndoTimer, preference.locale, visible]);
 
   const totalAll = React.useMemo(
     () => sections.reduce((sum, s) => sum + s.total, 0),
@@ -153,9 +249,37 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
       const { payment } = item;
       const debtName = debtNameMap.get(payment.debtId) ?? "Deleted Debt";
+      const isSelected = selectedIds.has(payment.id);
 
       return (
-        <View style={styles.paymentRow}>
+        <TouchableOpacity
+          style={[
+            styles.paymentRow,
+            isSelected && {
+              borderColor: colors.accent,
+              backgroundColor: `${colors.accent}1a`,
+            },
+          ]}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (selectionMode) toggleSelect(payment.id);
+          }}
+          onLongPress={() => {
+            setSelectionMode(true);
+            toggleSelect(payment.id);
+          }}
+          delayLongPress={300}
+        >
+          {selectionMode && (
+            <Text
+              style={[
+                styles.paymentCheck,
+                { color: isSelected ? colors.accent : colors.textMuted },
+              ]}
+            >
+              {isSelected ? "☑" : "☐"}
+            </Text>
+          )}
           <View style={styles.paymentLeft}>
             <Text style={styles.paymentDebtName}>{debtName}</Text>
             <Text style={styles.paymentDate}>{formatDate(payment.date, preference.locale)}</Text>
@@ -163,10 +287,19 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           <Text style={styles.paymentAmount}>
             -{formatCurrency(payment.amount)}
           </Text>
-        </View>
+        </TouchableOpacity>
       );
     },
-    [debtNameMap, formatCurrency, preference.locale, styles]
+    [
+      colors,
+      debtNameMap,
+      formatCurrency,
+      preference.locale,
+      selectionMode,
+      selectedIds,
+      styles,
+      toggleSelect,
+    ]
   );
 
   const emptyState = (
@@ -197,8 +330,13 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                 </Text>
               )}
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>Done</Text>
+            <TouchableOpacity
+              onPress={selectionMode ? exitSelection : onClose}
+              style={styles.closeBtn}
+            >
+              <Text style={styles.closeBtnText}>
+                {selectionMode ? "Cancel" : "Done"}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -213,6 +351,46 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             }
             showsVerticalScrollIndicator={false}
           />
+
+          {selectionMode && (
+            <View style={styles.bulkBar}>
+              <Text style={styles.bulkBarCount}>
+                {selectedIds.size} selected
+              </Text>
+              <TouchableOpacity
+                disabled={selectedIds.size === 0}
+                onPress={handleBulkDelete}
+                accessibilityRole="button"
+                accessibilityLabel="Delete selected payments"
+              >
+                <Text
+                  style={[
+                    styles.bulkBarDelete,
+                    selectedIds.size === 0 && { color: colors.textMuted },
+                  ]}
+                >
+                  Delete
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {undoBatch && !selectionMode && (
+            <View style={styles.undoBar}>
+              <Text style={styles.undoText}>
+                Deleted {undoBatch.length}{" "}
+                {undoBatch.length === 1 ? "payment" : "payments"}
+              </Text>
+              <TouchableOpacity
+                onPress={handleUndo}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Undo delete payments"
+              >
+                <Text style={styles.undoAction}>UNDO</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -308,6 +486,11 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 14,
       marginBottom: 8,
     },
+    paymentCheck: {
+      fontSize: 16,
+      fontWeight: "700",
+      marginRight: 12,
+    },
     paymentLeft: {
       flex: 1,
       marginRight: 12,
@@ -329,6 +512,50 @@ const makeStyles = (colors: ThemeColors) =>
       fontVariant: ["tabular-nums"],
     },
 
+    bulkBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      backgroundColor: colors.card,
+    },
+    bulkBarCount: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    bulkBarDelete: {
+      fontSize: 14,
+      fontWeight: "800",
+      color: colors.danger,
+    },
+    undoBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginHorizontal: 20,
+      marginBottom: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+    },
+    undoText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.text,
+    },
+    undoAction: {
+      fontSize: 13,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+      color: colors.accent,
+    },
     emptyWrap: {
       alignItems: "center",
       paddingVertical: 48,

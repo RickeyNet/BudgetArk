@@ -4,6 +4,7 @@ import {
   filterLive,
   purgeExpiredTombstones,
   tombstone,
+  untombstone,
 } from "./tombstones";
 
 const STORAGE_KEY = "@budgetark_asset_accounts";
@@ -77,6 +78,23 @@ export const deleteAssetAccount = async (accountId: string): Promise<AssetAccoun
   const now = new Date().toISOString();
   const next = accounts.map((account) =>
     account.id === accountId ? tombstone(account, now) : account
+  );
+  await saveAssetAccounts(next);
+  return filterLive(next);
+};
+
+/**
+ * Undo a soft-deleted asset account. No-op if id isn't a tombstone.
+ */
+export const restoreAssetAccount = async (
+  accountId: string
+): Promise<AssetAccount[]> => {
+  const accounts = await getAssetAccountsIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = accounts.map((account) =>
+    account.id === accountId && account.deletedAt
+      ? untombstone(account, now)
+      : account
   );
   await saveAssetAccounts(next);
   return filterLive(next);

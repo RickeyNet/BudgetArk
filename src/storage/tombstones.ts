@@ -48,6 +48,18 @@ export const tombstone = <T extends Tombstoneable>(record: T, now: string): T =>
 });
 
 /**
+ * Reverse a tombstone (undo a soft-delete). Clears `deletedAt` and bumps
+ * `updatedAt` to `now` so the revival wins LWW on the next sync against
+ * the delete the partner may have already received - i.e. an undo
+ * propagates as a normal upsert and resurrects the record everywhere.
+ */
+export const untombstone = <T extends Tombstoneable>(record: T, now: string): T => {
+  const { deletedAt, ...rest } = record;
+  void deletedAt;
+  return { ...(rest as T), updatedAt: now };
+};
+
+/**
  * Drop tombstones whose `deletedAt` is older than the TTL. Returns the
  * pruned array (a new copy if any were dropped, the original ref otherwise).
  */

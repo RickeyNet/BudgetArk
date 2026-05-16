@@ -4,6 +4,7 @@ import {
   filterLive,
   purgeExpiredTombstones,
   tombstone,
+  untombstone,
 } from "./tombstones";
 
 export const BUDGET_STORAGE_KEYS = {
@@ -150,6 +151,93 @@ export const deleteBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
   const next = entries.map((entry) =>
     entry.id === id ? tombstone(entry, now) : entry
   );
+  await saveBudgetEntries(next);
+  return filterLive(next);
+};
+
+/**
+ * Tombstone-safe field update for a single entry. Operates on the
+ * including-deleted array (like deleteBudgetEntry) so we never drop a
+ * tombstone the next sync needs, and bumps `updatedAt` for LWW. Used by
+ * undo-of-edit and bulk recategorize.
+ */
+export const updateBudgetEntry = async (
+  id: string,
+  patch: Partial<BudgetEntry>
+): Promise<BudgetEntry[]> => {
+  const entries = await getBudgetEntriesIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = entries.map((entry) =>
+    entry.id === id ? { ...entry, ...patch, id: entry.id, updatedAt: now } : entry
+  );
+  await saveBudgetEntries(next);
+  return filterLive(next);
+};
+
+/**
+ * Undo a soft-delete: clears the tombstone so the entry is live again.
+ * No-op (returns current live set) if the id isn't a tombstone.
+ */
+export const restoreBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
+  const entries = await getBudgetEntriesIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = entries.map((entry) =>
+    entry.id === id && entry.deletedAt ? untombstone(entry, now) : entry
+  );
+  await saveBudgetEntries(next);
+  return filterLive(next);
+};
+
+/* ─── Bulk operations (multi-select) ─── */
+
+/**
+ * Soft-deletes many entries in a single read/write. Returns live entries.
+ */
+export const deleteBudgetEntries = async (
+  ids: string[]
+): Promise<BudgetEntry[]> => {
+  const idSet = new Set(ids);
+  const entries = await getBudgetEntriesIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = entries.map((entry) =>
+    idSet.has(entry.id) && !entry.deletedAt ? tombstone(entry, now) : entry
+  );
+  await saveBudgetEntries(next);
+  return filterLive(next);
+};
+
+/**
+ * Undo a bulk delete: clears tombstones for the given ids in one write.
+ */
+export const restoreBudgetEntries = async (
+  ids: string[]
+): Promise<BudgetEntry[]> => {
+  const idSet = new Set(ids);
+  const entries = await getBudgetEntriesIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = entries.map((entry) =>
+    idSet.has(entry.id) && entry.deletedAt ? untombstone(entry, now) : entry
+  );
+  await saveBudgetEntries(next);
+  return filterLive(next);
+};
+
+/**
+ * Sets the category on each entry id in the map (id -> category) in one
+ * read/write, bumping updatedAt. Used by bulk recategorize and, with the
+ * captured prior categories, by its undo.
+ */
+export const setBudgetEntryCategories = async (
+  categoryById: Record<string, BudgetEntry["category"]>
+): Promise<BudgetEntry[]> => {
+  const entries = await getBudgetEntriesIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = entries.map((entry) => {
+    const nextCategory = categoryById[entry.id];
+    return nextCategory != null
+      ? { ...entry, category: nextCategory, updatedAt: now }
+      : entry;
+  });
   await saveBudgetEntries(next);
   return filterLive(next);
 };

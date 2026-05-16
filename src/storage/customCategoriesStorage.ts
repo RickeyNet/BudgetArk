@@ -163,6 +163,39 @@ export const deleteCustomCategory = async (
   return next;
 };
 
+/**
+ * Undo a delete by re-inserting the exact category object (same id, name,
+ * icon, timestamps). Unlike addCustomCategory this does NOT mint a new id,
+ * so any budget entries still tagged with the name keep resolving its icon.
+ * Skips if the id is already present, the cap is full, or the name now
+ * collides with a built-in or another custom (e.g. the user re-created it
+ * during the undo window) - restoring a duplicate would corrupt lookups.
+ */
+export const restoreCustomCategory = async (
+  category: CustomCategory
+): Promise<CategoryMutationResult> => {
+  const existing = await readStore();
+  if (existing.some((c) => c.id === category.id)) {
+    return { ok: true, categories: existing };
+  }
+  if (existing.length >= MAX_CUSTOM_CATEGORIES) {
+    return {
+      ok: false,
+      error: `You can have up to ${MAX_CUSTOM_CATEGORIES} custom categories.`,
+    };
+  }
+  const lower = category.name.toLowerCase();
+  if (
+    isBuiltInCategory(category.name) ||
+    existing.some((c) => c.name.toLowerCase() === lower)
+  ) {
+    return { ok: false, error: `"${category.name}" already exists.` };
+  }
+  const next = [...existing, category];
+  await writeStore(next);
+  return { ok: true, categories: next };
+};
+
 export const clearCustomCategories = async (): Promise<void> => {
   await EncryptedStorage.removeItem(STORAGE_KEY);
 };

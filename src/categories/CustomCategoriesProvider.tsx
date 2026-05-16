@@ -21,6 +21,7 @@ import {
   addCustomCategory,
   updateCustomCategory,
   deleteCustomCategory,
+  restoreCustomCategory,
   type CategoryMutationResult,
 } from "../storage/customCategoriesStorage";
 
@@ -34,6 +35,7 @@ interface CustomCategoriesContextValue {
     patch: { name?: string; icon?: string }
   ) => Promise<CategoryMutationResult>;
   remove: (id: string) => Promise<void>;
+  restore: (category: CustomCategory) => Promise<CategoryMutationResult>;
 }
 
 const CustomCategoriesContext =
@@ -84,9 +86,18 @@ export const CustomCategoriesProvider: React.FC<{
     setCustomCategories(await deleteCustomCategory(id));
   }, []);
 
+  const restore = useCallback(
+    async (category: CustomCategory): Promise<CategoryMutationResult> => {
+      const result = await restoreCustomCategory(category);
+      if (result.ok) setCustomCategories(result.categories);
+      return result;
+    },
+    []
+  );
+
   const value = useMemo<CustomCategoriesContextValue>(
-    () => ({ customCategories, isReady, refresh, add, update, remove }),
-    [customCategories, isReady, refresh, add, update, remove]
+    () => ({ customCategories, isReady, refresh, add, update, remove, restore }),
+    [customCategories, isReady, refresh, add, update, remove, restore]
   );
 
   return (

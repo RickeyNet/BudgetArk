@@ -3,6 +3,7 @@ import {
   Dimensions,
   FlatList,
   Modal,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -42,6 +43,11 @@ import {
   saveBudgetEntries,
   saveCategoryBudgetLimits,
   deleteBudgetEntry,
+  restoreBudgetEntry,
+  updateBudgetEntry,
+  deleteBudgetEntries,
+  restoreBudgetEntries,
+  setBudgetEntryCategories,
 } from "../storage/budgetStorage";
 import {
   buildMonthlyReview,
@@ -58,6 +64,7 @@ import {
   getAssetAccounts,
   saveAssetAccounts,
   deleteAssetAccount,
+  restoreAssetAccount,
 } from "../storage/assetAccountStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
@@ -73,6 +80,7 @@ import {
 } from "../onboarding/CoachmarkAnchorContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fabBottomOffset } from "../navigation/tabBarLayout";
+import { useUndo } from "../undo/UndoProvider";
 
 /**
  * FAB layout constants - kept here so the coachmark can compute a
@@ -239,6 +247,7 @@ const BudgetScreen: React.FC = () => {
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
   const insets = useSafeAreaInsets();
+  const { pushUndo } = useUndo();
   const coachmark = useTabCoachmark("Budget");
   const listRef = useRef<FlatList>(null);
   const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card", { scrollRef: listRef });
@@ -278,6 +287,12 @@ const BudgetScreen: React.FC = () => {
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Multi-select for bulk delete / recategorize. `selectionMode` flips row
+  // taps from "edit" to "toggle select"; auto-debt-payment rows are never
+  // selectable (they're derived from debts, not real budget entries).
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
+  const [showBulkCategoryPicker, setShowBulkCategoryPicker] = useState(false);
   const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
@@ -822,7 +837,28 @@ const BudgetScreen: React.FC = () => {
     setEditingEntry(null);
     triggerHaptic("success");
     void notifyAchievementCheck();
-  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
+    // Inverse of the linked-account deltas this edit applied, so undo
+    // also unwinds any asset-balance side effect.
+    const inverseDeltas = deltas.map((d) => ({ ...d, amount: -d.amount }));
+    pushUndo({
+      message: `Edited "${original.description || original.category}"`,
+      onUndo: async () => {
+        const reverted = await updateBudgetEntry(updated.id, original);
+        setEntries(reverted);
+        if (inverseDeltas.length > 0) {
+          const fresh = await getAssetAccounts();
+          const adjusted = adjustAssetAccounts(fresh, inverseDeltas);
+          await saveAssetAccounts(adjusted);
+          setAssetAccounts(adjusted);
+        }
+        await Promise.all([
+          refreshNetWorthSnapshots(),
+          refreshMonthlyReview(reverted),
+        ]);
+        void notifyAchievementCheck();
+      },
+    });
+  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
@@ -845,7 +881,159 @@ const BudgetScreen: React.FC = () => {
     ]);
     setEditingEntry(null);
     triggerHaptic("warning");
-  }, [adjustAssetAccounts, assetAccounts, entries, refreshMonthlyReview, refreshNetWorthSnapshots]);
+    pushUndo({
+      message: target
+        ? `Deleted "${target.description || target.category}"`
+        : "Deleted entry",
+      onUndo: async () => {
+        const restored = await restoreBudgetEntry(id);
+        setEntries(restored);
+        // The delete pulled `target.amount` out of its linked asset;
+        // putting the entry back must add it again.
+        if (target?.linkedAccountId) {
+          const fresh = await getAssetAccounts();
+          const adjusted = adjustAssetAccounts(fresh, [
+            { accountId: target.linkedAccountId, amount: target.amount },
+          ]);
+          await saveAssetAccounts(adjusted);
+          setAssetAccounts(adjusted);
+        }
+        await Promise.all([
+          refreshNetWorthSnapshots(),
+          refreshMonthlyReview(restored),
+        ]);
+        void notifyAchievementCheck();
+      },
+    });
+  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
+
+  /* ─── Bulk multi-select ─── */
+
+  const isAutoEntry = useCallback(
+    (id: string) => id.startsWith("auto-debt-"),
+    []
+  );
+
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedEntryIds(new Set());
+  }, []);
+
+  const toggleSelectEntry = useCallback(
+    (id: string) => {
+      if (isAutoEntry(id)) return;
+      setSelectedEntryIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    },
+    [isAutoEntry]
+  );
+
+  const enterSelectionWith = useCallback(
+    (id: string) => {
+      if (isAutoEntry(id)) return;
+      setSelectionMode(true);
+      setSelectedEntryIds(new Set([id]));
+    },
+    [isAutoEntry]
+  );
+
+  // Same category set the Add/Edit pickers offer, plus the user's customs.
+  const bulkCategoryOptions = useMemo<CategoryName[]>(() => {
+    const expenseBuiltins = BUDGET_CATEGORIES.filter(
+      (c) => c !== "Freelance" && c !== "Debt Payments" && c !== "Food"
+    ) as CategoryName[];
+    return [...expenseBuiltins, ...customCategories.map((c) => c.name)];
+  }, [customCategories]);
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntry(id));
+    if (ids.length === 0) {
+      exitSelection();
+      return;
+    }
+    const targets = entries.filter((e) => ids.includes(e.id));
+    // Net the linked-account effect of every deleted entry in one pass so
+    // the asset balances stay correct (and undo can mirror it).
+    const deltas = targets
+      .filter((e) => e.linkedAccountId)
+      .map((e) => ({ accountId: e.linkedAccountId as string, amount: -e.amount }));
+
+    const nextEntries = await deleteBudgetEntries(ids);
+    setEntries(nextEntries);
+    if (deltas.length > 0) {
+      const fresh = await getAssetAccounts();
+      const adjusted = adjustAssetAccounts(fresh, deltas);
+      await saveAssetAccounts(adjusted);
+      setAssetAccounts(adjusted);
+    }
+    await Promise.all([
+      refreshNetWorthSnapshots(),
+      refreshMonthlyReview(nextEntries),
+    ]);
+    exitSelection();
+    triggerHaptic("warning");
+    const inverse = deltas.map((d) => ({ ...d, amount: -d.amount }));
+    pushUndo({
+      message: `Deleted ${ids.length} ${ids.length === 1 ? "entry" : "entries"}`,
+      onUndo: async () => {
+        const restored = await restoreBudgetEntries(ids);
+        setEntries(restored);
+        if (inverse.length > 0) {
+          const fresh = await getAssetAccounts();
+          const adjusted = adjustAssetAccounts(fresh, inverse);
+          await saveAssetAccounts(adjusted);
+          setAssetAccounts(adjusted);
+        }
+        await Promise.all([
+          refreshNetWorthSnapshots(),
+          refreshMonthlyReview(restored),
+        ]);
+        void notifyAchievementCheck();
+      },
+    });
+  }, [adjustAssetAccounts, entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
+
+  const handleBulkRecategorize = useCallback(
+    async (category: CategoryName) => {
+      const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntry(id));
+      if (ids.length === 0) {
+        setShowBulkCategoryPicker(false);
+        exitSelection();
+        return;
+      }
+      // Capture each entry's prior category so undo restores them exactly
+      // (a mixed selection can't be reverted to one shared category).
+      const priorById: Record<string, CategoryName> = {};
+      const nextById: Record<string, CategoryName> = {};
+      for (const e of entries) {
+        if (ids.includes(e.id)) {
+          priorById[e.id] = e.category;
+          nextById[e.id] = category;
+        }
+      }
+      const nextEntries = await setBudgetEntryCategories(nextById);
+      setEntries(nextEntries);
+      await refreshMonthlyReview(nextEntries);
+      setShowBulkCategoryPicker(false);
+      exitSelection();
+      triggerHaptic("success");
+      void notifyAchievementCheck();
+      pushUndo({
+        message: `Moved ${ids.length} ${ids.length === 1 ? "entry" : "entries"} to ${category}`,
+        onUndo: async () => {
+          const reverted = await setBudgetEntryCategories(priorById);
+          setEntries(reverted);
+          await refreshMonthlyReview(reverted);
+          void notifyAchievementCheck();
+        },
+      });
+    },
+    [entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, selectedEntryIds]
+  );
 
   const foodEntriesToSplit = useMemo(
     () => entries.filter((entry) => entry.type === "expense" && entry.category === "Food"),
@@ -994,12 +1182,21 @@ const BudgetScreen: React.FC = () => {
   }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, notifyAchievementCheck, refreshNetWorthSnapshots]);
 
   const deleteAsset = useCallback(async (id: string) => {
+    const prior = assetAccounts.find((a) => a.id === id) ?? null;
     // Soft-delete so the partner's next sync removes this account locally.
     const nextAccounts = await deleteAssetAccount(id);
     setAssetAccounts(nextAccounts);
     await refreshNetWorthSnapshots();
     closeAssetModal();
-  }, [closeAssetModal, refreshNetWorthSnapshots]);
+    pushUndo({
+      message: prior ? `Deleted "${prior.name}"` : "Deleted account",
+      onUndo: async () => {
+        const restored = await restoreAssetAccount(id);
+        setAssetAccounts(restored);
+        await refreshNetWorthSnapshots();
+      },
+    });
+  }, [assetAccounts, closeAssetModal, pushUndo, refreshNetWorthSnapshots]);
 
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);
@@ -1298,16 +1495,43 @@ const BudgetScreen: React.FC = () => {
                   </Text>
                   {item.entries.map((entry) => {
                     const isAutoDebtPayment = entry.id.startsWith("auto-debt-");
+                    const isSelected = selectedEntryIds.has(entry.id);
                     const entryDate = new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
                     return (
                       <TouchableOpacity
                         key={entry.id}
-                        style={styles.expandedEntryRow}
+                        style={[
+                          styles.expandedEntryRow,
+                          isSelected && {
+                            backgroundColor: `${colors.accent}22`,
+                            borderRadius: 8,
+                          },
+                        ]}
                         onPress={() => {
-                          if (!isAutoDebtPayment) handleEditEntry(entry.id);
+                          if (isAutoDebtPayment) return;
+                          if (selectionMode) toggleSelectEntry(entry.id);
+                          else handleEditEntry(entry.id);
                         }}
+                        onLongPress={() => {
+                          if (!isAutoDebtPayment) enterSelectionWith(entry.id);
+                        }}
+                        delayLongPress={300}
                         activeOpacity={isAutoDebtPayment ? 1 : 0.6}
                       >
+                        {selectionMode && !isAutoDebtPayment && (
+                          <Text
+                            style={[
+                              styles.entryEditHint,
+                              {
+                                color: isSelected ? colors.accent : colors.textMuted,
+                                marginRight: 8,
+                                fontSize: 16,
+                              },
+                            ]}
+                          >
+                            {isSelected ? "☑" : "☐"}
+                          </Text>
+                        )}
                         <View style={styles.expandedEntryLeft}>
                           <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
                           {entry.description ? (
@@ -1355,16 +1579,132 @@ const BudgetScreen: React.FC = () => {
         />
       )}
 
-      {/* FAB - Add Income / Expense. Spotlight anchor is registered above
-          via useCoachmarkComputedAnchor; its rect uses fabBottomOffset /
-          FAB_RIGHT / FAB_SIZE, so keep those in sync with styles.fab. */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}
-        onPress={() => setShowAddModal(true)}
-        activeOpacity={0.8}
+      {/* FAB - Add Income / Expense. Hidden during multi-select so it
+          doesn't overlap the selection action bar. Spotlight anchor is
+          registered above via useCoachmarkComputedAnchor; its rect uses
+          fabBottomOffset / FAB_RIGHT / FAB_SIZE, keep in sync with
+          styles.fab. */}
+      {!selectionMode && (
+        <TouchableOpacity
+          style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}
+          onPress={() => setShowAddModal(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Bulk selection action bar - sits where the FAB was, clear of the
+          tab bar. Mutually exclusive in time with the Undo snackbar. */}
+      {selectionMode && (
+        <View
+          style={[
+            styles.bulkBar,
+            { bottom: fabBottomOffset(insets.bottom) },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={exitSelection}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel selection"
+          >
+            <Text style={[styles.bulkBarCancel, { color: colors.textMuted }]}>
+              ✕
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.bulkBarCount, { color: colors.text }]}>
+            {selectedEntryIds.size} selected
+          </Text>
+          <View style={styles.bulkBarActions}>
+            <TouchableOpacity
+              disabled={selectedEntryIds.size === 0}
+              onPress={() => setShowBulkCategoryPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Recategorize selected entries"
+            >
+              <Text
+                style={[
+                  styles.bulkBarAction,
+                  {
+                    color:
+                      selectedEntryIds.size === 0
+                        ? colors.textMuted
+                        : colors.accent,
+                  },
+                ]}
+              >
+                Recategorize
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              disabled={selectedEntryIds.size === 0}
+              onPress={handleBulkDelete}
+              accessibilityRole="button"
+              accessibilityLabel="Delete selected entries"
+            >
+              <Text
+                style={[
+                  styles.bulkBarAction,
+                  {
+                    color:
+                      selectedEntryIds.size === 0
+                        ? colors.textMuted
+                        : colors.danger,
+                  },
+                ]}
+              >
+                Delete
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      <Modal
+        visible={showBulkCategoryPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBulkCategoryPicker(false)}
       >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bulkPickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowBulkCategoryPicker(false)}
+        >
+          <View
+            style={[
+              styles.bulkPickerCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.cardBorder,
+                borderRadius: tokens.radius,
+              },
+            ]}
+          >
+            <Text style={[styles.bulkPickerTitle, { color: colors.text }]}>
+              Move {selectedEntryIds.size}{" "}
+              {selectedEntryIds.size === 1 ? "entry" : "entries"} to…
+            </Text>
+            <ScrollView style={styles.bulkPickerList}>
+              {bulkCategoryOptions.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.bulkPickerRow,
+                    { borderTopColor: colors.cardBorder },
+                  ]}
+                  onPress={() => handleBulkRecategorize(cat)}
+                >
+                  <Text style={[styles.bulkPickerRowText, { color: colors.text }]}>
+                    {getCategoryIcon(cat, customCategories)} {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <AddBudgetEntryModal
         visible={showAddModal}
@@ -2435,6 +2775,70 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontWeight: "300",
       color: colors.accentButtonText || colors.bg,
       lineHeight: 28,
+    },
+    bulkBar: {
+      position: "absolute",
+      left: 16,
+      right: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      borderRadius: tokens.radius,
+      elevation: 6,
+      shadowColor: "#000",
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+    },
+    bulkBarCancel: {
+      fontSize: scale(15),
+      fontWeight: "700",
+    },
+    bulkBarCount: {
+      flex: 1,
+      fontSize: scale(13),
+      fontWeight: "700",
+    },
+    bulkBarActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 18,
+    },
+    bulkBarAction: {
+      fontSize: scale(13),
+      fontWeight: "800",
+    },
+    bulkPickerOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.7)",
+      justifyContent: "center",
+      paddingHorizontal: 28,
+    },
+    bulkPickerCard: {
+      borderWidth: 1,
+      padding: 20,
+      maxHeight: "70%",
+    },
+    bulkPickerTitle: {
+      fontSize: scale(16),
+      fontWeight: "700",
+      marginBottom: 12,
+    },
+    bulkPickerList: {
+      flexGrow: 0,
+    },
+    bulkPickerRow: {
+      paddingVertical: 13,
+      borderTopWidth: 1,
+    },
+    bulkPickerRowText: {
+      fontSize: scale(14),
+      fontWeight: "600",
     },
   });
 };

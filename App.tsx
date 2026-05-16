@@ -32,6 +32,7 @@ import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
 import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
 import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
 import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvider";
+import { UndoProvider } from "./src/undo/UndoProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
@@ -395,7 +396,9 @@ export default function App(): React.JSX.Element {
                 <CoachmarkAnchorProvider>
                   <AchievementsProvider>
                     <CustomCategoriesProvider>
-                      <AppContent />
+                      <UndoProvider>
+                        <AppContent />
+                      </UndoProvider>
                     </CustomCategoriesProvider>
                   </AchievementsProvider>
                 </CoachmarkAnchorProvider>

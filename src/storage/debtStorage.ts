@@ -17,6 +17,7 @@ import {
   filterLive,
   purgeExpiredTombstones,
   tombstone,
+  untombstone,
 } from "./tombstones";
 
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
@@ -207,6 +208,20 @@ export const updateDebt = async (
   return filterLive(updated);
 };
 
+/**
+ * Undo a soft-deleted debt: clears the tombstone so it's live again.
+ * No-op if the id isn't a tombstone.
+ */
+export const restoreDebt = async (id: string): Promise<Debt[]> => {
+  const debts = await getDebtsIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = debts.map((d) =>
+    d.id === id && d.deletedAt ? untombstone(d, now) : d
+  );
+  await saveDebts(next);
+  return filterLive(next);
+};
+
 /* ─── Payment History Operations ─── */
 
 /**
@@ -298,6 +313,87 @@ export const recordPayment = async (
     [STORAGE_KEYS.PAYMENTS, JSON.stringify(updatedPayments)],
   ]);
 
+  return {
+    debts: filterLive(updatedDebts),
+    payments: filterLive(updatedPayments),
+  };
+};
+
+/**
+ * Soft-deletes a payment and reverses its effect on the debt balance.
+ * A logged-in-error payment had reduced the debt's balance; deleting it
+ * must add that amount back, or the balance silently stays wrong. Both
+ * keys are written in one multiSet, mirroring recordPayment, so a write
+ * timeout can't tombstone the payment without also restoring the balance.
+ *
+ * @returns updated live debts + payments
+ */
+export const deletePayment = async (
+  paymentId: string
+): Promise<{ debts: Debt[]; payments: Payment[] }> => {
+  const [debts, payments] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+  ]);
+  const now = new Date().toISOString();
+  const target = payments.find((p) => p.id === paymentId && !p.deletedAt);
+
+  const updatedPayments = payments.map((p) =>
+    p.id === paymentId && !p.deletedAt ? tombstone(p, now) : p
+  );
+  const updatedDebts =
+    target == null
+      ? debts
+      : debts.map((d) =>
+          d.id === target.debtId && !d.deletedAt
+            ? { ...d, balance: d.balance + target.amount, updatedAt: now }
+            : d
+        );
+
+  await EncryptedStorage.multiSet([
+    [STORAGE_KEYS.DEBTS, JSON.stringify(updatedDebts)],
+    [STORAGE_KEYS.PAYMENTS, JSON.stringify(updatedPayments)],
+  ]);
+  return {
+    debts: filterLive(updatedDebts),
+    payments: filterLive(updatedPayments),
+  };
+};
+
+/**
+ * Undo a payment delete: clears the tombstone and re-applies the balance
+ * reduction it originally caused. Inverse of deletePayment.
+ */
+export const restorePayment = async (
+  paymentId: string
+): Promise<{ debts: Debt[]; payments: Payment[] }> => {
+  const [debts, payments] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+  ]);
+  const now = new Date().toISOString();
+  const target = payments.find((p) => p.id === paymentId && p.deletedAt);
+
+  const updatedPayments = payments.map((p) =>
+    p.id === paymentId && p.deletedAt ? untombstone(p, now) : p
+  );
+  const updatedDebts =
+    target == null
+      ? debts
+      : debts.map((d) =>
+          d.id === target.debtId && !d.deletedAt
+            ? {
+                ...d,
+                balance: Math.max(0, d.balance - target.amount),
+                updatedAt: now,
+              }
+            : d
+        );
+
+  await EncryptedStorage.multiSet([
+    [STORAGE_KEYS.DEBTS, JSON.stringify(updatedDebts)],
+    [STORAGE_KEYS.PAYMENTS, JSON.stringify(updatedPayments)],
+  ]);
   return {
     debts: filterLive(updatedDebts),
     payments: filterLive(updatedPayments),

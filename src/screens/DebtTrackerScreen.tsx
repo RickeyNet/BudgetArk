@@ -30,6 +30,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fabBottomOffset } from "../navigation/tabBarLayout";
+import { useUndo } from "../undo/UndoProvider";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import {
@@ -48,6 +49,7 @@ import {
   getDebts,
   saveDebts,
   deleteDebt,
+  restoreDebt,
   recordPayment,
   updateDebt,
   getPayoffStrategyPreference,
@@ -57,6 +59,7 @@ import {
   getSavingsGoals,
   saveSavingsGoals,
   deleteSavingsGoal,
+  restoreSavingsGoal,
 } from "../storage/savingsGoalStorage";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
@@ -241,6 +244,7 @@ const DebtTrackerScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
+  const { pushUndo } = useUndo();
   const coachmark = useTabCoachmark("DebtTracker");
   const listRef = useRef<FlatList<Debt>>(null);
   const anchorSummary = useCoachmarkAnchor("debts-summary-card", { scrollRef: listRef });
@@ -650,12 +654,26 @@ const DebtTrackerScreen: React.FC = () => {
 
   /** Save edits to an existing debt */
   const handleSaveEdit = useCallback(async (debtId: string, updates: Partial<Debt>) => {
+    // Snapshot the full prior record so undo can write every field back,
+    // not just the keys this edit touched.
+    const prior = debts.find((d) => d.id === debtId) ?? null;
     const updated = await updateDebt(debtId, updates);
     const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
     setDebts(updated);
     await syncNetWorthSnapshot();
     setShowModal(false);
     setEditingDebt(null);
+    if (prior) {
+      pushUndo({
+        message: `Edited "${prior.name}"`,
+        onUndo: async () => {
+          const reverted = await updateDebt(debtId, prior);
+          setDebts(reverted);
+          await syncNetWorthSnapshot();
+          void notifyAchievementCheck();
+        },
+      });
+    }
     if (paidOffDebt) {
       // Defer the celebration Modal so the edit Modal's close animation
       // finishes first - RN can't stack two Modal presentations in the
@@ -665,7 +683,7 @@ const DebtTrackerScreen: React.FC = () => {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
-  }, [debts, notifyAchievementCheck]);
+  }, [debts, notifyAchievementCheck, pushUndo]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -679,12 +697,32 @@ const DebtTrackerScreen: React.FC = () => {
     // Soft-delete via the storage helper so a tombstone gets persisted -
     // a paired partner needs that to remove the debt locally on next sync,
     // otherwise their stale upsert would resurrect this deletion.
+    const deletedName = pendingDeleteDebt.name;
     const updated = await deleteDebt(debtId);
     setDebts(updated);
     await syncNetWorthSnapshot();
     setPendingDeleteDebt(null);
     triggerHaptic("warning");
-  }, [pendingDeleteDebt]);
+    pushUndo({
+      message: `Deleted "${deletedName}"`,
+      onUndo: async () => {
+        const restored = await restoreDebt(debtId);
+        setDebts(restored);
+        await syncNetWorthSnapshot();
+        void notifyAchievementCheck();
+      },
+    });
+  }, [pendingDeleteDebt, pushUndo, notifyAchievementCheck]);
+
+  // Payment bulk-delete/undo (inside PaymentHistoryModal) re-adjusts debt
+  // balances, so pull fresh debts + resnapshot net worth when it reports a
+  // change.
+  const handlePaymentsChanged = useCallback(async () => {
+    const fresh = await getDebts();
+    setDebts(fresh);
+    await syncNetWorthSnapshot();
+    void notifyAchievementCheck();
+  }, [notifyAchievementCheck]);
 
   const openClassifyModal = useCallback(() => {
     const nextDraft: Record<string, DebtClass> = {};
@@ -896,12 +934,22 @@ const DebtTrackerScreen: React.FC = () => {
 
   const handleDeleteSavingsGoal = useCallback(
     async (goalId: string) => {
+      const prior = savingsGoals.find((g) => g.id === goalId) ?? null;
       // Soft-delete so the partner sees the deletion on next sync.
       const updated = await deleteSavingsGoal(goalId);
       setSavingsGoals(updated);
       await syncNetWorthSnapshot();
+      pushUndo({
+        message: prior ? `Deleted "${prior.name}"` : "Deleted savings goal",
+        onUndo: async () => {
+          const restored = await restoreSavingsGoal(goalId);
+          setSavingsGoals(restored);
+          await syncNetWorthSnapshot();
+          void notifyAchievementCheck();
+        },
+      });
     },
-    []
+    [savingsGoals, pushUndo, notifyAchievementCheck]
   );
 
   const handleUpdateEssentialsEstimate = useCallback((value: number) => {
@@ -1101,6 +1149,7 @@ const DebtTrackerScreen: React.FC = () => {
         visible={showHistory}
         onClose={() => setShowHistory(false)}
         debts={debts}
+        onPaymentsChanged={handlePaymentsChanged}
       />
 
       <DebtPayoffCelebrationModal
