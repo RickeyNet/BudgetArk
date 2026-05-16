@@ -3,7 +3,7 @@
  * File: src/components/ManageCategoriesModal.tsx
  *
  * Modal-as-sub-screen (visible/onClose) for adding and deleting user-defined
- * budget categories. v1 is additive only — built-in categories are fixed and
+ * budget categories. v1 is additive only - built-in categories are fixed and
  * not listed here. Reads/writes via useCustomCategories().
  */
 
@@ -24,10 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
-import {
-  EMOJI_CHOICES,
-  DEFAULT_CATEGORY_ICON,
-} from "../data/categoryIcons";
+import { EMOJI_CHOICES, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
 import { MAX_CATEGORY_NAME_LENGTH } from "../storage/customCategoriesStorage";
 
 interface ManageCategoriesModalProps {
@@ -77,7 +74,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
     (id: string, label: string) => {
       Alert.alert(
         "Delete category?",
-        `"${label}" will be removed from the picker. Existing entries keep this category — they just lose the custom icon.`,
+        `"${label}" will be removed from the picker. Existing entries keep this category, they just lose the custom icon.`,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -87,10 +84,10 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
               void remove(id);
             },
           },
-        ]
+        ],
       );
     },
-    [remove]
+    [remove],
   );
 
   const canAdd = name.trim().length > 0 && !saving;
@@ -114,8 +111,8 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
           >
             <Text style={styles.title}>Custom Categories</Text>
             <Text style={styles.subtitle}>
-              Add your own budget categories. They work everywhere built-in
-              ones do — entries, limits, charts, and reports.
+              Add your own budget categories. They work everywhere built-in ones
+              do - entries, limits, charts, and reports.
             </Text>
 
             {/* ── Add form ── */}
@@ -202,10 +199,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
                 : null,
             ]}
           >
-            <TouchableOpacity
-              style={styles.doneButton}
-              onPress={handleClose}
-            >
+            <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
               <Text style={styles.doneText}>Done</Text>
             </TouchableOpacity>
           </View>

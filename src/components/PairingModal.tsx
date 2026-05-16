@@ -78,7 +78,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
   const cancelledRef = useRef(false);
 
   // Reset state when modal opens/closes. The teardown body lives in a single
-  // function so it also runs on parent unmount via the effect's return —
+  // function so it also runs on parent unmount via the effect's return -
   // without that, a parent that unmounts the modal while it's still `visible`
   // would leak the countdown interval, the listening TCP server, and the
   // Zeroconf publish. Fixes a bug where retry attempts wedged on the same

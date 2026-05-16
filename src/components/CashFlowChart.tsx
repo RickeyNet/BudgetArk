@@ -3,7 +3,7 @@
  * File: src/components/CashFlowChart.tsx
  *
  * Monthly income-vs-expense grouped bars with a "net wick" connecting the
- * two tops and a net trend line across months — the candlestick-style cash
+ * two tops and a net trend line across months - the candlestick-style cash
  * flow panel from the ui concept. Presentational only; the caller derives
  * the monthly series.
  */

@@ -1,10 +1,10 @@
-# BudgetArk — App Store Launch TODO
+# BudgetArk - App Store Launch TODO
 
 Work through phases in order: finish the features first, then handle store prep and submission.
 
 ---
 
-## Phase 1 — Budget Screen
+## Phase 1 - Budget Screen
 
 - [x] Design data model for income/expense entries (category, amount, date, type)
 - [x] Create `budgetStorage.ts` following the same AsyncStorage pattern as `debtStorage.ts`
@@ -17,7 +17,7 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ---
 
-## Phase 2 — Investment Screen
+## Phase 2 - Investment Screen
 
 - [x] Design UI for contribution calculator (inputs: monthly amount, annual return %, years)
 - [x] Wire up `calcInvestmentGrowth()` from `src/utils/calculations.ts` (already implemented)
@@ -31,8 +31,8 @@ Work through phases in order: finish the features first, then handle store prep 
 ## Pre-Launch (Required Before Any Submission)
 
 ### App Configuration
-- [x] Add `bundleIdentifier` to `app.json` under `expo.ios` (e.g., `com.yourname.budgetark`) — required by Apple
-- [x] Add `package` to `app.json` under `expo.android` (e.g., `com.yourname.budgetark`) — required by Google
+- [x] Add `bundleIdentifier` to `app.json` under `expo.ios` (e.g., `com.yourname.budgetark`) - required by Apple
+- [x] Add `package` to `app.json` under `expo.android` (e.g., `com.yourname.budgetark`) - required by Google
 - [x] Change `userInterfaceStyle` in `app.json` from `"light"` to `"dark"` (the app uses a dark theme)
 - [x] Add `expo.ios.buildNumber` and `expo.android.versionCode` fields to `app.json`
 
@@ -55,7 +55,7 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ### Privacy Policy
 - [x] Write a privacy policy (required by both Apple and Google)
-  - Can be a simple web page or GitHub Gist — key point: state that no data leaves the device
+  - Can be a simple web page or GitHub Gist - key point: state that no data leaves the device
 - [x] Add the privacy policy URL to `app.json` under `expo.ios.privacyManifests` or as a link in the store listing
 
 ===========================================================================================================================================================================================
@@ -90,10 +90,10 @@ Work through phases in order: finish the features first, then handle store prep 
 - [ ] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
 - [x] Short description (80 characters max)
 - [x] Full description (4,000 characters max)
-- [x] Privacy policy URL (required — host on GitHub Pages for free, state no data leaves the device)
+- [x] Privacy policy URL (required - host on GitHub Pages for free, state no data leaves the device)
 
 ### 4. App Content Questionnaire (in Play Console)
-- [x] Complete content rating (IARC questionnaire — should be "Everyone")
+- [x] Complete content rating (IARC questionnaire - should be "Everyone")
 - [x] Set target audience / age group
 - [x] Complete Data Safety form (no data collected, no data shared, all data stays on device)
 - [x] Ads declaration (no ads)
@@ -109,8 +109,8 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ### 6. Wait for Review
 - [ ] Google review typically takes a few hours to a few days for first submission
-- [ ] Note: `android.package` is `com.budgetark.app` — this is your permanent Play Store identity
-- [ ] Google Play App Signing manages your keys by default — no risk of losing your keystore
+- [ ] Note: `android.package` is `com.budgetark.app` - this is your permanent Play Store identity
+- [ ] Google Play App Signing manages your keys by default - no risk of losing your keystore
 
 ==============================================================================================================================================================================================
 
@@ -120,7 +120,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 
 ### 1. Prerequisites
 - [ ] Make your GitHub repo public (F-Droid requires open source code)
-- [ ] Add an open-source license to the repo (e.g., GPL-3.0, MIT, Apache-2.0) — add a `LICENSE` file
+- [ ] Add an open-source license to the repo (e.g., GPL-3.0, MIT, Apache-2.0) - add a `LICENSE` file
 - [ ] Remove any proprietary dependencies if possible (F-Droid prefers fully free software)
   - Note: `expo-updates` and EAS-related code may need to be optional since F-Droid builds won't use EAS
 - [ ] Ensure the app can build with standard open-source tooling (Gradle)
@@ -129,7 +129,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 - [ ] Run `npx expo prebuild` to generate the native `android/` folder
 - [ ] Verify the app builds locally: `cd android && ./gradlew assembleRelease`
 - [ ] Make sure `android/` is committed to the repo (F-Droid builds from source)
-- [ ] Tag your release in git (e.g., `git tag v1.0.0`) — F-Droid uses tags to detect new versions
+- [ ] Tag your release in git (e.g., `git tag v1.0.0`) - F-Droid uses tags to detect new versions
 
 ### 3. Create F-Droid Metadata
 - [ ] Fork the F-Droid Data repo: https://gitlab.com/fdroid/fdroiddata
@@ -176,9 +176,9 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 - [ ] They will build the app from source on their servers and sign it with their key
 
 ### 5. Things to Know
-- [ ] F-Droid signs the APK with their own key — it will NOT be the same signature as your Play Store/EAS builds
+- [ ] F-Droid signs the APK with their own key - it will NOT be the same signature as your Play Store/EAS builds
 - [ ] Users cannot switch between Play Store and F-Droid versions without reinstalling
-- [ ] Updates go through F-Droid's build cycle — not instant like EAS OTA
+- [ ] Updates go through F-Droid's build cycle - not instant like EAS OTA
 - [ ] No analytics, tracking, or proprietary push services allowed (BudgetArk should be fine since it's fully offline)
 
 =================================================================================================================================================================================================
@@ -186,7 +186,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 ## Security Hardening
 
 ### Critical
-- [x] Fix encryption implementation — add HMAC integrity verification to `encryptedStorage.ts` so tampered ciphertexts are detected
+- [x] Fix encryption implementation - add HMAC integrity verification to `encryptedStorage.ts` so tampered ciphertexts are detected
 - [x] Wrap all unsafe `JSON.parse` calls in try-catch with fallback defaults (`userStorage.ts:83`, `debtStorage.ts:70`, `savingsGoalStorage.ts:8`, `budgetStorage.ts:45`)
 
 ### High
@@ -197,7 +197,7 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 ### Medium
 - [x] Gate `console.error` / `console.warn` calls behind `__DEV__` checks in production (`App.tsx`, screens)
 - [x] Add input validation against control characters and null bytes on display name and debt name fields
-- [x] Audit Android permissions — consider removing `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` from `AndroidManifest.xml`
+- [x] Audit Android permissions - consider removing `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` from `AndroidManifest.xml`
 - [x] Add `FLAG_SECURE` screenshot/screen recording protection on screens showing financial data
 - [x] Add transactional safety (write-to-temp-key, then rename) for import merge operations in `importData.ts`
 
@@ -212,39 +212,39 @@ F-Droid is a free, open-source Android app store. Apps must be open source and b
 #### 1. Add timeouts to AsyncStorage operations to prevent app hangs on slow I/O
 File: `src/storage/encryptedStorage.ts`
 Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash storage or backed-up I/O queues could hang indefinitely, freezing the app.
-- **Option A — Promise.race timeout wrapper:** Create a `withTimeout()` utility wrapping each AsyncStorage call with `Promise.race([operation, rejectAfter5s])`. Apply inside `encryptedStorage.ts` so all callers get it automatically.
-- **Option B — Timeout only on raw I/O:** Same concept but wrap only the `AsyncStorage.*` calls, not the crypto operations (which can be slow on low-end devices). More surgical.
-- **Option C — Timeout + retry once:** On timeout, retry the operation once before throwing. Handles transient I/O hiccups without surfacing errors on brief blips.
-- Recommended: **Option A** — simple, comprehensive, 5-second timeout is generous enough for slow devices.
+- **Option A - Promise.race timeout wrapper:** Create a `withTimeout()` utility wrapping each AsyncStorage call with `Promise.race([operation, rejectAfter5s])`. Apply inside `encryptedStorage.ts` so all callers get it automatically.
+- **Option B - Timeout only on raw I/O:** Same concept but wrap only the `AsyncStorage.*` calls, not the crypto operations (which can be slow on low-end devices). More surgical.
+- **Option C - Timeout + retry once:** On timeout, retry the operation once before throwing. Handles transient I/O hiccups without surfacing errors on brief blips.
+- Recommended: **Option A** - simple, comprehensive, 5-second timeout is generous enough for slow devices.
 
 
 - [x] Implement fail-closed downgrade guard 
 #### 2. Fail-closed policy for version downgrade guard
 File: `src/utils/versionGuard.ts`
 Currently `isUpdateSafe()` returns `true` (fail-open) when either version is missing. An attacker could strip version metadata from a malicious OTA update to bypass the downgrade guard.
-- **Option A — Fail-closed on missing incoming version:** Return `false` if incoming version is undefined (block the update). Keep fail-open if the *current* version is missing (avoids locking out users whose app was installed without version metadata).
-- **Option B — Full fail-closed:** Return `false` if either version is missing. Strictest, but risks blocking legitimate updates if Expo metadata has a hiccup.
-- **Option C — Fail-closed with user override:** Return `false` by default, but show a modal letting the user choose to install anyway.
-- Recommended: **Option A** — blocks the actual attack vector without risking lockout from legitimate updates.
+- **Option A - Fail-closed on missing incoming version:** Return `false` if incoming version is undefined (block the update). Keep fail-open if the *current* version is missing (avoids locking out users whose app was installed without version metadata).
+- **Option B - Full fail-closed:** Return `false` if either version is missing. Strictest, but risks blocking legitimate updates if Expo metadata has a hiccup.
+- **Option C - Fail-closed with user override:** Return `false` by default, but show a modal letting the user choose to install anyway.
+- Recommended: **Option A** - blocks the actual attack vector without risking lockout from legitimate updates.
 
 
 - [x] Implement stale import warning
 #### 3. Data expiration warnings for stale imports
 Files: `src/utils/importData.ts`, `src/utils/exportData.ts`
 Exports already include an `exportedAt` timestamp, but imports don't check it. A user could import a 6-month-old backup and silently overwrite fresher data in merge mode.
-- **Option A — Warning in import result:** After successful import, check `exportedAt`; if >30 days old, include a warning message in the result for the UI to display.
-- **Option B — Pre-import warning with confirmation:** Before writing data, check `exportedAt` and throw a special error if stale, prompting user confirmation. Blocks stale imports by default.
-- **Option C — Non-blocking info banner:** Parse `exportedAt`, return a `staleDays` field alongside import counts. UI shows an info banner but doesn't block the import.
-- Recommended: **Option C** — stale imports aren't dangerous (merge deduplicates by ID), so blocking would be frustrating. A simple banner is the right awareness level.
+- **Option A - Warning in import result:** After successful import, check `exportedAt`; if >30 days old, include a warning message in the result for the UI to display.
+- **Option B - Pre-import warning with confirmation:** Before writing data, check `exportedAt` and throw a special error if stale, prompting user confirmation. Blocks stale imports by default.
+- **Option C - Non-blocking info banner:** Parse `exportedAt`, return a `staleDays` field alongside import counts. UI shows an info banner but doesn't block the import.
+- Recommended: **Option C** - stale imports aren't dangerous (merge deduplicates by ID), so blocking would be frustrating. A simple banner is the right awareness level.
 
 - [x] Implement explicit bounds checks
 #### 4. Explicit bounds checks before financial calculations
 File: `src/utils/calculations.ts`
 Calculation functions accept raw `number` inputs with no upper bounds. JS `Number` loses precision above ~2^53, and `Math.pow()` with extreme inputs returns `Infinity`/`NaN`, which cascades into the UI.
-- **Option A — Input clamping at function boundaries:** Add bounds checks at the top of each exported function — clamp `balance` to max $1B, `annualRate` to max 200%, `monthlyPayment` to max $1M, `years` to max 100, `monthlyContribution` to max $1M. Return early with safe defaults (0 or Infinity) if out of range. Matches limits already in `importData.ts`.
-- **Option B — Shared validation utility:** Create `validateFinancialInput()` that all functions call; throws descriptive errors for out-of-bounds inputs.
-- **Option C — Output validation:** Don't restrict inputs, but check outputs. If any result is `NaN`, `Infinity`, or unexpectedly negative, return a safe fallback.
-- Recommended: **Option A** — prevents the issue at the source. Bounds match `importData.ts` limits (`MAX_MONEY: 1_000_000_000`, `MAX_RATE: 200`). Clamping is silent and non-disruptive.
+- **Option A - Input clamping at function boundaries:** Add bounds checks at the top of each exported function - clamp `balance` to max $1B, `annualRate` to max 200%, `monthlyPayment` to max $1M, `years` to max 100, `monthlyContribution` to max $1M. Return early with safe defaults (0 or Infinity) if out of range. Matches limits already in `importData.ts`.
+- **Option B - Shared validation utility:** Create `validateFinancialInput()` that all functions call; throws descriptive errors for out-of-bounds inputs.
+- **Option C - Output validation:** Don't restrict inputs, but check outputs. If any result is `NaN`, `Infinity`, or unexpectedly negative, return a safe fallback.
+- Recommended: **Option A** - prevents the issue at the source. Bounds match `importData.ts` limits (`MAX_MONEY: 1_000_000_000`, `MAX_RATE: 200`). Clamping is silent and non-disruptive.
 
 ### v1.4.16 Audit Follow-ups
 
@@ -252,58 +252,58 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Add app-launch biometric / PIN gate
   Files: new screen + `App.tsx`, `package.json` (add `expo-local-authentication`)
   No auth between device unlock and full financial data. Anyone past the lockscreen sees balances, debts, payments. Biggest user-facing gap for a finance app.
-  - **Option A — Biometric required, PIN fallback:** Gate first render on `LocalAuthentication.authenticateAsync({ disableDeviceFallback: false })`. Falls back to device passcode if Face/Touch ID enrollment is missing.
-  - **Option B — Optional, off by default:** Setting in ProfileScreen; default off so existing users aren't surprised on update. Lower friction, lower protection.
-  - **Option C — Optional, prompt on first launch after update:** One-shot opt-in modal explaining the trade-off, default to enabled if the user dismisses.
-  - Recommended: **Option C** — best mix of security and not breaking expectations for existing installs.
+  - **Option A - Biometric required, PIN fallback:** Gate first render on `LocalAuthentication.authenticateAsync({ disableDeviceFallback: false })`. Falls back to device passcode if Face/Touch ID enrollment is missing.
+  - **Option B - Optional, off by default:** Setting in ProfileScreen; default off so existing users aren't surprised on update. Lower friction, lower protection.
+  - **Option C - Optional, prompt on first launch after update:** One-shot opt-in modal explaining the trade-off, default to enabled if the user dismisses.
+  - Recommended: **Option C** - best mix of security and not breaking expectations for existing installs.
 
 #### Medium
 - [ ] Add MAC to encrypted exports (or switch to AES-GCM)
   File: `src/utils/exportData.ts`, `src/utils/importData.ts`
   v2 encrypted export uses AES-CBC with no integrity tag. JSON-parse failure is the only "tamper" signal. No realistic padding-oracle exposure today (user decrypts locally), but a missing MAC is an audit flag every time.
-  - **Option A — AES-GCM:** Replace CBC with GCM; auth tag is built in. Cleanest. CryptoJS doesn't ship GCM though — would need `expo-crypto`/native or a vetted JS GCM lib.
-  - **Option B — Encrypt-then-MAC envelope:** Keep CBC, append `HMAC-SHA256(salt | iv | ciphertext)` to the v2 prefix as a new `__BUDGETARK_ENC3__:` format. Stays inside CryptoJS. Mirrors the storage-layer pattern.
-  - **Option C — Leave as-is, document the threat model:** Note in code that integrity is JSON-parse only and any tampering corrupts decrypt → user re-imports.
-  - Recommended: **Option B** — matches what `encryptedStorage.ts` already does, no new dep, bumps prefix so legacy v2 stays decryptable.
+  - **Option A - AES-GCM:** Replace CBC with GCM; auth tag is built in. Cleanest. CryptoJS doesn't ship GCM though - would need `expo-crypto`/native or a vetted JS GCM lib.
+  - **Option B - Encrypt-then-MAC envelope:** Keep CBC, append `HMAC-SHA256(salt | iv | ciphertext)` to the v2 prefix as a new `__BUDGETARK_ENC3__:` format. Stays inside CryptoJS. Mirrors the storage-layer pattern.
+  - **Option C - Leave as-is, document the threat model:** Note in code that integrity is JSON-parse only and any tampering corrupts decrypt → user re-imports.
+  - Recommended: **Option B** - matches what `encryptedStorage.ts` already does, no new dep, bumps prefix so legacy v2 stays decryptable.
 
 - [ ] Pin `expo-secure-store` to device-only accessibility
   File: `src/storage/encryptedStorage.ts:124`
-  `SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key)` uses no options, so iOS default is `WHEN_UNLOCKED` — included in iCloud Keychain sync. The master encryption key for all on-device data could end up in iCloud.
-  - **Option A — `WHEN_UNLOCKED_THIS_DEVICE_ONLY`:** Pass `{ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }`. Key never leaves the device, but a device restore to a new phone loses access — user has to re-import.
-  - **Option B — `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`:** Same iCloud-blocked guarantee, but readable after first unlock post-boot (lets a future background sync work). Slightly weaker at-rest posture.
-  - **Option C — Leave default + document trade-off:** Easier device migration via iCloud Keychain restore, at the cost of the key existing off-device.
-  - Recommended: **Option A** — finance data shouldn't quietly ride iCloud. Pair with a clear "back up your encrypted JSON before switching phones" note in the restore flow.
+  `SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key)` uses no options, so iOS default is `WHEN_UNLOCKED` - included in iCloud Keychain sync. The master encryption key for all on-device data could end up in iCloud.
+  - **Option A - `WHEN_UNLOCKED_THIS_DEVICE_ONLY`:** Pass `{ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }`. Key never leaves the device, but a device restore to a new phone loses access - user has to re-import.
+  - **Option B - `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`:** Same iCloud-blocked guarantee, but readable after first unlock post-boot (lets a future background sync work). Slightly weaker at-rest posture.
+  - **Option C - Leave default + document trade-off:** Easier device migration via iCloud Keychain restore, at the cost of the key existing off-device.
+  - Recommended: **Option A** - finance data shouldn't quietly ride iCloud. Pair with a clear "back up your encrypted JSON before switching phones" note in the restore flow.
 
 #### Low
 - [ ] Pass crypto keys as `WordArray`, not hex string passphrases
   Files: `src/storage/encryptedStorage.ts:154-198`, `src/sync/transportService.ts:39-51`
   `CryptoJS.AES.encrypt(plaintext, hexKeyString)` triggers OpenSSL's EVP_BytesToKey (single-round MD5) to re-derive the AES key + IV from a string treated as a passphrase. Inputs already have full 256-bit entropy so it's not exploitable, but the weak-KDF flag will surface on every audit. `exportData.ts` already does this right.
-  - **Option A — Switch both call sites to `CryptoJS.enc.Hex.parse(key)` + explicit random IV:** Mirrors the v2 export path. Storage stays backward-compatible if we bump to a `__ENCV3__:` prefix and migrate-on-read.
-  - **Option B — Leave as-is, add a comment explaining why it's safe:** Cheapest. Keeps the audit-flag treadmill.
-  - Recommended: **Option A** — same pattern as exports, eliminates the recurring audit comment, migration-on-read is the same shape we already used for V1→V2.
+  - **Option A - Switch both call sites to `CryptoJS.enc.Hex.parse(key)` + explicit random IV:** Mirrors the v2 export path. Storage stays backward-compatible if we bump to a `__ENCV3__:` prefix and migrate-on-read.
+  - **Option B - Leave as-is, add a comment explaining why it's safe:** Cheapest. Keeps the audit-flag treadmill.
+  - Recommended: **Option A** - same pattern as exports, eliminates the recurring audit comment, migration-on-read is the same shape we already used for V1→V2.
 
 - [ ] Use HKDF (or distinct random keys) so HMAC and AES don't share a key
   Files: `src/storage/encryptedStorage.ts`, `src/sync/transportService.ts`
   Both at-rest and on-the-wire formats use the same key for `AES.encrypt` and `HmacSHA256`. With a 256-bit random root key it's not breakable, but key-separation is standard hygiene and would isolate any future weakness in either primitive.
-  - **Option A — HKDF-SHA256 from the root key into `encKey || macKey`:** Derive both subkeys lazily on first use; cache. CryptoJS lacks HKDF but it's ~20 lines on top of `HmacSHA256`.
-  - **Option B — Generate two independent keys at SecureStore-init time:** Simpler, no derivation. Adds a second SecureStore entry; migration on first launch.
-  - Recommended: **Option A** — single root key keeps SecureStore footprint small and pairing/export envelopes don't need to plumb a second secret.
+  - **Option A - HKDF-SHA256 from the root key into `encKey || macKey`:** Derive both subkeys lazily on first use; cache. CryptoJS lacks HKDF but it's ~20 lines on top of `HmacSHA256`.
+  - **Option B - Generate two independent keys at SecureStore-init time:** Simpler, no derivation. Adds a second SecureStore entry; migration on first launch.
+  - Recommended: **Option A** - single root key keeps SecureStore footprint small and pairing/export envelopes don't need to plumb a second secret.
 
 - [ ] Constant-time HMAC comparison
   Files: `src/storage/encryptedStorage.ts:188`, `src/sync/transportService.ts:47`
   `storedHmac !== calculatedHmac` is short-circuiting string compare. No realistic remote-timing exposure (storage is local, sync is LAN TCP through the JS bridge), but trivial to fix.
-  - **Option A — Length-checked XOR-accumulate compare:** `if (a.length !== b.length) return false; let d=0; for (i) d |= a.charCodeAt(i)^b.charCodeAt(i); return d===0`.
-  - Recommended: **Option A** — five lines, removes the audit nit.
+  - **Option A - Length-checked XOR-accumulate compare:** `if (a.length !== b.length) return false; let d=0; for (i) d |= a.charCodeAt(i)^b.charCodeAt(i); return d===0`.
+  - Recommended: **Option A** - five lines, removes the audit nit.
 
 - [ ] Document the no-forward-secrecy model for sync
   Files: `src/sync/transportService.ts`, `docs/`
   Sync is pre-shared-key with no per-session ephemeral exchange. If `sharedSecret` ever leaks (compromised device, leaked backup), every captured past sync frame is decryptable. Acceptable for the threat model, but not currently called out.
-  - **Option A — Comment in `transportService.ts` + paragraph in security docs:** Explains the choice and the ratchet-style upgrade path if it ever matters.
-  - **Option B — Add an ephemeral key exchange (X25519 ECDH per session):** Real forward secrecy. Big lift; CryptoJS doesn't ship curve25519. Probably overkill for a LAN sync between two paired devices.
-  - Recommended: **Option A** — match the reality of the threat model rather than over-engineer.
+  - **Option A - Comment in `transportService.ts` + paragraph in security docs:** Explains the choice and the ratchet-style upgrade path if it ever matters.
+  - **Option B - Add an ephemeral key exchange (X25519 ECDH per session):** Real forward secrecy. Big lift; CryptoJS doesn't ship curve25519. Probably overkill for a LAN sync between two paired devices.
+  - Recommended: **Option A** - match the reality of the threat model rather than over-engineer.
 
 #### Info
-- [ ] Pairing listens on `0.0.0.0` — note in security docs
+- [ ] Pairing listens on `0.0.0.0` - note in security docs
   File: `src/sync/pairingService.ts:203`
   During the 60s pairing window the TCP server accepts from any LAN host. Mitigated by the 40-bit Crockford code + 100k-iter PBKDF2 + user-confirmed fingerprint, so a successful attack requires both code guess and fingerprint trick. Worth a doc line so future contributors don't tighten the bind without understanding the discovery flow needs it.
 
@@ -312,34 +312,34 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 ## Code Quality & Crash Prevention
 
 ### High Priority
-- [x] Fix race condition in `recordPayment()` — `src/storage/debtStorage.ts:162-177`. The `balance: undefined as any` workaround means if `updateDebt` fails after payment is written, the payment is saved but debt balance never updates. Add atomic/transactional storage operations.
-- [x] Wrap `Promise.all()` in try-catch in `DebtTrackerScreen.tsx:181-205` — was already wrapped in try-catch with fallback to empty state. Verified correct.
-- [x] Fix division by zero in `DebtTrackerScreen.tsx:339` — was already guarded with `nonMortgageOriginal > 0` ternary. Verified correct.
-- [x] Use `Number.isFinite()` for all parsed numeric inputs in `AddDebtModal.tsx:229-231` — `parseFloat(x) > 0` doesn't catch `Infinity` edge cases.
-- [x] Make decryption failures distinguishable from missing data in `encryptedStorage.ts:195-211` — now throws `DecryptionError` instead of returning `null`, so callers can distinguish corruption from missing data.
-- [x] Remove `as any` casts and replace with proper type guards — `debtStorage.ts:175`, `App.tsx:99-100`, `ProfileScreen.tsx:213-214`, plus `ProfileScreen.tsx:445`.
+- [x] Fix race condition in `recordPayment()` - `src/storage/debtStorage.ts:162-177`. The `balance: undefined as any` workaround means if `updateDebt` fails after payment is written, the payment is saved but debt balance never updates. Add atomic/transactional storage operations.
+- [x] Wrap `Promise.all()` in try-catch in `DebtTrackerScreen.tsx:181-205` - was already wrapped in try-catch with fallback to empty state. Verified correct.
+- [x] Fix division by zero in `DebtTrackerScreen.tsx:339` - was already guarded with `nonMortgageOriginal > 0` ternary. Verified correct.
+- [x] Use `Number.isFinite()` for all parsed numeric inputs in `AddDebtModal.tsx:229-231` - `parseFloat(x) > 0` doesn't catch `Infinity` edge cases.
+- [x] Make decryption failures distinguishable from missing data in `encryptedStorage.ts:195-211` - now throws `DecryptionError` instead of returning `null`, so callers can distinguish corruption from missing data.
+- [x] Remove `as any` casts and replace with proper type guards - `debtStorage.ts:175`, `App.tsx:99-100`, `ProfileScreen.tsx:213-214`, plus `ProfileScreen.tsx:445`.
 
 ### Medium Priority
-- [x] Fix stale closure in `useCallback` — `DebtTrackerScreen.tsx:160-178`. `primeMilestonesModal` captures `targetDraftByStep` but may not properly list it in dependencies.
-- [x] Add cleanup functions to async `useEffect` hooks — `ProfileScreen.tsx:154-167`. If component unmounts mid-load, state updates on unmounted components cause warnings/crashes.
-- [x] Fix memory leak in AppState listener — `encryptedStorage.ts:69-73`. `AppState.addEventListener` at module scope with no removal; listeners accumulate during hot-reload.
-- [x] Fix concurrent budget entry write race condition — `BudgetScreen.tsx:316-344`. `saveBudgetEntries()` is async inside a sync `setState` callback. Rapid edits can cause storage to lag behind state, leading to data loss on restart.
-- [x] Add upper bound validation on import numeric values — `importData.ts:161-168`. `monthlyLimit` validated only as `> 0.01` with no ceiling. A malformed import could inject absurd values.
-- [x] Handle chart empty state gracefully — `InvestmentScreen.tsx:68`. Chart returns `null` for < 2 data points, which could cause layout shift.
-- [x] Add safeguard for simulation loop — `calculations.ts:128-195`. Already guarded: line 185 exits early when balance isn't decreasing (`afterBalance >= beforeBalance - 0.000001`), plus hard cap at 600 iterations and input sanitization. No additional fix needed.
+- [x] Fix stale closure in `useCallback` - `DebtTrackerScreen.tsx:160-178`. `primeMilestonesModal` captures `targetDraftByStep` but may not properly list it in dependencies.
+- [x] Add cleanup functions to async `useEffect` hooks - `ProfileScreen.tsx:154-167`. If component unmounts mid-load, state updates on unmounted components cause warnings/crashes.
+- [x] Fix memory leak in AppState listener - `encryptedStorage.ts:69-73`. `AppState.addEventListener` at module scope with no removal; listeners accumulate during hot-reload.
+- [x] Fix concurrent budget entry write race condition - `BudgetScreen.tsx:316-344`. `saveBudgetEntries()` is async inside a sync `setState` callback. Rapid edits can cause storage to lag behind state, leading to data loss on restart.
+- [x] Add upper bound validation on import numeric values - `importData.ts:161-168`. `monthlyLimit` validated only as `> 0.01` with no ceiling. A malformed import could inject absurd values.
+- [x] Handle chart empty state gracefully - `InvestmentScreen.tsx:68`. Chart returns `null` for < 2 data points, which could cause layout shift.
+- [x] Add safeguard for simulation loop - `calculations.ts:128-195`. Already guarded: line 185 exits early when balance isn't decreasing (`afterBalance >= beforeBalance - 0.000001`), plus hard cap at 600 iterations and input sanitization. No additional fix needed.
 
 ### Low Priority
-- [x] Improve navigation error logging — `App.tsx:242-244`. Added try-catch around `navigate()` calls and `__DEV__` warnings when navigation isn't ready.
-- [x] Fix FlatList `keyExtractor` — `BudgetScreen.tsx:672`. Verified safe: `expenseRows` derives from a `Set<BudgetCategory>`, so `item.category` is guaranteed unique. No change needed.
-- [x] Reduce excessive local state in `DebtTrackerScreen.tsx:115-152` — Evaluated: `useReducer` would not reduce re-renders (React re-renders the full component on any state change regardless). The main stale-closure risk was already fixed in medium priority. Not worth the refactor risk.
-- [x] Fix missing `useCallback` dependency in `InvestmentScreen.tsx:188-191` — Verified correct: `handleSliderChange` and `adjust` only use stable `useState` setters and module-level constants (`SLIDERS`). Empty dependency arrays are appropriate.
-- [x] Add negative value validation for savings goals — `SmartPlanModal.tsx:597`. Added `Math.max(0, ...)` clamp so negative `currentAmount` from data corruption renders as 0% instead of a negative percentage.
+- [x] Improve navigation error logging - `App.tsx:242-244`. Added try-catch around `navigate()` calls and `__DEV__` warnings when navigation isn't ready.
+- [x] Fix FlatList `keyExtractor` - `BudgetScreen.tsx:672`. Verified safe: `expenseRows` derives from a `Set<BudgetCategory>`, so `item.category` is guaranteed unique. No change needed.
+- [x] Reduce excessive local state in `DebtTrackerScreen.tsx:115-152` - Evaluated: `useReducer` would not reduce re-renders (React re-renders the full component on any state change regardless). The main stale-closure risk was already fixed in medium priority. Not worth the refactor risk.
+- [x] Fix missing `useCallback` dependency in `InvestmentScreen.tsx:188-191` - Verified correct: `handleSliderChange` and `adjust` only use stable `useState` setters and module-level constants (`SLIDERS`). Empty dependency arrays are appropriate.
+- [x] Add negative value validation for savings goals - `SmartPlanModal.tsx:597`. Added `Math.max(0, ...)` clamp so negative `currentAmount` from data corruption renders as 0% instead of a negative percentage.
 
 ---
 
 ## Nice-to-Have (Post-Launch)
 
-- [x] Payment history screen — the data is already being recorded, just needs a UI
+- [x] Payment history screen - the data is already being recorded, just needs a UI
 - [x] Edit existing debts (currently debts can only be added or deleted, not edited)
 - [x] Debt payoff order strategies (avalanche vs. snowball method)
 - [ ] Push notifications for payment reminders (requires `expo-notifications`)
@@ -355,41 +355,41 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [x] Improve debt milestone modal readability (full-screen layout + larger text + safe-area support)
 - [x] Improve theme readability and contrast across The Ark and dark themes (buttons + theme selector cards)
 - [x] Monthly review insights (category changes, spending trends, streaks)
-- [x] Custom categories and category icon support — v1 (add-only): users add their own categories (name + emoji icon) via Profile → CATEGORIES → Custom Categories. Built-in 21 stay fixed. Custom categories work everywhere built-ins do: entry pickers (Add/Edit modals), Budget category list, donut chart (deterministic name-hashed color), monthly limits, insights/streaks, Annual Report. New `customCategoriesStorage.ts` (EncryptedStorage, validated/sanitized names, dup-checked vs built-in+custom, cap 30) + `CustomCategoriesProvider` + `categoryIcons.ts` (emoji map for all 21 built-ins + curated picker grid + resolver). `BudgetEntry.category`/`CategoryBudgetLimit.category` widened to `CategoryName` (built-in autocomplete preserved). OTA-safe — emoji only, no native deps. Typecheck clean. Import/export round-trips custom categories: JSON export carries a `customCategories` collection; the shared record validator (`recordValidators.isValidImportCategory`, also on the LAN-sync path) accepts safe custom names (sanitized, ≤24 chars) instead of rejecting them; importData merges the explicit collection (LWW-by-id, name-deduped, built-in shadow dropped) AND derives definitions from any referenced-but-undefined custom names so pre-feature/foreign backups and sync-relayed entries stay usable (derived ones get the default icon). Spreadsheet import uses the same gate (`normalizeImportCategory`). Replace-mode intentionally does NOT wipe local custom categories when the import carries none, to avoid losing definitions still referenced by imported entries. Known limitation: deleting a custom category leaves tagged entries on the name with the default icon; spreadsheet export has no dedicated icon sheet (names survive via derivation, icon resets to default on round-trip).
+- [x] Custom categories and category icon support - v1 (add-only): users add their own categories (name + emoji icon) via Profile → CATEGORIES → Custom Categories. Built-in 21 stay fixed. Custom categories work everywhere built-ins do: entry pickers (Add/Edit modals), Budget category list, donut chart (deterministic name-hashed color), monthly limits, insights/streaks, Annual Report. New `customCategoriesStorage.ts` (EncryptedStorage, validated/sanitized names, dup-checked vs built-in+custom, cap 30) + `CustomCategoriesProvider` + `categoryIcons.ts` (emoji map for all 21 built-ins + curated picker grid + resolver). `BudgetEntry.category`/`CategoryBudgetLimit.category` widened to `CategoryName` (built-in autocomplete preserved). OTA-safe - emoji only, no native deps. Typecheck clean. Import/export round-trips custom categories: JSON export carries a `customCategories` collection; the shared record validator (`recordValidators.isValidImportCategory`, also on the LAN-sync path) accepts safe custom names (sanitized, ≤24 chars) instead of rejecting them; importData merges the explicit collection (LWW-by-id, name-deduped, built-in shadow dropped) AND derives definitions from any referenced-but-undefined custom names so pre-feature/foreign backups and sync-relayed entries stay usable (derived ones get the default icon). Spreadsheet import uses the same gate (`normalizeImportCategory`). Replace-mode intentionally does NOT wipe local custom categories when the import carries none, to avoid losing definitions still referenced by imported entries. Known limitation: deleting a custom category leaves tagged entries on the name with the default icon; spreadsheet export has no dedicated icon sheet (names survive via derivation, icon resets to default on round-trip).
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Undo actions and bulk edit/delete operations
 - [ ] Data confidence tools (last backup badge + backup reminders)
-- [~] Accessibility improvements (larger text mode + better screen reader labels) — Larger text mode SHIPPED: app-wide "Text Size" axis (Small / Default / Large / Extra Large) in Profile → Appearance, persisted in EncryptedStorage, multiplies the active Density's `fontScale` so every screen using `tokens.fontScale` scales for free without ballooning spacing (`src/theme/textSize.ts` + extended `DensityProvider`). Budget Spending donut + bars now also scale with it so the section zooms, not just text. Remaining: a systematic pass of `accessibilityLabel`/`accessibilityRole`/`accessibilityState` across all screens (only the new Text Size controls got labels so far).
+- [~] Accessibility improvements (larger text mode + better screen reader labels) - Larger text mode SHIPPED: app-wide "Text Size" axis (Small / Default / Large / Extra Large) in Profile → Appearance, persisted in EncryptedStorage, multiplies the active Density's `fontScale` so every screen using `tokens.fontScale` scales for free without ballooning spacing (`src/theme/textSize.ts` + extended `DensityProvider`). Budget Spending donut + bars now also scale with it so the section zooms, not just text. Remaining: a systematic pass of `accessibilityLabel`/`accessibilityRole`/`accessibilityState` across all screens (only the new Text Size controls got labels so far).
 - [ ] Onboarding quick-start templates (single, couple, debt-heavy, zero-based)
 - [ ] First-launch coachmark walkthrough + always-on How-To reference page
 
   Purpose: new users currently land on Bridge with no idea what each tab does. Replace cold-start with a guided tour, and keep an always-available reference for users who skip or forget.
 
   Two parts:
-  1. **Coachmark tour** — first time the user lands on each of the 5 tabs (Debts, Budget, Bridge, Utilities, Profile), show a darkened-backdrop overlay with a tooltip card explaining the tab's primary purpose and one or two key actions ("Tap + to add a debt", "Tap a milestone to set targets"). Persist `seenTabs: string[]` to encrypted storage so the same user never sees a step twice. Skip-all and Next buttons. Theme + density aware (uses existing `useTheme()` + `useDensity()` hooks).
-  2. **How-To reference** — extend the existing FAQ section in Profile into a richer "How to use BudgetArk" block. Cover one section per tab with the same content the coachmark teaches, plus deeper notes (recurring entries, milestone editing, payoff strategies, partner sync, density/theme toggles). Add a "Replay walkthrough" button that clears `seenTabs` and re-runs the tour the next time each tab is opened.
+  1. **Coachmark tour** - first time the user lands on each of the 5 tabs (Debts, Budget, Bridge, Utilities, Profile), show a darkened-backdrop overlay with a tooltip card explaining the tab's primary purpose and one or two key actions ("Tap + to add a debt", "Tap a milestone to set targets"). Persist `seenTabs: string[]` to encrypted storage so the same user never sees a step twice. Skip-all and Next buttons. Theme + density aware (uses existing `useTheme()` + `useDensity()` hooks).
+  2. **How-To reference** - extend the existing FAQ section in Profile into a richer "How to use BudgetArk" block. Cover one section per tab with the same content the coachmark teaches, plus deeper notes (recurring entries, milestone editing, payoff strategies, partner sync, density/theme toggles). Add a "Replay walkthrough" button that clears `seenTabs` and re-runs the tour the next time each tab is opened.
 
   Files (proposed):
-  - `src/storage/coachmarksStorage.ts` — CRUD for `seenTabs` set, `walkthroughSkipped` flag.
-  - `src/onboarding/CoachmarksProvider.tsx` — Context exposing `markSeen(tabId)`, `replay()`, `seenTabs`.
-  - `src/onboarding/Coachmark.tsx` — Modal overlay with backdrop + tooltip card. No spotlight cutout in v1; just darkens the screen and shows a card pinned to the relevant region (top/middle/bottom).
-  - `src/data/coachmarkContent.ts` — content per tab.
-  - `src/screens/*.tsx` — each tab calls `useCoachmark("tabId")` on focus.
-  - `src/screens/ProfileScreen.tsx` — How-To section + Replay button.
+  - `src/storage/coachmarksStorage.ts` - CRUD for `seenTabs` set, `walkthroughSkipped` flag.
+  - `src/onboarding/CoachmarksProvider.tsx` - Context exposing `markSeen(tabId)`, `replay()`, `seenTabs`.
+  - `src/onboarding/Coachmark.tsx` - Modal overlay with backdrop + tooltip card. No spotlight cutout in v1; just darkens the screen and shows a card pinned to the relevant region (top/middle/bottom).
+  - `src/data/coachmarkContent.ts` - content per tab.
+  - `src/screens/*.tsx` - each tab calls `useCoachmark("tabId")` on focus.
+  - `src/screens/ProfileScreen.tsx` - How-To section + Replay button.
 
   Storage: `@budgetark_coachmarks` in EncryptedStorage. `{ seenTabs: string[], skippedAll: boolean, version: number }`. Bump version to invalidate the seen list when content changes meaningfully (e.g. a 6th tab gets added).
 
   No new deps. Uses React Native `Modal` + the existing theme/density tokens. OTA-eligible.
 - [ ] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage
-- [ ] Debt-Free Countdown Timer — live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
-- [x] Annual Financial Report — selectable calendar-year summary: total debt paid, total set aside, net worth change, top spending category, months under budget, cash flow + savings rate + monthly spending sparkline. Entry card on Bridge → AnnualReportModal. Shareable as aggregates/percentages-only text (no PII). Image capture deferred to v2 (would need a native view-shot dep + EAS rebuild; kept OTA-safe per request).
-- [ ] Budget Rollover Mode — unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
-- [ ] Spending Velocity Alerts — passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
-- [ ] Partner Budget Visibility Controls — mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
-- [x] Debt Payoff Celebration Screen — confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
-- [ ] "What If I Stopped Spending on X" Projections — pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
-- [ ] Net Worth Timeline Graph — plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
-- [ ] Live Stock Holdings & Quote Feed — let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
+- [ ] Debt-Free Countdown Timer - live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
+- [x] Annual Financial Report - selectable calendar-year summary: total debt paid, total set aside, net worth change, top spending category, months under budget, cash flow + savings rate + monthly spending sparkline. Entry card on Bridge → AnnualReportModal. Shareable as aggregates/percentages-only text (no PII). Image capture deferred to v2 (would need a native view-shot dep + EAS rebuild; kept OTA-safe per request).
+- [ ] Budget Rollover Mode - unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
+- [ ] Spending Velocity Alerts - passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
+- [ ] Partner Budget Visibility Controls - mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
+- [x] Debt Payoff Celebration Screen - confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
+- [ ] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
+- [ ] Net Worth Timeline Graph - plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
+- [ ] Live Stock Holdings & Quote Feed - let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
 
   Data model:
   - New `Holding` record: `{ id, symbol, shares, costBasis?, accountId? }`. Either nest under existing `AssetAccount` or add a new top-level collection that aggregates into Net Worth the same way Asset Accounts do.
@@ -397,7 +397,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   Refresh strategy (privacy-friendly default):
   - Auto-refresh once per day on first app open of the calendar day.
-  - Manual "Refresh prices" button with 1-hour cooldown. Disabled outside US market hours (9:30am–4:00pm ET, weekdays) with copy "Markets closed — prices update at next open."
+  - Manual "Refresh prices" button with 1-hour cooldown. Disabled outside US market hours (9:30am–4:00pm ET, weekdays) with copy "Markets closed - prices update at next open."
   - Manual override on cooldown shows "Last updated 12 min ago" rather than firing the call.
   - Per-day cap means free API tiers are viable. Per-user fetch volume stays under 25 calls/day worst case.
 
@@ -405,7 +405,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   - Finnhub free: 60 calls/min, single-symbol endpoint. Fine for <10 tickers/user.
   - Twelve Data free: 800 calls/day, batched up to 120 symbols/call. Best fit for this app.
   - Alpha Vantage free: 25/day. Too tight unless one user.
-  - Avoid yfinance scraping — breaks unpredictably.
+  - Avoid yfinance scraping - breaks unpredictably.
 
   Cloudflare Worker proxy (optional, only if app scales):
   - Free tier covers ~330 daily-active users at 300 req/user/day. Paid $5/mo covers 33k DAU.
@@ -415,21 +415,21 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   Privacy / UX implications:
   - First feature in the app that sends data off-device. Add a one-time disclosure on Holdings screen: "Symbols you hold are sent to <provider> to fetch prices. Share counts and cost basis stay on your device."
   - Make the whole feature opt-in via a toggle in Profile so users who want pure offline can skip it.
-  - Label it "Daily portfolio value" in copy — never claim "live" or "real-time" with delayed-quote providers.
-  - Apple/Google may require provider attribution in store listing per data ToS — check before submission.
+  - Label it "Daily portfolio value" in copy - never claim "live" or "real-time" with delayed-quote providers.
+  - Apple/Google may require provider attribution in store listing per data ToS - check before submission.
 
   Files (proposed):
-  - `src/types/index.ts` — add `Holding`, `Quote` types.
-  - `src/storage/holdingsStorage.ts` — CRUD via EncryptedStorage, follows existing pattern.
-  - `src/services/quotesService.ts` — provider abstraction, throttle, cache TTL, market-hours gate.
-  - `src/screens/HoldingsScreen.tsx` or new tab in Asset Accounts — list + add/edit holdings, refresh button.
-  - Net Worth aggregator — pull `holdings.reduce((s, h) => s + h.shares * cachedPrice(h.symbol), 0)`.
+  - `src/types/index.ts` - add `Holding`, `Quote` types.
+  - `src/storage/holdingsStorage.ts` - CRUD via EncryptedStorage, follows existing pattern.
+  - `src/services/quotesService.ts` - provider abstraction, throttle, cache TTL, market-hours gate.
+  - `src/screens/HoldingsScreen.tsx` or new tab in Asset Accounts - list + add/edit holdings, refresh button.
+  - Net Worth aggregator - pull `holdings.reduce((s, h) => s + h.shares * cachedPrice(h.symbol), 0)`.
 
   OTA-eligible: yes if no new native modules. `fetch` is already available; no SDK changes needed.
 
   Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
-- [ ] Savings Streak Tracker — track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
-- [x] Trophy Room / Ark Achievements — gamification layer built entirely on existing data. Auto-unlocks retroactively for current users on first open. Shipped as "Ship's Log": 18 badges, retroactive silent first-eval, global unlock celebration modal, Bridge card + Profile → PROGRESS entry. Three badges (Cartographer/export, Crow's Nest/review opens, Lighthouse Keeper/30-day app-open streak) are backed by a new `achievementStatsStorage.ts` counter; Steady Crew + All Sails Set derive from budget limits vs. recurring-aware monthly spend. App-open streak is recorded idempotently per calendar day inside `evaluateAchievements`. OTA-safe — no native deps.
+- [ ] Savings Streak Tracker - track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
+- [x] Trophy Room / Ark Achievements - gamification layer built entirely on existing data. Auto-unlocks retroactively for current users on first open. Shipped as "Ship's Log": 18 badges, retroactive silent first-eval, global unlock celebration modal, Bridge card + Profile → PROGRESS entry. Three badges (Cartographer/export, Crow's Nest/review opens, Lighthouse Keeper/30-day app-open streak) are backed by a new `achievementStatsStorage.ts` counter; Steady Crew + All Sails Set derive from budget limits vs. recurring-aware monthly spend. App-open streak is recorded idempotently per calendar day inside `evaluateAchievements`. OTA-safe - no native deps.
 
   Purpose: add a dopamine-rich progress surface without changing how data is entered. Every badge is derived from debts, payments, savings goals, budget entries, milestones, and net worth that the app already stores. No new write paths, no behavior shift.
 
@@ -440,7 +440,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   - Theme-aware: ring stroke reads from `useTheme()` tokens so Forest Gold/Synthwave/Slate each tint differently.
   - Reuse the existing debt-payoff celebration animation when a new badge unlocks.
 
-  v1 badge list (~16-20 — sweet spot before it feels grindy):
+  v1 badge list (~16-20 - sweet spot before it feels grindy):
 
   | Achievement | Glyph | Tier | Unlock condition |
   |---|---|---|---|
@@ -465,20 +465,20 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   Data model:
   - `Achievement` type: `{ id: string, unlockedAt: number, tier: 'bronze' | 'silver' | 'gold' | 'legendary' }`
-  - Storage key `@budgetark_achievements` in EncryptedStorage: `{ unlocked: Record<string, number>, version: number }` — `unlocked[id]` is the timestamp.
+  - Storage key `@budgetark_achievements` in EncryptedStorage: `{ unlocked: Record<string, number>, version: number }` - `unlocked[id]` is the timestamp.
   - `version` bump invalidates definitions when badge set changes meaningfully.
 
   Files (proposed):
-  - `src/data/achievementDefs.ts` — array of `{ id, glyph, tier, title, description, check: (ctx) => boolean }`. `ctx` is `{ debts, payments, savingsGoals, budgetEntries, milestones, user }`.
-  - `src/utils/achievements.ts` — `evaluateAchievements(ctx)` walks defs, returns newly-unlocked IDs since last evaluation. Compares against stored `unlocked` map and persists new ones.
-  - `src/storage/achievementsStorage.ts` — CRUD for the unlocked map.
-  - `src/components/Medal.tsx` — SVG ring + glyph component. Props: `{ tier, glyph, locked, size }`.
-  - `src/screens/AchievementsScreen.tsx` — grid of medals, tap for detail sheet (title, description, unlock date, "How to earn" if locked). Filter chips: All / Earned / Locked.
-  - Entry point: card on Bridge ("Ship's Log — 8/18 earned") + button in Profile.
+  - `src/data/achievementDefs.ts` - array of `{ id, glyph, tier, title, description, check: (ctx) => boolean }`. `ctx` is `{ debts, payments, savingsGoals, budgetEntries, milestones, user }`.
+  - `src/utils/achievements.ts` - `evaluateAchievements(ctx)` walks defs, returns newly-unlocked IDs since last evaluation. Compares against stored `unlocked` map and persists new ones.
+  - `src/storage/achievementsStorage.ts` - CRUD for the unlocked map.
+  - `src/components/Medal.tsx` - SVG ring + glyph component. Props: `{ tier, glyph, locked, size }`.
+  - `src/screens/AchievementsScreen.tsx` - grid of medals, tap for detail sheet (title, description, unlock date, "How to earn" if locked). Filter chips: All / Earned / Locked.
+  - Entry point: card on Bridge ("Ship's Log - 8/18 earned") + button in Profile.
   - Hook into existing celebration component for unlock animation; trigger from a `useEffect` on the screen that just performed the unlocking action (payment recorded, goal completed, etc.).
 
   Evaluation strategy:
-  - Pure derivation from existing storage — never trust user input to "set" an achievement.
+  - Pure derivation from existing storage - never trust user input to "set" an achievement.
   - Run `evaluateAchievements()` lazily: on app foreground, after each major write (payment, goal contribution, debt update), and on Achievements screen mount.
   - Cheap because it's all in-memory loops over already-loaded data. No re-reading storage in the loop.
 
@@ -497,14 +497,14 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   - v2: commissioned art set if traction warrants.
 
   OTA-eligible: yes. No new deps. Uses `react-native-svg` (already in app) + emoji.
-- [ ] Quick-Entry Home Screen Widget — minimal widget to log an expense (category + amount) without opening the full app.
-- [ ] Bill Calendar View — monthly calendar showing when recurring expenses hit. Visual cash flow timing.
-- [ ] Spending Heatmap — calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
-- [ ] Financial Health Score — single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
-- [ ] Ark Journey Timeline — visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
-- [x] Category Spending Comparison — "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
-- [ ] Dark Mode Schedule — auto-switch themes based on time of day (lighter during day, dark at night).
-- [ ] Layout density selector — Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental — screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
+- [ ] Quick-Entry Home Screen Widget - minimal widget to log an expense (category + amount) without opening the full app.
+- [ ] Bill Calendar View - monthly calendar showing when recurring expenses hit. Visual cash flow timing.
+- [ ] Spending Heatmap - calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
+- [ ] Financial Health Score - single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
+- [ ] Ark Journey Timeline - visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
+- [x] Category Spending Comparison - "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
+- [ ] Dark Mode Schedule - auto-switch themes based on time of day (lighter during day, dark at night).
+- [ ] Layout density selector - Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental - screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
 - [x] fix theme selection so it doesn't close option window until you hit done
 - [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
 - [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
@@ -525,12 +525,12 @@ Recommended first version:
 - [x] Import / export Google Sheets and Excel files for budget data (v1: CSV + XLSX, fixed schema; multi-sheet workbook for XLSX, budget-entries-only for CSV; column-mapping UI deferred to v2). See `docs/SPREADSHEET_SCHEMA.md`.
 Goal: let users coming from spreadsheet-based budgeting (Google Sheets, Excel, Mint/YNAB exports) bring their data into BudgetArk and export back out.
 
-Scope: file-based only. No direct Google Sheets API integration in v1 — users export their sheet to CSV/XLSX and pick the file. Skip OAuth complexity.
+Scope: file-based only. No direct Google Sheets API integration in v1 - users export their sheet to CSV/XLSX and pick the file. Skip OAuth complexity.
 
 Tech stack:
-- `xlsx` (SheetJS) — pure JS, reads/writes .xlsx, .xls, .csv. No native deps. Bundles into JS bundle (no new EAS build required).
+- `xlsx` (SheetJS) - pure JS, reads/writes .xlsx, .xls, .csv. No native deps. Bundles into JS bundle (no new EAS build required).
 - Reuse existing deps: `expo-document-picker` (already installed) for file picking, `expo-sharing` + `expo-file-system` for export.
-- All processing on-device — keeps offline-first/no-data-leaves-device promise intact.
+- All processing on-device - keeps offline-first/no-data-leaves-device promise intact.
 
 Data flow (import):
 1. User taps "Import Spreadsheet" in Profile or Budget screen.
@@ -538,10 +538,10 @@ Data flow (import):
 3. Read file with `expo-file-system`, parse with `XLSX.read()`.
 4. Show sheet picker if workbook has multiple sheets.
 5. Show preview of first 5-10 rows.
-6. Column mapping UI — match each spreadsheet column to a BudgetArk field (Date, Amount, Category, Description, Type[income/expense]). Auto-suggest based on header names ("date" → Date, "amount"/"$" → Amount, etc.).
+6. Column mapping UI - match each spreadsheet column to a BudgetArk field (Date, Amount, Category, Description, Type[income/expense]). Auto-suggest based on header names ("date" → Date, "amount"/"$" → Amount, etc.).
 7. Parse + validate each row: date formats (MM/DD/YYYY, DD/MM/YYYY, ISO, Excel serial), amount formats ($, commas, parens for negatives, minus signs), required fields.
 8. Show import summary (X rows ready, Y rows skipped with reasons).
-9. User confirms — write to budget storage using the existing transactional pattern from `importData.ts`.
+9. User confirms - write to budget storage using the existing transactional pattern from `importData.ts`.
 10. Apply same bounds/validation as JSON import (`MAX_MONEY`, character limits, etc.).
 
 Data flow (export):
@@ -559,27 +559,27 @@ Column mapping UX (the hard part):
 - Save mapping presets per filename pattern for repeat imports.
 
 File structure (new):
-- `src/utils/spreadsheetImport.ts` — parse, map, validate
-- `src/utils/spreadsheetExport.ts` — generate workbook
-- `src/screens/ImportSpreadsheetScreen.tsx` — file pick → preview → mapping → confirm flow
-- `src/components/ColumnMapper.tsx` — mapping UI
+- `src/utils/spreadsheetImport.ts` - parse, map, validate
+- `src/utils/spreadsheetExport.ts` - generate workbook
+- `src/screens/ImportSpreadsheetScreen.tsx` - file pick → preview → mapping → confirm flow
+- `src/components/ColumnMapper.tsx` - mapping UI
 
 Validation / safety:
 - Same `MAX_RAW_CHARS` (500KB) cap as JSON import to avoid OOM on low-end devices.
-- Wrap all `XLSX.read()` calls in try-catch — malformed files must not crash app.
+- Wrap all `XLSX.read()` calls in try-catch - malformed files must not crash app.
 - Reject files >5MB on disk before parsing.
-- Treat all imported strings as untrusted — apply existing control-char/null-byte sanitization.
+- Treat all imported strings as untrusted - apply existing control-char/null-byte sanitization.
 
 Recommended first version:
 1. CSV-only import to ship fast. CSV covers Google Sheets exports + most bank exports.
-2. Fixed column mapping (no UI mapper) — require users to rename headers to a documented schema. Ugly but fast.
+2. Fixed column mapping (no UI mapper) - require users to rename headers to a documented schema. Ugly but fast.
 3. Export to CSV only.
 4. Iterate to .xlsx + auto-mapping UI in v2.
 
 Out of scope (v1):
 - Direct Google Sheets API / OAuth (revisit if user demand justifies overhead).
 - Real-time sync.
-- Formulas — read computed values only, never re-evaluate.
+- Formulas - read computed values only, never re-evaluate.
 
 OTA-shippable: yes. No native modules added, all deps already in current EAS build.
 

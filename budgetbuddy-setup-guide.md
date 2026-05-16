@@ -1,4 +1,4 @@
-# BudgetArk — Development Setup Guide
+# BudgetArk - Development Setup Guide
 
 - [Windows 11 Setup](#windows-11-setup)
 - [WSL (Windows Subsystem for Linux) Setup](#wsl-setup)
@@ -22,7 +22,7 @@ Node.js is the JavaScript runtime that powers everything.
 
 1. Go to: **https://nodejs.org**
 2. Download the **LTS** version (currently 20.x or higher)
-3. Run the installer — accept all defaults
+3. Run the installer - accept all defaults
 4. **Check "Automatically install necessary tools"** when prompted
 5. Verify in a **new** terminal (PowerShell or Command Prompt):
 
@@ -50,7 +50,7 @@ git --version
 
 ---
 
-### Step 3: Install a Code Editor — VS Code
+### Step 3: Install a Code Editor - VS Code
 
 1. Go to: **https://code.visualstudio.com**
 2. Download and install
@@ -85,7 +85,7 @@ eas --version
 
 ### Step 5: Install Expo Go on Your Phone
 
-This lets you preview the app live on your actual phone (with some limitations — see [Development Builds](#eas-build--development-builds) for the full-featured option).
+This lets you preview the app live on your actual phone (with some limitations - see [Development Builds](#eas-build--development-builds) for the full-featured option).
 
 1. **iPhone**: Search "Expo Go" in the App Store
 2. **Android**: Search "Expo Go" in the Google Play Store
@@ -134,7 +134,7 @@ npm install --save-dev @types/uuid
 # Gesture handler (required by navigation)
 npx expo install react-native-gesture-handler
 
-# Development client (for dev builds — required for advanced native features)
+# Development client (for dev builds - required for advanced native features)
 npx expo install expo-dev-client
 ```
 
@@ -158,7 +158,7 @@ module.exports = function (api) {
 **Important:** Reanimated also requires an import at the very top of `App.tsx`, before any other imports:
 
 ```typescript
-// File: App.tsx — FIRST LINE
+// File: App.tsx - FIRST LINE
 import "react-native-reanimated";
 ```
 
@@ -238,7 +238,7 @@ When Android Studio is installed on Windows but you're developing in WSL, extra 
 1. In Android Studio: **More Actions** (or **Tools**) > **Virtual Device Manager**
 2. Click **Create Device**
 3. Pick **Pixel 7** (or any phone), click Next
-4. Select a system image — pick the latest API level from the **Recommended** tab, download if needed
+4. Select a system image - pick the latest API level from the **Recommended** tab, download if needed
 5. Click **Finish**, then hit the **play button** to start the emulator
 
 ### Step 3: Set Up Environment Variables in WSL
@@ -300,7 +300,7 @@ List of devices attached
 emulator-5554    device
 ```
 
-If it shows `offline`, the emulator is still booting — wait 10-20 seconds and retry.
+If it shows `offline`, the emulator is still booting - wait 10-20 seconds and retry.
 
 ### Step 6: Launch the App
 
@@ -444,7 +444,7 @@ EAS_NO_VCS=1 eas build --profile development --platform android
 - Build takes ~10-15 minutes in the cloud
 - Outputs a download URL for the `.apk`
 
-**iOS (requires Apple Developer Program — $99/year):**
+**iOS (requires Apple Developer Program - $99/year):**
 
 ```bash
 EAS_NO_VCS=1 eas build --profile development --platform ios
@@ -452,7 +452,7 @@ EAS_NO_VCS=1 eas build --profile development --platform ios
 
 - You'll be prompted to log in with your Apple ID
 - Apple Developer enrollment must be fully activated (can take up to 48 hours after payment)
-- When asked about encryption: select **Yes** (standard/exempt) — the app only uses standard iOS encryption (HTTPS, AsyncStorage)
+- When asked about encryption: select **Yes** (standard/exempt) - the app only uses standard iOS encryption (HTTPS, AsyncStorage)
 
 ### Step 7: Install and Run
 
@@ -500,7 +500,7 @@ Open the BudgetArk app on the device/emulator. It will show a dev client screen 
 2. Open the build URL on your phone's browser
 3. Download and install the APK
 4. Start dev server: `npx expo start --dev-client`
-5. Open the app — it connects to your dev server via the URL/QR code
+5. Open the app - it connects to your dev server via the URL/QR code
 
 ### iPhone (requires Apple Developer Program)
 
@@ -541,7 +541,7 @@ Scan the QR code with Expo Go on your phone.
 | `expo` command not found | Close and reopen your terminal after installing |
 | Module not found errors | Run `npm install`, then `npx expo start --clear` |
 | Reanimated "not installed" error | Add `import "react-native-reanimated"` as the first line in `App.tsx`, then restart with `--clear` |
-| Slow first load | Normal — subsequent loads are faster due to caching |
+| Slow first load | Normal - subsequent loads are faster due to caching |
 | Worklets version mismatch | You're using Expo Go with native modules that require a dev build. Use `--go` flag or build a dev client |
 
 ### WSL-Specific
@@ -583,7 +583,7 @@ Are you submitting to app stores?
 
 ```
 BudgetArk/
-├── App.tsx                    # Entry point — sets up navigation
+├── App.tsx                    # Entry point - sets up navigation
 ├── app.json                   # Expo configuration (bundle IDs, splash, etc.)
 ├── babel.config.js            # Babel config with reanimated plugin
 ├── eas.json                   # EAS Build profiles (dev, preview, production)

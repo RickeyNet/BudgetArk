@@ -38,7 +38,7 @@ export interface EvaluationResult {
   newlyUnlocked: string[];
   /**
    * True only on the very first evaluation after install. The caller
-   * should NOT celebrate retroactive unlocks in that case — show them
+   * should NOT celebrate retroactive unlocks in that case - show them
    * silently in the Ship's Log instead.
    */
   isFirstEvaluation: boolean;

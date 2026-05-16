@@ -5,7 +5,7 @@
  * Full-screen deep-space backdrop for the "Deep Space" theme: a radial
  * gradient base, a few soft nebula glows, and a static starfield.
  *
- * Static by design — a continuously animating canvas on a finance screen
+ * Static by design - a continuously animating canvas on a finance screen
  * burns battery for little gain. Stars are generated once via a seeded PRNG
  * so the field is stable across re-renders (no twinkle-on-every-render).
  *

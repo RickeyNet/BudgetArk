@@ -127,7 +127,7 @@ export const getBudgetEntriesIncludingDeleted = async (): Promise<BudgetEntry[]>
 /**
  * Persists the full entries array (live + tombstones). Sync writes go
  * through this. UI screens that need to splice/delete should use the CRUD
- * helpers below — calling `saveBudgetEntries(filtered)` to delete would
+ * helpers below - calling `saveBudgetEntries(filtered)` to delete would
  * silently drop the tombstone the next sync needs to propagate the delete.
  */
 export const saveBudgetEntries = async (entries: BudgetEntry[]): Promise<void> => {

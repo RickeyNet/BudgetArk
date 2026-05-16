@@ -671,7 +671,7 @@ const ProfileScreen: React.FC = () => {
     } catch (err) {
       // `clearAllData` throws `ResetIncompleteError` when a non-atomic
       // multi-key clear leaves some keys behind. Surface that to the user
-      // instead of pretending the reset succeeded — the leftover keys could
+      // instead of pretending the reset succeeded - the leftover keys could
       // make the next session look corrupt or partially-onboarded.
       const message =
         err instanceof Error && err.message
@@ -736,7 +736,7 @@ const ProfileScreen: React.FC = () => {
       // Defer the achievement check until the spinner overlay AND the OS
       // share sheet have fully dismissed. The unlock celebration is a RN
       // <Modal>; asking it to present while another modal/share sheet is
-      // still transitioning fails silently on iOS — which is why the
+      // still transitioning fails silently on iOS - which is why the
       // Cartographer badge "never showed up" after exporting.
       setTimeout(() => {
         void refreshAchievements();
@@ -878,7 +878,7 @@ const ProfileScreen: React.FC = () => {
         setIsExporting(false);
       }
       if (exported) {
-        // Same deferral as JSON export — let the spinner + share sheet
+        // Same deferral as JSON export - let the spinner + share sheet
         // dismiss so the achievement <Modal> can actually present.
         setTimeout(() => {
           void refreshAchievements();

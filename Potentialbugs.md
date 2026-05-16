@@ -4,7 +4,7 @@ Sorted by **priority / user impact**: crash or data-loss risk first, then data-i
 
 Static review only. No automated build/test run was performed in this environment.
 
-## P0 — Critical: data loss / serious integrity risk
+## P0 - Critical: data loss / serious integrity risk
 
 - [x] **Debt payment may apply twice or race incorrectly**
   - **Priority:** P0
@@ -35,7 +35,7 @@ Static review only. No automated build/test run was performed in this environmen
   - **Why this is a bug:** App-generated data can become non-importable.
   - **Impact:** Exported backups can fail to import later.
 
-## P1 — High: important accounting / history correctness bugs
+## P1 - High: important accounting / history correctness bugs
 
 - [x] **Deleting linked budget entry does not reverse linked account contribution**
   - **Priority:** P1
@@ -52,7 +52,7 @@ Static review only. No automated build/test run was performed in this environmen
   - **Impact:** Monthly review and budget history can become inaccurate after restore.
   - **Example:** January limits exported and imported in April become April limits.
 
-## P2 — Medium: sync correctness / state consistency
+## P2 - Medium: sync correctness / state consistency
 
 - [x] **Budget limit sync can overwrite newer local data with stale remote data**
   - **Priority:** P2
@@ -81,7 +81,7 @@ Static review only. No automated build/test run was performed in this environmen
   - **Why this is a bug:** When avalanche/snowball strategy changes, focus debt can change, but card expansion state does not update accordingly.
   - **Impact:** UI can disagree with selected payoff strategy.
 
-## P3 — Lower: UX / messaging consistency
+## P3 - Lower: UX / messaging consistency
 
 - [x] **Auto-update popup in `App.tsx` can show wrong release notes**
   - **Priority:** P3
@@ -119,19 +119,19 @@ Static review only. No automated build/test run was performed in this environmen
 
 ---
 
-# Round 2 — Audit Findings (2026-05-03)
+# Round 2 - Audit Findings (2026-05-03)
 
 Discovered via four parallel code-review agents covering React hooks, storage
 integrity, financial calculations, and partner sync. Sorted by user impact.
 
-## P0 — Critical: data loss / wrong-money risk
+## P0 - Critical: data loss / wrong-money risk
 
-- [x] **Net Worth filter only counts "Savings" category — ignores Retirement and Investing**
+- [x] **Net Worth filter only counts "Savings" category - ignores Retirement and Investing**
   - **Priority:** P0
   - **Files:** `src/utils/netWorth.ts:27-32`
   - **What:** `entrySavings` filter is `entry.category === "Savings"` but every other screen (`DebtTrackerScreen.tsx:325`, `BudgetScreen.tsx:413`) treats `Savings`, `Retirement`, and `Investing` as the same reserve.
   - **Impact:** Bridge shows a different net-worth number than Build-Your-Ark for identical data. A user with $10k in Retirement category sees that $10k missing from Net Worth on the Bridge.
-  - **Fix:** Match the rest of the app — broaden filter to all three categories.
+  - **Fix:** Match the rest of the app - broaden filter to all three categories.
 
 - [x] **Net Worth double-counts emergency fund when explicit goal + savings entry both exist**
   - **Priority:** P0
@@ -161,30 +161,30 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - **Impact:** Tracked retirement/savings balance creeps up by `amount × N` for every screen visit until next month rollover.
   - **Fix:** Move catch-up into a single guarded function that runs on app foreground only. Write `lastAppliedMonth` first, balance second; abort balance write if marker save failed.
 
-- [x] **Spreadsheet round-trip drops `updatedAt` on budget entries — wipes partner data on next sync**
+- [x] **Spreadsheet round-trip drops `updatedAt` on budget entries - wipes partner data on next sync**
   - **Priority:** P0
   - **Files:** `src/utils/spreadsheetExport.ts:184-194`, `src/utils/spreadsheetImport.ts:285-298`
   - **What:** Budget entry export columns don't include `UpdatedAt`. Importer always stamps `updatedAt: now`. Round-tripping through xlsx makes every entry "freshly edited."
   - **Impact:** On the next paired-device sync, every entry overwrites the partner's data because the import-time stamp wins LWW.
   - **Fix:** Add `UpdatedAt` to budget entry column set; preserve on import; if absent, fall back to `createdAt` not `now`.
 
-- [x] **`mergeById` cannot delete records — silent resurrection across paired devices**
+- [x] **`mergeById` cannot delete records - silent resurrection across paired devices**
   - **Priority:** P0
   - **Files:** `src/sync/diffEngine.ts:121-150` and every `filterChanged` site (74-80)
-  - **What:** `computeOutgoingDiff` only ever emits `action: "upsert"`. When Alice deletes a debt, the next sync sends nothing for it. Bob still has the record, his next sync upserts it back to Alice — resurrecting the deletion.
+  - **What:** `computeOutgoingDiff` only ever emits `action: "upsert"`. When Alice deletes a debt, the next sync sends nothing for it. Bob still has the record, his next sync upserts it back to Alice - resurrecting the deletion.
   - **Impact:** Deletions silently revert across paired devices; the user thinks they deleted a record but it keeps coming back.
   - **Fix:** Persist deletion tombstones (`deletedAt`); emit `action: "delete"` from `computeOutgoingDiff`; reject upserts older than a known tombstone in `mergeById`.
 
-## P1 — High: visible glitches, crashy edge cases
+## P1 - High: visible glitches, crashy edge cases
 
 - [x] **iOS modal-stacking on debt celebration → history**
   - **Priority:** P1
   - **Files:** `src/screens/DebtTrackerScreen.tsx:1056-1064` (`onViewHistory`), `src/screens/DebtTrackerScreen.tsx:628-640` (`handleSaveEdit` celebration trigger)
-  - **What:** `setCelebrationDebt(null) + setShowHistory(true)` in the same tick — iOS Modal can't reliably dismiss-then-present in one frame. Same problem for an edit that pays off a debt while the edit modal is still tearing down.
+  - **What:** `setCelebrationDebt(null) + setShowHistory(true)` in the same tick - iOS Modal can't reliably dismiss-then-present in one frame. Same problem for an edit that pays off a debt while the edit modal is still tearing down.
   - **Impact:** "View History" sometimes leaves the user staring at a dimmed celebration with no history modal; or shows a flicker where two sheets overlap.
   - **Fix:** Wait one frame between dismiss and present (250ms `setTimeout`).
 
-- [x] **Async screen loaders lack cancellation flags — month-switch shows wrong data**
+- [x] **Async screen loaders lack cancellation flags - month-switch shows wrong data**
   - **Priority:** P1
   - **Files:** `src/screens/BudgetScreen.tsx:285-356`, `BridgeScreen.tsx:74-120`, `DebtTrackerScreen.tsx:278-378`, `UtilitiesScreen.tsx:439-457`, `ProfileScreen.tsx:253-290`, `src/components/PaymentHistoryModal.tsx:95-104`
   - **What:** Every `useFocusEffect`/effect that does `await getX(); setX(...)` has no `let cancelled = false` guard.
@@ -194,14 +194,14 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
 - [x] **PairingModal + ProfileScreen leak listeners on unmount**
   - **Priority:** P1
   - **Files:** `src/components/PairingModal.tsx:81-105`, `src/screens/ProfileScreen.tsx:253-290`
-  - **What:** PairingModal cleanup runs only on `visible` flip, not on parent unmount — leaves countdown interval, TCP server, and Zeroconf advert running. ProfileScreen registers `startMonitoring` on mount with no `stopMonitoring()` in cleanup.
+  - **What:** PairingModal cleanup runs only on `visible` flip, not on parent unmount - leaves countdown interval, TCP server, and Zeroconf advert running. ProfileScreen registers `startMonitoring` on mount with no `stopMonitoring()` in cleanup.
   - **Impact:** Resource leak; can wedge subsequent pair attempts on the same port.
   - **Fix:** Move cleanup body into the effect's `return () => { ... }`.
 
 - [x] **Storage timeouts leave cross-key partial state**
   - **Priority:** P1
   - **Files:** `src/storage/encryptedStorage.ts:79-92, 270-294`, `src/storage/debtStorage.ts:202-227`, `src/utils/importData.ts:610-637`
-  - **What:** `withTimeout` doesn't cancel the underlying native write. If `recordPayment` times out between `saveDebts` and `savePayments`, balance is reduced with no payment row. Import's Phase 3 promotion has the same shape — rollback writes use the same timeout.
+  - **What:** `withTimeout` doesn't cancel the underlying native write. If `recordPayment` times out between `saveDebts` and `savePayments`, balance is reduced with no payment row. Import's Phase 3 promotion has the same shape - rollback writes use the same timeout.
   - **Impact:** Inconsistent storage state after a slow disk write times out.
   - **Fix:** Use `multiSet` for compound writes where possible; surface "data may be inconsistent" instead of swallowing throws.
 
@@ -226,7 +226,7 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - **Impact:** Could surface as a "data corrupted" crash even when the data is fine.
   - **Fix:** Check `bytes.sigBytes` to distinguish "decrypt produced empty" from "decrypt failed."
 
-## P2 — Medium: state consistency, sync edge cases
+## P2 - Medium: state consistency, sync edge cases
 
 - [x] **Auto-sync race fires `syncNow` twice on app foreground**
   - **Priority:** P2
@@ -240,7 +240,7 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - **What:** Single Zeroconf instance shared between publish and browse. `discoverPartner` cleanup calls `zc.stop()`, killing publish too.
   - **Fix:** Separate publish/browse instances; refcount before `stop()`.
 
-- [x] **`seenNonces` set is unbounded — memory DoS path**
+- [x] **`seenNonces` set is unbounded - memory DoS path**
   - **Priority:** P2
   - **Files:** `src/sync/transportService.ts:17, 103-111`
   - **What:** Module-level `seenNonces` Set grows unbounded. A peer that can send valid frames repeatedly causes unbounded memory growth.
@@ -270,17 +270,17 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - **What:** AsyncStorage `multiRemove` isn't transactional on Android. Slow flash + `withTimeout` can produce partial reset state.
   - **Fix:** Wrap in try/catch; surface partial-failure state instead of silent.
 
-## P3 — Lower
+## P3 - Lower
 
-- [x] **`getBudgetEntries` rewrites all entries on every read where any normalization changes anything** — startup latency, no integrity issue. `src/storage/budgetStorage.ts:69-82`. Same opt applied to `getDebtsIncludingDeleted`, `getPaymentsIncludingDeleted`, `getSavingsGoalsIncludingDeleted`, `getAssetAccountsIncludingDeleted`. Normalize helpers now return the same ref when nothing needs filling; the read path uses ref equality against `purgeExpiredTombstones` (which already returns the original array on no-op) instead of an O(n × record-size) `JSON.stringify` self-diff.
-- [x] **`useTabCoachmark.handleNext` setTimeout has no cleanup on unmount** — defensive only. `src/onboarding/useTabCoachmark.tsx:52-71`.
-- [x] **`CoachmarksProvider.markSeen` calls async `persist` from inside setState updater** — fire-and-forget, no observed failure. `src/onboarding/CoachmarksProvider.tsx:73-84`.
-- [x] **`calcAvgMonthlyExpenses` excludes zero-spend months — biases the average upward** — affects EF target calculation. `src/screens/UtilitiesScreen.tsx:104`.
-- [x] **`calcInvestmentGrowth` clamps negative rates to 0** — silently suppresses deflationary scenarios. `src/utils/calculations.ts:355-376`. Math now allows `[-MAX_RATE, MAX_RATE]` — formula is well-defined for any monthly r > -1 and -200% annual maps to monthly ≈ -0.167. Same clamp widened in `calcInvestmentTimeline`. UI still defaults to positive input; this just makes the function correct if a future scenario picker exposes losses.
+- [x] **`getBudgetEntries` rewrites all entries on every read where any normalization changes anything** - startup latency, no integrity issue. `src/storage/budgetStorage.ts:69-82`. Same opt applied to `getDebtsIncludingDeleted`, `getPaymentsIncludingDeleted`, `getSavingsGoalsIncludingDeleted`, `getAssetAccountsIncludingDeleted`. Normalize helpers now return the same ref when nothing needs filling; the read path uses ref equality against `purgeExpiredTombstones` (which already returns the original array on no-op) instead of an O(n × record-size) `JSON.stringify` self-diff.
+- [x] **`useTabCoachmark.handleNext` setTimeout has no cleanup on unmount** - defensive only. `src/onboarding/useTabCoachmark.tsx:52-71`.
+- [x] **`CoachmarksProvider.markSeen` calls async `persist` from inside setState updater** - fire-and-forget, no observed failure. `src/onboarding/CoachmarksProvider.tsx:73-84`.
+- [x] **`calcAvgMonthlyExpenses` excludes zero-spend months - biases the average upward** - affects EF target calculation. `src/screens/UtilitiesScreen.tsx:104`.
+- [x] **`calcInvestmentGrowth` clamps negative rates to 0** - silently suppresses deflationary scenarios. `src/utils/calculations.ts:355-376`. Math now allows `[-MAX_RATE, MAX_RATE]` - formula is well-defined for any monthly r > -1 and -200% annual maps to monthly ≈ -0.167. Same clamp widened in `calcInvestmentTimeline`. UI still defaults to positive input; this just makes the function correct if a future scenario picker exposes losses.
 
-## Round 3 — Self-audit findings on the v1.4.16 changes themselves
+## Round 3 - Self-audit findings on the v1.4.16 changes themselves
 
-- [x] **`linkedAccountRecurring` orphan stamping when a linked asset account is deleted** — entry's `lastAppliedMonth` advanced to "now" even when the linked account no longer existed in the live array, so the credit silently vanished and every subsequent month treated the entry as already applied. Now skips entries pointing to a non-live account so they stay in catch-up state if the user later relinks.
+- [x] **`linkedAccountRecurring` orphan stamping when a linked asset account is deleted** - entry's `lastAppliedMonth` advanced to "now" even when the linked account no longer existed in the live array, so the credit silently vanished and every subsequent month treated the entry as already applied. Now skips entries pointing to a non-live account so they stay in catch-up state if the user later relinks.
 
 ## Suggested manual test list
 

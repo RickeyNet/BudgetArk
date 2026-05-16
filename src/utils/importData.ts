@@ -311,7 +311,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
  */
 /**
  * Returns true if the raw string is a password-encrypted BudgetArk export
- * (either format — v1 legacy or v2 PBKDF2).
+ * (either format - v1 legacy or v2 PBKDF2).
  */
 export const isEncryptedExport = (raw: string): boolean => {
   const head = raw.trimStart();
@@ -656,7 +656,7 @@ export const importFromString = async (
    * exports stay usable:
    *   1. The explicit `customCategories` collection (new exports).
    *   2. Names derived from imported budget entries / limits that aren't
-   *      built-in and aren't already defined — covers pre-feature backups
+   *      built-in and aren't already defined - covers pre-feature backups
    *      and sync-relayed entries that carry a custom name but no
    *      definition. Derived ones get the default icon until the user
    *      edits them.
@@ -721,7 +721,7 @@ export const importFromString = async (
 
     let touched = 0;
 
-    // 1. Explicit imported definitions — LWW by id.
+    // 1. Explicit imported definitions - LWW by id.
     for (const incoming of sanitized.customCategories) {
       const id = (incoming as any).id as string;
       const existing = byId.get(id);
@@ -904,7 +904,7 @@ export const importFromString = async (
   } catch (error) {
     // Rollback: restore original values, then clean up temp keys.
     // We use `allSettled` and collect failures rather than awaiting each
-    // restore in sequence — if a restore itself times out, the original
+    // restore in sequence - if a restore itself times out, the original
     // sequential `await` in a for-loop would abort and leave the remaining
     // backups un-restored, silently corrupting state. With allSettled we
     // attempt every restore and surface any that didn't make it.
@@ -928,7 +928,7 @@ export const importFromString = async (
       throw new Error(
         `Import failed during write and rollback could not restore all data ` +
           `(failed keys: ${restoreFailures.length}). ` +
-          `Some records may be in an inconsistent state — please reinstall ` +
+          `Some records may be in an inconsistent state - please reinstall ` +
           `the app and re-import your most recent backup before adding new data.`
       );
     }

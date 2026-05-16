@@ -3,7 +3,7 @@
  * File: src/data/achievementDefs.ts
  *
  * Source of truth for every Ark badge. Each definition is pure data plus
- * a `check(ctx)` predicate that runs against the user's existing storage —
+ * a `check(ctx)` predicate that runs against the user's existing storage -
  * no separate "earn" event is fired anywhere in the app. The evaluator in
  * src/utils/achievements.ts loads context once and walks this list.
  *
@@ -98,7 +98,7 @@ const nextMonthKey = (key: string): string => {
 /**
  * Months that had saved category limits where *every* limited category
  * stayed at or under its cap, sorted ascending. Recurring expenses apply
- * from their start month onward; one-offs only in their own month — the
+ * from their start month onward; one-offs only in their own month - the
  * same rule the budget screen and Annual Report use.
  */
 const underBudgetMonths = (ctx: AchievementContext): string[] => {
@@ -275,7 +275,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     glyph: "🗺️", // 🗺️
     tier: "bronze",
     title: "Cartographer",
-    description: "Charted a course — exported your data at least once.",
+    description: "Charted a course - exported your data at least once.",
     hint: "Export your data from Profile → Data.",
     check: (ctx) => ctx.stats.exportCount > 0,
   },
@@ -284,7 +284,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     glyph: "🔭", // 🔭
     tier: "bronze",
     title: "Crow's Nest",
-    description: "Kept watch — opened the Monthly Review three times.",
+    description: "Kept watch - opened the Monthly Review three times.",
     hint: "Open the Monthly Review from the Budget screen 3 times.",
     check: (ctx) => ctx.stats.monthlyReviewOpens >= 3,
   },

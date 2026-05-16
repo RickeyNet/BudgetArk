@@ -227,7 +227,7 @@ const OCEAN_CORAL: ThemePreset = {
 };
 
 /**
- * Deep Space — the "trading terminal" concept palette.
+ * Deep Space - the "trading terminal" concept palette.
  *
  * `card`/`cardBorder` are intentionally translucent so the SpaceBackground
  * starfield reads through the glass. `bg` is a near-black base; the actual

@@ -284,7 +284,7 @@ const DebtTrackerScreen: React.FC = () => {
   /** Load debts from device storage whenever this tab is focused */
   useFocusEffect(
     useCallback(() => {
-      // Cancellation flag — guards every setState after an await so a stale
+      // Cancellation flag - guards every setState after an await so a stale
       // load can't overwrite a newer one's state on rapid tab thrash.
       let cancelled = false;
       const loadDebts = async () => {
@@ -331,7 +331,7 @@ const DebtTrackerScreen: React.FC = () => {
           setSavingsGoals(storedGoals);
 
           // Emergency-fund / keel reserve. Only the "Savings" category
-          // counts here — Retirement and Investing flow into the
+          // counts here - Retirement and Investing flow into the
           // gather_animals milestone via retirementInvestingMonthly below
           // because those funds aren't liquid emergency money.
           const savings = budgetEntries
@@ -655,7 +655,7 @@ const DebtTrackerScreen: React.FC = () => {
     setEditingDebt(null);
     if (paidOffDebt) {
       // Defer the celebration Modal so the edit Modal's close animation
-      // finishes first — RN can't stack two Modal presentations in the
+      // finishes first - RN can't stack two Modal presentations in the
       // same frame on iOS without one being queued or visually clipped.
       setTimeout(() => setCelebrationDebt(paidOffDebt), 250);
     } else {
@@ -673,7 +673,7 @@ const DebtTrackerScreen: React.FC = () => {
   const confirmDelete = useCallback(async () => {
     if (!pendingDeleteDebt) return;
     const debtId = pendingDeleteDebt.id;
-    // Soft-delete via the storage helper so a tombstone gets persisted —
+    // Soft-delete via the storage helper so a tombstone gets persisted -
     // a paired partner needs that to remove the debt locally on next sync,
     // otherwise their stale upsert would resurrect this deletion.
     const updated = await deleteDebt(debtId);
@@ -1106,7 +1106,7 @@ const DebtTrackerScreen: React.FC = () => {
         onClose={() => setCelebrationDebt(null)}
         onViewHistory={() => {
           // Wait for the celebration Modal close animation before presenting
-          // the history Modal — iOS doesn't reliably handle dismiss-then-
+          // the history Modal - iOS doesn't reliably handle dismiss-then-
           // present in the same frame and one of the two ends up hidden.
           setCelebrationDebt(null);
           setTimeout(() => setShowHistory(true), 250);

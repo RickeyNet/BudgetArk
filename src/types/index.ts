@@ -113,7 +113,7 @@ export interface Payment {
   /** ISO timestamp of when this payment was last modified */
   updatedAt: string;
 
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 
@@ -155,7 +155,7 @@ export type CategoryName = BudgetCategory | (string & {});
 
 /**
  * A user-defined budget category. Built-in categories stay fixed; these are
- * additive only (v1). `icon` is a single emoji glyph. Not tombstoned —
+ * additive only (v1). `icon` is a single emoji glyph. Not tombstoned -
  * deleting just drops it from the list; any entries already tagged with the
  * name keep working and fall back to the default icon/color.
  */
@@ -189,7 +189,7 @@ export interface BudgetEntry {
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
   lastAppliedMonth?: string;
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 
@@ -225,7 +225,7 @@ export interface SavingsGoal {
   targetDate?: string;
   createdAt: string;
   updatedAt: string;
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 
@@ -256,7 +256,7 @@ export interface AssetAccount {
   balance: number;
   createdAt: string;
   updatedAt: string;
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 

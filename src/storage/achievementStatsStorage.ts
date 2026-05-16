@@ -5,7 +5,7 @@
  * Backing counters for the few badges that can't be derived purely from
  * financial data: how many times the user exported, opened the Monthly
  * Review, and their consecutive app-open streak. Every mutation is
- * idempotent-safe to call often — the streak recorder in particular only
+ * idempotent-safe to call often - the streak recorder in particular only
  * changes state once per calendar day, so it's cheap to invoke on every
  * achievement evaluation.
  */

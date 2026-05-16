@@ -76,7 +76,7 @@ export const discoverPartner = (
       resolved = true;
       zc.removeAllListeners("resolved");
       zc.removeAllListeners("error");
-      // Only stop the browse instance — the publish instance keeps
+      // Only stop the browse instance - the publish instance keeps
       // advertising independently.
       zc.stop();
     };

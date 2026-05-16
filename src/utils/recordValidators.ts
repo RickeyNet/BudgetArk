@@ -48,7 +48,7 @@ const VALID_CATEGORIES = new Set<string>(BUDGET_CATEGORIES);
 
 /**
  * Max custom-category name length accepted on import / sync. Mirrors
- * MAX_CATEGORY_NAME_LENGTH in customCategoriesStorage.ts — kept as a local
+ * MAX_CATEGORY_NAME_LENGTH in customCategoriesStorage.ts - kept as a local
  * literal so this module stays free of storage-layer imports (it's also on
  * the LAN-sync receive path, which must not pull in EncryptedStorage).
  */
@@ -58,7 +58,7 @@ export const MAX_IMPORTED_CATEGORY_NAME_LENGTH = 24;
  * A category reference is valid if it's a built-in name OR a safe
  * user-defined custom name: a non-empty string with no control/null bytes
  * (equal to its sanitized form) within the custom-name length cap. This
- * keeps import/sync backward compatible — built-ins still pass unchanged —
+ * keeps import/sync backward compatible - built-ins still pass unchanged -
  * while letting custom-category entries/limits through the same bounded
  * gate instead of being rejected at the trust boundary.
  */
@@ -75,7 +75,7 @@ export const isValidImportCategory = (value: unknown): value is string => {
 
 /**
  * For the spreadsheet importer: returns the category string if acceptable
- * (built-in or safe custom), else null so the row is skipped — same gate
+ * (built-in or safe custom), else null so the row is skipped - same gate
  * as the JSON path, just non-throwing.
  */
 export const normalizeImportCategory = (raw: string): string | null =>
@@ -94,7 +94,7 @@ export const NEGATIVE_AMOUNT_CATEGORIES = new Set<string>([
 
 /**
  * Tombstone marker validator. Records carrying a `deletedAt` field MUST
- * have it as a parseable ISO date — otherwise the on-read tombstone GC
+ * have it as a parseable ISO date - otherwise the on-read tombstone GC
  * (`purgeExpiredTombstones`) can't compute an age and the tombstone never
  * expires, polluting storage forever. Allowed because a malicious peer
  * could send `deletedAt: "garbage"` past the rest of the validator gate.

@@ -19,7 +19,7 @@ type NetWorthInput = {
 };
 
 /**
- * Categories that count toward the user's "savings reserve" — kept in sync
+ * Categories that count toward the user's "savings reserve" - kept in sync
  * with the same set used by `savingsReserve` calculations in
  * DebtTrackerScreen and BudgetScreen so Net Worth reports the same dollars
  * those screens treat as set-aside money.
@@ -40,7 +40,7 @@ export const calculateNetWorthTotals = ({
   // Reserve-category expense entries flow money INTO savings. Entries that
   // are linkedAccountId-tagged have already credited an asset account (see
   // applyMissedRecurringLinkedAccountContributions + the Add/Edit handlers in
-  // BudgetScreen) — counting them again here would double-count that
+  // BudgetScreen) - counting them again here would double-count that
   // contribution against the asset balance below.
   const entrySavings = entries
     .filter(

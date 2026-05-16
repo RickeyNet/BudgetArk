@@ -5,7 +5,7 @@
  * Pure, on-device aggregation of a single calendar year's financial picture:
  * debt paid, money set aside, net-worth change, top spending category, and
  * months that stayed under budget. Every figure is derived from data the app
- * already stores — no new write paths, nothing leaves the device.
+ * already stores - no new write paths, nothing leaves the device.
  *
  * The share text intentionally contains only aggregates and percentages
  * (no debt names, descriptions, or account labels) so a screenshot/text
@@ -99,7 +99,7 @@ interface MonthAgg {
 }
 
 /**
- * A recurring entry repeats every month from its start month onward — same
+ * A recurring entry repeats every month from its start month onward - same
  * rule `budgetInsights`/`BudgetScreen` use. A one-off counts only in its own
  * month. Both are evaluated against an explicit `monthKey` so we can build a
  * report for any past calendar year, not just a trailing window.
@@ -264,7 +264,7 @@ export const buildAnnualReport = (
   // Months under budget: only months that actually have saved limits count
   // toward the denominator. Limit history retains a full trailing year (13
   // months), so the current calendar year is fully checkable; years older
-  // than that have aged-out limits — we report "X / Y" against the months
+  // than that have aged-out limits - we report "X / Y" against the months
   // we can still verify.
   let monthsUnderBudget = 0;
   let monthsWithLimits = 0;
@@ -312,8 +312,8 @@ export const buildAnnualReport = (
 };
 
 /**
- * Builds the shareable summary. Aggregates and percentages only — no debt
- * names, entry descriptions, or account labels — so sharing leaks no PII.
+ * Builds the shareable summary. Aggregates and percentages only - no debt
+ * names, entry descriptions, or account labels - so sharing leaks no PII.
  */
 export const formatAnnualReportShareText = (
   data: AnnualReportData,

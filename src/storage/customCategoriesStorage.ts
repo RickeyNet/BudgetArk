@@ -2,7 +2,7 @@
  * BudgetArk - Custom categories storage
  * File: src/storage/customCategoriesStorage.ts
  *
- * CRUD for user-defined budget categories (v1: additive only — built-in
+ * CRUD for user-defined budget categories (v1: additive only - built-in
  * categories are fixed). Same EncryptedStorage + try/catch-with-default
  * pattern as the other storage modules. Names are sanitized and validated
  * (length, control chars, duplicate vs. built-in/custom) before write.

@@ -9,7 +9,7 @@ const getMonthKey = (date: Date): string => {
 };
 
 // For arbitrary ISO date strings, slice the YYYY-MM prefix directly when
-// possible — that avoids a Date round-trip entirely.
+// possible - that avoids a Date round-trip entirely.
 const monthKeyFromISO = (iso: string): string => {
   if (/^\d{4}-\d{2}/.test(iso)) return iso.slice(0, 7);
   return getMonthKey(new Date(iso));
@@ -55,7 +55,7 @@ export const applyMissedRecurringLinkedAccountContributions = (
   // Callers pass live (non-tombstoned) accounts. An entry pointing to an
   // account that no longer exists used to still advance its `lastAppliedMonth`
   // here even though the credit silently vanished (the missing account isn't
-  // in the map below) — so the user lost one month's contribution at delete
+  // in the map below) - so the user lost one month's contribution at delete
   // time and every subsequent month the entry was treated as "already
   // applied" with nothing to apply against. Skipping orphans keeps the
   // entry in "needs catch-up" state so a future fix-up (relink to a

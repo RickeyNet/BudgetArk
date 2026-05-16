@@ -108,7 +108,7 @@ const BridgeScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      // Cancellation flag — prevents a slower load from overwriting a newer
+      // Cancellation flag - prevents a slower load from overwriting a newer
       // one's state when the user re-focuses the tab quickly.
       let cancelled = false;
       const loadBridgeData = async () => {
@@ -135,7 +135,7 @@ const BridgeScreen: React.FC = () => {
             // (or running them concurrently) opens a race window where
             // another reader (e.g. BudgetScreen on a quick tab switch) can
             // see the new asset balance with the OLD lastAppliedMonth and
-            // re-apply the contribution — silently double-crediting the
+            // re-apply the contribution - silently double-crediting the
             // asset.
             await saveBudgetEntries(processed.entries);
             await saveAssetAccounts(processed.assetAccounts);

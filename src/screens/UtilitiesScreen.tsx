@@ -90,7 +90,7 @@ const calcAvgMonthlyExpenses = (entries: BudgetEntry[]): number => {
 
     // A month with *any* entry (expense or income, recurring or not) is a
     // month the user was actively tracking. We previously only counted
-    // months with expense > 0, which biased the average upward — a month
+    // months with expense > 0, which biased the average upward - a month
     // where the user paid $0 in expenses but logged income still says "I
     // was tracking, my expenses really were zero," and dropping it from
     // the denominator made historical EF targets larger than necessary.

@@ -433,7 +433,7 @@ const BudgetScreen: React.FC = () => {
   // Tracker screen). Surfacing them on Budget closes the gap where past
   // months previously showed $0 for "Debt Payments" because the screen only
   // ever saw the synthetic minimum forecast below. Payments whose parent
-  // debt has since been deleted are excluded — `deleteDebt` does not
+  // debt has since been deleted are excluded - `deleteDebt` does not
   // cascade-delete payments, and a user who created a test debt, paid it
   // off, and deleted it should not see those test payments lingering on
   // their Budget for past months.
@@ -449,7 +449,7 @@ const BudgetScreen: React.FC = () => {
     [recordedDebtPaymentsForMonth]
   );
 
-  // Synthetic minimum-payment forecast. Kept only for the NEXT month — the
+  // Synthetic minimum-payment forecast. Kept only for the NEXT month - the
   // user hasn't recorded actuals yet, so the forecast helps with planning.
   // For the current month and any past month we use `recordedDebtPaymentsTotal`
   // instead; mixing forecast with actuals there would either double-count
@@ -614,7 +614,7 @@ const BudgetScreen: React.FC = () => {
 
         if (category === "Debt Payments") {
           if (recordedDebtPaymentsForMonth.length > 0) {
-            // Actual recorded payments — show one row per payment so the
+            // Actual recorded payments - show one row per payment so the
             // drilldown matches what the user did on the Debt Tracker.
             const debtNamesById = new Map(debts.map((d) => [d.id, d.name]));
             const recordedRows: ExpenseCategoryEntry[] = recordedDebtPaymentsForMonth.map(
@@ -627,7 +627,7 @@ const BudgetScreen: React.FC = () => {
             );
             entries.push(...recordedRows);
           } else if (automaticDebtMonthlyCost > 0) {
-            // No actuals (next-month forecast view) — synthesize one row per
+            // No actuals (next-month forecast view) - synthesize one row per
             // active debt at its minimum payment so the user sees the
             // forthcoming obligation.
             const forecastRows: ExpenseCategoryEntry[] = activeDebts.map((debt) => ({

@@ -5,7 +5,7 @@
  * Full-screen modal summarizing one calendar year: debt paid, money set
  * aside, net-worth change, top spending category, and months under budget.
  * Year is selectable (any year that has data). A "Share summary" button
- * sends an aggregates-only text recap via the OS share sheet — no PII.
+ * sends an aggregates-only text recap via the OS share sheet - no PII.
  *
  * Loads its own storage on open (mirrors AchievementsScreen), so the host
  * screen only has to toggle `visible`.
@@ -97,7 +97,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
     return () => {
       cancelled = true;
     };
-    // selectedYear is intentionally excluded — year switches recompute via
+    // selectedYear is intentionally excluded - year switches recompute via
     // handleSelectYear below without re-reading storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -246,7 +246,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                   <Text style={styles.tileLabel}>Net worth change</Text>
                   <Text style={[styles.tileValue, { color: netWorthColor }]}>
                     {netWorthChange == null
-                      ? "—"
+                      ? "-"
                       : `${netWorthChange >= 0 ? "+" : "−"}${formatCurrency(
                           Math.abs(netWorthChange)
                         )}`}
@@ -274,7 +274,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                     ]}
                   >
                     {report.savingsRate == null
-                      ? "—"
+                      ? "-"
                       : `${Math.round(report.savingsRate)}%`}
                   </Text>
                   <Text style={styles.tileHint}>Income kept, not spent</Text>
@@ -398,7 +398,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                 <Text style={styles.shareBtnText}>Share summary</Text>
               </TouchableOpacity>
               <Text style={styles.shareNote}>
-                Shares totals and percentages only — no names or details.
+                Shares totals and percentages only - no names or details.
               </Text>
             </>
           )}

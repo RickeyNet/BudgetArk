@@ -225,7 +225,7 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
                 {filter === "earned"
-                  ? "No badges earned yet — start tracking debts or savings to fill the log."
+                  ? "No badges earned yet - start tracking debts or savings to fill the log."
                   : "Nothing here."}
               </Text>
             </View>

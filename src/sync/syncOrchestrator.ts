@@ -270,7 +270,7 @@ export const syncNow = async (
   } finally {
     // Always tear down discovery + the replay-protection nonce set so the
     // next sync starts from a clean slate. Inner happy paths also call
-    // these — calling twice is idempotent. The finally form covers timeout
+    // these - calling twice is idempotent. The finally form covers timeout
     // closures and other internal failures that don't bubble through the
     // outer catch.
     Discovery.stop();

@@ -279,7 +279,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
 
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
-  // they're missing or unparseable, fall back to `now` — but prefer carrying
+  // they're missing or unparseable, fall back to `now` - but prefer carrying
   // them forward so paired-device sync doesn't treat every imported row as
   // "freshly edited" and overwrite the partner's data.
   const parseIsoOrNull = (value: string): string | null => {

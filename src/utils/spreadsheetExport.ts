@@ -734,7 +734,7 @@ export const exportSpreadsheet = async (
     const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
     const keelTarget = keelStep?.targetAmount ?? 0;
     // Only the "Savings" category counts toward the derived emergency fund.
-    // Retirement and Investing aren't liquid emergency money — they feed
+    // Retirement and Investing aren't liquid emergency money - they feed
     // the gather_animals milestone separately. Kept in sync with the same
     // narrowing on BridgeScreen / BudgetScreen / DebtTrackerScreen.
     const savingsReserve = budgetEntries

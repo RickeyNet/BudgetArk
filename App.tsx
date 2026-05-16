@@ -222,7 +222,7 @@ const AppContent: React.FC = () => {
     const checkReleaseNotesPrompt = async () => {
       const justInstalledOta = await consumeOtaUpdateInstalled();
       if (justInstalledOta) {
-        // OTA update was just applied — the update modal already showed
+        // OTA update was just applied - the update modal already showed
         // the release notes, so mark as seen and skip the prompt.
         await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
         return;
@@ -266,7 +266,7 @@ const AppContent: React.FC = () => {
         if (__DEV__) console.warn("Navigation to Profile failed:", e);
       }
     } else if (__DEV__) {
-      console.warn("Navigation not ready — could not open release notes");
+      console.warn("Navigation not ready - could not open release notes");
     }
   }, [navigationRef]);
 

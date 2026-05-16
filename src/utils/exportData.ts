@@ -29,7 +29,7 @@ import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
 /**
- * Legacy v1 prefix — `CryptoJS.AES.encrypt(json, password).toString()` with
+ * Legacy v1 prefix - `CryptoJS.AES.encrypt(json, password).toString()` with
  * the default OpenSSL EVP_BytesToKey KDF (single-round MD5). Brute-forceable
  * offline in seconds for short passwords. Still readable on import for users
  * with old backups, but the export path now produces v2 only.
@@ -44,7 +44,7 @@ export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
  * even for the same password). IV: 16 random bytes (AES-256-CBC needs a
  * fresh IV per ciphertext or two exports with the same password leak the
  * XOR of their first plaintext blocks). KDF: PBKDF2-SHA256 with 250k
- * iterations — slow enough that a 4-char password takes hours instead of
+ * iterations - slow enough that a 4-char password takes hours instead of
  * seconds to brute-force, while still keeping a single export decrypt
  * under ~200ms on a low-end device.
  */

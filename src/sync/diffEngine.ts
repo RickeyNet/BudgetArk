@@ -84,7 +84,7 @@ export const computeOutgoingDiff = async (
   // Records flow through here as either upserts (live records updated since
   // the last sync) or deletes (tombstoned records the partner needs to
   // remove locally). Without the delete branch the partner would silently
-  // resurrect any record we deleted — its next sync would upsert it back to
+  // resurrect any record we deleted - its next sync would upsert it back to
   // us, since we wouldn't even mention the deletion.
   const filterChanged = <T extends { updatedAt: string; deletedAt?: string }>(
     items: T[]
@@ -141,7 +141,7 @@ export const computeOutgoingDiff = async (
  *  - On `delete`: we *replace* the local entry with the incoming tombstone
  *    (rather than `localMap.delete(id)`). Keeping the tombstone locally is
  *    what blocks a stale third device from later upserting the record back
- *    — it can compare against our tombstone's updatedAt and lose LWW.
+ *    - it can compare against our tombstone's updatedAt and lose LWW.
  *  - On `upsert`: if the local record is already a tombstone with a newer
  *    updatedAt, we ignore the incoming upsert. That's the resurrection
  *    case the audit flagged.
@@ -166,7 +166,7 @@ const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string
     if (incomingTime >= localTime) {
       localMap.set(entry.record.id, entry.record);
     }
-    // else: local is newer — keep it. If local is a tombstone and incoming
+    // else: local is newer - keep it. If local is a tombstone and incoming
     // is an upsert, the tombstone wins (no resurrection). If local is live
     // and incoming is a stale delete, the live record wins.
   }
@@ -354,7 +354,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   // Merge payoff strategy with last-write-wins on the envelope timestamp.
   // Peers without `payoffStrategyUpdatedAt` (older versions) are treated as
-  // having sent at the epoch — so any locally-stamped envelope wins, and
+  // having sent at the epoch - so any locally-stamped envelope wins, and
   // the strategy stops flip-flopping every sync direction.
   if (diff.payoffStrategy) {
     const localEnv = await getPayoffStrategyEnvelope();

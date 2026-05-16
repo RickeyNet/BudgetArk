@@ -9,7 +9,7 @@
  * Why tombstones? Without them, a deletion on Device A would simply remove
  * the record from the local array. The next sync's `computeOutgoingDiff`
  * would emit nothing for that ID. Device B still has the record, and on
- * its next sync would `upsert` it back to A — silently resurrecting the
+ * its next sync would `upsert` it back to A - silently resurrecting the
  * deletion. By keeping a `deletedAt` marker we can emit `action: "delete"`
  * with a timestamp, and the receiver applies it via the same LWW logic
  * as upserts.
