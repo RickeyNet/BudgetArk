@@ -71,13 +71,16 @@ import {
   useCoachmarkAnchor,
   useCoachmarkComputedAnchor,
 } from "../onboarding/CoachmarkAnchorContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { fabBottomOffset } from "../navigation/tabBarLayout";
 
 /**
  * FAB layout constants - kept here so the coachmark can compute a
  * window-relative rect for the spotlight without going through a ref +
- * measureInWindow round-trip. Keep these in sync with styles.fab.
+ * measureInWindow round-trip. The vertical offset derives from the live
+ * bottom safe-area inset via fabBottomOffset() (so the FAB clears the tab
+ * bar on every device); keep RIGHT/SIZE in sync with styles.fab.
  */
-const FAB_BOTTOM = 90;
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
 import type { ThemeColors } from "../theme/themes";
@@ -235,6 +238,7 @@ const BudgetScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
+  const insets = useSafeAreaInsets();
   const coachmark = useTabCoachmark("Budget");
   const listRef = useRef<FlatList>(null);
   const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card", { scrollRef: listRef });
@@ -244,7 +248,7 @@ const BudgetScreen: React.FC = () => {
     const { width, height } = Dimensions.get("window");
     return {
       x: width - FAB_RIGHT - FAB_SIZE,
-      y: height - FAB_BOTTOM - FAB_SIZE,
+      y: height - fabBottomOffset(insets.bottom) - FAB_SIZE,
       width: FAB_SIZE,
       height: FAB_SIZE,
     };
@@ -1352,10 +1356,10 @@ const BudgetScreen: React.FC = () => {
       )}
 
       {/* FAB - Add Income / Expense. Spotlight anchor is registered above
-          via useCoachmarkComputedAnchor; its rect comes from FAB_BOTTOM /
+          via useCoachmarkComputedAnchor; its rect uses fabBottomOffset /
           FAB_RIGHT / FAB_SIZE, so keep those in sync with styles.fab. */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}
         onPress={() => setShowAddModal(true)}
         activeOpacity={0.8}
       >
@@ -2411,7 +2415,8 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     /* FAB */
     fab: {
       position: "absolute",
-      bottom: FAB_BOTTOM,
+      // `bottom` is applied inline at the call site from the live safe-area
+      // inset (fabBottomOffset) so the FAB always clears the tab bar.
       right: FAB_RIGHT,
       width: FAB_SIZE,
       height: FAB_SIZE,

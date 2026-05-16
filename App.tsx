@@ -3,6 +3,9 @@
 import "react-native-get-random-values";
 import "react-native-gesture-handler";
 import "react-native-reanimated";
+// Side-effect: clamps the OS font-scale multiplier app-wide. Must run before
+// any <Text>/<TextInput> renders, so keep it among the top imports.
+import "./src/theme/fontScalingPolicy";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import {

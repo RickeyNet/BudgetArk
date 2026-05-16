@@ -26,6 +26,7 @@ import React from "react";
 import { Text, StyleSheet } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TAB_BAR_BASE_HEIGHT } from "./tabBarLayout";
 import { RootTabParamList } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -128,7 +129,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
       backgroundColor: colors.card.startsWith("#") ? `${colors.card}ee` : colors.card,
       borderTopColor: colors.cardBorder,
       borderTopWidth: 1,
-      height: 58 + bottomInset,
+      height: TAB_BAR_BASE_HEIGHT + bottomInset,
       paddingTop: 8,
       paddingBottom: Math.max(8, bottomInset),
       position: "absolute",

@@ -29,6 +29,7 @@ import {
   Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { fabBottomOffset } from "../navigation/tabBarLayout";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import {
@@ -86,9 +87,11 @@ import {
  * FAB layout constants - kept here so the coachmark can compute a
  * window-relative rect for the spotlight without going through a ref +
  * measureInWindow round-trip (which was returning bounds for the wrong
- * native node). Keep these in sync with styles.fab below.
+ * native node). The vertical offset is no longer a constant: it derives
+ * from the live bottom safe-area inset via fabBottomOffset() so the FAB
+ * always clears the tab bar (whose height also grows with that inset).
+ * Keep RIGHT/SIZE in sync with styles.fab below.
  */
-const FAB_BOTTOM = 90;
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
 import type { ThemeColors } from "../theme/themes";
@@ -249,7 +252,7 @@ const DebtTrackerScreen: React.FC = () => {
     const { width, height } = Dimensions.get("window");
     return {
       x: width - FAB_RIGHT - FAB_SIZE,
-      y: height - FAB_BOTTOM - FAB_SIZE,
+      y: height - fabBottomOffset(insets.bottom) - FAB_SIZE,
       width: FAB_SIZE,
       height: FAB_SIZE,
     };
@@ -1079,7 +1082,7 @@ const DebtTrackerScreen: React.FC = () => {
           rect from FAB_BOTTOM / FAB_RIGHT / FAB_SIZE - keep the style and
           those constants in sync. */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}
         onPress={() => setShowModal(true)}
         activeOpacity={0.8}
       >
@@ -2259,7 +2262,8 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   /* FAB */
   fab: {
     position: "absolute",
-    bottom: FAB_BOTTOM,
+    // `bottom` is applied inline at the call site from the live safe-area
+    // inset (fabBottomOffset) so the FAB always clears the tab bar.
     right: FAB_RIGHT,
     width: FAB_SIZE,
     height: FAB_SIZE,
