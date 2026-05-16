@@ -7,6 +7,22 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.5.0",
+    title: "Deep Space Redesign",
+    releasedAt: "2026-05-15",
+    highlights: [
+      "Bridge and Budget got a full visual redesign. Centered headers, a divider stat strip (Income / Spent / Net on Budget, Tracked / Emergency Fund on Bridge), glass cards with a subtle accent hairline, and crisp tabular numbers throughout.",
+      "Budget's Spending card is reworked: a compact donut with the month total in the center, a side legend with per-category percentages, and horizontal category bars that show how close you are to each limit at a glance. Tap a row to expand entries, long-press to set a limit - same as before.",
+      "Budget month navigation is now a single tidy month pill with ‹ › arrows instead of the two wide buttons.",
+      "Added a Monthly Cash Flow chart to the Bridge - income vs expense bars for the last six months with a net trend line, so you can see at a glance which months you came out ahead.",
+      "New \"Deep Space\" theme in Profile → Appearance: a dark trading-terminal look with a starfield and nebula background that flows behind every tab. Purely optional - pick it from the theme list, every other theme is untouched.",
+      "Added custom budget categories with emoji icons - create your own categories alongside the built-in ones. Custom categories survive spreadsheet and backup round-trips and sync between paired devices.",
+      "Ship's Log is complete: five new achievement badges, a full-year history view, and a Ship's Log entry on Profile so you can revisit everything you've earned.",
+      "Added an Annual Financial Report on the Bridge - your year in review for net worth, spending, and progress.",
+      "Added a \"View history\" hint on the debt payoff ring so it's clearer you can tap through to payment history.",
+    ],
+  },
+  {
     version: "1.4.16",
     title: "Sync Reliability + Cleanup",
     releasedAt: "2026-05-04",

@@ -1,5 +1,29 @@
 # BudgetArk Release Notes
 
+## v1.5.0 - Deep Space Redesign (2026-05-15)
+
+Minor version bump - first release with a native-facing UI redesign plus the features accumulated since v1.4.16. `app.json` version is `1.5.0`.
+
+### Bridge & Budget redesign
+
+- Both screens reworked to a "trading terminal" concept layout: centered header block, a bordered divider stat strip (`Income / Spent / Net` on Budget, `Tracked Accounts / Emergency Fund` on Bridge), glass cards with a top accent hairline, and `tabular-nums` values throughout.
+- Budget Spending card rebuilt: 92px donut with a centered month-total overlay, a side legend with per-slice percentages, and per-category horizontal bars (fill scales to the limit when set, otherwise to the biggest category that month; over-limit turns red). Tap-to-expand and long-press-to-set-limit behavior unchanged - presentational only, no logic/data changes.
+- Budget month switcher replaced with a single `‹ Month ›` pill.
+- New `CashFlowChart` component on the Bridge: grouped income/expense bars for the trailing 6 months with a net "wick" + net trend line, derived from existing budget entries.
+
+### Deep Space theme
+
+- New opt-in `deep_space` theme preset (`src/theme/themes.ts`) with a translucent-card palette.
+- New `SpaceBackground` component: SVG radial-gradient base, three nebula glows, and a static seeded starfield (mulberry32 PRNG so it never reshuffles). Static by design - no animation loop.
+- Mounted globally in `AppNavigator` behind the tab navigator and gated on the active theme id. When Deep Space is active, all five tab screens (Bridge, Budget, Debts, Utilities, Profile) render their roots transparent and the navigator scene is transparent so the starfield shows app-wide. Other themes pay zero cost.
+
+### Features since v1.4.16
+
+- Custom budget categories with emoji icons (add-only v1), preserved across spreadsheet/backup round-trips and paired-device sync.
+- Ship's Log completed: 5 new achievement badges, full-year history, and a Profile entry point.
+- Annual Financial Report added to the Bridge.
+- "View history" hint added to the debt payoff ring.
+
 ## v1.4.16 - Sync Reliability + Cleanup (2026-05-04)
 
 Round 2 audit follow-up - closes every remaining `Potentialbugs.md` Round 2 item except the two explicitly deferred low-impact P3s. Pure JS - `runtimeVersion` stays at `1.4.14`, ships as OTA against the v1.4.14 native binary.

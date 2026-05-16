@@ -707,7 +707,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     titleSection: {
       paddingTop: 56,
       paddingBottom: tokens.gap,
-      alignItems: "flex-start",
+      alignItems: "center",
     },
     appLabel: {
       fontSize: scale(10),
@@ -716,6 +716,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       letterSpacing: 3,
       marginBottom: 3,
       textTransform: "uppercase",
+      textAlign: "center",
     },
     screenTitle: {
       fontSize: scale(28),
@@ -723,10 +724,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.text,
       marginBottom: 4,
       letterSpacing: -0.5,
+      textAlign: "center",
     },
     screenSubtitle: {
       fontSize: scale(13),
       color: colors.textMuted,
+      textAlign: "center",
     },
     statsStrip: {
       flexDirection: "row",

@@ -911,7 +911,7 @@ const ProfileScreen: React.FC = () => {
 
   if (!user) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" }}>
+      <View style={{ flex: 1, backgroundColor: themeId === "deep_space" ? "transparent" : colors.bg, justifyContent: "center", alignItems: "center" }}>
         <Text style={{ color: colors.textDim, fontSize: 14 }}>Loading profile...</Text>
       </View>
     );
@@ -926,7 +926,7 @@ const ProfileScreen: React.FC = () => {
     <>
       <ScrollView
         ref={scrollRef}
-        style={[styles.screen, { backgroundColor: colors.bg }]}
+        style={[styles.screen, { backgroundColor: themeId === "deep_space" ? "transparent" : colors.bg }]}
         contentContainerStyle={styles.content}
       >
         {/* ── Backup reminder banner ── */}

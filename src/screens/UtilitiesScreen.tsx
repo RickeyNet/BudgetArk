@@ -239,7 +239,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
 /* ── Main Screen ── */
 
 const UtilitiesScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, themeId } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Utilities");
@@ -648,7 +648,12 @@ const UtilitiesScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        themeId === "deep_space" && { backgroundColor: "transparent" },
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}

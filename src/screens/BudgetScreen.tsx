@@ -1035,12 +1035,13 @@ const BudgetScreen: React.FC = () => {
 
   const listHeader = (
     <View>
-      <View style={styles.headerRow}>
-        <View style={styles.titleSection}>
-          <Text style={styles.appLabel}>BudgetArk</Text>
-          <Text style={styles.screenTitle}>Budget</Text>
-        </View>
+      <View style={styles.titleSection}>
+        <Text style={styles.appLabel}>BudgetArk</Text>
+        <Text style={styles.screenTitle}>Budget</Text>
+        <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
+      </View>
 
+      <View style={styles.monthPillRow}>
       <View style={styles.monthPill}>
         <TouchableOpacity
           style={styles.monthPillArrowBtn}
@@ -1085,8 +1086,6 @@ const BudgetScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
       </View>
-
-      <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
 
       <View ref={anchorBudgetSummary} collapsable={false} style={styles.summaryCard}>
         <View style={styles.summaryTopRow}>
@@ -1633,16 +1632,10 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       paddingHorizontal: tokens.pad,
       paddingBottom: 110,
     },
-    headerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
+    titleSection: {
       paddingTop: 50,
       paddingBottom: tokens.gapSm + 2,
-    },
-    titleSection: {
-      alignItems: "flex-start",
-      flexShrink: 1,
+      alignItems: "center",
     },
     appLabel: {
       fontSize: scale(10),
@@ -1651,16 +1644,24 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       letterSpacing: 3,
       marginBottom: 3,
       textTransform: "uppercase",
+      textAlign: "center",
     },
     screenTitle: {
       fontSize: scale(28),
       fontWeight: "800",
       color: colors.text,
       letterSpacing: -0.5,
+      marginBottom: 4,
+      textAlign: "center",
     },
     screenSubtitle: {
       fontSize: scale(13),
       color: colors.textMuted,
+      textAlign: "center",
+    },
+    monthPillRow: {
+      alignItems: "center",
+      marginTop: tokens.gapSm + 2,
       marginBottom: tokens.gap,
     },
     monthPill: {
