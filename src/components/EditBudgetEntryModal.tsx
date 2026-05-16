@@ -18,12 +18,15 @@ import {
   BudgetEntry,
   BudgetEntryType,
   BudgetCategory,
+  CategoryName,
+  CustomCategory,
   AssetAccount,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import { getCategoryIcon } from "../data/categoryIcons";
 
-const LINKABLE_CATEGORIES: ReadonlySet<BudgetCategory> = new Set([
+const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Savings",
   "Retirement",
   "Investing",
@@ -35,6 +38,7 @@ interface EditBudgetEntryModalProps {
   onSave: (updated: BudgetEntry) => void;
   onDelete: (id: string) => void;
   assetAccounts?: AssetAccount[];
+  customCategories?: CustomCategory[];
 }
 
 const MONTH_LABELS = [
@@ -74,13 +78,14 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   onSave,
   onDelete,
   assetAccounts = [],
+  customCategories = [],
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
   const [type, setType] = useState<BudgetEntryType>("expense");
-  const [category, setCategory] = useState<BudgetCategory>("Grocery");
+  const [category, setCategory] = useState<CategoryName>("Grocery");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [yearMonth, setYearMonth] = useState("");
@@ -113,12 +118,18 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const isValid = parseFloat(amount) > 0;
   const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
 
-  const categoryOptions = useMemo(() => {
-    if (SELECTABLE_BUDGET_CATEGORIES.includes(category)) {
-      return SELECTABLE_BUDGET_CATEGORIES;
+  const categoryOptions = useMemo<CategoryName[]>(() => {
+    const base: CategoryName[] = [
+      ...SELECTABLE_BUDGET_CATEGORIES,
+      ...customCategories.map((c) => c.name),
+    ];
+    // Keep an entry's existing category selectable even if it's a legacy
+    // built-in (e.g. "Food") or a custom category that was since deleted.
+    if (category && !base.includes(category)) {
+      return [category, ...base];
     }
-    return [category, ...SELECTABLE_BUDGET_CATEGORIES];
-  }, [category]);
+    return base;
+  }, [category, customCategories]);
 
   const handleSave = useCallback(() => {
     if (!entry || !isValid) return;
@@ -241,7 +252,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                             category === item && styles.categoryPillTextActive,
                           ]}
                         >
-                          {item}
+                          {getCategoryIcon(item, customCategories)} {item}
                         </Text>
                       </TouchableOpacity>
                     ))}

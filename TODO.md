@@ -355,7 +355,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [x] Improve debt milestone modal readability (full-screen layout + larger text + safe-area support)
 - [x] Improve theme readability and contrast across The Ark and dark themes (buttons + theme selector cards)
 - [x] Monthly review insights (category changes, spending trends, streaks)
-- [ ] Custom categories and category icon support
+- [x] Custom categories and category icon support — v1 (add-only): users add their own categories (name + emoji icon) via Profile → CATEGORIES → Custom Categories. Built-in 21 stay fixed. Custom categories work everywhere built-ins do: entry pickers (Add/Edit modals), Budget category list, donut chart (deterministic name-hashed color), monthly limits, insights/streaks, Annual Report. New `customCategoriesStorage.ts` (EncryptedStorage, validated/sanitized names, dup-checked vs built-in+custom, cap 30) + `CustomCategoriesProvider` + `categoryIcons.ts` (emoji map for all 21 built-ins + curated picker grid + resolver). `BudgetEntry.category`/`CategoryBudgetLimit.category` widened to `CategoryName` (built-in autocomplete preserved). OTA-safe — emoji only, no native deps. Typecheck clean. Known limitation: JSON/spreadsheet import still coerces unknown category strings per existing validators; deleting a custom category leaves tagged entries on the name with the default icon.
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Undo actions and bulk edit/delete operations
 - [ ] Data confidence tools (last backup badge + backup reminders)

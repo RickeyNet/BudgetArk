@@ -1,0 +1,107 @@
+/**
+ * BudgetArk - Custom Categories Provider
+ * File: src/categories/CustomCategoriesProvider.tsx
+ *
+ * Global context owning the user's custom category list so pickers, the
+ * Budget screen, and the manage modal all read one reactive source instead
+ * of each re-reading storage. Mirrors AchievementsProvider's shape.
+ */
+
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { CustomCategory } from "../types";
+import {
+  getCustomCategories,
+  addCustomCategory,
+  updateCustomCategory,
+  deleteCustomCategory,
+  type CategoryMutationResult,
+} from "../storage/customCategoriesStorage";
+
+interface CustomCategoriesContextValue {
+  customCategories: CustomCategory[];
+  isReady: boolean;
+  refresh: () => Promise<void>;
+  add: (name: string, icon: string) => Promise<CategoryMutationResult>;
+  update: (
+    id: string,
+    patch: { name?: string; icon?: string }
+  ) => Promise<CategoryMutationResult>;
+  remove: (id: string) => Promise<void>;
+}
+
+const CustomCategoriesContext =
+  createContext<CustomCategoriesContextValue | null>(null);
+
+export const CustomCategoriesProvider: React.FC<{
+  children: React.ReactNode;
+}> = ({ children }) => {
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [isReady, setIsReady] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      setCustomCategories(await getCustomCategories());
+    } catch (error) {
+      if (__DEV__) console.warn("Custom categories load failed:", error);
+    } finally {
+      setIsReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const add = useCallback(
+    async (name: string, icon: string): Promise<CategoryMutationResult> => {
+      const result = await addCustomCategory(name, icon);
+      if (result.ok) setCustomCategories(result.categories);
+      return result;
+    },
+    []
+  );
+
+  const update = useCallback(
+    async (
+      id: string,
+      patch: { name?: string; icon?: string }
+    ): Promise<CategoryMutationResult> => {
+      const result = await updateCustomCategory(id, patch);
+      if (result.ok) setCustomCategories(result.categories);
+      return result;
+    },
+    []
+  );
+
+  const remove = useCallback(async (id: string) => {
+    setCustomCategories(await deleteCustomCategory(id));
+  }, []);
+
+  const value = useMemo<CustomCategoriesContextValue>(
+    () => ({ customCategories, isReady, refresh, add, update, remove }),
+    [customCategories, isReady, refresh, add, update, remove]
+  );
+
+  return (
+    <CustomCategoriesContext.Provider value={value}>
+      {children}
+    </CustomCategoriesContext.Provider>
+  );
+};
+
+export const useCustomCategories = (): CustomCategoriesContextValue => {
+  const ctx = useContext(CustomCategoriesContext);
+  if (!ctx) {
+    throw new Error(
+      "useCustomCategories must be used within CustomCategoriesProvider"
+    );
+  }
+  return ctx;
+};

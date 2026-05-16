@@ -95,7 +95,7 @@ const yearOfDate = (iso: string): number => new Date(iso).getFullYear();
 interface MonthAgg {
   income: number;
   expenses: number;
-  byCategory: Partial<Record<BudgetCategory, number>>;
+  byCategory: Record<string, number>;
 }
 
 /**

@@ -145,12 +145,37 @@ export const BUDGET_CATEGORIES = [
 
 export type BudgetCategory = (typeof BUDGET_CATEGORIES)[number];
 
+/**
+ * A category an entry/limit can reference. Built-in names keep editor
+ * autocomplete; the `string & {}` arm lets user-defined custom category
+ * names flow through without an `as` cast at every assignment. Runtime
+ * lookups against built-in-keyed maps must fall back (see `categoryIcons`).
+ */
+export type CategoryName = BudgetCategory | (string & {});
+
+/**
+ * A user-defined budget category. Built-in categories stay fixed; these are
+ * additive only (v1). `icon` is a single emoji glyph. Not tombstoned —
+ * deleting just drops it from the list; any entries already tagged with the
+ * name keep working and fall back to the default icon/color.
+ */
+export interface CustomCategory {
+  id: string;
+  name: string;
+  /** Single emoji glyph shown beside the category. */
+  icon: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const CUSTOM_CATEGORY_STORAGE_VERSION = 1;
+
 export type BudgetEntryType = "income" | "expense";
 
 export interface BudgetEntry {
   id: string;
   type: BudgetEntryType;
-  category: BudgetCategory;
+  category: CategoryName;
   amount: number;
   /** Optional user-provided note describing the entry */
   description?: string;
@@ -171,7 +196,7 @@ export interface BudgetEntry {
 export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt" | "updatedAt">;
 
 export interface CategoryBudgetLimit {
-  category: BudgetCategory;
+  category: CategoryName;
   monthlyLimit: number;
   /**
    * Last-write-wins timestamp for sync conflict resolution. Limits saved

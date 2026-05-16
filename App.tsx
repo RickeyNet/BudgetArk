@@ -28,6 +28,7 @@ import { CurrencyProvider } from "./src/currency/CurrencyProvider";
 import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
 import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
 import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
+import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
@@ -390,7 +391,9 @@ export default function App(): React.JSX.Element {
               <CoachmarksProvider>
                 <CoachmarkAnchorProvider>
                   <AchievementsProvider>
-                    <AppContent />
+                    <CustomCategoriesProvider>
+                      <AppContent />
+                    </CustomCategoriesProvider>
                   </AchievementsProvider>
                 </CoachmarkAnchorProvider>
               </CoachmarksProvider>

@@ -17,9 +17,12 @@ import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
+import { useCustomCategories } from "../categories/CustomCategoriesProvider";
+import { getCategoryIcon, categoryNameHash } from "../data/categoryIcons";
 import {
   BUDGET_CATEGORIES,
   BudgetCategory,
+  CategoryName,
   BudgetEntry,
   CategoryBudgetLimit,
   Debt,
@@ -90,7 +93,7 @@ type ExpenseCategoryEntry = {
 };
 
 type ExpenseCategoryRow = {
-  category: BudgetCategory;
+  category: CategoryName;
   spent: number;
   limit: number | null;
   ratio: number | null;
@@ -248,6 +251,12 @@ const BudgetScreen: React.FC = () => {
   });
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
+  const { customCategories } = useCustomCategories();
+  const customCategoryNames = useMemo(
+    () => customCategories.map((c) => c.name),
+    [customCategories]
+  );
+
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -256,7 +265,7 @@ const BudgetScreen: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
-  const [limitModalCategory, setLimitModalCategory] = useState<BudgetCategory | null>(null);
+  const [limitModalCategory, setLimitModalCategory] = useState<CategoryName | null>(null);
   const [limitInput, setLimitInput] = useState("");
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
@@ -527,7 +536,7 @@ const BudgetScreen: React.FC = () => {
   );
 
   const limitByCategory = useMemo(() => {
-    const map: Partial<Record<BudgetCategory, number>> = {};
+    const map: Record<string, number> = {};
     limits.forEach((limit) => {
       map[limit.category] = limit.monthlyLimit;
     });
@@ -535,7 +544,7 @@ const BudgetScreen: React.FC = () => {
   }, [limits]);
 
   const expensesByCategory = useMemo(() => {
-    const map: Partial<Record<BudgetCategory, number>> = {};
+    const map: Record<string, number> = {};
 
     monthlyEntries
       .filter((entry) => entry.type === "expense")
@@ -551,7 +560,7 @@ const BudgetScreen: React.FC = () => {
   }, [debtPaymentsTotal, monthlyEntries]);
 
   const incomeByCategory = useMemo(() => {
-    const map: Partial<Record<BudgetCategory, number>> = {};
+    const map: Record<string, number> = {};
 
     monthlyEntries
       .filter((entry) => entry.type === "income")
@@ -571,9 +580,13 @@ const BudgetScreen: React.FC = () => {
   );
 
   const expenseRows = useMemo<ExpenseCategoryRow[]>(() => {
-    const categoriesInPlay = new Set<BudgetCategory>();
+    const categoriesInPlay = new Set<CategoryName>();
 
-    BUDGET_CATEGORIES.forEach((category) => {
+    const allCategories: CategoryName[] = [
+      ...BUDGET_CATEGORIES,
+      ...customCategoryNames,
+    ];
+    allCategories.forEach((category) => {
       if ((expensesByCategory[category] ?? 0) > 0 || limitByCategory[category] != null) {
         categoriesInPlay.add(category);
       }
@@ -629,6 +642,7 @@ const BudgetScreen: React.FC = () => {
   }, [
     activeDebts,
     automaticDebtMonthlyCost,
+    customCategoryNames,
     debts,
     expensesByCategory,
     limitByCategory,
@@ -661,14 +675,32 @@ const BudgetScreen: React.FC = () => {
     }, {} as Record<BudgetCategory, string>);
   }, [colors]);
 
+  /**
+   * Built-in categories get their fixed index-based color; custom ones get a
+   * deterministic slot from the static palette (name-hashed) so the donut
+   * color stays stable across renders and launches.
+   */
+  const colorForCategory = useCallback(
+    (category: CategoryName): string => {
+      const builtIn = (categoryChartColors as Record<string, string | undefined>)[
+        category
+      ];
+      if (builtIn) return builtIn;
+      return CATEGORY_CHART_PALETTE[
+        categoryNameHash(category) % CATEGORY_CHART_PALETTE.length
+      ];
+    },
+    [categoryChartColors]
+  );
+
   const pieData = useMemo<DonutSlice[]>(
     () =>
       chartData.map((item) => ({
         label: item.category,
         value: item.amount,
-        color: categoryChartColors[item.category],
+        color: colorForCategory(item.category),
       })),
-    [categoryChartColors, chartData]
+    [colorForCategory, chartData]
   );
 
   const adjustAssetAccounts = useCallback(
@@ -839,7 +871,7 @@ const BudgetScreen: React.FC = () => {
   }, []);
 
   const openLimitModal = useCallback(
-    (category: BudgetCategory) => {
+    (category: CategoryName) => {
       const currentLimit = limitByCategory[category];
       setLimitInput(currentLimit ? String(currentLimit) : "");
       setLimitModalCategory(category);
@@ -1144,7 +1176,7 @@ const BudgetScreen: React.FC = () => {
           const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
           const isOver = ratio != null && ratio >= 1;
           const statusColor = isOver ? colors.danger : hasWarning ? colors.warning : colors.success;
-          const dotColor = categoryChartColors[item.category];
+          const dotColor = colorForCategory(item.category);
           const isExpanded = expandedCategories.has(item.category);
 
           return (
@@ -1157,7 +1189,9 @@ const BudgetScreen: React.FC = () => {
               >
                 <View style={styles.categoryRowLeft}>
                   <View style={[styles.categoryDot, { backgroundColor: dotColor }]} />
-                  <Text style={styles.rowCategory}>{item.category}</Text>
+                  <Text style={styles.rowCategory}>
+                    {getCategoryIcon(item.category, customCategories)} {item.category}
+                  </Text>
                 </View>
                 <View style={styles.categoryRowRight}>
                   <Text style={styles.rowSpent}>
@@ -1254,6 +1288,7 @@ const BudgetScreen: React.FC = () => {
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddEntry}
         assetAccounts={assetAccounts}
+        customCategories={customCategories}
       />
 
       <EditBudgetEntryModal
@@ -1262,6 +1297,7 @@ const BudgetScreen: React.FC = () => {
         onSave={handleSaveEntry}
         onDelete={handleDeleteEntry}
         assetAccounts={assetAccounts}
+        customCategories={customCategories}
       />
 
       <MonthlyReviewModal

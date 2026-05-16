@@ -55,6 +55,8 @@ import { exportAllData } from "../utils/exportData";
 import { recordExport } from "../storage/achievementStatsStorage";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import AchievementsScreen from "./AchievementsScreen";
+import ManageCategoriesModal from "../components/ManageCategoriesModal";
+import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { importData, importFromString, isEncryptedExport, type ImportResult } from "../utils/importData";
 import {
   exportSpreadsheet,
@@ -168,6 +170,10 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether the Ship's Log (achievements) screen is visible */
   const [showAchievements, setShowAchievements] = useState(false);
+
+  const { customCategories } = useCustomCategories();
+  /** Whether the manage-custom-categories modal is visible */
+  const [showManageCategories, setShowManageCategories] = useState(false);
 
   /** Current user account state */
   const [user, setUser] = useState<UserAccount | null>(null);
@@ -1191,6 +1197,37 @@ const ProfileScreen: React.FC = () => {
                 </Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
                   {`${Object.keys(achievementUnlocked).length}/${totalAchievements} achievements earned`}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Categories ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            CATEGORIES
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                triggerHaptic("selection");
+                setShowManageCategories(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Manage custom categories"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Custom Categories
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {customCategories.length === 0
+                    ? "Add your own budget categories"
+                    : `${customCategories.length} custom`}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
@@ -2552,6 +2589,11 @@ const ProfileScreen: React.FC = () => {
       <AchievementsScreen
         visible={showAchievements}
         onClose={() => setShowAchievements(false)}
+      />
+
+      <ManageCategoriesModal
+        visible={showManageCategories}
+        onClose={() => setShowManageCategories(false)}
       />
       {coachmark}
     </>

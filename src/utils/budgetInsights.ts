@@ -29,7 +29,7 @@ export interface MonthSummary {
   totalIncome: number;
   totalExpenses: number;
   net: number;
-  byCategory: Partial<Record<BudgetCategory, number>>;
+  byCategory: Record<string, number>;
 }
 
 export interface CategoryChange {
@@ -82,7 +82,7 @@ const buildMonthSummary = (
   monthKey: string
 ): MonthSummary => {
   const monthly = getEntriesForMonth(entries, monthKey);
-  const byCategory: Partial<Record<BudgetCategory, number>> = {};
+  const byCategory: Record<string, number> = {};
   let totalIncome = 0;
   let totalExpenses = 0;
 

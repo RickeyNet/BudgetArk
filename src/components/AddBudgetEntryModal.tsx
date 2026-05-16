@@ -15,13 +15,16 @@ import {
   BUDGET_CATEGORIES,
   BudgetEntryType,
   BudgetCategory,
+  CategoryName,
+  CustomCategory,
   NewBudgetEntryInput,
   AssetAccount,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import { getCategoryIcon } from "../data/categoryIcons";
 
-const LINKABLE_CATEGORIES: ReadonlySet<BudgetCategory> = new Set([
+const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Savings",
   "Retirement",
   "Investing",
@@ -32,6 +35,7 @@ interface AddBudgetEntryModalProps {
   onClose: () => void;
   onAdd: (entry: NewBudgetEntryInput) => void;
   assetAccounts?: AssetAccount[];
+  customCategories?: CustomCategory[];
 }
 
 const todayYearMonth = () => new Date().toISOString().slice(0, 7);
@@ -70,13 +74,22 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   onClose,
   onAdd,
   assetAccounts = [],
+  customCategories = [],
 }) => {
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
+  const selectableCategories = useMemo<CategoryName[]>(
+    () => [
+      ...SELECTABLE_BUDGET_CATEGORIES,
+      ...customCategories.map((c) => c.name),
+    ],
+    [customCategories]
+  );
+
   const [type, setType] = useState<BudgetEntryType>("expense");
-  const [category, setCategory] = useState<BudgetCategory>("Grocery");
+  const [category, setCategory] = useState<CategoryName>("Grocery");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [yearMonth, setYearMonth] = useState(todayYearMonth());
@@ -191,7 +204,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
             <View style={styles.field}>
               <Text style={styles.label}>CATEGORY</Text>
               <View style={styles.categoryWrap}>
-                {SELECTABLE_BUDGET_CATEGORIES.map((item) => (
+                {selectableCategories.map((item) => (
                   <TouchableOpacity
                     key={item}
                     style={[
@@ -206,7 +219,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
                         category === item && styles.categoryPillTextActive,
                       ]}
                     >
-                      {item}
+                      {getCategoryIcon(item, customCategories)} {item}
                     </Text>
                   </TouchableOpacity>
                 ))}
