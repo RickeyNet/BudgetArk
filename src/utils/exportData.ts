@@ -56,13 +56,14 @@ const SALT_BYTES = 16;
 const IV_BYTES = 16;
 
 /**
- * Gathers all app data into a single object and opens
- * the native share sheet so the user can copy, save, or send it.
- *
- * @param password - if provided, the export is AES-encrypted with this password
- * @returns Promise<void>
+ * Builds the export message string (plain JSON or v2-encrypted envelope).
+ * Split out from `exportAllData` so the UI can dismiss any "preparing"
+ * spinner before opening the share sheet — on iOS, presenting
+ * UIActivityViewController over a still-visible RN <Modal> leaves the
+ * share sheet's completion callback un-fired, so `Share.share` never
+ * resolves and the spinner spins forever.
  */
-export const exportAllData = async (password?: string): Promise<void> => {
+export const buildExportMessage = async (password?: string): Promise<string> => {
   // Collect all data in parallel
   const [
     debts,
@@ -156,6 +157,15 @@ export const exportAllData = async (password?: string): Promise<void> => {
     message = json;
   }
 
+  return message;
+};
+
+/**
+ * Opens the native share sheet with a pre-built message. Caller is
+ * responsible for dismissing any blocking modals first (see the note on
+ * `buildExportMessage` re: iOS share-sheet presentation).
+ */
+export const shareExportMessage = async (message: string): Promise<void> => {
   const result = await Share.share({
     title: "BudgetArk Data Export",
     message,
@@ -166,4 +176,14 @@ export const exportAllData = async (password?: string): Promise<void> => {
   if (result.action === Share.sharedAction) {
     await recordBackup(CURRENT_APP_VERSION);
   }
+};
+
+/**
+ * Convenience wrapper that builds the export and shares it back-to-back.
+ * Prefer calling `buildExportMessage` + `shareExportMessage` directly when
+ * a UI spinner needs to be dismissed between the two steps.
+ */
+export const exportAllData = async (password?: string): Promise<void> => {
+  const message = await buildExportMessage(password);
+  await shareExportMessage(message);
 };

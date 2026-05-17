@@ -52,7 +52,7 @@ import {
   completeOnboarding,
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
-import { exportAllData } from "../utils/exportData";
+import { buildExportMessage, shareExportMessage } from "../utils/exportData";
 import { recordExport } from "../storage/achievementStatsStorage";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import AchievementsScreen from "./AchievementsScreen";
@@ -711,13 +711,30 @@ const ProfileScreen: React.FC = () => {
       return;
     }
     setShowExportModal(false);
-    setIsExporting(true);
-    // Yield a frame so the export modal dismisses and the spinner overlay
-    // actually mounts before the synchronous PBKDF2 freeze begins.
-    await new Promise((resolve) => setTimeout(resolve, 60));
     let exported = false;
     try {
-      await exportAllData(exportEncrypt ? exportPassword : undefined);
+      let message: string;
+      if (exportEncrypt) {
+        // PBKDF2 freezes the JS thread for ~200ms+; the native ActivityIndicator
+        // keeps spinning so the user sees we're working. Yield a frame so the
+        // overlay actually mounts before the freeze begins.
+        setIsExporting(true);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        message = await buildExportMessage(exportPassword);
+        // Dismiss the overlay *before* opening the share sheet. On iOS,
+        // UIActivityViewController presented over a still-visible RN <Modal>
+        // can fail to fire its completion callback, leaving Share.share
+        // pending forever - which is what stranded users on the spinner.
+        setIsExporting(false);
+        if (Platform.OS === "ios") {
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+      } else {
+        // Unencrypted gather is fast (no PBKDF2); skip the overlay entirely
+        // so there's nothing blocking the share sheet's presentation.
+        message = await buildExportMessage();
+      }
+      await shareExportMessage(message);
       triggerHaptic("success");
       await refreshBackupState();
       await recordExport();
