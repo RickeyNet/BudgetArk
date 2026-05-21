@@ -105,7 +105,20 @@ const Spotlight: React.FC<SpotlightProps> = ({
   const nextLabel = isLast ? "Got it" : "Next";
 
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={handleNext}>
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      // Android: Modal otherwise renders below the status bar, so the
+      // coachmark coordinate space is shifted ~24-32 px down vs the
+      // underlying screen. That made the spotlight ring miss the FAB on
+      // devices like the Moto G. statusBarTranslucent makes the Modal
+      // share the screen's window frame (top:0 = screen y=0), so the
+      // computed FAB rect (window-relative) lands exactly on the FAB.
+      // No-op on iOS.
+      statusBarTranslucent
+      onRequestClose={handleNext}
+    >
       <View style={styles.root} pointerEvents="box-none">
         {rect ? (
           <>
