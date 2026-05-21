@@ -19,6 +19,7 @@ import {
   NetWorthSnapshot,
   Payment,
 } from "../types";
+import { isEntryActiveInMonth } from "./recurrence";
 
 /**
  * Categories that represent money moved *into* savings rather than spending.
@@ -82,12 +83,6 @@ const MONTH_LABELS = [
 const monthKeyFor = (year: number, monthIndex: number): string =>
   `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
 
-/** YYYY-MM of an ISO date string (uses local time, like the rest of the app). */
-const monthKeyOfDate = (iso: string): string => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
-
 const yearOfDate = (iso: string): number => new Date(iso).getFullYear();
 
 /* ─── Per-month aggregation (year-scoped, recurring-aware) ─── */
@@ -99,15 +94,12 @@ interface MonthAgg {
 }
 
 /**
- * A recurring entry repeats every month from its start month onward - same
- * rule `budgetInsights`/`BudgetScreen` use. A one-off counts only in its own
- * month. Both are evaluated against an explicit `monthKey` so we can build a
- * report for any past calendar year, not just a trailing window.
+ * Recurring entries repeat at their configured interval from the start month
+ * onward; one-offs count only in their own month. Evaluated against an
+ * explicit `monthKey` so we can build a report for any past calendar year.
  */
-const entryAppliesToMonth = (entry: BudgetEntry, monthKey: string): boolean => {
-  const entryMonth = monthKeyOfDate(entry.date);
-  return entry.recurring ? entryMonth <= monthKey : entryMonth === monthKey;
-};
+const entryAppliesToMonth = (entry: BudgetEntry, monthKey: string): boolean =>
+  isEntryActiveInMonth(entry, monthKey);
 
 const buildMonthAggregates = (
   entries: BudgetEntry[],

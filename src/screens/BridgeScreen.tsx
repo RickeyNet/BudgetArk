@@ -47,6 +47,7 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
+import { isEntryActiveInMonth } from "../utils/recurrence";
 
 /** Emoji glyph per asset category for the concept's account-row icon chip. */
 const ACCOUNT_ICONS: Record<string, string> = {
@@ -230,13 +231,7 @@ const BridgeScreen: React.FC = () => {
       let income = 0;
       let expense = 0;
       for (const entry of entries) {
-        const entryMonth = `${new Date(entry.date).getFullYear()}-${String(
-          new Date(entry.date).getMonth() + 1
-        ).padStart(2, "0")}`;
-        const counts = entry.recurring
-          ? entryMonth <= monthKey
-          : entryMonth === monthKey;
-        if (!counts) continue;
+        if (!isEntryActiveInMonth(entry, monthKey)) continue;
         if (entry.type === "income") income += entry.amount;
         else expense += entry.amount;
       }

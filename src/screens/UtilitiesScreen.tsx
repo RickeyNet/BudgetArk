@@ -33,6 +33,7 @@ import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import type { BudgetEntry, SavingsGoal } from "../types";
+import { isEntryActiveInMonth } from "../utils/recurrence";
 import SmoothSlider from "../components/SmoothSlider";
 
 /* Enable LayoutAnimation on Android */
@@ -85,25 +86,17 @@ const calcAvgMonthlyExpenses = (entries: BudgetEntry[]): number => {
     monthTotals[getMonthKey(d)] = 0;
   }
 
+  // A month with *any* entry (expense or income, recurring or not) is a
+  // month the user was actively tracking. We previously only counted
+  // months with expense > 0, which biased the average upward - a month
+  // where the user paid $0 in expenses but logged income still says "I
+  // was tracking, my expenses really were zero," and dropping it from
+  // the denominator made historical EF targets larger than necessary.
   for (const entry of entries) {
-    const entryMonthKey = getMonthKey(new Date(entry.date));
-
-    // A month with *any* entry (expense or income, recurring or not) is a
-    // month the user was actively tracking. We previously only counted
-    // months with expense > 0, which biased the average upward - a month
-    // where the user paid $0 in expenses but logged income still says "I
-    // was tracking, my expenses really were zero," and dropping it from
-    // the denominator made historical EF targets larger than necessary.
-    if (entry.recurring) {
-      for (const mk of Object.keys(monthTotals)) {
-        if (mk >= entryMonthKey) {
-          monthsTracked.add(mk);
-          if (entry.type === "expense") monthTotals[mk] += entry.amount;
-        }
-      }
-    } else if (entryMonthKey in monthTotals) {
-      monthsTracked.add(entryMonthKey);
-      if (entry.type === "expense") monthTotals[entryMonthKey] += entry.amount;
+    for (const mk of Object.keys(monthTotals)) {
+      if (!isEntryActiveInMonth(entry, mk)) continue;
+      monthsTracked.add(mk);
+      if (entry.type === "expense") monthTotals[mk] += entry.amount;
     }
   }
 

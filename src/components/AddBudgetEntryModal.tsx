@@ -17,7 +17,10 @@ import {
   BudgetCategory,
   CategoryName,
   CustomCategory,
+  DEFAULT_RECURRENCE_INTERVAL,
   NewBudgetEntryInput,
+  RECURRENCE_INTERVAL_OPTIONS,
+  RecurrenceInterval,
   AssetAccount,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
@@ -96,6 +99,9 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const [recurring, setRecurring] = useState(false);
+  const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
+    DEFAULT_RECURRENCE_INTERVAL
+  );
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
 
   const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
@@ -111,6 +117,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     setShowMonthPicker(false);
     setPickerYear(new Date().getFullYear());
     setRecurring(false);
+    setRecurrenceInterval(DEFAULT_RECURRENCE_INTERVAL);
     setLinkedAccountId(undefined);
   }, []);
 
@@ -125,6 +132,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
       description: description.trim() || undefined,
       date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
       recurring: recurring || undefined,
+      recurrenceInterval: recurring ? recurrenceInterval : undefined,
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
     });
 
@@ -136,6 +144,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     linkedAccountId,
     onAdd,
     recurring,
+    recurrenceInterval,
     reset,
     showAccountPicker,
     type,
@@ -285,12 +294,40 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
                 {recurring && <Text style={styles.recurringCheck}>✓</Text>}
               </View>
               <View style={styles.recurringTextWrap}>
-                <Text style={styles.recurringLabel}>Monthly Recurring</Text>
+                <Text style={styles.recurringLabel}>Recurring</Text>
                 <Text style={styles.recurringHint}>
-                  This entry will appear in every month from the start month onward.
+                  This entry will repeat from the start month onward at the
+                  frequency you choose below.
                 </Text>
               </View>
             </TouchableOpacity>
+
+            {recurring && (
+              <View style={styles.field}>
+                <Text style={styles.label}>FREQUENCY</Text>
+                <View style={styles.categoryWrap}>
+                  {RECURRENCE_INTERVAL_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.categoryPill,
+                        recurrenceInterval === opt.value && styles.categoryPillActive,
+                      ]}
+                      onPress={() => setRecurrenceInterval(opt.value)}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryPillText,
+                          recurrenceInterval === opt.value && styles.categoryPillTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {showAccountPicker && (
               <View style={styles.field}>

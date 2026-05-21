@@ -23,6 +23,7 @@ import type {
   DebtMilestonePlan,
   NetWorthSnapshot,
 } from "../types";
+import { isEntryActiveInMonth } from "../utils/recurrence";
 
 export interface AchievementContext {
   debts: Debt[];
@@ -82,12 +83,6 @@ const consecutiveSavingsMonths = (ctx: AchievementContext): number => {
   return count;
 };
 
-/** YYYY-MM of an ISO date string, local time (matches the rest of the app). */
-const monthKeyOfDate = (iso: string): string => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
-
 /** YYYY-MM that immediately follows the given key. */
 const nextMonthKey = (key: string): string => {
   const [y, m] = key.split("-").map((n) => parseInt(n, 10));
@@ -111,9 +106,7 @@ const underBudgetMonths = (ctx: AchievementContext): string[] => {
     for (const e of ctx.budgetEntries) {
       if (e.type !== "expense") continue;
       if (!Number.isFinite(e.amount) || e.amount <= 0) continue;
-      const em = monthKeyOfDate(e.date);
-      const applies = e.recurring ? em <= monthKey : em === monthKey;
-      if (!applies) continue;
+      if (!isEntryActiveInMonth(e, monthKey)) continue;
       spend[e.category] = (spend[e.category] ?? 0) + e.amount;
     }
 

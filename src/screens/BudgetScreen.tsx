@@ -29,6 +29,7 @@ import {
   Debt,
   NewBudgetEntryInput,
   Payment,
+  RecurrenceInterval,
   SavingsGoal,
   AssetAccount,
   AssetAccountCategory,
@@ -94,6 +95,11 @@ const FAB_SIZE = 52;
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { calculateNetWorthTotals } from "../utils/netWorth";
+import {
+  countOccurrencesBetween,
+  getRecurrenceTag,
+  isEntryActiveInMonth,
+} from "../utils/recurrence";
 
 type ExpenseCategoryEntry = {
   id: string;
@@ -101,6 +107,7 @@ type ExpenseCategoryEntry = {
   description?: string;
   date: string;
   recurring?: boolean;
+  recurrenceInterval?: RecurrenceInterval;
 };
 
 type ExpenseCategoryRow = {
@@ -171,28 +178,6 @@ const getBudgetMonthKeys = (): string[] => {
 
 const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
   getMonthKey(new Date(dateISO)) === monthKey;
-
-/** Returns true when a recurring entry should appear in the given month (its start month or any later month). */
-const isRecurringInMonth = (dateISO: string, monthKey: string): boolean =>
-  getMonthKey(new Date(dateISO)) <= monthKey;
-
-/** Returns an array of YYYY-MM keys from the month after `from` up to and including `to`. */
-const getMonthKeysBetween = (from: string, to: string): string[] => {
-  const keys: string[] = [];
-  const [fy, fm] = from.split("-").map(Number);
-  const [ty, tm] = to.split("-").map(Number);
-  let y = fy;
-  let m = fm;
-  // Advance one month past `from`
-  m++;
-  if (m > 12) { m = 1; y++; }
-  while (y < ty || (y === ty && m <= tm)) {
-    keys.push(`${y}-${String(m).padStart(2, "0")}`);
-    m++;
-    if (m > 12) { m = 1; y++; }
-  }
-  return keys;
-};
 
 const getCategoryComparisonHeadline = (comparison: CategorySpendingComparison): string => {
   if (comparison.percentChange != null) {
@@ -366,10 +351,21 @@ const BudgetScreen: React.FC = () => {
           const lastApplied = entry.lastAppliedMonth ?? entryStartMonth;
           if (lastApplied >= currentMonth) continue;
 
-          const missedMonths = getMonthKeysBetween(lastApplied, currentMonth);
-          if (missedMonths.length === 0) continue;
+          const occurrenceCount = countOccurrencesBetween(
+            entry,
+            lastApplied,
+            currentMonth
+          );
+          if (occurrenceCount <= 0) {
+            // No occurrences this catch-up window (e.g. quarterly entry that
+            // hasn't hit a cycle month yet). Still advance the marker so we
+            // don't re-scan the same gap every load.
+            entry.lastAppliedMonth = currentMonth;
+            entriesModified = true;
+            continue;
+          }
 
-          const delta = entry.amount * missedMonths.length;
+          const delta = entry.amount * occurrenceCount;
           const prev = accountBalanceDeltas.get(entry.linkedAccountId) ?? 0;
           accountBalanceDeltas.set(entry.linkedAccountId, prev + delta);
           entry.lastAppliedMonth = currentMonth;
@@ -425,12 +421,7 @@ const BudgetScreen: React.FC = () => {
   );
 
   const monthlyEntries = useMemo(
-    () =>
-      entries.filter((entry) =>
-        entry.recurring
-          ? isRecurringInMonth(entry.date, selectedMonthKey)
-          : isDateInMonthKey(entry.date, selectedMonthKey)
-      ),
+    () => entries.filter((entry) => isEntryActiveInMonth(entry, selectedMonthKey)),
     [entries, selectedMonthKey]
   );
 
@@ -628,6 +619,7 @@ const BudgetScreen: React.FC = () => {
             description: e.description,
             date: e.date,
             recurring: e.recurring,
+            recurrenceInterval: e.recurrenceInterval,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -1337,7 +1329,9 @@ const BudgetScreen: React.FC = () => {
                 </Text>
                 <View style={styles.incomeSummaryRight}>
                   {entry.recurring && (
-                    <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>Monthly</Text>
+                    <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
+                      {getRecurrenceTag(entry)}
+                    </Text>
                   )}
                   <Text style={[styles.incomeSummaryAmount, { color: colors.success }]}>
                     {formatCurrency(entry.amount)}
@@ -1540,7 +1534,9 @@ const BudgetScreen: React.FC = () => {
                         </View>
                         <View style={styles.expandedEntryRight}>
                           {entry.recurring && (
-                            <Text style={[styles.entryEditHint, { color: colors.accent }]}>Monthly</Text>
+                            <Text style={[styles.entryEditHint, { color: colors.accent }]}>
+                              {getRecurrenceTag(entry)}
+                            </Text>
                           )}
                           {isAutoDebtPayment ? (
                             <Text style={styles.entryEditHint}>Auto</Text>

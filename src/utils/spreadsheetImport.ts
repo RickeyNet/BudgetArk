@@ -267,6 +267,15 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
   }
   const description = parseString(get(row, "Description", "Notes", "Memo"));
   const recurring = parseBoolean(get(row, "Recurring"));
+  const recurrenceRaw = Number(
+    parseString(get(row, "RecurrenceInterval", "Recurrence Interval"), 8)
+  );
+  const recurrenceInterval: 1 | 3 | 6 | 12 | undefined =
+    recurring && (recurrenceRaw === 3 || recurrenceRaw === 6 || recurrenceRaw === 12)
+      ? recurrenceRaw
+      : recurring && recurrenceRaw === 1
+      ? 1
+      : undefined;
   const linkedAccountId = parseString(get(row, "LinkedAccountId", "LinkedAccount"), 80);
   // Preserve the recurring/linked-account "last applied" stamp so the app
   // doesn't re-credit the linked AssetAccount for every month between the
@@ -302,6 +311,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     createdAt,
     updatedAt,
     recurring: recurring || undefined,
+    recurrenceInterval,
     linkedAccountId: linkedAccountId || undefined,
     lastAppliedMonth,
   };

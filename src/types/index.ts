@@ -172,6 +172,23 @@ export const CUSTOM_CATEGORY_STORAGE_VERSION = 1;
 
 export type BudgetEntryType = "income" | "expense";
 
+/** Months between repeats for a recurring budget entry. */
+export type RecurrenceInterval = 1 | 3 | 6 | 12;
+
+export const RECURRENCE_INTERVAL_OPTIONS: ReadonlyArray<{
+  value: RecurrenceInterval;
+  label: string;
+  /** Short tag shown on entry rows (e.g. "Monthly", "Quarterly"). */
+  tag: string;
+}> = [
+  { value: 1, label: "Monthly", tag: "Monthly" },
+  { value: 3, label: "Quarterly", tag: "Quarterly" },
+  { value: 6, label: "Every 6 months", tag: "6 mo" },
+  { value: 12, label: "Yearly", tag: "Yearly" },
+];
+
+export const DEFAULT_RECURRENCE_INTERVAL: RecurrenceInterval = 1;
+
 export interface BudgetEntry {
   id: string;
   type: BudgetEntryType;
@@ -183,8 +200,14 @@ export interface BudgetEntry {
   createdAt: string;
   /** ISO timestamp of when this entry was last modified */
   updatedAt: string;
-  /** When true, this entry repeats every month from its `date` month onward */
+  /** When true, this entry repeats from its `date` month onward at `recurrenceInterval` months. */
   recurring?: boolean;
+  /**
+   * Months between repeats when `recurring` is true. Allowed: 1 (monthly), 3
+   * (quarterly), 6 (semiannual), 12 (yearly). Defaults to 1 when omitted so
+   * pre-existing recurring entries keep their monthly cadence on read.
+   */
+  recurrenceInterval?: RecurrenceInterval;
   /** Asset account ID this savings entry contributes to */
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */

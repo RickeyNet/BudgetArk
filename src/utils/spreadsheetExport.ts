@@ -34,6 +34,7 @@ import {
   Payment,
   SavingsGoal,
 } from "../types";
+import { getRecurrenceInterval } from "./recurrence";
 
 export type SpreadsheetFormat = "csv" | "xlsx";
 
@@ -75,6 +76,10 @@ const BUDGET_ENTRY_COLUMNS = [
   "Amount",
   "Description",
   "Recurring",
+  // Months between repeats when Recurring="yes": 1 (monthly), 3 (quarterly),
+  // 6 (semiannual), 12 (yearly). Blank for non-recurring rows. Round-tripped
+  // so re-importing the exported workbook preserves the cadence.
+  "RecurrenceInterval",
   "LinkedAccountId",
   // Year-month key (YYYY-MM) of the last month a recurring entry was applied
   // to its linked AssetAccount. The app uses it to avoid double-applying the
@@ -207,6 +212,7 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
   Amount: entry.amount,
   Description: entry.description ?? "",
   Recurring: entry.recurring ? "yes" : "no",
+  RecurrenceInterval: entry.recurring ? getRecurrenceInterval(entry) : "",
   LinkedAccountId: entry.linkedAccountId ?? "",
   LastAppliedMonth: entry.lastAppliedMonth ?? "",
   CreatedAt: entry.createdAt ?? "",
@@ -337,13 +343,13 @@ const expandRecurringRows = (
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const endMonth = latestMonth > currentMonth ? latestMonth : currentMonth;
 
-  const nextMonth = (ym: string): string => {
+  const addMonths = (ym: string, count: number): string => {
     const [yStr, mStr] = ym.split("-");
     let y = Number(yStr);
-    let m = Number(mStr) + 1;
-    if (m > 12) {
+    let m = Number(mStr) + count;
+    while (m > 12) {
+      m -= 12;
       y += 1;
-      m = 1;
     }
     return `${y}-${String(m).padStart(2, "0")}`;
   };
@@ -365,8 +371,12 @@ const expandRecurringRows = (
     const day = Number(match[3]);
     if (startMonth >= endMonth) continue;
 
+    const rawInterval = Number(row.RecurrenceInterval);
+    const interval =
+      rawInterval === 3 || rawInterval === 6 || rawInterval === 12 ? rawInterval : 1;
+
     const baseId = String(row.ID ?? "");
-    let m = nextMonth(startMonth);
+    let m = addMonths(startMonth, interval);
     while (m <= endMonth) {
       const dd = String(Math.min(day, lastDayOfMonth(m))).padStart(2, "0");
       out.push({
@@ -374,7 +384,7 @@ const expandRecurringRows = (
         ID: `${DERIVED_RECURRING_PREFIX}${baseId}:${m}`,
         Date: `${m}-${dd}`,
       });
-      m = nextMonth(m);
+      m = addMonths(m, interval);
     }
   }
   return out;

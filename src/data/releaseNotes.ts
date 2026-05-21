@@ -17,6 +17,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Added a Monthly Cash Flow chart to the Bridge - income vs expense bars for the last six months with a net trend line, so you can see at a glance which months you came out ahead.",
       "New \"Deep Space\" theme in Profile → Appearance: a dark trading-terminal look with a starfield and nebula background that flows behind every tab. Purely optional - pick it from the theme list, every other theme is untouched.",
       "Added custom budget categories with emoji icons - create your own categories alongside the built-in ones. Custom categories survive spreadsheet and backup round-trips and sync between paired devices.",
+      "Recurring budget entries now support a frequency: Monthly, Quarterly, Every 6 months, or Yearly. Set it from the Add or Edit modal on the Budget tab. Linked-account contributions, spreadsheet exports, and Annual Report math all honor the cadence, so a quarterly bill no longer appears every month.",
       "Ship's Log is complete: five new achievement badges, a full-year history view, and a Ship's Log entry on Profile so you can revisit everything you've earned.",
       "Added an Annual Financial Report on the Bridge - your year in review for net worth, spending, and progress.",
       "Added a \"View history\" hint on the debt payoff ring so it's clearer you can tap through to payment history.",

@@ -23,6 +23,7 @@ Minor version bump - first release with a native-facing UI redesign plus the fea
 - Ship's Log completed: 5 new achievement badges, full-year history, and a Profile entry point.
 - Annual Financial Report added to the Bridge.
 - "View history" hint added to the debt payoff ring.
+- Recurring budget entries gained a frequency picker (Monthly / Quarterly / Every 6 months / Yearly). New `recurrenceInterval?: 1 | 3 | 6 | 12` field on `BudgetEntry` defaults to monthly on read so pre-existing recurring entries keep their cadence with no migration. A shared `src/utils/recurrence.ts` helper (`isEntryActiveInMonth`, `countOccurrencesBetween`, `listOccurrenceMonths`, `getRecurrenceInterval`, `getRecurrenceTag`) replaced inline `entryMonth <= monthKey` logic in `BudgetScreen`, `BridgeScreen`, `annualReport`, `budgetInsights`, `achievementDefs`, `UtilitiesScreen`, and `linkedAccountRecurring` so every consumer agrees on which months a recurring entry is active. The linked-account catch-up loop now credits one delta per cycle that lands in the window (a quarterly entry credits once per quarter, not three times). Spreadsheet export adds a `RecurrenceInterval` column and only projects cycle months; import parses it and falls back to monthly when blank, so older workbooks round-trip cleanly. Entry-row labels show the interval ("Quarterly", "6 mo", "Yearly") instead of always saying "Monthly".
 
 ## v1.4.16 - Sync Reliability + Cleanup (2026-05-04)
 

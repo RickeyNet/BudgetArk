@@ -20,8 +20,12 @@ import {
   BudgetCategory,
   CategoryName,
   CustomCategory,
+  DEFAULT_RECURRENCE_INTERVAL,
+  RECURRENCE_INTERVAL_OPTIONS,
+  RecurrenceInterval,
   AssetAccount,
 } from "../types";
+import { getRecurrenceInterval } from "../utils/recurrence";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { getCategoryIcon } from "../data/categoryIcons";
@@ -92,6 +96,9 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const [recurring, setRecurring] = useState(false);
+  const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
+    DEFAULT_RECURRENCE_INTERVAL
+  );
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
   const [ready, setReady] = useState(false);
 
@@ -105,6 +112,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setYearMonth(ym);
       setPickerYear(Number(ym.split("-")[0]) || new Date().getFullYear());
       setRecurring(!!entry.recurring);
+      setRecurrenceInterval(getRecurrenceInterval(entry));
       setLinkedAccountId(entry.linkedAccountId);
       setReady(false);
       setShowMonthPicker(false);
@@ -143,6 +151,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       description: description.trim() || undefined,
       date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
       recurring: recurring || undefined,
+      recurrenceInterval: recurring ? recurrenceInterval : undefined,
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       updatedAt: new Date().toISOString(),
     });
@@ -155,6 +164,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     linkedAccountId,
     onSave,
     recurring,
+    recurrenceInterval,
     showAccountPicker,
     type,
     yearMonth,
@@ -318,12 +328,41 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                     {recurring && <Text style={styles.recurringCheck}>✓</Text>}
                   </View>
                   <View style={styles.recurringTextWrap}>
-                    <Text style={styles.recurringLabel}>Monthly Recurring</Text>
+                    <Text style={styles.recurringLabel}>Recurring</Text>
                     <Text style={styles.recurringHint}>
-                      This entry will appear in every month from the start month onward.
+                      This entry will repeat from the start month onward at the
+                      frequency you choose below.
                     </Text>
                   </View>
                 </TouchableOpacity>
+
+                {recurring && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>FREQUENCY</Text>
+                    <View style={styles.categoryWrap}>
+                      {RECURRENCE_INTERVAL_OPTIONS.map((opt) => (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[
+                            styles.categoryPill,
+                            recurrenceInterval === opt.value && styles.categoryPillActive,
+                          ]}
+                          onPress={() => setRecurrenceInterval(opt.value)}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryPillText,
+                              recurrenceInterval === opt.value &&
+                                styles.categoryPillTextActive,
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
 
                 {showAccountPicker && (
                   <View style={styles.field}>

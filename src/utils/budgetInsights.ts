@@ -1,4 +1,5 @@
 import { BudgetCategory, BudgetEntry, CategoryBudgetLimit } from "../types";
+import { isEntryActiveInMonth } from "./recurrence";
 
 /* ─── Month-key helpers (same logic as BudgetScreen) ─── */
 
@@ -16,11 +17,6 @@ const getMonthKeyOffset = (
   return getMonthKey(cursor);
 };
 
-const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
-  getMonthKey(new Date(dateISO)) === monthKey;
-
-const isRecurringInMonth = (dateISO: string, monthKey: string): boolean =>
-  getMonthKey(new Date(dateISO)) <= monthKey;
 
 /* ─── Types ─── */
 
@@ -71,11 +67,7 @@ const getEntriesForMonth = (
   entries: BudgetEntry[],
   monthKey: string
 ): BudgetEntry[] =>
-  entries.filter((entry) =>
-    entry.recurring
-      ? isRecurringInMonth(entry.date, monthKey)
-      : isDateInMonthKey(entry.date, monthKey)
-  );
+  entries.filter((entry) => isEntryActiveInMonth(entry, monthKey));
 
 const buildMonthSummary = (
   entries: BudgetEntry[],
