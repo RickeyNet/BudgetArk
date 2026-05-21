@@ -18,6 +18,8 @@ import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
+import BillCalendarCard from "../components/BillCalendarCard";
+import BillCalendarModal from "../components/BillCalendarModal";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { getCategoryIcon, categoryNameHash } from "../data/categoryIcons";
 import {
@@ -267,6 +269,7 @@ const BudgetScreen: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
+  const [showBillCalendar, setShowBillCalendar] = useState(false);
   const [limitModalCategory, setLimitModalCategory] = useState<CategoryName | null>(null);
   const [limitInput, setLimitInput] = useState("");
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
@@ -1376,6 +1379,12 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.reviewBtnHint}>Trends, changes, streaks, comparisons</Text>
       </TouchableOpacity>
 
+      <BillCalendarCard
+        entries={entries}
+        monthKey={selectedMonthKey}
+        onOpen={() => setShowBillCalendar(true)}
+      />
+
       {/* Spending card - donut chart + category rows in one card */}
       <View ref={anchorBudgetSpending} collapsable={false} style={styles.spendingCard}>
         <View style={styles.topHairline} />
@@ -1723,6 +1732,19 @@ const BudgetScreen: React.FC = () => {
         visible={showReviewModal}
         onClose={() => setShowReviewModal(false)}
         data={reviewData}
+      />
+
+      <BillCalendarModal
+        visible={showBillCalendar}
+        onClose={() => setShowBillCalendar(false)}
+        entries={entries}
+        monthKey={selectedMonthKey}
+        customCategories={customCategories}
+        colorForCategory={colorForCategory}
+        onEditEntry={(entry) => {
+          setShowBillCalendar(false);
+          setEditingEntry(entry);
+        }}
       />
 
       <Modal

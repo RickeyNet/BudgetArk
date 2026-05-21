@@ -508,6 +508,66 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   OTA-eligible: yes. No new deps. Uses `react-native-svg` (already in app) + emoji.
 - [ ] Quick-Entry Home Screen Widget - minimal widget to log an expense (category + amount) without opening the full app.
 - [ ] Bill Calendar View - monthly calendar showing when recurring expenses hit. Visual cash flow timing.
+
+  OTA-shippable: yes. Pure RN + math against existing `BudgetEntry` data. No native modules. The only caveat is the data prerequisite below - handle that first or the calendar is useless.
+
+  Data prerequisite (must ship first or alongside):
+  - Every recurring entry today is stored with `date: ${yearMonth}-15T12:00:00` (see `AddBudgetEntryModal.tsx` + `EditBudgetEntryModal.tsx`) - pinned to the 15th. A calendar built against current data would clump every recurring bill on the 15th.
+  - **Option A - Day-of-month picker on Add/Edit modals (recommended).** When Recurring is on for an expense, surface a day-of-month input (1-31). Persist via the existing `date` field's day component - no schema change. Migrate by treating old entries' day as 15; first time the user opens the calendar, show a one-shot nudge ("Set the day each bill actually hits"). Income (paycheck) stays on the 15th since paychecks aren't "bills" in this surface.
+  - **Option B - New `recurrenceDayOfMonth?: number` field on `BudgetEntry`.** Explicit, doesn't repurpose `date`. Type change carries through sync, export, import, validators. Overkill - Option A round-trips fine.
+  - Recommended: **Option A**.
+
+  Scope (v1):
+  - Full-screen `Modal` pinned to the selected month from BudgetScreen (reuse `getBudgetMonthKeys` so users can flip forward/back).
+  - 7-col × 5-6 row day grid. Each cell shows day number + up to 3 colored dots (one per category that day) + total dollar amount due when > 0.
+  - Cells with bills get a subtle background tint; warning tint if day total overlaps a near-limit category.
+  - Today's cell ringed in `colors.accent`. Past days within the selected month dimmed to ~60% opacity (informational only).
+  - Top strip: monthly total bills, paid so far (past + today), remaining (future), next bill ("Rent · $1,650 · in 3 days").
+  - Tap a day → bottom sheet listing bills due that day (description, category icon, amount). Tap a bill → opens existing `EditBudgetEntryModal` for that entry.
+  - One-off (non-recurring) expenses NOT shown by default - too noisy. Header toggle "Show one-offs too" for users who log expenses on the day they happen.
+
+  Visual approach:
+  - Pure RN `View` grid, no calendar lib. Existing date helpers in `BudgetScreen.tsx` (`getMonthDateFromKey`, `getMonthKey`) carry over.
+  - Marker dots use the donut chart's color palette (`getCategoryColor` from `categoryIcons`) so a category looks the same here as on the Spending card.
+  - Theme + density aware via existing `useTheme()` + `useDensity()` hooks.
+  - Coachmark anchors on the entry card so the walkthrough can point at it.
+
+  Recurrence handling:
+  - Reuse `isEntryActiveInMonth(entry, monthKey)` from `src/utils/recurrence.ts` to decide whether a recurring entry shows in the calendar's month at all. Quarterly / 6-month / yearly entries naturally only render on their cycle months - no extra logic.
+  - Place each entry on the day-of-month derived from `entry.date`. Clamp:
+    - Day 31 in a 30-day month → last day of month (mirrors `spreadsheetExport.lastDayOfMonth`).
+    - Day 29-31 in February → Feb 28 (or 29 in leap years).
+
+  Data flow (read-only, no new storage):
+  ```
+  BudgetScreen entries
+    → filter by isEntryActiveInMonth(entry, selectedMonthKey)
+    → filter to expenses (income gated behind the toggle)
+    → group by clamped day-of-month
+    → render grid
+  ```
+  Memoize per `selectedMonthKey`. O(entries) per month - well under 1ms for any realistic dataset.
+
+  Entry point: dedicated card on the Budget tab, between the month switcher and the Spending card. Mini preview: "5 bills · $2,340 due this month · next: Rent in 3 days." Opens the full-screen calendar modal. Avoids cluttering Bridge; surfaces the feature where users already think about monthly cash flow.
+
+  Files (proposed):
+  - `src/components/BillCalendarModal.tsx` - the modal, grid, day-detail sheet.
+  - `src/components/BillCalendarCard.tsx` - Budget-tab entry card with the "next bill" preview.
+  - `src/utils/billCalendar.ts` - pure helpers: `getDayOfMonth(entry, monthKey)` (with clamp), `groupBillsByDay(entries, monthKey)`, `nextBillFrom(entries, fromDate)`.
+  - `src/components/AddBudgetEntryModal.tsx` + `EditBudgetEntryModal.tsx` - add day-of-month picker (visible only when Recurring + expense).
+  - `src/screens/BudgetScreen.tsx` - mount the card + wire open/close.
+
+  v2 (out of scope, mostly not OTA-eligible):
+  - Cash flow line overlay (recurring income on payday + cumulative expense burn). Doable in JS but blurs the "bills" framing - decide after v1 feel.
+  - iCal / `.ics` export so bills land in the user's phone calendar. New `expo-calendar` dep → not OTA. Defer.
+  - Push notification day-of ("Netflix charges today, $19.99"). Requires `expo-notifications` → not OTA. Defer.
+  - Drag a bill to a different day to update day-of-month. Adds drag-gesture surface; nice-to-have.
+
+  Recommended first ship:
+  1. Land Option A (day-of-month picker on Add/Edit). Ships independently - no UI change for users who don't use recurring entries.
+  2. Build `BillCalendarModal` + helpers. Read-only, expenses-only, no one-off toggle.
+  3. Add the Budget card entry point with the "next bill" preview.
+  4. Ship as part of the next OTA bundle.
 - [ ] Spending Heatmap - calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
 - [ ] Financial Health Score - single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
 - [ ] Ark Journey Timeline - visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.

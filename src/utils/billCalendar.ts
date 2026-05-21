@@ -1,0 +1,131 @@
+import { BudgetEntry } from "../types";
+import { isEntryActiveInMonth } from "./recurrence";
+
+export interface BillsByDay {
+  /** Day-of-month (1-31) → entries that hit on that day for this month. */
+  byDay: Map<number, BudgetEntry[]>;
+  /** Sum across the whole month. */
+  monthTotal: number;
+}
+
+export interface NextBillInfo {
+  entry: BudgetEntry;
+  date: Date;
+  daysUntil: number;
+}
+
+const lastDayOfMonth = (year: number, monthIndex: number): number =>
+  new Date(year, monthIndex + 1, 0).getDate();
+
+/**
+ * Day-of-month an entry lands on for the given calendar month, clamped to that
+ * month's actual length. A bill set to the 31st falls back to the last day
+ * in shorter months (Feb 28/29, Apr 30, etc.) - mirrors the
+ * `spreadsheetExport.lastDayOfMonth` clamp the projection logic already uses.
+ */
+export const getDayOfMonth = (
+  entry: Pick<BudgetEntry, "date">,
+  monthKey: string
+): number => {
+  const stored = new Date(entry.date).getDate();
+  const day = Number.isFinite(stored) && stored >= 1 && stored <= 31 ? stored : 15;
+  const [yStr, mStr] = monthKey.split("-");
+  const last = lastDayOfMonth(Number(yStr), Number(mStr) - 1);
+  return Math.min(day, last);
+};
+
+/**
+ * Groups recurring (and optionally one-off) expense entries by the day they
+ * land on in the given month. Non-active entries (a quarterly bill not on its
+ * cycle this month, a one-off from a different month) are filtered out via
+ * `isEntryActiveInMonth`.
+ */
+export const groupBillsByDay = (
+  entries: BudgetEntry[],
+  monthKey: string,
+  options: { includeOneOff?: boolean; includeIncome?: boolean } = {}
+): BillsByDay => {
+  const { includeOneOff = false, includeIncome = false } = options;
+  const byDay = new Map<number, BudgetEntry[]>();
+  let monthTotal = 0;
+
+  for (const entry of entries) {
+    if (!includeIncome && entry.type !== "expense") continue;
+    if (!includeOneOff && !entry.recurring) continue;
+    if (!isEntryActiveInMonth(entry, monthKey)) continue;
+
+    const day = getDayOfMonth(entry, monthKey);
+    const existing = byDay.get(day);
+    if (existing) existing.push(entry);
+    else byDay.set(day, [entry]);
+    monthTotal += entry.amount;
+  }
+
+  return { byDay, monthTotal };
+};
+
+/**
+ * The next bill to land on or after `fromDate`. Walks forward up to 12 months
+ * so quarterly / semiannual / yearly entries surface even when the current
+ * month has nothing left. Returns `null` when no bills exist in the window.
+ */
+export const nextBillFrom = (
+  entries: BudgetEntry[],
+  fromDate: Date = new Date()
+): NextBillInfo | null => {
+  const fromYear = fromDate.getFullYear();
+  const fromMonth = fromDate.getMonth();
+  const fromDay = fromDate.getDate();
+
+  for (let offset = 0; offset < 12; offset++) {
+    const cursorYear = fromYear + Math.floor((fromMonth + offset) / 12);
+    const cursorMonth = (fromMonth + offset + 12) % 12;
+    const monthKey = `${cursorYear}-${String(cursorMonth + 1).padStart(2, "0")}`;
+    const { byDay } = groupBillsByDay(entries, monthKey);
+    if (byDay.size === 0) continue;
+
+    const sortedDays = Array.from(byDay.keys()).sort((a, b) => a - b);
+    for (const day of sortedDays) {
+      if (offset === 0 && day < fromDay) continue;
+      const list = byDay.get(day);
+      if (!list || list.length === 0) continue;
+      const date = new Date(cursorYear, cursorMonth, day);
+      const daysUntil = Math.round(
+        (date.getTime() - new Date(fromYear, fromMonth, fromDay).getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
+      // Pick the largest bill on that day as the "headline" - matches what
+      // most users mean by "next bill" when several stack on the same day.
+      const headline = list.reduce((max, e) => (e.amount > max.amount ? e : max), list[0]);
+      return { entry: headline, date, daysUntil };
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Sum of bills already due (day ≤ today) and remaining (day > today) for the
+ * given month, useful for the calendar's top stats strip. When the requested
+ * month isn't the current calendar month, "paid" covers everything (past
+ * month) or nothing (future month).
+ */
+export const splitPaidVsRemaining = (
+  bills: BillsByDay,
+  monthKey: string,
+  now: Date = new Date()
+): { paid: number; remaining: number } => {
+  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  if (monthKey < nowKey) return { paid: bills.monthTotal, remaining: 0 };
+  if (monthKey > nowKey) return { paid: 0, remaining: bills.monthTotal };
+
+  const today = now.getDate();
+  let paid = 0;
+  let remaining = 0;
+  for (const [day, list] of bills.byDay) {
+    const sum = list.reduce((s, e) => s + e.amount, 0);
+    if (day <= today) paid += sum;
+    else remaining += sum;
+  }
+  return { paid, remaining };
+};

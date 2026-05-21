@@ -62,6 +62,25 @@ const MONTH_LABELS = [
 
 const toYearMonth = (iso: string) => new Date(iso).toISOString().slice(0, 7);
 
+const DEFAULT_RECURRENCE_DAY = 15;
+
+const dayOfMonthFromIso = (iso: string): number => {
+  const d = new Date(iso);
+  const day = d.getDate();
+  return Number.isFinite(day) && day >= 1 && day <= 31 ? day : DEFAULT_RECURRENCE_DAY;
+};
+
+const lastDayOfYearMonth = (yearMonth: string): number => {
+  const [yStr, mStr] = yearMonth.split("-");
+  return new Date(Number(yStr), Number(mStr), 0).getDate();
+};
+
+const buildEntryDateISO = (yearMonth: string, day: number): string => {
+  const clamped = Math.max(1, Math.min(day, lastDayOfYearMonth(yearMonth)));
+  const dd = String(clamped).padStart(2, "0");
+  return new Date(`${yearMonth}-${dd}T12:00:00`).toISOString();
+};
+
 const formatYearMonthLabel = (yearMonth: string): string => {
   const [yearStr, monthStr] = yearMonth.split("-");
   const monthIndex = Number(monthStr) - 1;
@@ -99,7 +118,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
     DEFAULT_RECURRENCE_INTERVAL
   );
+  const [recurrenceDay, setRecurrenceDay] = useState<number>(DEFAULT_RECURRENCE_DAY);
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
+
+  const showDayPicker = recurring && type === "expense";
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -113,6 +135,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setPickerYear(Number(ym.split("-")[0]) || new Date().getFullYear());
       setRecurring(!!entry.recurring);
       setRecurrenceInterval(getRecurrenceInterval(entry));
+      setRecurrenceDay(dayOfMonthFromIso(entry.date));
       setLinkedAccountId(entry.linkedAccountId);
       setReady(false);
       setShowMonthPicker(false);
@@ -149,7 +172,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       category,
       amount: amountNum,
       description: description.trim() || undefined,
-      date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
+      date: buildEntryDateISO(
+        yearMonth,
+        showDayPicker ? recurrenceDay : dayOfMonthFromIso(entry.date)
+      ),
       recurring: recurring || undefined,
       recurrenceInterval: recurring ? recurrenceInterval : undefined,
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
@@ -164,8 +190,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     linkedAccountId,
     onSave,
     recurring,
+    recurrenceDay,
     recurrenceInterval,
     showAccountPicker,
+    showDayPicker,
     type,
     yearMonth,
   ]);
@@ -357,6 +385,37 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                             ]}
                           >
                             {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {showDayPicker && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>DAY OF MONTH</Text>
+                    <Text style={styles.accountPickerHint}>
+                      The day this bill hits. Day 29-31 falls back to the last
+                      day in shorter months.
+                    </Text>
+                    <View style={styles.dayGrid}>
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                        <TouchableOpacity
+                          key={day}
+                          style={[
+                            styles.dayBtn,
+                            recurrenceDay === day && styles.dayBtnActive,
+                          ]}
+                          onPress={() => setRecurrenceDay(day)}
+                        >
+                          <Text
+                            style={[
+                              styles.dayBtnText,
+                              recurrenceDay === day && styles.dayBtnTextActive,
+                            ]}
+                          >
+                            {day}
                           </Text>
                         </TouchableOpacity>
                       ))}
@@ -643,6 +702,36 @@ const makeStyles = (colors: ThemeColors) =>
     monthBtnTextActive: {
       color: colors.accent,
     },
+
+    /* Day-of-month grid (7 cols, ~31 entries) */
+    dayGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    dayBtn: {
+      width: "13%",
+      aspectRatio: 1,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.bg,
+    },
+    dayBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    dayBtnText: {
+      color: colors.textDim,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    dayBtnTextActive: {
+      color: colors.accent,
+    },
+
     /* Recurring toggle */
     recurringRow: {
       flexDirection: "row",

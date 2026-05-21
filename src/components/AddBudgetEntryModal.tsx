@@ -65,6 +65,19 @@ const formatYearMonthLabel = (yearMonth: string): string => {
   return `${monthLabel} ${yearStr}`;
 };
 
+const DEFAULT_RECURRENCE_DAY = 15;
+
+const lastDayOfYearMonth = (yearMonth: string): number => {
+  const [yStr, mStr] = yearMonth.split("-");
+  return new Date(Number(yStr), Number(mStr), 0).getDate();
+};
+
+const buildEntryDateISO = (yearMonth: string, day: number): string => {
+  const clamped = Math.max(1, Math.min(day, lastDayOfYearMonth(yearMonth)));
+  const dd = String(clamped).padStart(2, "0");
+  return new Date(`${yearMonth}-${dd}T12:00:00`).toISOString();
+};
+
 const SELECTABLE_BUDGET_CATEGORIES: BudgetCategory[] = BUDGET_CATEGORIES.filter(
   (category) =>
     category !== "Freelance" &&
@@ -102,7 +115,10 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
     DEFAULT_RECURRENCE_INTERVAL
   );
+  const [recurrenceDay, setRecurrenceDay] = useState<number>(DEFAULT_RECURRENCE_DAY);
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
+
+  const showDayPicker = recurring && type === "expense";
 
   const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
 
@@ -118,6 +134,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     setPickerYear(new Date().getFullYear());
     setRecurring(false);
     setRecurrenceInterval(DEFAULT_RECURRENCE_INTERVAL);
+    setRecurrenceDay(DEFAULT_RECURRENCE_DAY);
     setLinkedAccountId(undefined);
   }, []);
 
@@ -130,7 +147,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
       category,
       amount: amountNum,
       description: description.trim() || undefined,
-      date: new Date(`${yearMonth}-15T12:00:00`).toISOString(),
+      date: buildEntryDateISO(yearMonth, showDayPicker ? recurrenceDay : DEFAULT_RECURRENCE_DAY),
       recurring: recurring || undefined,
       recurrenceInterval: recurring ? recurrenceInterval : undefined,
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
@@ -144,9 +161,11 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     linkedAccountId,
     onAdd,
     recurring,
+    recurrenceDay,
     recurrenceInterval,
     reset,
     showAccountPicker,
+    showDayPicker,
     type,
     yearMonth,
   ]);
@@ -322,6 +341,37 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
                         ]}
                       >
                         {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {showDayPicker && (
+              <View style={styles.field}>
+                <Text style={styles.label}>DAY OF MONTH</Text>
+                <Text style={styles.accountPickerHint}>
+                  The day this bill hits. Day 29-31 falls back to the last day in
+                  shorter months.
+                </Text>
+                <View style={styles.dayGrid}>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                    <TouchableOpacity
+                      key={day}
+                      style={[
+                        styles.dayBtn,
+                        recurrenceDay === day && styles.dayBtnActive,
+                      ]}
+                      onPress={() => setRecurrenceDay(day)}
+                    >
+                      <Text
+                        style={[
+                          styles.dayBtnText,
+                          recurrenceDay === day && styles.dayBtnTextActive,
+                        ]}
+                      >
+                        {day}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -606,6 +656,35 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
     },
     monthBtnTextActive: {
+      color: colors.accent,
+    },
+
+    /* Day-of-month grid (7 cols, ~31 entries) */
+    dayGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    dayBtn: {
+      width: "13%",
+      aspectRatio: 1,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.bg,
+    },
+    dayBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    dayBtnText: {
+      color: colors.textDim,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    dayBtnTextActive: {
       color: colors.accent,
     },
 
