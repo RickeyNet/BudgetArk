@@ -20,6 +20,7 @@ import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import BillCalendarCard from "../components/BillCalendarCard";
 import BillCalendarModal from "../components/BillCalendarModal";
+import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { getCategoryIcon, categoryNameHash } from "../data/categoryIcons";
 import {
@@ -1378,6 +1379,11 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.reviewBtnText}>Monthly Review</Text>
         <Text style={styles.reviewBtnHint}>Trends, changes, streaks, comparisons</Text>
       </TouchableOpacity>
+
+      <DueDateReminderBanner
+        entries={entries}
+        onOpen={() => setShowBillCalendar(true)}
+      />
 
       <BillCalendarCard
         entries={entries}

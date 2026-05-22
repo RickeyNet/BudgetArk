@@ -347,7 +347,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
 - [x] Localization / currency format options beyond USD
 - [x] Recurring budget entries
-- [ ] Due-date reminder banners
+- [x] Due-date reminder banners - shipped as an in-app Budget banner for upcoming recurring bill dates (opens Bill Calendar). Push notifications still deferred.
 - [x] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
 - [x] Savings goals and emergency fund Deck tracker
 - [x] Persist user-selected payoff strategy across app restarts (no default reset to Custom)
@@ -397,6 +397,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Partner Budget Visibility Controls - mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
 - [x] Debt Payoff Celebration Screen - confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
 - [ ] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
+- [ ] Big Purchase Cost/Benefit Comparison Calculator - compare long-term total cost of ownership for expensive vs cheaper options (e.g. gas car vs hybrid vs EV) using purchase price, financing, fuel/energy cost, insurance, maintenance, depreciation/resale, annual miles, and ownership length. Show break-even point, 5/10-year totals, cost per mile, and whether the higher upfront option pays off over time.
 - [ ] Net Worth Timeline Graph - plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
 - [ ] Live Stock Holdings & Quote Feed - let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
 

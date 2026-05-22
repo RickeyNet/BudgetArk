@@ -14,6 +14,12 @@ export interface NextBillInfo {
   daysUntil: number;
 }
 
+export interface UpcomingBillInfo {
+  entry: BudgetEntry;
+  date: Date;
+  daysUntil: number;
+}
+
 const lastDayOfMonth = (year: number, monthIndex: number): number =>
   new Date(year, monthIndex + 1, 0).getDate();
 
@@ -102,6 +108,54 @@ export const nextBillFrom = (
   }
 
   return null;
+};
+
+/**
+ * Every recurring bill scheduled from `fromDate` through `daysAhead` days
+ * later, inclusive. Used by the in-app reminder banner to surface the next
+ * few due dates without implying the app knows whether the bill was actually
+ * paid yet.
+ */
+export const upcomingBillsWithin = (
+  entries: BudgetEntry[],
+  daysAhead: number,
+  fromDate: Date = new Date()
+): UpcomingBillInfo[] => {
+  if (daysAhead < 0) return [];
+
+  const start = new Date(
+    fromDate.getFullYear(),
+    fromDate.getMonth(),
+    fromDate.getDate()
+  );
+  const billsByMonth = new Map<string, BillsByDay>();
+  const upcoming: UpcomingBillInfo[] = [];
+
+  for (let offset = 0; offset <= daysAhead; offset++) {
+    const cursor = new Date(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate() + offset
+    );
+    const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+    const day = cursor.getDate();
+    const monthBills = billsByMonth.get(monthKey) ?? groupBillsByDay(entries, monthKey);
+    billsByMonth.set(monthKey, monthBills);
+    const dayEntries = monthBills.byDay.get(day) ?? [];
+
+    for (const entry of dayEntries) {
+      upcoming.push({
+        entry,
+        date: new Date(cursor.getFullYear(), cursor.getMonth(), day),
+        daysUntil: offset,
+      });
+    }
+  }
+
+  return upcoming.sort((a, b) => {
+    if (a.daysUntil !== b.daysUntil) return a.daysUntil - b.daysUntil;
+    return b.entry.amount - a.entry.amount;
+  });
 };
 
 /**
