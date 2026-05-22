@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +24,7 @@ import {
 } from "../utils/billCalendar";
 import { getCategoryIcon } from "../data/categoryIcons";
 import { getRecurrenceTag } from "../utils/recurrence";
+import { normalizePaymentUrl } from "../utils/paymentUrl";
 
 interface BillCalendarModalProps {
   visible: boolean;
@@ -109,6 +112,27 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
     if (selectedDay == null) return [];
     return (bills.byDay.get(selectedDay) ?? []).slice().sort((a, b) => b.amount - a.amount);
   }, [bills, selectedDay]);
+
+  const openPaymentUrl = useCallback(async (raw: string | undefined) => {
+    const url = normalizePaymentUrl(raw);
+    if (!url) {
+      Alert.alert(
+        "Can't open this link",
+        "The saved URL isn't a valid http(s) address. Edit the bill to fix it."
+      );
+      return;
+    }
+    try {
+      const ok = await Linking.canOpenURL(url);
+      if (!ok) {
+        Alert.alert("Can't open this link", "No browser is available to open the URL.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Can't open this link", "Something went wrong opening the URL.");
+    }
+  }, []);
 
   const nextLabel = useMemo(() => {
     if (!next) return null;
@@ -285,36 +309,49 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
             </Text>
             <ScrollView style={styles.dayList}>
               {selectedEntries.map((entry) => (
-                <TouchableOpacity
-                  key={entry.id}
-                  style={styles.dayItem}
-                  onPress={() => {
-                    setSelectedDay(null);
-                    onEditEntry(entry);
-                  }}
-                >
-                  <View style={styles.dayItemLeft}>
-                    <View
-                      style={[
-                        styles.dayItemDot,
-                        { backgroundColor: colorForCategory(entry.category) },
-                      ]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.dayItemTitle} numberOfLines={1}>
-                        {getCategoryIcon(entry.category, customCategories)}{" "}
-                        {entry.description || entry.category}
-                      </Text>
-                      <Text style={styles.dayItemSub}>
-                        {entry.category}
-                        {entry.recurring ? ` · ${getRecurrenceTag(entry)}` : ""}
-                      </Text>
+                <View key={entry.id} style={styles.dayItem}>
+                  <TouchableOpacity
+                    style={styles.dayItemMain}
+                    onPress={() => {
+                      setSelectedDay(null);
+                      onEditEntry(entry);
+                    }}
+                  >
+                    <View style={styles.dayItemLeft}>
+                      <View
+                        style={[
+                          styles.dayItemDot,
+                          { backgroundColor: colorForCategory(entry.category) },
+                        ]}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dayItemTitle} numberOfLines={1}>
+                          {getCategoryIcon(entry.category, customCategories)}{" "}
+                          {entry.description || entry.category}
+                        </Text>
+                        <Text style={styles.dayItemSub}>
+                          {entry.category}
+                          {entry.recurring ? ` · ${getRecurrenceTag(entry)}` : ""}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  <Text style={styles.dayItemAmount}>
-                    {formatCurrency(entry.amount)}
-                  </Text>
-                </TouchableOpacity>
+                    <Text style={styles.dayItemAmount}>
+                      {formatCurrency(entry.amount)}
+                    </Text>
+                  </TouchableOpacity>
+                  {entry.paymentUrl && (
+                    <TouchableOpacity
+                      style={styles.payBtn}
+                      onPress={() => openPaymentUrl(entry.paymentUrl)}
+                      accessibilityRole="link"
+                      accessibilityLabel={`Open payment site for ${
+                        entry.description || entry.category
+                      }`}
+                    >
+                      <Text style={styles.payBtnText}>Pay ↗</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
             </ScrollView>
             <TouchableOpacity
@@ -562,13 +599,31 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 12,
     },
     dayItem: {
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.cardBorder,
+    },
+    dayItemMain: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 10,
       gap: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.cardBorder,
+    },
+    payBtn: {
+      alignSelf: "flex-start",
+      marginTop: 6,
+      marginLeft: 18,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: `${colors.accent}80`,
+      backgroundColor: `${colors.accent}15`,
+    },
+    payBtnText: {
+      color: colors.accent,
+      fontSize: 12,
+      fontWeight: "700",
     },
     dayItemLeft: {
       flexDirection: "row",

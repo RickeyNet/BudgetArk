@@ -29,6 +29,7 @@ import { getRecurrenceInterval } from "../utils/recurrence";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { getCategoryIcon } from "../data/categoryIcons";
+import { normalizePaymentUrl } from "../utils/paymentUrl";
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Savings",
@@ -119,6 +120,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     DEFAULT_RECURRENCE_INTERVAL
   );
   const [recurrenceDay, setRecurrenceDay] = useState<number>(DEFAULT_RECURRENCE_DAY);
+  const [paymentUrl, setPaymentUrl] = useState("");
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
 
   const showDayPicker = recurring && type === "expense";
@@ -136,6 +138,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setRecurring(!!entry.recurring);
       setRecurrenceInterval(getRecurrenceInterval(entry));
       setRecurrenceDay(dayOfMonthFromIso(entry.date));
+      setPaymentUrl(entry.paymentUrl ?? "");
       setLinkedAccountId(entry.linkedAccountId);
       setReady(false);
       setShowMonthPicker(false);
@@ -178,6 +181,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       ),
       recurring: recurring || undefined,
       recurrenceInterval: recurring ? recurrenceInterval : undefined,
+      paymentUrl: showDayPicker ? normalizePaymentUrl(paymentUrl) ?? undefined : undefined,
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       updatedAt: new Date().toISOString(),
     });
@@ -189,6 +193,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     isValid,
     linkedAccountId,
     onSave,
+    paymentUrl,
     recurring,
     recurrenceDay,
     recurrenceInterval,
@@ -389,6 +394,27 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                         </TouchableOpacity>
                       ))}
                     </View>
+                  </View>
+                )}
+
+                {showDayPicker && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>PAY URL (OPTIONAL)</Text>
+                    <Text style={styles.accountPickerHint}>
+                      Link to the payment site for this bill. https:// is added
+                      if you leave it off.
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. mybill.example.com/pay"
+                      placeholderTextColor={colors.textMuted}
+                      value={paymentUrl}
+                      onChangeText={setPaymentUrl}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      maxLength={512}
+                    />
                   </View>
                 )}
 

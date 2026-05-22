@@ -10,6 +10,7 @@
 
 import { ASSET_ACCOUNT_CATEGORIES, BUDGET_CATEGORIES } from "../types";
 import { sanitizeTextInput } from "./sanitize";
+import { isAcceptablePaymentUrl } from "./paymentUrl";
 
 export const VALIDATOR_LIMITS = {
   MAX_TEXT_LENGTH: 120,
@@ -152,12 +153,15 @@ export const isBudgetEntryItem = (
       }) && Math.abs(item.amount as number) >= 0.01
     : isSafeNumber(item.amount, { min: 0.01 });
 
+  const paymentUrlValid = isAcceptablePaymentUrl(item.paymentUrl);
+
   return (
     isSafeText(item.id) &&
     typeValid &&
     categoryValid &&
     amountValid &&
     descriptionValid &&
+    paymentUrlValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&

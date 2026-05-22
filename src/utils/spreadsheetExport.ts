@@ -80,6 +80,10 @@ const BUDGET_ENTRY_COLUMNS = [
   // 6 (semiannual), 12 (yearly). Blank for non-recurring rows. Round-tripped
   // so re-importing the exported workbook preserves the cadence.
   "RecurrenceInterval",
+  // Optional payment URL for recurring expenses paid online (utility portal,
+  // trash service billing, etc.). Validator gates on http(s) only; blank for
+  // non-recurring rows or entries without a saved link.
+  "PaymentUrl",
   "LinkedAccountId",
   // Year-month key (YYYY-MM) of the last month a recurring entry was applied
   // to its linked AssetAccount. The app uses it to avoid double-applying the
@@ -213,6 +217,7 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
   Description: entry.description ?? "",
   Recurring: entry.recurring ? "yes" : "no",
   RecurrenceInterval: entry.recurring ? getRecurrenceInterval(entry) : "",
+  PaymentUrl: entry.paymentUrl ?? "",
   LinkedAccountId: entry.linkedAccountId ?? "",
   LastAppliedMonth: entry.lastAppliedMonth ?? "",
   CreatedAt: entry.createdAt ?? "",

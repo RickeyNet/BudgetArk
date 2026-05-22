@@ -189,6 +189,9 @@ export const RECURRENCE_INTERVAL_OPTIONS: ReadonlyArray<{
 
 export const DEFAULT_RECURRENCE_INTERVAL: RecurrenceInterval = 1;
 
+/** Max stored length for `BudgetEntry.paymentUrl`. */
+export const PAYMENT_URL_MAX_LENGTH = 512;
+
 export interface BudgetEntry {
   id: string;
   type: BudgetEntryType;
@@ -208,6 +211,13 @@ export interface BudgetEntry {
    * pre-existing recurring entries keep their monthly cadence on read.
    */
   recurrenceInterval?: RecurrenceInterval;
+  /**
+   * Optional payment URL for recurring expenses that are paid online (electric
+   * bill portal, trash pickup billing site, etc.). Validated to http(s):// only
+   * at write time; missing scheme is normalized to https://. Capped at
+   * `PAYMENT_URL_MAX_LENGTH` chars and stripped of control chars.
+   */
+  paymentUrl?: string;
   /** Asset account ID this savings entry contributes to */
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */

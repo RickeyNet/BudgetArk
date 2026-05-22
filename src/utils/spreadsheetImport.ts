@@ -31,8 +31,10 @@ import {
 } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
 import { normalizeImportCategory } from "./recordValidators";
+import { normalizePaymentUrl } from "./paymentUrl";
 import {
   ASSET_ACCOUNT_CATEGORIES,
+  PAYMENT_URL_MAX_LENGTH,
   type AssetAccountCategory,
 } from "../types";
 
@@ -276,6 +278,11 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
       : recurring && recurrenceRaw === 1
       ? 1
       : undefined;
+  const paymentUrlRaw = parseString(
+    get(row, "PaymentUrl", "Payment URL", "PaymentLink"),
+    PAYMENT_URL_MAX_LENGTH
+  );
+  const paymentUrl = recurring ? normalizePaymentUrl(paymentUrlRaw) ?? undefined : undefined;
   const linkedAccountId = parseString(get(row, "LinkedAccountId", "LinkedAccount"), 80);
   // Preserve the recurring/linked-account "last applied" stamp so the app
   // doesn't re-credit the linked AssetAccount for every month between the
@@ -312,6 +319,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     updatedAt,
     recurring: recurring || undefined,
     recurrenceInterval,
+    paymentUrl,
     linkedAccountId: linkedAccountId || undefined,
     lastAppliedMonth,
   };
