@@ -568,6 +568,35 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   2. Build `BillCalendarModal` + helpers. Read-only, expenses-only, no one-off toggle.
   3. Add the Budget card entry point with the "next bill" preview.
   4. Ship as part of the next OTA bundle.
+- [ ] "New" badge on newly-released feature entry cards (discovery aid)
+
+  Purpose: when a release adds a new entry surface (e.g. the Bill Calendar card on Budget), give users a visual cue they haven't seen this before so they tap in. Avoids relying solely on the release-notes modal, which users dismiss quickly.
+
+  How:
+  - Add a small accent pill ("NEW") in the corner of the entry card. Style mirrors the existing `eyebrow` accent used on cards.
+  - Pin per-feature: each candidate feature gets a string id (`"bill_calendar"`, etc.) and an "introduced in version" tag baked into the component.
+  - Show condition: badge renders while EITHER (a) the feature has never been opened by the user, OR (b) within N days (default 14) of the install/upgrade that introduced the feature - whichever clears first.
+  - Clear-on-open: tapping into the feature stamps it as seen in storage so the badge disappears next render.
+
+  Storage:
+  - New `featureDiscoveryStorage.ts` in EncryptedStorage under `@budgetark_feature_discovery`. Shape: `{ seenFeatures: Record<string, number>, version: number }` where the value is the seen-at timestamp (kept for future analytics-like questions: "did the user open this within 24h of the upgrade?"). Idempotent set: `markFeatureSeen(id)` writes only when not already present.
+  - Discovery context (new `FeatureDiscoveryProvider`) wraps `useFeatureBadge(id, introducedAtVersion?)` so cards opt in with one line. Returns `{ showBadge: boolean, markSeen: () => void }`.
+
+  Files (proposed):
+  - `src/storage/featureDiscoveryStorage.ts` - CRUD for the seen map.
+  - `src/discovery/FeatureDiscoveryProvider.tsx` - Context + `useFeatureBadge` hook. Mount at app root next to `CustomCategoriesProvider`.
+  - `src/components/NewBadge.tsx` - Tiny presentational chip (accent bg, white "NEW" text, scales with `tokens.fontScale`).
+  - Wire-up sites for this release:
+    - `BillCalendarCard.tsx` - `const { showBadge, markSeen } = useFeatureBadge("bill_calendar")` + render `<NewBadge />` in the headerRow; call `markSeen()` from `onOpen`.
+
+  Cross-cutting notes:
+  - OTA-safe - no native deps. Theme/density aware via existing tokens.
+  - Reset path: include `@budgetark_feature_discovery` in `clearAllData`'s `RESET_KEYS` so a reset device re-shows every "NEW" badge.
+  - Sync: do NOT sync this collection. It's per-device UX state - if synced, a partner who opened the feature first would clear the badge on the slower device before it could ever surface.
+
+  v2 ideas (not now):
+  - Dot-badge on the Budget tab icon (RN bottom-tabs `tabBarBadge`) when any feature on that tab hasn't been opened yet. Tempting but adds a second discovery surface; the card pill is enough for v1.
+  - "What's new in this version" Profile entry that lists every still-unseen feature with a "Show me" jump. Discoverable replay path beyond the one-shot release-notes modal.
 - [ ] Spending Heatmap - calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
 - [ ] Financial Health Score - single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
 - [ ] Ark Journey Timeline - visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
