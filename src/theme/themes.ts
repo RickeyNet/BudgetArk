@@ -229,18 +229,17 @@ const OCEAN_CORAL: ThemePreset = {
 /**
  * Deep Space - the "trading terminal" concept palette.
  *
- * `card`/`cardBorder` are intentionally translucent so the SpaceBackground
- * starfield reads through the glass. `bg` is a near-black base; the actual
- * gradient + stars are painted by <SpaceBackground/>, which mounts only when
- * this theme is active (see AppNavigator).
+ * Cards are defined as opaque base colors here; the separate surface-style
+ * layer can turn them into glass so the starfield still works when users
+ * choose the Glass design option, while Deep Space + Solid remains possible.
  */
 const DEEP_SPACE: ThemePreset = {
   id: "deep_space",
   name: "Deep Space",
   colors: {
     bg: "#04060f",
-    card: "rgba(10, 16, 32, 0.55)",
-    cardBorder: "rgba(60, 120, 220, 0.14)",
+    card: "#0a1020",
+    cardBorder: "#24477f",
     accent: "#5b9ef0",
     success: "#34d399",
     successDim: "rgba(52, 211, 153, 0.14)",

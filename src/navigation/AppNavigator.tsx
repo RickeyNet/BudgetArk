@@ -123,10 +123,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
       backgroundColor: "transparent",
     },
     tabBar: {
-      // Hex cards get an "ee" alpha for the frosted look; rgba()/named cards
-      // (e.g. Deep Space's translucent card) are already alpha-aware and
-      // would produce an invalid "rgba(...)ee" string if suffixed.
-      backgroundColor: colors.card.startsWith("#") ? `${colors.card}ee` : colors.card,
+      backgroundColor: colors.card,
       borderTopColor: colors.cardBorder,
       borderTopWidth: 1,
       height: TAB_BAR_BASE_HEIGHT + bottomInset,

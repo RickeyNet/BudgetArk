@@ -25,6 +25,7 @@ import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
+import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
@@ -389,23 +390,25 @@ export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <DensityProvider>
-            <CurrencyProvider>
-              <CoachmarksProvider>
-                <CoachmarkAnchorProvider>
-                  <AchievementsProvider>
-                    <CustomCategoriesProvider>
-                      <UndoProvider>
-                        <AppContent />
-                      </UndoProvider>
-                    </CustomCategoriesProvider>
-                  </AchievementsProvider>
-                </CoachmarkAnchorProvider>
-              </CoachmarksProvider>
-            </CurrencyProvider>
-          </DensityProvider>
-        </ThemeProvider>
+        <SurfaceStyleProvider>
+          <ThemeProvider>
+            <DensityProvider>
+              <CurrencyProvider>
+                <CoachmarksProvider>
+                  <CoachmarkAnchorProvider>
+                    <AchievementsProvider>
+                      <CustomCategoriesProvider>
+                        <UndoProvider>
+                          <AppContent />
+                        </UndoProvider>
+                      </CustomCategoriesProvider>
+                    </AchievementsProvider>
+                  </CoachmarkAnchorProvider>
+                </CoachmarksProvider>
+              </CurrencyProvider>
+            </DensityProvider>
+          </ThemeProvider>
+        </SurfaceStyleProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

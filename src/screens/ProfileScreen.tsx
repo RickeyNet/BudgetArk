@@ -77,6 +77,7 @@ import {
   type BackupReminderState,
 } from "../storage/backupReminderStorage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useSurfaceStyle } from "../theme/SurfaceStyleProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
@@ -144,7 +145,12 @@ const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
 
   /** Current theme context */
-  const { colors, presets, themeId, setThemeId } = useTheme();
+  const { colors, presets, themeId, surfaceStyleId, setThemeId } = useTheme();
+  const {
+    surfaceStyleId: storedSurfaceStyleId,
+    presets: surfaceStylePresets,
+    setSurfaceStyleId,
+  } = useSurfaceStyle();
   const {
     densityId,
     tokens,
@@ -191,6 +197,7 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether theme selector modal is visible */
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showSurfaceStyleModal, setShowSurfaceStyleModal] = useState(false);
   const [showDensityModal, setShowDensityModal] = useState(false);
   const [showTextSizeModal, setShowTextSizeModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -354,6 +361,13 @@ const ProfileScreen: React.FC = () => {
       await setThemeId(id);
     },
     [setThemeId]
+  );
+
+  const handleSurfaceStyleSelect = useCallback(
+    async (id: "solid" | "glass") => {
+      await setSurfaceStyleId(id);
+    },
+    [setSurfaceStyleId]
   );
 
   const handleDensitySelect = useCallback(
@@ -986,6 +1000,7 @@ const ProfileScreen: React.FC = () => {
 
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
+  const currentSurfaceStyle = surfaceStylePresets.find((p) => p.id === surfaceStyleId);
   const currentDensity = densityPresets.find((p) => p.id === densityId);
   const currentTextSize = textSizePresets.find((p) => p.id === textSizeId);
   const latestRelease: ReleaseNote = RELEASE_NOTES[0];
@@ -1139,6 +1154,22 @@ const ProfileScreen: React.FC = () => {
                 </Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
                   {currentTheme?.name || "Forest Gold"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowSurfaceStyleModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Design Style</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {currentSurfaceStyle?.name || "Solid"}
+                  {storedSurfaceStyleId == null && themeId === "deep_space" ? " · theme default" : ""}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
@@ -1676,6 +1707,76 @@ const ProfileScreen: React.FC = () => {
               <Text style={[styles.closeBtnText, { color: colors.white }]}>
                 Done
               </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Design Style Selection Modal ── */}
+      <Modal
+        visible={showSurfaceStyleModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSurfaceStyleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Design Style</Text>
+            {storedSurfaceStyleId == null && themeId === "deep_space" ? (
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim, marginBottom: 12 }]}> 
+                Deep Space currently defaults to Glass. Pick a style here to keep it across all themes.
+              </Text>
+            ) : null}
+
+            <ScrollView style={styles.themeList}>
+              {surfaceStylePresets.map((preset) => {
+                const selected = surfaceStyleId === preset.id;
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        backgroundColor: colors.bg,
+                      },
+                    ]}
+                    onPress={() => handleSurfaceStyleSelect(preset.id)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                        {preset.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsRowSubtext,
+                          { color: colors.textDim, marginTop: 4 },
+                        ]}
+                      >
+                        {preset.description}
+                      </Text>
+                    </View>
+
+                    {selected && (
+                      <View style={[styles.checkMark, { backgroundColor: colors.accent }]}>
+                        <Text style={[styles.checkMarkText, { color: colors.white }]}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowSurfaceStyleModal(false)}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
