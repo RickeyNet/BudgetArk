@@ -302,6 +302,7 @@ const UtilitiesScreen: React.FC = () => {
   const [loanTerm, setLoanTerm] = useState(30);
   const [loanEditingKey, setLoanEditingKey] = useState<string | null>(null);
   const [loanEditingText, setLoanEditingText] = useState("");
+  const [loanYearlySummaryOpen, setLoanYearlySummaryOpen] = useState(true);
   const [loanScheduleVisibleRows, setLoanScheduleVisibleRows] = useState(LOAN_SCHEDULE_PAGE_SIZE);
   const [isLoanExporting, setIsLoanExporting] = useState(false);
   const [loanExportMessage, setLoanExportMessage] = useState<{
@@ -555,6 +556,11 @@ const UtilitiesScreen: React.FC = () => {
   const handleShowLessLoanSchedule = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setLoanScheduleVisibleRows(LOAN_SCHEDULE_PAGE_SIZE);
+  }, []);
+
+  const toggleLoanYearlySummary = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setLoanYearlySummaryOpen((prev) => !prev);
   }, []);
 
   const handleExportLoanSchedule = useCallback(async () => {
@@ -1070,58 +1076,67 @@ const UtilitiesScreen: React.FC = () => {
 
             {/* Yearly summary */}
             <View style={styles.scheduleCard}>
-              <View style={styles.scheduleHeader}>
+              <TouchableOpacity
+                style={styles.scheduleHeader}
+                onPress={toggleLoanYearlySummary}
+                activeOpacity={0.7}
+              >
                 <View style={styles.scheduleHeaderTextWrap}>
                   <Text style={styles.breakdownTitle}>Yearly Summary</Text>
                   <Text style={styles.scheduleHint}>
                     Groups every 12 payments from the loan start. Final year may be shorter.
                   </Text>
                 </View>
-                <Text style={styles.scheduleMeta}>{loanYearlySummary.length} yr</Text>
-              </View>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.scheduleTable}>
-                  <View style={[styles.scheduleRow, styles.scheduleHeaderRow]}>
-                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleMonthCell]}>
-                      Year
-                    </Text>
-                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                      Payments
-                    </Text>
-                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                      Principal
-                    </Text>
-                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                      Interest
-                    </Text>
-                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleBalanceCell]}>
-                      End Balance
-                    </Text>
-                  </View>
-
-                  {loanYearlySummary.map((row, index) => {
-                    const isLastRow = index === loanYearlySummary.length - 1;
-                    return (
-                      <View key={row.year} style={[styles.scheduleRow, isLastRow && styles.scheduleRowLast]}>
-                        <Text style={[styles.scheduleCell, styles.scheduleMonthCell]}>{row.year}</Text>
-                        <Text style={[styles.scheduleCell, styles.scheduleValueCell]}>
-                          {formatCurrency(row.payment)}
-                        </Text>
-                        <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.success }]}>
-                          {formatCurrency(row.principal)}
-                        </Text>
-                        <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.danger }]}>
-                          {formatCurrency(row.interest)}
-                        </Text>
-                        <Text style={[styles.scheduleCell, styles.scheduleBalanceCell]}>
-                          {formatCurrency(row.endingBalance)}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                <View style={styles.scheduleHeaderActions}>
+                  <Text style={styles.scheduleMeta}>{loanYearlySummary.length} yr</Text>
+                  <Text style={styles.scheduleChevron}>{loanYearlySummaryOpen ? "▾" : "›"}</Text>
                 </View>
-              </ScrollView>
+              </TouchableOpacity>
+
+              {loanYearlySummaryOpen && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.scheduleTable}>
+                    <View style={[styles.scheduleRow, styles.scheduleHeaderRow]}>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleMonthCell]}>
+                        Year
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                        Payments
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                        Principal
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                        Interest
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleBalanceCell]}>
+                        End Balance
+                      </Text>
+                    </View>
+
+                    {loanYearlySummary.map((row, index) => {
+                      const isLastRow = index === loanYearlySummary.length - 1;
+                      return (
+                        <View key={row.year} style={[styles.scheduleRow, isLastRow && styles.scheduleRowLast]}>
+                          <Text style={[styles.scheduleCell, styles.scheduleMonthCell]}>{row.year}</Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleValueCell]}>
+                            {formatCurrency(row.payment)}
+                          </Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.success }]}>
+                            {formatCurrency(row.principal)}
+                          </Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.danger }]}>
+                            {formatCurrency(row.interest)}
+                          </Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleBalanceCell]}>
+                            {formatCurrency(row.endingBalance)}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              )}
             </View>
 
             {/* Amortization schedule */}
@@ -1823,6 +1838,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     scheduleHeaderTextWrap: {
       flex: 1,
     },
+    scheduleHeaderActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginTop: 2,
+    },
     scheduleHint: {
       fontSize: 12,
       color: colors.textDim,
@@ -1835,6 +1856,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontWeight: "700",
       fontVariant: ["tabular-nums"],
       marginTop: 2,
+    },
+    scheduleChevron: {
+      fontSize: 16,
+      color: colors.textDim,
+      fontWeight: "700",
+      lineHeight: 18,
     },
     scheduleTable: {
       minWidth: 560,
