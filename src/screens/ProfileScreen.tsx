@@ -88,7 +88,7 @@ import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
-import { resolveUpdateInfo } from "../utils/updateReleaseNotes";
+import { resolveUpdateInfo, findReleaseNoteForVersion } from "../utils/updateReleaseNotes";
 import { getPrivacyMode, setPrivacyMode } from "../storage/privacyStorage";
 import {
   getPairingState,
