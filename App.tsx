@@ -42,7 +42,7 @@ import {
   setOtaUpdateInstalled,
   consumeOtaUpdateInstalled,
 } from "./src/storage/releaseNotesStorage";
-import { CURRENT_APP_VERSION, RELEASE_NOTES } from "./src/data/releaseNotes";
+import { CURRENT_APP_VERSION, RELEASE_NOTES, type ReleaseNote } from "./src/data/releaseNotes";
 import type { RootTabParamList } from "./src/types";
 import {
   getUpdatePreferences,
@@ -51,6 +51,7 @@ import {
 import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
 import { isUpdateSafe } from "./src/utils/versionGuard";
 import { getPrivacyMode } from "./src/storage/privacyStorage";
+import { resolveUpdateInfo } from "./src/utils/updateReleaseNotes";
 
 const FlagSecureModule = Platform.OS === "android" ? NativeModules.FlagSecureModule : null;
 const ScreenGuardModule = Platform.OS === "ios" ? NativeModules.ScreenGuardModule : null;
@@ -59,6 +60,8 @@ type UpdatePrompt = {
   message: string;
   createdAt?: string;
   runtimeVersion?: string;
+  appVersion?: string;
+  releaseNote?: ReleaseNote;
 };
 
 /**
@@ -109,29 +112,10 @@ const AppContent: React.FC = () => {
     setIsOnboardingComplete(true);
   }, []);
 
-  const extractUpdatePrompt = useCallback((manifest: unknown): UpdatePrompt => {
-    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
-    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
-    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
-    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
-    const messageCandidates = [
-      metadata.message,
-      metadata.updateMessage,
-      eas.message,
-      data.description,
-      data.message,
-    ];
-    const message =
-      messageCandidates.find((candidate) => typeof candidate === "string") ||
-      "A new update is ready to install.";
-
-    return {
-      message,
-      createdAt: typeof data.createdAt === "string" ? data.createdAt : undefined,
-      runtimeVersion:
-        typeof data.runtimeVersion === "string" ? data.runtimeVersion : undefined,
-    };
-  }, []);
+  const extractUpdatePrompt = useCallback(
+    (manifest: unknown): UpdatePrompt => resolveUpdateInfo(manifest, CURRENT_APP_VERSION),
+    []
+  );
 
   const formatDateTime = useCallback((iso?: string) => {
     if (!iso) return "Unknown";
@@ -314,11 +298,36 @@ const AppContent: React.FC = () => {
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              {pendingUpdate?.message ?? "A new update is ready to install."}
-            </Text>
+            {pendingUpdate?.appVersion ? (
+              <View style={[styles.updateVersionBadge, { backgroundColor: colors.accent }]}> 
+                <Text style={[styles.updateVersionText, { color: colors.white }]}>
+                  v{pendingUpdate.appVersion}
+                </Text>
+              </View>
+            ) : null}
+            {pendingUpdate?.releaseNote ? (
+              <>
+                <Text style={[styles.updateReleaseTitle, { color: colors.accent }]}> 
+                  {pendingUpdate.releaseNote.title}
+                </Text>
+                {pendingUpdate.releaseNote.highlights.slice(0, 4).map((line, i) => (
+                  <Text key={`${pendingUpdate.releaseNote?.version}-${i}`} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                    {"\u2022"} {line}
+                  </Text>
+                ))}
+                {pendingUpdate.releaseNote.highlights.length > 4 ? (
+                  <Text style={[styles.dialogBullet, { color: colors.textMuted }]}> 
+                    +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={[styles.dialogMessage, { color: colors.textDim }]}> 
+                {pendingUpdate?.message ?? "A new update is ready to install."}
+              </Text>
+            )}
             {pendingUpdate?.createdAt && (
-              <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+              <Text style={[styles.updateMeta, { color: colors.textMuted }]}> 
                 Published {formatDateTime(pendingUpdate.createdAt)}
               </Text>
             )}
@@ -459,6 +468,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
+    marginBottom: 8,
+  },
+  updateVersionBadge: {
+    alignSelf: "center",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  updateVersionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  updateReleaseTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  updateMeta: {
+    fontSize: 11,
+    textAlign: "center",
+    marginTop: 8,
     marginBottom: 8,
   },
   dialogActions: {

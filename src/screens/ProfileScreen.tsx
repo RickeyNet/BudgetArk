@@ -88,6 +88,7 @@ import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
+import { resolveUpdateInfo } from "../utils/updateReleaseNotes";
 import { getPrivacyMode, setPrivacyMode } from "../storage/privacyStorage";
 import {
   getPairingState,
@@ -121,25 +122,6 @@ type UpdateMetadata = {
 type ReleaseNoteKey = string;
 
 import { sanitizeTextInput } from "../utils/sanitize";
-
-const SEMVER_REGEX = /\b\d+\.\d+\.\d+\b/;
-
-const normalizeVersionString = (value: unknown): string | undefined => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const directMatch = trimmed.match(/^v?(\d+\.\d+\.\d+)$/i);
-  if (directMatch) return directMatch[1];
-  const semverMatch = trimmed.match(SEMVER_REGEX);
-  return semverMatch?.[0];
-};
-
-const findReleaseNoteForVersion = (version?: string): ReleaseNote | undefined => {
-  const normalizedVersion = normalizeVersionString(version);
-  return normalizedVersion
-    ? RELEASE_NOTES.find((release) => release.version === normalizedVersion)
-    : undefined;
-};
 
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
@@ -415,53 +397,18 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   const extractUpdateMetadata = useCallback((manifest: unknown): UpdateMetadata => {
-    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
-    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
-    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
-    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
-    const expoClient = (extras.expoClient != null && typeof extras.expoClient === "object" ? extras.expoClient : {}) as Record<string, unknown>;
-
-    const id = typeof data.id === "string" ? data.id : "unknown";
-    const createdAt = typeof data.createdAt === "string" ? data.createdAt : undefined;
-    const runtimeVersion =
-      typeof data.runtimeVersion === "string" ? data.runtimeVersion : undefined;
-
-    const messageCandidates = [
-      metadata.message,
-      metadata.updateMessage,
-      eas.message,
-      data.description,
-      data.message,
-    ];
-    const rawMessage =
-      messageCandidates.find((candidate) => typeof candidate === "string") ||
-      "A new update is ready to install.";
-    const messageVersion = normalizeVersionString(rawMessage);
-
-    // Prefer update-specific version metadata over installed binary version.
-    const versionCandidates = [
-      metadata.appVersion,
-      metadata.version,
-      eas.appVersion,
-      data.version,
-      extras.version,
-      rawMessage,
-      expoClient.version,
-    ];
-    const appVersion = versionCandidates
-      .map((candidate) => normalizeVersionString(candidate))
-      .find((candidate) => !!candidate);
-
-    const matchedRelease =
-      findReleaseNoteForVersion(appVersion) || findReleaseNoteForVersion(messageVersion);
-    const message = matchedRelease?.title || rawMessage;
+    const data =
+      manifest != null && typeof manifest === "object"
+        ? (manifest as Record<string, unknown>)
+        : {};
+    const resolved = resolveUpdateInfo(manifest, CURRENT_APP_VERSION);
 
     return {
-      id,
-      createdAt,
-      runtimeVersion,
-      message,
-      appVersion: matchedRelease?.version || appVersion,
+      id: typeof data.id === "string" ? data.id : "unknown",
+      createdAt: resolved.createdAt,
+      runtimeVersion: resolved.runtimeVersion,
+      message: resolved.message,
+      appVersion: resolved.appVersion,
     };
   }, []);
 
