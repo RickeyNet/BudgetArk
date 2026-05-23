@@ -62,7 +62,7 @@ const iconForCategory = (category: string): string =>
   ACCOUNT_ICONS[category] ?? "💼";
 
 const BridgeScreen: React.FC = () => {
-  const { colors, themeId } = useTheme();
+  const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Bridge");
@@ -537,7 +537,7 @@ const BridgeScreen: React.FC = () => {
     <View
       style={[
         styles.screen,
-        themeId === "deep_space" && styles.screenTransparent,
+        showAmbientBackground && styles.screenTransparent,
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />

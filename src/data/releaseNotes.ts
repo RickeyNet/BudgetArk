@@ -7,6 +7,19 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.6.0",
+    title: "Appearance Controls + Loan Details",
+    releasedAt: "2026-05-22",
+    highlights: [
+      "Appearance is now split into Theme + Design Style. The glass look is no longer tied only to Deep Space - you can mix Solid or Glass with any theme, including Deep Space in a plain solid mode.",
+      "Deep Forest now gets a richer misty night-forest ambient background, while Deep Space keeps its starfield look when decorative backgrounds are enabled.",
+      "Added an Ambient Backgrounds toggle in Profile → Appearance so users can turn off decorative backgrounds and keep a plain backdrop for comfort, readability, or accessibility.",
+      "Budget now shows an in-app due-date reminder banner for upcoming recurring bills. It surfaces the next few due dates and total scheduled amount, and opens the Bill Calendar when tapped.",
+      "The Loan / Mortgage Calculator on Utilities now includes a full amortization schedule with month-by-month principal, interest, payment, and remaining balance.",
+      "Loan results also add a yearly summary, first-5-years interest highlight, collapsible yearly section, and CSV export for the amortization schedule.",
+    ],
+  },
+  {
     version: "1.5.0",
     title: "Deep Space Redesign",
     releasedAt: "2026-05-15",

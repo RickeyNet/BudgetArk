@@ -8,6 +8,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as EncryptedStorage from "../storage/encryptedStorage";
+import { useBackgroundEffects } from "./BackgroundEffectsProvider";
 import { useSurfaceStyle } from "./SurfaceStyleProvider";
 import { DEFAULT_SURFACE_STYLE_ID, type SurfaceStylePreset } from "./surfaceStyles";
 import { DEFAULT_THEME_ID, THEME_BY_ID, THEME_PRESETS, ThemeColors, ThemePreset } from "./themes";
@@ -20,6 +21,8 @@ type ThemeContextValue = Readonly<{
   presets: readonly ThemePreset[];
   surfaceStyleId: SurfaceStylePreset["id"];
   isGlassSurface: boolean;
+  backgroundEffectsEnabled: boolean;
+  showAmbientBackground: boolean;
   setThemeId: (id: ThemePreset["id"]) => Promise<void>;
 }>;
 
@@ -71,6 +74,11 @@ const isLightColor = (color: string): boolean => {
   return luminance > 0.72;
 };
 
+const AMBIENT_BACKGROUND_THEMES = new Set<ThemePreset["id"]>([
+  "deep_space",
+  "deepforest",
+]);
+
 const applySurfaceStyle = (
   colors: ThemeColors,
   surfaceStyleId: SurfaceStylePreset["id"]
@@ -94,6 +102,7 @@ const applySurfaceStyle = (
  * default before their theme swaps in.
  */
 export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const { backgroundEffectsEnabled } = useBackgroundEffects();
   const { surfaceStyleId: storedSurfaceStyleId } = useSurfaceStyle();
   const [themeId, setThemeIdState] = useState<ThemePreset["id"]>(DEFAULT_THEME_ID);
   const [ready, setReady] = useState(false);
@@ -125,6 +134,8 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
 
   const resolvedSurfaceStyleId: SurfaceStylePreset["id"] =
     storedSurfaceStyleId ?? (themeId === "deep_space" ? "glass" : DEFAULT_SURFACE_STYLE_ID);
+  const showAmbientBackground =
+    backgroundEffectsEnabled && AMBIENT_BACKGROUND_THEMES.has(themeId);
   const baseColors = THEME_BY_ID[themeId]?.colors ?? THEME_BY_ID[DEFAULT_THEME_ID].colors;
   const colors = useMemo(
     () => applySurfaceStyle(baseColors, resolvedSurfaceStyleId),
@@ -138,9 +149,11 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
       presets: THEME_PRESETS,
       surfaceStyleId: resolvedSurfaceStyleId,
       isGlassSurface: resolvedSurfaceStyleId === "glass",
+      backgroundEffectsEnabled,
+      showAmbientBackground,
       setThemeId,
     }),
-    [themeId, colors, resolvedSurfaceStyleId, setThemeId]
+    [themeId, colors, resolvedSurfaceStyleId, backgroundEffectsEnabled, showAmbientBackground, setThemeId]
   );
 
   return (

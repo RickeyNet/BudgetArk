@@ -278,7 +278,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
 /* ── Main Screen ── */
 
 const UtilitiesScreen: React.FC = () => {
-  const { colors, themeId } = useTheme();
+  const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Utilities");
@@ -810,7 +810,7 @@ const UtilitiesScreen: React.FC = () => {
     <View
       style={[
         styles.screen,
-        themeId === "deep_space" && { backgroundColor: "transparent" },
+        showAmbientBackground && { backgroundColor: "transparent" },
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />

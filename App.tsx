@@ -25,6 +25,7 @@ import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
+import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
 import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { DensityProvider } from "./src/theme/DensityProvider";
@@ -73,7 +74,7 @@ type UpdatePrompt = {
  * Inner app component that has access to theme context
  */
 const AppContent: React.FC = () => {
-  const { colors, themeId } = useTheme();
+  const { colors, themeId, backgroundEffectsEnabled } = useTheme();
   const navigationRef = useMemo(() => createNavigationContainerRef<RootTabParamList>(), []);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
@@ -289,7 +290,7 @@ const AppContent: React.FC = () => {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
 
-  const isSynthwave = themeId === "synthwave";
+  const isSynthwave = themeId === "synthwave" && backgroundEffectsEnabled;
 
   /** Show main app navigation */
   return (
@@ -390,25 +391,27 @@ export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <SurfaceStyleProvider>
-          <ThemeProvider>
-            <DensityProvider>
-              <CurrencyProvider>
-                <CoachmarksProvider>
-                  <CoachmarkAnchorProvider>
-                    <AchievementsProvider>
-                      <CustomCategoriesProvider>
-                        <UndoProvider>
-                          <AppContent />
-                        </UndoProvider>
-                      </CustomCategoriesProvider>
-                    </AchievementsProvider>
-                  </CoachmarkAnchorProvider>
-                </CoachmarksProvider>
-              </CurrencyProvider>
-            </DensityProvider>
-          </ThemeProvider>
-        </SurfaceStyleProvider>
+        <BackgroundEffectsProvider>
+          <SurfaceStyleProvider>
+            <ThemeProvider>
+              <DensityProvider>
+                <CurrencyProvider>
+                  <CoachmarksProvider>
+                    <CoachmarkAnchorProvider>
+                      <AchievementsProvider>
+                        <CustomCategoriesProvider>
+                          <UndoProvider>
+                            <AppContent />
+                          </UndoProvider>
+                        </CustomCategoriesProvider>
+                      </AchievementsProvider>
+                    </CoachmarkAnchorProvider>
+                  </CoachmarksProvider>
+                </CurrencyProvider>
+              </DensityProvider>
+            </ThemeProvider>
+          </SurfaceStyleProvider>
+        </BackgroundEffectsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

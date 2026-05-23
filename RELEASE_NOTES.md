@@ -1,5 +1,31 @@
 # BudgetArk Release Notes
 
+## v1.6.0 - Appearance Controls + Loan Details (2026-05-22)
+
+Minor version bump for the new appearance-system split, accessibility-focused background controls, and loan-calculator expansions.
+
+### Appearance controls
+
+- Appearance is now split into **Theme + Design Style**. The glass look is no longer tied only to Deep Space - you can mix **Solid** or **Glass** with any theme, including Deep Space in a plain solid mode.
+- Added a persisted **SurfaceStyleProvider** and design-style picker in **Profile → Appearance** so visual treatment is selected separately from color theme.
+- Deep Space's glass treatment was decoupled from the theme palette itself, so the theme can now be used in both Glass and Solid modes without special-case color definitions.
+
+### Ambient backgrounds
+
+- Deep Forest now gets a richer misty night-forest ambient background: dark forest gradient base, canopy glow, soft mist bands, and subtle firefly specks.
+- Deep Space keeps its starfield / nebula background, but ambient backgrounds are now controlled centrally instead of being hardwired only to that theme.
+- Added an **Ambient Backgrounds** toggle in **Profile → Appearance** so users can disable decorative backgrounds and keep a plain backdrop for readability, comfort, or accessibility.
+- Synthwave's decorative grid also respects the same background-effects preference.
+
+### Budget reminders
+
+- Budget now shows an in-app **due-date reminder banner** for upcoming recurring bills. It surfaces the next few due dates, total scheduled amount, and opens the Bill Calendar when tapped.
+
+### Utilities loan upgrades
+
+- The **Loan / Mortgage Calculator** on Utilities now includes a full amortization schedule with month-by-month principal, interest, payment, and remaining balance.
+- Loan results now also include a **yearly summary**, a **first-5-years interest highlight**, a **collapsible yearly summary section**, and **CSV export** for the amortization schedule.
+
 ## v1.5.0 - Deep Space Redesign (2026-05-15)
 
 Minor version bump - first release with a native-facing UI redesign plus the features accumulated since v1.4.16. `app.json` version is `1.5.0`.

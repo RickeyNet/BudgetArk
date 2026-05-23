@@ -30,6 +30,7 @@ import { TAB_BAR_BASE_HEIGHT } from "./tabBarLayout";
 import { RootTabParamList } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import ForestBackground from "../components/ForestBackground";
 import SpaceBackground from "../components/SpaceBackground";
 
 /* ── Screen Imports ── */
@@ -68,22 +69,27 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
 };
 
 const AppNavigator: React.FC = () => {
-  const { colors, themeId } = useTheme();
+  const { colors, themeId, showAmbientBackground } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
-  const isDeepSpace = themeId === "deep_space";
+  const ambientBackground =
+    showAmbientBackground && themeId === "deep_space" ? (
+      <SpaceBackground />
+    ) : showAmbientBackground && themeId === "deepforest" ? (
+      <ForestBackground />
+    ) : null;
 
   return (
     <>
-      {isDeepSpace ? <SpaceBackground /> : null}
-    <Tab.Navigator
+      {ambientBackground}
+      <Tab.Navigator
       initialRouteName="Bridge"
       screenOptions={({ route }) => ({
         /** Hide the default header - each screen has its own */
         headerShown: false,
 
-        /** Let the global SpaceBackground show through on the Deep Space theme */
-        sceneStyle: isDeepSpace ? styles.transparentScene : undefined,
+        /** Let the active ambient background show through on supported themes */
+        sceneStyle: showAmbientBackground ? styles.transparentScene : undefined,
 
         /** Tab bar icon - emoji based */
         tabBarIcon: ({ focused }) => (

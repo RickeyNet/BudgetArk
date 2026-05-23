@@ -240,7 +240,7 @@ const DebtTrackerScreen: React.FC = () => {
   const [savingsDraft, setSavingsDraft] = useState("");
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
 
-  const { colors, themeId } = useTheme();
+  const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
@@ -1111,7 +1111,7 @@ const DebtTrackerScreen: React.FC = () => {
     <View
       style={[
         styles.screen,
-        themeId === "deep_space" && { backgroundColor: "transparent" },
+        showAmbientBackground && { backgroundColor: "transparent" },
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />

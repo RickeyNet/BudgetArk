@@ -77,6 +77,7 @@ import {
   type BackupReminderState,
 } from "../storage/backupReminderStorage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useBackgroundEffects } from "../theme/BackgroundEffectsProvider";
 import { useSurfaceStyle } from "../theme/SurfaceStyleProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
@@ -145,7 +146,15 @@ const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
 
   /** Current theme context */
-  const { colors, presets, themeId, surfaceStyleId, setThemeId } = useTheme();
+  const {
+    colors,
+    presets,
+    themeId,
+    surfaceStyleId,
+    showAmbientBackground,
+    setThemeId,
+  } = useTheme();
+  const { backgroundEffectsEnabled, setBackgroundEffectsEnabled } = useBackgroundEffects();
   const {
     surfaceStyleId: storedSurfaceStyleId,
     presets: surfaceStylePresets,
@@ -369,6 +378,10 @@ const ProfileScreen: React.FC = () => {
     },
     [setSurfaceStyleId]
   );
+
+  const handleToggleBackgroundEffects = useCallback(async () => {
+    await setBackgroundEffectsEnabled(!backgroundEffectsEnabled);
+  }, [backgroundEffectsEnabled, setBackgroundEffectsEnabled]);
 
   const handleDensitySelect = useCallback(
     async (id: string) => {
@@ -992,7 +1005,7 @@ const ProfileScreen: React.FC = () => {
 
   if (!user) {
     return (
-      <View style={{ flex: 1, backgroundColor: themeId === "deep_space" ? "transparent" : colors.bg, justifyContent: "center", alignItems: "center" }}>
+      <View style={{ flex: 1, backgroundColor: showAmbientBackground ? "transparent" : colors.bg, justifyContent: "center", alignItems: "center" }}>
         <Text style={{ color: colors.textDim, fontSize: 14 }}>Loading profile...</Text>
       </View>
     );
@@ -1009,7 +1022,7 @@ const ProfileScreen: React.FC = () => {
     <>
       <ScrollView
         ref={scrollRef}
-        style={[styles.screen, { backgroundColor: themeId === "deep_space" ? "transparent" : colors.bg }]}
+        style={[styles.screen, { backgroundColor: showAmbientBackground ? "transparent" : colors.bg }]}
         contentContainerStyle={styles.content}
       >
         {/* ── Backup reminder banner ── */}
@@ -1173,6 +1186,25 @@ const ProfileScreen: React.FC = () => {
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleToggleBackgroundEffects}
+            >
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Ambient Backgrounds</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {backgroundEffectsEnabled
+                    ? "Decorative themed backgrounds are enabled"
+                    : "Plain backgrounds for reduced visual noise"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: backgroundEffectsEnabled ? colors.accent : colors.textDim }]}>
+                {backgroundEffectsEnabled ? "On" : "Off"}
+              </Text>
             </TouchableOpacity>
 
             <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
@@ -1728,7 +1760,7 @@ const ProfileScreen: React.FC = () => {
           >
             <Text style={[styles.modalTitle, { color: colors.text }]}>Design Style</Text>
             {storedSurfaceStyleId == null && themeId === "deep_space" ? (
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim, marginBottom: 12 }]}> 
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim, marginBottom: 12 }]}>
                 Deep Space currently defaults to Glass. Pick a style here to keep it across all themes.
               </Text>
             ) : null}

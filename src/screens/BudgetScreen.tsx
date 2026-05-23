@@ -230,7 +230,7 @@ const CATEGORY_CHART_PALETTE = [
 ] as const;
 
 const BudgetScreen: React.FC = () => {
-  const { colors, themeId } = useTheme();
+  const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
@@ -1575,7 +1575,7 @@ const BudgetScreen: React.FC = () => {
     <View
       style={[
         styles.screen,
-        themeId === "deep_space" && styles.screenTransparent,
+        showAmbientBackground && styles.screenTransparent,
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
