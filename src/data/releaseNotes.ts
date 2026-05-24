@@ -7,6 +7,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.6.1",
+    title: "Crash Fix",
+    releasedAt: "2026-05-24",
+    highlights: [
+      "Fixed a crash that closed the app when opening the Profile tab on the v1.6.0 update.",
+    ],
+  },
+  {
     version: "1.6.0",
     title: "Appearance Controls + Loan Details",
     releasedAt: "2026-05-22",
