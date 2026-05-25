@@ -726,3 +726,156 @@ Possible feature design (v1):
 - Couples support
   - Add “Plan owner” mode: Mine / Partner / Household
   - Reuse your existing debt ownership concepts where possible
+
+- [ ] Lean month mode - toggle that hides non-essential categories from Budget, surfacing only essentials (Rent, Food, Utilities, Transport). Helps users focus during tight months without deleting or reorganizing data. Pure UI filter, OTA-safe.
+
+- [ ] Hidden cost of debt counter - widget on Debt Tracker showing projected total interest across the remaining life of every debt, updates live as payments post. Motivational. Pure derivation from existing balances + APRs + payment schedule.
+
+- [ ] Effective hourly wage view - user enters annual income + hours worked per week; app reframes every expense in "hours of your life" ("$80 dinner = 3.2h"). Optional, opt-in. Settings live in Profile, display toggle on entry rows.
+
+- [ ] Personal best tracking - surface records like "best savings month: April 2025 - $1,840", "longest under-budget streak: 6 months", "biggest debt month: $1,200 paid". Card on Bridge. Pure read over existing data.
+
+- [ ] Year-over-year comparison - pick a category (or all), see same-month-last-year vs this-year deltas in a small bar chart. Lives in Budget or Annual Report.
+
+- [ ] Photo attachments on entries (no OCR) - manual photo per budget entry, stored locally in app sandbox via `expo-file-system`. Browsable "Receipts" gallery filterable by month/category. Ships ahead of full OCR (which stays as separate TODO). New native dep: `expo-image-picker` (already common in Expo apps) - NOT OTA-eligible.
+
+- [ ] Refinance break-even calculator - on Utilities. Inputs: current loan balance/rate/term based on what is listed in the debt tracker, new rate/term/closing costs. Outputs: monthly payment delta, total interest delta, months to break even. Pure math, no new deps.
+
+- [ ] Runway simulator - "how long does my current savings last with income = $0?" Uses existing recurring expenses + emergency fund + asset accounts. Shows months of runway + month it goes negative. Lives on Bridge or Utilities.
+
+- [ ] Emergency mode dashboard - when emergency fund balance drops below a user-defined threshold (or is "tapped" via a withdrawal), Bridge surfaces a refill plan card (recommended monthly contribution to restore in N months) and a soft 30-day freeze on adding new debt entries (with override). Behavioral guardrail.
+
+- [ ] Visible ark fills as milestones complete - replace the abstract Hull/Deck/Supplies progress bars with a visual ark illustration that progressively gains planks, sails, supplies, animals as milestones complete. Big emotional payoff, leans hard into the app's name and theme. Needs an SVG ark in tiered states (or layered components). OTA-safe.
+
+- [ ] Optional daily Proverb / verse - opt-in single verse shown on first app-open of each calendar day. Fits Ark theming. Bundled JSON of public-domain verses (KJV) - no network. Profile toggle defaults OFF so users who don't want it never see it.
+
+- [ ] Income tax / take-home pay calculator (US, v1) - on Utilities. Inputs: gross annual income, filing status (Single / MFJ / MFS / HoH), state, optional pre-tax deductions (401k %, HSA, health premium), pay frequency (weekly / biweekly / semimonthly / monthly). Outputs: federal tax, FICA (SS + Medicare + additional Medicare), state tax, total tax burden, effective rate, marginal bracket, take-home per pay period and per year.
+
+  Tax data:
+  - Bundled JSON of current-year federal brackets, standard deductions per filing status, FICA caps/rates (`src/data/taxData2026.ts` etc.). Updated annually via OTA - no native dep, no network.
+  - State data: bracket arrays + standard deductions per state. 9 no-income-tax states return 0 (AK, FL, NV, NH, SD, TN, TX, WA, WY). Flat-tax states (CO, IL, IN, KY, MA, MI, NC, PA, UT) are one rate. Progressive states (CA, NY, NJ, OR, MN, etc.) carry full brackets.
+  - Source: IRS Pub 15-T + each state's revenue department site; cite source + year in a "Data source" line in the modal so users know when it's stale.
+
+  Scope explicitly EXCLUDED (v1):
+  - Local/city taxes (NYC, San Francisco, etc.) - too many edge cases.
+  - Itemized deductions, credits (EITC, CTC, etc.) - calc is "rough take-home estimate," not a tax preparer.
+  - Self-employment / 1099 SE tax - flag for v2.
+  - Year-mid bracket changes, multi-state residence.
+
+  UI:
+  - Single screen, inputs at top, live-recomputed breakdown card below (federal / state / FICA / pre-tax savings / take-home), pie of where each dollar goes.
+  - Per-pay-period view toggle (annual / monthly / biweekly / weekly).
+  - "Compare states" button - shows take-home delta if you moved to a different state at the same gross. Powerful for remote-work users.
+
+  Disclaimer copy: "Estimate only - actual tax depends on credits, deductions, local taxes, and other factors not modeled here. Not tax advice."
+
+  Files (proposed):
+  - `src/data/taxData2026.ts` - federal brackets, standard deductions, FICA constants.
+  - `src/data/stateTaxData2026.ts` - per-state brackets + standard deductions.
+  - `src/utils/taxCalc.ts` - pure functions: `calcFederalTax`, `calcStateTax`, `calcFICA`, `calcTakeHome`.
+  - `src/screens/TaxCalculatorScreen.tsx` or `src/components/TaxCalculatorModal.tsx` - entry from Utilities card.
+
+  OTA-eligible: yes. Pure JS, bundled data, no new native deps. Bracket refresh each tax year = OTA bundle update.
+
+- [ ] Compass tab - rename Utilities → Compass and turn it into a personal finance learning hub alongside the existing calculators.
+
+  Concept: bite-sized lessons on budgeting, debt, saving, investing, taxes, insurance, real estate, retirement. Each lesson ends with contextual CTAs that open existing in-app flows (set up a savings goal, switch debt strategy, open a calculator) so learning ties directly to user action. External resources per lesson: curated YouTube videos for deeper discussion + Amazon book recommendations (affiliate links, with full compliance flow).
+
+  Naming / IA:
+  - Bottom tab label: "Compass" with 🧭 icon. Route key stays "Utilities" for backward compat with existing sync/state - only the display label changes.
+  - Compass landing has 3 sections: Captain's Course (linear path), Topics (free-form browse), Tools (existing calculators - Refinance, Sinking Fund, Tax, etc., folded in instead of a separate tab).
+  - Personalized "Recommended for you" card at top, picked from user state (high-interest debt → avalanche lesson; no emergency fund → starter cushion lesson; net worth crossed $10k → investing basics).
+
+  Lesson model:
+  - Bundled in JS, no network. `src/data/lessons/*.ts` exports `Lesson` objects.
+  - `Lesson` shape:
+    ```ts
+    {
+      id, title, chapter, topics, readMin,
+      body: Section[],          // typed sections, NOT free-form markdown
+      action?: { label, route }, // jump into existing flow (savings goal, calculator, etc.)
+      resources?: Resource[],    // YouTube + Amazon + articles + internal tool links
+    }
+    ```
+  - `Section` types: `paragraph`, `bullet-list`, `callout`, `calculator-embed`, `glossary-link`, `image-ref`. Renderer in `src/lessons/LessonRenderer.tsx` walks the array. Explicit types avoid markdown XSS/parse surprises.
+  - `Resource` discriminated union:
+    ```ts
+    | { type: "youtube"; title; channel; duration?; url }
+    | { type: "book"; title; author; coverAsset; amazonUrl; affiliate: boolean }
+    | { type: "article"; title; source; url }
+    | { type: "tool"; title; route }
+    ```
+
+  External link handling:
+  - YouTube: `Linking.openURL("youtube://watch?v=...")` with fallback to `https://www.youtube.com/watch?v=...`. Opens the user's YouTube app - no in-app webview, no autoplay-on-cellular issue, no new native deps.
+  - Amazon: `Linking.openURL(amazonUrl)`. Use OneLink-formatted URLs so international users land on their local Amazon storefront with the regional affiliate tag applied. Requires linking Associates accounts per country in Amazon's dashboard.
+  - Books: bundled cover images at `assets/books/<isbn>.png` (~30-50 books across all lessons ≈ 2MB total). Avoids any runtime call to Amazon's image CDN - preserves offline-first promise and avoids the tracking surface of an image fetch. New books ship cover in OTA bundle.
+
+  Amazon affiliate compliance (CRITICAL - read before shipping):
+  - **Amazon Associates Operating Agreement** requires the verbatim disclosure: "As an Amazon Associate I earn from qualifying purchases." Must be visible near affiliate links AND in a persistent location.
+  - **First-tap one-time disclosure modal** on any affiliate link:
+    > "Books on Compass link to Amazon. If you buy after tapping, BudgetArk earns a small commission at no extra cost to you. This helps fund the app's development."
+    > [Continue] [Cancel]
+    Persist in `@budgetark_affiliate_disclosure_seen`, never shows again.
+  - **Always-visible small footer** on lesson resource sections: "Some links earn commission. As an Amazon Associate, BudgetArk earns from qualifying purchases."
+  - **Profile → About** gets a full "Affiliate Disclosure" section with the verbatim Amazon-required text.
+  - **Profile toggle**: "Show affiliate links" (default ON). When OFF, book cards still render with metadata but hide the Amazon CTA - honors privacy-purist users.
+  - **Apple App Store**: affiliate links allowed under Guideline 3.1.3 (physical/digital goods sold elsewhere). Reviewers occasionally flag undisclosed affiliate use - the disclosure modal + Profile section + footer mitigate. CTAs must clearly route to a browser ("View on Amazon"), never "Buy in app."
+  - **Google Play**: allowed with disclosure - covered by the above.
+  - **F-Droid**: affiliate links count as Advertising under their anti-features taxonomy. Two options:
+    - **Option A (recommended)**: build flag `process.env.BUILD_VARIANT === "fdroid"` strips `amazonUrl` from resource cards at render time. Books still show metadata + cover, just no Amazon button. Clean ship, no anti-feature tag.
+    - **Option B**: ship with the `Advertising` anti-feature tag and accept the user-filter penalty.
+
+  UI:
+  - Compass landing: scrollable, three section headers.
+    - "Continue your course" - resumes Captain's Course where the user left off; progress bar showing chapter X of Y.
+    - "Recommended for you" - 1-3 personalized lesson cards.
+    - "Topics" - chip row (Budgeting / Debt / Saving / Investing / Taxes / Insurance / Real Estate / Retirement). Tap → filtered lesson grid.
+    - "Tools" - existing calculators (Refinance, Sinking Fund, Tax, Loan Amortization, Investment Growth, Big Purchase Comparison).
+  - Lesson screen: scroll-through; hero icon, sections, "Key takeaway" callout, action button, "Go deeper" resource list at bottom.
+  - Resource cards: YouTube cards show channel + duration + ▶ icon; book cards show cover + title + author + "View on Amazon" pill (or hidden under affiliate-off toggle).
+
+  Progression / gamification (ties into existing Ship's Log):
+  - 📖 First Voyage - finished first lesson
+  - 🧭 Course Plotter - completed Captain's Course Ch 1
+  - ⚓ Anchored in Knowledge - completed full Captain's Course
+  - 🦉 Wise Steward - read 25 lessons
+  - Lesson completion timestamps in `learningProgressStorage.ts`. Counts toward existing app-open streak.
+
+  Storage:
+  - `src/storage/learningProgressStorage.ts` - `{ completedLessons: Record<string, number>, currentChapter?: string, glossaryViews: number, affiliateDisclosureSeenAt?: number, showAffiliateLinks: boolean }`. EncryptedStorage.
+  - Do NOT sync to partner - per-device learning state. Partner reading different lessons shouldn't mark each other's complete.
+  - Include in `clearAllData` `RESET_KEYS`.
+
+  Files (proposed):
+  - `src/screens/CompassScreen.tsx` (landing - replaces UtilitiesScreen or wraps it)
+  - `src/screens/LessonScreen.tsx`
+  - `src/lessons/LessonRenderer.tsx` (typed section walker)
+  - `src/lessons/AffiliateLinkGuard.tsx` (first-tap disclosure modal + F-Droid build-flag strip)
+  - `src/data/lessons/` directory (one file per lesson, indexed via `lessonIndex.ts`)
+  - `src/data/lessonChapters.ts` (Captain's Course ordering)
+  - `src/storage/learningProgressStorage.ts`
+  - `assets/books/<isbn>.png` (bundled covers for the curated v1 book list)
+  - `src/navigation/AppNavigator.tsx` - rename tab label, swap icon, keep route key
+
+  MVP scope (single OTA + cover assets in next EAS build for the bundled images):
+  1. Rename tab to Compass, fold existing calculators into "Tools" section.
+  2. Ship Captain's Course chapters 1-2 (~8 lessons: budgeting basics, needs/wants/savings, emergency fund why, $1k starter, snowball vs avalanche, interest math, good vs bad debt, recap).
+  3. Topics chips with 4 active (Budgeting, Debt, Saving, Tools); remaining grayed "Coming soon."
+  4. Resource cards for YouTube + book affiliates.
+  5. Affiliate disclosure flow (modal + Profile section + footer).
+  6. 2 new Ship's Log badges (📖 First Voyage, 🧭 Course Plotter).
+  7. Personalized recommendation rules (3-5 triggers).
+
+  Out of scope (v1):
+  - Glossary screen (defer to v1.1).
+  - Captain's Course Ch 3-4 (Saving & Investing, Wealth Building).
+  - Quizzes / interactive checkpoints.
+  - User notes on lessons.
+  - In-app YouTube embed (stays external).
+  - Audio narration / podcast embed.
+
+  Tech notes:
+  - Cover-image bundle bumps EAS build size by ~2MB - acceptable, but the assets ship in a NEW binary (not OTA), so plan the version bump accordingly. Lesson text + new lessons stay OTA after that.
+  - OneLink setup is a one-time Amazon Associates dashboard config, not code work.
+  - Existing `react-native-svg` and emoji icons cover all new visuals - no new native deps for v1.
