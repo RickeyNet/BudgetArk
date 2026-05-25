@@ -333,6 +333,21 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     }),
   },
   {
+    id: "galleons_hold",
+    glyph: "💰", // 💰
+    tier: "legendary",
+    title: "Galleon's Hold",
+    description: "Net worth crossed $1,000,000. A true treasure ship.",
+    hint: "Grow net worth above $1M.",
+    revocable: true,
+    check: (ctx) => latestNetWorth(ctx) >= 1_000_000,
+    progress: (ctx) => ({
+      current: Math.max(0, latestNetWorth(ctx)),
+      target: 1_000_000,
+      format: formatCurrencyProgress,
+    }),
+  },
+  {
     id: "ark_builder",
     glyph: "🛠️", // 🛠️
     tier: "gold",

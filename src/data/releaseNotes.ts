@@ -14,6 +14,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Ship's Log badges now show how close you are to earning them - locked medals fill in proportionally and the cell shows your current count (e.g. '$1.2k / $10k' or '12 / 30 days').",
       "Tap a locked badge to see the same progress in the detail sheet alongside its hint.",
       "Some badges now reflect your current state instead of staying earned forever: Treasure Hoard I/II/III, Galley Stocked, Half Mast, Debt-Free Captain, First Mate, and Admiral can dim back to locked if conditions change (net worth drops, new debt added, emergency fund drained, partner unpaired, milestone uncompleted). Historical badges - first payment, exports, streak bests, completed-month badges - stay earned forever.",
+      "New legendary badge: Galleon's Hold 💰 - awarded when net worth crosses $1,000,000.",
     ],
   },
   {

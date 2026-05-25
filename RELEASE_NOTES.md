@@ -20,6 +20,10 @@ Two-part upgrade to the achievement system. Pure JS - ships OTA against the exis
 - Evaluator loop restructured: single `check(ctx)` call per def feeds both the unlock-on-true path and the revoke-on-false-when-revocable path. Persist also runs when only revokes happened (previously gated on `newlyUnlocked.length || isFirstEvaluation`).
 - Revoked badges silently revert to locked with their progress ring showing distance to re-earning - no nag modal in v1. `newlyRevoked` is plumbed through for a future "badge dimmed" toast.
 
+### New legendary badge
+
+- `galleons_hold` (💰, legendary, revocable): net worth ≥ $1,000,000. Slots between Treasure Hoard III ($100k gold) and Admiral (capstone). Progress ring tracks against the $1M target via the same `formatCurrencyProgress` used by the other Treasure tiers. Total badge count goes 18 → 19; `TOTAL_ACHIEVEMENTS` is array-length-derived so the Ship's Log "X / Y earned" counter updates automatically.
+
 ## v1.6.4 - Cleaner Bridge + Smarter Update Prompt (2026-05-24)
 
 Bridge accounts card UX polish + a structural fix for the OTA "Update Ready" modal so highlights actually show. Pure JS - ships OTA against the existing 1.6.x native runtime.
