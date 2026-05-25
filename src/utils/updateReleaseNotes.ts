@@ -27,6 +27,39 @@ export const findReleaseNoteForVersion = (version?: string): ReleaseNote | undef
     : undefined;
 };
 
+/**
+ * Parse a release note carried in the OTA manifest's `message` field as JSON.
+ * The publish helper (scripts/eas-update-message.mjs) emits this payload so
+ * the running (older) bundle can describe the *incoming* update without
+ * needing the new version baked into its own RELEASE_NOTES list.
+ *
+ * Returns undefined for plain-string messages so the legacy lookup path
+ * still runs.
+ */
+export const tryParseReleaseNoteFromMessage = (
+  message: string
+): ReleaseNote | undefined => {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith("{")) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof (parsed as ReleaseNote).version === "string" &&
+      typeof (parsed as ReleaseNote).title === "string" &&
+      typeof (parsed as ReleaseNote).releasedAt === "string" &&
+      Array.isArray((parsed as ReleaseNote).highlights) &&
+      (parsed as ReleaseNote).highlights.every((h) => typeof h === "string")
+    ) {
+      return parsed as ReleaseNote;
+    }
+  } catch {
+    // not JSON - treat as plain-string message
+  }
+  return undefined;
+};
+
 const compareVersions = (a: string, b: string): number => {
   const aParts = a.split(".").map((part) => Number(part) || 0);
   const bParts = b.split(".").map((part) => Number(part) || 0);
@@ -77,7 +110,13 @@ export const resolveUpdateInfo = (
     messageCandidates.find((candidate) => typeof candidate === "string") ||
     "A new update is ready to install.";
 
+  // Notes shipped in the manifest message override the baked-in lookup so a
+  // user running an older bundle can still see highlights for the incoming
+  // version (the entry doesn't yet exist in their local RELEASE_NOTES).
+  const inlineReleaseNote = tryParseReleaseNoteFromMessage(rawMessage);
+
   const versionCandidates = [
+    inlineReleaseNote?.version,
     metadata.appVersion,
     metadata.version,
     eas.appVersion,
@@ -91,12 +130,17 @@ export const resolveUpdateInfo = (
     .find((candidate) => !!candidate);
 
   const releaseNote =
+    inlineReleaseNote ||
     findReleaseNoteForVersion(appVersion) ||
     findReleaseNoteForVersion(rawMessage) ||
     inferReleaseFromCurrentVersion(currentVersion);
 
+  const displayMessage = inlineReleaseNote
+    ? inlineReleaseNote.title
+    : releaseNote?.title || rawMessage;
+
   return {
-    message: releaseNote?.title || rawMessage,
+    message: displayMessage,
     createdAt: typeof data.createdAt === "string" ? data.createdAt : undefined,
     runtimeVersion:
       typeof data.runtimeVersion === "string" ? data.runtimeVersion : undefined,

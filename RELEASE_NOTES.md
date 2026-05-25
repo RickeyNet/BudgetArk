@@ -1,5 +1,26 @@
 # BudgetArk Release Notes
 
+## v1.6.4 - Cleaner Bridge + Smarter Update Prompt (2026-05-24)
+
+Bridge accounts card UX polish + a structural fix for the OTA "Update Ready" modal so highlights actually show. Pure JS - ships OTA against the existing 1.6.x native runtime.
+
+### Bridge category UX
+
+- `BridgeScreen` accounts card now opens with every category collapsed. `collapsedAccountCategories` state seeds with `new Set(ASSET_ACCOUNT_CATEGORIES)` so first render hides every group; tap a header to expand. Cuts first-view height for users with accounts spread across several categories.
+- Moved the category emoji glyph from individual account rows up to the category header (`{iconForCategory(group.category)} {label}`), matching the Budget screen's `{getCategoryIcon(category)} {category}` pattern. Removed the per-row `accountIcon` chip; nested rows keep their 28px indent via the existing `accountRowNested` style. Emergency Fund keeps its 🛡️ chip since it's pinned outside the category groups.
+
+### OTA "Update Ready" modal now shows highlights
+
+- Root cause: `findReleaseNoteForVersion` was looking up the incoming version in the *currently running* bundle's `RELEASE_NOTES` list. Since release-note entries ship inside the bundle they describe, the running (older) bundle never has the new version's entry - the lookup always returned undefined and the modal rendered version-only.
+- Fix: `resolveUpdateInfo` now tries `JSON.parse` on the manifest's message field first via the new `tryParseReleaseNoteFromMessage` helper. If the parsed payload has the `{version, title, releasedAt, highlights[]}` shape we treat it as the release note directly, ahead of the baked-in lookup chain. Plain-string messages still fall through to the existing `findReleaseNoteForVersion` → `inferReleaseFromCurrentVersion` cascade so older publish flows keep working.
+- New `scripts/eas-update-message.mjs` reads the top entry from `src/data/releaseNotes.ts` (regex-based, no ts-node dependency) and emits the JSON payload to stdout. Wired up as `npm run update:message`. Publish becomes:
+
+  ```bash
+  eas update --branch production --message "$(npm run -s update:message)"
+  ```
+
+- The very next OTA still shows version-only (existing user bundles predate the parser); every OTA after that picks up highlights from the manifest immediately.
+
 ## v1.6.3 - Better Update Check Errors (2026-05-24)
 
 Tightens the "Update Check Failed" modal in Profile so a flaky connection is correctly identified instead of being surfaced as an unknown failure. Pure JS - ships OTA against the existing 1.6.x native runtime.

@@ -7,6 +7,16 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.6.4",
+    title: "Cleaner Bridge + Smarter Update Prompt",
+    releasedAt: "2026-05-24",
+    highlights: [
+      "Bridge accounts now open with every category collapsed - one tap on a header expands the accounts inside.",
+      "Category emoji moved from each individual account row up to the category header, matching how Budget categories look.",
+      "Future update prompts will show the new version's highlights directly from the update itself instead of falling back to just the version number.",
+    ],
+  },
+  {
     version: "1.6.3",
     title: "Better Update Check Errors",
     releasedAt: "2026-05-24",

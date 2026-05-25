@@ -87,7 +87,7 @@ const BridgeScreen: React.FC = () => {
   const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("checking");
   const [collapsedAccountCategories, setCollapsedAccountCategories] = useState<
     Set<AssetAccountCategory>
-  >(() => new Set());
+  >(() => new Set(ASSET_ACCOUNT_CATEGORIES));
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
   const [showAchievements, setShowAchievements] = useState(false);
@@ -517,7 +517,7 @@ const BridgeScreen: React.FC = () => {
                       {isCollapsed ? "▶" : "▼"}
                     </Text>
                     <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
-                      {ASSET_ACCOUNT_CATEGORY_LABELS[group.category]}
+                      {iconForCategory(group.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[group.category]}
                     </Text>
                     <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
                       {formatCurrency(group.total)}
@@ -532,9 +532,6 @@ const BridgeScreen: React.FC = () => {
                           onPress={() => openEditAssetModal(account)}
                           activeOpacity={0.7}
                         >
-                          <View style={[styles.accountIcon, { backgroundColor: `${categoryColor}1f` }]}>
-                            <Text style={styles.accountIconGlyph}>{iconForCategory(account.category)}</Text>
-                          </View>
                           <View style={styles.accountRowLeft}>
                             <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
                           </View>
