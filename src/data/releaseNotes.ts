@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.6.3",
+    title: "Better Update Check Errors",
+    releasedAt: "2026-05-24",
+    highlights: [
+      "When the Check for Updates button fails, the app now does a better job of detecting connection problems and shows a clearer 'check your internet' message.",
+      "Other update failures now include the underlying error details so it's easier to tell when something other than the network is wrong.",
+    ],
+  },
+  {
     version: "1.6.2",
     title: "Bridge Categories + Pay-Off Fix",
     releasedAt: "2026-05-24",

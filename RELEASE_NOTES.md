@@ -1,5 +1,15 @@
 # BudgetArk Release Notes
 
+## v1.6.3 - Better Update Check Errors (2026-05-24)
+
+Tightens the "Update Check Failed" modal in Profile so a flaky connection is correctly identified instead of being surfaced as an unknown failure. Pure JS - ships OTA against the existing 1.6.x native runtime.
+
+### Update-check error handling
+
+- `ProfileScreen.checkForUpdates` catch branch was matching Expo's thrown error string with case-sensitive `.includes()` against three substrings (`failed to check`, `network`, `timeout`). Real platform throws are worded differently - iOS `"Failed to download manifest"` / `"The Internet connection appears to be offline"`, Android `"Unable to resolve host"`, Node-style `ENOTFOUND` / `ECONNREFUSED` / `ECONNRESET` / `ETIMEDOUT` - so the friendly "check your connection" copy almost never fired and users saw a raw stack-trace-looking message instead.
+- Lowercases the message before matching and broadens the hint list: `failed to check`, `failed to download`, `network`, `timeout`, `timed out`, `offline`, `resolve host`, `unreachable`, `connection`, `internet`, `enotfound`, `econnrefused`, `econnreset`, `etimedout`.
+- Always appends the raw error message under `Details:` regardless of which branch matched, so non-network failures still surface the underlying error for diagnosis instead of being swallowed by friendly copy.
+
 ## v1.6.2 - Bridge Categories + Pay-Off Fix (2026-05-24)
 
 Bridge screen restructure plus a Debt-screen rounding fix. Pure JS - ships OTA against the existing 1.6.x native runtime.
