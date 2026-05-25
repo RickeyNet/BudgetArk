@@ -1,5 +1,25 @@
 # BudgetArk Release Notes
 
+## v1.6.5 - Ship's Log Progress + Live Badges (2026-05-25)
+
+Two-part upgrade to the achievement system. Pure JS - ships OTA against the existing 1.6.x native runtime.
+
+### Per-badge progress tracking
+
+- New `AchievementDef.progress?(ctx) => { current, target, format? } | null` reporter. Returns null for badges with no meaningful partial state (binary "first payment" / "paired" / "exported once" / month-flip badges); otherwise reports raw counts so the evaluator and UI can render a partial-fill ring + "X / Y" caption.
+- Added progress to 12 threshold/counter badges: Half Mast (paid vs original/2), Treasure Hoard I/II/III (net worth vs $10k/$25k/$100k), Galley Stocked (EF vs $1k), Sextant Sharp (best-progressed goal), Lighthouse Keeper (longest streak vs 30 days), Doubloon Streak (consecutive savings months vs 12), Crow's Nest (review opens vs 3), Steady Crew (longest under-budget run vs 3 months), Debt-Free Captain (cleared non-mortgage count vs total), Admiral (completed milestone steps vs total).
+- `Medal` accepts an optional `progress` ratio 0..1. Locked badges with progress render a `strokeDasharray` sweep starting at 12 o'clock and bump container opacity from 0.45 to 0.7 so partial progress reads as "closer to done" than truly-flat-locked.
+- `evaluateAchievements` collects every def's progress into a new `progress: Record<string, AchievementProgress>` field on `EvaluationResult` so the screen renders without a second storage pass.
+- Compact currency formatter (`formatCurrencyProgress`) renders `$1.2k / $10k`, `$25k / $100k`, etc. - units stay tight on the small caption.
+- `AchievementsScreen` cell shows the formatted progress line in accent color under the title; detail sheet shows the same line above the unlock date. a11y label includes progress on locked badges.
+
+### Revocable state-based badges
+
+- New `AchievementDef.revocable?: boolean` flag. When true and `check(ctx)` later returns false on a previously-unlocked badge, the evaluator deletes it from the unlocked map and surfaces its id in a new `EvaluationResult.newlyRevoked` array.
+- Marked revocable: Half Mast, Galley Stocked, Treasure Hoard I/II/III, Debt-Free Captain, First Mate, Admiral - all conditions describe *current state*, not a historical event. Historical badges (first_steps, patched_the_hull, cartographer, sextant_sharp, crows_nest, lighthouse_keeper, doubloon_streak, steady_crew, all_sails_set, ark_builder) intentionally stay earned forever because their underlying events already happened.
+- Evaluator loop restructured: single `check(ctx)` call per def feeds both the unlock-on-true path and the revoke-on-false-when-revocable path. Persist also runs when only revokes happened (previously gated on `newlyUnlocked.length || isFirstEvaluation`).
+- Revoked badges silently revert to locked with their progress ring showing distance to re-earning - no nag modal in v1. `newlyRevoked` is plumbed through for a future "badge dimmed" toast.
+
 ## v1.6.4 - Cleaner Bridge + Smarter Update Prompt (2026-05-24)
 
 Bridge accounts card UX polish + a structural fix for the OTA "Update Ready" modal so highlights actually show. Pure JS - ships OTA against the existing 1.6.x native runtime.
