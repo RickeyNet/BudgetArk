@@ -83,13 +83,6 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
           "Net Worth = everything you own minus everything you owe. The big number rolls up debts, savings, retirement, investments, and tracked accounts. The chart below it plots Net Worth over time - snapshots save automatically when balances change.",
       },
       {
-        id: "bridge-overview",
-        anchorId: "bridge-overview-card",
-        title: "Tracked balances at a glance",
-        body:
-          "Tracked Accounts and Emergency Fund roll up here. They feed straight into the Net Worth total above.",
-      },
-      {
         id: "bridge-accounts",
         anchorId: "bridge-accounts-card",
         title: "Manage your accounts",

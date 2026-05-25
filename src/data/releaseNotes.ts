@@ -7,6 +7,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.6.2",
+    title: "Pay-Off Fix",
+    releasedAt: "2026-05-24",
+    highlights: [
+      "Fixed a bug on the Debt screen where paying the last few cents on a debt did nothing when tapping the green check - small balances now clear cleanly even with display-rounded values.",
+    ],
+  },
+  {
     version: "1.6.1",
     title: "Crash Fix",
     releasedAt: "2026-05-24",

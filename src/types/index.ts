@@ -265,6 +265,7 @@ export interface SavingsGoal {
 /* ─── Asset Account Types ─── */
 
 export const ASSET_ACCOUNT_CATEGORIES = [
+  "checking",
   "savings",
   "retirement",
   "hsa",
@@ -275,6 +276,7 @@ export const ASSET_ACCOUNT_CATEGORIES = [
 export type AssetAccountCategory = (typeof ASSET_ACCOUNT_CATEGORIES)[number];
 
 export const ASSET_ACCOUNT_CATEGORY_LABELS: Record<AssetAccountCategory, string> = {
+  checking: "Checking",
   savings: "Savings",
   retirement: "401k / Retirement",
   hsa: "HSA",
