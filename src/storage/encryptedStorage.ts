@@ -285,7 +285,7 @@ export const getItem = async (key: string): Promise<string | null> => {
  * debts) used to race because each call did `getX → mutate → saveX` on its
  * own snapshot, so the second writer would overwrite the first writer's
  * changes. Serializing per key ensures the second write reads-after-write
- * the first completes — at the storage layer at least, the load-mutate-save
+ * the first completes - at the storage layer at least, the load-mutate-save
  * pattern in callers still has its own race window between load and save.
  *
  * The map only tracks the *latest* tail of the chain per key. A finished
@@ -296,7 +296,7 @@ const writeQueues = new Map<string, Promise<void>>();
 
 const enqueueWrite = (key: string, run: () => Promise<void>): Promise<void> => {
   const previous = writeQueues.get(key) ?? Promise.resolve();
-  // Run after previous resolves OR rejects — a failed write shouldn't block
+  // Run after previous resolves OR rejects - a failed write shouldn't block
   // the next attempt forever.
   const next = previous.catch(() => {}).then(run);
   writeQueues.set(key, next);
@@ -312,7 +312,7 @@ const enqueueWrite = (key: string, run: () => Promise<void>): Promise<void> => {
 
 /**
  * Encrypts and stores a value in AsyncStorage using V2 format (AES + HMAC).
- * Writes for the same key are serialized — see writeQueues comment above.
+ * Writes for the same key are serialized - see writeQueues comment above.
  */
 export const setItem = async (
   key: string,
@@ -366,7 +366,7 @@ export const multiRemove = async (keys: string[]): Promise<void> => {
  * atomicity at the platform layer (AsyncStorage's `multiSet` isn't a
  * transaction on Android), but a single I/O is meaningfully safer than two.
  *
- * Throws on failure — callers must handle the inconsistency rather than
+ * Throws on failure - callers must handle the inconsistency rather than
  * silently leaving partial state.
  */
 export const multiSet = async (

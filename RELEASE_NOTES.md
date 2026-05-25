@@ -1,5 +1,57 @@
 # BudgetArk Release Notes
 
+## v1.6.0 - Appearance Controls + Loan Details (2026-05-22)
+
+Minor version bump for the new appearance-system split, accessibility-focused background controls, and loan-calculator expansions.
+
+### Appearance controls
+
+- Appearance is now split into **Theme + Design Style**. The glass look is no longer tied only to Deep Space - you can mix **Solid** or **Glass** with any theme, including Deep Space in a plain solid mode.
+- Added a persisted **SurfaceStyleProvider** and design-style picker in **Profile → Appearance** so visual treatment is selected separately from color theme.
+- Deep Space's glass treatment was decoupled from the theme palette itself, so the theme can now be used in both Glass and Solid modes without special-case color definitions.
+
+### Ambient backgrounds
+
+- Deep Forest now gets a richer misty night-forest ambient background: dark forest gradient base, canopy glow, soft mist bands, and subtle firefly specks.
+- Deep Space keeps its starfield / nebula background, but ambient backgrounds are now controlled centrally instead of being hardwired only to that theme.
+- Added an **Ambient Backgrounds** toggle in **Profile → Appearance** so users can disable decorative backgrounds and keep a plain backdrop for readability, comfort, or accessibility.
+- Synthwave's decorative grid also respects the same background-effects preference.
+
+### Budget reminders
+
+- Budget now shows an in-app **due-date reminder banner** for upcoming recurring bills. It surfaces the next few due dates, total scheduled amount, and opens the Bill Calendar when tapped.
+
+### Utilities loan upgrades
+
+- The **Loan / Mortgage Calculator** on Utilities now includes a full amortization schedule with month-by-month principal, interest, payment, and remaining balance.
+- Loan results now also include a **yearly summary**, a **first-5-years interest highlight**, a **collapsible yearly summary section**, and **CSV export** for the amortization schedule.
+
+## v1.5.0 - Deep Space Redesign (2026-05-15)
+
+Minor version bump - first release with a native-facing UI redesign plus the features accumulated since v1.4.16. `app.json` version is `1.5.0`.
+
+### Bridge & Budget redesign
+
+- Both screens reworked to a "trading terminal" concept layout: centered header block, a bordered divider stat strip (`Income / Spent / Net` on Budget, `Tracked Accounts / Emergency Fund` on Bridge), glass cards with a top accent hairline, and `tabular-nums` values throughout.
+- Budget Spending card rebuilt: 92px donut with a centered month-total overlay, a side legend with per-slice percentages, and per-category horizontal bars (fill scales to the limit when set, otherwise to the biggest category that month; over-limit turns red). Tap-to-expand and long-press-to-set-limit behavior unchanged - presentational only, no logic/data changes.
+- Budget month switcher replaced with a single `‹ Month ›` pill.
+- New `CashFlowChart` component on the Bridge: grouped income/expense bars for the trailing 6 months with a net "wick" + net trend line, derived from existing budget entries.
+
+### Deep Space theme
+
+- New opt-in `deep_space` theme preset (`src/theme/themes.ts`) with a translucent-card palette.
+- New `SpaceBackground` component: SVG radial-gradient base, three nebula glows, and a static seeded starfield (mulberry32 PRNG so it never reshuffles). Static by design - no animation loop.
+- Mounted globally in `AppNavigator` behind the tab navigator and gated on the active theme id. When Deep Space is active, all five tab screens (Bridge, Budget, Debts, Utilities, Profile) render their roots transparent and the navigator scene is transparent so the starfield shows app-wide. Other themes pay zero cost.
+
+### Features since v1.4.16
+
+- Custom budget categories with emoji icons (add-only v1), preserved across spreadsheet/backup round-trips and paired-device sync.
+- Ship's Log completed: 5 new achievement badges, full-year history, and a Profile entry point.
+- Annual Financial Report added to the Bridge.
+- "View history" hint added to the debt payoff ring.
+- Recurring budget entries gained a frequency picker (Monthly / Quarterly / Every 6 months / Yearly). New `recurrenceInterval?: 1 | 3 | 6 | 12` field on `BudgetEntry` defaults to monthly on read so pre-existing recurring entries keep their cadence with no migration. A shared `src/utils/recurrence.ts` helper (`isEntryActiveInMonth`, `countOccurrencesBetween`, `listOccurrenceMonths`, `getRecurrenceInterval`, `getRecurrenceTag`) replaced inline `entryMonth <= monthKey` logic in `BudgetScreen`, `BridgeScreen`, `annualReport`, `budgetInsights`, `achievementDefs`, `UtilitiesScreen`, and `linkedAccountRecurring` so every consumer agrees on which months a recurring entry is active. The linked-account catch-up loop now credits one delta per cycle that lands in the window (a quarterly entry credits once per quarter, not three times). Spreadsheet export adds a `RecurrenceInterval` column and only projects cycle months; import parses it and falls back to monthly when blank, so older workbooks round-trip cleanly. Entry-row labels show the interval ("Quarterly", "6 mo", "Yearly") instead of always saying "Monthly".
+- Bill Calendar on Budget. Recurring expenses now carry a real day-of-month (Add/Edit modals show a 1-31 picker when Recurring + Expense; default 15 for backwards compat, clamped to the start month's last day on write). New `src/utils/billCalendar.ts` derives `getDayOfMonth` (with per-rendered-month clamp, mirroring the spreadsheet exporter), `groupBillsByDay`, `nextBillFrom` (walks up to 12 months so quarterly / 6-mo / yearly entries surface), and `splitPaidVsRemaining`. `BillCalendarModal` renders a 7-col grid with category-color dots per day (palette matches the donut via the existing `colorForCategory`), today ringed, past days dimmed, tap-a-day bottom sheet that hands off to the existing `EditBudgetEntryModal`. `BillCalendarCard` on the Budget tab between the Monthly Review button and the Spending card shows "N bills · $X · remaining · next bill" and hides itself when there are zero bills. Income excluded by default (paychecks aren't bills); a "Show one-offs too" toggle inside the modal opts non-recurring expenses in. Pure JS - no storage migration, no new deps.
+
 ## v1.4.16 - Sync Reliability + Cleanup (2026-05-04)
 
 Round 2 audit follow-up - closes every remaining `Potentialbugs.md` Round 2 item except the two explicitly deferred low-impact P3s. Pure JS - `runtimeVersion` stays at `1.4.14`, ships as OTA against the v1.4.14 native binary.

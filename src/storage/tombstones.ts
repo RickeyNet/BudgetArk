@@ -9,7 +9,7 @@
  * Why tombstones? Without them, a deletion on Device A would simply remove
  * the record from the local array. The next sync's `computeOutgoingDiff`
  * would emit nothing for that ID. Device B still has the record, and on
- * its next sync would `upsert` it back to A — silently resurrecting the
+ * its next sync would `upsert` it back to A - silently resurrecting the
  * deletion. By keeping a `deletedAt` marker we can emit `action: "delete"`
  * with a timestamp, and the receiver applies it via the same LWW logic
  * as upserts.
@@ -46,6 +46,18 @@ export const tombstone = <T extends Tombstoneable>(record: T, now: string): T =>
   deletedAt: now,
   updatedAt: now,
 });
+
+/**
+ * Reverse a tombstone (undo a soft-delete). Clears `deletedAt` and bumps
+ * `updatedAt` to `now` so the revival wins LWW on the next sync against
+ * the delete the partner may have already received - i.e. an undo
+ * propagates as a normal upsert and resurrects the record everywhere.
+ */
+export const untombstone = <T extends Tombstoneable>(record: T, now: string): T => {
+  const { deletedAt, ...rest } = record;
+  void deletedAt;
+  return { ...(rest as T), updatedAt: now };
+};
 
 /**
  * Drop tombstones whose `deletedAt` is older than the TTL. Returns the

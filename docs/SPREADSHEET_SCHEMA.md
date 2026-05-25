@@ -105,7 +105,7 @@ Summed columns by sheet:
 
 | Sheet          | Summed columns                                |
 | -------------- | --------------------------------------------- |
-| Budget Entries | *(label only — see note below)*               |
+| Budget Entries | *(label only - see note below)*               |
 | Budget Limits  | `MonthlyLimit`                                |
 | Debts          | `Balance`, `OriginalBalance`, `MinPayment`    |
 | Payments       | `Amount`                                      |
@@ -116,9 +116,9 @@ The Budget Entries Total row deliberately leaves the numeric column blank: incom
 
 The `SUM` ranges are bounded to the data rows present at export time. Excel and Google Sheets auto-extend these ranges when you **insert** rows above the Total row; rows **appended** below it are not included.
 
-The importer ignores the total row automatically — you don't need to delete it before re-importing. If you add your own summary row, give it the label `Total` (case-insensitive) in the first column and it will be skipped the same way.
+The importer ignores the total row automatically - you don't need to delete it before re-importing. If you add your own summary row, give it the label `Total` (case-insensitive) in the first column and it will be skipped the same way.
 
-> **Reserved value:** `Total` (case-insensitive) is a reserved sentinel in the **first column** of every sheet. Any row whose first cell equals `Total` is dropped silently on import. Don't use `Total` as a user-supplied `ID` or `Category` value — your row will disappear.
+> **Reserved value:** `Total` (case-insensitive) is a reserved sentinel in the **first column** of every sheet. Any row whose first cell equals `Total` is dropped silently on import. Don't use `Total` as a user-supplied `ID` or `Category` value - your row will disappear.
 
 ## Round-Trip Tip
 

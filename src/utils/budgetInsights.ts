@@ -1,4 +1,5 @@
 import { BudgetCategory, BudgetEntry, CategoryBudgetLimit } from "../types";
+import { isEntryActiveInMonth } from "./recurrence";
 
 /* ─── Month-key helpers (same logic as BudgetScreen) ─── */
 
@@ -16,11 +17,6 @@ const getMonthKeyOffset = (
   return getMonthKey(cursor);
 };
 
-const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
-  getMonthKey(new Date(dateISO)) === monthKey;
-
-const isRecurringInMonth = (dateISO: string, monthKey: string): boolean =>
-  getMonthKey(new Date(dateISO)) <= monthKey;
 
 /* ─── Types ─── */
 
@@ -29,7 +25,7 @@ export interface MonthSummary {
   totalIncome: number;
   totalExpenses: number;
   net: number;
-  byCategory: Partial<Record<BudgetCategory, number>>;
+  byCategory: Record<string, number>;
 }
 
 export interface CategoryChange {
@@ -71,18 +67,14 @@ const getEntriesForMonth = (
   entries: BudgetEntry[],
   monthKey: string
 ): BudgetEntry[] =>
-  entries.filter((entry) =>
-    entry.recurring
-      ? isRecurringInMonth(entry.date, monthKey)
-      : isDateInMonthKey(entry.date, monthKey)
-  );
+  entries.filter((entry) => isEntryActiveInMonth(entry, monthKey));
 
 const buildMonthSummary = (
   entries: BudgetEntry[],
   monthKey: string
 ): MonthSummary => {
   const monthly = getEntriesForMonth(entries, monthKey);
-  const byCategory: Partial<Record<BudgetCategory, number>> = {};
+  const byCategory: Record<string, number> = {};
   let totalIncome = 0;
   let totalExpenses = 0;
 

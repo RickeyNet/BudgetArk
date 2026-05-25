@@ -131,12 +131,14 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
    * Uses useCallback to prevent child re-renders.
    */
   const handlePayment = useCallback(() => {
-    const amount = parseFloat(payAmount);
-    if (amount > 0 && amount <= debt.balance) {
-      onPayment(debt.id, amount);
-      setPayAmount("");
-      setShowPayInput(false);
-    }
+    const raw = parseFloat(payAmount);
+    if (!Number.isFinite(raw) || raw <= 0 || debt.balance <= 0) return;
+    // Clamp to balance so display-rounding ($0.09 shown for a 0.0899... balance)
+    // and small overpayments still zero the debt instead of silently failing.
+    const amount = Math.min(raw, debt.balance);
+    onPayment(debt.id, amount);
+    setPayAmount("");
+    setShowPayInput(false);
   }, [payAmount, debt.id, debt.balance, onPayment]);
 
   /* ── Collapsed compact view ── */

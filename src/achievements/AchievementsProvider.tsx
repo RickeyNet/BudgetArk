@@ -89,7 +89,7 @@ export const AchievementsProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  // Initial silent eval at app boot — stamps `firstEvaluatedAt` so future
+  // Initial silent eval at app boot - stamps `firstEvaluatedAt` so future
   // checks celebrate but retroactive ones don't pop dozens of modals.
   useEffect(() => {
     void runCheck();

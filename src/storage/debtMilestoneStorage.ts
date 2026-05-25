@@ -71,7 +71,7 @@ export const saveDebtMilestonePlan = async (
 /**
  * Sync-only setter that preserves the incoming peer's `updatedAt` instead of
  * stamping `now`. Used by `applyIncomingDiff` so a merged-in remote plan
- * doesn't get re-broadcast as a fresh edit on the next outbound diff —
+ * doesn't get re-broadcast as a fresh edit on the next outbound diff -
  * which used to cause a small ping-pong on every paired sync.
  */
 export const saveDebtMilestonePlanFromSync = async (

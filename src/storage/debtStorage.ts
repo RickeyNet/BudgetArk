@@ -17,6 +17,7 @@ import {
   filterLive,
   purgeExpiredTombstones,
   tombstone,
+  untombstone,
 } from "./tombstones";
 
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
@@ -24,7 +25,7 @@ export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
 /**
  * On-disk envelope for the payoff strategy preference. The bare value used
  * to be persisted directly (and over the wire) which gave sync no way to
- * resolve conflicts — the value flip-flopped on every sync direction. The
+ * resolve conflicts - the value flip-flopped on every sync direction. The
  * envelope lets us LWW the strategy like every other syncable field.
  */
 export interface PayoffStrategyEnvelope {
@@ -109,7 +110,7 @@ const normalizeDebt = (debt: Debt): Debt => {
 };
 
 /**
- * Retrieves all stored debts (excluding tombstones — those are an
+ * Retrieves all stored debts (excluding tombstones - those are an
  * implementation detail of sync; UI never sees them).
  *
  * @returns Promise<Debt[]> - array of live debt entries
@@ -173,7 +174,7 @@ export const addDebt = async (debt: Debt): Promise<Debt[]> => {
  * record in storage. The next paired sync emits `action: "delete"` for
  * this tombstone so the partner removes it locally too. Without the
  * tombstone, the partner would just upsert the record back on its next
- * sync — silently resurrecting the deletion.
+ * sync - silently resurrecting the deletion.
  *
  * @param id - the unique ID of the debt to remove
  * @returns Promise<Debt[]> - live (non-tombstoned) debts after the delete
@@ -207,6 +208,20 @@ export const updateDebt = async (
   return filterLive(updated);
 };
 
+/**
+ * Undo a soft-deleted debt: clears the tombstone so it's live again.
+ * No-op if the id isn't a tombstone.
+ */
+export const restoreDebt = async (id: string): Promise<Debt[]> => {
+  const debts = await getDebtsIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = debts.map((d) =>
+    d.id === id && d.deletedAt ? untombstone(d, now) : d
+  );
+  await saveDebts(next);
+  return filterLive(next);
+};
+
 /* ─── Payment History Operations ─── */
 
 /**
@@ -230,7 +245,7 @@ export const getPayments = async (): Promise<Payment[]> => {
 /**
  * Sync-only: like `getPayments` but returns tombstones too. There's no
  * UI delete for payments today, but the sync layer still needs the
- * tombstone-aware path for symmetry with debts/budget entries — and so
+ * tombstone-aware path for symmetry with debts/budget entries - and so
  * a future delete feature plugs in without changing the sync wiring.
  */
 export const getPaymentsIncludingDeleted = async (): Promise<Payment[]> => {
@@ -279,7 +294,7 @@ export const recordPayment = async (
     getPaymentsIncludingDeleted(),
   ]);
 
-  /* Calculate updated debt balance — only matches a live debt, never a
+  /* Calculate updated debt balance - only matches a live debt, never a
    * tombstone (UI couldn't have surfaced a deleted debt to pay). */
   const now = new Date().toISOString();
   const updatedDebts = debts.map((d) => {
@@ -305,6 +320,87 @@ export const recordPayment = async (
 };
 
 /**
+ * Soft-deletes a payment and reverses its effect on the debt balance.
+ * A logged-in-error payment had reduced the debt's balance; deleting it
+ * must add that amount back, or the balance silently stays wrong. Both
+ * keys are written in one multiSet, mirroring recordPayment, so a write
+ * timeout can't tombstone the payment without also restoring the balance.
+ *
+ * @returns updated live debts + payments
+ */
+export const deletePayment = async (
+  paymentId: string
+): Promise<{ debts: Debt[]; payments: Payment[] }> => {
+  const [debts, payments] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+  ]);
+  const now = new Date().toISOString();
+  const target = payments.find((p) => p.id === paymentId && !p.deletedAt);
+
+  const updatedPayments = payments.map((p) =>
+    p.id === paymentId && !p.deletedAt ? tombstone(p, now) : p
+  );
+  const updatedDebts =
+    target == null
+      ? debts
+      : debts.map((d) =>
+          d.id === target.debtId && !d.deletedAt
+            ? { ...d, balance: d.balance + target.amount, updatedAt: now }
+            : d
+        );
+
+  await EncryptedStorage.multiSet([
+    [STORAGE_KEYS.DEBTS, JSON.stringify(updatedDebts)],
+    [STORAGE_KEYS.PAYMENTS, JSON.stringify(updatedPayments)],
+  ]);
+  return {
+    debts: filterLive(updatedDebts),
+    payments: filterLive(updatedPayments),
+  };
+};
+
+/**
+ * Undo a payment delete: clears the tombstone and re-applies the balance
+ * reduction it originally caused. Inverse of deletePayment.
+ */
+export const restorePayment = async (
+  paymentId: string
+): Promise<{ debts: Debt[]; payments: Payment[] }> => {
+  const [debts, payments] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+  ]);
+  const now = new Date().toISOString();
+  const target = payments.find((p) => p.id === paymentId && p.deletedAt);
+
+  const updatedPayments = payments.map((p) =>
+    p.id === paymentId && p.deletedAt ? untombstone(p, now) : p
+  );
+  const updatedDebts =
+    target == null
+      ? debts
+      : debts.map((d) =>
+          d.id === target.debtId && !d.deletedAt
+            ? {
+                ...d,
+                balance: Math.max(0, d.balance - target.amount),
+                updatedAt: now,
+              }
+            : d
+        );
+
+  await EncryptedStorage.multiSet([
+    [STORAGE_KEYS.DEBTS, JSON.stringify(updatedDebts)],
+    [STORAGE_KEYS.PAYMENTS, JSON.stringify(updatedPayments)],
+  ]);
+  return {
+    debts: filterLive(updatedDebts),
+    payments: filterLive(updatedPayments),
+  };
+};
+
+/**
  * Clears all stored data. Used for account reset / logout.
  * WARNING: This is destructive and cannot be undone.
  *
@@ -318,7 +414,7 @@ export const recordPayment = async (
  */
 // Keys cleared on Reset All Data. User account, pairing state, and sync
 // metadata are wiped separately by `confirmReset` (deleteAccount +
-// clearPairingState) — they live in different modules. Visual preferences
+// clearPairingState) - they live in different modules. Visual preferences
 // (theme, density, haptics, privacy mode) intentionally survive a reset
 // since they're cosmetic, not user data.
 const RESET_KEYS = [
@@ -332,17 +428,17 @@ const RESET_KEYS = [
   "@budgetark_asset_accounts",
   "@budgetark_debt_milestones",
   "@budgetark_open_ark_setup_once",
-  // Walkthrough state — without this, a fresh reset wouldn't re-show the
+  // Walkthrough state - without this, a fresh reset wouldn't re-show the
   // first-launch tour even though all the user's data is gone.
   "@budgetark_coachmarks",
-  // Backup-reminder version — survives reset would mean the user wouldn't
+  // Backup-reminder version - survives reset would mean the user wouldn't
   // see the "take a backup" nudge again until the next app upgrade.
   "@budgetark_backup_reminder",
-  // Release-notes seen state + OTA-installed flag — fresh reset should
+  // Release-notes seen state + OTA-installed flag - fresh reset should
   // re-show the latest release notes the same way a fresh install would.
   "@budgetark_last_seen_release_notes_version",
   "@budgetark_ota_update_installed",
-  // Update-check preferences — auto vs manual choice belongs to the user
+  // Update-check preferences - auto vs manual choice belongs to the user
   // identity, not the device, so it should reset with everything else.
   "@budgetark_update_preferences",
 ] as const;
@@ -370,7 +466,7 @@ const removeAllSettled = async (
 export const clearAllData = async (): Promise<void> => {
   let failed = await removeAllSettled(RESET_KEYS);
   if (failed.length > 0) {
-    // Single retry — handles transient timeouts where the underlying
+    // Single retry - handles transient timeouts where the underlying
     // AsyncStorage call eventually flushed but our `withTimeout` wrapper
     // already rejected.
     failed = await removeAllSettled(failed);
@@ -414,7 +510,7 @@ export const getPayoffStrategyEnvelope = async (): Promise<PayoffStrategyEnvelop
       return parsed as PayoffStrategyEnvelope;
     }
   } catch {
-    // fallthrough — treat as missing
+    // fallthrough - treat as missing
   }
   return null;
 };

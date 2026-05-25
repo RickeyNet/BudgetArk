@@ -3,6 +3,9 @@
 import "react-native-get-random-values";
 import "react-native-gesture-handler";
 import "react-native-reanimated";
+// Side-effect: clamps the OS font-scale multiplier app-wide. Must run before
+// any <Text>/<TextInput> renders, so keep it among the top imports.
+import "./src/theme/fontScalingPolicy";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import {
@@ -22,12 +25,16 @@ import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
+import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
+import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
 import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
 import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
 import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
+import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvider";
+import { UndoProvider } from "./src/undo/UndoProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
   getLastSeenReleaseNotesVersion,
@@ -35,7 +42,7 @@ import {
   setOtaUpdateInstalled,
   consumeOtaUpdateInstalled,
 } from "./src/storage/releaseNotesStorage";
-import { CURRENT_APP_VERSION, RELEASE_NOTES } from "./src/data/releaseNotes";
+import { CURRENT_APP_VERSION, RELEASE_NOTES, type ReleaseNote } from "./src/data/releaseNotes";
 import type { RootTabParamList } from "./src/types";
 import {
   getUpdatePreferences,
@@ -44,6 +51,7 @@ import {
 import { requestArkSetupPrompt } from "./src/storage/arkSetupStorage";
 import { isUpdateSafe } from "./src/utils/versionGuard";
 import { getPrivacyMode } from "./src/storage/privacyStorage";
+import { resolveUpdateInfo } from "./src/utils/updateReleaseNotes";
 
 const FlagSecureModule = Platform.OS === "android" ? NativeModules.FlagSecureModule : null;
 const ScreenGuardModule = Platform.OS === "ios" ? NativeModules.ScreenGuardModule : null;
@@ -52,6 +60,8 @@ type UpdatePrompt = {
   message: string;
   createdAt?: string;
   runtimeVersion?: string;
+  appVersion?: string;
+  releaseNote?: ReleaseNote;
 };
 
 /**
@@ -67,7 +77,7 @@ type UpdatePrompt = {
  * Inner app component that has access to theme context
  */
 const AppContent: React.FC = () => {
-  const { colors, themeId } = useTheme();
+  const { colors, themeId, backgroundEffectsEnabled } = useTheme();
   const navigationRef = useMemo(() => createNavigationContainerRef<RootTabParamList>(), []);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
@@ -102,29 +112,10 @@ const AppContent: React.FC = () => {
     setIsOnboardingComplete(true);
   }, []);
 
-  const extractUpdatePrompt = useCallback((manifest: unknown): UpdatePrompt => {
-    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
-    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
-    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
-    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
-    const messageCandidates = [
-      metadata.message,
-      metadata.updateMessage,
-      eas.message,
-      data.description,
-      data.message,
-    ];
-    const message =
-      messageCandidates.find((candidate) => typeof candidate === "string") ||
-      "A new update is ready to install.";
-
-    return {
-      message,
-      createdAt: typeof data.createdAt === "string" ? data.createdAt : undefined,
-      runtimeVersion:
-        typeof data.runtimeVersion === "string" ? data.runtimeVersion : undefined,
-    };
-  }, []);
+  const extractUpdatePrompt = useCallback(
+    (manifest: unknown): UpdatePrompt => resolveUpdateInfo(manifest, CURRENT_APP_VERSION),
+    []
+  );
 
   const formatDateTime = useCallback((iso?: string) => {
     if (!iso) return "Unknown";
@@ -221,7 +212,7 @@ const AppContent: React.FC = () => {
     const checkReleaseNotesPrompt = async () => {
       const justInstalledOta = await consumeOtaUpdateInstalled();
       if (justInstalledOta) {
-        // OTA update was just applied — the update modal already showed
+        // OTA update was just applied - the update modal already showed
         // the release notes, so mark as seen and skip the prompt.
         await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
         return;
@@ -265,7 +256,7 @@ const AppContent: React.FC = () => {
         if (__DEV__) console.warn("Navigation to Profile failed:", e);
       }
     } else if (__DEV__) {
-      console.warn("Navigation not ready — could not open release notes");
+      console.warn("Navigation not ready - could not open release notes");
     }
   }, [navigationRef]);
 
@@ -283,7 +274,7 @@ const AppContent: React.FC = () => {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
 
-  const isSynthwave = themeId === "synthwave";
+  const isSynthwave = themeId === "synthwave" && backgroundEffectsEnabled;
 
   /** Show main app navigation */
   return (
@@ -307,11 +298,36 @@ const AppContent: React.FC = () => {
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              {pendingUpdate?.message ?? "A new update is ready to install."}
-            </Text>
+            {pendingUpdate?.appVersion ? (
+              <View style={[styles.updateVersionBadge, { backgroundColor: colors.accent }]}> 
+                <Text style={[styles.updateVersionText, { color: colors.white }]}>
+                  v{pendingUpdate.appVersion}
+                </Text>
+              </View>
+            ) : null}
+            {pendingUpdate?.releaseNote ? (
+              <>
+                <Text style={[styles.updateReleaseTitle, { color: colors.accent }]}> 
+                  {pendingUpdate.releaseNote.title}
+                </Text>
+                {pendingUpdate.releaseNote.highlights.slice(0, 4).map((line, i) => (
+                  <Text key={`${pendingUpdate.releaseNote?.version}-${i}`} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                    {"\u2022"} {line}
+                  </Text>
+                ))}
+                {pendingUpdate.releaseNote.highlights.length > 4 ? (
+                  <Text style={[styles.dialogBullet, { color: colors.textMuted }]}> 
+                    +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={[styles.dialogMessage, { color: colors.textDim }]}> 
+                {pendingUpdate?.message ?? "A new update is ready to install."}
+              </Text>
+            )}
             {pendingUpdate?.createdAt && (
-              <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+              <Text style={[styles.updateMeta, { color: colors.textMuted }]}> 
                 Published {formatDateTime(pendingUpdate.createdAt)}
               </Text>
             )}
@@ -384,19 +400,27 @@ export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <DensityProvider>
-            <CurrencyProvider>
-              <CoachmarksProvider>
-                <CoachmarkAnchorProvider>
-                  <AchievementsProvider>
-                    <AppContent />
-                  </AchievementsProvider>
-                </CoachmarkAnchorProvider>
-              </CoachmarksProvider>
-            </CurrencyProvider>
-          </DensityProvider>
-        </ThemeProvider>
+        <BackgroundEffectsProvider>
+          <SurfaceStyleProvider>
+            <ThemeProvider>
+              <DensityProvider>
+                <CurrencyProvider>
+                  <CoachmarksProvider>
+                    <CoachmarkAnchorProvider>
+                      <AchievementsProvider>
+                        <CustomCategoriesProvider>
+                          <UndoProvider>
+                            <AppContent />
+                          </UndoProvider>
+                        </CustomCategoriesProvider>
+                      </AchievementsProvider>
+                    </CoachmarkAnchorProvider>
+                  </CoachmarksProvider>
+                </CurrencyProvider>
+              </DensityProvider>
+            </ThemeProvider>
+          </SurfaceStyleProvider>
+        </BackgroundEffectsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -444,6 +468,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
+    marginBottom: 8,
+  },
+  updateVersionBadge: {
+    alignSelf: "center",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  updateVersionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  updateReleaseTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  updateMeta: {
+    fontSize: 11,
+    textAlign: "center",
+    marginTop: 8,
     marginBottom: 8,
   },
   dialogActions: {

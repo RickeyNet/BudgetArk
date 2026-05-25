@@ -25,6 +25,7 @@ import {
   StyleSheet,
   ScrollView,
   Modal,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -51,7 +52,12 @@ import {
   completeOnboarding,
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
-import { exportAllData } from "../utils/exportData";
+import { buildExportMessage, shareExportMessage } from "../utils/exportData";
+import { recordExport } from "../storage/achievementStatsStorage";
+import { useAchievements } from "../achievements/AchievementsProvider";
+import AchievementsScreen from "./AchievementsScreen";
+import ManageCategoriesModal from "../components/ManageCategoriesModal";
+import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { importData, importFromString, isEncryptedExport, type ImportResult } from "../utils/importData";
 import {
   exportSpreadsheet,
@@ -71,6 +77,8 @@ import {
   type BackupReminderState,
 } from "../storage/backupReminderStorage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useBackgroundEffects } from "../theme/BackgroundEffectsProvider";
+import { useSurfaceStyle } from "../theme/SurfaceStyleProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
@@ -80,6 +88,7 @@ import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
+import { resolveUpdateInfo, findReleaseNoteForVersion } from "../utils/updateReleaseNotes";
 import { getPrivacyMode, setPrivacyMode } from "../storage/privacyStorage";
 import {
   getPairingState,
@@ -114,36 +123,33 @@ type ReleaseNoteKey = string;
 
 import { sanitizeTextInput } from "../utils/sanitize";
 
-const SEMVER_REGEX = /\b\d+\.\d+\.\d+\b/;
-
-const normalizeVersionString = (value: unknown): string | undefined => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const directMatch = trimmed.match(/^v?(\d+\.\d+\.\d+)$/i);
-  if (directMatch) return directMatch[1];
-  const semverMatch = trimmed.match(SEMVER_REGEX);
-  return semverMatch?.[0];
-};
-
-const findReleaseNoteForVersion = (version?: string): ReleaseNote | undefined => {
-  const normalizedVersion = normalizeVersionString(version);
-  return normalizedVersion
-    ? RELEASE_NOTES.find((release) => release.version === normalizedVersion)
-    : undefined;
-};
-
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
 
   /** Current theme context */
-  const { colors, presets, themeId, setThemeId } = useTheme();
+  const {
+    colors,
+    presets,
+    themeId,
+    surfaceStyleId,
+    showAmbientBackground,
+    setThemeId,
+  } = useTheme();
+  const { backgroundEffectsEnabled, setBackgroundEffectsEnabled } = useBackgroundEffects();
+  const {
+    surfaceStyleId: storedSurfaceStyleId,
+    presets: surfaceStylePresets,
+    setSurfaceStyleId,
+  } = useSurfaceStyle();
   const {
     densityId,
     tokens,
     presets: densityPresets,
     setDensityId,
+    textSizeId,
+    textSizePresets,
+    setTextSizeId,
   } = useDensity();
   const coachmark = useTabCoachmark("Profile");
   const { replay: replayCoachmarks, startGuidedTour } = useCoachmarks();
@@ -157,6 +163,20 @@ const ProfileScreen: React.FC = () => {
     setPreferenceId,
   } = useCurrency();
 
+  const {
+    unlocked: achievementUnlocked,
+    totalCount: totalAchievements,
+    runCheck: refreshAchievements,
+  } = useAchievements();
+
+  /** Whether the Ship's Log (achievements) screen is visible */
+  const [showAchievements, setShowAchievements] = useState(false);
+
+  const { customCategories, refresh: refreshCustomCategories } =
+    useCustomCategories();
+  /** Whether the manage-custom-categories modal is visible */
+  const [showManageCategories, setShowManageCategories] = useState(false);
+
   /** Current user account state */
   const [user, setUser] = useState<UserAccount | null>(null);
 
@@ -168,7 +188,9 @@ const ProfileScreen: React.FC = () => {
 
   /** Whether theme selector modal is visible */
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showSurfaceStyleModal, setShowSurfaceStyleModal] = useState(false);
   const [showDensityModal, setShowDensityModal] = useState(false);
+  const [showTextSizeModal, setShowTextSizeModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
 
   /** Whether the paste-import modal is visible */
@@ -181,6 +203,15 @@ const ProfileScreen: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportEncrypt, setExportEncrypt] = useState(true);
   const [exportPassword, setExportPassword] = useState("");
+  /**
+   * True while an export is generating/sharing. Drives a blocking spinner
+   * overlay. Encrypted export runs 250k PBKDF2 rounds in pure JS on the JS
+   * thread, freezing the UI for several seconds on real devices; without
+   * feedback the app looks hung, users walk away, and the phone auto-locks
+   * mid-export. The ActivityIndicator animates on the native thread so it
+   * keeps spinning even while JS is blocked.
+   */
+  const [isExporting, setIsExporting] = useState(false);
 
   /** Import password modal state (for encrypted exports) */
   const [showImportPasswordModal, setShowImportPasswordModal] = useState(false);
@@ -323,11 +354,29 @@ const ProfileScreen: React.FC = () => {
     [setThemeId]
   );
 
+  const handleSurfaceStyleSelect = useCallback(
+    async (id: "solid" | "glass") => {
+      await setSurfaceStyleId(id);
+    },
+    [setSurfaceStyleId]
+  );
+
+  const handleToggleBackgroundEffects = useCallback(async () => {
+    await setBackgroundEffectsEnabled(!backgroundEffectsEnabled);
+  }, [backgroundEffectsEnabled, setBackgroundEffectsEnabled]);
+
   const handleDensitySelect = useCallback(
     async (id: string) => {
       await setDensityId(id);
     },
     [setDensityId]
+  );
+
+  const handleTextSizeSelect = useCallback(
+    async (id: string) => {
+      await setTextSizeId(id);
+    },
+    [setTextSizeId]
   );
 
   const handleCurrencySelect = useCallback(
@@ -348,53 +397,18 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   const extractUpdateMetadata = useCallback((manifest: unknown): UpdateMetadata => {
-    const data = (manifest != null && typeof manifest === "object" ? manifest : {}) as Record<string, unknown>;
-    const metadata = (data.metadata != null && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown>;
-    const extras = (data.extra != null && typeof data.extra === "object" ? data.extra : {}) as Record<string, unknown>;
-    const eas = (extras.eas != null && typeof extras.eas === "object" ? extras.eas : {}) as Record<string, unknown>;
-    const expoClient = (extras.expoClient != null && typeof extras.expoClient === "object" ? extras.expoClient : {}) as Record<string, unknown>;
-
-    const id = typeof data.id === "string" ? data.id : "unknown";
-    const createdAt = typeof data.createdAt === "string" ? data.createdAt : undefined;
-    const runtimeVersion =
-      typeof data.runtimeVersion === "string" ? data.runtimeVersion : undefined;
-
-    const messageCandidates = [
-      metadata.message,
-      metadata.updateMessage,
-      eas.message,
-      data.description,
-      data.message,
-    ];
-    const rawMessage =
-      messageCandidates.find((candidate) => typeof candidate === "string") ||
-      "A new update is ready to install.";
-    const messageVersion = normalizeVersionString(rawMessage);
-
-    // Prefer update-specific version metadata over installed binary version.
-    const versionCandidates = [
-      metadata.appVersion,
-      metadata.version,
-      eas.appVersion,
-      data.version,
-      extras.version,
-      rawMessage,
-      expoClient.version,
-    ];
-    const appVersion = versionCandidates
-      .map((candidate) => normalizeVersionString(candidate))
-      .find((candidate) => !!candidate);
-
-    const matchedRelease =
-      findReleaseNoteForVersion(appVersion) || findReleaseNoteForVersion(messageVersion);
-    const message = matchedRelease?.title || rawMessage;
+    const data =
+      manifest != null && typeof manifest === "object"
+        ? (manifest as Record<string, unknown>)
+        : {};
+    const resolved = resolveUpdateInfo(manifest, CURRENT_APP_VERSION);
 
     return {
-      id,
-      createdAt,
-      runtimeVersion,
-      message,
-      appVersion: matchedRelease?.version || appVersion,
+      id: typeof data.id === "string" ? data.id : "unknown",
+      createdAt: resolved.createdAt,
+      runtimeVersion: resolved.runtimeVersion,
+      message: resolved.message,
+      appVersion: resolved.appVersion,
     };
   }, []);
 
@@ -631,7 +645,7 @@ const ProfileScreen: React.FC = () => {
     } catch (err) {
       // `clearAllData` throws `ResetIncompleteError` when a non-atomic
       // multi-key clear leaves some keys behind. Surface that to the user
-      // instead of pretending the reset succeeded — the leftover keys could
+      // instead of pretending the reset succeeded - the leftover keys could
       // make the next session look corrupt or partially-onboarded.
       const message =
         err instanceof Error && err.message
@@ -671,19 +685,55 @@ const ProfileScreen: React.FC = () => {
       return;
     }
     setShowExportModal(false);
+    let exported = false;
     try {
-      await exportAllData(exportEncrypt ? exportPassword : undefined);
+      let message: string;
+      if (exportEncrypt) {
+        // PBKDF2 freezes the JS thread for ~200ms+; the native ActivityIndicator
+        // keeps spinning so the user sees we're working. Yield a frame so the
+        // overlay actually mounts before the freeze begins.
+        setIsExporting(true);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        message = await buildExportMessage(exportPassword);
+        // Dismiss the overlay *before* opening the share sheet. On iOS,
+        // UIActivityViewController presented over a still-visible RN <Modal>
+        // can fail to fire its completion callback, leaving Share.share
+        // pending forever - which is what stranded users on the spinner.
+        setIsExporting(false);
+        if (Platform.OS === "ios") {
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+      } else {
+        // Unencrypted gather is fast (no PBKDF2); skip the overlay entirely
+        // so there's nothing blocking the share sheet's presentation.
+        message = await buildExportMessage();
+      }
+      await shareExportMessage(message);
       triggerHaptic("success");
       await refreshBackupState();
+      await recordExport();
+      exported = true;
     } catch (error: any) {
       triggerHaptic("error");
       setInfoModal({
         title: "Export Failed",
         message: error?.message || "Something went wrong while exporting your data.",
       });
+    } finally {
+      setIsExporting(false);
     }
     setExportPassword("");
-  }, [exportEncrypt, exportPassword, refreshBackupState]);
+    if (exported) {
+      // Defer the achievement check until the spinner overlay AND the OS
+      // share sheet have fully dismissed. The unlock celebration is a RN
+      // <Modal>; asking it to present while another modal/share sheet is
+      // still transitioning fails silently on iOS - which is why the
+      // Cartographer badge "never showed up" after exporting.
+      setTimeout(() => {
+        void refreshAchievements();
+      }, 500);
+    }
+  }, [exportEncrypt, exportPassword, refreshBackupState, refreshAchievements]);
 
   /**
    * First step: show a themed modal to choose import source.
@@ -721,6 +771,7 @@ const ProfileScreen: React.FC = () => {
       if (result.savingsGoals > 0) parts.push(`${result.savingsGoals} savings goals`);
       if (result.assetAccounts > 0) parts.push(`${result.assetAccounts} asset accounts`);
       if (result.netWorthSnapshots > 0) parts.push(`${result.netWorthSnapshots} net worth snapshots`);
+      if (result.customCategories > 0) parts.push(`${result.customCategories} custom categories`);
       const extras: string[] = [];
       if (result.debtMilestones) extras.push("milestone plan");
       if (result.payoffStrategy) extras.push("payoff strategy");
@@ -731,6 +782,7 @@ const ProfileScreen: React.FC = () => {
       if (result.staleDays !== undefined && result.staleDays > 30) {
         message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
       }
+      void refreshCustomCategories();
       triggerHaptic("success");
       setInfoModal({
         title: "Import Complete",
@@ -752,7 +804,7 @@ const ProfileScreen: React.FC = () => {
         });
       }
     }
-  }, []);
+  }, [refreshCustomCategories]);
 
   const confirmImportPassword = useCallback(() => {
     if (!pendingImportAction) return;
@@ -787,6 +839,9 @@ const ProfileScreen: React.FC = () => {
   const confirmSpreadsheetExport = useCallback(
     async (format: SpreadsheetFormat) => {
       setShowSpreadsheetExportModal(false);
+      setIsExporting(true);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      let exported = false;
       try {
         const result = await exportSpreadsheet(format);
         const formatLabel = format === "csv" ? "CSV" : "Excel";
@@ -800,6 +855,8 @@ const ProfileScreen: React.FC = () => {
           message: note,
         });
         await refreshBackupState();
+        await recordExport();
+        exported = true;
       } catch (error: any) {
         triggerHaptic("error");
         setInfoModal({
@@ -808,9 +865,18 @@ const ProfileScreen: React.FC = () => {
             error?.message ||
             "Something went wrong while exporting the spreadsheet.",
         });
+      } finally {
+        setIsExporting(false);
+      }
+      if (exported) {
+        // Same deferral as JSON export - let the spinner + share sheet
+        // dismiss so the achievement <Modal> can actually present.
+        setTimeout(() => {
+          void refreshAchievements();
+        }, 500);
       }
     },
-    [refreshBackupState]
+    [refreshBackupState, refreshAchievements]
   );
 
   /**
@@ -886,7 +952,7 @@ const ProfileScreen: React.FC = () => {
 
   if (!user) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", alignItems: "center" }}>
+      <View style={{ flex: 1, backgroundColor: showAmbientBackground ? "transparent" : colors.bg, justifyContent: "center", alignItems: "center" }}>
         <Text style={{ color: colors.textDim, fontSize: 14 }}>Loading profile...</Text>
       </View>
     );
@@ -894,14 +960,16 @@ const ProfileScreen: React.FC = () => {
 
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
+  const currentSurfaceStyle = surfaceStylePresets.find((p) => p.id === surfaceStyleId);
   const currentDensity = densityPresets.find((p) => p.id === densityId);
+  const currentTextSize = textSizePresets.find((p) => p.id === textSizeId);
   const latestRelease: ReleaseNote = RELEASE_NOTES[0];
 
   return (
     <>
       <ScrollView
         ref={scrollRef}
-        style={[styles.screen, { backgroundColor: colors.bg }]}
+        style={[styles.screen, { backgroundColor: showAmbientBackground ? "transparent" : colors.bg }]}
         contentContainerStyle={styles.content}
       >
         {/* ── Backup reminder banner ── */}
@@ -1055,6 +1123,41 @@ const ProfileScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.groupedRow}
+              onPress={() => setShowSurfaceStyleModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Design Style</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {currentSurfaceStyle?.name || "Solid"}
+                  {storedSurfaceStyleId == null && themeId === "deep_space" ? " · theme default" : ""}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleToggleBackgroundEffects}
+            >
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>Ambient Backgrounds</Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {backgroundEffectsEnabled
+                    ? "Decorative themed backgrounds are enabled"
+                    : "Plain backgrounds for reduced visual noise"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: backgroundEffectsEnabled ? colors.accent : colors.textDim }]}>
+                {backgroundEffectsEnabled ? "On" : "Off"}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
               onPress={() => setShowDensityModal(true)}
             >
               <View>
@@ -1063,6 +1166,26 @@ const ProfileScreen: React.FC = () => {
                 </Text>
                 <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
                   {currentDensity?.name || "Comfortable"}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowTextSizeModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Text Size, currently ${currentTextSize?.name || "Default"}`}
+              accessibilityHint="Opens text size options for the whole app"
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Text Size
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {currentTextSize?.name || "Default"}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
@@ -1151,6 +1274,66 @@ const ProfileScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           )}
+        </View>
+
+        {/* ── Progress (Ship's Log achievements) ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            PROGRESS
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                triggerHaptic("selection");
+                setShowAchievements(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open Ship's Log achievements"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Ship's Log
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {`${Object.keys(achievementUnlocked).length}/${totalAchievements} achievements earned`}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Categories ── */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+            CATEGORIES
+          </Text>
+
+          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                triggerHaptic("selection");
+                setShowManageCategories(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Manage custom categories"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Custom Categories
+                </Text>
+                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  {customCategories.length === 0
+                    ? "Add your own budget categories"
+                    : `${customCategories.length} custom`}
+                </Text>
+              </View>
+              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ── Data (Export, Import, Reset) ── */}
@@ -1508,6 +1691,76 @@ const ProfileScreen: React.FC = () => {
         </View>
       </Modal>
 
+      {/* ── Design Style Selection Modal ── */}
+      <Modal
+        visible={showSurfaceStyleModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSurfaceStyleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Design Style</Text>
+            {storedSurfaceStyleId == null && themeId === "deep_space" ? (
+              <Text style={[styles.settingsRowSubtext, { color: colors.textDim, marginBottom: 12 }]}>
+                Deep Space currently defaults to Glass. Pick a style here to keep it across all themes.
+              </Text>
+            ) : null}
+
+            <ScrollView style={styles.themeList}>
+              {surfaceStylePresets.map((preset) => {
+                const selected = surfaceStyleId === preset.id;
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        backgroundColor: colors.bg,
+                      },
+                    ]}
+                    onPress={() => handleSurfaceStyleSelect(preset.id)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                        {preset.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsRowSubtext,
+                          { color: colors.textDim, marginTop: 4 },
+                        ]}
+                      >
+                        {preset.description}
+                      </Text>
+                    </View>
+
+                    {selected && (
+                      <View style={[styles.checkMark, { backgroundColor: colors.accent }]}>
+                        <Text style={[styles.checkMarkText, { color: colors.white }]}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowSurfaceStyleModal(false)}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Density Selection Modal ── */}
       <Modal
         visible={showDensityModal}
@@ -1580,6 +1833,94 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity
               style={[styles.closeBtn, { backgroundColor: colors.accent }]}
               onPress={() => setShowDensityModal(false)}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Text Size Selection Modal ── */}
+      <Modal
+        visible={showTextSizeModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowTextSizeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Text Size
+            </Text>
+
+            <ScrollView style={styles.themeList}>
+              {textSizePresets.map((preset) => {
+                const selected = textSizeId === preset.id;
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        backgroundColor: colors.bg,
+                      },
+                    ]}
+                    onPress={() => handleTextSizeSelect(preset.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${preset.name}. ${preset.description}`}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.themeOptionText,
+                          {
+                            color: colors.text,
+                            // Preview the size right in its own row.
+                            fontSize: Math.round(16 * preset.multiplier),
+                          },
+                        ]}
+                      >
+                        {preset.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsRowSubtext,
+                          { color: colors.textDim, marginTop: 4 },
+                        ]}
+                      >
+                        {preset.description}
+                      </Text>
+                    </View>
+
+                    {selected && (
+                      <View
+                        style={[
+                          styles.checkMark,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      >
+                        <Text style={[styles.checkMarkText, { color: colors.white }]}>
+                          ✓
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
+              onPress={() => setShowTextSizeModal(false)}
             >
               <Text style={[styles.closeBtnText, { color: colors.white }]}>
                 Done
@@ -1794,6 +2135,54 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Exporting Spinner Overlay ──
+          Blocking, non-dismissable. The native ActivityIndicator keeps
+          animating on the UI thread even while the JS thread is frozen by
+          the synchronous PBKDF2 key derivation, so the user sees clear
+          "working" feedback instead of a dead screen. */}
+      <Modal visible={isExporting} animationType="fade" transparent>
+        <View
+          style={[
+            styles.modalOverlay,
+            { alignItems: "center", justifyContent: "center" },
+          ]}
+        >
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.cardBorder,
+              borderWidth: 1,
+              borderRadius: 16,
+              paddingVertical: 28,
+              paddingHorizontal: 36,
+              alignItems: "center",
+            }}
+          >
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 15,
+                fontWeight: "600",
+                marginTop: 16,
+              }}
+            >
+              Preparing your export…
+            </Text>
+            <Text
+              style={{
+                color: colors.textDim,
+                fontSize: 12,
+                marginTop: 6,
+                textAlign: "center",
+              }}
+            >
+              Encrypting can take a few seconds. Keep the app open.
+            </Text>
           </View>
         </View>
       </Modal>
@@ -2502,6 +2891,17 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Ship's Log (achievements) ── */}
+      <AchievementsScreen
+        visible={showAchievements}
+        onClose={() => setShowAchievements(false)}
+      />
+
+      <ManageCategoriesModal
+        visible={showManageCategories}
+        onClose={() => setShowManageCategories(false)}
+      />
       {coachmark}
     </>
   );

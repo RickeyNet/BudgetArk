@@ -283,7 +283,7 @@ const withScreenGuardXcode = (config) => {
 };
 
 /**
- * Main plugin — composes the file-writing and Xcode-project steps.
+ * Main plugin - composes the file-writing and Xcode-project steps.
  */
 const withScreenGuard = (config) => {
   config = withScreenGuardFiles(config);

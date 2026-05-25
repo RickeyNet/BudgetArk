@@ -4,6 +4,7 @@ import {
   filterLive,
   purgeExpiredTombstones,
   tombstone,
+  untombstone,
 } from "./tombstones";
 
 const STORAGE_KEY = "@budgetark_savings_goals";
@@ -77,6 +78,21 @@ export const deleteSavingsGoal = async (goalId: string): Promise<SavingsGoal[]> 
   const now = new Date().toISOString();
   const next = goals.map((goal) =>
     goal.id === goalId ? tombstone(goal, now) : goal
+  );
+  await saveSavingsGoals(next);
+  return filterLive(next);
+};
+
+/**
+ * Undo a soft-deleted savings goal. No-op if id isn't a tombstone.
+ */
+export const restoreSavingsGoal = async (
+  goalId: string
+): Promise<SavingsGoal[]> => {
+  const goals = await getSavingsGoalsIncludingDeleted();
+  const now = new Date().toISOString();
+  const next = goals.map((goal) =>
+    goal.id === goalId && goal.deletedAt ? untombstone(goal, now) : goal
   );
   await saveSavingsGoals(next);
   return filterLive(next);

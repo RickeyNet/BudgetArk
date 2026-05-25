@@ -113,7 +113,7 @@ export interface Payment {
   /** ISO timestamp of when this payment was last modified */
   updatedAt: string;
 
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 
@@ -145,12 +145,57 @@ export const BUDGET_CATEGORIES = [
 
 export type BudgetCategory = (typeof BUDGET_CATEGORIES)[number];
 
+/**
+ * A category an entry/limit can reference. Built-in names keep editor
+ * autocomplete; the `string & {}` arm lets user-defined custom category
+ * names flow through without an `as` cast at every assignment. Runtime
+ * lookups against built-in-keyed maps must fall back (see `categoryIcons`).
+ */
+export type CategoryName = BudgetCategory | (string & {});
+
+/**
+ * A user-defined budget category. Built-in categories stay fixed; these are
+ * additive only (v1). `icon` is a single emoji glyph. Not tombstoned -
+ * deleting just drops it from the list; any entries already tagged with the
+ * name keep working and fall back to the default icon/color.
+ */
+export interface CustomCategory {
+  id: string;
+  name: string;
+  /** Single emoji glyph shown beside the category. */
+  icon: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const CUSTOM_CATEGORY_STORAGE_VERSION = 1;
+
 export type BudgetEntryType = "income" | "expense";
+
+/** Months between repeats for a recurring budget entry. */
+export type RecurrenceInterval = 1 | 3 | 6 | 12;
+
+export const RECURRENCE_INTERVAL_OPTIONS: ReadonlyArray<{
+  value: RecurrenceInterval;
+  label: string;
+  /** Short tag shown on entry rows (e.g. "Monthly", "Quarterly"). */
+  tag: string;
+}> = [
+  { value: 1, label: "Monthly", tag: "Monthly" },
+  { value: 3, label: "Quarterly", tag: "Quarterly" },
+  { value: 6, label: "Every 6 months", tag: "6 mo" },
+  { value: 12, label: "Yearly", tag: "Yearly" },
+];
+
+export const DEFAULT_RECURRENCE_INTERVAL: RecurrenceInterval = 1;
+
+/** Max stored length for `BudgetEntry.paymentUrl`. */
+export const PAYMENT_URL_MAX_LENGTH = 512;
 
 export interface BudgetEntry {
   id: string;
   type: BudgetEntryType;
-  category: BudgetCategory;
+  category: CategoryName;
   amount: number;
   /** Optional user-provided note describing the entry */
   description?: string;
@@ -158,20 +203,33 @@ export interface BudgetEntry {
   createdAt: string;
   /** ISO timestamp of when this entry was last modified */
   updatedAt: string;
-  /** When true, this entry repeats every month from its `date` month onward */
+  /** When true, this entry repeats from its `date` month onward at `recurrenceInterval` months. */
   recurring?: boolean;
+  /**
+   * Months between repeats when `recurring` is true. Allowed: 1 (monthly), 3
+   * (quarterly), 6 (semiannual), 12 (yearly). Defaults to 1 when omitted so
+   * pre-existing recurring entries keep their monthly cadence on read.
+   */
+  recurrenceInterval?: RecurrenceInterval;
+  /**
+   * Optional payment URL for recurring expenses that are paid online (electric
+   * bill portal, trash pickup billing site, etc.). Validated to http(s):// only
+   * at write time; missing scheme is normalized to https://. Capped at
+   * `PAYMENT_URL_MAX_LENGTH` chars and stripped of control chars.
+   */
+  paymentUrl?: string;
   /** Asset account ID this savings entry contributes to */
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
   lastAppliedMonth?: string;
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 
 export type NewBudgetEntryInput = Omit<BudgetEntry, "id" | "createdAt" | "updatedAt">;
 
 export interface CategoryBudgetLimit {
-  category: BudgetCategory;
+  category: CategoryName;
   monthlyLimit: number;
   /**
    * Last-write-wins timestamp for sync conflict resolution. Limits saved
@@ -200,13 +258,14 @@ export interface SavingsGoal {
   targetDate?: string;
   createdAt: string;
   updatedAt: string;
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 
 /* ─── Asset Account Types ─── */
 
 export const ASSET_ACCOUNT_CATEGORIES = [
+  "checking",
   "savings",
   "retirement",
   "hsa",
@@ -217,6 +276,7 @@ export const ASSET_ACCOUNT_CATEGORIES = [
 export type AssetAccountCategory = (typeof ASSET_ACCOUNT_CATEGORIES)[number];
 
 export const ASSET_ACCOUNT_CATEGORY_LABELS: Record<AssetAccountCategory, string> = {
+  checking: "Checking",
   savings: "Savings",
   retirement: "401k / Retirement",
   hsa: "HSA",
@@ -231,7 +291,7 @@ export interface AssetAccount {
   balance: number;
   createdAt: string;
   updatedAt: string;
-  /** Tombstone marker — see Debt.deletedAt. */
+  /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
 
@@ -420,6 +480,28 @@ export interface UnlockedAchievements {
 }
 
 export const ACHIEVEMENTS_STORAGE_VERSION = 1;
+
+/**
+ * Counters that back achievements which can't be derived from the user's
+ * financial data alone (export taps, Monthly Review opens, app-open streak).
+ * Kept separate from `UnlockedAchievements` so the unlock map stays a pure
+ * id → timestamp record.
+ */
+export interface AchievementStats {
+  /** Times the user has exported their data (JSON or spreadsheet). */
+  exportCount: number;
+  /** Times the user has opened the Monthly Review. */
+  monthlyReviewOpens: number;
+  /** Current consecutive-day app-open streak. */
+  appOpenStreak: number;
+  /** Best app-open streak ever reached (badges check this). */
+  longestAppOpenStreak: number;
+  /** YYYY-MM-DD of the last day the app was opened, or null on first run. */
+  lastAppOpenDay: string | null;
+  version: number;
+}
+
+export const ACHIEVEMENT_STATS_VERSION = 1;
 
 /* ─── Navigation Types ─── */
 

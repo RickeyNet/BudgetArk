@@ -24,11 +24,12 @@ import { getSavingsGoalsIncludingDeleted } from "../storage/savingsGoalStorage";
 import { getAssetAccountsIncludingDeleted } from "../storage/assetAccountStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
+import { getCustomCategories } from "../storage/customCategoriesStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
 /**
- * Legacy v1 prefix — `CryptoJS.AES.encrypt(json, password).toString()` with
+ * Legacy v1 prefix - `CryptoJS.AES.encrypt(json, password).toString()` with
  * the default OpenSSL EVP_BytesToKey KDF (single-round MD5). Brute-forceable
  * offline in seconds for short passwords. Still readable on import for users
  * with old backups, but the export path now produces v2 only.
@@ -43,7 +44,7 @@ export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
  * even for the same password). IV: 16 random bytes (AES-256-CBC needs a
  * fresh IV per ciphertext or two exports with the same password leak the
  * XOR of their first plaintext blocks). KDF: PBKDF2-SHA256 with 250k
- * iterations — slow enough that a 4-char password takes hours instead of
+ * iterations - slow enough that a 4-char password takes hours instead of
  * seconds to brute-force, while still keeping a single export decrypt
  * under ~200ms on a low-end device.
  */
@@ -55,13 +56,14 @@ const SALT_BYTES = 16;
 const IV_BYTES = 16;
 
 /**
- * Gathers all app data into a single object and opens
- * the native share sheet so the user can copy, save, or send it.
- *
- * @param password - if provided, the export is AES-encrypted with this password
- * @returns Promise<void>
+ * Builds the export message string (plain JSON or v2-encrypted envelope).
+ * Split out from `exportAllData` so the UI can dismiss any "preparing"
+ * spinner before opening the share sheet — on iOS, presenting
+ * UIActivityViewController over a still-visible RN <Modal> leaves the
+ * share sheet's completion callback un-fired, so `Share.share` never
+ * resolves and the spinner spins forever.
  */
-export const exportAllData = async (password?: string): Promise<void> => {
+export const buildExportMessage = async (password?: string): Promise<string> => {
   // Collect all data in parallel
   const [
     debts,
@@ -75,6 +77,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
     debtMilestones,
     payoffStrategyEnvelope,
     netWorthSnapshots,
+    customCategories,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
     // restore on this device, or another paired device, doesn't accidentally
@@ -96,6 +99,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
     // ping-pong we fixed for sync; export-then-import was opening it back up.
     getPayoffStrategyEnvelope(),
     getNetWorthSnapshots(),
+    getCustomCategories(),
   ]);
 
   const exportPayload = {
@@ -122,6 +126,7 @@ export const exportAllData = async (password?: string): Promise<void> => {
     payoffStrategy: payoffStrategyEnvelope?.value,
     payoffStrategyUpdatedAt: payoffStrategyEnvelope?.updatedAt,
     netWorthSnapshots,
+    customCategories,
   };
 
   const json = JSON.stringify(exportPayload, null, 2);
@@ -152,6 +157,15 @@ export const exportAllData = async (password?: string): Promise<void> => {
     message = json;
   }
 
+  return message;
+};
+
+/**
+ * Opens the native share sheet with a pre-built message. Caller is
+ * responsible for dismissing any blocking modals first (see the note on
+ * `buildExportMessage` re: iOS share-sheet presentation).
+ */
+export const shareExportMessage = async (message: string): Promise<void> => {
   const result = await Share.share({
     title: "BudgetArk Data Export",
     message,
@@ -162,4 +176,14 @@ export const exportAllData = async (password?: string): Promise<void> => {
   if (result.action === Share.sharedAction) {
     await recordBackup(CURRENT_APP_VERSION);
   }
+};
+
+/**
+ * Convenience wrapper that builds the export and shares it back-to-back.
+ * Prefer calling `buildExportMessage` + `shareExportMessage` directly when
+ * a UI spinner needs to be dismissed between the two steps.
+ */
+export const exportAllData = async (password?: string): Promise<void> => {
+  const message = await buildExportMessage(password);
+  await shareExportMessage(message);
 };

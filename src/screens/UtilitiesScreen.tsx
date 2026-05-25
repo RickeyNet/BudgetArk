@@ -7,7 +7,7 @@
  * S&P 500 educational context and return rate presets.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
@@ -20,6 +20,8 @@ import {
   UIManager,
   View,
 } from "react-native";
+import * as Sharing from "expo-sharing";
+import { File as ExpoFile, Paths } from "expo-file-system";
 import { useFocusEffect } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useTheme } from "../theme/ThemeProvider";
@@ -28,11 +30,16 @@ import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
-import { calcInvestmentTimeline, calcPaymentForGoalDate } from "../utils/calculations";
+import {
+  calcInvestmentTimeline,
+  calcPaymentForGoalDate,
+  generatePayoffSchedule,
+} from "../utils/calculations";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
-import type { BudgetEntry, SavingsGoal } from "../types";
+import type { BudgetEntry } from "../types";
+import { isEntryActiveInMonth } from "../utils/recurrence";
 import SmoothSlider from "../components/SmoothSlider";
 
 /* Enable LayoutAnimation on Android */
@@ -66,6 +73,46 @@ const LOAN_SLIDERS: Record<"loanAmount" | "loanRate" | "loanTerm", SliderConfig>
 };
 
 const LOAN_TERM_PRESETS = [15, 20, 30] as const;
+const LOAN_SCHEDULE_PAGE_SIZE = 12;
+
+type LoanScheduleRow = {
+  month: number;
+  balance: number;
+  interestPaid: number;
+  principalPaid: number;
+};
+
+const csvEscape = (value: string | number): string => {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+const buildLoanScheduleCsv = (
+  schedule: ReadonlyArray<LoanScheduleRow>
+): string => {
+  const lines = [
+    ["Year", "Month", "Payment", "Principal", "Interest", "RemainingBalance"].join(","),
+    ...schedule.map((row) =>
+      [
+        Math.ceil(row.month / 12),
+        row.month,
+        (row.principalPaid + row.interestPaid).toFixed(2),
+        row.principalPaid.toFixed(2),
+        row.interestPaid.toFixed(2),
+        row.balance.toFixed(2),
+      ]
+        .map(csvEscape)
+        .join(",")
+    ),
+  ];
+
+  return lines.join("\n");
+};
+
+const buildLoanScheduleFilename = (): string => {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `budgetark-amortization-${stamp}.csv`;
+};
 
 /* ── Emergency Fund Helpers ── */
 
@@ -85,25 +132,17 @@ const calcAvgMonthlyExpenses = (entries: BudgetEntry[]): number => {
     monthTotals[getMonthKey(d)] = 0;
   }
 
+  // A month with *any* entry (expense or income, recurring or not) is a
+  // month the user was actively tracking. We previously only counted
+  // months with expense > 0, which biased the average upward - a month
+  // where the user paid $0 in expenses but logged income still says "I
+  // was tracking, my expenses really were zero," and dropping it from
+  // the denominator made historical EF targets larger than necessary.
   for (const entry of entries) {
-    const entryMonthKey = getMonthKey(new Date(entry.date));
-
-    // A month with *any* entry (expense or income, recurring or not) is a
-    // month the user was actively tracking. We previously only counted
-    // months with expense > 0, which biased the average upward — a month
-    // where the user paid $0 in expenses but logged income still says "I
-    // was tracking, my expenses really were zero," and dropping it from
-    // the denominator made historical EF targets larger than necessary.
-    if (entry.recurring) {
-      for (const mk of Object.keys(monthTotals)) {
-        if (mk >= entryMonthKey) {
-          monthsTracked.add(mk);
-          if (entry.type === "expense") monthTotals[mk] += entry.amount;
-        }
-      }
-    } else if (entryMonthKey in monthTotals) {
-      monthsTracked.add(entryMonthKey);
-      if (entry.type === "expense") monthTotals[entryMonthKey] += entry.amount;
+    for (const mk of Object.keys(monthTotals)) {
+      if (!isEntryActiveInMonth(entry, mk)) continue;
+      monthsTracked.add(mk);
+      if (entry.type === "expense") monthTotals[mk] += entry.amount;
     }
   }
 
@@ -239,7 +278,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
 /* ── Main Screen ── */
 
 const UtilitiesScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Utilities");
@@ -263,6 +302,13 @@ const UtilitiesScreen: React.FC = () => {
   const [loanTerm, setLoanTerm] = useState(30);
   const [loanEditingKey, setLoanEditingKey] = useState<string | null>(null);
   const [loanEditingText, setLoanEditingText] = useState("");
+  const [loanYearlySummaryOpen, setLoanYearlySummaryOpen] = useState(true);
+  const [loanScheduleVisibleRows, setLoanScheduleVisibleRows] = useState(LOAN_SCHEDULE_PAGE_SIZE);
+  const [isLoanExporting, setIsLoanExporting] = useState(false);
+  const [loanExportMessage, setLoanExportMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   /* Emergency fund calculator state */
   const [efOpen, setEfOpen] = useState(false);
@@ -307,10 +353,74 @@ const UtilitiesScreen: React.FC = () => {
     () => calcPaymentForGoalDate(loanAmount, loanRate, loanTerm * 12),
     [loanAmount, loanRate, loanTerm]
   );
-  const loanTotalPaid = isFinite(loanMonthlyPayment)
-    ? loanMonthlyPayment * loanTerm * 12
-    : 0;
-  const loanTotalInterest = Math.max(0, loanTotalPaid - loanAmount);
+  const loanSchedule = useMemo<LoanScheduleRow[]>(
+    () =>
+      isFinite(loanMonthlyPayment)
+        ? generatePayoffSchedule(loanAmount, loanRate, loanMonthlyPayment)
+        : [],
+    [loanAmount, loanMonthlyPayment, loanRate]
+  );
+  const loanYearlySummary = useMemo(
+    () =>
+      Array.from({ length: Math.ceil(loanSchedule.length / 12) }, (_, index) => {
+        const start = index * 12;
+        const chunk = loanSchedule.slice(start, start + 12);
+        const payment = chunk.reduce(
+          (sum, row) => sum + row.principalPaid + row.interestPaid,
+          0
+        );
+        const principal = chunk.reduce((sum, row) => sum + row.principalPaid, 0);
+        const interest = chunk.reduce((sum, row) => sum + row.interestPaid, 0);
+        return {
+          year: index + 1,
+          payment,
+          principal,
+          interest,
+          endingBalance: chunk[chunk.length - 1]?.balance ?? 0,
+        };
+      }),
+    [loanSchedule]
+  );
+  const loanTotalPaid = useMemo(
+    () =>
+      loanSchedule.reduce(
+        (sum, row) => sum + row.principalPaid + row.interestPaid,
+        0
+      ),
+    [loanSchedule]
+  );
+  const loanTotalInterest = useMemo(
+    () => loanSchedule.reduce((sum, row) => sum + row.interestPaid, 0),
+    [loanSchedule]
+  );
+  const loanFirstFiveYearsMonths = Math.min(60, loanSchedule.length);
+  const loanInterestFirstFiveYears = useMemo(
+    () =>
+      loanSchedule
+        .slice(0, loanFirstFiveYearsMonths)
+        .reduce((sum, row) => sum + row.interestPaid, 0),
+    [loanFirstFiveYearsMonths, loanSchedule]
+  );
+  const loanPrincipalFirstFiveYears = useMemo(
+    () =>
+      loanSchedule
+        .slice(0, loanFirstFiveYearsMonths)
+        .reduce((sum, row) => sum + row.principalPaid, 0),
+    [loanFirstFiveYearsMonths, loanSchedule]
+  );
+  const loanInterestFirstFiveYearsShare =
+    loanTotalInterest > 0 ? loanInterestFirstFiveYears / loanTotalInterest : 0;
+  const visibleLoanSchedule = useMemo(
+    () => loanSchedule.slice(0, loanScheduleVisibleRows),
+    [loanSchedule, loanScheduleVisibleRows]
+  );
+  const hasMoreLoanScheduleRows = loanScheduleVisibleRows < loanSchedule.length;
+  const canCollapseLoanSchedule = loanSchedule.length > LOAN_SCHEDULE_PAGE_SIZE;
+
+  useEffect(() => {
+    setLoanScheduleVisibleRows(LOAN_SCHEDULE_PAGE_SIZE);
+    setLoanExportMessage(null);
+  }, [loanAmount, loanRate, loanTerm]);
 
   const adjustLoan = useCallback(
     (key: "loanAmount" | "loanRate" | "loanTerm", delta: number) => {
@@ -437,6 +547,55 @@ const UtilitiesScreen: React.FC = () => {
       </View>
     );
   };
+
+  const handleShowMoreLoanSchedule = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setLoanScheduleVisibleRows((prev) => Math.min(prev + LOAN_SCHEDULE_PAGE_SIZE, loanSchedule.length));
+  }, [loanSchedule.length]);
+
+  const handleShowLessLoanSchedule = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setLoanScheduleVisibleRows(LOAN_SCHEDULE_PAGE_SIZE);
+  }, []);
+
+  const toggleLoanYearlySummary = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setLoanYearlySummaryOpen((prev) => !prev);
+  }, []);
+
+  const handleExportLoanSchedule = useCallback(async () => {
+    if (loanSchedule.length === 0 || isLoanExporting) return;
+
+    try {
+      setIsLoanExporting(true);
+      setLoanExportMessage(null);
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        throw new Error("Sharing is not available on this device.");
+      }
+
+      const file = new ExpoFile(Paths.cache, buildLoanScheduleFilename());
+      file.create({ overwrite: true });
+      file.write(buildLoanScheduleCsv(loanSchedule), { encoding: "utf8" });
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType: "text/csv",
+        dialogTitle: "Export Amortization Schedule",
+        UTI: "public.comma-separated-values-text",
+      });
+
+      setLoanExportMessage({
+        type: "success",
+        text: "CSV export opened. Save or share it from the sheet.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Loan schedule export failed.";
+      setLoanExportMessage({ type: "error", text: message });
+    } finally {
+      setIsLoanExporting(false);
+    }
+  }, [isLoanExporting, loanSchedule]);
 
   /* ── Emergency fund logic ── */
 
@@ -648,7 +807,12 @@ const UtilitiesScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        showAmbientBackground && { backgroundColor: "transparent" },
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
@@ -890,6 +1054,185 @@ const UtilitiesScreen: React.FC = () => {
               {loanTotalPaid > 0 && (
                 <Text style={styles.ratioText}>
                   You'll pay {formatCurrency(loanTotalPaid)} total over {loanTerm} years
+                </Text>
+              )}
+            </View>
+
+            {/* First-5-years highlight */}
+            <View style={styles.loanHighlightCard}>
+              <Text style={styles.resultLabel}>INTEREST IN FIRST 5 YEARS</Text>
+              <Text style={[styles.loanHighlightValue, { color: colors.danger }]}>
+                {formatCurrency(loanInterestFirstFiveYears)}
+              </Text>
+              <Text style={styles.loanHighlightText}>
+                {loanSchedule.length >= 60
+                  ? `${(loanInterestFirstFiveYearsShare * 100).toFixed(0)}% of your total interest is paid in the first 60 months.`
+                  : "This loan ends before year 5, so this reflects the full-term interest cost."}
+              </Text>
+              <Text style={styles.loanHighlightSubtext}>
+                Principal paid in that span: {formatCurrency(loanPrincipalFirstFiveYears)}
+              </Text>
+            </View>
+
+            {/* Yearly summary */}
+            <View style={styles.scheduleCard}>
+              <TouchableOpacity
+                style={styles.scheduleHeader}
+                onPress={toggleLoanYearlySummary}
+                activeOpacity={0.7}
+              >
+                <View style={styles.scheduleHeaderTextWrap}>
+                  <Text style={styles.breakdownTitle}>Yearly Summary</Text>
+                  <Text style={styles.scheduleHint}>
+                    Groups every 12 payments from the loan start. Final year may be shorter.
+                  </Text>
+                </View>
+                <View style={styles.scheduleHeaderActions}>
+                  <Text style={styles.scheduleMeta}>{loanYearlySummary.length} yr</Text>
+                  <Text style={styles.scheduleChevron}>{loanYearlySummaryOpen ? "▾" : "›"}</Text>
+                </View>
+              </TouchableOpacity>
+
+              {loanYearlySummaryOpen && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.scheduleTable}>
+                    <View style={[styles.scheduleRow, styles.scheduleHeaderRow]}>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleMonthCell]}>
+                        Year
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                        Payments
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                        Principal
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                        Interest
+                      </Text>
+                      <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleBalanceCell]}>
+                        End Balance
+                      </Text>
+                    </View>
+
+                    {loanYearlySummary.map((row, index) => {
+                      const isLastRow = index === loanYearlySummary.length - 1;
+                      return (
+                        <View key={row.year} style={[styles.scheduleRow, isLastRow && styles.scheduleRowLast]}>
+                          <Text style={[styles.scheduleCell, styles.scheduleMonthCell]}>{row.year}</Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleValueCell]}>
+                            {formatCurrency(row.payment)}
+                          </Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.success }]}>
+                            {formatCurrency(row.principal)}
+                          </Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.danger }]}>
+                            {formatCurrency(row.interest)}
+                          </Text>
+                          <Text style={[styles.scheduleCell, styles.scheduleBalanceCell]}>
+                            {formatCurrency(row.endingBalance)}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              )}
+            </View>
+
+            {/* Amortization schedule */}
+            <View style={styles.scheduleCard}>
+              <View style={styles.scheduleHeader}>
+                <View style={styles.scheduleHeaderTextWrap}>
+                  <Text style={styles.breakdownTitle}>Amortization Schedule</Text>
+                  <Text style={styles.scheduleHint}>
+                    Month-by-month payment, principal, interest, and remaining balance.
+                  </Text>
+                </View>
+                <Text style={styles.scheduleMeta}>{loanSchedule.length} mo</Text>
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.scheduleTable}>
+                  <View style={[styles.scheduleRow, styles.scheduleHeaderRow]}>
+                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleMonthCell]}>
+                      Month
+                    </Text>
+                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                      Payment
+                    </Text>
+                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                      Principal
+                    </Text>
+                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
+                      Interest
+                    </Text>
+                    <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleBalanceCell]}>
+                      Balance
+                    </Text>
+                  </View>
+
+                  {visibleLoanSchedule.map((row, index) => {
+                    const payment = row.principalPaid + row.interestPaid;
+                    const isLastVisibleRow = index === visibleLoanSchedule.length - 1;
+                    return (
+                      <View
+                        key={row.month}
+                        style={[styles.scheduleRow, isLastVisibleRow && styles.scheduleRowLast]}
+                      >
+                        <Text style={[styles.scheduleCell, styles.scheduleMonthCell]}>{row.month}</Text>
+                        <Text style={[styles.scheduleCell, styles.scheduleValueCell]}>
+                          {formatCurrency(payment)}
+                        </Text>
+                        <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.success }]}>
+                          {formatCurrency(row.principalPaid)}
+                        </Text>
+                        <Text style={[styles.scheduleCell, styles.scheduleValueCell, { color: colors.danger }]}>
+                          {formatCurrency(row.interestPaid)}
+                        </Text>
+                        <Text style={[styles.scheduleCell, styles.scheduleBalanceCell]}>
+                          {formatCurrency(row.balance)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              <View style={styles.scheduleFooter}>
+                <Text style={styles.scheduleFooterText}>
+                  Showing {visibleLoanSchedule.length} of {loanSchedule.length} months
+                </Text>
+                <View style={styles.scheduleActions}>
+                  <TouchableOpacity
+                    style={styles.scheduleMoreBtn}
+                    onPress={handleExportLoanSchedule}
+                    disabled={isLoanExporting || loanSchedule.length === 0}
+                  >
+                    <Text style={styles.scheduleMoreBtnText}>
+                      {isLoanExporting ? "Preparing CSV..." : "Export CSV"}
+                    </Text>
+                  </TouchableOpacity>
+                  {hasMoreLoanScheduleRows ? (
+                    <TouchableOpacity style={styles.scheduleMoreBtn} onPress={handleShowMoreLoanSchedule}>
+                      <Text style={styles.scheduleMoreBtnText}>
+                        Show {Math.min(LOAN_SCHEDULE_PAGE_SIZE, loanSchedule.length - loanScheduleVisibleRows)} more
+                      </Text>
+                    </TouchableOpacity>
+                  ) : canCollapseLoanSchedule ? (
+                    <TouchableOpacity style={styles.scheduleMoreBtn} onPress={handleShowLessLoanSchedule}>
+                      <Text style={styles.scheduleMoreBtnText}>Show less</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+              {loanExportMessage && (
+                <Text
+                  style={[
+                    styles.scheduleStatus,
+                    { color: loanExportMessage.type === "error" ? colors.danger : colors.success },
+                  ]}
+                >
+                  {loanExportMessage.text}
                 </Text>
               )}
             </View>
@@ -1449,6 +1792,153 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.textDim,
       textAlign: "center",
       marginTop: 10,
+    },
+
+    /* Loan highlights + schedule */
+    loanHighlightCard: {
+      backgroundColor: `${colors.danger}12`,
+      borderWidth: 1,
+      borderColor: `${colors.danger}35`,
+      borderRadius: 16,
+      padding: 18,
+      alignItems: "center",
+      gap: 6,
+    },
+    loanHighlightValue: {
+      fontSize: scale(28),
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+      textAlign: "center",
+    },
+    loanHighlightText: {
+      fontSize: 13,
+      color: colors.textDim,
+      lineHeight: 18,
+      textAlign: "center",
+    },
+    loanHighlightSubtext: {
+      fontSize: 12,
+      color: colors.textMuted,
+      textAlign: "center",
+    },
+    scheduleCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 18,
+      gap: 12,
+    },
+    scheduleHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 12,
+    },
+    scheduleHeaderTextWrap: {
+      flex: 1,
+    },
+    scheduleHeaderActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginTop: 2,
+    },
+    scheduleHint: {
+      fontSize: 12,
+      color: colors.textDim,
+      lineHeight: 17,
+      marginTop: -6,
+    },
+    scheduleMeta: {
+      fontSize: 12,
+      color: colors.accent,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+      marginTop: 2,
+    },
+    scheduleChevron: {
+      fontSize: 16,
+      color: colors.textDim,
+      fontWeight: "700",
+      lineHeight: 18,
+    },
+    scheduleTable: {
+      minWidth: 560,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 12,
+      overflow: "hidden",
+    },
+    scheduleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+    },
+    scheduleHeaderRow: {
+      backgroundColor: colors.bg,
+    },
+    scheduleRowLast: {
+      borderBottomWidth: 0,
+    },
+    scheduleCell: {
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 12,
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
+    },
+    scheduleHeaderCell: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontWeight: "700",
+      letterSpacing: 0.4,
+    },
+    scheduleMonthCell: {
+      width: 64,
+    },
+    scheduleValueCell: {
+      width: 120,
+      textAlign: "right",
+    },
+    scheduleBalanceCell: {
+      width: 136,
+      textAlign: "right",
+    },
+    scheduleFooter: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      flexWrap: "wrap",
+    },
+    scheduleFooterText: {
+      fontSize: 12,
+      color: colors.textDim,
+    },
+    scheduleActions: {
+      flexDirection: "row",
+      gap: 8,
+      flexWrap: "wrap",
+    },
+    scheduleMoreBtn: {
+      borderWidth: 1,
+      borderColor: `${colors.accent}40`,
+      backgroundColor: `${colors.accent}12`,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    scheduleMoreBtnText: {
+      fontSize: 12,
+      color: colors.accent,
+      fontWeight: "700",
+    },
+    scheduleStatus: {
+      fontSize: 12,
+      lineHeight: 17,
     },
 
     /* Emergency Fund */

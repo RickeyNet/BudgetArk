@@ -199,7 +199,7 @@ export const simulatePayoffPlan = (
     }
 
     if (afterBalance >= beforeBalance - 0.000001) {
-      // Plan is unsolvable — minimum payment doesn't cover monthly interest.
+      // Plan is unsolvable - minimum payment doesn't cover monthly interest.
       // Return Infinity for monthsToPayoff so formatPayoffMonths/UI render
       // "Not solvable" instead of showing the misleading early-exit month.
       return {
@@ -213,7 +213,7 @@ export const simulatePayoffPlan = (
     }
   }
 
-  // Hit the simulation cap (MAX_MONTHS) without paying everything off — also
+  // Hit the simulation cap (MAX_MONTHS) without paying everything off - also
   // an unsolvable / impractical plan, surface it as Infinity for the same
   // reason as above.
   return {
@@ -397,7 +397,7 @@ export const calcInvestmentTimeline = (
   years: number
 ): { year: number; total: number; contributed: number; interest: number }[] => {
   monthlyContribution = clamp(monthlyContribution, 0, MAX_PAYMENT);
-  // Match calcInvestmentGrowth — negative annual returns are valid input
+  // Match calcInvestmentGrowth - negative annual returns are valid input
   // for deflationary / loss scenarios; previously clamped to 0 here too.
   annualReturn = clamp(annualReturn, -MAX_RATE, MAX_RATE);
   years = clamp(years, 0, MAX_YEARS);

@@ -12,8 +12,10 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
+import CashFlowChart, { type CashFlowPoint } from "../components/CashFlowChart";
 import Medal from "../components/Medal";
 import AchievementsScreen from "./AchievementsScreen";
+import AnnualReportModal from "../components/AnnualReportModal";
 import { ACHIEVEMENT_DEFS } from "../data/achievementDefs";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import {
@@ -45,14 +47,27 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
+import { isEntryActiveInMonth } from "../utils/recurrence";
+import DonutChart, { type DonutSlice } from "../components/DonutChart";
+
+/** Emoji glyph per asset category for the account-row icon chip. */
+const ACCOUNT_ICONS: Record<AssetAccountCategory, string> = {
+  checking: "🏦",
+  savings: "💰",
+  retirement: "📈",
+  hsa: "🏥",
+  investment: "📊",
+  other: "💼",
+};
+const iconForCategory = (category: AssetAccountCategory): string =>
+  ACCOUNT_ICONS[category] ?? "💼";
 
 const BridgeScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
   const coachmark = useTabCoachmark("Bridge");
   const listRef = useRef<FlatList>(null);
-  const anchorBridgeOverview = useCoachmarkAnchor("bridge-overview-card", { scrollRef: listRef });
   const anchorBridgeAccounts = useCoachmarkAnchor("bridge-accounts-card", { scrollRef: listRef });
   const anchorBridgeHistory = useCoachmarkAnchor("bridge-history-card", { scrollRef: listRef });
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -69,10 +84,14 @@ const BridgeScreen: React.FC = () => {
   const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
   const [assetName, setAssetName] = useState("");
   const [assetBalance, setAssetBalance] = useState("");
-  const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
+  const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("checking");
+  const [collapsedAccountCategories, setCollapsedAccountCategories] = useState<
+    Set<AssetAccountCategory>
+  >(() => new Set());
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
   const [showAchievements, setShowAchievements] = useState(false);
+  const [showAnnualReport, setShowAnnualReport] = useState(false);
   const {
     unlocked: achievementUnlocked,
     totalCount: totalAchievements,
@@ -93,7 +112,7 @@ const BridgeScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      // Cancellation flag — prevents a slower load from overwriting a newer
+      // Cancellation flag - prevents a slower load from overwriting a newer
       // one's state when the user re-focuses the tab quickly.
       let cancelled = false;
       const loadBridgeData = async () => {
@@ -120,7 +139,7 @@ const BridgeScreen: React.FC = () => {
             // (or running them concurrently) opens a race window where
             // another reader (e.g. BudgetScreen on a quick tab switch) can
             // see the new asset balance with the OLD lastAppliedMonth and
-            // re-apply the contribution — silently double-crediting the
+            // re-apply the contribution - silently double-crediting the
             // asset.
             await saveBudgetEntries(processed.entries);
             await saveAssetAccounts(processed.assetAccounts);
@@ -202,6 +221,84 @@ const BridgeScreen: React.FC = () => {
   );
 
   const trackedAccountsTotal = totalAssetBalance + (emergencyFundGoal?.currentAmount ?? 0);
+
+  /**
+   * Per-category color palette for the asset donut + category headers.
+   * Pulled from the active theme so each preset's accent/teal/success/etc.
+   * carry through. Keep in sync with ASSET_ACCOUNT_CATEGORIES order.
+   */
+  const assetCategoryColors = useMemo<Record<AssetAccountCategory, string>>(
+    () => ({
+      checking: colors.accent,
+      savings: colors.teal,
+      retirement: colors.success,
+      hsa: colors.warning,
+      investment: colors.danger,
+      other: colors.textDim,
+    }),
+    [colors]
+  );
+
+  /**
+   * Group asset accounts by category, drop empty groups, and tally each.
+   * Iteration order follows ASSET_ACCOUNT_CATEGORIES so the UI stays stable
+   * regardless of insertion order.
+   */
+  const accountsByCategory = useMemo(() => {
+    return ASSET_ACCOUNT_CATEGORIES.map((category) => {
+      const accounts = assetAccounts.filter((a) => a.category === category);
+      const total = accounts.reduce((sum, a) => sum + a.balance, 0);
+      return { category, accounts, total };
+    }).filter((group) => group.accounts.length > 0);
+  }, [assetAccounts]);
+
+  const accountDonutSlices = useMemo<DonutSlice[]>(
+    () =>
+      accountsByCategory
+        .filter((group) => group.total > 0)
+        .map((group) => ({
+          label: group.category,
+          value: group.total,
+          color: assetCategoryColors[group.category],
+        })),
+    [accountsByCategory, assetCategoryColors]
+  );
+
+  const toggleAccountCategory = useCallback((category: AssetAccountCategory) => {
+    setCollapsedAccountCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }, []);
+
+  // Trailing 6 months of income vs expense, oldest → newest, for the cash
+  // flow panel. Recurring entries are counted in every month from their
+  // start onward (mirrors how the Budget screen rolls them forward).
+  const cashFlow = useMemo<CashFlowPoint[]>(() => {
+    const now = new Date();
+    const buckets: CashFlowPoint[] = [];
+    for (let offset = 5; offset >= 0; offset--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      let income = 0;
+      let expense = 0;
+      for (const entry of entries) {
+        if (!isEntryActiveInMonth(entry, monthKey)) continue;
+        if (entry.type === "income") income += entry.amount;
+        else expense += entry.amount;
+      }
+      buckets.push({
+        label: d.toLocaleDateString(undefined, { month: "short" }),
+        income,
+        expense,
+      });
+    }
+    return buckets;
+  }, [entries]);
+
+  const hasCashFlow = cashFlow.some((m) => m.income > 0 || m.expense > 0);
 
   const openAddAssetModal = useCallback(() => {
     setEditingAsset(null);
@@ -337,31 +434,16 @@ const BridgeScreen: React.FC = () => {
         />
       </View>
 
-      <View ref={anchorBridgeOverview} collapsable={false} style={styles.overviewCard}>
-        <View style={styles.overviewRow}>
-          <View style={styles.overviewStat}>
-            <Text style={styles.overviewLabel}>Tracked Accounts</Text>
-            <Text style={[styles.overviewValue, { color: colors.success }]}>
-              {formatCurrency(trackedAccountsTotal)}
-            </Text>
-          </View>
-          <View style={styles.overviewStat}>
-            <Text style={styles.overviewLabel}>Emergency Fund</Text>
-            <Text style={[styles.overviewValue, { color: colors.teal }]}>
-              {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
-            </Text>
-          </View>
-        </View>
-        {emergencyFundGoal?.targetAmount ? (
-          <Text style={styles.overviewHint}>
-            Emergency Fund target: {formatCurrency(emergencyFundGoal.targetAmount)}
-          </Text>
-        ) : (
-          <Text style={styles.overviewHint}>Track savings, retirement, HSA, and investment balances here.</Text>
-        )}
-      </View>
+      {hasCashFlow ? (
+        <CashFlowChart
+          data={cashFlow}
+          colors={colors}
+          formatCompactCurrency={formatCompactCurrency}
+        />
+      ) : null}
 
       <View ref={anchorBridgeAccounts} collapsable={false} style={styles.accountsCard}>
+        <View style={styles.topHairline} />
         <View style={styles.accountsHeaderRow}>
           <Text style={styles.accountsTitle}>Accounts</Text>
           <TouchableOpacity onPress={openAddAssetModal}>
@@ -371,10 +453,29 @@ const BridgeScreen: React.FC = () => {
 
         {assetAccounts.length === 0 && !emergencyFundGoal ? (
           <Text style={styles.accountsEmpty}>
-            Track your savings, 401k, HSA, and other account balances here.
+            Track your checking, savings, 401k, HSA, and other account balances here.
           </Text>
         ) : (
           <>
+            {accountDonutSlices.length > 0 ? (
+              <View style={styles.accountsSummaryRow}>
+                <DonutChart data={accountDonutSlices} size={120} strokeWidth={20} />
+                <View style={styles.accountsSummaryText}>
+                  <Text style={[styles.accountsSummaryLabel, { color: colors.textDim }]}>
+                    Total
+                  </Text>
+                  <Text style={[styles.accountsSummaryValue, { color: colors.success }]}>
+                    {formatCurrency(trackedAccountsTotal)}
+                  </Text>
+                  <Text style={[styles.accountsSummaryMeta, { color: colors.textMuted }]}>
+                    across {assetAccounts.length}{" "}
+                    {assetAccounts.length === 1 ? "account" : "accounts"}
+                    {emergencyFundGoal ? " + Emergency Fund" : ""}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             {emergencyFundGoal ? (
               <TouchableOpacity
                 style={styles.accountRow}
@@ -384,6 +485,9 @@ const BridgeScreen: React.FC = () => {
                 }}
                 activeOpacity={0.7}
               >
+                <View style={[styles.accountIcon, { backgroundColor: colors.tealDim }]}>
+                  <Text style={styles.accountIconGlyph}>🛡️</Text>
+                </View>
                 <View style={styles.accountRowLeft}>
                   <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
                   <Text style={styles.accountCategory}>
@@ -398,31 +502,51 @@ const BridgeScreen: React.FC = () => {
               </TouchableOpacity>
             ) : null}
 
-            {assetAccounts.map((account) => (
-              <TouchableOpacity
-                key={account.id}
-                style={styles.accountRow}
-                onPress={() => openEditAssetModal(account)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.accountRowLeft}>
-                  <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
-                  <Text style={styles.accountCategory}>
-                    {ASSET_ACCOUNT_CATEGORY_LABELS[account.category]}
-                  </Text>
-                </View>
-                <Text style={[styles.accountBalance, { color: colors.success }]}>
-                  {formatCurrency(account.balance)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {accountsByCategory.map((group) => {
+              const isCollapsed = collapsedAccountCategories.has(group.category);
+              const categoryColor = assetCategoryColors[group.category];
+              return (
+                <View key={group.category}>
+                  <TouchableOpacity
+                    style={styles.accountCategoryHeader}
+                    onPress={() => toggleAccountCategory(group.category)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
+                    <Text style={[styles.accountCategoryChevron, { color: colors.textDim }]}>
+                      {isCollapsed ? "▶" : "▼"}
+                    </Text>
+                    <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
+                      {ASSET_ACCOUNT_CATEGORY_LABELS[group.category]}
+                    </Text>
+                    <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
+                      {formatCurrency(group.total)}
+                    </Text>
+                  </TouchableOpacity>
 
-            <View style={styles.accountTotalRow}>
-              <Text style={styles.accountTotalLabel}>Total</Text>
-              <Text style={[styles.accountTotalValue, { color: colors.success }]}>
-                {formatCurrency(trackedAccountsTotal)}
-              </Text>
-            </View>
+                  {!isCollapsed
+                    ? group.accounts.map((account) => (
+                        <TouchableOpacity
+                          key={account.id}
+                          style={[styles.accountRow, styles.accountRowNested]}
+                          onPress={() => openEditAssetModal(account)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.accountIcon, { backgroundColor: `${categoryColor}1f` }]}>
+                            <Text style={styles.accountIconGlyph}>{iconForCategory(account.category)}</Text>
+                          </View>
+                          <View style={styles.accountRowLeft}>
+                            <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
+                          </View>
+                          <Text style={[styles.accountBalance, { color: colors.success }]}>
+                            {formatCurrency(account.balance)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))
+                    : null}
+                </View>
+              );
+            })}
           </>
         )}
       </View>
@@ -454,11 +578,33 @@ const BridgeScreen: React.FC = () => {
         </View>
         <Text style={[styles.shipsLogChevron, { color: colors.accent }]}>›</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.annualReportCard}
+        onPress={() => setShowAnnualReport(true)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Open your annual financial report"
+      >
+        <Text style={styles.annualReportGlyph}>📅</Text>
+        <View style={styles.annualReportTextBlock}>
+          <Text style={styles.annualReportTitle}>Annual Report</Text>
+          <Text style={styles.annualReportSubtitle}>
+            Your {new Date().getFullYear()} year in review
+          </Text>
+        </View>
+        <Text style={[styles.shipsLogChevron, { color: colors.accent }]}>›</Text>
+      </TouchableOpacity>
     </View>
   );
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        showAmbientBackground && styles.screenTransparent,
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       {isLoaded ? (
         <FlatList
@@ -594,6 +740,10 @@ const BridgeScreen: React.FC = () => {
           void refreshAchievements();
         }}
       />
+      <AnnualReportModal
+        visible={showAnnualReport}
+        onClose={() => setShowAnnualReport(false)}
+      />
 
       {coachmark}
     </View>
@@ -607,6 +757,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       flex: 1,
       backgroundColor: colors.bg,
     },
+    screenTransparent: {
+      backgroundColor: "transparent",
+    },
     listContent: {
       paddingHorizontal: tokens.pad,
       paddingBottom: 110,
@@ -617,53 +770,45 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       alignItems: "center",
     },
     appLabel: {
-      fontSize: scale(12),
+      fontSize: scale(10),
+      fontWeight: "600",
       color: colors.textDim,
-      letterSpacing: 2,
-      marginBottom: 4,
+      letterSpacing: 3,
+      marginBottom: 3,
+      textTransform: "uppercase",
       textAlign: "center",
     },
     screenTitle: {
       fontSize: scale(28),
-      fontWeight: "700",
+      fontWeight: "800",
       color: colors.text,
       marginBottom: 4,
+      letterSpacing: -0.5,
       textAlign: "center",
     },
     screenSubtitle: {
-      fontSize: scale(14),
+      fontSize: scale(13),
       color: colors.textMuted,
       textAlign: "center",
     },
-    overviewCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: `${colors.accent}30`,
-      borderRadius: tokens.radius,
-      padding: tokens.pad,
-      marginBottom: tokens.gap,
+    topHairline: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 1,
+      backgroundColor: colors.accent,
+      opacity: 0.18,
     },
-    overviewRow: {
-      flexDirection: "row",
-      gap: tokens.gapSm + 4,
-      marginBottom: tokens.gapSm + 4,
+    accountIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
     },
-    overviewStat: {
-      flex: 1,
-    },
-    overviewLabel: {
-      fontSize: scale(11),
-      color: colors.textDim,
-      marginBottom: 3,
-    },
-    overviewValue: {
-      fontSize: scale(18),
-      fontWeight: "700",
-      fontVariant: ["tabular-nums"] as any,
-    },
-    overviewHint: {
-      fontSize: scale(12),
-      color: colors.textDim,
+    accountIconGlyph: {
+      fontSize: scale(15),
     },
     accountsCard: {
       backgroundColor: colors.card,
@@ -672,6 +817,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: tokens.radius,
       padding: tokens.pad,
       marginBottom: tokens.gap,
+      overflow: "hidden",
     },
     accountsHeaderRow: {
       flexDirection: "row",
@@ -697,14 +843,13 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     accountRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: tokens.padSm - 2,
+      gap: 10,
+      paddingVertical: tokens.padSm,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     accountRowLeft: {
       flex: 1,
-      marginRight: 8,
     },
     accountName: {
       fontSize: scale(14),
@@ -738,6 +883,63 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(15),
       fontWeight: "700",
       fontVariant: ["tabular-nums"] as any,
+    },
+    accountsSummaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      paddingVertical: tokens.padSm,
+      marginBottom: tokens.gapSm,
+    },
+    accountsSummaryText: {
+      flex: 1,
+    },
+    accountsSummaryLabel: {
+      fontSize: scale(12),
+      fontWeight: "600",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+    },
+    accountsSummaryValue: {
+      fontSize: scale(24),
+      fontWeight: "800",
+      marginTop: 2,
+      fontVariant: ["tabular-nums"] as any,
+    },
+    accountsSummaryMeta: {
+      fontSize: scale(11),
+      marginTop: 4,
+    },
+    accountCategoryHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: tokens.padSm,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    categoryDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    accountCategoryChevron: {
+      fontSize: scale(11),
+      width: 12,
+    },
+    accountCategoryHeaderText: {
+      flex: 1,
+      fontSize: scale(14),
+      fontWeight: "700",
+    },
+    accountCategoryHeaderTotal: {
+      fontSize: scale(14),
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"] as any,
+    },
+    accountRowNested: {
+      paddingLeft: 28,
+      borderTopColor: "transparent",
     },
     modalOverlay: {
       flex: 1,
@@ -859,6 +1061,34 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(28),
       fontWeight: "300",
       paddingHorizontal: 4,
+    },
+    annualReportCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
+      gap: tokens.gapSm + 4,
+    },
+    annualReportGlyph: {
+      fontSize: scale(30),
+    },
+    annualReportTextBlock: {
+      flex: 1,
+      marginLeft: 6,
+    },
+    annualReportTitle: {
+      fontSize: scale(16),
+      fontWeight: "700",
+      color: colors.text,
+    },
+    annualReportSubtitle: {
+      fontSize: scale(12),
+      color: colors.textDim,
+      marginTop: 2,
     },
   });
 };

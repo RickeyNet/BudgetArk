@@ -29,6 +29,8 @@ import {
   Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { fabBottomOffset } from "../navigation/tabBarLayout";
+import { useUndo } from "../undo/UndoProvider";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import {
@@ -47,6 +49,7 @@ import {
   getDebts,
   saveDebts,
   deleteDebt,
+  restoreDebt,
   recordPayment,
   updateDebt,
   getPayoffStrategyPreference,
@@ -56,6 +59,7 @@ import {
   getSavingsGoals,
   saveSavingsGoals,
   deleteSavingsGoal,
+  restoreSavingsGoal,
 } from "../storage/savingsGoalStorage";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
@@ -86,9 +90,11 @@ import {
  * FAB layout constants - kept here so the coachmark can compute a
  * window-relative rect for the spotlight without going through a ref +
  * measureInWindow round-trip (which was returning bounds for the wrong
- * native node). Keep these in sync with styles.fab below.
+ * native node). The vertical offset is no longer a constant: it derives
+ * from the live bottom safe-area inset via fabBottomOffset() so the FAB
+ * always clears the tab bar (whose height also grows with that inset).
+ * Keep RIGHT/SIZE in sync with styles.fab below.
  */
-const FAB_BOTTOM = 90;
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
 import type { ThemeColors } from "../theme/themes";
@@ -234,10 +240,11 @@ const DebtTrackerScreen: React.FC = () => {
   const [savingsDraft, setSavingsDraft] = useState("");
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
 
-  const { colors } = useTheme();
+  const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
+  const { pushUndo } = useUndo();
   const coachmark = useTabCoachmark("DebtTracker");
   const listRef = useRef<FlatList<Debt>>(null);
   const anchorSummary = useCoachmarkAnchor("debts-summary-card", { scrollRef: listRef });
@@ -249,7 +256,7 @@ const DebtTrackerScreen: React.FC = () => {
     const { width, height } = Dimensions.get("window");
     return {
       x: width - FAB_RIGHT - FAB_SIZE,
-      y: height - FAB_BOTTOM - FAB_SIZE,
+      y: height - fabBottomOffset(insets.bottom) - FAB_SIZE,
       width: FAB_SIZE,
       height: FAB_SIZE,
     };
@@ -284,7 +291,7 @@ const DebtTrackerScreen: React.FC = () => {
   /** Load debts from device storage whenever this tab is focused */
   useFocusEffect(
     useCallback(() => {
-      // Cancellation flag — guards every setState after an await so a stale
+      // Cancellation flag - guards every setState after an await so a stale
       // load can't overwrite a newer one's state on rapid tab thrash.
       let cancelled = false;
       const loadDebts = async () => {
@@ -331,7 +338,7 @@ const DebtTrackerScreen: React.FC = () => {
           setSavingsGoals(storedGoals);
 
           // Emergency-fund / keel reserve. Only the "Savings" category
-          // counts here — Retirement and Investing flow into the
+          // counts here - Retirement and Investing flow into the
           // gather_animals milestone via retirementInvestingMonthly below
           // because those funds aren't liquid emergency money.
           const savings = budgetEntries
@@ -647,22 +654,36 @@ const DebtTrackerScreen: React.FC = () => {
 
   /** Save edits to an existing debt */
   const handleSaveEdit = useCallback(async (debtId: string, updates: Partial<Debt>) => {
+    // Snapshot the full prior record so undo can write every field back,
+    // not just the keys this edit touched.
+    const prior = debts.find((d) => d.id === debtId) ?? null;
     const updated = await updateDebt(debtId, updates);
     const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
     setDebts(updated);
     await syncNetWorthSnapshot();
     setShowModal(false);
     setEditingDebt(null);
+    if (prior) {
+      pushUndo({
+        message: `Edited "${prior.name}"`,
+        onUndo: async () => {
+          const reverted = await updateDebt(debtId, prior);
+          setDebts(reverted);
+          await syncNetWorthSnapshot();
+          void notifyAchievementCheck();
+        },
+      });
+    }
     if (paidOffDebt) {
       // Defer the celebration Modal so the edit Modal's close animation
-      // finishes first — RN can't stack two Modal presentations in the
+      // finishes first - RN can't stack two Modal presentations in the
       // same frame on iOS without one being queued or visually clipped.
       setTimeout(() => setCelebrationDebt(paidOffDebt), 250);
     } else {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
-  }, [debts, notifyAchievementCheck]);
+  }, [debts, notifyAchievementCheck, pushUndo]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -673,15 +694,35 @@ const DebtTrackerScreen: React.FC = () => {
   const confirmDelete = useCallback(async () => {
     if (!pendingDeleteDebt) return;
     const debtId = pendingDeleteDebt.id;
-    // Soft-delete via the storage helper so a tombstone gets persisted —
+    // Soft-delete via the storage helper so a tombstone gets persisted -
     // a paired partner needs that to remove the debt locally on next sync,
     // otherwise their stale upsert would resurrect this deletion.
+    const deletedName = pendingDeleteDebt.name;
     const updated = await deleteDebt(debtId);
     setDebts(updated);
     await syncNetWorthSnapshot();
     setPendingDeleteDebt(null);
     triggerHaptic("warning");
-  }, [pendingDeleteDebt]);
+    pushUndo({
+      message: `Deleted "${deletedName}"`,
+      onUndo: async () => {
+        const restored = await restoreDebt(debtId);
+        setDebts(restored);
+        await syncNetWorthSnapshot();
+        void notifyAchievementCheck();
+      },
+    });
+  }, [pendingDeleteDebt, pushUndo, notifyAchievementCheck]);
+
+  // Payment bulk-delete/undo (inside PaymentHistoryModal) re-adjusts debt
+  // balances, so pull fresh debts + resnapshot net worth when it reports a
+  // change.
+  const handlePaymentsChanged = useCallback(async () => {
+    const fresh = await getDebts();
+    setDebts(fresh);
+    await syncNetWorthSnapshot();
+    void notifyAchievementCheck();
+  }, [notifyAchievementCheck]);
 
   const openClassifyModal = useCallback(() => {
     const nextDraft: Record<string, DebtClass> = {};
@@ -893,12 +934,22 @@ const DebtTrackerScreen: React.FC = () => {
 
   const handleDeleteSavingsGoal = useCallback(
     async (goalId: string) => {
+      const prior = savingsGoals.find((g) => g.id === goalId) ?? null;
       // Soft-delete so the partner sees the deletion on next sync.
       const updated = await deleteSavingsGoal(goalId);
       setSavingsGoals(updated);
       await syncNetWorthSnapshot();
+      pushUndo({
+        message: prior ? `Deleted "${prior.name}"` : "Deleted savings goal",
+        onUndo: async () => {
+          const restored = await restoreSavingsGoal(goalId);
+          setSavingsGoals(restored);
+          await syncNetWorthSnapshot();
+          void notifyAchievementCheck();
+        },
+      });
     },
-    []
+    [savingsGoals, pushUndo, notifyAchievementCheck]
   );
 
   const handleUpdateEssentialsEstimate = useCallback((value: number) => {
@@ -946,21 +997,30 @@ const DebtTrackerScreen: React.FC = () => {
             style={styles.summaryRingWrap}
             onPress={() => setShowHistory(true)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Payoff ${overallPercent} percent. Tap to view payment history.`}
           >
-            <ProgressRing
-              percent={overallPercent}
-              size={80}
-              strokeWidth={6}
-              color={overallPercent >= 60 ? colors.success : colors.accent}
-            />
-            <Text
-              style={[
-                styles.summaryRingLabel,
-                { color: overallPercent >= 60 ? colors.success : colors.accent },
-              ]}
-            >
-              {overallPercent}%
-            </Text>
+            <View style={styles.summaryRingInner}>
+              <ProgressRing
+                percent={overallPercent}
+                size={80}
+                strokeWidth={6}
+                color={overallPercent >= 60 ? colors.success : colors.accent}
+              />
+              <Text
+                style={[
+                  styles.summaryRingLabel,
+                  { color: overallPercent >= 60 ? colors.success : colors.accent },
+                ]}
+              >
+                {overallPercent}%
+              </Text>
+            </View>
+            <View style={[styles.summaryRingHint, { backgroundColor: `${colors.accent}20` }]}>
+              <Text style={[styles.summaryRingHintText, { color: colors.accent }]}>
+                🕐 View history
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -1048,7 +1108,12 @@ const DebtTrackerScreen: React.FC = () => {
   );
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        showAmbientBackground && { backgroundColor: "transparent" },
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <FlatList
         ref={listRef}
@@ -1065,7 +1130,7 @@ const DebtTrackerScreen: React.FC = () => {
           rect from FAB_BOTTOM / FAB_RIGHT / FAB_SIZE - keep the style and
           those constants in sync. */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}
         onPress={() => setShowModal(true)}
         activeOpacity={0.8}
       >
@@ -1084,6 +1149,7 @@ const DebtTrackerScreen: React.FC = () => {
         visible={showHistory}
         onClose={() => setShowHistory(false)}
         debts={debts}
+        onPaymentsChanged={handlePaymentsChanged}
       />
 
       <DebtPayoffCelebrationModal
@@ -1092,7 +1158,7 @@ const DebtTrackerScreen: React.FC = () => {
         onClose={() => setCelebrationDebt(null)}
         onViewHistory={() => {
           // Wait for the celebration Modal close animation before presenting
-          // the history Modal — iOS doesn't reliably handle dismiss-then-
+          // the history Modal - iOS doesn't reliably handle dismiss-then-
           // present in the same frame and one of the two ends up hidden.
           setCelebrationDebt(null);
           setTimeout(() => setShowHistory(true), 250);
@@ -1545,8 +1611,11 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   summaryLabel: { fontSize: scale(11), color: colors.textDim, letterSpacing: 1, marginBottom: 4 },
   summaryAmount: { fontSize: scale(32), fontWeight: "700", color: colors.text, fontVariant: ["tabular-nums"] },
   paidText: { fontSize: scale(14), color: colors.success, fontWeight: "600", marginTop: 4 },
-  summaryRingWrap: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
+  summaryRingWrap: { alignItems: "center", justifyContent: "center" },
+  summaryRingInner: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
   summaryRingLabel: { position: "absolute", fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  summaryRingHint: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  summaryRingHintText: { fontSize: scale(10), fontWeight: "700", letterSpacing: 0.2 },
 
    badgeRow: { flexDirection: "row", gap: 8, marginTop: 14 },
    badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
@@ -2242,7 +2311,8 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   /* FAB */
   fab: {
     position: "absolute",
-    bottom: FAB_BOTTOM,
+    // `bottom` is applied inline at the call site from the live safe-area
+    // inset (fabBottomOffset) so the FAB always clears the tab bar.
     right: FAB_RIGHT,
     width: FAB_SIZE,
     height: FAB_SIZE,

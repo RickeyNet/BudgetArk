@@ -180,22 +180,22 @@ const DEEPFOREST: ThemePreset = {
   id: "deepforest",
   name: "Deep Forest",
   colors: {
-    bg: "#0a1214",
-    card: "#0f1e1a",
-    cardBorder: "#1e3a2c",
-    accent: "#5eada5",
-    success: "#c3e88d",
-    successDim: "rgba(195, 232, 141, 0.15)",
-    warning: "#ffcb6b",
-    warningDim: "rgba(255, 203, 107, 0.15)",
-    danger: "#ff5370",
-    dangerDim: "rgba(255, 83, 112, 0.15)",
-    text: "#cdd3de",
-    textDim: "#7e9a8a",
-    textMuted: "#3e5a4a",
-    white: "#e8ede9",
-    teal: "#89ddff",
-    tealDim: "rgba(137, 221, 255, 0.15)",
+    bg: "#06100d",
+    card: "#0c1914",
+    cardBorder: "#26483a",
+    accent: "#67b8a2",
+    success: "#a6d98d",
+    successDim: "rgba(166, 217, 141, 0.15)",
+    warning: "#d6b05c",
+    warningDim: "rgba(214, 176, 92, 0.15)",
+    danger: "#c96b6b",
+    dangerDim: "rgba(201, 107, 107, 0.15)",
+    text: "#e2ece2",
+    textDim: "#8aa79a",
+    textMuted: "#49665a",
+    white: "#f4f8f3",
+    teal: "#7bd7c6",
+    tealDim: "rgba(123, 215, 198, 0.15)",
     accentButtonText: "#000000",
   },
 };
@@ -226,7 +226,38 @@ const OCEAN_CORAL: ThemePreset = {
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL] as const;
+/**
+ * Deep Space - the "trading terminal" concept palette.
+ *
+ * Cards are defined as opaque base colors here; the separate surface-style
+ * layer can turn them into glass so the starfield still works when users
+ * choose the Glass design option, while Deep Space + Solid remains possible.
+ */
+const DEEP_SPACE: ThemePreset = {
+  id: "deep_space",
+  name: "Deep Space",
+  colors: {
+    bg: "#04060f",
+    card: "#0a1020",
+    cardBorder: "#24477f",
+    accent: "#5b9ef0",
+    success: "#34d399",
+    successDim: "rgba(52, 211, 153, 0.14)",
+    warning: "#f0a050",
+    warningDim: "rgba(240, 160, 80, 0.14)",
+    danger: "#ef6060",
+    dangerDim: "rgba(239, 96, 96, 0.14)",
+    text: "#e4ecf8",
+    textDim: "#8fa6c8",
+    textMuted: "#5a6d8c",
+    white: "#ffffff",
+    teal: "#2dd4bf",
+    tealDim: "rgba(45, 212, 191, 0.14)",
+    accentButtonText: "#ffffff",
+  },
+};
+
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, DEEP_SPACE] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";

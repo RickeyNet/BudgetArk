@@ -26,9 +26,12 @@ import React from "react";
 import { Text, StyleSheet } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TAB_BAR_BASE_HEIGHT } from "./tabBarLayout";
 import { RootTabParamList } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import ForestBackground from "../components/ForestBackground";
+import SpaceBackground from "../components/SpaceBackground";
 
 /* ── Screen Imports ── */
 import DebtTrackerScreen from "../screens/DebtTrackerScreen";
@@ -66,16 +69,27 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
 };
 
 const AppNavigator: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, themeId, showAmbientBackground } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const ambientBackground =
+    showAmbientBackground && themeId === "deep_space" ? (
+      <SpaceBackground />
+    ) : showAmbientBackground && themeId === "deepforest" ? (
+      <ForestBackground />
+    ) : null;
 
   return (
-    <Tab.Navigator
+    <>
+      {ambientBackground}
+      <Tab.Navigator
       initialRouteName="Bridge"
       screenOptions={({ route }) => ({
         /** Hide the default header - each screen has its own */
         headerShown: false,
+
+        /** Let the active ambient background show through on supported themes */
+        sceneStyle: showAmbientBackground ? styles.transparentScene : undefined,
 
         /** Tab bar icon - emoji based */
         tabBarIcon: ({ focused }) => (
@@ -105,16 +119,20 @@ const AppNavigator: React.FC = () => {
       <Tab.Screen name="Utilities" component={UtilitiesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
+    </>
   );
 };
 
 const makeStyles = (colors: ThemeColors, bottomInset: number) =>
   StyleSheet.create({
+    transparentScene: {
+      backgroundColor: "transparent",
+    },
     tabBar: {
-      backgroundColor: `${colors.card}ee`,
+      backgroundColor: colors.card,
       borderTopColor: colors.cardBorder,
       borderTopWidth: 1,
-      height: 58 + bottomInset,
+      height: TAB_BAR_BASE_HEIGHT + bottomInset,
       paddingTop: 8,
       paddingBottom: Math.max(8, bottomInset),
       position: "absolute",

@@ -3,7 +3,7 @@
  * File: src/data/achievementDefs.ts
  *
  * Source of truth for every Ark badge. Each definition is pure data plus
- * a `check(ctx)` predicate that runs against the user's existing storage —
+ * a `check(ctx)` predicate that runs against the user's existing storage -
  * no separate "earn" event is fired anywhere in the app. The evaluator in
  * src/utils/achievements.ts loads context once and walks this list.
  *
@@ -14,6 +14,8 @@
 import type {
   Achievement,
   AchievementTier,
+  AchievementStats,
+  CategoryBudgetLimit,
   Debt,
   Payment,
   SavingsGoal,
@@ -21,6 +23,7 @@ import type {
   DebtMilestonePlan,
   NetWorthSnapshot,
 } from "../types";
+import { isEntryActiveInMonth } from "../utils/recurrence";
 
 export interface AchievementContext {
   debts: Debt[];
@@ -30,6 +33,10 @@ export interface AchievementContext {
   milestonePlan: DebtMilestonePlan;
   netWorthSnapshots: NetWorthSnapshot[];
   isPaired: boolean;
+  /** Counters for badges not derivable from financial data alone. */
+  stats: AchievementStats;
+  /** YYYY-MM → saved category limits for that month. */
+  limitsByMonth: Record<string, CategoryBudgetLimit[]>;
 }
 
 export interface AchievementDef extends Achievement {
@@ -74,6 +81,54 @@ const consecutiveSavingsMonths = (ctx: AchievementContext): number => {
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
   }
   return count;
+};
+
+/** YYYY-MM that immediately follows the given key. */
+const nextMonthKey = (key: string): string => {
+  const [y, m] = key.split("-").map((n) => parseInt(n, 10));
+  const d = new Date(y, m, 1); // m is 1-based → Date month index = next month
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
+/**
+ * Months that had saved category limits where *every* limited category
+ * stayed at or under its cap, sorted ascending. Recurring expenses apply
+ * from their start month onward; one-offs only in their own month - the
+ * same rule the budget screen and Annual Report use.
+ */
+const underBudgetMonths = (ctx: AchievementContext): string[] => {
+  const result: string[] = [];
+  for (const monthKey of Object.keys(ctx.limitsByMonth)) {
+    const limits = ctx.limitsByMonth[monthKey];
+    if (!limits || limits.length === 0) continue;
+
+    const spend: Partial<Record<string, number>> = {};
+    for (const e of ctx.budgetEntries) {
+      if (e.type !== "expense") continue;
+      if (!Number.isFinite(e.amount) || e.amount <= 0) continue;
+      if (!isEntryActiveInMonth(e, monthKey)) continue;
+      spend[e.category] = (spend[e.category] ?? 0) + e.amount;
+    }
+
+    const allUnder = limits.every(
+      (lim) => (spend[lim.category] ?? 0) <= lim.monthlyLimit
+    );
+    if (allUnder) result.push(monthKey);
+  }
+  return result.sort();
+};
+
+/** Longest run of consecutive calendar months in a sorted YYYY-MM list. */
+const longestConsecutiveRun = (sortedMonthKeys: string[]): number => {
+  let best = 0;
+  let run = 0;
+  let prev: string | null = null;
+  for (const key of sortedMonthKeys) {
+    run = prev !== null && nextMonthKey(prev) === key ? run + 1 : 1;
+    if (run > best) best = run;
+    prev = key;
+  }
+  return best;
 };
 
 /* ─── Definitions ─── */
@@ -207,6 +262,51 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "12 consecutive months of savings contributions.",
     hint: "Add a Savings entry every month for a year.",
     check: (ctx) => consecutiveSavingsMonths(ctx) >= 12,
+  },
+  {
+    id: "cartographer",
+    glyph: "🗺️", // 🗺️
+    tier: "bronze",
+    title: "Cartographer",
+    description: "Charted a course - exported your data at least once.",
+    hint: "Export your data from Profile → Data.",
+    check: (ctx) => ctx.stats.exportCount > 0,
+  },
+  {
+    id: "crows_nest",
+    glyph: "🔭", // 🔭
+    tier: "bronze",
+    title: "Crow's Nest",
+    description: "Kept watch - opened the Monthly Review three times.",
+    hint: "Open the Monthly Review from the Budget screen 3 times.",
+    check: (ctx) => ctx.stats.monthlyReviewOpens >= 3,
+  },
+  {
+    id: "steady_crew",
+    glyph: "⚖️", // ⚖️
+    tier: "silver",
+    title: "Steady Crew",
+    description: "Three months running with every category under budget.",
+    hint: "Stay under all category limits 3 months in a row.",
+    check: (ctx) => longestConsecutiveRun(underBudgetMonths(ctx)) >= 3,
+  },
+  {
+    id: "lighthouse_keeper",
+    glyph: "🗼", // 🗼
+    tier: "silver",
+    title: "Lighthouse Keeper",
+    description: "Opened the app 30 days in a row.",
+    hint: "Keep a 30-day app-open streak.",
+    check: (ctx) => ctx.stats.longestAppOpenStreak >= 30,
+  },
+  {
+    id: "all_sails_set",
+    glyph: "⛵", // ⛵
+    tier: "gold",
+    title: "All Sails Set",
+    description: "Held every budget category under its limit for a month.",
+    hint: "Keep all category limits for one full month.",
+    check: (ctx) => underBudgetMonths(ctx).length > 0,
   },
   {
     id: "admiral",

@@ -53,7 +53,7 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         anchorId: "budget-summary-card",
         title: "Income vs expense",
         body:
-          "Top card shows this month's income, expenses, and net. Use the < > arrows above it to look at past months - six months of history are kept.",
+          "Top card shows this month's income, expenses, and net. Use the < > arrows above it to look at past months - a full year of history is kept.",
       },
       {
         id: "budget-spending",
@@ -81,13 +81,6 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         title: "Your Net Worth",
         body:
           "Net Worth = everything you own minus everything you owe. The big number rolls up debts, savings, retirement, investments, and tracked accounts. The chart below it plots Net Worth over time - snapshots save automatically when balances change.",
-      },
-      {
-        id: "bridge-overview",
-        anchorId: "bridge-overview-card",
-        title: "Tracked balances at a glance",
-        body:
-          "Tracked Accounts and Emergency Fund roll up here. They feed straight into the Net Worth total above.",
       },
       {
         id: "bridge-accounts",

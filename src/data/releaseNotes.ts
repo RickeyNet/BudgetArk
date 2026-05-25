@@ -7,6 +7,53 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.6.2",
+    title: "Pay-Off Fix",
+    releasedAt: "2026-05-24",
+    highlights: [
+      "Fixed a bug on the Debt screen where paying the last few cents on a debt did nothing when tapping the green check - small balances now clear cleanly even with display-rounded values.",
+    ],
+  },
+  {
+    version: "1.6.1",
+    title: "Crash Fix",
+    releasedAt: "2026-05-24",
+    highlights: [
+      "Fixed a crash that closed the app when opening the Profile tab on the v1.6.0 update.",
+    ],
+  },
+  {
+    version: "1.6.0",
+    title: "Appearance Controls + Loan Details",
+    releasedAt: "2026-05-22",
+    highlights: [
+      "Appearance is now split into Theme + Design Style. The glass look is no longer tied only to Deep Space - you can mix Solid or Glass with any theme, including Deep Space in a plain solid mode.",
+      "Deep Forest now gets a richer misty night-forest ambient background, while Deep Space keeps its starfield look when decorative backgrounds are enabled.",
+      "Added an Ambient Backgrounds toggle in Profile → Appearance so users can turn off decorative backgrounds and keep a plain backdrop for comfort, readability, or accessibility.",
+      "Budget now shows an in-app due-date reminder banner for upcoming recurring bills. It surfaces the next few due dates and total scheduled amount, and opens the Bill Calendar when tapped.",
+      "The Loan / Mortgage Calculator on Utilities now includes a full amortization schedule with month-by-month principal, interest, payment, and remaining balance.",
+      "Loan results also add a yearly summary, first-5-years interest highlight, collapsible yearly section, and CSV export for the amortization schedule.",
+    ],
+  },
+  {
+    version: "1.5.0",
+    title: "Deep Space Redesign",
+    releasedAt: "2026-05-15",
+    highlights: [
+      "Bridge and Budget got a full visual redesign. Centered headers, a divider stat strip (Income / Spent / Net on Budget, Tracked / Emergency Fund on Bridge), glass cards with a subtle accent hairline, and crisp tabular numbers throughout.",
+      "Budget's Spending card is reworked: a compact donut with the month total in the center, a side legend with per-category percentages, and horizontal category bars that show how close you are to each limit at a glance. Tap a row to expand entries, long-press to set a limit - same as before.",
+      "Budget month navigation is now a single tidy month pill with ‹ › arrows instead of the two wide buttons.",
+      "Added a Monthly Cash Flow chart to the Bridge - income vs expense bars for the last six months with a net trend line, so you can see at a glance which months you came out ahead.",
+      "New \"Deep Space\" theme in Profile → Appearance: a dark trading-terminal look with a starfield and nebula background that flows behind every tab. Purely optional - pick it from the theme list, every other theme is untouched.",
+      "Added custom budget categories with emoji icons - create your own categories alongside the built-in ones. Custom categories survive spreadsheet and backup round-trips and sync between paired devices.",
+      "Recurring budget entries now support a frequency: Monthly, Quarterly, Every 6 months, or Yearly. Set it from the Add or Edit modal on the Budget tab. Linked-account contributions, spreadsheet exports, and Annual Report math all honor the cadence, so a quarterly bill no longer appears every month.",
+      "New Bill Calendar on the Budget tab. Pick a day-of-month for each recurring expense and see a month-at-a-glance grid of when your bills land - with totals for the month, paid-so-far vs remaining, and the next bill due. Tap any day to drill into the bills due that day and jump straight to edit. Existing recurring bills start on the 15th until you set their actual day.",
+      "Ship's Log is complete: five new achievement badges, a full-year history view, and a Ship's Log entry on Profile so you can revisit everything you've earned.",
+      "Added an Annual Financial Report on the Bridge - your year in review for net worth, spending, and progress.",
+      "Added a \"View history\" hint on the debt payoff ring so it's clearer you can tap through to payment history.",
+    ],
+  },
+  {
     version: "1.4.16",
     title: "Sync Reliability + Cleanup",
     releasedAt: "2026-05-04",

@@ -30,18 +30,17 @@ import {
   DERIVED_RECURRING_PREFIX,
 } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
+import { normalizeImportCategory } from "./recordValidators";
+import { normalizePaymentUrl } from "./paymentUrl";
 import {
-  BUDGET_CATEGORIES,
   ASSET_ACCOUNT_CATEGORIES,
-  type BudgetCategory,
+  PAYMENT_URL_MAX_LENGTH,
   type AssetAccountCategory,
 } from "../types";
 
 /** Cap raw spreadsheet file size (uncompressed bytes for csv, on-disk size for xlsx). */
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_ROWS_PER_SHEET = 5000;
-
-const VALID_BUDGET_CATEGORIES = new Set<string>(BUDGET_CATEGORIES);
 
 /** Categories where the app legitimately writes negative-amount correction entries. */
 const NEGATIVE_AMOUNT_CATEGORIES = new Set<string>([
@@ -244,9 +243,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
   const typeRaw = parseString(get(row, "Type")).toLowerCase();
   const type = typeRaw === "income" ? "income" : typeRaw === "expense" ? "expense" : null;
   const categoryRaw = parseString(get(row, "Category"), 60);
-  const category: BudgetCategory | null = VALID_BUDGET_CATEGORIES.has(categoryRaw)
-    ? (categoryRaw as BudgetCategory)
-    : null;
+  const category: string | null = normalizeImportCategory(categoryRaw);
   const amount = parseAmount(get(row, "Amount"));
   const dateIso = parseDate(get(row, "Date"));
 
@@ -272,6 +269,20 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
   }
   const description = parseString(get(row, "Description", "Notes", "Memo"));
   const recurring = parseBoolean(get(row, "Recurring"));
+  const recurrenceRaw = Number(
+    parseString(get(row, "RecurrenceInterval", "Recurrence Interval"), 8)
+  );
+  const recurrenceInterval: 1 | 3 | 6 | 12 | undefined =
+    recurring && (recurrenceRaw === 3 || recurrenceRaw === 6 || recurrenceRaw === 12)
+      ? recurrenceRaw
+      : recurring && recurrenceRaw === 1
+      ? 1
+      : undefined;
+  const paymentUrlRaw = parseString(
+    get(row, "PaymentUrl", "Payment URL", "PaymentLink"),
+    PAYMENT_URL_MAX_LENGTH
+  );
+  const paymentUrl = recurring ? normalizePaymentUrl(paymentUrlRaw) ?? undefined : undefined;
   const linkedAccountId = parseString(get(row, "LinkedAccountId", "LinkedAccount"), 80);
   // Preserve the recurring/linked-account "last applied" stamp so the app
   // doesn't re-credit the linked AssetAccount for every month between the
@@ -284,7 +295,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
 
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
-  // they're missing or unparseable, fall back to `now` — but prefer carrying
+  // they're missing or unparseable, fall back to `now` - but prefer carrying
   // them forward so paired-device sync doesn't treat every imported row as
   // "freshly edited" and overwrite the partner's data.
   const parseIsoOrNull = (value: string): string | null => {
@@ -307,6 +318,8 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     createdAt,
     updatedAt,
     recurring: recurring || undefined,
+    recurrenceInterval,
+    paymentUrl,
     linkedAccountId: linkedAccountId || undefined,
     lastAppliedMonth,
   };
@@ -314,9 +327,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
 
 const rowToBudgetLimit = (row: Record<string, unknown>) => {
   const categoryRaw = parseString(get(row, "Category"), 60);
-  const category: BudgetCategory | null = VALID_BUDGET_CATEGORIES.has(categoryRaw)
-    ? (categoryRaw as BudgetCategory)
-    : null;
+  const category: string | null = normalizeImportCategory(categoryRaw);
   const monthlyLimit = parseAmount(get(row, "MonthlyLimit", "Monthly Limit", "Limit"));
 
   if (!category || !Number.isFinite(monthlyLimit) || monthlyLimit <= 0) {

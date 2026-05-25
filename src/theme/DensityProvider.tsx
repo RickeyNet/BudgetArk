@@ -5,6 +5,11 @@
  * Mirrors ThemeProvider for layout density (Compact / Comfortable / Spacious).
  * Screens read tokens via `useDensity()` and apply them where they currently
  * use hardcoded spacing values.
+ *
+ * Also owns the accessibility Text Size axis. Text Size only multiplies
+ * `tokens.fontScale`, so every screen already reading `tokens.fontScale`
+ * (via its local `scale()` helper) gets larger/smaller type app-wide for
+ * free, while padding/radius stay put. Density and Text Size compose.
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -16,32 +21,48 @@ import {
   DensityPreset,
   DensityTokens,
 } from "./density";
+import {
+  DEFAULT_TEXT_SIZE_ID,
+  TEXT_SIZE_BY_ID,
+  TEXT_SIZE_PRESETS,
+  TextSizePreset,
+} from "./textSize";
 
 const DENSITY_KEY = "@budgetark_density_id" as const;
+const TEXT_SIZE_KEY = "@budgetark_text_size_id" as const;
 
 type DensityContextValue = Readonly<{
   densityId: DensityPreset["id"];
+  /** Density tokens with the Text Size multiplier already folded into fontScale. */
   tokens: DensityTokens;
   presets: readonly DensityPreset[];
   setDensityId: (id: DensityPreset["id"]) => Promise<void>;
+  textSizeId: TextSizePreset["id"];
+  textSizePresets: readonly TextSizePreset[];
+  setTextSizeId: (id: TextSizePreset["id"]) => Promise<void>;
 }>;
 
 const DensityContext = createContext<DensityContextValue | null>(null);
 
 export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [densityId, setDensityIdState] = useState<DensityPreset["id"]>(DEFAULT_DENSITY_ID);
+  const [textSizeId, setTextSizeIdState] = useState<TextSizePreset["id"]>(DEFAULT_TEXT_SIZE_ID);
   // Gate children on the same `ready` pattern as ThemeProvider so a user with
-  // a non-default density doesn't see a brief Comfortable layout snap before
-  // their saved Compact/Spacious tokens load.
+  // a non-default density/text size doesn't see a brief default layout snap
+  // before their saved preset loads.
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const stored = await EncryptedStorage.getItem(DENSITY_KEY);
+        const [storedDensity, storedTextSize] = await Promise.all([
+          EncryptedStorage.getItem(DENSITY_KEY),
+          EncryptedStorage.getItem(TEXT_SIZE_KEY),
+        ]);
         if (cancelled) return;
-        if (stored && DENSITY_BY_ID[stored]) setDensityIdState(stored);
+        if (storedDensity && DENSITY_BY_ID[storedDensity]) setDensityIdState(storedDensity);
+        if (storedTextSize && TEXT_SIZE_BY_ID[storedTextSize]) setTextSizeIdState(storedTextSize);
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -58,7 +79,22 @@ export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children })
     await EncryptedStorage.setItem(DENSITY_KEY, id);
   }, []);
 
-  const tokens = DENSITY_BY_ID[densityId]?.tokens ?? DENSITY_BY_ID[DEFAULT_DENSITY_ID].tokens;
+  const setTextSizeId = useCallback(async (id: TextSizePreset["id"]) => {
+    if (!TEXT_SIZE_BY_ID[id]) return;
+    setTextSizeIdState(id);
+    await EncryptedStorage.setItem(TEXT_SIZE_KEY, id);
+  }, []);
+
+  const baseTokens = DENSITY_BY_ID[densityId]?.tokens ?? DENSITY_BY_ID[DEFAULT_DENSITY_ID].tokens;
+  const textMultiplier =
+    TEXT_SIZE_BY_ID[textSizeId]?.multiplier ?? TEXT_SIZE_BY_ID[DEFAULT_TEXT_SIZE_ID].multiplier;
+
+  // Fold Text Size into fontScale only. Spacing tokens are deliberately
+  // untouched so enlarging text doesn't also balloon padding/margins.
+  const tokens = useMemo<DensityTokens>(
+    () => ({ ...baseTokens, fontScale: baseTokens.fontScale * textMultiplier }),
+    [baseTokens, textMultiplier]
+  );
 
   const value = useMemo<DensityContextValue>(
     () => ({
@@ -66,8 +102,11 @@ export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children })
       tokens,
       presets: DENSITY_PRESETS,
       setDensityId,
+      textSizeId,
+      textSizePresets: TEXT_SIZE_PRESETS,
+      setTextSizeId,
     }),
-    [densityId, tokens, setDensityId]
+    [densityId, tokens, setDensityId, textSizeId, setTextSizeId]
   );
 
   return (
