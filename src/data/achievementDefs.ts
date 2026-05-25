@@ -39,8 +39,23 @@ export interface AchievementContext {
   limitsByMonth: Record<string, CategoryBudgetLimit[]>;
 }
 
+/** Progress toward an achievement. `target` is what fully unlocks it. */
+export interface AchievementProgress {
+  current: number;
+  target: number;
+  /** Optional human-readable formatter override (e.g. "$1,250 / $10,000"). */
+  format?: (current: number, target: number) => string;
+}
+
 export interface AchievementDef extends Achievement {
   check: (ctx: AchievementContext) => boolean;
+  /**
+   * Optional progress reporter. Returns null/undefined for binary badges
+   * with no meaningful partial state (e.g. "exported once", "paired"). When
+   * present, `current` is clamped to [0, target] by callers - defs can
+   * return raw counts without worrying about overflow.
+   */
+  progress?: (ctx: AchievementContext) => AchievementProgress | null;
 }
 
 /* ─── Tier display order (used for sorting in the UI) ─── */
@@ -118,6 +133,18 @@ const underBudgetMonths = (ctx: AchievementContext): string[] => {
   return result.sort();
 };
 
+/** Compact currency formatter for progress strings ("$1.2k / $10k"). */
+const formatCurrencyProgress = (current: number, target: number): string => {
+  const fmt = (n: number): string => {
+    const abs = Math.abs(n);
+    if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+    if (abs >= 10_000) return `$${Math.round(n / 1000)}k`;
+    if (abs >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+    return `$${Math.round(n)}`;
+  };
+  return `${fmt(current)} / ${fmt(target)}`;
+};
+
 /** Longest run of consecutive calendar months in a sorted YYYY-MM list. */
 const longestConsecutiveRun = (sortedMonthKeys: string[]): number => {
   let best = 0;
@@ -166,6 +193,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
       if (original <= 0) return false;
       return (original - current) / original >= 0.5;
     },
+    progress: (ctx) => {
+      const nonMortgage = ctx.debts.filter((d) => d.debtClass !== "house");
+      const original = nonMortgage.reduce((s, d) => s + d.originalBalance, 0);
+      const current = nonMortgage.reduce((s, d) => s + d.balance, 0);
+      if (original <= 0) return null;
+      const paid = Math.max(0, original - current);
+      const target = original / 2;
+      return { current: paid, target, format: formatCurrencyProgress };
+    },
   },
   {
     id: "debt_free_captain",
@@ -178,6 +214,12 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
       const nonMortgage = ctx.debts.filter((d) => d.debtClass !== "house");
       if (nonMortgage.length === 0) return false;
       return nonMortgage.every((d) => d.balance <= 0.01);
+    },
+    progress: (ctx) => {
+      const nonMortgage = ctx.debts.filter((d) => d.debtClass !== "house");
+      if (nonMortgage.length === 0) return null;
+      const cleared = nonMortgage.filter((d) => d.balance <= 0.01).length;
+      return { current: cleared, target: nonMortgage.length };
     },
   },
   {
@@ -196,6 +238,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
         .reduce((s, e) => s + e.amount, 0);
       return savings >= 1000;
     },
+    progress: (ctx) => {
+      const ef = ctx.savingsGoals.find((g) => g.category === "emergency_fund");
+      const efAmount = ef?.currentAmount ?? 0;
+      const savings = ctx.budgetEntries
+        .filter((e) => e.type === "expense" && e.category === "Savings")
+        .reduce((s, e) => s + e.amount, 0);
+      const best = Math.max(efAmount, savings);
+      return { current: best, target: 1000, format: formatCurrencyProgress };
+    },
   },
   {
     id: "sextant_sharp",
@@ -208,6 +259,21 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
       ctx.savingsGoals.some(
         (g) => g.targetAmount > 0 && g.currentAmount >= g.targetAmount
       ),
+    progress: (ctx) => {
+      // Best-progressed goal so the ring tracks the user's closest finish.
+      let best: { current: number; target: number } | null = null;
+      let bestRatio = -1;
+      for (const g of ctx.savingsGoals) {
+        if (g.targetAmount <= 0) continue;
+        const ratio = g.currentAmount / g.targetAmount;
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          best = { current: g.currentAmount, target: g.targetAmount };
+        }
+      }
+      if (!best) return null;
+      return { ...best, format: formatCurrencyProgress };
+    },
   },
   {
     id: "treasure_i",
@@ -217,6 +283,11 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "Net worth crossed $10,000.",
     hint: "Grow net worth above $10k.",
     check: (ctx) => latestNetWorth(ctx) >= 10_000,
+    progress: (ctx) => ({
+      current: Math.max(0, latestNetWorth(ctx)),
+      target: 10_000,
+      format: formatCurrencyProgress,
+    }),
   },
   {
     id: "treasure_ii",
@@ -226,6 +297,11 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "Net worth crossed $25,000.",
     hint: "Grow net worth above $25k.",
     check: (ctx) => latestNetWorth(ctx) >= 25_000,
+    progress: (ctx) => ({
+      current: Math.max(0, latestNetWorth(ctx)),
+      target: 25_000,
+      format: formatCurrencyProgress,
+    }),
   },
   {
     id: "treasure_iii",
@@ -235,6 +311,11 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "Net worth crossed $100,000.",
     hint: "Grow net worth above $100k.",
     check: (ctx) => latestNetWorth(ctx) >= 100_000,
+    progress: (ctx) => ({
+      current: Math.max(0, latestNetWorth(ctx)),
+      target: 100_000,
+      format: formatCurrencyProgress,
+    }),
   },
   {
     id: "ark_builder",
@@ -262,6 +343,11 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "12 consecutive months of savings contributions.",
     hint: "Add a Savings entry every month for a year.",
     check: (ctx) => consecutiveSavingsMonths(ctx) >= 12,
+    progress: (ctx) => ({
+      current: consecutiveSavingsMonths(ctx),
+      target: 12,
+      format: (c, t) => `${c} / ${t} mo`,
+    }),
   },
   {
     id: "cartographer",
@@ -280,6 +366,10 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "Kept watch - opened the Monthly Review three times.",
     hint: "Open the Monthly Review from the Budget screen 3 times.",
     check: (ctx) => ctx.stats.monthlyReviewOpens >= 3,
+    progress: (ctx) => ({
+      current: ctx.stats.monthlyReviewOpens,
+      target: 3,
+    }),
   },
   {
     id: "steady_crew",
@@ -289,6 +379,11 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "Three months running with every category under budget.",
     hint: "Stay under all category limits 3 months in a row.",
     check: (ctx) => longestConsecutiveRun(underBudgetMonths(ctx)) >= 3,
+    progress: (ctx) => ({
+      current: longestConsecutiveRun(underBudgetMonths(ctx)),
+      target: 3,
+      format: (c, t) => `${c} / ${t} mo`,
+    }),
   },
   {
     id: "lighthouse_keeper",
@@ -298,6 +393,11 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "Opened the app 30 days in a row.",
     hint: "Keep a 30-day app-open streak.",
     check: (ctx) => ctx.stats.longestAppOpenStreak >= 30,
+    progress: (ctx) => ({
+      current: ctx.stats.longestAppOpenStreak,
+      target: 30,
+      format: (c, t) => `${c} / ${t} days`,
+    }),
   },
   {
     id: "all_sails_set",
@@ -318,6 +418,12 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     check: (ctx) =>
       ctx.milestonePlan.steps.length > 0 &&
       ctx.milestonePlan.steps.every((s) => s.isCompleted),
+    progress: (ctx) => {
+      const total = ctx.milestonePlan.steps.length;
+      if (total === 0) return null;
+      const done = ctx.milestonePlan.steps.filter((s) => s.isCompleted).length;
+      return { current: done, target: total };
+    },
   },
 ];
 

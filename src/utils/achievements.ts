@@ -15,6 +15,7 @@
 import {
   ACHIEVEMENT_DEFS,
   type AchievementContext,
+  type AchievementProgress,
 } from "../data/achievementDefs";
 import {
   getUnlockedAchievements,
@@ -42,6 +43,12 @@ export interface EvaluationResult {
    * silently in the Ship's Log instead.
    */
   isFirstEvaluation: boolean;
+  /**
+   * id → progress snapshot for every def whose `progress(ctx)` returned
+   * a non-null value. Useful for UIs that want to render partial-fill
+   * rings or "X / Y" captions without reloading storage.
+   */
+  progress: Record<string, AchievementProgress>;
 }
 
 const loadContext = async (): Promise<AchievementContext> => {
@@ -92,18 +99,29 @@ export const evaluateAchievements = async (): Promise<EvaluationResult> => {
 
   const next: Record<string, number> = { ...state.unlocked };
   const newlyUnlocked: string[] = [];
+  const progress: Record<string, AchievementProgress> = {};
   const now = Date.now();
   const isFirstEvaluation = state.firstEvaluatedAt === undefined;
 
   for (const def of ACHIEVEMENT_DEFS) {
-    if (next[def.id] !== undefined) continue;
-    try {
-      if (def.check(ctx)) {
-        next[def.id] = now;
-        newlyUnlocked.push(def.id);
+    if (next[def.id] === undefined) {
+      try {
+        if (def.check(ctx)) {
+          next[def.id] = now;
+          newlyUnlocked.push(def.id);
+        }
+      } catch (error) {
+        if (__DEV__) console.warn(`Achievement check failed: ${def.id}`, error);
       }
-    } catch (error) {
-      if (__DEV__) console.warn(`Achievement check failed: ${def.id}`, error);
+    }
+    if (def.progress) {
+      try {
+        const p = def.progress(ctx);
+        if (p && p.target > 0) progress[def.id] = p;
+      } catch (error) {
+        if (__DEV__)
+          console.warn(`Achievement progress failed: ${def.id}`, error);
+      }
     }
   }
 
@@ -115,5 +133,5 @@ export const evaluateAchievements = async (): Promise<EvaluationResult> => {
     });
   }
 
-  return { unlocked: next, newlyUnlocked, isFirstEvaluation };
+  return { unlocked: next, newlyUnlocked, isFirstEvaluation, progress };
 };

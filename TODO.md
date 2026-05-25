@@ -357,6 +357,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [x] Monthly review insights (category changes, spending trends, streaks)
 - [x] Custom categories and category icon support - v1 (add-only): users add their own categories (name + emoji icon) via Profile → CATEGORIES → Custom Categories. Built-in 21 stay fixed. Custom categories work everywhere built-ins do: entry pickers (Add/Edit modals), Budget category list, donut chart (deterministic name-hashed color), monthly limits, insights/streaks, Annual Report. New `customCategoriesStorage.ts` (EncryptedStorage, validated/sanitized names, dup-checked vs built-in+custom, cap 30) + `CustomCategoriesProvider` + `categoryIcons.ts` (emoji map for all 21 built-ins + curated picker grid + resolver). `BudgetEntry.category`/`CategoryBudgetLimit.category` widened to `CategoryName` (built-in autocomplete preserved). OTA-safe - emoji only, no native deps. Typecheck clean. Import/export round-trips custom categories: JSON export carries a `customCategories` collection; the shared record validator (`recordValidators.isValidImportCategory`, also on the LAN-sync path) accepts safe custom names (sanitized, ≤24 chars) instead of rejecting them; importData merges the explicit collection (LWW-by-id, name-deduped, built-in shadow dropped) AND derives definitions from any referenced-but-undefined custom names so pre-feature/foreign backups and sync-relayed entries stay usable (derived ones get the default icon). Spreadsheet import uses the same gate (`normalizeImportCategory`). Replace-mode intentionally does NOT wipe local custom categories when the import carries none, to avoid losing definitions still referenced by imported entries. Known limitation: deleting a custom category leaves tagged entries on the name with the default icon; spreadsheet export has no dedicated icon sheet (names survive via derivation, icon resets to default on round-trip).
 - [ ] Search and advanced filters across debts, payments, and budget entries
+- [ ] Currency exchange calculator (Utilities tab) - pick base + target currency, enter amount, see converted value. Decide rate source (offline lookup table snapshotted at build time vs. on-demand API call) and whether to surface a "rates last updated" timestamp. Reuse existing `useCurrency()` formatting; live in Utilities alongside the loan amortization tools.
 - [x] Undo actions and bulk edit/delete operations - SHIPPED. (1) Global single-slot Undo snackbar (`src/undo/UndoProvider.tsx`, mounted at app root, theme/density/safe-area aware, sits above tab bar via `fabBottomOffset`, 5s auto-dismiss). Storage gained `untombstone()` + restore paths: `restoreDebt`/`restoreBudgetEntry`/`restoreSavingsGoal`/`restoreAssetAccount`, compound `deletePayment`+`restorePayment` (also reverses the debt-balance effect), `restoreCustomCategory` (re-inserts exact object, same id), tombstone-safe `updateBudgetEntry`. Undo wired for deletes AND edits on: debt delete/edit, savings-goal delete, budget-entry delete/edit, asset delete - each undo also unwinds side effects (net-worth snapshot, linked-asset balance deltas, achievement re-check). (2) Bulk multi-select: long-press to enter selection. Budget entries (BudgetScreen) - per-row checkboxes on expanded category entries (auto-debt-payment rows excluded), bottom action bar with Recategorize (category picker) + Delete, single batched Undo via the global snackbar; batch storage helpers `deleteBudgetEntries`/`restoreBudgetEntries`/`setBudgetEntryCategories` (one read/write). Payments (PaymentHistoryModal) - selectable rows, batched Delete with a LOCAL in-modal undo bar (the root snackbar is occluded by the RN Modal); `onPaymentsChanged` bubbles up so DebtTrackerScreen refreshes debts/net-worth/achievements.
 
   Deliberate exclusion: custom-category delete keeps its existing `Alert.alert` confirm instead of an undo snackbar - it's deleted from inside the Categories RN Modal, which would occlude the root snackbar (the `restoreCustomCategory` path exists for future use / import round-trip). Not yet device-tested - verify on-device: undo timing/occlusion, linked-asset balance math on bulk delete+undo, recategorize undo of a mixed selection (restores each entry's prior category, not one shared one).
@@ -777,13 +778,13 @@ Possible feature design (v1):
 
   OTA-eligible: yes. Pure JS, bundled data, no new native deps. Bracket refresh each tax year = OTA bundle update.
 
-- [ ] Compass tab - rename Utilities → Compass and turn it into a personal finance learning hub alongside the existing calculators.
+- [ ] Charts tab - rename Utilities → Charts and turn it into a personal finance learning hub alongside the existing calculators. (Avoids "Compass" since Bridge already uses 🧭. "Charts" reads as both star/nautical charts and the reference-material framing for a learning hub, and stays short like the other tab labels.)
 
   Concept: bite-sized lessons on budgeting, debt, saving, investing, taxes, insurance, real estate, retirement. Each lesson ends with contextual CTAs that open existing in-app flows (set up a savings goal, switch debt strategy, open a calculator) so learning ties directly to user action. External resources per lesson: curated YouTube videos for deeper discussion + Amazon book recommendations (affiliate links, with full compliance flow).
 
   Naming / IA:
-  - Bottom tab label: "Compass" with 🧭 icon. Route key stays "Utilities" for backward compat with existing sync/state - only the display label changes.
-  - Compass landing has 3 sections: Captain's Course (linear path), Topics (free-form browse), Tools (existing calculators - Refinance, Sinking Fund, Tax, etc., folded in instead of a separate tab).
+  - Bottom tab label: "Charts" with 📜 icon (scroll/chart). Alternates worth a quick A/B in design: 🗺️ or 🌌. Route key stays "Utilities" for backward compat with existing sync/state - only the display label and icon change.
+  - Charts landing has 3 sections: Captain's Course (linear path), Topics (free-form browse), Tools (existing calculators - Refinance, Sinking Fund, Tax, etc., folded in instead of a separate tab).
   - Personalized "Recommended for you" card at top, picked from user state (high-interest debt → avalanche lesson; no emergency fund → starter cushion lesson; net worth crossed $10k → investing basics).
 
   Lesson model:
@@ -814,7 +815,7 @@ Possible feature design (v1):
   Amazon affiliate compliance (CRITICAL - read before shipping):
   - **Amazon Associates Operating Agreement** requires the verbatim disclosure: "As an Amazon Associate I earn from qualifying purchases." Must be visible near affiliate links AND in a persistent location.
   - **First-tap one-time disclosure modal** on any affiliate link:
-    > "Books on Compass link to Amazon. If you buy after tapping, BudgetArk earns a small commission at no extra cost to you. This helps fund the app's development."
+    > "Books on Charts link to Amazon. If you buy after tapping, BudgetArk earns a small commission at no extra cost to you. This helps fund the app's development."
     > [Continue] [Cancel]
     Persist in `@budgetark_affiliate_disclosure_seen`, never shows again.
   - **Always-visible small footer** on lesson resource sections: "Some links earn commission. As an Amazon Associate, BudgetArk earns from qualifying purchases."
@@ -827,7 +828,7 @@ Possible feature design (v1):
     - **Option B**: ship with the `Advertising` anti-feature tag and accept the user-filter penalty.
 
   UI:
-  - Compass landing: scrollable, three section headers.
+  - Charts landing: scrollable, three section headers.
     - "Continue your course" - resumes Captain's Course where the user left off; progress bar showing chapter X of Y.
     - "Recommended for you" - 1-3 personalized lesson cards.
     - "Topics" - chip row (Budgeting / Debt / Saving / Investing / Taxes / Insurance / Real Estate / Retirement). Tap → filtered lesson grid.
@@ -837,7 +838,7 @@ Possible feature design (v1):
 
   Progression / gamification (ties into existing Ship's Log):
   - 📖 First Voyage - finished first lesson
-  - 🧭 Course Plotter - completed Captain's Course Ch 1
+  - ⭐ Course Plotter - completed Captain's Course Ch 1 (was 🧭 - reusing Bridge's glyph, swapped to a star to match the Charts theme)
   - ⚓ Anchored in Knowledge - completed full Captain's Course
   - 🦉 Wise Steward - read 25 lessons
   - Lesson completion timestamps in `learningProgressStorage.ts`. Counts toward existing app-open streak.
@@ -848,7 +849,7 @@ Possible feature design (v1):
   - Include in `clearAllData` `RESET_KEYS`.
 
   Files (proposed):
-  - `src/screens/CompassScreen.tsx` (landing - replaces UtilitiesScreen or wraps it)
+  - `src/screens/ChartsScreen.tsx` (landing - replaces UtilitiesScreen or wraps it)
   - `src/screens/LessonScreen.tsx`
   - `src/lessons/LessonRenderer.tsx` (typed section walker)
   - `src/lessons/AffiliateLinkGuard.tsx` (first-tap disclosure modal + F-Droid build-flag strip)
@@ -859,12 +860,12 @@ Possible feature design (v1):
   - `src/navigation/AppNavigator.tsx` - rename tab label, swap icon, keep route key
 
   MVP scope (single OTA + cover assets in next EAS build for the bundled images):
-  1. Rename tab to Compass, fold existing calculators into "Tools" section.
+  1. Rename tab to Charts, fold existing calculators into "Tools" section.
   2. Ship Captain's Course chapters 1-2 (~8 lessons: budgeting basics, needs/wants/savings, emergency fund why, $1k starter, snowball vs avalanche, interest math, good vs bad debt, recap).
   3. Topics chips with 4 active (Budgeting, Debt, Saving, Tools); remaining grayed "Coming soon."
   4. Resource cards for YouTube + book affiliates.
   5. Affiliate disclosure flow (modal + Profile section + footer).
-  6. 2 new Ship's Log badges (📖 First Voyage, 🧭 Course Plotter).
+  6. 2 new Ship's Log badges (📖 First Voyage, ⭐ Course Plotter).
   7. Personalized recommendation rules (3-5 triggers).
 
   Out of scope (v1):

@@ -26,6 +26,7 @@ import {
   TIER_ORDER,
   TOTAL_ACHIEVEMENTS,
   type AchievementDef,
+  type AchievementProgress,
 } from "../data/achievementDefs";
 import { evaluateAchievements } from "../utils/achievements";
 import { useTheme } from "../theme/ThemeProvider";
@@ -69,6 +70,9 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [unlocked, setUnlocked] = useState<Record<string, number>>({});
+  const [progressMap, setProgressMap] = useState<
+    Record<string, AchievementProgress>
+  >({});
   const [filter, setFilter] = useState<FilterId>("all");
   const [selected, setSelected] = useState<AchievementDef | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -81,18 +85,29 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
       .then((result) => {
         if (cancelled) return;
         setUnlocked(result.unlocked);
+        setProgressMap(result.progress);
         setIsLoaded(true);
       })
       .catch((error) => {
         if (cancelled) return;
         if (__DEV__) console.warn("Failed to evaluate achievements:", error);
         setUnlocked({});
+        setProgressMap({});
         setIsLoaded(true);
       });
     return () => {
       cancelled = true;
     };
   }, [visible]);
+
+  const formatProgress = useCallback(
+    (p: AchievementProgress): string => {
+      const cur = Math.max(0, Math.min(p.current, p.target));
+      if (p.format) return p.format(cur, p.target);
+      return `${Math.floor(cur)} / ${p.target}`;
+    },
+    []
+  );
 
   const sortedDefs = useMemo(() => {
     // Earned first, then by tier ascending, then by definition order.
@@ -127,6 +142,11 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
   const renderItem = useCallback(
     ({ item }: { item: AchievementDef }) => {
       const isEarned = unlocked[item.id] !== undefined;
+      const prog = !isEarned ? progressMap[item.id] : undefined;
+      const ratio =
+        prog && prog.target > 0
+          ? Math.max(0, Math.min(1, prog.current / prog.target))
+          : undefined;
       return (
         <Pressable
           style={({ pressed }) => [
@@ -135,9 +155,21 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
           ]}
           onPress={() => setSelected(item)}
           accessibilityRole="button"
-          accessibilityLabel={`${item.title}${isEarned ? ", earned" : ", locked"}`}
+          accessibilityLabel={`${item.title}${
+            isEarned
+              ? ", earned"
+              : prog
+                ? `, ${formatProgress(prog)}`
+                : ", locked"
+          }`}
         >
-          <Medal tier={item.tier} glyph={item.glyph} locked={!isEarned} size={72} />
+          <Medal
+            tier={item.tier}
+            glyph={item.glyph}
+            locked={!isEarned}
+            size={72}
+            progress={ratio}
+          />
           <Text
             style={[
               styles.cellTitle,
@@ -147,13 +179,26 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
           >
             {item.title}
           </Text>
+          {prog && (
+            <Text style={styles.cellProgress} numberOfLines={1}>
+              {formatProgress(prog)}
+            </Text>
+          )}
         </Pressable>
       );
     },
-    [colors.textMuted, styles, unlocked]
+    [colors.textMuted, formatProgress, progressMap, styles, unlocked]
   );
 
   const detailEarned = selected ? unlocked[selected.id] : undefined;
+  const detailProgress =
+    selected && detailEarned === undefined
+      ? progressMap[selected.id]
+      : undefined;
+  const detailRatio =
+    detailProgress && detailProgress.target > 0
+      ? Math.max(0, Math.min(1, detailProgress.current / detailProgress.target))
+      : undefined;
 
   return (
     <Modal
@@ -259,6 +304,7 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
                     glyph={selected.glyph}
                     locked={detailEarned === undefined}
                     size={108}
+                    progress={detailRatio}
                   />
                   <Text style={styles.detailTitle}>{selected.title}</Text>
                   <Text style={styles.detailTier}>
@@ -270,6 +316,11 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
                       ? selected.description
                       : selected.hint}
                   </Text>
+                  {detailProgress && (
+                    <Text style={styles.detailProgress}>
+                      {formatProgress(detailProgress)}
+                    </Text>
+                  )}
                   {detailEarned !== undefined && (
                     <Text style={styles.detailDate}>
                       Earned {formatUnlockDate(detailEarned)}
@@ -375,6 +426,14 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       textAlign: "center",
       marginTop: 8,
     },
+    cellProgress: {
+      color: colors.accent,
+      fontSize: 11,
+      fontWeight: "700",
+      textAlign: "center",
+      marginTop: 4,
+      fontVariant: ["tabular-nums"],
+    },
     emptyContainer: {
       paddingHorizontal: 24,
       paddingVertical: 48,
@@ -422,6 +481,13 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       lineHeight: 20,
       textAlign: "center",
       marginTop: 12,
+    },
+    detailProgress: {
+      color: colors.accent,
+      fontSize: 14,
+      fontWeight: "700",
+      marginTop: 10,
+      fontVariant: ["tabular-nums"],
     },
     detailDate: {
       color: colors.textMuted,
