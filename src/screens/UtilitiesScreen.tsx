@@ -32,13 +32,15 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import {
   calcInvestmentTimeline,
+  calcMonthsUntilDate,
   calcPaymentForGoalDate,
   generatePayoffSchedule,
 } from "../utils/calculations";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
-import type { BudgetEntry } from "../types";
+import { getDebts } from "../storage/debtStorage";
+import type { BudgetEntry, Debt } from "../types";
 import { isEntryActiveInMonth } from "../utils/recurrence";
 import SmoothSlider from "../components/SmoothSlider";
 
@@ -74,6 +76,21 @@ const LOAN_SLIDERS: Record<"loanAmount" | "loanRate" | "loanTerm", SliderConfig>
 
 const LOAN_TERM_PRESETS = [15, 20, 30] as const;
 const LOAN_SCHEDULE_PAGE_SIZE = 12;
+
+/* ── Refinance Break-Even Config ── */
+
+type RefiKey =
+  | "refiCurrentTerm"
+  | "refiNewRate"
+  | "refiNewTerm"
+  | "refiClosingCosts";
+
+const REFI_SLIDERS: Record<RefiKey, SliderConfig> = {
+  refiCurrentTerm: { label: "Years Remaining", min: 1, max: 30, step: 1 },
+  refiNewRate: { label: "New Rate (APR)", min: 0.5, max: 30, step: 0.125 },
+  refiNewTerm: { label: "New Term (years)", min: 1, max: 30, step: 1 },
+  refiClosingCosts: { label: "Closing Costs", min: 0, max: 30_000, step: 100 },
+};
 
 type LoanScheduleRow = {
   month: number;
@@ -309,6 +326,19 @@ const UtilitiesScreen: React.FC = () => {
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  /* Refinance break-even calculator state */
+  const [refiOpen, setRefiOpen] = useState(false);
+  const [refiCurrentTerm, setRefiCurrentTerm] = useState(28);
+  const [refiNewRate, setRefiNewRate] = useState(5.5);
+  const [refiNewTerm, setRefiNewTerm] = useState(30);
+  const [refiClosingCosts, setRefiClosingCosts] = useState(4000);
+  const [refiEditingKey, setRefiEditingKey] = useState<RefiKey | null>(null);
+  const [refiEditingText, setRefiEditingText] = useState("");
+  const [refiDebts, setRefiDebts] = useState<Debt[]>([]);
+  const [refiSelectedDebtIds, setRefiSelectedDebtIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   /* Emergency fund calculator state */
   const [efOpen, setEfOpen] = useState(false);
@@ -597,6 +627,159 @@ const UtilitiesScreen: React.FC = () => {
     }
   }, [isLoanExporting, loanSchedule]);
 
+  /* ── Refinance break-even logic ── */
+
+  const toggleRefi = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setRefiOpen((prev) => !prev);
+  }, []);
+
+  const refiSetters: Record<RefiKey, React.Dispatch<React.SetStateAction<number>>> = {
+    refiCurrentTerm: setRefiCurrentTerm,
+    refiNewRate: setRefiNewRate,
+    refiNewTerm: setRefiNewTerm,
+    refiClosingCosts: setRefiClosingCosts,
+  };
+
+  const adjustRefi = useCallback((key: RefiKey, delta: number) => {
+    const cfg = REFI_SLIDERS[key];
+    refiSetters[key]((prev) => {
+      const next = Math.round((prev + delta * cfg.step) * 1000) / 1000;
+      return Math.max(cfg.min, Math.min(cfg.max, next));
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRefiSliderChange = useCallback((key: RefiKey, val: number) => {
+    refiSetters[key](val);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRefiValueFocus = useCallback((key: RefiKey, value: number) => {
+    setRefiEditingKey(key);
+    setRefiEditingText(String(value));
+  }, []);
+
+  const handleRefiValueChange = useCallback((key: RefiKey, text: string) => {
+    const isDecimal = key === "refiNewRate";
+    setRefiEditingText(
+      isDecimal ? text.replace(/[^0-9.]/g, "") : text.replace(/[^0-9]/g, "")
+    );
+  }, []);
+
+  const handleRefiValueSubmit = useCallback(
+    (key: RefiKey) => {
+      const cfg = REFI_SLIDERS[key];
+      const parsed = parseFloat(refiEditingText);
+      if (!isNaN(parsed) && parsed >= cfg.min) {
+        const clamped = Math.max(cfg.min, Math.min(cfg.max, parsed));
+        const snapped =
+          cfg.step >= 1
+            ? Math.round(clamped)
+            : Math.round(clamped / cfg.step) * cfg.step;
+        refiSetters[key](Math.round(snapped * 1000) / 1000);
+      }
+      setRefiEditingKey(null);
+    },
+    [refiEditingText] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const toggleRefiDebt = useCallback((id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setRefiSelectedDebtIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  /* Derived current-loan numbers from the selected debts */
+  const selectedRefiDebts = useMemo(
+    () => refiDebts.filter((d) => refiSelectedDebtIds.has(d.id)),
+    [refiDebts, refiSelectedDebtIds]
+  );
+
+  const refiBalance = useMemo(
+    () =>
+      selectedRefiDebts.reduce((s, d) => s + Math.max(0, d.balance), 0),
+    [selectedRefiDebts]
+  );
+
+  const refiCurrentRate = useMemo(() => {
+    if (refiBalance <= 0) return 0;
+    const weighted = selectedRefiDebts.reduce(
+      (s, d) => s + Math.max(0, d.balance) * d.rate,
+      0
+    );
+    return weighted / refiBalance;
+  }, [selectedRefiDebts, refiBalance]);
+
+  // Auto-fill years remaining when every selected debt has a goal date
+  // (weighted by balance). Leaves the user's manual value alone otherwise.
+  useEffect(() => {
+    if (selectedRefiDebts.length === 0) return;
+    if (!selectedRefiDebts.every((d) => Boolean(d.goalDate))) return;
+    if (refiBalance <= 0) return;
+    const weightedMonths =
+      selectedRefiDebts.reduce(
+        (s, d) =>
+          s + Math.max(0, d.balance) * calcMonthsUntilDate(d.goalDate as string),
+        0
+      ) / refiBalance;
+    const years = Math.max(1, Math.min(30, Math.round(weightedMonths / 12)));
+    setRefiCurrentTerm(years);
+  }, [selectedRefiDebts, refiBalance]);
+
+  /* Refi math */
+  const refiCurrentMonths = refiCurrentTerm * 12;
+  const refiNewMonths = refiNewTerm * 12;
+  const hasRefiSelection = selectedRefiDebts.length > 0 && refiBalance > 0;
+
+  const refiCurrentMonthlyPayment = useMemo(
+    () =>
+      hasRefiSelection
+        ? calcPaymentForGoalDate(refiBalance, refiCurrentRate, refiCurrentMonths)
+        : 0,
+    [hasRefiSelection, refiBalance, refiCurrentRate, refiCurrentMonths]
+  );
+  const refiNewMonthlyPayment = useMemo(
+    () =>
+      hasRefiSelection
+        ? calcPaymentForGoalDate(refiBalance, refiNewRate, refiNewMonths)
+        : 0,
+    [hasRefiSelection, refiBalance, refiNewRate, refiNewMonths]
+  );
+
+  const refiCurrentTotalInterest = useMemo(() => {
+    if (!hasRefiSelection || !isFinite(refiCurrentMonthlyPayment)) return 0;
+    return generatePayoffSchedule(
+      refiBalance,
+      refiCurrentRate,
+      refiCurrentMonthlyPayment
+    ).reduce((sum, row) => sum + row.interestPaid, 0);
+  }, [hasRefiSelection, refiBalance, refiCurrentRate, refiCurrentMonthlyPayment]);
+
+  const refiNewTotalInterest = useMemo(() => {
+    if (!hasRefiSelection || !isFinite(refiNewMonthlyPayment)) return 0;
+    return generatePayoffSchedule(
+      refiBalance,
+      refiNewRate,
+      refiNewMonthlyPayment
+    ).reduce((sum, row) => sum + row.interestPaid, 0);
+  }, [hasRefiSelection, refiBalance, refiNewRate, refiNewMonthlyPayment]);
+
+  const refiMonthlyDelta = refiCurrentMonthlyPayment - refiNewMonthlyPayment;
+  const refiInterestDelta = refiCurrentTotalInterest - refiNewTotalInterest;
+  const refiBreakEvenMonths =
+    hasRefiSelection && refiMonthlyDelta > 0
+      ? refiClosingCosts / refiMonthlyDelta
+      : null;
+  const refiNetSavingsOverNewTerm =
+    refiMonthlyDelta * refiNewMonths - refiClosingCosts;
+  const refiExtendsTerm = refiNewMonths > refiCurrentMonths;
+  const refiAllSelectedHaveGoalDate =
+    selectedRefiDebts.length > 0 &&
+    selectedRefiDebts.every((d) => Boolean(d.goalDate));
+
   /* ── Emergency fund logic ── */
 
   const toggleEf = useCallback(() => {
@@ -608,9 +791,10 @@ const UtilitiesScreen: React.FC = () => {
     useCallback(() => {
       let cancelled = false;
       const loadEfData = async () => {
-        const [entries, goals] = await Promise.all([
+        const [entries, goals, debts] = await Promise.all([
           getBudgetEntries(),
           getSavingsGoals(),
+          getDebts(),
         ]);
         if (cancelled) return;
 
@@ -621,6 +805,8 @@ const UtilitiesScreen: React.FC = () => {
         setCurrentEfAmount(efGoal?.currentAmount ?? 0);
         setEfTargetAmount(efGoal?.targetAmount ?? 0);
         setEfDataLoaded(true);
+
+        setRefiDebts(debts);
       };
       loadEfData();
       return () => {
@@ -706,6 +892,73 @@ const UtilitiesScreen: React.FC = () => {
     },
     []
   );
+
+  const renderRefiSlider = (key: RefiKey, value: number) => {
+    const cfg = REFI_SLIDERS[key];
+    const isCurrency = key === "refiClosingCosts";
+    const isRate = key === "refiNewRate";
+    const displayValue = isCurrency
+      ? formatCurrency(value)
+      : isRate
+        ? `${value}%`
+        : `${value} yr`;
+
+    return (
+      <View key={key} style={styles.sliderGroup}>
+        <View style={styles.sliderHeader}>
+          <Text style={styles.sliderLabel}>{cfg.label}</Text>
+          {refiEditingKey === key ? (
+            <TextInput
+              style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
+              value={refiEditingText}
+              onChangeText={(text) => handleRefiValueChange(key, text)}
+              onBlur={() => handleRefiValueSubmit(key)}
+              onSubmitEditing={() => handleRefiValueSubmit(key)}
+              keyboardType={isRate ? "decimal-pad" : "numeric"}
+              returnKeyType="done"
+              selectTextOnFocus
+              autoFocus
+              placeholderTextColor={colors.textMuted}
+            />
+          ) : (
+            <TouchableOpacity
+              style={styles.sliderValueDisplay}
+              onPress={() => handleRefiValueFocus(key, value)}
+            >
+              <Text style={styles.sliderValue}>{displayValue}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.sliderRow}>
+          <TouchableOpacity
+            style={styles.sliderBtn}
+            onPress={() => adjustRefi(key, -1)}
+            disabled={value <= cfg.min}
+          >
+            <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
+          </TouchableOpacity>
+          <SmoothSlider
+            value={value}
+            min={cfg.min}
+            max={cfg.max}
+            step={cfg.step}
+            onValueChange={(val) => handleRefiSliderChange(key, val)}
+            trackColor={colors.bg}
+            fillColor={colors.accent}
+            thumbColor={colors.accent}
+            thumbBorderColor={colors.card}
+          />
+          <TouchableOpacity
+            style={styles.sliderBtn}
+            onPress={() => adjustRefi(key, 1)}
+            disabled={value >= cfg.max}
+          >
+            <Text style={[styles.sliderBtnText, value >= cfg.max && styles.sliderBtnDisabled]}>+</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   const renderSlider = (key: "contribution" | "returnRate" | "years", value: number) => {
     const cfg = SLIDERS[key];
@@ -1236,6 +1489,276 @@ const UtilitiesScreen: React.FC = () => {
                 </Text>
               )}
             </View>
+          </View>
+        )}
+
+        {/* ── Refinance Break-Even Calculator Tool ── */}
+        <TouchableOpacity style={styles.toolHeader} onPress={toggleRefi} activeOpacity={0.7}>
+          <View>
+            <Text style={styles.toolTitle}>Refinance Break-Even Calculator</Text>
+            <Text style={styles.toolHint}>
+              See if refinancing actually saves you money
+            </Text>
+          </View>
+          <Text style={styles.toolChevron}>{refiOpen ? "▾" : "›"}</Text>
+        </TouchableOpacity>
+
+        {refiOpen && (
+          <View style={styles.toolBody}>
+            {/* Result card - break-even */}
+            <View style={styles.resultCard}>
+              <Text style={styles.resultLabel}>BREAK-EVEN</Text>
+              {!hasRefiSelection ? (
+                <>
+                  <Text style={[styles.resultValue, { color: colors.textDim }]}>
+                    --
+                  </Text>
+                  <Text style={styles.resultSub}>
+                    Pick at least one debt below to see the comparison.
+                  </Text>
+                </>
+              ) : refiBreakEvenMonths !== null && isFinite(refiBreakEvenMonths) ? (
+                <>
+                  <Text style={styles.resultValue}>
+                    {Math.ceil(refiBreakEvenMonths)} mo
+                  </Text>
+                  <Text style={styles.resultSub}>
+                    {refiBreakEvenMonths >= 12
+                      ? `~${(refiBreakEvenMonths / 12).toFixed(1)} years to recover ${formatCurrency(refiClosingCosts)} in closing costs`
+                      : `${formatCurrency(refiClosingCosts)} in closing costs recovered in under a year`}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.resultValue, { color: colors.danger }]}>--</Text>
+                  <Text style={styles.resultSub}>
+                    New payment isn't lower than current - no break-even.
+                  </Text>
+                </>
+              )}
+            </View>
+
+            {/* Current loan - debt multi-select */}
+            <View style={styles.refiPrefillCard}>
+              <Text style={styles.refiSectionLabel}>CURRENT LOAN</Text>
+              <Text style={styles.refiPrefillTitle}>
+                Pick the debts you want to refinance
+              </Text>
+              {refiDebts.length === 0 ? (
+                <Text style={styles.refiEmptyText}>
+                  Add a debt in the Debt Tracker to use this calculator.
+                </Text>
+              ) : (
+                refiDebts.map((debt) => {
+                  const isSelected = refiSelectedDebtIds.has(debt.id);
+                  return (
+                    <TouchableOpacity
+                      key={debt.id}
+                      style={[
+                        styles.refiDebtRow,
+                        isSelected && styles.refiDebtRowActive,
+                      ]}
+                      onPress={() => toggleRefiDebt(debt.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        style={[
+                          styles.refiDebtCheckbox,
+                          isSelected && styles.refiDebtCheckboxActive,
+                        ]}
+                      >
+                        {isSelected && (
+                          <Text style={styles.refiDebtCheckboxMark}>✓</Text>
+                        )}
+                      </View>
+                      <View style={styles.refiDebtRowText}>
+                        <Text
+                          style={[
+                            styles.refiDebtName,
+                            isSelected && styles.refiDebtNameActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {debt.name}
+                        </Text>
+                        <Text style={styles.refiDebtMeta}>
+                          {formatCurrency(debt.balance)} · {debt.rate}% APR
+                          {debt.goalDate ? " · goal set" : ""}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+
+            {/* Current loan derived summary + years-remaining slider */}
+            {hasRefiSelection && (
+              <View style={styles.slidersCard}>
+                <Text style={styles.refiSectionLabel}>CURRENT LOAN SUMMARY</Text>
+                <View style={styles.refiSummaryRow}>
+                  <View style={styles.refiSummaryItem}>
+                    <Text style={styles.refiSummaryLabel}>Combined balance</Text>
+                    <Text style={styles.refiSummaryValue}>
+                      {formatCurrency(refiBalance)}
+                    </Text>
+                  </View>
+                  <View style={styles.breakdownDivider} />
+                  <View style={styles.refiSummaryItem}>
+                    <Text style={styles.refiSummaryLabel}>
+                      {selectedRefiDebts.length > 1 ? "Weighted APR" : "APR"}
+                    </Text>
+                    <Text style={styles.refiSummaryValue}>
+                      {refiCurrentRate.toFixed(2)}%
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.refiSummaryHint}>
+                  {selectedRefiDebts.length} of {refiDebts.length} debts selected
+                  {selectedRefiDebts.length > 1
+                    ? " · weighted by balance"
+                    : ""}
+                </Text>
+                {renderRefiSlider("refiCurrentTerm", refiCurrentTerm)}
+                <Text style={styles.refiPrefillHint}>
+                  {refiAllSelectedHaveGoalDate
+                    ? "Years remaining auto-filled from each debt's goal date. Adjust freely if the goal dates aren't exact."
+                    : "Set a goal date on each debt in the tracker to auto-fill years remaining."}
+                </Text>
+              </View>
+            )}
+
+            {/* New loan sliders */}
+            {hasRefiSelection && (
+              <View style={styles.slidersCard}>
+                <Text style={styles.refiSectionLabel}>NEW LOAN</Text>
+                {renderRefiSlider("refiNewRate", refiNewRate)}
+                {renderRefiSlider("refiNewTerm", refiNewTerm)}
+                {renderRefiSlider("refiClosingCosts", refiClosingCosts)}
+              </View>
+            )}
+
+            {/* Monthly payment breakdown */}
+            {hasRefiSelection && (<>
+            <View style={styles.breakdownCard}>
+              <Text style={styles.breakdownTitle}>Monthly Payment</Text>
+              <View style={styles.breakdownRow}>
+                <View style={styles.breakdownItem}>
+                  <Text style={[styles.breakdownValue, { color: colors.textDim }]}>
+                    {isFinite(refiCurrentMonthlyPayment)
+                      ? formatCurrency(refiCurrentMonthlyPayment)
+                      : "--"}
+                  </Text>
+                  <Text style={styles.breakdownLabel}>Current</Text>
+                </View>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.breakdownItem}>
+                  <Text style={[styles.breakdownValue, { color: colors.accent }]}>
+                    {isFinite(refiNewMonthlyPayment)
+                      ? formatCurrency(refiNewMonthlyPayment)
+                      : "--"}
+                  </Text>
+                  <Text style={styles.breakdownLabel}>New</Text>
+                </View>
+              </View>
+              <Text
+                style={[
+                  styles.ratioText,
+                  {
+                    color:
+                      refiMonthlyDelta > 0
+                        ? colors.success
+                        : refiMonthlyDelta < 0
+                          ? colors.danger
+                          : colors.textDim,
+                    fontWeight: "700",
+                    marginTop: 12,
+                  },
+                ]}
+              >
+                {refiMonthlyDelta > 0
+                  ? `Saves ${formatCurrency(refiMonthlyDelta)}/mo`
+                  : refiMonthlyDelta < 0
+                    ? `Costs ${formatCurrency(Math.abs(refiMonthlyDelta))}/mo more`
+                    : "Same monthly payment"}
+              </Text>
+            </View>
+
+            {/* Lifetime interest comparison */}
+            <View style={styles.breakdownCard}>
+              <Text style={styles.breakdownTitle}>Lifetime Interest</Text>
+              <View style={styles.breakdownRow}>
+                <View style={styles.breakdownItem}>
+                  <Text style={[styles.breakdownValue, { color: colors.textDim }]}>
+                    {formatCurrency(refiCurrentTotalInterest)}
+                  </Text>
+                  <Text style={styles.breakdownLabel}>Keep current</Text>
+                </View>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.breakdownItem}>
+                  <Text style={[styles.breakdownValue, { color: colors.accent }]}>
+                    {formatCurrency(refiNewTotalInterest)}
+                  </Text>
+                  <Text style={styles.breakdownLabel}>Refinance</Text>
+                </View>
+              </View>
+              <Text
+                style={[
+                  styles.ratioText,
+                  {
+                    color:
+                      refiInterestDelta > 0
+                        ? colors.success
+                        : refiInterestDelta < 0
+                          ? colors.danger
+                          : colors.textDim,
+                    fontWeight: "700",
+                    marginTop: 12,
+                  },
+                ]}
+              >
+                {refiInterestDelta > 0
+                  ? `Saves ${formatCurrency(refiInterestDelta)} over the life of the loan`
+                  : refiInterestDelta < 0
+                    ? `Pays ${formatCurrency(Math.abs(refiInterestDelta))} more in interest overall`
+                    : "Same lifetime interest"}
+              </Text>
+            </View>
+
+            {/* Net savings + warnings */}
+            {refiBreakEvenMonths !== null && (
+              <View style={styles.insightCard}>
+                <Text style={styles.insightText}>
+                  Net savings over the new {refiNewTerm}-year term:{" "}
+                  <Text
+                    style={{
+                      color:
+                        refiNetSavingsOverNewTerm > 0
+                          ? colors.success
+                          : colors.danger,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {refiNetSavingsOverNewTerm >= 0 ? "+" : "-"}
+                    {formatCurrency(Math.abs(refiNetSavingsOverNewTerm))}
+                  </Text>
+                </Text>
+              </View>
+            )}
+
+            {refiExtendsTerm && refiMonthlyDelta > 0 && (
+              <View
+                style={[
+                  styles.insightCard,
+                  { backgroundColor: `${colors.warning}15` },
+                ]}
+              >
+                <Text style={styles.insightText}>
+                  Heads up: the new term is longer than what's left on your current loan. Lower monthly payments here partly come from spreading the balance over more months - check the lifetime interest above to see if that trade-off is worth it.
+                </Text>
+              </View>
+            )}
+            </>)}
           </View>
         )}
 
@@ -1939,6 +2462,115 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     scheduleStatus: {
       fontSize: 12,
       lineHeight: 17,
+    },
+
+    /* Refinance break-even */
+    refiPrefillCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      gap: 10,
+    },
+    refiPrefillTitle: {
+      fontSize: 13,
+      color: colors.textDim,
+      fontWeight: "600",
+    },
+    refiPrefillHint: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontStyle: "italic",
+    },
+    refiSectionLabel: {
+      fontSize: 10,
+      color: colors.textMuted,
+      letterSpacing: 1.5,
+      fontWeight: "700",
+      marginBottom: -4,
+    },
+    refiEmptyText: {
+      fontSize: 13,
+      color: colors.textMuted,
+      paddingVertical: 8,
+    },
+    refiDebtRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+    },
+    refiDebtRowActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}15`,
+    },
+    refiDebtRowText: {
+      flex: 1,
+    },
+    refiDebtCheckbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1.5,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    refiDebtCheckboxActive: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accent,
+    },
+    refiDebtCheckboxMark: {
+      color: colors.white ?? "#fff",
+      fontSize: 14,
+      fontWeight: "700",
+      lineHeight: 16,
+    },
+    refiDebtName: {
+      fontSize: 14,
+      color: colors.text,
+      fontWeight: "600",
+    },
+    refiDebtNameActive: {
+      color: colors.accent,
+    },
+    refiDebtMeta: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontVariant: ["tabular-nums"],
+      marginTop: 2,
+    },
+    refiSummaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    refiSummaryItem: {
+      flex: 1,
+      alignItems: "center",
+    },
+    refiSummaryLabel: {
+      fontSize: 11,
+      color: colors.textDim,
+      letterSpacing: 0.4,
+      marginBottom: 4,
+    },
+    refiSummaryValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
+    },
+    refiSummaryHint: {
+      fontSize: 11,
+      color: colors.textMuted,
+      textAlign: "center",
     },
 
     /* Emergency Fund */

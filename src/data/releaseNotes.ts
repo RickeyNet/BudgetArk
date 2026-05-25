@@ -15,6 +15,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Tap a locked badge to see the same progress in the detail sheet alongside its hint.",
       "Some badges now reflect your current state instead of staying earned forever: Treasure Hoard I/II/III, Galley Stocked, Half Mast, Debt-Free Captain, First Mate, and Admiral can dim back to locked if conditions change (net worth drops, new debt added, emergency fund drained, partner unpaired, milestone uncompleted). Historical badges - first payment, exports, streak bests, completed-month badges - stay earned forever.",
       "New legendary badge: Galleon's Hold 💰 - awarded when net worth crosses $1,000,000.",
+      "New Refinance Break-Even calculator on Utilities: pick one or more debts from the tracker to include, then enter a refinance offer (rate, term, closing costs) to see months-to-break-even, monthly payment change, and lifetime interest difference. Balance and APR are combined automatically (balance-weighted), so you can model a consolidation refi too.",
     ],
   },
   {

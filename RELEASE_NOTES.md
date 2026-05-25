@@ -24,6 +24,16 @@ Two-part upgrade to the achievement system. Pure JS - ships OTA against the exis
 
 - `galleons_hold` (💰, legendary, revocable): net worth ≥ $1,000,000. Slots between Treasure Hoard III ($100k gold) and Admiral (capstone). Progress ring tracks against the $1M target via the same `formatCurrencyProgress` used by the other Treasure tiers. Total badge count goes 18 → 19; `TOTAL_ACHIEVEMENTS` is array-length-derived so the Ship's Log "X / Y earned" counter updates automatically.
 
+### Refinance Break-Even calculator
+
+- New collapsible card on `UtilitiesScreen` between Loan/Mortgage and Emergency Fund.
+- Current-loan side is driven entirely by the debt tracker. Multi-select list of every debt from `getDebts()` (loaded alongside EF data in the focus effect); tapping a row toggles inclusion via a `Set<string>` of selected IDs. Combined balance and balance-weighted APR derive in `useMemo`s from the selection - both read-only.
+- Years remaining auto-fills via a balance-weighted average of `calcMonthsUntilDate(debt.goalDate)` across the selection, but only when every selected debt has a `goalDate`. Stays user-editable via the same `SmoothSlider` / tap-to-edit pattern. Hint copy switches between "auto-filled" and "set a goal date in the tracker to auto-fill" so users know why the slider isn't moving.
+- New-loan side: rate, term, closing costs (sliders). Math reuses `calcPaymentForGoalDate` + `generatePayoffSchedule`. Surfaces months-to-break-even (`closingCosts / monthlyDelta`), monthly delta (savings/cost color cue), lifetime interest delta, and net savings over the new term (`monthlyDelta * newMonths - closingCosts`).
+- Empty states: when `refiDebts.length === 0` the list shows a "Add a debt in the Debt Tracker" message. When zero debts are selected the result card shows "--" / "Pick at least one debt below" and the new-loan sliders + breakdowns are hidden via a single `hasRefiSelection` gate.
+- Edge cases handled: when the new payment isn't lower, result reads "no break-even" and the net-savings card is suppressed. When the new term extends past the current loan's remaining term, a warning-tinted insight card explains the lower-payment-for-more-interest trade-off.
+- Supports the consolidation-refi case: select multiple debts to roll into one new loan; the combined APR is balance-weighted, matching how a lender would amortize the consolidated principal.
+
 ## v1.6.4 - Cleaner Bridge + Smarter Update Prompt (2026-05-24)
 
 Bridge accounts card UX polish + a structural fix for the OTA "Update Ready" modal so highlights actually show. Pure JS - ships OTA against the existing 1.6.x native runtime.
