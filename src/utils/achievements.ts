@@ -38,6 +38,13 @@ export interface EvaluationResult {
   /** IDs that crossed locked → unlocked during this call. */
   newlyUnlocked: string[];
   /**
+   * IDs of `revocable: true` badges that were unlocked at the start of
+   * this call but no longer satisfy `check(ctx)`. These have been removed
+   * from `unlocked`. Callers can surface a subtle "badge dimmed" toast
+   * but should NOT show the celebration modal.
+   */
+  newlyRevoked: string[];
+  /**
    * True only on the very first evaluation after install. The caller
    * should NOT celebrate retroactive unlocks in that case - show them
    * silently in the Ship's Log instead.
@@ -99,21 +106,31 @@ export const evaluateAchievements = async (): Promise<EvaluationResult> => {
 
   const next: Record<string, number> = { ...state.unlocked };
   const newlyUnlocked: string[] = [];
+  const newlyRevoked: string[] = [];
   const progress: Record<string, AchievementProgress> = {};
   const now = Date.now();
   const isFirstEvaluation = state.firstEvaluatedAt === undefined;
 
   for (const def of ACHIEVEMENT_DEFS) {
-    if (next[def.id] === undefined) {
-      try {
-        if (def.check(ctx)) {
-          next[def.id] = now;
-          newlyUnlocked.push(def.id);
-        }
-      } catch (error) {
-        if (__DEV__) console.warn(`Achievement check failed: ${def.id}`, error);
-      }
+    let passes: boolean | null = null;
+    try {
+      passes = def.check(ctx);
+    } catch (error) {
+      if (__DEV__) console.warn(`Achievement check failed: ${def.id}`, error);
     }
+
+    if (passes === true && next[def.id] === undefined) {
+      next[def.id] = now;
+      newlyUnlocked.push(def.id);
+    } else if (
+      passes === false &&
+      def.revocable &&
+      next[def.id] !== undefined
+    ) {
+      delete next[def.id];
+      newlyRevoked.push(def.id);
+    }
+
     if (def.progress) {
       try {
         const p = def.progress(ctx);
@@ -125,7 +142,11 @@ export const evaluateAchievements = async (): Promise<EvaluationResult> => {
     }
   }
 
-  if (newlyUnlocked.length > 0 || isFirstEvaluation) {
+  if (
+    newlyUnlocked.length > 0 ||
+    newlyRevoked.length > 0 ||
+    isFirstEvaluation
+  ) {
     await saveUnlockedAchievements({
       unlocked: next,
       firstEvaluatedAt: state.firstEvaluatedAt ?? now,
@@ -133,5 +154,11 @@ export const evaluateAchievements = async (): Promise<EvaluationResult> => {
     });
   }
 
-  return { unlocked: next, newlyUnlocked, isFirstEvaluation, progress };
+  return {
+    unlocked: next,
+    newlyUnlocked,
+    newlyRevoked,
+    isFirstEvaluation,
+    progress,
+  };
 };

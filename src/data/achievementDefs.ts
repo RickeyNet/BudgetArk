@@ -56,6 +56,15 @@ export interface AchievementDef extends Achievement {
    * return raw counts without worrying about overflow.
    */
   progress?: (ctx: AchievementContext) => AchievementProgress | null;
+  /**
+   * If true, the evaluator removes this badge from the unlocked map when
+   * `check(ctx)` later returns false. Use for state-based badges (current
+   * net worth, current debt-free status, current pairing) but NOT for
+   * historical/once-achieved badges ("first payment", "opened review 3
+   * times", "30-day streak best") - those should stay earned forever.
+   * Defaults to false.
+   */
+  revocable?: boolean;
 }
 
 /* ─── Tier display order (used for sorting in the UI) ─── */
@@ -81,7 +90,7 @@ const consecutiveSavingsMonths = (ctx: AchievementContext): number => {
     const d = new Date(entry.date);
     if (Number.isNaN(d.getTime())) continue;
     months.add(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
     );
   }
   if (months.size === 0) return 0;
@@ -126,7 +135,7 @@ const underBudgetMonths = (ctx: AchievementContext): string[] => {
     }
 
     const allUnder = limits.every(
-      (lim) => (spend[lim.category] ?? 0) <= lim.monthlyLimit
+      (lim) => (spend[lim.category] ?? 0) <= lim.monthlyLimit,
     );
     if (allUnder) result.push(monthKey);
   }
@@ -186,6 +195,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "Half Mast",
     description: "Paid off half of your original non-mortgage debt total.",
     hint: "Pay down 50% of your starting debt.",
+    revocable: true,
     check: (ctx) => {
       const nonMortgage = ctx.debts.filter((d) => d.debtClass !== "house");
       const original = nonMortgage.reduce((s, d) => s + d.originalBalance, 0);
@@ -210,6 +220,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "Debt-Free Captain",
     description: "All non-mortgage debts cleared. The crew salutes you.",
     hint: "Clear every debt except your mortgage.",
+    revocable: true,
     check: (ctx) => {
       const nonMortgage = ctx.debts.filter((d) => d.debtClass !== "house");
       if (nonMortgage.length === 0) return false;
@@ -229,6 +240,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "Galley Stocked",
     description: "Your emergency fund reached $1,000.",
     hint: "Save $1,000 for emergencies.",
+    revocable: true,
     check: (ctx) => {
       const ef = ctx.savingsGoals.find((g) => g.category === "emergency_fund");
       if (ef && ef.currentAmount >= 1000) return true;
@@ -257,7 +269,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     hint: "Complete any savings goal.",
     check: (ctx) =>
       ctx.savingsGoals.some(
-        (g) => g.targetAmount > 0 && g.currentAmount >= g.targetAmount
+        (g) => g.targetAmount > 0 && g.currentAmount >= g.targetAmount,
       ),
     progress: (ctx) => {
       // Best-progressed goal so the ring tracks the user's closest finish.
@@ -282,6 +294,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "Treasure Hoard I",
     description: "Net worth crossed $10,000.",
     hint: "Grow net worth above $10k.",
+    revocable: true,
     check: (ctx) => latestNetWorth(ctx) >= 10_000,
     progress: (ctx) => ({
       current: Math.max(0, latestNetWorth(ctx)),
@@ -296,6 +309,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "Treasure Hoard II",
     description: "Net worth crossed $25,000.",
     hint: "Grow net worth above $25k.",
+    revocable: true,
     check: (ctx) => latestNetWorth(ctx) >= 25_000,
     progress: (ctx) => ({
       current: Math.max(0, latestNetWorth(ctx)),
@@ -310,6 +324,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "Treasure Hoard III",
     description: "Net worth crossed $100,000.",
     hint: "Grow net worth above $100k.",
+    revocable: true,
     check: (ctx) => latestNetWorth(ctx) >= 100_000,
     progress: (ctx) => ({
       current: Math.max(0, latestNetWorth(ctx)),
@@ -333,6 +348,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "First Mate",
     description: "Paired with a partner for cross-device sync.",
     hint: "Pair with your partner from Profile → Sync.",
+    revocable: false,
     check: (ctx) => ctx.isPaired,
   },
   {
@@ -415,6 +431,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     title: "Admiral",
     description: "Completed every milestone. The Ark is built.",
     hint: "Complete every step in the milestone plan.",
+    revocable: true,
     check: (ctx) =>
       ctx.milestonePlan.steps.length > 0 &&
       ctx.milestonePlan.steps.every((s) => s.isCompleted),
