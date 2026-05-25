@@ -463,16 +463,31 @@ const ProfileScreen: React.FC = () => {
         setPendingUpdate(updateMeta);
       } catch (error: any) {
         if (source === "manual") {
-          const raw = error?.message || String(error);
-          const isNetworkError =
-            raw.includes("failed to check") ||
-            raw.includes("network") ||
-            raw.includes("timeout");
+          const raw = (error?.message || String(error) || "").trim();
+          const lower = raw.toLowerCase();
+          const networkHints = [
+            "failed to check",
+            "failed to download",
+            "network",
+            "timeout",
+            "timed out",
+            "offline",
+            "resolve host",
+            "unreachable",
+            "connection",
+            "internet",
+            "enotfound",
+            "econnrefused",
+            "econnreset",
+            "etimedout",
+          ];
+          const isNetworkError = networkHints.some((hint) => lower.includes(hint));
+          const friendly = isNetworkError
+            ? "Could not reach the update server. Check your internet connection and try again."
+            : "Unable to check for updates right now. Please try again shortly.";
           setInfoModal({
             title: "Update Check Failed",
-            message: isNetworkError
-              ? "Could not reach the update server. Check your internet connection and try again."
-              : raw || "Unable to check for updates right now. Please try again shortly.",
+            message: raw ? `${friendly}\n\nDetails: ${raw}` : friendly,
           });
         }
       } finally {
