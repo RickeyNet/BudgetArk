@@ -1,5 +1,37 @@
 # BudgetArk Release Notes
 
+## v1.6.2 - Bridge Categories + Pay-Off Fix (2026-05-24)
+
+Bridge screen restructure plus a Debt-screen rounding fix. Pure JS - ships OTA against the existing 1.6.x native runtime.
+
+### Bridge accounts grouped by category
+
+- `BridgeScreen` accounts card was a flat list; now matches the Budget screen's grouped-by-category layout. A `DonutChart` allocation summary sits on top showing total balance + account count, then collapsible per-category groups (Checking, Savings, Retirement, HSA, Investment, Other) hold the nested account rows. Empty categories drop out of the list. Emergency Fund stays pinned above the groups since it's a savings goal, not an asset.
+- Removed the now-redundant Tracked Accounts / Emergency Fund stats strip above the accounts card - the donut summary shows the same totals.
+- Dropped the orphan `bridge-overview` coachmark + its dead anchor/styles along with the stats strip.
+
+### New Checking asset category
+
+- Added `checking` to `AssetAccountCategory`. The new-asset modal defaults to Checking instead of Savings so the most common asset type is one tap away.
+- Fixed `ACCOUNT_ICONS` map: had stale `investing` / `cash` keys that didn't match real categories and missing entries for `checking` / `investment`. Re-typed the map as `Record<AssetAccountCategory, string>` so future category additions fail typecheck if not mapped.
+
+### Debt pay-off rounding fix
+
+- `DebtCard` Pay button silently rejected the typed amount when it exceeded `debt.balance`, which left small balances impossible to clear (a debt displaying $0.09 with a stored 0.0899... balance refused $0.09 as an overpayment). Clamp the typed amount down to `debt.balance` instead so display-rounding gaps and small intentional overpayments still zero the debt.
+
+## v1.6.1 - Profile Crash Fix + OTA Release Notes (2026-05-24)
+
+Hotfix for an iOS crash on the Profile tab introduced by the v1.6.0 OTA-prompt refactor, plus the previously-unreleased release-notes prompt that drove that refactor.
+
+### Profile crash on iOS (P0)
+
+- The v1.6.0 OTA refactor extracted `findReleaseNoteForVersion` into `src/utils/updateReleaseNotes.ts` but `ProfileScreen.tsx` still referenced the symbol directly inside an inline IIFE in the Update Ready Modal's JSX. Because the IIFE evaluates during render regardless of Modal visibility, every mount of ProfileScreen threw `ReferenceError`, crashing the app with a black screen on Profile tab tap. Added the missing import.
+
+### Release notes in OTA prompt
+
+- New `src/utils/updateReleaseNotes.ts` consolidates the version-matching + notes-lookup helpers (`findReleaseNoteForVersion`, etc.) that were duplicated across `App.tsx` and `ProfileScreen.tsx`.
+- `App.tsx` Update Ready modal now shows the highlights for the incoming version instead of a generic "an update is available" message. `ProfileScreen` shares the same util so the in-app release notes viewer stays consistent with the OTA prompt.
+
 ## v1.6.0 - Appearance Controls + Loan Details (2026-05-22)
 
 Minor version bump for the new appearance-system split, accessibility-focused background controls, and loan-calculator expansions.

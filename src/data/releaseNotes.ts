@@ -8,9 +8,11 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.6.2",
-    title: "Pay-Off Fix",
+    title: "Bridge Categories + Pay-Off Fix",
     releasedAt: "2026-05-24",
     highlights: [
+      "Bridge accounts are now grouped by category with a donut allocation chart on top - tap a category header to collapse or expand it. Empty categories are hidden automatically.",
+      "Added a Checking category for everyday transactional accounts, separate from Savings.",
       "Fixed a bug on the Debt screen where paying the last few cents on a debt did nothing when tapping the green check - small balances now clear cleanly even with display-rounded values.",
     ],
   },
