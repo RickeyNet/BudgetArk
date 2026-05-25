@@ -9,6 +9,10 @@ Bridge accounts card UX polish + a structural fix for the OTA "Update Ready" mod
 - `BridgeScreen` accounts card now opens with every category collapsed. `collapsedAccountCategories` state seeds with `new Set(ASSET_ACCOUNT_CATEGORIES)` so first render hides every group; tap a header to expand. Cuts first-view height for users with accounts spread across several categories.
 - Moved the category emoji glyph from individual account rows up to the category header (`{iconForCategory(group.category)} {label}`), matching the Budget screen's `{getCategoryIcon(category)} {category}` pattern. Removed the per-row `accountIcon` chip; nested rows keep their 28px indent via the existing `accountRowNested` style. Emergency Fund keeps its 🛡️ chip since it's pinned outside the category groups.
 
+### Budget screen spacing fix
+
+- `BillCalendarCard`'s root `card` style had no `marginBottom`, so the card butted directly against the Spending card below it - inconsistent with every other Budget card. Added `marginBottom: 14` to match the surrounding `reviewBtn` / `marginBottom: tokens.gap` spacing.
+
 ### OTA "Update Ready" modal now shows highlights
 
 - Root cause: `findReleaseNoteForVersion` was looking up the incoming version in the *currently running* bundle's `RELEASE_NOTES` list. Since release-note entries ship inside the bundle they describe, the running (older) bundle never has the new version's entry - the lookup always returned undefined and the modal rendered version-only.

@@ -88,6 +88,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.cardBorder,
       paddingVertical: 14,
       paddingHorizontal: 16,
+      marginBottom: 14,
       gap: 6,
     },
     headerRow: {

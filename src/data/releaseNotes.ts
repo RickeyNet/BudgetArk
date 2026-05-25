@@ -13,6 +13,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     highlights: [
       "Bridge accounts now open with every category collapsed - one tap on a header expands the accounts inside.",
       "Category emoji moved from each individual account row up to the category header, matching how Budget categories look.",
+      "Fixed the Bill Calendar card touching the Spending card on the Budget screen - now spaced like every other card.",
       "Future update prompts will show the new version's highlights directly from the update itself instead of falling back to just the version number.",
     ],
   },
