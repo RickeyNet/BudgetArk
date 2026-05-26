@@ -24,6 +24,8 @@ import * as Sharing from "expo-sharing";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { useFocusEffect } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
@@ -298,6 +300,7 @@ const UtilitiesScreen: React.FC = () => {
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const insets = useSafeAreaInsets();
   const coachmark = useTabCoachmark("Utilities");
   const scrollRef = useRef<ScrollView>(null);
   const anchorUtilitiesTool = useCoachmarkAnchor("utilities-tool-header", { scrollRef });
@@ -1067,7 +1070,14 @@ const UtilitiesScreen: React.FC = () => {
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.titleSection}>
           <Text style={styles.appLabel}>BudgetArk</Text>
@@ -1937,7 +1947,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     content: {
       paddingHorizontal: tokens.pad,
-      paddingBottom: 110,
     },
     titleSection: {
       paddingTop: 56,

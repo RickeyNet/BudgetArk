@@ -122,10 +122,13 @@ type UpdateMetadata = {
 type ReleaseNoteKey = string;
 
 import { sanitizeTextInput } from "../utils/sanitize";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+  const insets = useSafeAreaInsets();
 
   /** Current theme context */
   const {
@@ -985,7 +988,10 @@ const ProfileScreen: React.FC = () => {
       <ScrollView
         ref={scrollRef}
         style={[styles.screen, { backgroundColor: showAmbientBackground ? "transparent" : colors.bg }]}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
+        ]}
       >
         {/* ── Backup reminder banner ── */}
         {shouldShowBackupReminder(backupState, CURRENT_APP_VERSION) && (
@@ -2930,7 +2936,6 @@ const makeStyles = (tokens: DensityTokens) => {
   },
   content: {
     paddingHorizontal: tokens.pad,
-    paddingBottom: 100,
   },
   titleSection: {
     paddingTop: 56,

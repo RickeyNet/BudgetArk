@@ -34,6 +34,17 @@ Two-part upgrade to the achievement system. Pure JS - ships OTA against the exis
 - Edge cases handled: when the new payment isn't lower, result reads "no break-even" and the net-savings card is suppressed. When the new term extends past the current loan's remaining term, a warning-tinted insight card explains the lower-payment-for-more-interest trade-off.
 - Supports the consolidation-refi case: select multiple debts to roll into one new loan; the combined APR is balance-weighted, matching how a lender would amortize the consolidated principal.
 
+### Fix: Android nav-bar tab-bar clipping
+
+- Every main tab (Debts, Budget, Bridge, Utilities, Profile) had a hardcoded `paddingBottom: 100/110` on the scroll container - tuned to iPhone's ~34px home-indicator + the 58px `TAB_BAR_BASE_HEIGHT`. On Android phones with a 3-button nav bar (~48px inset) or even gesture pill (~24px), the actual on-screen tab bar height (`TAB_BAR_BASE_HEIGHT + insets.bottom`) exceeded that buffer, clipping the last item (most visibly the "BudgetArk v1.6.5" footer on Profile).
+- Replaced the magic numbers with `paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24` applied inline on each scroll container's `contentContainerStyle`. Static styles drop the dead `paddingBottom` field so there's only one source of truth. Pulled `useSafeAreaInsets` + `TAB_BAR_BASE_HEIGHT` imports into Profile/Utilities/Bridge; Budget/DebtTracker already had insets for FAB positioning so just added the layout import.
+
+### Fix: walkthrough spotlight missing the FAB
+
+- Budget and Debts walkthrough steps that highlight the `+` button were using `useCoachmarkComputedAnchor` to derive a window rect from `Dimensions.get("window").height - fabBottomOffset(insets.bottom) - FAB_SIZE`. That math only matches the real on-screen FAB when the window's coordinate space matches the screen view's coordinate space - which on Android can drift depending on edge-to-edge mode, status-bar-translucent flag, and nav-bar height. Result: the spotlight ring landed above (or below) the actual FAB.
+- Replaced the computed-rect approach with a **phantom anchor View** rendered next to each FAB at the same layout position (`styles.fab` + the live `bottom: fabBottomOffset(insets.bottom)`), marked `collapsable={false}`, `pointerEvents="none"`, and `opacity: 0`. The coachmark anchor system measures it via `measureInWindow`, which is RN's source of truth for the on-screen position - by construction the spotlight lands exactly where the FAB lands.
+- The phantom stays mounted even when the FAB is conditionally hidden (e.g. during multi-select on Budget), so the walkthrough still finds an anchor if it runs in those states. Dropped the now-unused `useCoachmarkComputedAnchor` + `Dimensions` imports from both screens and trimmed the stale "computed-rect" comment on `FAB_RIGHT/SIZE`.
+
 ## v1.6.4 - Cleaner Bridge + Smarter Update Prompt (2026-05-24)
 
 Bridge accounts card UX polish + a structural fix for the OTA "Update Ready" modal so highlights actually show. Pure JS - ships OTA against the existing 1.6.x native runtime.

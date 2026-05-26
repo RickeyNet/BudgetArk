@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-  Dimensions,
   FlatList,
   Modal,
   ScrollView,
@@ -78,12 +77,9 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
-import {
-  useCoachmarkAnchor,
-  useCoachmarkComputedAnchor,
-} from "../onboarding/CoachmarkAnchorContext";
+import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fabBottomOffset } from "../navigation/tabBarLayout";
+import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { useUndo } from "../undo/UndoProvider";
 
 /**
@@ -240,16 +236,13 @@ const BudgetScreen: React.FC = () => {
   const listRef = useRef<FlatList>(null);
   const anchorBudgetSummary = useCoachmarkAnchor("budget-summary-card", { scrollRef: listRef });
   const anchorBudgetSpending = useCoachmarkAnchor("budget-spending-card", { scrollRef: listRef });
-  // FAB rect computed from layout constants - see DebtTrackerScreen for why.
-  useCoachmarkComputedAnchor("budget-fab", () => {
-    const { width, height } = Dimensions.get("window");
-    return {
-      x: width - FAB_RIGHT - FAB_SIZE,
-      y: height - fabBottomOffset(insets.bottom) - FAB_SIZE,
-      width: FAB_SIZE,
-      height: FAB_SIZE,
-    };
-  });
+  // FAB anchor is a phantom View rendered alongside the FAB at the exact same
+  // layout position. Previous computed-rect approach drifted from the real
+  // on-screen FAB on Android when window/nav-bar inset assumptions diverged
+  // from the screen's coordinate space. Using a real ref + measureInWindow
+  // means the spotlight ring lands wherever React Native actually painted the
+  // FAB - by definition.
+  const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   // Spending donut scales with the effective font scale (Density × Text Size)
   // so the accessibility Text Size setting zooms the chart too, not just text.
@@ -1585,16 +1578,31 @@ const BudgetScreen: React.FC = () => {
           data={[]}
           renderItem={null}
           ListHeaderComponent={listHeader}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
         />
       )}
 
+      {/* Phantom anchor for the coachmark spotlight. Rendered unconditionally
+          at the FAB's exact layout position (same styles, just invisible and
+          non-interactive) so the spotlight's measureInWindow returns the real
+          on-screen rect regardless of platform inset quirks. Stays mounted
+          during selection mode too, in case the walkthrough opens then. */}
+      <View
+        ref={anchorBudgetFab}
+        collapsable={false}
+        pointerEvents="none"
+        style={[
+          styles.fab,
+          { bottom: fabBottomOffset(insets.bottom), opacity: 0 },
+        ]}
+      />
+
       {/* FAB - Add Income / Expense. Hidden during multi-select so it
-          doesn't overlap the selection action bar. Spotlight anchor is
-          registered above via useCoachmarkComputedAnchor; its rect uses
-          fabBottomOffset / FAB_RIGHT / FAB_SIZE, keep in sync with
-          styles.fab. */}
+          doesn't overlap the selection action bar. */}
       {!selectionMode && (
         <TouchableOpacity
           style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}
@@ -2002,7 +2010,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     listContent: {
       paddingHorizontal: tokens.pad,
-      paddingBottom: 110,
     },
     titleSection: {
       paddingTop: 50,

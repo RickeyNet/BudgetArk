@@ -16,6 +16,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Some badges now reflect your current state instead of staying earned forever: Treasure Hoard I/II/III, Galley Stocked, Half Mast, Debt-Free Captain, First Mate, and Admiral can dim back to locked if conditions change (net worth drops, new debt added, emergency fund drained, partner unpaired, milestone uncompleted). Historical badges - first payment, exports, streak bests, completed-month badges - stay earned forever.",
       "New legendary badge: Galleon's Hold 💰 - awarded when net worth crosses $1,000,000.",
       "New Refinance Break-Even calculator on Utilities: pick one or more debts from the tracker to include, then enter a refinance offer (rate, term, closing costs) to see months-to-break-even, monthly payment change, and lifetime interest difference. Balance and APR are combined automatically (balance-weighted), so you can model a consolidation refi too.",
+      "Fixed the bottom of every main tab (Debts, Budget, Bridge, Utilities, Profile) being clipped behind the tab bar on Android phones with a navigation bar - content now reserves space for the actual nav-bar inset instead of a hardcoded iPhone-tuned value.",
+      "Fixed the walkthrough spotlight not landing on the + button on the Debts and Budget screens. The highlight now follows the real on-screen position of the FAB instead of a formula that could drift on devices with a navigation bar.",
     ],
   },
   {

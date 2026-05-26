@@ -26,10 +26,9 @@ import {
   ScrollView,
   TextInput,
   Platform,
-  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fabBottomOffset } from "../navigation/tabBarLayout";
+import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { useUndo } from "../undo/UndoProvider";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
@@ -81,19 +80,13 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
-import {
-  useCoachmarkAnchor,
-  useCoachmarkComputedAnchor,
-} from "../onboarding/CoachmarkAnchorContext";
+import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 
 /**
- * FAB layout constants - kept here so the coachmark can compute a
- * window-relative rect for the spotlight without going through a ref +
- * measureInWindow round-trip (which was returning bounds for the wrong
- * native node). The vertical offset is no longer a constant: it derives
- * from the live bottom safe-area inset via fabBottomOffset() so the FAB
- * always clears the tab bar (whose height also grows with that inset).
- * Keep RIGHT/SIZE in sync with styles.fab below.
+ * FAB layout constants. The vertical offset derives from the live bottom
+ * safe-area inset via fabBottomOffset() so the FAB always clears the tab
+ * bar (whose height also grows with that inset). Keep RIGHT/SIZE in sync
+ * with styles.fab below.
  */
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
@@ -249,18 +242,12 @@ const DebtTrackerScreen: React.FC = () => {
   const listRef = useRef<FlatList<Debt>>(null);
   const anchorSummary = useCoachmarkAnchor("debts-summary-card", { scrollRef: listRef });
   const anchorMilestones = useCoachmarkAnchor("debts-milestones-card", { scrollRef: listRef });
-  // FAB rect is computed from layout constants (FAB_* above) rather than
-  // measured via ref - measureInWindow returned the wrong bounds when the
-  // ref was on the TouchableOpacity, even after wrapping it in a plain View.
-  useCoachmarkComputedAnchor("debts-fab", () => {
-    const { width, height } = Dimensions.get("window");
-    return {
-      x: width - FAB_RIGHT - FAB_SIZE,
-      y: height - fabBottomOffset(insets.bottom) - FAB_SIZE,
-      width: FAB_SIZE,
-      height: FAB_SIZE,
-    };
-  });
+  // FAB anchor is a phantom View rendered alongside the FAB at the exact same
+  // layout position. The earlier computed-rect approach drifted on Android
+  // when window-inset assumptions diverged from the screen's coordinate
+  // space; using a real ref + measureInWindow means the spotlight lands
+  // wherever the FAB actually paints, by definition.
+  const anchorDebtsFab = useCoachmarkAnchor("debts-fab");
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
@@ -1122,13 +1109,27 @@ const DebtTrackerScreen: React.FC = () => {
         renderItem={renderDebtCard}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={emptyState}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       />
-      {/* FAB - Add Debt. The spotlight anchor for this button is registered
-          via useCoachmarkComputedAnchor above, which computes the window
-          rect from FAB_BOTTOM / FAB_RIGHT / FAB_SIZE - keep the style and
-          those constants in sync. */}
+      {/* Phantom anchor for the coachmark spotlight. Rendered at the FAB's
+          exact layout position (same styles, invisible and non-interactive)
+          so measureInWindow returns the real on-screen rect regardless of
+          platform inset quirks. */}
+      <View
+        ref={anchorDebtsFab}
+        collapsable={false}
+        pointerEvents="none"
+        style={[
+          styles.fab,
+          { bottom: fabBottomOffset(insets.bottom), opacity: 0 },
+        ]}
+      />
+
+      {/* FAB - Add Debt. */}
       <TouchableOpacity
         style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}
         onPress={() => setShowModal(true)}
@@ -1591,7 +1592,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bg },
-    listContent: { paddingHorizontal: tokens.pad, paddingBottom: 100 },
+    listContent: { paddingHorizontal: tokens.pad },
 
     titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const },
     appLabel: { fontSize: scale(12), color: colors.textDim, letterSpacing: 2, marginBottom: 4, textAlign: "center" as const },

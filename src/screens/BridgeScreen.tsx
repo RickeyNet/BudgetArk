@@ -10,6 +10,8 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { generateUUID } from "../utils/uuid";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import CashFlowChart, { type CashFlowPoint } from "../components/CashFlowChart";
@@ -66,6 +68,7 @@ const BridgeScreen: React.FC = () => {
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const insets = useSafeAreaInsets();
   const coachmark = useTabCoachmark("Bridge");
   const listRef = useRef<FlatList>(null);
   const anchorBridgeAccounts = useCoachmarkAnchor("bridge-accounts-card", { scrollRef: listRef });
@@ -609,7 +612,10 @@ const BridgeScreen: React.FC = () => {
           data={[]}
           renderItem={() => null}
           ListHeaderComponent={listHeader}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
         />
       ) : null}
@@ -759,7 +765,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     listContent: {
       paddingHorizontal: tokens.pad,
-      paddingBottom: 110,
     },
     titleSection: {
       paddingTop: 56,
