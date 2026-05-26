@@ -1612,7 +1612,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            BudgetArk v{CURRENT_APP_VERSION}
+            {`BudgetArk v${CURRENT_APP_VERSION || "?"}`}
           </Text>
         </View>
       </ScrollView>

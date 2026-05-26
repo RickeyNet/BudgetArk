@@ -115,8 +115,14 @@ const Spotlight: React.FC<SpotlightProps> = ({
       // devices like the Moto G. statusBarTranslucent makes the Modal
       // share the screen's window frame (top:0 = screen y=0), so the
       // computed FAB rect (window-relative) lands exactly on the FAB.
-      // No-op on iOS.
+      // navigationBarTranslucent extends the Modal behind the nav bar so
+      // the bottom of the Modal also matches the activity window - without
+      // it, edge-to-edge activities (SDK 53+ default) measure FAB rects in
+      // a taller window than the Modal can paint over, shifting the ring
+      // up by the nav-bar inset on devices with a 3-button or gesture nav.
+      // Both are no-ops on iOS.
       statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={handleNext}
     >
       <View style={styles.root} pointerEvents="box-none">
