@@ -1,10 +1,14 @@
 /**
- * BudgetArk - Utilities Screen
- * File: src/screens/UtilitiesScreen.tsx
+ * BudgetArk - Charts Screen
+ * File: src/screens/ChartsScreen.tsx
  *
- * Hub for financial tools and calculators.
- * Currently includes the Compound Interest Calculator with
- * S&P 500 educational context and return rate presets.
+ * Learning hub + financial-tools surface. Renders the Captain's Course
+ * (chapter list w/ progress), the Topics browse strip, and the existing
+ * calculators grouped under a TOOLS section.
+ *
+ * Route key stays `Utilities` for backward compatibility with sync state
+ * and saved navigation params; only the display label, icon, and screen
+ * composition changed.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -42,14 +46,63 @@ import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getDebts } from "../storage/debtStorage";
-import type { BudgetEntry, Debt } from "../types";
+import type {
+  BudgetEntry,
+  ChapterId,
+  Debt,
+  LearningProgress,
+  LessonStub,
+  LessonTopic,
+  RootTabParamList,
+} from "../types";
+import { LESSON_TOPICS } from "../types";
 import { isEntryActiveInMonth } from "../utils/recurrence";
 import SmoothSlider from "../components/SmoothSlider";
+import { CHAPTERS } from "../data/lessonChapters";
+import {
+  getChapterProgress,
+  getOverallProgress,
+  hasLessonBody,
+  pickResumeLesson,
+} from "../data/lessonIndex";
+import { getLearningProgress } from "../storage/learningProgressStorage";
+import LessonScreen from "../lessons/LessonScreen";
+import { useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 /* Enable LayoutAnimation on Android */
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+/* ── Topic display metadata ──
+ * Glyph + human-readable label per lesson topic, used in the Topics chip
+ * row. Kept in this file so the topic taxonomy in `types/index.ts` stays
+ * pure data (no UI strings leaking down into the type layer).
+ */
+const TOPIC_GLYPHS: Record<LessonTopic, string> = {
+  budgeting: "💰",
+  debt: "🔨",
+  saving: "🍞",
+  investing: "📈",
+  taxes: "🧾",
+  insurance: "🛡️",
+  real_estate: "🏠",
+  retirement: "⏳",
+  mindset: "🧠",
+};
+
+const TOPIC_LABELS: Record<LessonTopic, string> = {
+  budgeting: "Budgeting",
+  debt: "Debt",
+  saving: "Saving",
+  investing: "Investing",
+  taxes: "Taxes",
+  insurance: "Insurance",
+  real_estate: "Real Estate",
+  retirement: "Retirement",
+  mindset: "Mindset",
+};
 
 /* ── Slider Config ── */
 
@@ -296,7 +349,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
 
 /* ── Main Screen ── */
 
-const UtilitiesScreen: React.FC = () => {
+const ChartsScreen: React.FC = () => {
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
@@ -351,6 +404,122 @@ const UtilitiesScreen: React.FC = () => {
   const [currentEfAmount, setCurrentEfAmount] = useState(0);
   const [efTargetAmount, setEfTargetAmount] = useState(0);
   const [efDataLoaded, setEfDataLoaded] = useState(false);
+
+  /* Learning progress (Captain's Course card). Refreshes on focus so
+   * completion progress and the Resume pointer update after a user finishes
+   * a lesson and returns to the Charts tab. Also refreshed on lesson-modal
+   * close since the modal sits on top of this screen (no focus event fires). */
+  const [learningProgress, setLearningProgress] = useState<LearningProgress | null>(null);
+  const [openLessonStub, setOpenLessonStub] = useState<LessonStub | null>(null);
+  const [expandedChapters, setExpandedChapters] = useState<Set<ChapterId>>(
+    () => new Set()
+  );
+  const navigation =
+    useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+
+  const refreshLearningProgress = useCallback(async () => {
+    try {
+      const progress = await getLearningProgress();
+      setLearningProgress(progress);
+    } catch (err) {
+      if (__DEV__) console.warn("[Charts] load learning progress", err);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const progress = await getLearningProgress();
+          if (!cancelled) setLearningProgress(progress);
+        } catch (err) {
+          if (__DEV__) console.warn("[Charts] load learning progress", err);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
+  const handleOpenLesson = useCallback((stub: LessonStub) => {
+    setOpenLessonStub(stub);
+  }, []);
+
+  const handleCloseLesson = useCallback(() => {
+    setOpenLessonStub(null);
+    /* Re-read so completed counts + Resume pointer reflect what happened
+     * inside the modal. */
+    void refreshLearningProgress();
+  }, [refreshLearningProgress]);
+
+  const handleToggleChapter = useCallback((chapterId: ChapterId) => {
+    setExpandedChapters((prev) => {
+      const next = new Set(prev);
+      if (next.has(chapterId)) next.delete(chapterId);
+      else next.add(chapterId);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Resolves a lesson action / tool route to a navigation effect. Routes
+   * starting with "charts/tools" close the modal and stay on this tab;
+   * the user can scroll to the matching calculator. Inter-tab routes
+   * (debts/.., budget/.., bridge/..) jump to the target tab. Unknown
+   * routes are inert (with a __DEV__ warning) so missing wiring never
+   * crashes a lesson.
+   */
+  const handleLessonRoute = useCallback(
+    (route: string) => {
+      setOpenLessonStub(null);
+      const [head] = route.split("/");
+      switch (head) {
+        case "debts":
+          navigation.navigate("DebtTracker");
+          return;
+        case "budget":
+          navigation.navigate("Budget");
+          return;
+        case "bridge":
+          navigation.navigate("Bridge");
+          return;
+        case "profile":
+          navigation.navigate("Profile");
+          return;
+        case "charts":
+          /* Already on this tab. Future work: scroll the Charts content to
+           * the matching calculator card. */
+          return;
+        default:
+          if (__DEV__) console.warn("[Charts] unknown lesson route", route);
+      }
+    },
+    [navigation]
+  );
+
+  const completedLessonsMap = learningProgress?.completedLessons ?? {};
+  const overallProgress = useMemo(
+    () => getOverallProgress(completedLessonsMap),
+    [completedLessonsMap]
+  );
+  const chapterProgressRows = useMemo(
+    () => getChapterProgress(completedLessonsMap),
+    [completedLessonsMap]
+  );
+  const resumeStub = useMemo(
+    () =>
+      pickResumeLesson(completedLessonsMap, learningProgress?.currentLessonId),
+    [completedLessonsMap, learningProgress?.currentLessonId]
+  );
+  const resumeChapter = resumeStub
+    ? CHAPTERS.find((c) => c.id === resumeStub.chapterId)
+    : undefined;
+  const overallPct =
+    overallProgress.total > 0
+      ? Math.round((overallProgress.completed / overallProgress.total) * 100)
+      : 0;
 
   const timeline = useMemo(
     () => calcInvestmentTimeline(contribution, returnRate, years),
@@ -1081,10 +1250,154 @@ const UtilitiesScreen: React.FC = () => {
         {/* Header */}
         <View style={styles.titleSection}>
           <Text style={styles.appLabel}>BudgetArk</Text>
-          <Text style={styles.screenTitle}>Utilities</Text>
+          <Text style={styles.screenTitle}>Charts</Text>
           <Text style={styles.screenSubtitle}>
-            Financial tools and calculators.
+            Learn the seas. Plot your course.
           </Text>
+        </View>
+
+        {/* ── Captain's Course ──
+         * Visual-only in this step. Chapter rows + Resume strip render but
+         * taps are inert; LessonScreen + navigation wire up in the next
+         * build pass.
+         */}
+        <View style={styles.courseCard}>
+          <View style={styles.courseHeaderRow}>
+            <Text style={styles.courseEyebrow}>⭐ CAPTAIN'S COURSE</Text>
+            <Text style={styles.courseProgressLabel}>
+              {overallProgress.completed} / {overallProgress.total}
+            </Text>
+          </View>
+          <View style={styles.courseProgressTrack}>
+            <View
+              style={[
+                styles.courseProgressFill,
+                { width: `${overallPct}%` },
+              ]}
+            />
+          </View>
+
+          {resumeStub && resumeChapter && (
+            <TouchableOpacity
+              style={styles.resumeStrip}
+              onPress={() => handleOpenLesson(resumeStub)}
+              activeOpacity={0.7}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resumeLabel}>
+                  {overallProgress.completed === 0 ? "START HERE" : "RESUME"}
+                </Text>
+                <Text style={styles.resumeTitle} numberOfLines={2}>
+                  {resumeChapter.number}.{resumeStub.number} {resumeStub.title}
+                </Text>
+                <Text style={styles.resumeSub}>
+                  Ch {resumeChapter.number} · {resumeChapter.title}
+                  {resumeStub.readMin ? ` · ${resumeStub.readMin} min` : ""}
+                </Text>
+              </View>
+              <Text style={styles.resumeChevron}>›</Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.chapterList}>
+            {chapterProgressRows.map(({ chapter, completed, total }) => {
+              const isComingSoon = chapter.status === "coming-soon";
+              const isExpanded = expandedChapters.has(chapter.id);
+              return (
+                <View key={chapter.id}>
+                  <TouchableOpacity
+                    style={styles.chapterRow}
+                    onPress={() => handleToggleChapter(chapter.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.chapterGlyph}>{chapter.glyph}</Text>
+                    <View style={styles.chapterBody}>
+                      <Text style={styles.chapterTitle}>
+                        Ch {chapter.number} · {chapter.title}
+                      </Text>
+                      <Text style={styles.chapterSubtitle}>{chapter.subtitle}</Text>
+                    </View>
+                    {isComingSoon ? (
+                      <Text style={styles.chapterComingSoon}>Coming soon</Text>
+                    ) : (
+                      <Text style={styles.chapterCount}>
+                        {completed}/{total}
+                      </Text>
+                    )}
+                    <Text style={styles.chapterChevron}>
+                      {isExpanded ? "▾" : "›"}
+                    </Text>
+                  </TouchableOpacity>
+                  {isExpanded && (
+                    <View style={styles.lessonList}>
+                      {chapter.lessons.map((stub) => {
+                        const stubHasBody = hasLessonBody(stub.id);
+                        const lessonCompleted = !!completedLessonsMap[stub.id];
+                        return (
+                          <TouchableOpacity
+                            key={stub.id}
+                            style={styles.lessonRow}
+                            onPress={() => handleOpenLesson(stub)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.lessonNumber}>
+                              {chapter.number}.{stub.number}
+                            </Text>
+                            <View style={styles.lessonBody}>
+                              <Text
+                                style={[
+                                  styles.lessonTitle,
+                                  !stubHasBody && styles.lessonTitleDim,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {stub.title}
+                              </Text>
+                              <Text style={styles.lessonMeta}>
+                                {stub.readMin
+                                  ? `${stub.readMin} min`
+                                  : "Coming soon"}
+                              </Text>
+                            </View>
+                            {lessonCompleted ? (
+                              <Text style={styles.lessonCompletedDot}>✓</Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* ── Topics ──
+         * Horizontal-scrolling chip row. Inert in this step - taps will
+         * filter the lesson grid in a follow-up pass.
+         */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeaderTitle}>TOPICS</Text>
+          <Text style={styles.sectionHeaderHint}>Browse by subject</Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.topicChipRow}
+        >
+          {LESSON_TOPICS.map((topic) => (
+            <View key={topic} style={styles.topicChip}>
+              <Text style={styles.topicChipGlyph}>{TOPIC_GLYPHS[topic]}</Text>
+              <Text style={styles.topicChipLabel}>{TOPIC_LABELS[topic]}</Text>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* ── Tools ── existing calculators */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeaderTitle}>TOOLS</Text>
+          <Text style={styles.sectionHeaderHint}>Calculators & utilities</Text>
         </View>
 
         {/* ── Compound Interest Calculator Tool ── */}
@@ -1934,6 +2247,14 @@ const UtilitiesScreen: React.FC = () => {
         )}
       </ScrollView>
       {coachmark}
+      <LessonScreen
+        visible={openLessonStub !== null}
+        stub={openLessonStub}
+        onClose={handleCloseLesson}
+        onNavigateTo={handleOpenLesson}
+        onOpenAction={handleLessonRoute}
+        onOpenTool={handleLessonRoute}
+      />
     </View>
   );
 };
@@ -2650,7 +2971,219 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.textMuted,
       textAlign: "center",
     },
+
+    /* Captain's Course card */
+    courseCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: `${colors.accent}30`,
+      borderRadius: tokens.radius + 4,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
+      gap: tokens.gapSm,
+    },
+    courseHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    courseEyebrow: {
+      fontSize: scale(11),
+      color: colors.accent,
+      letterSpacing: 1.5,
+      fontWeight: "700",
+    },
+    courseProgressLabel: {
+      fontSize: scale(12),
+      color: colors.textDim,
+      fontVariant: ["tabular-nums"],
+    },
+    courseProgressTrack: {
+      height: 6,
+      backgroundColor: `${colors.accent}20`,
+      borderRadius: 999,
+      overflow: "hidden",
+    },
+    courseProgressFill: {
+      height: "100%",
+      backgroundColor: colors.accent,
+      borderRadius: 999,
+      minWidth: 2,
+    },
+    resumeStrip: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: `${colors.accent}12`,
+      borderWidth: 1,
+      borderColor: `${colors.accent}40`,
+      borderRadius: tokens.radius,
+      paddingVertical: tokens.padSm,
+      paddingHorizontal: tokens.pad,
+      marginTop: 4,
+    },
+    resumeLabel: {
+      fontSize: scale(10),
+      color: colors.accent,
+      letterSpacing: 1.5,
+      fontWeight: "700",
+      marginBottom: 2,
+    },
+    resumeTitle: {
+      fontSize: scale(15),
+      fontWeight: "700",
+      color: colors.text,
+    },
+    resumeSub: {
+      fontSize: scale(12),
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    resumeChevron: {
+      fontSize: scale(22),
+      color: colors.accent,
+      fontWeight: "600",
+      marginLeft: 10,
+    },
+    chapterList: {
+      marginTop: 4,
+      gap: 2,
+    },
+    chapterRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.cardBorder,
+    },
+    chapterGlyph: {
+      fontSize: scale(18),
+      width: 28,
+      textAlign: "center",
+    },
+    chapterBody: {
+      flex: 1,
+      marginLeft: 6,
+    },
+    chapterTitle: {
+      fontSize: scale(14),
+      fontWeight: "600",
+      color: colors.text,
+    },
+    chapterSubtitle: {
+      fontSize: scale(12),
+      color: colors.textMuted,
+      marginTop: 1,
+    },
+    chapterCount: {
+      fontSize: scale(13),
+      color: colors.textDim,
+      fontVariant: ["tabular-nums"],
+      fontWeight: "600",
+    },
+    chapterComingSoon: {
+      fontSize: scale(11),
+      color: colors.textMuted,
+      letterSpacing: 0.8,
+      fontStyle: "italic",
+    },
+    chapterChevron: {
+      fontSize: scale(18),
+      color: colors.textMuted,
+      fontWeight: "600",
+      marginLeft: 8,
+      minWidth: 14,
+      textAlign: "right",
+    },
+
+    /* Expanded lesson list inside a chapter */
+    lessonList: {
+      paddingLeft: 34,
+      paddingBottom: 6,
+      gap: 4,
+    },
+    lessonRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 8,
+      paddingHorizontal: 8,
+      borderRadius: tokens.radius - 2,
+      backgroundColor: `${colors.accent}08`,
+    },
+    lessonNumber: {
+      fontSize: scale(11),
+      color: colors.textMuted,
+      fontWeight: "700",
+      width: 32,
+      fontVariant: ["tabular-nums"],
+    },
+    lessonBody: {
+      flex: 1,
+    },
+    lessonTitle: {
+      fontSize: scale(13),
+      color: colors.text,
+      fontWeight: "500",
+    },
+    lessonTitleDim: {
+      color: colors.textMuted,
+    },
+    lessonMeta: {
+      fontSize: scale(11),
+      color: colors.textMuted,
+      marginTop: 1,
+    },
+    lessonCompletedDot: {
+      fontSize: scale(13),
+      color: colors.success,
+      fontWeight: "700",
+      marginLeft: 6,
+    },
+
+    /* Section header (TOPICS / TOOLS) */
+    sectionHeader: {
+      marginTop: tokens.gap,
+      marginBottom: tokens.gapSm,
+      paddingHorizontal: 2,
+    },
+    sectionHeaderTitle: {
+      fontSize: scale(12),
+      color: colors.accent,
+      letterSpacing: 2,
+      fontWeight: "700",
+    },
+    sectionHeaderHint: {
+      fontSize: scale(12),
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+
+    /* Topic chips */
+    topicChipRow: {
+      gap: 8,
+      paddingVertical: 4,
+      paddingRight: tokens.pad,
+    },
+    topicChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 999,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      gap: 6,
+    },
+    topicChipGlyph: {
+      fontSize: scale(14),
+    },
+    topicChipLabel: {
+      fontSize: scale(13),
+      color: colors.text,
+      fontWeight: "600",
+    },
   });
 };
 
-export default UtilitiesScreen;
+export default ChartsScreen;

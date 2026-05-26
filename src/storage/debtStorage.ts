@@ -441,6 +441,10 @@ const RESET_KEYS = [
   // Update-check preferences - auto vs manual choice belongs to the user
   // identity, not the device, so it should reset with everything else.
   "@budgetark_update_preferences",
+  // Learning progress (Charts lesson completions, resume pointer, affiliate
+  // flags). Per-device state - a fresh reset should re-show every lesson as
+  // unread and clear the Resume card.
+  "@budgetark_learning_progress",
 ] as const;
 
 export class ResetIncompleteError extends Error {

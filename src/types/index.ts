@@ -503,6 +503,194 @@ export interface AchievementStats {
 
 export const ACHIEVEMENT_STATS_VERSION = 1;
 
+/* ─── Learning (Charts) Types ─── */
+
+/** Top-level taxonomy for the Charts learning hub. */
+export const LESSON_TOPICS = [
+  "budgeting",
+  "debt",
+  "saving",
+  "investing",
+  "taxes",
+  "insurance",
+  "real_estate",
+  "retirement",
+  "mindset",
+] as const;
+
+export type LessonTopic = (typeof LESSON_TOPICS)[number];
+
+export type ChapterId = "ch1" | "ch2" | "ch3" | "ch4" | "ch5";
+
+export type ChapterStatus = "available" | "coming-soon";
+
+/**
+ * Minimal lesson metadata. Always present for every lesson in the curriculum,
+ * including "coming soon" ones whose full body doesn't exist yet. Surfaces
+ * in chapter listings, recommendation cards, and the resume pointer.
+ */
+export interface LessonStub {
+  id: string;
+  chapterId: ChapterId;
+  /** Display order within the chapter (1-based). */
+  number: number;
+  title: string;
+  /** Estimated read time in minutes. `null` for "coming soon" lessons. */
+  readMin: number | null;
+  topics: readonly LessonTopic[];
+}
+
+export interface Chapter {
+  id: ChapterId;
+  /** Display order in the Captain's Course (1-based). */
+  number: number;
+  title: string;
+  subtitle: string;
+  /** Emoji glyph shown on chapter cards. */
+  glyph: string;
+  status: ChapterStatus;
+  lessons: readonly LessonStub[];
+}
+
+/* Lesson body sections - discriminated union. Renderer walks the array. */
+
+export interface ParagraphSection {
+  type: "paragraph";
+  text: string;
+}
+
+export interface BulletListSection {
+  type: "bullet-list";
+  title?: string;
+  items: readonly string[];
+}
+
+export type CalloutTone = "info" | "warn" | "success";
+
+export interface CalloutSection {
+  type: "callout";
+  tone: CalloutTone;
+  title?: string;
+  text: string;
+}
+
+/**
+ * Inline embed for an existing in-app calculator. Renderer looks up the
+ * matching component; unknown ids render as a "Tool unavailable" stub
+ * so missing wiring never crashes a lesson.
+ */
+export interface CalculatorEmbedSection {
+  type: "calculator-embed";
+  /** Calculator id; e.g. "loan-amortization", "payoff-comparison". */
+  calc: string;
+}
+
+export type LessonSection =
+  | ParagraphSection
+  | BulletListSection
+  | CalloutSection
+  | CalculatorEmbedSection;
+
+/* Lesson resources - external + internal references shown at the bottom. */
+
+export interface YoutubeResource {
+  type: "youtube";
+  title: string;
+  channel: string;
+  /** "mm:ss" string, free-form. */
+  duration?: string;
+  url: string;
+}
+
+/**
+ * Book recommendation. `amazonUrl` + `affiliate` are deliberately optional
+ * so v1 ships with no affiliate links - the card renders as cover + title +
+ * author. When affiliate links light up later, populate these fields plus
+ * gate rendering behind LearningProgress.showAffiliateLinks.
+ */
+export interface BookResource {
+  type: "book";
+  title: string;
+  author: string;
+  /** Asset path under assets/books/, e.g. "9781595555274.png". Optional in v1. */
+  coverAsset?: string;
+  amazonUrl?: string;
+  affiliate?: boolean;
+}
+
+export interface ArticleResource {
+  type: "article";
+  title: string;
+  source: string;
+  url: string;
+}
+
+export interface ToolResource {
+  type: "tool";
+  title: string;
+  /** Route key understood by the Charts/Tools router (e.g. "refinance"). */
+  route: string;
+}
+
+export type LessonResource =
+  | YoutubeResource
+  | BookResource
+  | ArticleResource
+  | ToolResource;
+
+/**
+ * Action CTA at the end of a lesson - opens an existing in-app flow.
+ * `route` is a free-form key resolved by the Lesson screen's action handler;
+ * unknown routes are inert.
+ */
+export interface LessonAction {
+  label: string;
+  /** e.g. "debts/strategy", "budget/limits", "charts/tools/refinance". */
+  route: string;
+}
+
+/**
+ * Full lesson content. Only authored for "available" chapters. Lookups for
+ * a stub that has no `Lesson` entry render the "Coming soon" lesson screen.
+ */
+export interface Lesson extends LessonStub {
+  /** Hero glyph for the lesson screen header. */
+  glyph: string;
+  /** One-line teaser shown on lesson cards and chapter rows. */
+  summary: string;
+  /** Optional pull-quote callout under the title. */
+  whyItMatters?: string;
+  body: readonly LessonSection[];
+  /** Highlighted summary at the end of the lesson body. */
+  keyTakeaway?: string;
+  action?: LessonAction;
+  resources?: readonly LessonResource[];
+}
+
+export interface LearningProgress {
+  /** Map of lesson id → ISO timestamp when first marked complete. */
+  completedLessons: Record<string, string>;
+  /** Last lesson opened, used by the Captain's Course Resume card. */
+  currentLessonId?: string;
+  /**
+   * Times the user has tapped through to an Amazon affiliate link.
+   * Tracked even in v1 (count stays at 0) so the field exists when affiliate
+   * links light up later.
+   */
+  affiliateTapCount: number;
+  /** First time the user accepted the affiliate disclosure modal, if ever. */
+  affiliateDisclosureSeenAt?: string;
+  /**
+   * User toggle for showing affiliate links. Defaults to `false` in v1 since
+   * there are no affiliate URLs yet; the toggle UI will land alongside the
+   * affiliate launch.
+   */
+  showAffiliateLinks: boolean;
+  version: number;
+}
+
+export const LEARNING_STORAGE_VERSION = 1;
+
 /* ─── Navigation Types ─── */
 
 /**

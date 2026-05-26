@@ -7,8 +7,11 @@
  *   1. Debt Tracker (⛓️) - debt payoff planning
  *   2. Budget (💰)       - income & expense tracking
  *   3. Bridge (🧭)       - net worth, accounts, and progress
- *   4. Utilities (🧰)    - financial tools & calculators
+ *   4. Charts (🗺️)       - learning hub + financial tools
  *   5. Profile (👤)      - anonymous account & settings
+ *
+ * Route key for tab #4 stays `Utilities` for sync/state backward compat;
+ * only the display label, icon, and screen component changed.
  *
  * Design decisions:
  * - Uses @react-navigation/bottom-tabs for native tab bar behavior
@@ -37,7 +40,7 @@ import SpaceBackground from "../components/SpaceBackground";
 import DebtTrackerScreen from "../screens/DebtTrackerScreen";
 import BudgetScreen from "../screens/BudgetScreen";
 import BridgeScreen from "../screens/BridgeScreen";
-import UtilitiesScreen from "../screens/UtilitiesScreen";
+import ChartsScreen from "../screens/ChartsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
 /** Create the typed tab navigator */
@@ -52,7 +55,7 @@ const TAB_ICONS: Record<keyof RootTabParamList, string> = {
   DebtTracker: "⛓️",
   Budget: "💰",
   Bridge: "🧭",
-  Utilities: "🧰",
+  Utilities: "🗺️",
   Profile: "👤",
 };
 
@@ -64,7 +67,7 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
   DebtTracker: "Debts",
   Budget: "Budget",
   Bridge: "Bridge",
-  Utilities: "Utilities",
+  Utilities: "Charts",
   Profile: "Profile",
 };
 
@@ -116,7 +119,7 @@ const AppNavigator: React.FC = () => {
       <Tab.Screen name="DebtTracker" component={DebtTrackerScreen} />
       <Tab.Screen name="Budget" component={BudgetScreen} />
       <Tab.Screen name="Bridge" component={BridgeScreen} />
-      <Tab.Screen name="Utilities" component={UtilitiesScreen} />
+      <Tab.Screen name="Utilities" component={ChartsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
     </>
