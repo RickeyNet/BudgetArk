@@ -21,9 +21,12 @@ import type {
   SavingsGoal,
   BudgetEntry,
   DebtMilestonePlan,
+  LearningProgress,
   NetWorthSnapshot,
 } from "../types";
 import { isEntryActiveInMonth } from "../utils/recurrence";
+import { CHAPTERS } from "./lessonChapters";
+import { hasLessonBody } from "./lessonIndex";
 
 export interface AchievementContext {
   debts: Debt[];
@@ -37,6 +40,8 @@ export interface AchievementContext {
   stats: AchievementStats;
   /** YYYY-MM → saved category limits for that month. */
   limitsByMonth: Record<string, CategoryBudgetLimit[]>;
+  /** Per-device Charts learning progress for lesson-completion badges. */
+  learningProgress: LearningProgress;
 }
 
 /** Progress toward an achievement. `target` is what fully unlocks it. */
@@ -438,6 +443,76 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     description: "Held every budget category under its limit for a month.",
     hint: "Keep all category limits for one full month.",
     check: (ctx) => underBudgetMonths(ctx).length > 0,
+  },
+  {
+    id: "first_voyage",
+    glyph: "📖",
+    tier: "bronze",
+    title: "First Voyage",
+    description: "Completed your first Charts lesson.",
+    hint: "Finish a lesson in the Captain's Course.",
+    check: (ctx) =>
+      Object.keys(ctx.learningProgress.completedLessons).length > 0,
+  },
+  {
+    id: "course_plotter",
+    glyph: "⭐",
+    tier: "silver",
+    title: "Course Plotter",
+    description: "Finished Chapter 1: Setting Sail.",
+    hint: "Complete every lesson in Chapter 1.",
+    check: (ctx) => {
+      const ch1 = CHAPTERS.find((c) => c.id === "ch1");
+      if (!ch1) return false;
+      const authored = ch1.lessons.filter((stub) => hasLessonBody(stub.id));
+      if (authored.length === 0) return false;
+      return authored.every(
+        (stub) => !!ctx.learningProgress.completedLessons[stub.id],
+      );
+    },
+    progress: (ctx) => {
+      const ch1 = CHAPTERS.find((c) => c.id === "ch1");
+      if (!ch1) return null;
+      const authored = ch1.lessons.filter((stub) => hasLessonBody(stub.id));
+      if (authored.length === 0) return null;
+      const done = authored.filter(
+        (stub) => !!ctx.learningProgress.completedLessons[stub.id],
+      ).length;
+      return { current: done, target: authored.length };
+    },
+  },
+  {
+    id: "anchored_in_knowledge",
+    glyph: "⚓",
+    tier: "gold",
+    title: "Anchored in Knowledge",
+    description: "Completed every lesson in every shipped chapter.",
+    hint: "Finish the entire Captain's Course.",
+    /* Requires ALL chapters to be available (no "coming soon" placeholders
+     * left) AND every authored lesson read. While Ch 3-5 are still coming
+     * soon this badge sits dormant - the user has to wait for the content
+     * to ship before they can earn it, which keeps the goalpost honest
+     * instead of unlocking at 5/24 in v1 and lying ever after. */
+    check: (ctx) => {
+      if (!CHAPTERS.every((c) => c.status === "available")) return false;
+      const allAuthored = CHAPTERS.flatMap((c) =>
+        c.lessons.filter((stub) => hasLessonBody(stub.id)),
+      );
+      if (allAuthored.length === 0) return false;
+      return allAuthored.every(
+        (stub) => !!ctx.learningProgress.completedLessons[stub.id],
+      );
+    },
+    progress: (ctx) => {
+      const allAuthored = CHAPTERS.flatMap((c) =>
+        c.lessons.filter((stub) => hasLessonBody(stub.id)),
+      );
+      if (allAuthored.length === 0) return null;
+      const done = allAuthored.filter(
+        (stub) => !!ctx.learningProgress.completedLessons[stub.id],
+      ).length;
+      return { current: done, target: allAuthored.length };
+    },
   },
   {
     id: "admiral",

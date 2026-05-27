@@ -28,6 +28,7 @@ import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import type {
+  Chapter,
   LearningProgress,
   Lesson,
   LessonStub,
@@ -37,6 +38,7 @@ import { CHAPTERS } from "../data/lessonChapters";
 import {
   getLessonById,
   getNextLessonStub,
+  getOverallProgress,
   getPrevLessonStub,
   hasLessonBody,
 } from "../data/lessonIndex";
@@ -47,6 +49,8 @@ import {
 } from "../storage/learningProgressStorage";
 import LessonRenderer from "./LessonRenderer";
 import ResourceCard from "./ResourceCard";
+import LessonCelebrationModal from "./LessonCelebrationModal";
+import { useAchievements } from "../achievements/AchievementsProvider";
 
 interface LessonScreenProps {
   visible: boolean;
@@ -62,6 +66,19 @@ interface LessonScreenProps {
   onOpenAction?: (route: string) => void;
   /** Tool resource tapped. Parent routes to the matching calculator. */
   onOpenTool?: (route: string) => void;
+}
+
+interface CelebrationSnapshot {
+  stub: LessonStub;
+  chapter: Chapter;
+  totalAuthored: number;
+  totalCompleted: number;
+  chapterCompleted: number;
+  chapterTotal: number;
+  isFirstEver: boolean;
+  isChapterComplete: boolean;
+  isCourseComplete: boolean;
+  nextStub: LessonStub | null;
 }
 
 const TOPIC_PILL_LABELS: Record<LessonTopic, string> = {
@@ -89,7 +106,15 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const scrollRef = useRef<ScrollView>(null);
+  const { runCheck: runAchievementsCheck } = useAchievements();
   const [progress, setProgress] = useState<LearningProgress | null>(null);
+
+  /* Celebration state. Captured at completion time so the celebration UI
+   * reflects the milestone the user just crossed (chapter completed, course
+   * completed, first-ever lesson) even if `progress` changes underneath. */
+  const [celebration, setCelebration] = useState<CelebrationSnapshot | null>(
+    null
+  );
 
   /* On open, record the lesson as the user's resume target. Re-read
    * progress so the "Mark complete" button reflects the latest state when
@@ -125,15 +150,71 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
   const nextStub = stub ? getNextLessonStub(stub.id) : undefined;
 
   const handleMarkComplete = useCallback(async () => {
-    if (!stub) return;
+    if (!stub || !chapter) return;
     try {
+      /* Snapshot pre-write state so we can detect the "first lesson ever"
+       * case (couldn't compute this from `fresh` alone after the write). */
+      const wasEmpty = Object.keys(progress?.completedLessons ?? {}).length === 0;
+
       await markLessonComplete(stub.id);
       const fresh = await getLearningProgress();
       setProgress(fresh);
+
+      const completedMap = fresh.completedLessons;
+      const overall = getOverallProgress(completedMap);
+      /* Chapter completion counts authored lessons only - "coming soon"
+       * stubs don't have bodies and can't be completed, so they shouldn't
+       * inflate the chapter denominator. */
+      const authoredChapterStubs = chapter.lessons.filter((s) =>
+        hasLessonBody(s.id)
+      );
+      const chapterCompleted = authoredChapterStubs.filter(
+        (s) => completedMap[s.id]
+      ).length;
+      const chapterTotal = authoredChapterStubs.length;
+      const nextAuthoredStub = (() => {
+        let cursor = getNextLessonStub(stub.id);
+        while (cursor && !hasLessonBody(cursor.id)) {
+          cursor = getNextLessonStub(cursor.id);
+        }
+        return cursor ?? null;
+      })();
+
+      setCelebration({
+        stub,
+        chapter,
+        totalAuthored: overall.total,
+        totalCompleted: overall.completed,
+        chapterCompleted,
+        chapterTotal,
+        isFirstEver: wasEmpty,
+        isChapterComplete:
+          chapterTotal > 0 && chapterCompleted === chapterTotal,
+        isCourseComplete:
+          overall.total > 0 && overall.completed === overall.total,
+        nextStub: nextAuthoredStub,
+      });
     } catch (err) {
       if (__DEV__) console.warn("[LessonScreen] mark complete", err);
     }
-  }, [stub]);
+  }, [stub, chapter, progress?.completedLessons]);
+
+  const handleCelebrationClose = useCallback(() => {
+    setCelebration(null);
+    /* Evaluate badges AFTER the lesson celebration closes so the Ship's Log
+     * unlock modal doesn't fight with the confetti card for the same screen
+     * space. The AchievementsProvider queues unlocks and pops them next. */
+    void runAchievementsCheck();
+  }, [runAchievementsCheck]);
+
+  const handleCelebrationNext = useCallback(
+    (nextStub: LessonStub) => {
+      setCelebration(null);
+      void runAchievementsCheck();
+      onNavigateTo(nextStub);
+    },
+    [onNavigateTo, runAchievementsCheck]
+  );
 
   const handleAction = useCallback(() => {
     if (!lesson?.action || !onOpenAction) return;
@@ -361,6 +442,21 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
           </View>
         </ScrollView>
       </View>
+      <LessonCelebrationModal
+        visible={celebration !== null}
+        stub={celebration?.stub ?? null}
+        chapter={celebration?.chapter ?? null}
+        totalAuthored={celebration?.totalAuthored ?? 0}
+        totalCompleted={celebration?.totalCompleted ?? 0}
+        chapterCompleted={celebration?.chapterCompleted ?? 0}
+        chapterTotal={celebration?.chapterTotal ?? 0}
+        isFirstEver={celebration?.isFirstEver ?? false}
+        isChapterComplete={celebration?.isChapterComplete ?? false}
+        isCourseComplete={celebration?.isCourseComplete ?? false}
+        nextStub={celebration?.nextStub ?? null}
+        onClose={handleCelebrationClose}
+        onNext={handleCelebrationNext}
+      />
     </Modal>
   );
 };

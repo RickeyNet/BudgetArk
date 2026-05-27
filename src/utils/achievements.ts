@@ -31,6 +31,7 @@ import {
   getAchievementStats,
   recordAppOpenForStreak,
 } from "../storage/achievementStatsStorage";
+import { getLearningProgress } from "../storage/learningProgressStorage";
 
 export interface EvaluationResult {
   /** Full id → unlocked-timestamp map after this run. */
@@ -69,6 +70,7 @@ const loadContext = async (): Promise<AchievementContext> => {
     pairing,
     stats,
     limitsByMonth,
+    learningProgress,
   ] = await Promise.all([
     getDebts(),
     getPayments(),
@@ -79,6 +81,7 @@ const loadContext = async (): Promise<AchievementContext> => {
     getPairingState(),
     getAchievementStats(),
     getAllLimitsByMonth(),
+    getLearningProgress(),
   ]);
 
   return {
@@ -91,6 +94,7 @@ const loadContext = async (): Promise<AchievementContext> => {
     isPaired: pairing !== null,
     stats,
     limitsByMonth,
+    learningProgress,
   };
 };
 
