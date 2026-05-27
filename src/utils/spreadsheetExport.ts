@@ -709,13 +709,22 @@ export interface SpreadsheetExportResult {
   entryCount: number;
 }
 
+export interface SpreadsheetExportOptions {
+  /**
+   * Optional hook that runs after the export file has been written but before
+   * the native share sheet is presented.
+   */
+  beforeShare?: () => void | Promise<void>;
+}
+
 /**
  * Builds the workbook, writes it to a cache file, and opens the share sheet.
  *
  * @param format - "csv" (budget entries only) or "xlsx" (full multi-sheet workbook)
  */
 export const exportSpreadsheet = async (
-  format: SpreadsheetFormat
+  format: SpreadsheetFormat,
+  options: SpreadsheetExportOptions = {}
 ): Promise<SpreadsheetExportResult> => {
   const [
     budgetEntries,
@@ -864,6 +873,10 @@ export const exportSpreadsheet = async (
     throw new Error(
       "Sharing is not available on this device. The file has been saved to the app cache."
     );
+  }
+
+  if (options.beforeShare) {
+    await options.beforeShare();
   }
 
   await Sharing.shareAsync(file.uri, {

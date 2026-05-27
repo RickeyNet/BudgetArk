@@ -861,7 +861,18 @@ const ProfileScreen: React.FC = () => {
       await new Promise((resolve) => setTimeout(resolve, 60));
       let exported = false;
       try {
-        const result = await exportSpreadsheet(format);
+        const result = await exportSpreadsheet(format, {
+          beforeShare: async () => {
+            // Dismiss the RN <Modal> before opening iOS share UI. Presenting
+            // UIActivityViewController while our own modal is still visible can
+            // strand shareAsync in a pending state, which leaves the user on
+            // an endless spinner.
+            setIsExporting(false);
+            if (Platform.OS === "ios") {
+              await new Promise((resolve) => setTimeout(resolve, 350));
+            }
+          },
+        });
         const formatLabel = format === "csv" ? "CSV" : "Excel";
         const note =
           format === "csv"
