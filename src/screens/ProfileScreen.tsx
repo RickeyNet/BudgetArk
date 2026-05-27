@@ -874,10 +874,13 @@ const ProfileScreen: React.FC = () => {
           },
         });
         const formatLabel = format === "csv" ? "CSV" : "Excel";
-        const note =
+        let note =
           format === "csv"
             ? "CSV exports include budget entries only. Use Excel format for a full backup."
             : `Workbook saved with ${result.entryCount} budget entries plus debts, payments, savings goals, and asset accounts.`;
+        if (result.partial) {
+          note += `\n\nPartial export: some sections could not be read and were skipped (${result.missingSections.join(", ")}).`;
+        }
         triggerHaptic("success");
         setInfoModal({
           title: `${formatLabel} Export Ready`,

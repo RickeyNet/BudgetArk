@@ -30,6 +30,7 @@ import {
   AssetAccount,
   BudgetEntry,
   CategoryBudgetLimit,
+  DebtMilestonePlan,
   Debt,
   Payment,
   SavingsGoal,
@@ -707,6 +708,8 @@ export interface SpreadsheetExportResult {
   format: SpreadsheetFormat;
   filename: string;
   entryCount: number;
+  partial: boolean;
+  missingSections: string[];
 }
 
 export interface SpreadsheetExportOptions {
@@ -726,15 +729,20 @@ export const exportSpreadsheet = async (
   format: SpreadsheetFormat,
   options: SpreadsheetExportOptions = {}
 ): Promise<SpreadsheetExportResult> => {
+  const missingSections = new Set<string>();
+  const markMissingSection = (name: string) => {
+    missingSections.add(name);
+  };
+
   const [
-    budgetEntries,
-    budgetLimits,
-    debts,
-    payments,
-    savingsGoals,
-    assetAccounts,
-    milestonePlan,
-  ] = await Promise.all([
+    budgetEntriesResult,
+    budgetLimitsResult,
+    debtsResult,
+    paymentsResult,
+    savingsGoalsResult,
+    assetAccountsResult,
+    milestonePlanResult,
+  ] = await Promise.allSettled([
     getBudgetEntries(),
     getCategoryBudgetLimits(),
     getDebts(),
@@ -743,6 +751,33 @@ export const exportSpreadsheet = async (
     getAssetAccounts(),
     getDebtMilestonePlan(),
   ]);
+
+  const budgetEntries =
+    budgetEntriesResult.status === "fulfilled"
+      ? budgetEntriesResult.value
+      : (markMissingSection("Budget Entries"), [] as BudgetEntry[]);
+  const budgetLimits =
+    budgetLimitsResult.status === "fulfilled"
+      ? budgetLimitsResult.value
+      : (markMissingSection("Budget Limits"), [] as CategoryBudgetLimit[]);
+  const debts =
+    debtsResult.status === "fulfilled"
+      ? debtsResult.value
+      : (markMissingSection("Debts"), [] as Debt[]);
+  const payments =
+    paymentsResult.status === "fulfilled"
+      ? paymentsResult.value
+      : (markMissingSection("Payments"), [] as Payment[]);
+  const savingsGoals =
+    savingsGoalsResult.status === "fulfilled"
+      ? savingsGoalsResult.value
+      : (markMissingSection("Savings Goals"), [] as SavingsGoal[]);
+  const assetAccounts =
+    assetAccountsResult.status === "fulfilled"
+      ? assetAccountsResult.value
+      : (markMissingSection("Asset Accounts"), [] as AssetAccount[]);
+  const milestonePlan: DebtMilestonePlan | null =
+    milestonePlanResult.status === "fulfilled" ? milestonePlanResult.value : null;
 
   // Build the savings-goal list shown in the spreadsheet. If the user has no
   // explicit emergency_fund goal but is tracking one via the Keel milestone
@@ -754,7 +789,7 @@ export const exportSpreadsheet = async (
   const hasExplicitEmergencyFund = savingsGoals.some(
     (goal) => goal.category === "emergency_fund"
   );
-  if (!hasExplicitEmergencyFund) {
+  if (!hasExplicitEmergencyFund && milestonePlan) {
     const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
     const keelTarget = keelStep?.targetAmount ?? 0;
     // Only the "Savings" category counts toward the derived emergency fund.
@@ -789,70 +824,96 @@ export const exportSpreadsheet = async (
   // Budget Entries is built by hand (not via json_to_sheet + appendTotalRow)
   // so we can sort by date, interleave per-month Income / Expense / Net
   // subtotals, and finish with a grand-total block. See buildBudgetEntriesSheet.
-  const entryRows = expandRecurringRows(budgetEntries.map(budgetEntryToRow));
-  const entrySheet = buildBudgetEntriesSheet(entryRows);
+  let entrySheet: XLSX.WorkSheet;
+  try {
+    const entryRows = expandRecurringRows(budgetEntries.map(budgetEntryToRow));
+    entrySheet = buildBudgetEntriesSheet(entryRows);
+  } catch {
+    markMissingSection("Budget Entries");
+    entrySheet = buildBudgetEntriesSheet([]);
+  }
   XLSX.utils.book_append_sheet(wb, entrySheet, "Budget Entries");
 
   if (format === "xlsx") {
-    const limitRows = budgetLimits.map(budgetLimitToRow);
-    const limitsSheet = XLSX.utils.json_to_sheet(limitRows, {
-      header: [...BUDGET_LIMIT_COLUMNS],
-    });
-    appendTotalRow(
-      limitsSheet,
-      limitRows,
-      BUDGET_LIMIT_COLUMNS,
-      SHEET_SUM_COLUMNS["Budget Limits"]
-    );
-    XLSX.utils.book_append_sheet(wb, limitsSheet, "Budget Limits");
+    try {
+      const limitRows = budgetLimits.map(budgetLimitToRow);
+      const limitsSheet = XLSX.utils.json_to_sheet(limitRows, {
+        header: [...BUDGET_LIMIT_COLUMNS],
+      });
+      appendTotalRow(
+        limitsSheet,
+        limitRows,
+        BUDGET_LIMIT_COLUMNS,
+        SHEET_SUM_COLUMNS["Budget Limits"]
+      );
+      XLSX.utils.book_append_sheet(wb, limitsSheet, "Budget Limits");
+    } catch {
+      markMissingSection("Budget Limits");
+    }
 
-    const debtRows = debts.map(debtToRow);
-    const debtsSheet = XLSX.utils.json_to_sheet(debtRows, {
-      header: [...DEBT_COLUMNS],
-    });
-    appendTotalRow(debtsSheet, debtRows, DEBT_COLUMNS, SHEET_SUM_COLUMNS["Debts"]);
-    promoteStringDateCells(debtsSheet, DEBT_COLUMNS, ["GoalDate", "CreatedAt"]);
-    XLSX.utils.book_append_sheet(wb, debtsSheet, "Debts");
+    try {
+      const debtRows = debts.map(debtToRow);
+      const debtsSheet = XLSX.utils.json_to_sheet(debtRows, {
+        header: [...DEBT_COLUMNS],
+      });
+      appendTotalRow(debtsSheet, debtRows, DEBT_COLUMNS, SHEET_SUM_COLUMNS["Debts"]);
+      promoteStringDateCells(debtsSheet, DEBT_COLUMNS, ["GoalDate", "CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, debtsSheet, "Debts");
+    } catch {
+      markMissingSection("Debts");
+    }
 
-    const paymentRows = payments.map(paymentToRow);
-    const paymentsSheet = XLSX.utils.json_to_sheet(paymentRows, {
-      header: [...PAYMENT_COLUMNS],
-    });
-    appendTotalRow(
-      paymentsSheet,
-      paymentRows,
-      PAYMENT_COLUMNS,
-      SHEET_SUM_COLUMNS["Payments"]
-    );
-    promoteStringDateCells(paymentsSheet, PAYMENT_COLUMNS, ["Date"]);
-    XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
+    try {
+      const paymentRows = payments.map(paymentToRow);
+      const paymentsSheet = XLSX.utils.json_to_sheet(paymentRows, {
+        header: [...PAYMENT_COLUMNS],
+      });
+      appendTotalRow(
+        paymentsSheet,
+        paymentRows,
+        PAYMENT_COLUMNS,
+        SHEET_SUM_COLUMNS["Payments"]
+      );
+      promoteStringDateCells(paymentsSheet, PAYMENT_COLUMNS, ["Date"]);
+      XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
+    } catch {
+      markMissingSection("Payments");
+    }
 
-    const goalRows = goalsForSheet.map(savingsGoalToRow);
-    const goalsSheet = XLSX.utils.json_to_sheet(goalRows, {
-      header: [...SAVINGS_GOAL_COLUMNS],
-    });
-    appendTotalRow(
-      goalsSheet,
-      goalRows,
-      SAVINGS_GOAL_COLUMNS,
-      SHEET_SUM_COLUMNS["Savings Goals"],
-      { excludeFirstColumnEquals: DERIVED_EMERGENCY_FUND_ID }
-    );
-    promoteStringDateCells(goalsSheet, SAVINGS_GOAL_COLUMNS, ["TargetDate", "CreatedAt"]);
-    XLSX.utils.book_append_sheet(wb, goalsSheet, "Savings Goals");
+    try {
+      const goalRows = goalsForSheet.map(savingsGoalToRow);
+      const goalsSheet = XLSX.utils.json_to_sheet(goalRows, {
+        header: [...SAVINGS_GOAL_COLUMNS],
+      });
+      appendTotalRow(
+        goalsSheet,
+        goalRows,
+        SAVINGS_GOAL_COLUMNS,
+        SHEET_SUM_COLUMNS["Savings Goals"],
+        { excludeFirstColumnEquals: DERIVED_EMERGENCY_FUND_ID }
+      );
+      promoteStringDateCells(goalsSheet, SAVINGS_GOAL_COLUMNS, ["TargetDate", "CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, goalsSheet, "Savings Goals");
+    } catch {
+      markMissingSection("Savings Goals");
+    }
 
-    const accountRows = assetAccounts.map(assetAccountToRow);
-    const accountsSheet = XLSX.utils.json_to_sheet(accountRows, {
-      header: [...ASSET_ACCOUNT_COLUMNS],
-    });
-    appendTotalRow(
-      accountsSheet,
-      accountRows,
-      ASSET_ACCOUNT_COLUMNS,
-      SHEET_SUM_COLUMNS["Asset Accounts"]
-    );
-    promoteStringDateCells(accountsSheet, ASSET_ACCOUNT_COLUMNS, ["CreatedAt"]);
-    XLSX.utils.book_append_sheet(wb, accountsSheet, "Asset Accounts");
+    try {
+      const accountRows = assetAccounts.map(assetAccountToRow);
+      const accountsSheet = XLSX.utils.json_to_sheet(accountRows, {
+        header: [...ASSET_ACCOUNT_COLUMNS],
+      });
+      appendTotalRow(
+        accountsSheet,
+        accountRows,
+        ASSET_ACCOUNT_COLUMNS,
+        SHEET_SUM_COLUMNS["Asset Accounts"]
+      );
+      promoteStringDateCells(accountsSheet, ASSET_ACCOUNT_COLUMNS, ["CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, accountsSheet, "Asset Accounts");
+    } catch {
+      markMissingSection("Asset Accounts");
+    }
   }
 
   const filename = sanitizeFilename(buildFilename(format));
@@ -899,5 +960,7 @@ export const exportSpreadsheet = async (
     format,
     filename,
     entryCount: budgetEntries.length,
+    partial: missingSections.size > 0,
+    missingSections: [...missingSections].sort(),
   };
 };
