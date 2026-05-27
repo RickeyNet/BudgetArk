@@ -360,7 +360,7 @@ const ChartsScreen: React.FC = () => {
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   /* Compound interest calculator state */
-  const [calcOpen, setCalcOpen] = useState(true);
+  const [calcOpen, setCalcOpen] = useState(false);
   const [contribution, setContribution] = useState(500);
   const [returnRate, setReturnRate] = useState(7);
   const [years, setYears] = useState(20);
