@@ -8,14 +8,14 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.7.0",
-    title: "Charts — Learning Hub",
+    title: "Charts - Learning Hub",
     releasedAt: "2026-05-26",
     highlights: [
       "Renamed the Utilities tab to Charts (🗺️). The existing calculators all live under a new TOOLS section, nothing was removed.",
-      "Added the Captain's Course: a 5-chapter, 24-lesson personal-finance walkthrough that lives at the top of the Charts tab. Ships with Chapters 1 (Setting Sail — budgeting basics) and 2 (Patching the Hull — debt) fully written; Chapters 3-5 are listed as 'Coming soon' so you can see the full path.",
-      "Soft gating throughout — every chapter is tappable, nothing is locked. A Resume strip points to where you left off.",
+      "Added the Captain's Course: a 5-chapter, 24-lesson personal-finance walkthrough that lives at the top of the Charts tab. Ships with Chapters 1 (Setting Sail, budgeting basics) and 2 (Patching the Hull, debt) fully written; Chapters 3-5 are listed as 'Coming soon' so you can see the full path.",
+      "Soft gating throughout: every chapter is tappable, nothing is locked. A Resume strip points to where you left off.",
       "Browse-by-topic chip row across nine subjects: Budgeting, Debt, Saving, Investing, Taxes, Insurance, Real Estate, Retirement, and Mindset.",
-      "Lesson progress is per-device — your partner's reading state doesn't sync over and won't mark your lessons complete.",
+      "Lesson progress is per-device. Your partner's reading state doesn't sync over and won't mark your lessons complete.",
     ],
   },
   {

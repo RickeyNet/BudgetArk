@@ -112,7 +112,7 @@ export const CHAPTERS: readonly Chapter[] = [
       },
       {
         id: "ch2-l5-refinancing",
-        title: "Refinancing — when it pays",
+        title: "Refinancing - when it pays",
         readMin: 6,
         topics: ["debt", "real_estate"],
       },
@@ -134,7 +134,7 @@ export const CHAPTERS: readonly Chapter[] = [
     lessons: stubsFor("ch3", [
       {
         id: "ch3-l1-emergency-fund-full",
-        title: "Emergency fund — 3 to 6 months",
+        title: "Emergency fund - 3 to 6 months",
         readMin: null,
         topics: ["saving"],
       },
@@ -180,7 +180,7 @@ export const CHAPTERS: readonly Chapter[] = [
       },
       {
         id: "ch4-l3-401k-ira-roth",
-        title: "401(k), IRA, Roth — which first?",
+        title: "401(k), IRA, Roth - which first?",
         readMin: null,
         topics: ["investing", "retirement", "taxes"],
       },
@@ -208,7 +208,7 @@ export const CHAPTERS: readonly Chapter[] = [
     lessons: stubsFor("ch5", [
       {
         id: "ch5-l1-net-worth",
-        title: "Net worth — the only score",
+        title: "Net worth - the only score",
         readMin: null,
         topics: ["mindset", "investing"],
       },
@@ -220,7 +220,7 @@ export const CHAPTERS: readonly Chapter[] = [
       },
       {
         id: "ch5-l3-insurance",
-        title: "Insurance — what you actually need",
+        title: "Insurance - what you actually need",
         readMin: null,
         topics: ["insurance"],
       },

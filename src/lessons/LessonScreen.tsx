@@ -282,7 +282,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
               <Text style={styles.comingSoonTitle}>Lesson in progress</Text>
               <Text style={styles.comingSoonBody}>
                 {chapter.title} ships in a future update. The chapter outline
-                is here so you can see the full course path — check back soon.
+                is here so you can see the full course path. Check back soon.
               </Text>
             </View>
           )}
@@ -319,7 +319,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
                   ]}
                   numberOfLines={1}
                 >
-                  {prevStub ? prevStub.title : "—"}
+                  {prevStub ? prevStub.title : "-"}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -346,7 +346,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
                   ]}
                   numberOfLines={1}
                 >
-                  {nextStub ? nextStub.title : "—"}
+                  {nextStub ? nextStub.title : "-"}
                 </Text>
               </View>
               <Text

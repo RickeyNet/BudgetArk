@@ -30,15 +30,22 @@ import {
   getLessonStub,
 } from "./lessonChapters";
 
-/**
- * Empty in this scaffolding step. Ch 1 + Ch 2 lesson files will be added
- * in the next build pass and registered here keyed by their lesson id.
- *
- * Example shape once authored:
- *   import ch1l1 from "./lessons/ch1-l1-what-is-budget";
- *   const LESSONS_BY_ID: Record<string, Lesson> = { [ch1l1.id]: ch1l1, ... };
- */
-const LESSONS_BY_ID: Record<string, Lesson> = {};
+/* Authored lesson bodies. Register every new lesson here so the screen can
+ * find it; the chapter stubs in lessonChapters.ts handle metadata + course
+ * order. Lesson ids must match the stub ids exactly. */
+import ch1l1 from "./lessons/ch1-l1-what-is-budget";
+import ch1l2 from "./lessons/ch1-l2-needs-wants-savings";
+import ch1l3 from "./lessons/ch1-l3-tracking-vs-budgeting";
+import ch1l4 from "./lessons/ch1-l4-zero-based";
+import ch1l5 from "./lessons/ch1-l5-monthly-review";
+
+const LESSONS_BY_ID: Record<string, Lesson> = {
+  [ch1l1.id]: ch1l1,
+  [ch1l2.id]: ch1l2,
+  [ch1l3.id]: ch1l3,
+  [ch1l4.id]: ch1l4,
+  [ch1l5.id]: ch1l5,
+};
 
 export const getLessonById = (lessonId: string): Lesson | undefined =>
   LESSONS_BY_ID[lessonId];

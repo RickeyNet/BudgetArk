@@ -728,6 +728,35 @@ Possible feature design (v1):
   - Add “Plan owner” mode: Mine / Partner / Household
   - Reuse your existing debt ownership concepts where possible
 
+- [ ] 50/30/20 view on Budget screen - ties directly to Charts Ch 1 Lesson 2. New card on the Budget tab (below the Spending donut) that buckets every spending category into Needs / Wants / Savings and shows actual % vs. target % per bucket as three stacked bars, plus the dollar gap from each target. Helps users see at a glance whether their real month matches the 50/30/20 framework they just read about.
+
+  Bucket mapping:
+  - Built-in categories ship with a `defaultBucket: "needs" | "wants" | "savings"` in a new `categoryBuckets.ts` constants map. Sensible defaults: Housing/Utilities/Food/Grocery/Transportation/Healthcare/Insurance/Debt Payments → Needs; Restaurant/Entertainment/Shopping/Travel/Tech/Fitness → Wants; Savings/Investing/Retirement/Giving → Savings. Income categories (Salary, Freelance) feed the denominator (after-tax take-home) and aren't bucketed.
+  - Custom categories prompt for a bucket on creation. Stored alongside the existing CustomCategory fields.
+  - Per-category override per user, since edges are opinionated (e.g. "Tech" might be a need for a freelance dev, a want for someone else). Stored under a new `@budgetark_category_bucket_overrides` key as `Record<CategoryName, BudgetBucket>`. Reads merge built-in defaults + custom-category bucket + override (override wins).
+  - Surface the override UX as a long-press on a row inside the 50/30/20 card, OR as a small "Reassign" gear next to each row that opens a 3-option sheet.
+
+  Card content:
+  - Header row: "50/30/20" + "Take-home this month: $X,XXX" (sum of all income entries for the month).
+  - Three rows, one per bucket. Each row: bucket name, target % chip, actual % big number, actual $ small, progress bar showing actual fill against target. Bar color uses the existing accent / success / warning palette (under target = success, near target = accent, over target = warning).
+  - Below the bars: tiny stats line "$X under target on Needs", "$Y over target on Wants", etc. so the gap is concrete dollars not just percentages.
+  - Tap a bucket row to expand a list of the categories inside it with their individual contributions. Long-press a category row to override its bucket.
+
+  Edge cases:
+  - Months with $0 income: card shows "Add income to see the 50/30/20 split" empty state.
+  - Months with $0 spending in a bucket: 0% rendered cleanly, not as NaN.
+  - Recurring entries respected via `isEntryActiveInMonth` so the math matches the Spending donut.
+  - Debt Payments default to Needs (the minimum is a need); extra payments above minimum technically belong in Savings, but the app doesn't yet track minimum-vs-extra inside a payment entry. v1 keeps Debt Payments as Needs and accepts the slight overcount.
+
+  Files (proposed):
+  - `src/data/categoryBuckets.ts` - defaultBucket per built-in category, BudgetBucket type, label/color metadata.
+  - `src/storage/categoryBucketOverridesStorage.ts` - CRUD for the override map.
+  - `src/components/BudgetBucketCard.tsx` - the card UI.
+  - `src/utils/budgetBucketMath.ts` - pure helpers (totalsByBucket, targetForBucket, varianceForBucket).
+  - `src/screens/BudgetScreen.tsx` - mount the card; wire the long-press override.
+
+  OTA-eligible: yes. No new native deps. Theme + density aware via existing tokens.
+
 - [ ] Lean month mode - toggle that hides non-essential categories from Budget, surfacing only essentials (Rent, Food, Utilities, Transport). Helps users focus during tight months without deleting or reorganizing data. Pure UI filter, OTA-safe.
 
 - [ ] Hidden cost of debt counter - widget on Debt Tracker showing projected total interest across the remaining life of every debt, updates live as payments post. Motivational. Pure derivation from existing balances + APRs + payment schedule.
