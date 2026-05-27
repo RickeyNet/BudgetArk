@@ -88,17 +88,25 @@ export const getLessonsForTopic = (
 
 /**
  * Picks the lesson the Resume CTA should jump to. Strategy:
- *   1. The user's stored `currentLessonId`, if it still exists in the
- *      curriculum and isn't already completed.
- *   2. The first stub (in course order) that has a body AND isn't completed.
- *   3. The first lesson with a body (course just started or fully complete).
- *   4. The very first stub in the curriculum (no available chapters at all -
+ *   1. If the user has no completed lessons yet, force the first lesson with
+ *      a body so "Start here" always begins at Chapter 1.
+ *   2. Otherwise, use the stored `currentLessonId` when it still exists in
+ *      the curriculum and isn't already completed.
+ *   3. The first stub (in course order) that has a body AND isn't completed.
+ *   4. The first lesson with a body (course fully complete).
+ *   5. The very first stub in the curriculum (no available chapters at all -
  *      unreachable today since Ch 1 ships with content).
  */
 export const pickResumeLesson = (
   completedLessons: Record<string, string>,
   currentLessonId: string | undefined
 ): LessonStub | undefined => {
+  const hasCompletedLessons = Object.keys(completedLessons).length > 0;
+  if (!hasCompletedLessons) {
+    const firstWithBody = ALL_LESSON_STUBS.find((stub) => hasLessonBody(stub.id));
+    return firstWithBody ?? ALL_LESSON_STUBS[0];
+  }
+
   if (currentLessonId) {
     const current = getLessonStub(currentLessonId);
     if (current && !completedLessons[current.id]) return current;
