@@ -16,6 +16,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Soft gating throughout: every chapter is tappable, nothing is locked. A Resume strip points to where you left off.",
       "Browse-by-topic chip row across nine subjects: Budgeting, Debt, Saving, Investing, Taxes, Insurance, Real Estate, Retirement, and Mindset.",
       "Lesson progress is per-device. Your partner's reading state doesn't sync over and won't mark your lessons complete.",
+      "Spreadsheet export is now fail-soft: if one data section can't be read (for example after a schema/storage mismatch), export still completes with the sections that are available and clearly labels the result as a partial export.",
     ],
   },
   {
