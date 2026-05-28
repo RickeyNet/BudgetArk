@@ -31,7 +31,7 @@ import {
   Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
@@ -157,6 +157,8 @@ const ProfileScreen: React.FC = () => {
   const coachmark = useTabCoachmark("Profile");
   const { replay: replayCoachmarks, startGuidedTour } = useCoachmarks();
   const scrollRef = useRef<ScrollView>(null);
+  const spreadsheetExportInFlightRef = useRef(false);
+  const spreadsheetExportOpIdRef = useRef(0);
   const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", { scrollRef });
   const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
   const styles = React.useMemo(() => makeStyles(tokens), [tokens]);
@@ -851,14 +853,27 @@ const ProfileScreen: React.FC = () => {
     setShowSpreadsheetExportModal(true);
   }, []);
 
+  const closeSpreadsheetExportModal = useCallback(() => {
+    setShowSpreadsheetExportModal(false);
+    if (!spreadsheetExportInFlightRef.current) {
+      setIsExporting(false);
+    }
+  }, []);
+
   /**
    * Spreadsheet export - run with the chosen format.
    */
   const confirmSpreadsheetExport = useCallback(
     async (format: SpreadsheetFormat) => {
-      setShowSpreadsheetExportModal(false);
+      if (spreadsheetExportInFlightRef.current) return;
+      spreadsheetExportInFlightRef.current = true;
+      const opId = spreadsheetExportOpIdRef.current + 1;
+      spreadsheetExportOpIdRef.current = opId;
+      const isActiveOp = () => spreadsheetExportOpIdRef.current === opId;
+      closeSpreadsheetExportModal();
       setIsExporting(true);
       await new Promise((resolve) => setTimeout(resolve, 60));
+      if (!isActiveOp()) return;
       let exported = false;
       try {
         const result = await exportSpreadsheet(format, {
@@ -873,6 +888,7 @@ const ProfileScreen: React.FC = () => {
             }
           },
         });
+        if (!isActiveOp()) return;
         const formatLabel = format === "csv" ? "CSV" : "Excel";
         let note =
           format === "csv"
@@ -887,9 +903,12 @@ const ProfileScreen: React.FC = () => {
           message: note,
         });
         await refreshBackupState();
+        if (!isActiveOp()) return;
         await recordExport();
+        if (!isActiveOp()) return;
         exported = true;
       } catch (error: any) {
+        if (!isActiveOp()) return;
         triggerHaptic("error");
         setInfoModal({
           title: "Export Failed",
@@ -898,9 +917,12 @@ const ProfileScreen: React.FC = () => {
             "Something went wrong while exporting the spreadsheet.",
         });
       } finally {
-        setIsExporting(false);
+        if (isActiveOp()) {
+          setIsExporting(false);
+          spreadsheetExportInFlightRef.current = false;
+        }
       }
-      if (exported) {
+      if (exported && isActiveOp()) {
         // Same deferral as JSON export - let the spinner + share sheet
         // dismiss so the achievement <Modal> can actually present.
         setTimeout(() => {
@@ -908,7 +930,17 @@ const ProfileScreen: React.FC = () => {
         }, 500);
       }
     },
-    [refreshBackupState, refreshAchievements]
+    [closeSpreadsheetExportModal, refreshBackupState, refreshAchievements]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      spreadsheetExportOpIdRef.current += 1;
+      setIsExporting(false);
+      setShowSpreadsheetExportModal(false);
+      spreadsheetExportInFlightRef.current = false;
+      return undefined;
+    }, [])
   );
 
   /**
@@ -2554,7 +2586,7 @@ const ProfileScreen: React.FC = () => {
         visible={showSpreadsheetExportModal}
         animationType="fade"
         transparent
-        onRequestClose={() => setShowSpreadsheetExportModal(false)}
+        onRequestClose={closeSpreadsheetExportModal}
       >
         <View style={styles.dialogOverlay}>
           <View
@@ -2575,8 +2607,10 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.dialogLinkRow}
               onPress={() => {
-                setShowSpreadsheetExportModal(false);
-                setShowSpreadsheetSchemaModal(true);
+                closeSpreadsheetExportModal();
+                setTimeout(() => {
+                  setShowSpreadsheetSchemaModal(true);
+                }, 250);
               }}
             >
               <Text style={[styles.dialogLinkText, { color: colors.accent }]}>
@@ -2586,7 +2620,7 @@ const ProfileScreen: React.FC = () => {
             <View style={styles.dialogActions}>
               <TouchableOpacity
                 style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
-                onPress={() => setShowSpreadsheetExportModal(false)}
+                onPress={closeSpreadsheetExportModal}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
                   Cancel

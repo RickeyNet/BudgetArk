@@ -16,6 +16,7 @@
 import * as XLSX from "xlsx";
 import * as Sharing from "expo-sharing";
 import { File as ExpoFile, Paths } from "expo-file-system";
+import { Platform } from "react-native";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import {
   getBudgetEntries,
@@ -720,6 +721,32 @@ export interface SpreadsheetExportOptions {
   beforeShare?: () => void | Promise<void>;
 }
 
+const IOS_SHARE_TIMEOUT_MS = 15000;
+const DATA_LOAD_TIMEOUT_MS = 12000;
+const BEFORE_SHARE_TIMEOUT_MS = 2000;
+
+const nowMs = (): number => Date.now();
+
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(message));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 /**
  * Builds the workbook, writes it to a cache file, and opens the share sheet.
  *
@@ -729,11 +756,20 @@ export const exportSpreadsheet = async (
   format: SpreadsheetFormat,
   options: SpreadsheetExportOptions = {}
 ): Promise<SpreadsheetExportResult> => {
+  const runId = `${nowMs().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const log = (phase: string, detail?: string) => {
+    const suffix = detail ? ` ${detail}` : "";
+    console.info(`[spreadsheetExport:${runId}] ${phase}${suffix}`);
+  };
+
+  log("start", `platform=${Platform.OS} format=${format}`);
+
   const missingSections = new Set<string>();
   const markMissingSection = (name: string) => {
     missingSections.add(name);
   };
 
+  const loadStartedAt = nowMs();
   const [
     budgetEntriesResult,
     budgetLimitsResult,
@@ -743,14 +779,39 @@ export const exportSpreadsheet = async (
     assetAccountsResult,
     milestonePlanResult,
   ] = await Promise.allSettled([
-    getBudgetEntries(),
-    getCategoryBudgetLimits(),
-    getDebts(),
-    getPayments(),
-    getSavingsGoals(),
-    getAssetAccounts(),
-    getDebtMilestonePlan(),
+    withTimeout(
+      getBudgetEntries(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading budget entries for export."
+    ),
+    withTimeout(
+      getCategoryBudgetLimits(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading budget limits for export."
+    ),
+    withTimeout(getDebts(), DATA_LOAD_TIMEOUT_MS, "Timed out loading debts for export."),
+    withTimeout(
+      getPayments(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading payments for export."
+    ),
+    withTimeout(
+      getSavingsGoals(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading savings goals for export."
+    ),
+    withTimeout(
+      getAssetAccounts(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading asset accounts for export."
+    ),
+    withTimeout(
+      getDebtMilestonePlan(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading milestone plan for export."
+    ),
   ]);
+  log("data-loaded", `ms=${nowMs() - loadStartedAt}`);
 
   const budgetEntries =
     budgetEntriesResult.status === "fulfilled"
@@ -919,15 +980,22 @@ export const exportSpreadsheet = async (
   const filename = sanitizeFilename(buildFilename(format));
   const file = new ExpoFile(Paths.cache, filename);
 
-  if (format === "csv") {
-    const csv = XLSX.utils.sheet_to_csv(entrySheet);
-    file.create({ overwrite: true });
-    file.write(csv, { encoding: "utf8" });
-  } else {
-    const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" }) as string;
-    file.create({ overwrite: true });
-    file.write(base64, { encoding: "base64" });
+  const writeStartedAt = nowMs();
+  try {
+    if (format === "csv") {
+      const csv = XLSX.utils.sheet_to_csv(entrySheet);
+      file.create({ overwrite: true });
+      file.write(csv, { encoding: "utf8" });
+    } else {
+      const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" }) as string;
+      file.create({ overwrite: true });
+      file.write(base64, { encoding: "base64" });
+    }
+  } catch (error) {
+    log("file-write-failed");
+    throw error;
   }
+  log("file-written", `ms=${nowMs() - writeStartedAt}`);
 
   const isAvailable = await Sharing.isAvailableAsync();
   if (!isAvailable) {
@@ -937,10 +1005,15 @@ export const exportSpreadsheet = async (
   }
 
   if (options.beforeShare) {
-    await options.beforeShare();
+    await withTimeout(
+      Promise.resolve(options.beforeShare()),
+      BEFORE_SHARE_TIMEOUT_MS,
+      "Timed out preparing share sheet presentation."
+    );
   }
 
-  await Sharing.shareAsync(file.uri, {
+  log("share-open");
+  const sharePromise = Sharing.shareAsync(file.uri, {
     mimeType:
       format === "csv"
         ? "text/csv"
@@ -949,12 +1022,29 @@ export const exportSpreadsheet = async (
     UTI: format === "csv" ? "public.comma-separated-values-text" : "org.openxmlformats.spreadsheetml.sheet",
   });
 
+  if (Platform.OS === "ios") {
+    await withTimeout(
+      sharePromise,
+      IOS_SHARE_TIMEOUT_MS,
+      "The iPhone share sheet did not open in time. Please try again."
+    );
+  } else {
+    await sharePromise;
+  }
+  log("share-complete");
+
   // Stamp the backup version so the Profile reminder banner clears.
   // expo-sharing's shareAsync resolves on share-sheet dismissal regardless
   // of the user's choice, so this is a best-effort marker - a user who
   // opens the sheet and cancels will still clear the reminder. Worth the
   // tradeoff vs nagging users who did successfully save the file.
   await recordBackup(CURRENT_APP_VERSION);
+  log(
+    "done",
+    `partial=${missingSections.size > 0 ? "yes" : "no"} missing=${
+      [...missingSections].sort().join("|") || "none"
+    }`
+  );
 
   return {
     format,
