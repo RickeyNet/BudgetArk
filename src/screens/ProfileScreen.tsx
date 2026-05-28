@@ -63,6 +63,7 @@ import {
   exportSpreadsheet,
   type SpreadsheetFormat,
 } from "../utils/spreadsheetExport";
+import { waitForIosModalTeardown } from "../utils/iosNativeShare";
 import { importSpreadsheet } from "../utils/spreadsheetImport";
 import {
   getUpdatePreferences,
@@ -871,22 +872,26 @@ const ProfileScreen: React.FC = () => {
       spreadsheetExportOpIdRef.current = opId;
       const isActiveOp = () => spreadsheetExportOpIdRef.current === opId;
       closeSpreadsheetExportModal();
-      setIsExporting(true);
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      await waitForIosModalTeardown(350);
+      if (!isActiveOp()) return;
+      // iOS: skip the blocking spinner modal entirely. Commit 1e7a8af added it
+      // for encrypted JSON export (PBKDF2 freeze), but presenting
+      // UIActivityViewController while any RN <Modal> is visible freezes the
+      // app until force-quit. Spreadsheet export worked before that change.
+      const useExportSpinner = Platform.OS !== "ios";
+      if (useExportSpinner) {
+        setIsExporting(true);
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
       if (!isActiveOp()) return;
       let exported = false;
       try {
         const result = await exportSpreadsheet(format, {
-          beforeShare: async () => {
-            // Dismiss the RN <Modal> before opening iOS share UI. Presenting
-            // UIActivityViewController while our own modal is still visible can
-            // strand shareAsync in a pending state, which leaves the user on
-            // an endless spinner.
-            setIsExporting(false);
-            if (Platform.OS === "ios") {
-              await new Promise((resolve) => setTimeout(resolve, 350));
-            }
-          },
+          beforeShare: useExportSpinner
+            ? () => {
+                setIsExporting(false);
+              }
+            : undefined,
         });
         if (!isActiveOp()) return;
         const formatLabel = format === "csv" ? "CSV" : "Excel";
@@ -918,7 +923,9 @@ const ProfileScreen: React.FC = () => {
         });
       } finally {
         if (isActiveOp()) {
-          setIsExporting(false);
+          if (useExportSpinner) {
+            setIsExporting(false);
+          }
           spreadsheetExportInFlightRef.current = false;
         }
       }
@@ -2211,7 +2218,12 @@ const ProfileScreen: React.FC = () => {
           animating on the UI thread even while the JS thread is frozen by
           the synchronous PBKDF2 key derivation, so the user sees clear
           "working" feedback instead of a dead screen. */}
-      <Modal visible={isExporting} animationType="fade" transparent>
+      <Modal
+        visible={isExporting}
+        animationType="fade"
+        transparent
+        presentationStyle={Platform.OS === "ios" ? "overFullScreen" : undefined}
+      >
         <View
           style={[
             styles.modalOverlay,
@@ -2586,6 +2598,7 @@ const ProfileScreen: React.FC = () => {
         visible={showSpreadsheetExportModal}
         animationType="fade"
         transparent
+        presentationStyle={Platform.OS === "ios" ? "overFullScreen" : undefined}
         onRequestClose={closeSpreadsheetExportModal}
       >
         <View style={styles.dialogOverlay}>

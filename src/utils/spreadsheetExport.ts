@@ -14,9 +14,9 @@
  */
 
 import * as XLSX from "xlsx";
-import * as Sharing from "expo-sharing";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { Platform } from "react-native";
+import { shareLocalFile, waitForIosModalTeardown } from "./iosNativeShare";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import {
   getBudgetEntries,
@@ -721,7 +721,6 @@ export interface SpreadsheetExportOptions {
   beforeShare?: () => void | Promise<void>;
 }
 
-const IOS_SHARE_TIMEOUT_MS = 15000;
 const DATA_LOAD_TIMEOUT_MS = 12000;
 const BEFORE_SHARE_TIMEOUT_MS = 2000;
 
@@ -978,7 +977,9 @@ export const exportSpreadsheet = async (
   }
 
   const filename = sanitizeFilename(buildFilename(format));
-  const file = new ExpoFile(Paths.cache, filename);
+  // iOS share sheet reads more reliably from the document directory than cache.
+  const fileDir = Platform.OS === "ios" ? Paths.document : Paths.cache;
+  const file = new ExpoFile(fileDir, filename);
 
   const writeStartedAt = nowMs();
   try {
@@ -997,13 +998,6 @@ export const exportSpreadsheet = async (
   }
   log("file-written", `ms=${nowMs() - writeStartedAt}`);
 
-  const isAvailable = await Sharing.isAvailableAsync();
-  if (!isAvailable) {
-    throw new Error(
-      "Sharing is not available on this device. The file has been saved to the app cache."
-    );
-  }
-
   if (options.beforeShare) {
     await withTimeout(
       Promise.resolve(options.beforeShare()),
@@ -1012,25 +1006,23 @@ export const exportSpreadsheet = async (
     );
   }
 
+  // Yield so the JS thread can flush modal unmounts before native presentation.
+  if (Platform.OS === "ios") {
+    await waitForIosModalTeardown(400);
+  }
+
   log("share-open");
-  const sharePromise = Sharing.shareAsync(file.uri, {
+  await shareLocalFile(file.uri, {
     mimeType:
       format === "csv"
         ? "text/csv"
         : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     dialogTitle: "Export BudgetArk Spreadsheet",
-    UTI: format === "csv" ? "public.comma-separated-values-text" : "org.openxmlformats.spreadsheetml.sheet",
+    UTI:
+      format === "csv"
+        ? "public.comma-separated-values-text"
+        : "org.openxmlformats.spreadsheetml.sheet",
   });
-
-  if (Platform.OS === "ios") {
-    await withTimeout(
-      sharePromise,
-      IOS_SHARE_TIMEOUT_MS,
-      "The iPhone share sheet did not open in time. Please try again."
-    );
-  } else {
-    await sharePromise;
-  }
   log("share-complete");
 
   // Stamp the backup version so the Profile reminder banner clears.
