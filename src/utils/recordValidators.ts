@@ -193,6 +193,11 @@ export const isCustomCategoryItem = (
   item: unknown
 ): item is Record<string, unknown> => {
   if (!isObject(item)) return false;
+  const defaultBucketValid =
+    item.defaultBucket === undefined ||
+    item.defaultBucket === "needs" ||
+    item.defaultBucket === "wants" ||
+    item.defaultBucket === "savings";
   return (
     isSafeText(item.id) &&
     typeof item.name === "string" &&
@@ -201,6 +206,7 @@ export const isCustomCategoryItem = (
     typeof item.icon === "string" &&
     item.icon.length > 0 &&
     item.icon.length <= 8 &&
+    defaultBucketValid &&
     isValidDateValue(item.createdAt) &&
     (item.updatedAt === undefined || isValidDateValue(item.updatedAt))
   );

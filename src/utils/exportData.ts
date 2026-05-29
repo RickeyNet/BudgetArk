@@ -25,6 +25,7 @@ import { getAssetAccountsIncludingDeleted } from "../storage/assetAccountStorage
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
+import { getCategoryBucketOverrides } from "../storage/categoryBucketOverridesStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
@@ -78,6 +79,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     payoffStrategyEnvelope,
     netWorthSnapshots,
     customCategories,
+    categoryBucketOverrides,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
     // restore on this device, or another paired device, doesn't accidentally
@@ -100,6 +102,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getPayoffStrategyEnvelope(),
     getNetWorthSnapshots(),
     getCustomCategories(),
+    getCategoryBucketOverrides(),
   ]);
 
   const exportPayload = {
@@ -127,6 +130,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     payoffStrategyUpdatedAt: payoffStrategyEnvelope?.updatedAt,
     netWorthSnapshots,
     customCategories,
+    categoryBucketOverrides,
   };
 
   const json = JSON.stringify(exportPayload, null, 2);

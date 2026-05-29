@@ -24,8 +24,8 @@ import {
   UIManager,
   View,
 } from "react-native";
-import * as Sharing from "expo-sharing";
 import { File as ExpoFile, Paths } from "expo-file-system";
+import { shareLocalFile } from "../utils/iosNativeShare";
 import { useFocusEffect } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -772,16 +772,12 @@ const ChartsScreen: React.FC = () => {
       setIsLoanExporting(true);
       setLoanExportMessage(null);
 
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        throw new Error("Sharing is not available on this device.");
-      }
-
-      const file = new ExpoFile(Paths.cache, buildLoanScheduleFilename());
+      const fileDir = Platform.OS === "ios" ? Paths.document : Paths.cache;
+      const file = new ExpoFile(fileDir, buildLoanScheduleFilename());
       file.create({ overwrite: true });
       file.write(buildLoanScheduleCsv(loanSchedule), { encoding: "utf8" });
 
-      await Sharing.shareAsync(file.uri, {
+      await shareLocalFile(file.uri, {
         mimeType: "text/csv",
         dialogTitle: "Export Amortization Schedule",
         UTI: "public.comma-separated-values-text",
