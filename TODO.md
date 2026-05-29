@@ -728,7 +728,7 @@ Possible feature design (v1):
   - Add “Plan owner” mode: Mine / Partner / Household
   - Reuse your existing debt ownership concepts where possible
 
-- [ ] 50/30/20 view on Budget screen - ties directly to Charts Ch 1 Lesson 2. New card on the Budget tab (below the Spending donut) that buckets every spending category into Needs / Wants / Savings and shows actual % vs. target % per bucket as three stacked bars, plus the dollar gap from each target. Helps users see at a glance whether their real month matches the 50/30/20 framework they just read about.
+- [x] 50/30/20 view on Budget screen - ties directly to Charts Ch 1 Lesson 2. New card on the Budget tab (below the Spending donut) that buckets every spending category into Needs / Wants / Savings and shows actual % vs. target % per bucket as three stacked bars, plus the dollar gap from each target. Helps users see at a glance whether their real month matches the 50/30/20 framework they just read about.
 
   Bucket mapping:
   - Built-in categories ship with a `defaultBucket: "needs" | "wants" | "savings"` in a new `categoryBuckets.ts` constants map. Sensible defaults: Housing/Utilities/Food/Grocery/Transportation/Healthcare/Insurance/Debt Payments → Needs; Restaurant/Entertainment/Shopping/Travel/Tech/Fitness → Wants; Savings/Investing/Retirement/Giving → Savings. Income categories (Salary, Freelance) feed the denominator (after-tax take-home) and aren't bucketed.

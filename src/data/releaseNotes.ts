@@ -11,6 +11,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     title: "Charts - Learning Hub",
     releasedAt: "2026-05-26",
     highlights: [
+      "Budget tab now includes a 50/30/20 card below Spending: compare Needs (50%), Wants (30%), and Savings (20%) against your take-home income for the selected month, with progress bars and over/under target amounts. Expand a bucket to see which categories contributed.",
+      "Built-in categories use sensible bucket defaults; custom categories pick a default bucket when you create them. Long-press a category in the 50/30/20 breakdown to reassign its bucket. Those settings are saved on-device and included in JSON backups.",
       "Renamed the Utilities tab to Charts (🗺️). The existing calculators all live under a new TOOLS section, nothing was removed.",
       "Added the Captain's Course: a 5-chapter, 24-lesson personal-finance walkthrough that lives at the top of the Charts tab. Ships with Chapters 1 (Setting Sail, budgeting basics) and 2 (Patching the Hull, debt) fully written; Chapters 3-5 are listed as 'Coming soon' so you can see the full path.",
       "Soft gating throughout: every chapter is tappable, nothing is locked. A Resume strip points to where you left off.",
