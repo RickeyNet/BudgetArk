@@ -145,6 +145,8 @@ export const BUDGET_CATEGORIES = [
 
 export type BudgetCategory = (typeof BUDGET_CATEGORIES)[number];
 
+export type BudgetBucket = "needs" | "wants" | "savings";
+
 /**
  * A category an entry/limit can reference. Built-in names keep editor
  * autocomplete; the `string & {}` arm lets user-defined custom category
@@ -164,6 +166,8 @@ export interface CustomCategory {
   name: string;
   /** Single emoji glyph shown beside the category. */
   icon: string;
+  /** 50/30/20 default bucket used when no per-category override exists. */
+  defaultBucket?: BudgetBucket;
   createdAt: string;
   updatedAt: string;
 }

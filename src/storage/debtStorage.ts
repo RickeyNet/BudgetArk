@@ -445,6 +445,8 @@ const RESET_KEYS = [
   // flags). Per-device state - a fresh reset should re-show every lesson as
   // unread and clear the Resume card.
   "@budgetark_learning_progress",
+  "@budgetark_custom_categories",
+  "@budgetark_category_bucket_overrides",
 ] as const;
 
 export class ResetIncompleteError extends Error {

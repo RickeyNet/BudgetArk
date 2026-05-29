@@ -18,6 +18,10 @@ import {
   CUSTOM_CATEGORY_STORAGE_VERSION,
 } from "../types";
 import { isBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
+import {
+  DEFAULT_CUSTOM_CATEGORY_BUCKET,
+  isBudgetBucket,
+} from "../data/categoryBuckets";
 import { generateUUID } from "./uuid";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
 import {
@@ -36,6 +40,7 @@ import {
   isAssetAccountItem,
   isNetWorthSnapshotItem,
   isCustomCategoryItem,
+  isValidImportCategory,
   isMonthKey,
   sanitizePayoffStrategy,
   sanitizeDebtMilestones,
@@ -54,6 +59,7 @@ const KEYS = {
   PAYOFF_STRATEGY: "@budgetark_payoff_strategy",
   NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
   CUSTOM_CATEGORIES: "@budgetark_custom_categories",
+  CATEGORY_BUCKET_OVERRIDES: "@budgetark_category_bucket_overrides",
 } as const;
 
 const getCurrentMonthKey = (): string => {
@@ -86,7 +92,8 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     isObject(data.debtMilestones) ||
     typeof data.payoffStrategy === "string" ||
     Array.isArray(data.netWorthSnapshots) ||
-    Array.isArray(data.customCategories);
+    Array.isArray(data.customCategories) ||
+    isObject(data.categoryBucketOverrides);
 
   return hasAny;
 };
@@ -104,6 +111,7 @@ interface ImportPayload {
   payoffStrategyUpdatedAt?: unknown;
   netWorthSnapshots?: unknown[];
   customCategories?: unknown[];
+  categoryBucketOverrides?: Record<string, unknown>;
   user?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -121,6 +129,7 @@ interface SanitizedImportPayload {
   payoffStrategyUpdatedAt?: string;
   netWorthSnapshots: Record<string, unknown>[];
   customCategories: Record<string, unknown>[];
+  categoryBucketOverrides?: Record<string, "needs" | "wants" | "savings">;
   user?: Record<string, unknown>;
 }
 
@@ -222,6 +231,19 @@ const sanitizeUser = (user: unknown): Record<string, unknown> | undefined => {
   return normalized;
 };
 
+const sanitizeCategoryBucketOverrides = (
+  raw: unknown
+): Record<string, "needs" | "wants" | "savings"> | undefined => {
+  if (!isObject(raw)) return undefined;
+  const out: Record<string, "needs" | "wants" | "savings"> = {};
+  for (const [category, bucket] of Object.entries(raw)) {
+    if (!isValidImportCategory(category)) continue;
+    if (!isBudgetBucket(bucket)) continue;
+    out[category] = bucket;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const debts = sanitizeCollection(data.debts, "debts", isDebtItem);
   const payments = sanitizeCollection(data.payments, "payments", isPaymentItem);
@@ -261,6 +283,9 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const payoffStrategyUpdatedAt = isValidDateValue(data.payoffStrategyUpdatedAt)
     ? data.payoffStrategyUpdatedAt
     : undefined;
+  const categoryBucketOverrides = sanitizeCategoryBucketOverrides(
+    data.categoryBucketOverrides
+  );
   const user = sanitizeUser(data.user);
 
   const limitsByMonthCount = budgetLimitsByMonth
@@ -293,6 +318,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     assetAccounts,
     netWorthSnapshots,
     customCategories,
+    categoryBucketOverrides,
     debtMilestones,
     payoffStrategy,
     payoffStrategyUpdatedAt,
@@ -764,6 +790,7 @@ export const importFromString = async (
         id,
         name,
         icon: DEFAULT_CATEGORY_ICON,
+        defaultBucket: DEFAULT_CUSTOM_CATEGORY_BUCKET,
         createdAt: now,
         updatedAt: now,
       });
@@ -797,6 +824,9 @@ export const importFromString = async (
     ? { json: JSON.stringify(sanitized.netWorthSnapshots), count: sanitized.netWorthSnapshots.length }
     : null;
   const mergedCustomCategories = await computeMergedCustomCategories();
+  const mergedCategoryBucketOverrides = sanitized.categoryBucketOverrides
+    ? { json: JSON.stringify(sanitized.categoryBucketOverrides) }
+    : null;
 
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
@@ -828,6 +858,12 @@ export const importFromString = async (
     tempWrites.push([
       KEYS.CUSTOM_CATEGORIES + TEMP_SUFFIX,
       mergedCustomCategories.json,
+    ]);
+  }
+  if (mergedCategoryBucketOverrides) {
+    tempWrites.push([
+      KEYS.CATEGORY_BUCKET_OVERRIDES + TEMP_SUFFIX,
+      mergedCategoryBucketOverrides.json,
     ]);
   }
   if (sanitized.debtMilestones) {
@@ -874,6 +910,8 @@ export const importFromString = async (
         KEYS.DEBT_MILESTONES,
         KEYS.PAYOFF_STRATEGY,
         KEYS.NET_WORTH_SNAPSHOTS,
+        KEYS.CUSTOM_CATEGORIES,
+        KEYS.CATEGORY_BUCKET_OVERRIDES,
       ];
       for (const key of keysToRemove) {
         const original = await EncryptedStorage.getItem(key);

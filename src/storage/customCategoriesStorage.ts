@@ -12,8 +12,13 @@ import * as EncryptedStorage from "./encryptedStorage";
 import {
   CustomCategory,
   CUSTOM_CATEGORY_STORAGE_VERSION,
+  BudgetBucket,
 } from "../types";
 import { isBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
+import {
+  DEFAULT_CUSTOM_CATEGORY_BUCKET,
+  isBudgetBucket,
+} from "../data/categoryBuckets";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { generateUUID } from "../utils/uuid";
 
@@ -39,7 +44,10 @@ const readStore = async (): Promise<CustomCategory[]> => {
     if (parsed && Array.isArray(parsed.categories)) {
       return parsed.categories.filter(
         (c): c is CustomCategory =>
-          !!c && typeof c.id === "string" && typeof c.name === "string"
+          !!c &&
+          typeof c.id === "string" &&
+          typeof c.name === "string" &&
+          (c.defaultBucket === undefined || isBudgetBucket(c.defaultBucket))
       );
     }
     return [];
@@ -101,7 +109,8 @@ const validateName = (
 
 export const addCustomCategory = async (
   rawName: string,
-  rawIcon: string
+  rawIcon: string,
+  rawBucket: BudgetBucket = DEFAULT_CUSTOM_CATEGORY_BUCKET
 ): Promise<CategoryMutationResult> => {
   const existing = await readStore();
   if (existing.length >= MAX_CUSTOM_CATEGORIES) {
@@ -120,6 +129,9 @@ export const addCustomCategory = async (
       id: generateUUID(),
       name: checked.name,
       icon: normalizeIcon(rawIcon),
+      defaultBucket: isBudgetBucket(rawBucket)
+        ? rawBucket
+        : DEFAULT_CUSTOM_CATEGORY_BUCKET,
       createdAt: now,
       updatedAt: now,
     },
@@ -130,7 +142,7 @@ export const addCustomCategory = async (
 
 export const updateCustomCategory = async (
   id: string,
-  patch: { name?: string; icon?: string }
+  patch: { name?: string; icon?: string; defaultBucket?: BudgetBucket }
 ): Promise<CategoryMutationResult> => {
   const existing = await readStore();
   const target = existing.find((c) => c.id === id);
@@ -144,10 +156,20 @@ export const updateCustomCategory = async (
   }
   const icon =
     patch.icon !== undefined ? normalizeIcon(patch.icon) : target.icon;
+  const defaultBucket =
+    patch.defaultBucket !== undefined && isBudgetBucket(patch.defaultBucket)
+      ? patch.defaultBucket
+      : target.defaultBucket;
 
   const next = existing.map((c) =>
     c.id === id
-      ? { ...c, name, icon, updatedAt: new Date().toISOString() }
+      ? {
+          ...c,
+          name,
+          icon,
+          defaultBucket,
+          updatedAt: new Date().toISOString(),
+        }
       : c
   );
   await writeStore(next);

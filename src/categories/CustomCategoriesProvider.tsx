@@ -15,7 +15,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { CustomCategory } from "../types";
+import { BudgetBucket, CustomCategory } from "../types";
 import {
   getCustomCategories,
   addCustomCategory,
@@ -29,10 +29,14 @@ interface CustomCategoriesContextValue {
   customCategories: CustomCategory[];
   isReady: boolean;
   refresh: () => Promise<void>;
-  add: (name: string, icon: string) => Promise<CategoryMutationResult>;
+  add: (
+    name: string,
+    icon: string,
+    defaultBucket: BudgetBucket
+  ) => Promise<CategoryMutationResult>;
   update: (
     id: string,
-    patch: { name?: string; icon?: string }
+    patch: { name?: string; icon?: string; defaultBucket?: BudgetBucket }
   ) => Promise<CategoryMutationResult>;
   remove: (id: string) => Promise<void>;
   restore: (category: CustomCategory) => Promise<CategoryMutationResult>;
@@ -62,8 +66,12 @@ export const CustomCategoriesProvider: React.FC<{
   }, [refresh]);
 
   const add = useCallback(
-    async (name: string, icon: string): Promise<CategoryMutationResult> => {
-      const result = await addCustomCategory(name, icon);
+    async (
+      name: string,
+      icon: string,
+      defaultBucket: BudgetBucket
+    ): Promise<CategoryMutationResult> => {
+      const result = await addCustomCategory(name, icon, defaultBucket);
       if (result.ok) setCustomCategories(result.categories);
       return result;
     },
@@ -73,7 +81,7 @@ export const CustomCategoriesProvider: React.FC<{
   const update = useCallback(
     async (
       id: string,
-      patch: { name?: string; icon?: string }
+      patch: { name?: string; icon?: string; defaultBucket?: BudgetBucket }
     ): Promise<CategoryMutationResult> => {
       const result = await updateCustomCategory(id, patch);
       if (result.ok) setCustomCategories(result.categories);

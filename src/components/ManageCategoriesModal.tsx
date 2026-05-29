@@ -23,9 +23,15 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import {
+  BUDGET_BUCKET_LABELS,
+  BUDGET_BUCKET_ORDER,
+  DEFAULT_CUSTOM_CATEGORY_BUCKET,
+} from "../data/categoryBuckets";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { EMOJI_CHOICES, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
 import { MAX_CATEGORY_NAME_LENGTH } from "../storage/customCategoriesStorage";
+import type { BudgetBucket } from "../types";
 
 interface ManageCategoriesModalProps {
   visible: boolean;
@@ -43,12 +49,15 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
 
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<string>(DEFAULT_CATEGORY_ICON);
+  const [defaultBucket, setDefaultBucket] =
+    useState<BudgetBucket>(DEFAULT_CUSTOM_CATEGORY_BUCKET);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const resetForm = useCallback(() => {
     setName("");
     setIcon(DEFAULT_CATEGORY_ICON);
+    setDefaultBucket(DEFAULT_CUSTOM_CATEGORY_BUCKET);
     setError(null);
   }, []);
 
@@ -61,14 +70,14 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
     if (saving) return;
     setSaving(true);
     setError(null);
-    const result = await add(name, icon);
+    const result = await add(name, icon, defaultBucket);
     setSaving(false);
     if (result.ok) {
       resetForm();
     } else {
       setError(result.error);
     }
-  }, [add, icon, name, resetForm, saving]);
+  }, [add, defaultBucket, icon, name, resetForm, saving]);
 
   const handleDelete = useCallback(
     (id: string, label: string) => {
@@ -151,6 +160,37 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
               </View>
             </View>
 
+            <View style={styles.field}>
+              <Text style={styles.label}>50/30/20 BUCKET</Text>
+              <View style={styles.bucketRow}>
+                {BUDGET_BUCKET_ORDER.map((bucket) => {
+                  const selected = defaultBucket === bucket;
+                  return (
+                    <TouchableOpacity
+                      key={bucket}
+                      style={[
+                        styles.bucketChip,
+                        selected && {
+                          borderColor: colors.accent,
+                          backgroundColor: `${colors.accent}20`,
+                        },
+                      ]}
+                      onPress={() => setDefaultBucket(bucket)}
+                    >
+                      <Text
+                        style={[
+                          styles.bucketChipText,
+                          { color: selected ? colors.accent : colors.textDim },
+                        ]}
+                      >
+                        {BUDGET_BUCKET_LABELS[bucket]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             {error && <Text style={styles.errorText}>{error}</Text>}
 
             <TouchableOpacity
@@ -177,6 +217,9 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
                   <Text style={styles.rowIcon}>{cat.icon}</Text>
                   <Text style={styles.rowName} numberOfLines={1}>
                     {cat.name}
+                  </Text>
+                  <Text style={styles.rowBucket}>
+                    {BUDGET_BUCKET_LABELS[cat.defaultBucket ?? DEFAULT_CUSTOM_CATEGORY_BUCKET]}
                   </Text>
                   <TouchableOpacity
                     onPress={() => handleDelete(cat.id, cat.name)}
@@ -279,6 +322,23 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 2,
     },
     emojiText: { fontSize: 20 },
+    bucketRow: {
+      flexDirection: "row",
+      gap: 8,
+      flexWrap: "wrap",
+    },
+    bucketChip: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor: colors.bg,
+    },
+    bucketChipText: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
     errorText: {
       color: colors.danger,
       fontSize: 13,
@@ -315,6 +375,11 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontSize: 15,
       fontWeight: "600",
+    },
+    rowBucket: {
+      color: colors.textMuted,
+      fontSize: 12,
+      marginRight: 8,
     },
     rowDelete: {
       color: colors.danger,

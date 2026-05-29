@@ -13,6 +13,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
+import BudgetBucketCard from "../components/BudgetBucketCard";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
@@ -22,6 +23,12 @@ import BillCalendarModal from "../components/BillCalendarModal";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { getCategoryIcon, categoryNameHash } from "../data/categoryIcons";
+import {
+  BUDGET_BUCKET_LABELS,
+  BUDGET_BUCKET_ORDER,
+  DEFAULT_CUSTOM_CATEGORY_BUCKET,
+  getDefaultBucketForCategory,
+} from "../data/categoryBuckets";
 import {
   BUDGET_CATEGORIES,
   BudgetCategory,
@@ -38,6 +45,8 @@ import {
   ASSET_ACCOUNT_CATEGORIES,
   ASSET_ACCOUNT_CATEGORY_LABELS,
   NetWorthSnapshot,
+  CustomCategory,
+  BudgetBucket,
 } from "../types";
 import {
   getBudgetEntries,
@@ -69,6 +78,12 @@ import {
   deleteAssetAccount,
   restoreAssetAccount,
 } from "../storage/assetAccountStorage";
+import {
+  getCategoryBucketOverrides,
+  removeCategoryBucketOverride,
+  setCategoryBucketOverride,
+  type CategoryBucketOverrides,
+} from "../storage/categoryBucketOverridesStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
@@ -99,6 +114,7 @@ import {
   getRecurrenceTag,
   isEntryActiveInMonth,
 } from "../utils/recurrence";
+import { totalsByBucket } from "../utils/budgetBucketMath";
 
 type ExpenseCategoryEntry = {
   id: string;
@@ -289,6 +305,8 @@ const BudgetScreen: React.FC = () => {
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
   const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
+  const [bucketOverrides, setBucketOverrides] = useState<CategoryBucketOverrides>({});
+  const [bucketOverrideCategory, setBucketOverrideCategory] = useState<string | null>(null);
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
@@ -324,6 +342,7 @@ const BudgetScreen: React.FC = () => {
           storedAssets,
           milestonePlan,
           allLimitsByMonth,
+          storedBucketOverrides,
         ] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
@@ -333,6 +352,7 @@ const BudgetScreen: React.FC = () => {
           getAssetAccounts(),
           getDebtMilestonePlan(),
           getAllLimitsByMonth(),
+          getCategoryBucketOverrides(),
         ]);
         if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
@@ -400,6 +420,7 @@ const BudgetScreen: React.FC = () => {
         setSavingsGoals(storedGoals);
         setAssetAccounts(storedAssets);
         setReviewPreviewData(nextReviewData);
+        setBucketOverrides(storedBucketOverrides);
         await refreshNetWorthSnapshots();
         if (cancelled) return;
         setIsLoaded(true);
@@ -569,6 +590,45 @@ const BudgetScreen: React.FC = () => {
 
     return map;
   }, [debtPaymentsTotal, monthlyEntries]);
+
+  const bucketByCategory = useMemo(() => {
+    const map: Record<string, BudgetBucket> = {};
+    for (const [category, amount] of Object.entries(expensesByCategory)) {
+      if (amount <= 0) continue;
+      map[category] =
+        bucketOverrides[category] ??
+        getDefaultBucketForCategory(category, customCategories) ??
+        DEFAULT_CUSTOM_CATEGORY_BUCKET;
+    }
+    return map;
+  }, [bucketOverrides, customCategories, expensesByCategory]);
+
+  const bucketTotals = useMemo(
+    () => totalsByBucket(expensesByCategory, bucketByCategory),
+    [bucketByCategory, expensesByCategory]
+  );
+
+  const categoriesByBucket = useMemo(() => {
+    const grouped: Record<BudgetBucket, Array<{ category: string; amount: number; hasOverride: boolean }>> = {
+      needs: [],
+      wants: [],
+      savings: [],
+    };
+    for (const [category, amount] of Object.entries(expensesByCategory)) {
+      if (amount <= 0) continue;
+      const bucket = bucketByCategory[category];
+      if (!bucket) continue;
+      grouped[bucket].push({
+        category,
+        amount,
+        hasOverride: bucketOverrides[category] != null,
+      });
+    }
+    (Object.keys(grouped) as BudgetBucket[]).forEach((bucket) => {
+      grouped[bucket].sort((a, b) => b.amount - a.amount);
+    });
+    return grouped;
+  }, [bucketByCategory, bucketOverrides, expensesByCategory]);
 
   const incomeByCategory = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1103,6 +1163,32 @@ const BudgetScreen: React.FC = () => {
     closeLimitModal();
   }, [closeLimitModal, entries, limitInput, limitModalCategory, limits, refreshMonthlyReview, selectedMonthKey]);
 
+  const openBucketOverrideModal = useCallback((category: string) => {
+    setBucketOverrideCategory(category);
+  }, []);
+
+  const closeBucketOverrideModal = useCallback(() => {
+    setBucketOverrideCategory(null);
+  }, []);
+
+  const saveBucketOverride = useCallback(
+    async (bucket: BudgetBucket) => {
+      if (!bucketOverrideCategory) return;
+      const defaultBucket =
+        getDefaultBucketForCategory(bucketOverrideCategory, customCategories) ??
+        DEFAULT_CUSTOM_CATEGORY_BUCKET;
+
+      const nextOverrides =
+        bucket === defaultBucket
+          ? await removeCategoryBucketOverride(bucketOverrideCategory)
+          : await setCategoryBucketOverride(bucketOverrideCategory, bucket);
+
+      setBucketOverrides(nextOverrides);
+      closeBucketOverrideModal();
+    },
+    [bucketOverrideCategory, closeBucketOverrideModal, customCategories]
+  );
+
   const openReviewModal = useCallback(async () => {
     const data = reviewPreviewData ?? (await refreshMonthlyReview(entries));
     setReviewData(data);
@@ -1226,6 +1312,14 @@ const BudgetScreen: React.FC = () => {
     setEfContribAmount("");
     void notifyAchievementCheck();
   }, [efContribAmount, keelTarget, notifyAchievementCheck, refreshNetWorthSnapshots, savingsGoals]);
+
+  const bucketOverrideDefault = bucketOverrideCategory
+    ? getDefaultBucketForCategory(bucketOverrideCategory, customCategories) ??
+      DEFAULT_CUSTOM_CATEGORY_BUCKET
+    : null;
+  const bucketOverrideCurrent = bucketOverrideCategory
+    ? bucketByCategory[bucketOverrideCategory] ?? bucketOverrideDefault
+    : null;
 
   const listHeader = (
     <View>
@@ -1561,6 +1655,14 @@ const BudgetScreen: React.FC = () => {
           );
         })}
       </View>
+
+      <BudgetBucketCard
+        takeHomeIncome={monthlyIncome}
+        bucketTotals={bucketTotals}
+        categoriesByBucket={categoriesByBucket}
+        formatCurrency={formatCurrency}
+        onLongPressCategory={openBucketOverrideModal}
+      />
     </View>
   );
 
@@ -1723,6 +1825,73 @@ const BudgetScreen: React.FC = () => {
             </ScrollView>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={bucketOverrideCategory != null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBucketOverrideModal}
+      >
+        <View style={styles.limitOverlay}>
+          <View style={styles.limitModalCard}>
+            <Text style={styles.limitModalTitle}>Reassign Bucket</Text>
+            <Text style={styles.limitModalSub}>
+              {bucketOverrideCategory}
+              {bucketOverrideCurrent
+                ? ` - currently ${BUDGET_BUCKET_LABELS[bucketOverrideCurrent]}`
+                : ""}
+            </Text>
+
+            <View style={styles.bucketAssignRow}>
+              {BUDGET_BUCKET_ORDER.map((bucket) => {
+                const selected = bucketOverrideCurrent === bucket;
+                return (
+                  <TouchableOpacity
+                    key={bucket}
+                    style={[
+                      styles.bucketAssignChip,
+                      {
+                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        backgroundColor: selected ? `${colors.accent}20` : colors.bg,
+                      },
+                    ]}
+                    onPress={() => saveBucketOverride(bucket)}
+                  >
+                    <Text
+                      style={[
+                        styles.bucketAssignText,
+                        { color: selected ? colors.accent : colors.textDim },
+                      ]}
+                    >
+                      {BUDGET_BUCKET_LABELS[bucket]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {bucketOverrideDefault && (
+              <TouchableOpacity
+                style={styles.limitCancelBtn}
+                onPress={() => saveBucketOverride(bucketOverrideDefault)}
+              >
+                <Text style={styles.limitCancelText}>
+                  Use default ({BUDGET_BUCKET_LABELS[bucketOverrideDefault]})
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.limitActions}>
+              <TouchableOpacity
+                style={styles.limitCancelBtn}
+                onPress={closeBucketOverrideModal}
+              >
+                <Text style={styles.limitCancelText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <AddBudgetEntryModal
@@ -2648,6 +2817,22 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     foodSplitOptionText: {
       fontSize: 12,
       fontWeight: "600",
+    },
+    bucketAssignRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 12,
+    },
+    bucketAssignChip: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    bucketAssignText: {
+      fontSize: 12,
+      fontWeight: "700",
     },
     limitCancelBtn: {
       flex: 1,
