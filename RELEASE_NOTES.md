@@ -1,5 +1,16 @@
 # BudgetArk Release Notes
 
+## v1.7.1 - Batch Budget Entries (2026-05-30)
+
+Pure JS - ships OTA against the existing native runtime.
+
+### Batch add on Budget
+
+- `AddBudgetEntryModal` now starts with one amount/description row and a small **+** to add more lines before saving.
+- Shared fields (type, category, month, recurring, linked account, etc.) apply to every line in the batch.
+- Save creates separate `BudgetEntry` records in one pass; the button reads **Add Entry** or **Add N Entries** from how many rows have a valid amount.
+- Extra rows can be removed with **×**; empty amount rows are ignored on submit.
+
 ## v1.6.5 - Ship's Log Progress + Live Badges (2026-05-25)
 
 Two-part upgrade to the achievement system. Pure JS - ships OTA against the existing 1.6.x native runtime.

@@ -34,13 +34,26 @@ const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Investing",
 ]);
 
+interface EntryLineDraft {
+  id: string;
+  amount: string;
+  description: string;
+}
+
 interface AddBudgetEntryModalProps {
   visible: boolean;
   onClose: () => void;
-  onAdd: (entry: NewBudgetEntryInput) => void;
+  onAdd: (entries: NewBudgetEntryInput[]) => void;
   assetAccounts?: AssetAccount[];
   customCategories?: CustomCategory[];
 }
+
+let nextLineId = 0;
+const createEmptyLine = (): EntryLineDraft => ({
+  id: `line-${++nextLineId}`,
+  amount: "",
+  description: "",
+});
 
 const todayYearMonth = () => new Date().toISOString().slice(0, 7);
 
@@ -107,8 +120,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
 
   const [type, setType] = useState<BudgetEntryType>("expense");
   const [category, setCategory] = useState<CategoryName>("Grocery");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
+  const [lines, setLines] = useState<EntryLineDraft[]>(() => [createEmptyLine()]);
   const [yearMonth, setYearMonth] = useState(todayYearMonth());
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
@@ -124,13 +136,34 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
 
   const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
 
-  const isValid = parseFloat(amount) > 0;
+  const validLineCount = useMemo(
+    () => lines.filter((line) => parseFloat(line.amount) > 0).length,
+    [lines]
+  );
+
+  const isValid = validLineCount > 0;
+
+  const updateLine = useCallback((lineId: string, patch: Partial<Pick<EntryLineDraft, "amount" | "description">>) => {
+    setLines((prev) =>
+      prev.map((line) => (line.id === lineId ? { ...line, ...patch } : line))
+    );
+  }, []);
+
+  const addLine = useCallback(() => {
+    setLines((prev) => [...prev, createEmptyLine()]);
+  }, []);
+
+  const removeLine = useCallback((lineId: string) => {
+    setLines((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((line) => line.id !== lineId);
+    });
+  }, []);
 
   const reset = useCallback(() => {
     setType("expense");
     setCategory("Grocery");
-    setAmount("");
-    setDescription("");
+    setLines([createEmptyLine()]);
     setYearMonth(todayYearMonth());
     setShowMonthPicker(false);
     setPickerYear(new Date().getFullYear());
@@ -142,26 +175,39 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   }, []);
 
   const handleSubmit = useCallback(() => {
-    const amountNum = parseFloat(amount);
-    if (amountNum <= 0) return;
+    const entryDate = buildEntryDateISO(
+      yearMonth,
+      showDayPicker ? recurrenceDay : DEFAULT_RECURRENCE_DAY
+    );
+    const normalizedPaymentUrl = showDayPicker
+      ? normalizePaymentUrl(paymentUrl) ?? undefined
+      : undefined;
 
-    onAdd({
-      type,
-      category,
-      amount: amountNum,
-      description: description.trim() || undefined,
-      date: buildEntryDateISO(yearMonth, showDayPicker ? recurrenceDay : DEFAULT_RECURRENCE_DAY),
-      recurring: recurring || undefined,
-      recurrenceInterval: recurring ? recurrenceInterval : undefined,
-      paymentUrl: showDayPicker ? normalizePaymentUrl(paymentUrl) ?? undefined : undefined,
-      linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
-    });
+    const payloads: NewBudgetEntryInput[] = [];
+    for (const line of lines) {
+      const amountNum = parseFloat(line.amount);
+      if (amountNum <= 0) continue;
 
+      payloads.push({
+        type,
+        category,
+        amount: amountNum,
+        description: line.description.trim() || undefined,
+        date: entryDate,
+        recurring: recurring || undefined,
+        recurrenceInterval: recurring ? recurrenceInterval : undefined,
+        paymentUrl: normalizedPaymentUrl,
+        linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
+      });
+    }
+
+    if (payloads.length === 0) return;
+
+    onAdd(payloads);
     reset();
   }, [
-    amount,
     category,
-    description,
+    lines,
     linkedAccountId,
     onAdd,
     paymentUrl,
@@ -174,6 +220,9 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     type,
     yearMonth,
   ]);
+
+  const addButtonLabel =
+    validLineCount <= 1 ? "Add Entry" : `Add ${validLineCount} Entries`;
 
   const selectMonth = useCallback((monthIndex: number) => {
     const month = String(monthIndex + 1).padStart(2, "0");
@@ -260,27 +309,55 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>AMOUNT</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0.00"
-                placeholderTextColor={colors.textMuted}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="decimal-pad"
-              />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>DESCRIPTION (OPTIONAL)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Grocery run, Netflix, etc."
-                placeholderTextColor={colors.textMuted}
-                value={description}
-                onChangeText={setDescription}
-                maxLength={100}
-              />
+              <View style={styles.linesHeader}>
+                <Text style={styles.label}>ENTRIES</Text>
+                <TouchableOpacity
+                  style={styles.addLineButton}
+                  onPress={addLine}
+                  accessibilityLabel="Add another entry line"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.addLineButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.linesHint}>
+                Add multiple amounts for the same category (e.g. several grocery
+                purchases from a bank statement).
+              </Text>
+              {lines.map((line, index) => (
+                <View key={line.id} style={styles.lineCard}>
+                  <View style={styles.lineCardHeader}>
+                    <Text style={styles.lineCardLabel}>
+                      {lines.length > 1 ? `Entry ${index + 1}` : "Amount"}
+                    </Text>
+                    {lines.length > 1 ? (
+                      <TouchableOpacity
+                        onPress={() => removeLine(line.id)}
+                        accessibilityLabel={`Remove entry ${index + 1}`}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.removeLineText}>×</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textMuted}
+                    value={line.amount}
+                    onChangeText={(text) => updateLine(line.id, { amount: text })}
+                    keyboardType="decimal-pad"
+                  />
+                  <TextInput
+                    style={[styles.input, styles.lineDescriptionInput]}
+                    placeholder="Description (optional)"
+                    placeholderTextColor={colors.textMuted}
+                    value={line.description}
+                    onChangeText={(text) => updateLine(line.id, { description: text })}
+                    maxLength={100}
+                  />
+                </View>
+              ))}
             </View>
 
             <View style={styles.field}>
@@ -469,7 +546,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
               onPress={handleSubmit}
               disabled={!isValid}
             >
-              <Text style={styles.addButtonText}>Add Entry</Text>
+              <Text style={styles.addButtonText}>{addButtonLabel}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -560,6 +637,58 @@ const makeStyles = (colors: ThemeColors) =>
     },
     field: {
       gap: 8,
+    },
+    linesHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    addLineButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}18`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    addLineButtonText: {
+      color: colors.accent,
+      fontSize: 18,
+      fontWeight: "700",
+      lineHeight: 20,
+      marginTop: -1,
+    },
+    linesHint: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    lineCard: {
+      gap: 8,
+      paddingTop: 4,
+    },
+    lineCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    lineCardLabel: {
+      fontSize: 11,
+      color: colors.textDim,
+      fontWeight: "600",
+      letterSpacing: 0.5,
+    },
+    removeLineText: {
+      color: colors.textMuted,
+      fontSize: 22,
+      fontWeight: "600",
+      lineHeight: 24,
+      paddingHorizontal: 4,
+    },
+    lineDescriptionInput: {
+      marginTop: 0,
     },
     label: {
       fontSize: 11,

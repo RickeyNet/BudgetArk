@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.7.1",
+    title: "Batch Budget Entries",
+    releasedAt: "2026-05-30",
+    highlights: [
+      "Add Budget Entry now supports multiple lines in one save: pick the category and month once, enter several amounts (and optional descriptions), then tap Add N Entries - handy when logging several purchases from the same category on a bank statement.",
+      "Use the small + next to Entries to add another line; remove extra lines with ×. Blank amount rows are skipped automatically.",
+    ],
+  },
+  {
     version: "1.7.0",
     title: "Charts - Learning Hub",
     releasedAt: "2026-05-26",

@@ -811,21 +811,29 @@ const BudgetScreen: React.FC = () => {
     []
   );
 
-  const handleAddEntry = useCallback(async (input: NewBudgetEntryInput) => {
+  const handleAddEntry = useCallback(async (inputs: NewBudgetEntryInput[]) => {
+    if (inputs.length === 0) return;
+
     const now = new Date().toISOString();
     const monthKey = now.slice(0, 7);
-    const newEntry: BudgetEntry = {
+    const newEntries: BudgetEntry[] = inputs.map((input) => ({
       ...input,
       id: generateUUID(),
       createdAt: now,
       updatedAt: now,
       lastAppliedMonth: input.linkedAccountId ? monthKey : undefined,
-    };
+    }));
 
-    const nextEntries = [...entries, newEntry];
-    const nextAssets = input.linkedAccountId
-      ? adjustAssetAccounts(assetAccounts, [{ accountId: input.linkedAccountId, amount: input.amount }])
-      : assetAccounts;
+    const deltas = newEntries
+      .filter((entry) => entry.linkedAccountId)
+      .map((entry) => ({
+        accountId: entry.linkedAccountId as string,
+        amount: entry.amount,
+      }));
+
+    const nextEntries = [...entries, ...newEntries];
+    const nextAssets =
+      deltas.length > 0 ? adjustAssetAccounts(assetAccounts, deltas) : assetAccounts;
 
     setEntries(nextEntries);
     if (nextAssets !== assetAccounts) {
