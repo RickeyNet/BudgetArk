@@ -441,46 +441,26 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                   </TouchableOpacity>
                 </View>
                 {paymentDueDay !== null && (
-                  <View style={styles.dueDayStepperRow}>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() =>
-                        setPaymentDueDay((d) =>
-                          d === null ? DEFAULT_DEBT_PAYMENT_DUE_DAY : Math.max(1, d - 1)
-                        )
-                      }
-                      disabled={paymentDueDay <= 1}
-                    >
-                      <Text
+                  <View style={styles.dueDayGrid}>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                      <TouchableOpacity
+                        key={day}
                         style={[
-                          styles.stepperBtnText,
-                          paymentDueDay <= 1 && styles.stepperBtnTextDisabled,
+                          styles.dueDayBtn,
+                          paymentDueDay === day && styles.dueDayBtnActive,
                         ]}
+                        onPress={() => setPaymentDueDay(day)}
                       >
-                        −
-                      </Text>
-                    </TouchableOpacity>
-                    <View style={styles.stepperValueWrap}>
-                      <Text style={styles.stepperValue}>Day {paymentDueDay}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.stepperBtn}
-                      onPress={() =>
-                        setPaymentDueDay((d) =>
-                          d === null ? DEFAULT_DEBT_PAYMENT_DUE_DAY : Math.min(31, d + 1)
-                        )
-                      }
-                      disabled={paymentDueDay >= 31}
-                    >
-                      <Text
-                        style={[
-                          styles.stepperBtnText,
-                          paymentDueDay >= 31 && styles.stepperBtnTextDisabled,
-                        ]}
-                      >
-                        +
-                      </Text>
-                    </TouchableOpacity>
+                        <Text
+                          style={[
+                            styles.dueDayBtnText,
+                            paymentDueDay === day && styles.dueDayBtnTextActive,
+                          ]}
+                        >
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 )}
               </View>
@@ -771,46 +751,33 @@ const makeStyles = (colors: ThemeColors) =>
     dueDayModeBtnTextActive: {
       color: colors.accent,
     },
-    dueDayStepperRow: {
+    dueDayGrid: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
+      flexWrap: "wrap",
+      gap: 6,
       marginTop: 10,
     },
-    stepperBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 10,
+    dueDayBtn: {
+      width: "13%",
+      aspectRatio: 1,
       borderWidth: 1,
       borderColor: colors.cardBorder,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
       backgroundColor: colors.bg,
-      alignItems: "center",
-      justifyContent: "center",
     },
-    stepperBtnText: {
-      fontSize: 22,
+    dueDayBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    dueDayBtnText: {
+      color: colors.textDim,
+      fontSize: 12,
       fontWeight: "600",
+    },
+    dueDayBtnTextActive: {
       color: colors.accent,
-      lineHeight: 24,
-    },
-    stepperBtnTextDisabled: {
-      color: colors.textMuted,
-    },
-    stepperValueWrap: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1,
-      borderColor: `${colors.accent}40`,
-      backgroundColor: `${colors.accent}10`,
-      borderRadius: 10,
-      paddingVertical: 10,
-    },
-    stepperValue: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.text,
-      fontVariant: ["tabular-nums"],
     },
 
     /* Buttons - outside ScrollView so they stay above keyboard */
