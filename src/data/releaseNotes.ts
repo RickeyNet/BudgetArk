@@ -8,11 +8,17 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.7.1",
-    title: "Batch Budget Entries",
-    releasedAt: "2026-05-30",
+    title: "Debt Reminders + Captain's Course Ch 2",
+    releasedAt: "2026-06-02",
     highlights: [
-      "Add Budget Entry now supports multiple lines in one save: pick the category and month once, enter several amounts (and optional descriptions), then tap Add N Entries - handy when logging several purchases from the same category on a bank statement.",
-      "Use the small + next to Entries to add another line; remove extra lines with ×. Blank amount rows are skipped automatically.",
+      "In-app debt due-date reminders: each debt can have a minimum payment due day (1-31). A new reminder banner on the Budget and Debts tabs lists any unpaid minimums due in the next 7 days, with the next one called out and an urgent color when it's today or tomorrow. Debts without a day fall back to day 15 until you set their actual schedule.",
+      "Set the due day from Add/Edit Debt with a default/custom toggle and a stepper - leave it on default to use day 15, or pick any day. The day is included in spreadsheet export/import (PaymentDueDay column) so it survives backups and sync.",
+      "On the Debts tab, focusing the screen on a due day brings up a prompt asking whether you made this month's minimum. Yes logs the payment at the minimum amount (updates balance and Budget's Debt Payments); 'Not yet this month' silences the prompt for that debt for the rest of the month; 'Remind me later' closes it until the next tab focus.",
+      "Captain's Course chapter 2 (Patching the Hull) is now live with all six lessons: good vs. bad debt, how interest works, starter emergency fund, snowball vs. avalanche, refinancing, and debt snowflakes. Complete the chapter to earn a new Hull Hand badge.",
+      "Added a 'not a financial professional' disclaimer on the Course landing and individual lesson screens so the educational framing is clear.",
+      "Budget tab now counts each active debt as the larger of your logged payments or the Debts-tab minimum for the current month. Your Spent and Net update from the start of the month with that planned baseline, and Debt Payments shows a 'planned minimum' row for any debt you haven't paid yet.",
+      "Added a mission-statement card to the Profile tab explaining why BudgetArk exists and that it's free.",
+      "Add Budget Entry supports multiple lines in one save: pick the category and month once, enter several amounts (and optional descriptions), then tap Add N Entries. Use + to add a line, × to remove one; blank amount rows are skipped.",
     ],
   },
   {

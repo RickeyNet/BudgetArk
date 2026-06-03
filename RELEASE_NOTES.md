@@ -1,14 +1,42 @@
 # BudgetArk Release Notes
 
-## v1.7.1 - Batch Budget Entries (2026-05-30)
+## v1.7.1 - Debt Reminders + Captain's Course Ch 2 (2026-06-02)
 
 Pure JS - ships OTA against the existing native runtime.
 
+### Debt due-date reminders (in-app, no push)
+
+- New optional `Debt.paymentDueDay?: number` (1-31). Validator (`isDebtItem`) enforces integer range; `normalizeDebt` floors fractional values and treats out-of-range as undefined so the migration is graceful. Reset/export/import all carry the field via a `PaymentDueDay` column on the Debts sheet (parser also accepts `Payment Due Day` / `DueDay` / `Due Day` aliases).
+- `src/utils/debtDueCalendar.ts` is the pure helper: `getEffectivePaymentDueDay` falls back to `DEFAULT_DEBT_PAYMENT_DUE_DAY` (15) when unset, `clampDueDayToMonth` rolls day 29-31 to month-end via `new Date(y, m+1, 0)`, `upcomingDebtDuesWithin` walks today..today+N and skips debts already paid this month (`hasPaymentInMonth` matches by `YYYY-MM-` prefix) or dismissed for the month, and `debtsDueTodayNeedingPrompt` dedupes by debt id.
+- `src/storage/debtDueReminderStorage.ts` persists per-month "not yet this month" dismissals under `@budgetark_debt_due_dismissals`, keyed by `debtId:YYYY-MM`. Key is added to `RESET_KEYS` so wipes pick it up.
+- New `DebtDueReminderBanner` renders on both Budget and Debts. Shows total minimum due + the next debt's name/amount/relative day, color-shifts to a warning tint when the next due is today or tomorrow, and renders nothing when no debts qualify. The Budget banner navigates to the Debts tab; the Debts banner opens the due-day prompt (if anything is due today) or the edit form for the next upcoming debt.
+- New `DebtDuePaymentPromptModal` fires when the Debts tab focuses on a due day. **Yes, log $X** records a minimum payment via the existing `handlePayment` path (so balance, payment history, net-worth snapshot, and Budget's Debt Payments all update); **Not yet this month** writes a dismissal; **Remind me later** closes without persisting. After each action the prompt chains forward to the next debt due today via `advanceDuePrompt`.
+
+### Per-debt due-day picker on Add/Edit Debt
+
+- New control on `AddDebtModal` with a default/custom toggle plus a stepper (-/Day N/+). State is `number | null` and is only persisted when the user explicitly picks a day, so opening + saving an old debt no longer silently assigns day 15. Defaults flow through naturally if the app's default ever changes.
+- Reminder math always reads `getEffectivePaymentDueDay(debt)`, so debts with `paymentDueDay === undefined` still surface in the banner/prompt - they just use day 15 until the user sets their real schedule.
+
+### Captain's Course chapter 2 - Patching the Hull
+
+- Shipped all six lessons under chapter `patching_the_hull`: `ch2-l1-good-vs-bad-debt`, `ch2-l2-how-interest-works`, `ch2-l3-starter-emergency-fund`, `ch2-l4-snowball-vs-avalanche`, `ch2-l5-refinancing`, `ch2-l6-debt-snowflake`. Wired into `lessonIndex` so the Course landing now shows Ch 2 as fully readable.
+- New `hull_hand` achievement awarded on completing every Ch 2 lesson. Definition + check live in `achievementDefs.ts`; revoked-from-locked semantics are unchanged.
+- Added `learningDisclaimer` text rendered on both `ChartsScreen` (Course landing) and `LessonScreen` so the not-a-financial-professional framing is consistent. Removed remaining em dashes from `dev-setup-guide.md` and a few share-flow comments.
+
+### Budget reflects planned debt minimums
+
+- `BudgetScreen` Spending/Debt-Payments math now counts each active debt as `max(loggedPaymentsThisMonth, debt.minPayment)` so Spent and Net surface a planned baseline from the 1st of the month instead of only growing as payments are logged.
+- Debt Payments breakdown shows a "planned minimum" row for any active debt with no logged payment yet, distinct from logged payment rows. Summary copy explains the rollup so users don't think their actual spend doubled.
+
+### Mission statement on Profile
+
+- New static card at the top of `ProfileScreen` (`src/data/missionStatement.ts`) explaining why BudgetArk exists and that it's free. Pure content addition; no behavior changes.
+
 ### Batch add on Budget
 
-- `AddBudgetEntryModal` now starts with one amount/description row and a small **+** to add more lines before saving.
+- `AddBudgetEntryModal` starts with one amount/description row and a small **+** to add more lines before saving.
 - Shared fields (type, category, month, recurring, linked account, etc.) apply to every line in the batch.
-- Save creates separate `BudgetEntry` records in one pass; the button reads **Add Entry** or **Add N Entries** from how many rows have a valid amount.
+- Save creates separate `BudgetEntry` records in one pass; button reads **Add Entry** or **Add N Entries** based on how many rows have a valid amount.
 - Extra rows can be removed with **×**; empty amount rows are ignored on submit.
 
 ## v1.6.5 - Ship's Log Progress + Live Badges (2026-05-25)
