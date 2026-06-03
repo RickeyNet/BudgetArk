@@ -19,7 +19,6 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
-
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
 
 /**
@@ -84,13 +83,21 @@ const splitLegacyCarHouse = (name: string): DebtClass => {
  * the steady-state read path (post-migration) doesn't spread + reallocate
  * every debt record on every getDebts call.
  */
+const isPaymentDueDay = (value: unknown): boolean =>
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  value >= 1 &&
+  value <= 31;
+
 const normalizeDebt = (debt: Debt): Debt => {
   const rawClass = (debt as { debtClass?: unknown }).debtClass;
   const ownerOk = isDebtOwner(debt.owner);
   const classOk = isDebtClass(rawClass);
   const sourceOk = isDebtClassSource(debt.debtClassSource);
   const stampOk = !!debt.updatedAt;
-  if (ownerOk && classOk && sourceOk && stampOk) return debt;
+  const dueDayOk =
+    debt.paymentDueDay === undefined || isPaymentDueDay(debt.paymentDueDay);
+  if (ownerOk && classOk && sourceOk && stampOk && dueDayOk) return debt;
 
   let nextClass: DebtClass;
   if (classOk) {
@@ -105,6 +112,9 @@ const normalizeDebt = (debt: Debt): Debt => {
     owner: ownerOk ? debt.owner : "mine",
     debtClass: nextClass,
     debtClassSource: sourceOk ? debt.debtClassSource : "inferred",
+    paymentDueDay: isPaymentDueDay(debt.paymentDueDay)
+      ? Math.floor(debt.paymentDueDay!)
+      : undefined,
     updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
   };
 };
@@ -447,6 +457,7 @@ const RESET_KEYS = [
   "@budgetark_learning_progress",
   "@budgetark_custom_categories",
   "@budgetark_category_bucket_overrides",
+  "@budgetark_debt_due_dismissals",
 ] as const;
 
 export class ResetIncompleteError extends Error {

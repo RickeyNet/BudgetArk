@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import BudgetBucketCard from "../components/BudgetBucketCard";
@@ -21,6 +22,11 @@ import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import BillCalendarCard from "../components/BillCalendarCard";
 import BillCalendarModal from "../components/BillCalendarModal";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
+import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
+import {
+  getDebtDueDismissals,
+  type DebtDueDismissals,
+} from "../storage/debtDueReminderStorage";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { getCategoryIcon, categoryNameHash } from "../data/categoryIcons";
 import {
@@ -47,6 +53,7 @@ import {
   NetWorthSnapshot,
   CustomCategory,
   BudgetBucket,
+  RootTabParamList,
 } from "../types";
 import {
   getBudgetEntries,
@@ -242,6 +249,7 @@ const CATEGORY_CHART_PALETTE = [
 ] as const;
 
 const BudgetScreen: React.FC = () => {
+  const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
@@ -274,6 +282,7 @@ const BudgetScreen: React.FC = () => {
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -343,6 +352,7 @@ const BudgetScreen: React.FC = () => {
           milestonePlan,
           allLimitsByMonth,
           storedBucketOverrides,
+          storedDueDismissals,
         ] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
@@ -353,6 +363,7 @@ const BudgetScreen: React.FC = () => {
           getDebtMilestonePlan(),
           getAllLimitsByMonth(),
           getCategoryBucketOverrides(),
+          getDebtDueDismissals(),
         ]);
         if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
@@ -417,6 +428,7 @@ const BudgetScreen: React.FC = () => {
         setLimits(storedLimits);
         setDebts(storedDebts);
         setPayments(storedPayments);
+        setDueDismissals(storedDueDismissals);
         setSavingsGoals(storedGoals);
         setAssetAccounts(storedAssets);
         setReviewPreviewData(nextReviewData);
@@ -1506,6 +1518,14 @@ const BudgetScreen: React.FC = () => {
       <DueDateReminderBanner
         entries={entries}
         onOpen={() => setShowBillCalendar(true)}
+      />
+
+      <DebtDueReminderBanner
+        debts={debts}
+        payments={payments}
+        dismissals={dueDismissals}
+        onOpen={() => navigation.navigate("DebtTracker")}
+        daysAhead={7}
       />
 
       <BillCalendarCard

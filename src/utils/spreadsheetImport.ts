@@ -382,6 +382,15 @@ const rowToDebt = (row: Record<string, unknown>) => {
     ? debtClassSourceRaw
     : "inferred";
   const goalDate = parseDate(get(row, "GoalDate", "Goal Date"));
+  const paymentDueDayRaw = parseAmount(
+    get(row, "PaymentDueDay", "Payment Due Day", "DueDay", "Due Day")
+  );
+  const paymentDueDay =
+    Number.isFinite(paymentDueDayRaw) &&
+    paymentDueDayRaw >= 1 &&
+    paymentDueDayRaw <= 31
+      ? Math.floor(paymentDueDayRaw)
+      : undefined;
   const createdAtIso = parseDate(get(row, "CreatedAt", "Created At"));
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   const now = new Date().toISOString();
@@ -401,6 +410,7 @@ const rowToDebt = (row: Record<string, unknown>) => {
     debtClass,
     debtClassSource,
     goalDate: goalDate || undefined,
+    paymentDueDay,
     createdAt: createdAtIso || now,
     updatedAt: updatedAtIso || createdAtIso || now,
   };

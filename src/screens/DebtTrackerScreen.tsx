@@ -42,10 +42,12 @@ import {
   DebtOwner,
   BudgetEntry,
   NewDebtInput,
+  Payment,
   SavingsGoal,
 } from "../types";
 import {
   getDebts,
+  getPayments,
   saveDebts,
   deleteDebt,
   restoreDebt,
@@ -54,6 +56,17 @@ import {
   getPayoffStrategyPreference,
   savePayoffStrategyPreference,
 } from "../storage/debtStorage";
+import {
+  dismissDebtDueForMonth,
+  getDebtDueDismissals,
+  type DebtDueDismissals,
+} from "../storage/debtDueReminderStorage";
+import {
+  debtsDueTodayNeedingPrompt,
+  upcomingDebtDuesWithin,
+} from "../utils/debtDueCalendar";
+import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
+import DebtDuePaymentPromptModal from "../components/DebtDuePaymentPromptModal";
 import {
   getSavingsGoals,
   saveSavingsGoals,
@@ -232,6 +245,9 @@ const DebtTrackerScreen: React.FC = () => {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [savingsDraft, setSavingsDraft] = useState("");
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
+  const [duePromptDebt, setDuePromptDebt] = useState<Debt | null>(null);
 
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
@@ -285,6 +301,8 @@ const DebtTrackerScreen: React.FC = () => {
         try {
           const [
             stored,
+            storedPayments,
+            storedDismissals,
             budgetEntries,
             storedMilestones,
             savedStrategy,
@@ -292,6 +310,8 @@ const DebtTrackerScreen: React.FC = () => {
             shouldOpenArkSetup,
           ] = await Promise.all([
             getDebts(),
+            getPayments(),
+            getDebtDueDismissals(),
             getBudgetEntries(),
             getDebtMilestonePlan(),
             getPayoffStrategyPreference(),
@@ -314,6 +334,14 @@ const DebtTrackerScreen: React.FC = () => {
           }
           if (cancelled) return;
           setDebts(valid);
+          setPayments(storedPayments);
+          setDueDismissals(storedDismissals);
+          const dueToday = debtsDueTodayNeedingPrompt(
+            valid,
+            storedPayments,
+            storedDismissals
+          );
+          setDuePromptDebt(dueToday[0] ?? null);
           setMilestonePlan(storedMilestones);
           if (shouldOpenArkSetup) {
             primeMilestonesModal(storedMilestones);
@@ -612,6 +640,24 @@ const DebtTrackerScreen: React.FC = () => {
     void notifyAchievementCheck();
   }, [debts, notifyAchievementCheck]);
 
+  const advanceDuePrompt = useCallback(
+    (
+      debtList: Debt[],
+      paymentList: Payment[],
+      dismissals: DebtDueDismissals,
+      skipDebtId?: string
+    ) => {
+      const dueToday = debtsDueTodayNeedingPrompt(
+        debtList,
+        paymentList,
+        dismissals
+      );
+      const next = dueToday.find((debt) => debt.id !== skipDebtId);
+      setDuePromptDebt(next ?? null);
+    },
+    []
+  );
+
   /** Record a payment against a debt */
   const handlePayment = useCallback(async (debtId: string, amount: number) => {
     const paymentNow = new Date().toISOString();
@@ -624,6 +670,8 @@ const DebtTrackerScreen: React.FC = () => {
     });
     const paidOffDebt = getNewlyPaidOffDebt(debts, result.debts);
     setDebts(result.debts);
+    const freshPayments = await getPayments();
+    setPayments(freshPayments);
     if (paidOffDebt) {
       setCelebrationDebt(paidOffDebt);
     } else {
@@ -631,7 +679,33 @@ const DebtTrackerScreen: React.FC = () => {
     }
     await syncNetWorthSnapshot(paymentNow);
     void notifyAchievementCheck();
+    return { debts: result.debts, payments: freshPayments };
   }, [debts, notifyAchievementCheck]);
+
+  const handleDuePromptLogPayment = useCallback(
+    async (debtId: string, amount: number) => {
+      const result = await handlePayment(debtId, amount);
+      setDuePromptDebt(null);
+      advanceDuePrompt(
+        result.debts,
+        result.payments,
+        dueDismissals,
+        debtId
+      );
+    },
+    [advanceDuePrompt, dueDismissals, handlePayment]
+  );
+
+  const handleDuePromptDismissMonth = useCallback(
+    async (debtId: string) => {
+      await dismissDebtDueForMonth(debtId);
+      const dismissals = await getDebtDueDismissals();
+      setDueDismissals(dismissals);
+      setDuePromptDebt(null);
+      advanceDuePrompt(debts, payments, dismissals, debtId);
+    },
+    [advanceDuePrompt, debts, payments]
+  );
 
   /** Open edit modal for a debt */
   const handleEdit = useCallback((debt: Debt) => {
@@ -705,8 +779,20 @@ const DebtTrackerScreen: React.FC = () => {
   // balances, so pull fresh debts + resnapshot net worth when it reports a
   // change.
   const handlePaymentsChanged = useCallback(async () => {
-    const fresh = await getDebts();
+    const [fresh, freshPayments, dismissals] = await Promise.all([
+      getDebts(),
+      getPayments(),
+      getDebtDueDismissals(),
+    ]);
     setDebts(fresh);
+    setPayments(freshPayments);
+    setDueDismissals(dismissals);
+    const dueToday = debtsDueTodayNeedingPrompt(
+      fresh,
+      freshPayments,
+      dismissals
+    );
+    setDuePromptDebt(dueToday[0] ?? null);
     await syncNetWorthSnapshot();
     void notifyAchievementCheck();
   }, [notifyAchievementCheck]);
@@ -1063,6 +1149,36 @@ const DebtTrackerScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      <View style={{ marginBottom: tokens.gap }}>
+        <DebtDueReminderBanner
+          debts={debts}
+          payments={payments}
+          dismissals={dueDismissals}
+          onOpen={() => {
+            const dueToday = debtsDueTodayNeedingPrompt(
+              debts,
+              payments,
+              dueDismissals
+            );
+            if (dueToday[0]) {
+              setDuePromptDebt(dueToday[0]);
+              return;
+            }
+            const upcoming = upcomingDebtDuesWithin(
+              debts,
+              payments,
+              7,
+              dueDismissals
+            );
+            if (upcoming[0]) {
+              setEditingDebt(upcoming[0].debt);
+              setShowModal(true);
+            }
+          }}
+          daysAhead={7}
+        />
+      </View>
+
       {/* Section header - just title + sort hint */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Debts</Text>
@@ -1164,6 +1280,14 @@ const DebtTrackerScreen: React.FC = () => {
           setCelebrationDebt(null);
           setTimeout(() => setShowHistory(true), 250);
         }}
+      />
+
+      <DebtDuePaymentPromptModal
+        visible={duePromptDebt !== null}
+        debt={duePromptDebt}
+        onLogPayment={handleDuePromptLogPayment}
+        onDismissForMonth={handleDuePromptDismissMonth}
+        onClose={() => setDuePromptDebt(null)}
       />
 
       <Modal

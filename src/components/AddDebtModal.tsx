@@ -39,6 +39,7 @@ import {
   NewDebtInput,
 } from "../types";
 import { calcPaymentForGoalDate, calcMonthsUntilDate } from "../utils/calculations";
+import { DEFAULT_DEBT_PAYMENT_DUE_DAY } from "../utils/debtDueCalendar";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -111,6 +112,10 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const [goalMonth, setGoalMonth] = useState("");
   const [owner, setOwner] = useState<DebtOwner>("mine");
   const [debtClass, setDebtClass] = useState<DebtClass>("personal_credit");
+  // null = use app default (DEFAULT_DEBT_PAYMENT_DUE_DAY) without persisting a
+  // value, so future default changes flow through and the user's intent stays
+  // distinguishable from "I happened to pick 15."
+  const [paymentDueDay, setPaymentDueDay] = useState<number | null>(null);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
 
@@ -124,6 +129,14 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       setGoalMonth(editDebt.goalDate ? editDebt.goalDate.slice(0, 7) : "");
       setOwner(editDebt.owner ?? "mine");
       setDebtClass(editDebt.debtClass ?? "personal_credit");
+      setPaymentDueDay(
+        typeof editDebt.paymentDueDay === "number" &&
+          Number.isInteger(editDebt.paymentDueDay) &&
+          editDebt.paymentDueDay >= 1 &&
+          editDebt.paymentDueDay <= 31
+          ? editDebt.paymentDueDay
+          : null
+      );
     } else {
       setName("");
       setBalance("");
@@ -132,6 +145,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       setGoalMonth("");
       setOwner("mine");
       setDebtClass("personal_credit");
+      setPaymentDueDay(null);
     }
   }, [editDebt]);
 
@@ -165,6 +179,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
     const parsedGoalDate = goalMonth.trim() ? `${goalMonth.trim()}-01` : undefined;
 
+    const paymentDueDayValue = paymentDueDay ?? undefined;
+
     if (isEditing && onEdit && editDebt) {
       onEdit(editDebt.id, {
         name: name.trim(),
@@ -175,6 +191,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
         owner,
         debtClass,
         debtClassSource: "manual",
+        paymentDueDay: paymentDueDayValue,
       });
     } else {
       onAdd({
@@ -187,6 +204,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
         owner,
         debtClass,
         debtClassSource: "manual",
+        paymentDueDay: paymentDueDayValue,
       });
     }
 
@@ -198,6 +216,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     setGoalMonth("");
     setOwner("mine");
     setDebtClass("personal_credit");
+    setPaymentDueDay(null);
   }, [
     name,
     balance,
@@ -207,6 +226,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     onAdd,
     owner,
     debtClass,
+    paymentDueDay,
     isEditing,
     onEdit,
     editDebt,
@@ -374,6 +394,95 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                     keyboardType="decimal-pad"
                   />
                 </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>MINIMUM PAYMENT DUE DAY</Text>
+                <Text style={styles.dueDayHint}>
+                  Day of each month your minimum is due. Day 29-31 falls back to
+                  the last day in shorter months.
+                </Text>
+                <View style={styles.dueDayModeRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.dueDayModeBtn,
+                      paymentDueDay === null && styles.dueDayModeBtnActive,
+                    ]}
+                    onPress={() => setPaymentDueDay(null)}
+                  >
+                    <Text
+                      style={[
+                        styles.dueDayModeBtnText,
+                        paymentDueDay === null && styles.dueDayModeBtnTextActive,
+                      ]}
+                    >
+                      Use default (day {DEFAULT_DEBT_PAYMENT_DUE_DAY})
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.dueDayModeBtn,
+                      paymentDueDay !== null && styles.dueDayModeBtnActive,
+                    ]}
+                    onPress={() =>
+                      setPaymentDueDay(
+                        paymentDueDay ?? DEFAULT_DEBT_PAYMENT_DUE_DAY
+                      )
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.dueDayModeBtnText,
+                        paymentDueDay !== null && styles.dueDayModeBtnTextActive,
+                      ]}
+                    >
+                      Set custom day
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {paymentDueDay !== null && (
+                  <View style={styles.dueDayStepperRow}>
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() =>
+                        setPaymentDueDay((d) =>
+                          d === null ? DEFAULT_DEBT_PAYMENT_DUE_DAY : Math.max(1, d - 1)
+                        )
+                      }
+                      disabled={paymentDueDay <= 1}
+                    >
+                      <Text
+                        style={[
+                          styles.stepperBtnText,
+                          paymentDueDay <= 1 && styles.stepperBtnTextDisabled,
+                        ]}
+                      >
+                        −
+                      </Text>
+                    </TouchableOpacity>
+                    <View style={styles.stepperValueWrap}>
+                      <Text style={styles.stepperValue}>Day {paymentDueDay}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() =>
+                        setPaymentDueDay((d) =>
+                          d === null ? DEFAULT_DEBT_PAYMENT_DUE_DAY : Math.min(31, d + 1)
+                        )
+                      }
+                      disabled={paymentDueDay >= 31}
+                    >
+                      <Text
+                        style={[
+                          styles.stepperBtnText,
+                          paymentDueDay >= 31 && styles.stepperBtnTextDisabled,
+                        ]}
+                      >
+                        +
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               {/* Goal Date (optional) */}
@@ -629,6 +738,79 @@ const makeStyles = (colors: ThemeColors) =>
     },
     monthBtnTextActive: {
       color: colors.accent,
+    },
+    dueDayHint: {
+      fontSize: 12,
+      lineHeight: 17,
+      color: colors.textMuted,
+      marginBottom: 8,
+    },
+    dueDayModeRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    dueDayModeBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      alignItems: "center",
+      backgroundColor: colors.bg,
+    },
+    dueDayModeBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    dueDayModeBtnText: {
+      color: colors.textDim,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    dueDayModeBtnTextActive: {
+      color: colors.accent,
+    },
+    dueDayStepperRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginTop: 10,
+    },
+    stepperBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    stepperBtnText: {
+      fontSize: 22,
+      fontWeight: "600",
+      color: colors.accent,
+      lineHeight: 24,
+    },
+    stepperBtnTextDisabled: {
+      color: colors.textMuted,
+    },
+    stepperValueWrap: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: `${colors.accent}40`,
+      backgroundColor: `${colors.accent}10`,
+      borderRadius: 10,
+      paddingVertical: 10,
+    },
+    stepperValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
     },
 
     /* Buttons - outside ScrollView so they stay above keyboard */

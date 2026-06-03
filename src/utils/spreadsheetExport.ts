@@ -124,6 +124,7 @@ const DEBT_COLUMNS = [
   "DebtClass",
   "DebtClassSource",
   "GoalDate",
+  "PaymentDueDay",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
@@ -243,6 +244,7 @@ const debtToRow = (debt: Debt) => ({
   DebtClass: debt.debtClass,
   DebtClassSource: debt.debtClassSource,
   GoalDate: debt.goalDate ? formatDateOnly(debt.goalDate) : "",
+  PaymentDueDay: debt.paymentDueDay ?? "",
   CreatedAt: debt.createdAt,
   UpdatedAt: debt.updatedAt ?? "",
 });

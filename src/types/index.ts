@@ -54,6 +54,12 @@ export interface Debt {
   goalDate?: string;
 
   /**
+   * Day of month (1-31) the minimum payment is due. Day 29-31 falls back to
+   * the last day in shorter months. When omitted, reminders use day 15.
+   */
+  paymentDueDay?: number;
+
+  /**
    * Tombstone marker. When set, the record is soft-deleted: hidden from
    * the UI but kept in storage so the next paired sync can propagate the
    * deletion. Tombstones older than `TOMBSTONE_TTL_MS` are purged on read.

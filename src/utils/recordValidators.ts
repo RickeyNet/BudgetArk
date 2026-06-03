@@ -114,7 +114,12 @@ export const isDebtItem = (item: unknown): item is Record<string, unknown> => {
     isSafeNumber(item.minPayment) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
-    isOptionalIso(item.deletedAt)
+    isOptionalIso(item.deletedAt) &&
+    (item.paymentDueDay === undefined ||
+      (typeof item.paymentDueDay === "number" &&
+        Number.isInteger(item.paymentDueDay) &&
+        item.paymentDueDay >= 1 &&
+        item.paymentDueDay <= 31))
   );
 };
 
