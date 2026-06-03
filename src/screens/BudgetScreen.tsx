@@ -472,25 +472,43 @@ const BudgetScreen: React.FC = () => {
         liveDebtIds.has(p.debtId) && isDateInMonthKey(p.date, selectedMonthKey)
     );
   }, [debts, payments, selectedMonthKey]);
-  const recordedDebtPaymentsTotal = useMemo(
-    () => recordedDebtPaymentsForMonth.reduce((sum, p) => sum + p.amount, 0),
-    [recordedDebtPaymentsForMonth]
+
+  /**
+   * Per-debt budget baseline for the selected month. Each active debt counts
+   * at least its minimum payment (so net income reflects planned obligations
+   * before the user logs payments). When payments exist, use the greater of
+   * paid-so-far vs minimum so extra payments raise the total but small partial
+   * payments do not understate the baseline.
+   */
+  const debtPaymentPlanForMonth = useMemo(() => {
+    const paidByDebt = new Map<string, number>();
+    for (const payment of recordedDebtPaymentsForMonth) {
+      paidByDebt.set(
+        payment.debtId,
+        (paidByDebt.get(payment.debtId) ?? 0) + payment.amount
+      );
+    }
+    return activeDebts.map((debt) => {
+      const paid = paidByDebt.get(debt.id) ?? 0;
+      const amount = Math.max(paid, debt.minPayment);
+      return { debt, paid, amount };
+    });
+  }, [activeDebts, recordedDebtPaymentsForMonth]);
+
+  const debtPaymentsTotal = useMemo(
+    () => debtPaymentPlanForMonth.reduce((sum, line) => sum + line.amount, 0),
+    [debtPaymentPlanForMonth]
   );
 
-  // Synthetic minimum-payment forecast. Kept only for the NEXT month - the
-  // user hasn't recorded actuals yet, so the forecast helps with planning.
-  // For the current month and any past month we use `recordedDebtPaymentsTotal`
-  // instead; mixing forecast with actuals there would either double-count
-  // (real payment + still-shown forecast) or under-count (forecast suppressed
-  // mid-month while actuals come in piecemeal).
-  const automaticDebtMonthlyCost = useMemo(() => {
-    if (selectedMonthKey !== nextMonthKey) return 0;
-    return activeDebts.reduce((sum, debt) => sum + debt.minPayment, 0);
-  }, [activeDebts, nextMonthKey, selectedMonthKey]);
-
-  // Combined "Debt Payments" total used by expensesByCategory + the monthly
-  // summary. Past/current months pull from actuals; next month from forecast.
-  const debtPaymentsTotal = recordedDebtPaymentsTotal + automaticDebtMonthlyCost;
+  /** Portion of Debt Payments that is planned minimums, not yet logged as paid. */
+  const plannedDebtMinimumTotal = useMemo(
+    () =>
+      debtPaymentPlanForMonth.reduce(
+        (sum, line) => sum + Math.max(0, line.amount - line.paid),
+        0
+      ),
+    [debtPaymentPlanForMonth]
+  );
 
   const monthlyExpenses = useMemo(
     () => {
@@ -681,30 +699,40 @@ const BudgetScreen: React.FC = () => {
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         if (category === "Debt Payments") {
-          if (recordedDebtPaymentsForMonth.length > 0) {
-            // Actual recorded payments - show one row per payment so the
-            // drilldown matches what the user did on the Debt Tracker.
-            const debtNamesById = new Map(debts.map((d) => [d.id, d.name]));
-            const recordedRows: ExpenseCategoryEntry[] = recordedDebtPaymentsForMonth.map(
-              (payment) => ({
-                id: `payment-${payment.id}`,
-                amount: payment.amount,
-                description: `${debtNamesById.get(payment.debtId) ?? "Debt"} payment`,
-                date: payment.date,
-              })
-            );
-            entries.push(...recordedRows);
-          } else if (automaticDebtMonthlyCost > 0) {
-            // No actuals (next-month forecast view) - synthesize one row per
-            // active debt at its minimum payment so the user sees the
-            // forthcoming obligation.
-            const forecastRows: ExpenseCategoryEntry[] = activeDebts.map((debt) => ({
-              id: `auto-debt-${debt.id}`,
-              amount: debt.minPayment,
-              description: `${debt.name} minimum payment`,
-              date: selectedMonthDate.toISOString(),
-            }));
-            entries.push(...forecastRows);
+          const paymentsByDebt = new Map<string, Payment[]>();
+          for (const payment of recordedDebtPaymentsForMonth) {
+            const list = paymentsByDebt.get(payment.debtId);
+            if (list) list.push(payment);
+            else paymentsByDebt.set(payment.debtId, [payment]);
+          }
+
+          for (const { debt, paid, amount } of debtPaymentPlanForMonth) {
+            const debtPayments = paymentsByDebt.get(debt.id) ?? [];
+            if (debtPayments.length > 0) {
+              for (const payment of debtPayments) {
+                entries.push({
+                  id: `payment-${payment.id}`,
+                  amount: payment.amount,
+                  description: `${debt.name} payment`,
+                  date: payment.date,
+                });
+              }
+              if (paid < debt.minPayment) {
+                entries.push({
+                  id: `debt-min-topup-${debt.id}`,
+                  amount: amount - paid,
+                  description: `${debt.name} minimum (planned)`,
+                  date: selectedMonthDate.toISOString(),
+                });
+              }
+            } else {
+              entries.push({
+                id: `auto-debt-${debt.id}`,
+                amount: debt.minPayment,
+                description: `${debt.name} minimum payment (planned)`,
+                date: selectedMonthDate.toISOString(),
+              });
+            }
           }
         }
 
@@ -712,10 +740,8 @@ const BudgetScreen: React.FC = () => {
       })
       .sort((a, b) => b.spent - a.spent);
   }, [
-    activeDebts,
-    automaticDebtMonthlyCost,
     customCategoryNames,
-    debts,
+    debtPaymentPlanForMonth,
     expensesByCategory,
     limitByCategory,
     monthlyEntries,
@@ -1411,8 +1437,10 @@ const BudgetScreen: React.FC = () => {
             </Text>
           </View>
         </View>
-        {automaticDebtMonthlyCost > 0 && (
-          <Text style={styles.autoDebtHint}>Includes {formatCurrency(automaticDebtMonthlyCost)} auto debt minimums</Text>
+        {plannedDebtMinimumTotal > 0 && (
+          <Text style={styles.autoDebtHint}>
+            Includes {formatCurrency(plannedDebtMinimumTotal)} planned debt minimums from the Debts tab
+          </Text>
         )}
         {incomeEntries.length > 0 && (
           <View style={styles.incomeSummaryList}>
