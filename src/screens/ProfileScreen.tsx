@@ -31,7 +31,11 @@ import {
   Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
-import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
@@ -45,6 +49,7 @@ import {
   RELEASE_NOTES,
   type ReleaseNote,
 } from "../data/releaseNotes";
+import { MISSION_STATEMENT } from "../data/missionStatement";
 import {
   getOrCreateUser,
   updateDisplayName,
@@ -58,7 +63,12 @@ import { useAchievements } from "../achievements/AchievementsProvider";
 import AchievementsScreen from "./AchievementsScreen";
 import ManageCategoriesModal from "../components/ManageCategoriesModal";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
-import { importData, importFromString, isEncryptedExport, type ImportResult } from "../utils/importData";
+import {
+  importData,
+  importFromString,
+  isEncryptedExport,
+  type ImportResult,
+} from "../utils/importData";
 import {
   exportSpreadsheet,
   type SpreadsheetFormat,
@@ -89,7 +99,10 @@ import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { isUpdateSafe } from "../utils/versionGuard";
-import { resolveUpdateInfo, findReleaseNoteForVersion } from "../utils/updateReleaseNotes";
+import {
+  resolveUpdateInfo,
+  findReleaseNoteForVersion,
+} from "../utils/updateReleaseNotes";
 import { getPrivacyMode, setPrivacyMode } from "../storage/privacyStorage";
 import {
   getPairingState,
@@ -110,7 +123,10 @@ import PairingModal from "../components/PairingModal";
 import FeedbackModal from "../components/FeedbackModal";
 import SpreadsheetSchemaModal from "../components/SpreadsheetSchemaModal";
 import { triggerHaptic, setHapticsCache } from "../utils/haptics";
-import { getHapticsEnabled, setHapticsEnabled } from "../storage/hapticsStorage";
+import {
+  getHapticsEnabled,
+  setHapticsEnabled,
+} from "../storage/hapticsStorage";
 
 type UpdateMetadata = {
   id: string;
@@ -140,7 +156,8 @@ const ProfileScreen: React.FC = () => {
     showAmbientBackground,
     setThemeId,
   } = useTheme();
-  const { backgroundEffectsEnabled, setBackgroundEffectsEnabled } = useBackgroundEffects();
+  const { backgroundEffectsEnabled, setBackgroundEffectsEnabled } =
+    useBackgroundEffects();
   const {
     surfaceStyleId: storedSurfaceStyleId,
     presets: surfaceStylePresets,
@@ -160,7 +177,9 @@ const ProfileScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
   const spreadsheetExportInFlightRef = useRef(false);
   const spreadsheetExportOpIdRef = useRef(0);
-  const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", { scrollRef });
+  const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", {
+    scrollRef,
+  });
   const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
   const styles = React.useMemo(() => makeStyles(tokens), [tokens]);
   const {
@@ -222,7 +241,9 @@ const ProfileScreen: React.FC = () => {
   /** Import password modal state (for encrypted exports) */
   const [showImportPasswordModal, setShowImportPasswordModal] = useState(false);
   const [importPassword, setImportPassword] = useState("");
-  const [pendingImportAction, setPendingImportAction] = useState<((pw: string) => void) | null>(null);
+  const [pendingImportAction, setPendingImportAction] = useState<
+    ((pw: string) => void) | null
+  >(null);
 
   /** Whether the reset confirmation modal is visible */
   const [showResetModal, setShowResetModal] = useState(false);
@@ -234,13 +255,16 @@ const ProfileScreen: React.FC = () => {
   const [showImportModeModal, setShowImportModeModal] = useState(false);
 
   /** Spreadsheet export format-picker modal */
-  const [showSpreadsheetExportModal, setShowSpreadsheetExportModal] = useState(false);
+  const [showSpreadsheetExportModal, setShowSpreadsheetExportModal] =
+    useState(false);
 
   /** Spreadsheet import merge/replace modal */
-  const [showSpreadsheetImportModal, setShowSpreadsheetImportModal] = useState(false);
+  const [showSpreadsheetImportModal, setShowSpreadsheetImportModal] =
+    useState(false);
 
   /** Spreadsheet format reference modal (shared by import and export flows) */
-  const [showSpreadsheetSchemaModal, setShowSpreadsheetSchemaModal] = useState(false);
+  const [showSpreadsheetSchemaModal, setShowSpreadsheetSchemaModal] =
+    useState(false);
 
   /** @deprecated How-to docs removed in v1.2.0 - help text moved inline */
 
@@ -254,14 +278,19 @@ const ProfileScreen: React.FC = () => {
   const [expandedHowTo, setExpandedHowTo] = useState<string | null>(null);
 
   /** Generic themed info/alert modal (replaces all Alert.alert) */
-  const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
+  const [infoModal, setInfoModal] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
 
   /** OTA update preferences and status */
   const [updatePrefs, setUpdatePrefs] = useState<UpdatePreferences>({
     manualUpdateMode: false,
   });
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<UpdateMetadata | null>(
+    null,
+  );
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
 
   /** Privacy mode - blocks screenshots/screen recording when enabled */
@@ -357,14 +386,14 @@ const ProfileScreen: React.FC = () => {
     async (id: string) => {
       await setThemeId(id);
     },
-    [setThemeId]
+    [setThemeId],
   );
 
   const handleSurfaceStyleSelect = useCallback(
     async (id: "solid" | "glass") => {
       await setSurfaceStyleId(id);
     },
-    [setSurfaceStyleId]
+    [setSurfaceStyleId],
   );
 
   const handleToggleBackgroundEffects = useCallback(async () => {
@@ -375,24 +404,24 @@ const ProfileScreen: React.FC = () => {
     async (id: string) => {
       await setDensityId(id);
     },
-    [setDensityId]
+    [setDensityId],
   );
 
   const handleTextSizeSelect = useCallback(
     async (id: string) => {
       await setTextSizeId(id);
     },
-    [setTextSizeId]
+    [setTextSizeId],
   );
 
   const handleCurrencySelect = useCallback(
     async (id: CurrencyPreferenceId) => {
       await setPreferenceId(id);
       setUser((current) =>
-        current ? { ...current, currencyPreferenceId: id } : current
+        current ? { ...current, currencyPreferenceId: id } : current,
       );
     },
-    [setPreferenceId]
+    [setPreferenceId],
   );
 
   const formatDateTime = useCallback((iso?: string) => {
@@ -402,21 +431,24 @@ const ProfileScreen: React.FC = () => {
     return new Date(parsed).toLocaleString();
   }, []);
 
-  const extractUpdateMetadata = useCallback((manifest: unknown): UpdateMetadata => {
-    const data =
-      manifest != null && typeof manifest === "object"
-        ? (manifest as Record<string, unknown>)
-        : {};
-    const resolved = resolveUpdateInfo(manifest, CURRENT_APP_VERSION);
+  const extractUpdateMetadata = useCallback(
+    (manifest: unknown): UpdateMetadata => {
+      const data =
+        manifest != null && typeof manifest === "object"
+          ? (manifest as Record<string, unknown>)
+          : {};
+      const resolved = resolveUpdateInfo(manifest, CURRENT_APP_VERSION);
 
-    return {
-      id: typeof data.id === "string" ? data.id : "unknown",
-      createdAt: resolved.createdAt,
-      runtimeVersion: resolved.runtimeVersion,
-      message: resolved.message,
-      appVersion: resolved.appVersion,
-    };
-  }, []);
+      return {
+        id: typeof data.id === "string" ? data.id : "unknown",
+        createdAt: resolved.createdAt,
+        runtimeVersion: resolved.runtimeVersion,
+        message: resolved.message,
+        appVersion: resolved.appVersion,
+      };
+    },
+    [],
+  );
 
   const checkForUpdates = useCallback(
     async (source: "auto" | "manual") => {
@@ -451,7 +483,9 @@ const ProfileScreen: React.FC = () => {
 
         const fetchResult = await Updates.fetchUpdateAsync();
         const manifest =
-          (fetchResult as Record<string, unknown>).manifest || (checkResult as Record<string, unknown>).manifest || null;
+          (fetchResult as Record<string, unknown>).manifest ||
+          (checkResult as Record<string, unknown>).manifest ||
+          null;
         const updateMeta = extractUpdateMetadata(manifest);
 
         const currentRuntime = Updates.runtimeVersion ?? undefined;
@@ -487,7 +521,9 @@ const ProfileScreen: React.FC = () => {
             "econnreset",
             "etimedout",
           ];
-          const isNetworkError = networkHints.some((hint) => lower.includes(hint));
+          const isNetworkError = networkHints.some((hint) =>
+            lower.includes(hint),
+          );
           const friendly = isNetworkError
             ? "Could not reach the update server. Check your internet connection and try again."
             : "Unable to check for updates right now. Please try again shortly.";
@@ -500,7 +536,7 @@ const ProfileScreen: React.FC = () => {
         setIsCheckingUpdates(false);
       }
     },
-    [canCheckUpdates, extractUpdateMetadata, formatDateTime, isCheckingUpdates]
+    [canCheckUpdates, extractUpdateMetadata, formatDateTime, isCheckingUpdates],
   );
 
   const toggleManualMode = useCallback(async () => {
@@ -549,7 +585,12 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   const handleSyncNow = useCallback(async () => {
-    if (syncStatus === "syncing" || syncStatus === "discovering" || syncStatus === "connecting") return;
+    if (
+      syncStatus === "syncing" ||
+      syncStatus === "discovering" ||
+      syncStatus === "connecting"
+    )
+      return;
     try {
       const result = await syncNow((status) => setSyncStatus(status));
       if (result.success) {
@@ -578,7 +619,8 @@ const ProfileScreen: React.FC = () => {
     setShowUnpairConfirm(false);
     setInfoModal({
       title: "Unpaired",
-      message: "Partner sync has been disconnected. Your data is still on this device.",
+      message:
+        "Partner sync has been disconnected. Your data is still on this device.",
     });
   }, []);
 
@@ -588,7 +630,8 @@ const ProfileScreen: React.FC = () => {
       if (!granted) {
         setInfoModal({
           title: "Permission Required",
-          message: "Location permission is needed to read the WiFi network name for auto-sync. Your location is never stored or shared.",
+          message:
+            "Location permission is needed to read the WiFi network name for auto-sync. Your location is never stored or shared.",
         });
         return;
       }
@@ -597,14 +640,15 @@ const ProfileScreen: React.FC = () => {
     if (!ssid) {
       setInfoModal({
         title: "No WiFi Detected",
-        message: Platform.OS === "ios"
-          ? "Unable to read your WiFi network name. Make sure you are connected to WiFi, then check:\n\n1. Settings > Privacy & Security > Location Services - turn on for BudgetArk (\"While Using\")\n2. Settings > Privacy & Security > Local Network - turn on for BudgetArk\n\niOS requires location access to read the WiFi name. Your location is never stored or shared."
-          : "Connect to your home WiFi first, then try again.",
+        message:
+          Platform.OS === "ios"
+            ? 'Unable to read your WiFi network name. Make sure you are connected to WiFi, then check:\n\n1. Settings > Privacy & Security > Location Services - turn on for BudgetArk ("While Using")\n2. Settings > Privacy & Security > Local Network - turn on for BudgetArk\n\niOS requires location access to read the WiFi name. Your location is never stored or shared.'
+            : "Connect to your home WiFi first, then try again.",
       });
       return;
     }
     await updateHomeSSID(ssid);
-    setPairing((prev) => prev ? { ...prev, homeSSID: ssid } : null);
+    setPairing((prev) => (prev ? { ...prev, homeSSID: ssid } : null));
     setInfoModal({
       title: "Home Network Set",
       message: `Auto-sync will trigger when both devices are on "${ssid}".`,
@@ -615,7 +659,7 @@ const ProfileScreen: React.FC = () => {
     if (!pairing) return;
     const next = !pairing.autoSyncEnabled;
     await setAutoSyncEnabled(next);
-    setPairing((prev) => prev ? { ...prev, autoSyncEnabled: next } : null);
+    setPairing((prev) => (prev ? { ...prev, autoSyncEnabled: next } : null));
     if (next) {
       startMonitoring((result) => {
         if (result.success) setLastSyncTime(result.timestamp);
@@ -643,7 +687,6 @@ const ProfileScreen: React.FC = () => {
       });
     }
   }, []);
-
 
   const toggleReleaseNote = useCallback((version: string) => {
     setExpandedReleaseNote((current) => (current === version ? null : version));
@@ -688,7 +731,10 @@ const ProfileScreen: React.FC = () => {
     setEditName(freshUser.displayName);
     setPairing(null);
     setLastSyncTime(null);
-    setInfoModal({ title: "Done", message: "All data has been reset successfully." });
+    setInfoModal({
+      title: "Done",
+      message: "All data has been reset successfully.",
+    });
   }, [setPreferenceId]);
 
   const handleExportData = useCallback(() => {
@@ -701,7 +747,8 @@ const ProfileScreen: React.FC = () => {
     if (exportEncrypt && exportPassword.length < 4) {
       setInfoModal({
         title: "Password Too Short",
-        message: "Please enter a password with at least 4 characters, or turn off encryption.",
+        message:
+          "Please enter a password with at least 4 characters, or turn off encryption.",
       });
       return;
     }
@@ -738,7 +785,8 @@ const ProfileScreen: React.FC = () => {
       triggerHaptic("error");
       setInfoModal({
         title: "Export Failed",
-        message: error?.message || "Something went wrong while exporting your data.",
+        message:
+          error?.message || "Something went wrong while exporting your data.",
       });
     } finally {
       setIsExporting(false);
@@ -775,57 +823,66 @@ const ProfileScreen: React.FC = () => {
    * Runs the actual import and shows the result.
    * Called directly or after password entry for encrypted exports.
    */
-  const executeImport = useCallback(async (
-    importFn: (password?: string) => Promise<ImportResult | null>,
-    label: string,
-    password?: string
-  ) => {
-    try {
-      const result = await importFn(password);
-      if (!result) return;
-      const parts = [
-        `${result.debts} debts`,
-        `${result.payments} payments`,
-        `${result.budgetEntries} budget entries`,
-        `${result.budgetLimits} budget limits`,
-      ];
-      if (result.savingsGoals > 0) parts.push(`${result.savingsGoals} savings goals`);
-      if (result.assetAccounts > 0) parts.push(`${result.assetAccounts} asset accounts`);
-      if (result.netWorthSnapshots > 0) parts.push(`${result.netWorthSnapshots} net worth snapshots`);
-      if (result.customCategories > 0) parts.push(`${result.customCategories} custom categories`);
-      const extras: string[] = [];
-      if (result.debtMilestones) extras.push("milestone plan");
-      if (result.payoffStrategy) extras.push("payoff strategy");
-      let message = `${label} ${parts.join(", ")}.`;
-      if (extras.length > 0) {
-        message += `\nAlso restored: ${extras.join(", ")}.`;
-      }
-      if (result.staleDays !== undefined && result.staleDays > 30) {
-        message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
-      }
-      void refreshCustomCategories();
-      triggerHaptic("success");
-      setInfoModal({
-        title: "Import Complete",
-        message,
-      });
-    } catch (error: any) {
-      if (error?.message?.includes("password-encrypted")) {
-        // Need password - show the password prompt
-        setPendingImportAction(() => (pw: string) =>
-          executeImport(importFn, label, pw)
-        );
-        setImportPassword("");
-        setShowImportPasswordModal(true);
-      } else {
-        triggerHaptic("error");
+  const executeImport = useCallback(
+    async (
+      importFn: (password?: string) => Promise<ImportResult | null>,
+      label: string,
+      password?: string,
+    ) => {
+      try {
+        const result = await importFn(password);
+        if (!result) return;
+        const parts = [
+          `${result.debts} debts`,
+          `${result.payments} payments`,
+          `${result.budgetEntries} budget entries`,
+          `${result.budgetLimits} budget limits`,
+        ];
+        if (result.savingsGoals > 0)
+          parts.push(`${result.savingsGoals} savings goals`);
+        if (result.assetAccounts > 0)
+          parts.push(`${result.assetAccounts} asset accounts`);
+        if (result.netWorthSnapshots > 0)
+          parts.push(`${result.netWorthSnapshots} net worth snapshots`);
+        if (result.customCategories > 0)
+          parts.push(`${result.customCategories} custom categories`);
+        const extras: string[] = [];
+        if (result.debtMilestones) extras.push("milestone plan");
+        if (result.payoffStrategy) extras.push("payoff strategy");
+        let message = `${label} ${parts.join(", ")}.`;
+        if (extras.length > 0) {
+          message += `\nAlso restored: ${extras.join(", ")}.`;
+        }
+        if (result.staleDays !== undefined && result.staleDays > 30) {
+          message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
+        }
+        void refreshCustomCategories();
+        triggerHaptic("success");
         setInfoModal({
-          title: "Import Failed",
-          message: error?.message || "Something went wrong while importing your data.",
+          title: "Import Complete",
+          message,
         });
+      } catch (error: any) {
+        if (error?.message?.includes("password-encrypted")) {
+          // Need password - show the password prompt
+          setPendingImportAction(
+            () => (pw: string) => executeImport(importFn, label, pw),
+          );
+          setImportPassword("");
+          setShowImportPasswordModal(true);
+        } else {
+          triggerHaptic("error");
+          setInfoModal({
+            title: "Import Failed",
+            message:
+              error?.message ||
+              "Something went wrong while importing your data.",
+          });
+        }
       }
-    }
-  }, [refreshCustomCategories]);
+    },
+    [refreshCustomCategories],
+  );
 
   const confirmImportPassword = useCallback(() => {
     if (!pendingImportAction) return;
@@ -838,14 +895,14 @@ const ProfileScreen: React.FC = () => {
   /**
    * File-picker: run the document picker with the chosen mode.
    */
-  const confirmFileImport = useCallback(async (mode: "merge" | "replace") => {
-    setShowImportModeModal(false);
-    const label = mode === "merge" ? "Merged" : "Imported";
-    await executeImport(
-      (password) => importData(mode, password),
-      label
-    );
-  }, [executeImport]);
+  const confirmFileImport = useCallback(
+    async (mode: "merge" | "replace") => {
+      setShowImportModeModal(false);
+      const label = mode === "merge" ? "Merged" : "Imported";
+      await executeImport((password) => importData(mode, password), label);
+    },
+    [executeImport],
+  );
 
   /**
    * Spreadsheet export - open the format-picker modal.
@@ -937,7 +994,7 @@ const ProfileScreen: React.FC = () => {
         }, 500);
       }
     },
-    [closeSpreadsheetExportModal, refreshBackupState, refreshAchievements]
+    [closeSpreadsheetExportModal, refreshBackupState, refreshAchievements],
   );
 
   useFocusEffect(
@@ -947,7 +1004,7 @@ const ProfileScreen: React.FC = () => {
       setShowSpreadsheetExportModal(false);
       spreadsheetExportInFlightRef.current = false;
       return undefined;
-    }, [])
+    }, []),
   );
 
   /**
@@ -973,8 +1030,10 @@ const ProfileScreen: React.FC = () => {
           `${result.debts} debts`,
           `${result.payments} payments`,
         ];
-        if (result.savingsGoals > 0) parts.push(`${result.savingsGoals} savings goals`);
-        if (result.assetAccounts > 0) parts.push(`${result.assetAccounts} asset accounts`);
+        if (result.savingsGoals > 0)
+          parts.push(`${result.savingsGoals} savings goals`);
+        if (result.assetAccounts > 0)
+          parts.push(`${result.assetAccounts} asset accounts`);
         let message = `${label} ${parts.join(", ")} from the spreadsheet.`;
         if (result.skippedRows > 0) {
           message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} were skipped because required fields were missing or invalid.`;
@@ -997,7 +1056,7 @@ const ProfileScreen: React.FC = () => {
         });
       }
     },
-    []
+    [],
   );
 
   /**
@@ -1007,7 +1066,10 @@ const ProfileScreen: React.FC = () => {
     (mode: "merge" | "replace") => {
       const text = pasteText.trim();
       if (!text) {
-        setInfoModal({ title: "Empty", message: "Please paste your exported JSON data first." });
+        setInfoModal({
+          title: "Empty",
+          message: "Please paste your exported JSON data first.",
+        });
         return;
       }
       setShowPasteModal(false);
@@ -1015,23 +1077,34 @@ const ProfileScreen: React.FC = () => {
       const label = mode === "merge" ? "Merged" : "Imported";
       executeImport(
         (password) => importFromString(text, mode, password),
-        label
+        label,
       );
     },
-    [pasteText, executeImport]
+    [pasteText, executeImport],
   );
 
   if (!user) {
     return (
-      <View style={{ flex: 1, backgroundColor: showAmbientBackground ? "transparent" : colors.bg, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ color: colors.textDim, fontSize: 14 }}>Loading profile...</Text>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: showAmbientBackground ? "transparent" : colors.bg,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: colors.textDim, fontSize: 14 }}>
+          Loading profile...
+        </Text>
       </View>
     );
   }
 
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
-  const currentSurfaceStyle = surfaceStylePresets.find((p) => p.id === surfaceStyleId);
+  const currentSurfaceStyle = surfaceStylePresets.find(
+    (p) => p.id === surfaceStyleId,
+  );
   const currentDensity = densityPresets.find((p) => p.id === densityId);
   const currentTextSize = textSizePresets.find((p) => p.id === textSizeId);
   const latestRelease: ReleaseNote = RELEASE_NOTES[0];
@@ -1040,7 +1113,12 @@ const ProfileScreen: React.FC = () => {
     <>
       <ScrollView
         ref={scrollRef}
-        style={[styles.screen, { backgroundColor: showAmbientBackground ? "transparent" : colors.bg }]}
+        style={[
+          styles.screen,
+          {
+            backgroundColor: showAmbientBackground ? "transparent" : colors.bg,
+          },
+        ]}
         contentContainerStyle={[
           styles.content,
           { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
@@ -1066,10 +1144,18 @@ const ProfileScreen: React.FC = () => {
             </Text>
             <View style={styles.backupBannerActions}>
               <TouchableOpacity
-                style={[styles.backupBannerPrimary, { backgroundColor: colors.accent }]}
+                style={[
+                  styles.backupBannerPrimary,
+                  { backgroundColor: colors.accent },
+                ]}
                 onPress={handleExportData}
               >
-                <Text style={[styles.backupBannerPrimaryText, { color: colors.white }]}>
+                <Text
+                  style={[
+                    styles.backupBannerPrimaryText,
+                    { color: colors.white },
+                  ]}
+                >
                   Back up now
                 </Text>
               </TouchableOpacity>
@@ -1080,7 +1166,12 @@ const ProfileScreen: React.FC = () => {
                   await refreshBackupState();
                 }}
               >
-                <Text style={[styles.backupBannerSecondaryText, { color: colors.textDim }]}>
+                <Text
+                  style={[
+                    styles.backupBannerSecondaryText,
+                    { color: colors.textDim },
+                  ]}
+                >
                   Dismiss
                 </Text>
               </TouchableOpacity>
@@ -1093,9 +1184,29 @@ const ProfileScreen: React.FC = () => {
           <Text style={[styles.appLabel, { color: colors.textDim }]}>
             BudgetArk
           </Text>
-          <Text style={[styles.screenTitle, { color: colors.text }]}>Profile</Text>
+          <Text style={[styles.screenTitle, { color: colors.text }]}>
+            Profile
+          </Text>
           <Text style={[styles.screenSubtitle, { color: colors.textMuted }]}>
             Your anonymous account settings.
+          </Text>
+        </View>
+
+        {/* ── Mission Statement ── */}
+        <View
+          style={[
+            styles.missionCard,
+            { backgroundColor: colors.card, borderColor: colors.cardBorder },
+          ]}
+        >
+          <Text style={[styles.missionEyebrow, { color: colors.accent }]}>
+            {MISSION_STATEMENT.eyebrow}
+          </Text>
+          <Text style={[styles.missionTitle, { color: colors.text }]}>
+            {MISSION_STATEMENT.title}
+          </Text>
+          <Text style={[styles.missionBody, { color: colors.textDim }]}>
+            {MISSION_STATEMENT.body}
           </Text>
         </View>
 
@@ -1128,12 +1239,17 @@ const ProfileScreen: React.FC = () => {
                       },
                     ]}
                     value={editName}
-                    onChangeText={(text) => setEditName(sanitizeTextInput(text))}
+                    onChangeText={(text) =>
+                      setEditName(sanitizeTextInput(text))
+                    }
                     autoFocus
                     maxLength={20}
                   />
                   <TouchableOpacity
-                    style={[styles.saveBtn, { backgroundColor: colors.success }]}
+                    style={[
+                      styles.saveBtn,
+                      { backgroundColor: colors.success },
+                    ]}
                     onPress={handleSaveName}
                   >
                     <Text style={[styles.saveBtnText, { color: colors.bg }]}>
@@ -1157,27 +1273,51 @@ const ProfileScreen: React.FC = () => {
 
         {/* ── Send Feedback ── */}
         <View style={styles.settingsSection}>
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => setShowFeedbackModal(true)}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Send Feedback</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Bug reports & feature requests</Text>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Send Feedback
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  Bug reports & feature requests
+                </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── Appearance (Theme + Currency) ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
             APPEARANCE
           </Text>
 
-          <View ref={anchorAppearance} collapsable={false} style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            ref={anchorAppearance}
+            collapsable={false}
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => setShowThemeModal(true)}
@@ -1186,49 +1326,93 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   Theme
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {currentTheme?.name || "Forest Gold"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => setShowSurfaceStyleModal(true)}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Design Style</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Design Style
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {currentSurfaceStyle?.name || "Solid"}
-                  {storedSurfaceStyleId == null && themeId === "deep_space" ? " · theme default" : ""}
+                  {storedSurfaceStyleId == null && themeId === "deep_space"
+                    ? " · theme default"
+                    : ""}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={handleToggleBackgroundEffects}
             >
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Ambient Backgrounds</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Ambient Backgrounds
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {backgroundEffectsEnabled
                     ? "Decorative themed backgrounds are enabled"
                     : "Plain backgrounds for reduced visual noise"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: backgroundEffectsEnabled ? colors.accent : colors.textDim }]}>
+              <Text
+                style={[
+                  styles.settingsRowArrow,
+                  {
+                    color: backgroundEffectsEnabled
+                      ? colors.accent
+                      : colors.textDim,
+                  },
+                ]}
+              >
                 {backgroundEffectsEnabled ? "On" : "Off"}
               </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
@@ -1238,14 +1422,25 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   Layout Density
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {currentDensity?.name || "Comfortable"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
@@ -1258,45 +1453,91 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   Text Size
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {currentTextSize?.name || "Default"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── Partner Sync (compressed) ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>PARTNER SYNC</Text>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
+            PARTNER SYNC
+          </Text>
 
           {!pairing ? (
-            <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View
+              style={[
+                styles.groupedCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
               <TouchableOpacity
                 style={styles.groupedRow}
                 onPress={() => setShowPairingModal(true)}
               >
                 <View>
-                  <Text style={[styles.settingsRowText, { color: colors.text }]}>Pair with Partner</Text>
-                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  <Text
+                    style={[styles.settingsRowText, { color: colors.text }]}
+                  >
+                    Pair with Partner
+                  </Text>
+                  <Text
+                    style={[
+                      styles.settingsRowSubtext,
+                      { color: colors.textDim },
+                    ]}
+                  >
                     Sync budgets over WiFi - no account needed
                   </Text>
                 </View>
-                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+                <Text
+                  style={[styles.settingsRowArrow, { color: colors.textDim }]}
+                >
+                  →
+                </Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View
+              style={[
+                styles.groupedCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
               <TouchableOpacity
                 style={styles.groupedRow}
                 onPress={handleSetHomeNetwork}
               >
                 <View>
-                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  <Text
+                    style={[styles.settingsRowText, { color: colors.text }]}
+                  >
                     {pairing.partnerName}
                   </Text>
-                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  <Text
+                    style={[
+                      styles.settingsRowSubtext,
+                      { color: colors.textDim },
+                    ]}
+                  >
                     {pairing.homeSSID
                       ? `Auto-sync ${pairing.autoSyncEnabled ? "on" : "off"} · "${pairing.homeSSID}"`
                       : "Tap to set home WiFi for auto-sync"}
@@ -1304,47 +1545,89 @@ const ProfileScreen: React.FC = () => {
                       <Text
                         style={{ color: colors.textMuted }}
                         onPress={handleToggleAutoSync}
-                      > · {pairing.autoSyncEnabled ? "Disable" : "Enable"}</Text>
+                      >
+                        {" "}
+                        · {pairing.autoSyncEnabled ? "Disable" : "Enable"}
+                      </Text>
                     ) : null}
                   </Text>
                 </View>
-                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+                <Text
+                  style={[styles.settingsRowArrow, { color: colors.textDim }]}
+                >
+                  →
+                </Text>
               </TouchableOpacity>
 
-              <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
 
               <TouchableOpacity
-                style={[styles.groupedRow, (syncStatus !== "idle" && syncStatus !== "error") && { opacity: 0.7 }]}
+                style={[
+                  styles.groupedRow,
+                  syncStatus !== "idle" &&
+                    syncStatus !== "error" && { opacity: 0.7 },
+                ]}
                 onPress={handleSyncNow}
                 disabled={syncStatus !== "idle" && syncStatus !== "error"}
               >
                 <View>
-                  <Text style={[styles.settingsRowText, { color: colors.accent }]}>Sync Now</Text>
-                  <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                  <Text
+                    style={[styles.settingsRowText, { color: colors.accent }]}
+                  >
+                    Sync Now
+                  </Text>
+                  <Text
+                    style={[
+                      styles.settingsRowSubtext,
+                      { color: colors.textDim },
+                    ]}
+                  >
                     {syncStatus === "discovering"
                       ? "Looking for partner..."
                       : syncStatus === "connecting"
-                      ? "Connecting..."
-                      : syncStatus === "syncing"
-                      ? "Syncing data..."
-                      : lastSyncTime
-                      ? `Last synced ${formatDateTime(lastSyncTime)}`
-                      : "Never synced"}
+                        ? "Connecting..."
+                        : syncStatus === "syncing"
+                          ? "Syncing data..."
+                          : lastSyncTime
+                            ? `Last synced ${formatDateTime(lastSyncTime)}`
+                            : "Never synced"}
                   </Text>
                 </View>
-                <Text style={[styles.settingsRowArrow, { color: colors.accent }]}>
-                  {syncStatus !== "idle" && syncStatus !== "error" ? "..." : "→"}
+                <Text
+                  style={[styles.settingsRowArrow, { color: colors.accent }]}
+                >
+                  {syncStatus !== "idle" && syncStatus !== "error"
+                    ? "..."
+                    : "→"}
                 </Text>
               </TouchableOpacity>
 
-              <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
 
               <TouchableOpacity
                 style={styles.groupedRow}
                 onPress={() => setShowUnpairConfirm(true)}
               >
-                <Text style={[styles.settingsRowText, { color: colors.danger }]}>Unpair</Text>
-                <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>→</Text>
+                <Text
+                  style={[styles.settingsRowText, { color: colors.danger }]}
+                >
+                  Unpair
+                </Text>
+                <Text
+                  style={[styles.settingsRowArrow, { color: colors.danger }]}
+                >
+                  →
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1352,11 +1635,18 @@ const ProfileScreen: React.FC = () => {
 
         {/* ── Progress (Ship's Log achievements) ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
             PROGRESS
           </Text>
 
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => {
@@ -1370,22 +1660,35 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   Ship's Log
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {`${Object.keys(achievementUnlocked).length}/${totalAchievements} achievements earned`}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── Categories ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
             CATEGORIES
           </Text>
 
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => {
@@ -1399,142 +1702,261 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   Custom Categories
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {customCategories.length === 0
                     ? "Add your own budget categories"
                     : `${customCategories.length} custom`}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── Data (Export, Import, Reset) ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
             DATA
           </Text>
 
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={handleExportData}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Export</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>Encrypted backup to file</Text>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Export
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  Encrypted backup to file
+                </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={handleImportData}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Import</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>From file or clipboard</Text>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Import
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  From file or clipboard
+                </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={handleExportSpreadsheet}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Export Spreadsheet</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>CSV or Excel for Google Sheets / Excel</Text>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Export Spreadsheet
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  CSV or Excel for Google Sheets / Excel
+                </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={handleImportSpreadsheet}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Import Spreadsheet</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>From a CSV or Excel file</Text>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Import Spreadsheet
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  From a CSV or Excel file
+                </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={handleResetData}
             >
-              <Text style={[styles.settingsRowText, { color: colors.danger }]}>Reset All Data</Text>
-              <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>→</Text>
+              <Text style={[styles.settingsRowText, { color: colors.danger }]}>
+                Reset All Data
+              </Text>
+              <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>
+                →
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── Settings (privacy, updates) ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
             SETTINGS
           </Text>
 
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => setShowCurrencyModal(true)}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Currency</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Currency
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {preference.label}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={togglePrivacyMode}
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Privacy Mode</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Privacy Mode
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {privacyMode
                     ? "Screenshots & screen recording blocked"
                     : "Screenshots & screen recording allowed"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
                 {privacyMode ? "On" : "Off"}
               </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity style={styles.groupedRow} onPress={toggleHaptics}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Haptic Feedback</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Haptic Feedback
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {hapticsEnabled
                     ? "Subtle vibrations on key actions"
                     : "Vibrations disabled"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
                 {hapticsEnabled ? "On" : "Off"}
               </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={[styles.groupedRow, isCheckingUpdates && { opacity: 0.7 }]}
@@ -1542,31 +1964,50 @@ const ProfileScreen: React.FC = () => {
               disabled={isCheckingUpdates}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Check for Updates</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Check for Updates
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   {updatePrefs.lastCheckedAt
                     ? `Last checked ${formatDateTime(updatePrefs.lastCheckedAt)}`
                     : "Never checked"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
                 {isCheckingUpdates ? "..." : "→"}
               </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={toggleManualMode}
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>Auto Updates</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
-                  {updatePrefs.manualUpdateMode ? "Off - manual checks only" : "On - checks automatically"}
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Auto Updates
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  {updatePrefs.manualUpdateMode
+                    ? "Off - manual checks only"
+                    : "On - checks automatically"}
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
                 {updatePrefs.manualUpdateMode ? "Off" : "On"}
               </Text>
             </TouchableOpacity>
@@ -1575,11 +2016,20 @@ const ProfileScreen: React.FC = () => {
 
         {/* ── Help (how-to + replay walkthrough) ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
             HELP
           </Text>
 
-          <View ref={anchorHelp} collapsable={false} style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            ref={anchorHelp}
+            collapsable={false}
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => {
@@ -1592,14 +2042,25 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   How to use BudgetArk
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   Per-tab quick reference
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
@@ -1609,29 +2070,47 @@ const ProfileScreen: React.FC = () => {
                 // Profile fires its own tour on focus; queue the rest so each
                 // tab auto-navigates after "Got it" on its last step. User
                 // gets a single chained walkthrough across all five tabs.
-                startGuidedTour(["DebtTracker", "Budget", "Bridge", "Utilities"]);
+                startGuidedTour([
+                  "DebtTracker",
+                  "Budget",
+                  "Bridge",
+                  "Utilities",
+                ]);
               }}
             >
               <View style={{ flex: 1 }}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   Replay walkthrough
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   Show the first-launch tour again
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>↺</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                ↺
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ── About (release notes, github) ── */}
         <View style={styles.settingsSection}>
-          <Text style={[styles.settingsSectionTitle, { color: colors.textMuted }]}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
             ABOUT
           </Text>
 
-          <View style={[styles.groupedCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => setShowReleaseNotesModal(true)}
@@ -1640,24 +2119,45 @@ const ProfileScreen: React.FC = () => {
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   v{latestRelease.version} - {latestRelease.title}
                 </Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
                   Tap for release notes
                 </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
 
-            <View style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]} />
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
 
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={() => Linking.openURL("https://github.com/RickeyNet")}
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>GitHub</Text>
-                <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>github.com/RickeyNet</Text>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  GitHub
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  github.com/RickeyNet
+                </Text>
               </View>
-              <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>→</Text>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1744,7 +2244,12 @@ const ProfileScreen: React.FC = () => {
                         { backgroundColor: preset.colors.accent },
                       ]}
                     >
-                      <Text style={[styles.checkMarkText, { color: preset.colors.white }]}>
+                      <Text
+                        style={[
+                          styles.checkMarkText,
+                          { color: preset.colors.white },
+                        ]}
+                      >
                         ✓
                       </Text>
                     </View>
@@ -1779,10 +2284,18 @@ const ProfileScreen: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Design Style</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Design Style
+            </Text>
             {storedSurfaceStyleId == null && themeId === "deep_space" ? (
-              <Text style={[styles.settingsRowSubtext, { color: colors.textDim, marginBottom: 12 }]}>
-                Deep Space currently defaults to Glass. Pick a style here to keep it across all themes.
+              <Text
+                style={[
+                  styles.settingsRowSubtext,
+                  { color: colors.textDim, marginBottom: 12 },
+                ]}
+              >
+                Deep Space currently defaults to Glass. Pick a style here to
+                keep it across all themes.
               </Text>
             ) : null}
 
@@ -1795,14 +2308,18 @@ const ProfileScreen: React.FC = () => {
                     style={[
                       styles.themeOption,
                       {
-                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        borderColor: selected
+                          ? colors.accent
+                          : colors.cardBorder,
                         backgroundColor: colors.bg,
                       },
                     ]}
                     onPress={() => handleSurfaceStyleSelect(preset.id)}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                      <Text
+                        style={[styles.themeOptionText, { color: colors.text }]}
+                      >
                         {preset.name}
                       </Text>
                       <Text
@@ -1816,8 +2333,20 @@ const ProfileScreen: React.FC = () => {
                     </View>
 
                     {selected && (
-                      <View style={[styles.checkMark, { backgroundColor: colors.accent }]}>
-                        <Text style={[styles.checkMarkText, { color: colors.white }]}>✓</Text>
+                      <View
+                        style={[
+                          styles.checkMark,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.checkMarkText,
+                            { color: colors.white },
+                          ]}
+                        >
+                          ✓
+                        </Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -1829,7 +2358,9 @@ const ProfileScreen: React.FC = () => {
               style={[styles.closeBtn, { backgroundColor: colors.accent }]}
               onPress={() => setShowSurfaceStyleModal(false)}
             >
-              <Text style={[styles.closeBtnText, { color: colors.white }]}>Done</Text>
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>
+                Done
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1862,7 +2393,9 @@ const ProfileScreen: React.FC = () => {
                     style={[
                       styles.themeOption,
                       {
-                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        borderColor: selected
+                          ? colors.accent
+                          : colors.cardBorder,
                         backgroundColor: colors.bg,
                       },
                     ]}
@@ -1870,10 +2403,7 @@ const ProfileScreen: React.FC = () => {
                   >
                     <View style={{ flex: 1 }}>
                       <Text
-                        style={[
-                          styles.themeOptionText,
-                          { color: colors.text },
-                        ]}
+                        style={[styles.themeOptionText, { color: colors.text }]}
                       >
                         {preset.name}
                       </Text>
@@ -1894,7 +2424,12 @@ const ProfileScreen: React.FC = () => {
                           { backgroundColor: colors.accent },
                         ]}
                       >
-                        <Text style={[styles.checkMarkText, { color: colors.white }]}>
+                        <Text
+                          style={[
+                            styles.checkMarkText,
+                            { color: colors.white },
+                          ]}
+                        >
                           ✓
                         </Text>
                       </View>
@@ -1943,7 +2478,9 @@ const ProfileScreen: React.FC = () => {
                     style={[
                       styles.themeOption,
                       {
-                        borderColor: selected ? colors.accent : colors.cardBorder,
+                        borderColor: selected
+                          ? colors.accent
+                          : colors.cardBorder,
                         backgroundColor: colors.bg,
                       },
                     ]}
@@ -1982,7 +2519,12 @@ const ProfileScreen: React.FC = () => {
                           { backgroundColor: colors.accent },
                         ]}
                       >
-                        <Text style={[styles.checkMarkText, { color: colors.white }]}>
+                        <Text
+                          style={[
+                            styles.checkMarkText,
+                            { color: colors.white },
+                          ]}
+                        >
                           ✓
                         </Text>
                       </View>
@@ -2017,7 +2559,9 @@ const ProfileScreen: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Currency & Locale</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Currency & Locale
+            </Text>
 
             <ScrollView style={styles.themeList}>
               {currencyOptions.map((option) => {
@@ -2028,8 +2572,12 @@ const ProfileScreen: React.FC = () => {
                     style={[
                       styles.themeOption,
                       {
-                        borderColor: isSelected ? colors.accent : colors.cardBorder,
-                        backgroundColor: isSelected ? `${colors.accent}10` : "transparent",
+                        borderColor: isSelected
+                          ? colors.accent
+                          : colors.cardBorder,
+                        backgroundColor: isSelected
+                          ? `${colors.accent}10`
+                          : "transparent",
                       },
                     ]}
                     onPress={() =>
@@ -2037,10 +2585,17 @@ const ProfileScreen: React.FC = () => {
                     }
                   >
                     <View style={styles.currencyOptionTextWrap}>
-                      <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                      <Text
+                        style={[styles.themeOptionText, { color: colors.text }]}
+                      >
                         {option.label}
                       </Text>
-                      <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}> 
+                      <Text
+                        style={[
+                          styles.settingsRowSubtext,
+                          { color: colors.textDim },
+                        ]}
+                      >
                         {new Intl.NumberFormat(option.locale, {
                           style: "currency",
                           currency: option.currencyCode,
@@ -2049,8 +2604,20 @@ const ProfileScreen: React.FC = () => {
                     </View>
 
                     {isSelected && (
-                      <View style={[styles.checkMark, { backgroundColor: colors.accent }]}> 
-                        <Text style={[styles.checkMarkText, { color: colors.white }]}>✓</Text>
+                      <View
+                        style={[
+                          styles.checkMark,
+                          { backgroundColor: colors.accent },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.checkMarkText,
+                            { color: colors.white },
+                          ]}
+                        >
+                          ✓
+                        </Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -2062,7 +2629,9 @@ const ProfileScreen: React.FC = () => {
               style={[styles.closeBtn, { backgroundColor: colors.accent }]}
               onPress={() => setShowCurrencyModal(false)}
             >
-              <Text style={[styles.closeBtnText, { color: colors.white }]}>Done</Text>
+              <Text style={[styles.closeBtnText, { color: colors.white }]}>
+                Done
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2078,13 +2647,24 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.cardBorder,
+                maxHeight: "80%",
+              },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>Release Notes</Text>
-            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>Browse current and past versions.</Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Release Notes
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              Browse current and past versions.
+            </Text>
 
-            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={styles.faqList}
+              showsVerticalScrollIndicator={false}
+            >
               {RELEASE_NOTES.map((release) => {
                 const isExpanded = expandedReleaseNote === release.version;
                 return (
@@ -2092,23 +2672,45 @@ const ProfileScreen: React.FC = () => {
                     key={release.version}
                     style={[
                       styles.faqItem,
-                      { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                      {
+                        backgroundColor: colors.bg,
+                        borderColor: colors.cardBorder,
+                      },
                     ]}
                     onPress={() => toggleReleaseNote(release.version)}
                   >
                     <View style={styles.faqHeader}>
-                      <Text style={[styles.faqQuestion, { color: colors.text }]}>
+                      <Text
+                        style={[styles.faqQuestion, { color: colors.text }]}
+                      >
                         v{release.version} - {release.title}
                       </Text>
-                      <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                      <Text
+                        style={[styles.faqArrow, { color: colors.textMuted }]}
+                      >
                         {isExpanded ? "v" : ">"}
                       </Text>
                     </View>
                     {isExpanded ? (
                       <>
-                        <Text style={[styles.faqAnswer, { color: colors.textMuted }]}>Released {release.releasedAt}</Text>
+                        <Text
+                          style={[
+                            styles.faqAnswer,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          Released {release.releasedAt}
+                        </Text>
                         {release.highlights.map((item) => (
-                          <Text key={`${release.version}-${item}`} style={[styles.faqAnswer, { color: colors.textDim }]}>- {item}</Text>
+                          <Text
+                            key={`${release.version}-${item}`}
+                            style={[
+                              styles.faqAnswer,
+                              { color: colors.textDim },
+                            ]}
+                          >
+                            - {item}
+                          </Text>
                         ))}
                       </>
                     ) : null}
@@ -2121,7 +2723,9 @@ const ProfileScreen: React.FC = () => {
               style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
               onPress={() => setShowReleaseNotesModal(false)}
             >
-              <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
+              <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                Done
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2138,15 +2742,24 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "85%" },
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.cardBorder,
+                maxHeight: "85%",
+              },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>How to use BudgetArk</Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              How to use BudgetArk
+            </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
               Tap a tab to see how it works.
             </Text>
 
-            <ScrollView contentContainerStyle={styles.faqList} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={styles.faqList}
+              showsVerticalScrollIndicator={false}
+            >
               {COACHMARK_TAB_IDS.map((tabId) => {
                 const tour = COACHMARKS[tabId];
                 const isExpanded = expandedHowTo === tabId;
@@ -2155,7 +2768,10 @@ const ProfileScreen: React.FC = () => {
                     key={tabId}
                     style={[
                       styles.faqItem,
-                      { backgroundColor: colors.bg, borderColor: colors.cardBorder },
+                      {
+                        backgroundColor: colors.bg,
+                        borderColor: colors.cardBorder,
+                      },
                     ]}
                     onPress={() => {
                       triggerHaptic("selection");
@@ -2163,18 +2779,39 @@ const ProfileScreen: React.FC = () => {
                     }}
                   >
                     <View style={styles.faqHeader}>
-                      <Text style={[styles.faqQuestion, { color: colors.text }]}>{tour.intro}</Text>
-                      <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
+                      <Text
+                        style={[styles.faqQuestion, { color: colors.text }]}
+                      >
+                        {tour.intro}
+                      </Text>
+                      <Text
+                        style={[styles.faqArrow, { color: colors.textMuted }]}
+                      >
                         {isExpanded ? "v" : ">"}
                       </Text>
                     </View>
                     {isExpanded
                       ? tour.steps.map((step, idx) => (
-                          <View key={step.id} style={{ marginTop: idx === 0 ? 8 : 6 }}>
-                            <Text style={[styles.faqAnswer, { color: colors.text, fontWeight: "700" }]}>
+                          <View
+                            key={step.id}
+                            style={{ marginTop: idx === 0 ? 8 : 6 }}
+                          >
+                            <Text
+                              style={[
+                                styles.faqAnswer,
+                                { color: colors.text, fontWeight: "700" },
+                              ]}
+                            >
                               {idx + 1}. {step.title}
                             </Text>
-                            <Text style={[styles.faqAnswer, { color: colors.textDim }]}>{step.body}</Text>
+                            <Text
+                              style={[
+                                styles.faqAnswer,
+                                { color: colors.textDim },
+                              ]}
+                            >
+                              {step.body}
+                            </Text>
                           </View>
                         ))
                       : null}
@@ -2183,9 +2820,23 @@ const ProfileScreen: React.FC = () => {
               })}
             </ScrollView>
 
-            <View style={{ flexDirection: "row", gap: tokens.gapSm, marginTop: tokens.gapSm }}>
+            <View
+              style={{
+                flexDirection: "row",
+                gap: tokens.gapSm,
+                marginTop: tokens.gapSm,
+              }}
+            >
               <TouchableOpacity
-                style={[styles.dialogBtn, { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder, flex: 1 }]}
+                style={[
+                  styles.dialogBtn,
+                  {
+                    backgroundColor: colors.bg,
+                    borderWidth: 1,
+                    borderColor: colors.cardBorder,
+                    flex: 1,
+                  },
+                ]}
                 onPress={() => {
                   triggerHaptic("selection");
                   setShowHowToModal(false);
@@ -2195,18 +2846,30 @@ const ProfileScreen: React.FC = () => {
                   // Modal and queues/hides one of them.
                   setTimeout(() => {
                     void replayCoachmarks().then(() => {
-                      startGuidedTour(["DebtTracker", "Budget", "Bridge", "Utilities"]);
+                      startGuidedTour([
+                        "DebtTracker",
+                        "Budget",
+                        "Bridge",
+                        "Utilities",
+                      ]);
                     });
                   }, 350);
                 }}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.text }]}>Replay tour</Text>
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Replay tour
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.dialogBtn, { backgroundColor: colors.accent, flex: 1 }]}
+                style={[
+                  styles.dialogBtn,
+                  { backgroundColor: colors.accent, flex: 1 },
+                ]}
                 onPress={() => setShowHowToModal(false)}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>Done</Text>
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Done
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2308,14 +2971,22 @@ const ProfileScreen: React.FC = () => {
                   borderRadius: 4,
                   borderWidth: 2,
                   borderColor: exportEncrypt ? colors.accent : colors.textMuted,
-                  backgroundColor: exportEncrypt ? colors.accent : "transparent",
+                  backgroundColor: exportEncrypt
+                    ? colors.accent
+                    : "transparent",
                   alignItems: "center",
                   justifyContent: "center",
                   marginRight: 10,
                 }}
               >
                 {exportEncrypt ? (
-                  <Text style={{ color: colors.white, fontSize: 14, fontWeight: "700" }}>
+                  <Text
+                    style={{
+                      color: colors.white,
+                      fontSize: 14,
+                      fontWeight: "700",
+                    }}
+                  >
                     ✓
                   </Text>
                 ) : null}
@@ -2396,7 +3067,8 @@ const ProfileScreen: React.FC = () => {
               Encrypted Export
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              This export was encrypted with a password. Enter the password to decrypt it.
+              This export was encrypted with a password. Enter the password to
+              decrypt it.
             </Text>
             <TextInput
               style={[
@@ -2752,8 +3424,12 @@ const ProfileScreen: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Paste Export Data</Text>
-            <Text style={[styles.pasteHint, { color: colors.textDim }]}>Paste the JSON text you copied from Export My Data.</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Paste Export Data
+            </Text>
+            <Text style={[styles.pasteHint, { color: colors.textDim }]}>
+              Paste the JSON text you copied from Export My Data.
+            </Text>
 
             <TextInput
               style={[
@@ -2779,13 +3455,17 @@ const ProfileScreen: React.FC = () => {
                 style={[styles.pasteBtn, { backgroundColor: colors.success }]}
                 onPress={() => handlePasteImport("merge")}
               >
-                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>Merge</Text>
+                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
+                  Merge
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.pasteBtn, { backgroundColor: colors.danger }]}
                 onPress={() => handlePasteImport("replace")}
               >
-                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>Replace</Text>
+                <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
+                  Replace
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -2796,7 +3476,9 @@ const ProfileScreen: React.FC = () => {
                 setPasteText("");
               }}
             >
-              <Text style={[styles.closeBtnText, { color: colors.text }]}>Cancel</Text>
+              <Text style={[styles.closeBtnText, { color: colors.text }]}>
+                Cancel
+              </Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -2813,22 +3495,39 @@ const ProfileScreen: React.FC = () => {
           <View
             style={[
               styles.dialogBox,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder, maxHeight: "80%" },
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.cardBorder,
+                maxHeight: "80%",
+              },
             ]}
           >
             {(() => {
               const matchedRelease =
                 findReleaseNoteForVersion(pendingUpdate?.appVersion) ||
                 findReleaseNoteForVersion(pendingUpdate?.message);
-              const updateVersion = matchedRelease?.version ?? pendingUpdate?.appVersion;
+              const updateVersion =
+                matchedRelease?.version ?? pendingUpdate?.appVersion;
 
               return (
                 <>
-                  <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
+                  <Text style={[styles.dialogTitle, { color: colors.text }]}>
+                    Update Ready
+                  </Text>
 
                   {updateVersion ? (
-                    <View style={[styles.updateVersionBadge, { backgroundColor: `${colors.accent}20` }]}>
-                      <Text style={[styles.updateVersionText, { color: colors.accent }]}>
+                    <View
+                      style={[
+                        styles.updateVersionBadge,
+                        { backgroundColor: `${colors.accent}20` },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.updateVersionText,
+                          { color: colors.accent },
+                        ]}
+                      >
                         v{updateVersion}
                       </Text>
                     </View>
@@ -2836,25 +3535,44 @@ const ProfileScreen: React.FC = () => {
 
                   {matchedRelease ? (
                     <>
-                      <Text style={[styles.updateReleaseTitle, { color: colors.text }]}>
+                      <Text
+                        style={[
+                          styles.updateReleaseTitle,
+                          { color: colors.text },
+                        ]}
+                      >
                         {matchedRelease.title}
                       </Text>
-                      <ScrollView style={styles.updateHighlightsList} showsVerticalScrollIndicator={false}>
+                      <ScrollView
+                        style={styles.updateHighlightsList}
+                        showsVerticalScrollIndicator={false}
+                      >
                         {matchedRelease.highlights.map((item) => (
-                          <Text key={item} style={[styles.updateHighlight, { color: colors.textDim }]}>
+                          <Text
+                            key={item}
+                            style={[
+                              styles.updateHighlight,
+                              { color: colors.textDim },
+                            ]}
+                          >
                             {"\u2022"} {item}
                           </Text>
                         ))}
                       </ScrollView>
                     </>
                   ) : (
-                    <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                      {pendingUpdate?.message || "A new update is ready to install."}
+                    <Text
+                      style={[styles.dialogMessage, { color: colors.textDim }]}
+                    >
+                      {pendingUpdate?.message ||
+                        "A new update is ready to install."}
                     </Text>
                   )}
 
                   {pendingUpdate?.createdAt ? (
-                    <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
+                    <Text
+                      style={[styles.updateMeta, { color: colors.textMuted }]}
+                    >
                       Published {formatDateTime(pendingUpdate.createdAt)}
                     </Text>
                   ) : null}
@@ -2864,13 +3582,24 @@ const ProfileScreen: React.FC = () => {
                       style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
                       onPress={() => setPendingUpdate(null)}
                     >
-                      <Text style={[styles.dialogBtnText, { color: colors.text }]}>Later</Text>
+                      <Text
+                        style={[styles.dialogBtnText, { color: colors.text }]}
+                      >
+                        Later
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                      style={[
+                        styles.dialogBtn,
+                        { backgroundColor: colors.accent },
+                      ]}
                       onPress={installPendingUpdate}
                     >
-                      <Text style={[styles.dialogBtnText, { color: colors.white }]}>Install Now</Text>
+                      <Text
+                        style={[styles.dialogBtnText, { color: colors.white }]}
+                      >
+                        Install Now
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -2949,8 +3678,8 @@ const ProfileScreen: React.FC = () => {
               Unpair Device
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              This will disconnect partner sync. Your data stays on this device, but
-              you'll need to pair again to sync.
+              This will disconnect partner sync. Your data stays on this device,
+              but you'll need to pair again to sync.
             </Text>
             <View style={styles.dialogActions}>
               <TouchableOpacity
@@ -2992,479 +3721,500 @@ const ProfileScreen: React.FC = () => {
 const makeStyles = (tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: tokens.pad,
-  },
-  titleSection: {
-    paddingTop: 56,
-    paddingBottom: tokens.gap,
-    alignItems: "center",
-  },
-  appLabel: {
-    fontSize: scale(12),
-    letterSpacing: 2,
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  screenTitle: {
-    fontSize: scale(28),
-    fontWeight: "700",
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  screenSubtitle: {
-    fontSize: scale(14),
-    textAlign: "center",
-  },
+    screen: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: tokens.pad,
+    },
+    titleSection: {
+      paddingTop: 56,
+      paddingBottom: tokens.gap,
+      alignItems: "center",
+    },
+    appLabel: {
+      fontSize: scale(12),
+      letterSpacing: 2,
+      marginBottom: 4,
+      textAlign: "center",
+    },
+    screenTitle: {
+      fontSize: scale(28),
+      fontWeight: "700",
+      marginBottom: 4,
+      textAlign: "center",
+    },
+    screenSubtitle: {
+      fontSize: scale(14),
+      textAlign: "center",
+    },
 
-  /* Backup reminder banner */
-  backupBanner: {
-    marginTop: 56,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 16,
-    gap: 8,
-  },
-  backupBannerTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  backupBannerBody: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  backupBannerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-    gap: 12,
-  },
-  backupBannerPrimary: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  backupBannerPrimaryText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  backupBannerSecondary: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  backupBannerSecondaryText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
+    missionCard: {
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 16,
+      marginBottom: tokens.gap,
+      gap: 8,
+    },
+    missionEyebrow: {
+      fontSize: scale(11),
+      fontWeight: "700",
+      letterSpacing: 1.5,
+    },
+    missionTitle: {
+      fontSize: scale(17),
+      fontWeight: "700",
+    },
+    missionBody: {
+      fontSize: scale(14),
+      lineHeight: scale(21),
+    },
 
-  /* Profile Card */
-  profileCard: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 4,
-  },
-  profileRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  displayName: {
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  editHint: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  editRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  nameInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    minWidth: 160,
-    textAlign: "center",
-  },
-  saveBtn: {
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  saveBtnText: {
-    fontWeight: "700",
-    fontSize: 14,
-  },
+    /* Backup reminder banner */
+    backupBanner: {
+      marginTop: 56,
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 16,
+      gap: 8,
+    },
+    backupBannerTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    backupBannerBody: {
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    backupBannerActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 8,
+      gap: 12,
+    },
+    backupBannerPrimary: {
+      flex: 1,
+      borderRadius: 10,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    backupBannerPrimaryText: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    backupBannerSecondary: {
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    backupBannerSecondaryText: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
 
-  /* Settings */
-  settingsSection: {
-    marginTop: 24,
-  },
-  settingsSectionTitle: {
-    fontSize: 11,
-    letterSpacing: 1.5,
-    marginBottom: 10,
-  },
-  settingsRow: {
-    borderWidth: 1,
-    borderRadius: tokens.radiusSm,
-    paddingHorizontal: tokens.pad,
-    paddingVertical: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-    minHeight: tokens.rowHeight,
-  },
-  settingsRowText: {
-    fontSize: scale(15),
-    fontWeight: "500",
-  },
-  settingsRowSubtext: {
-    fontSize: scale(13),
-    marginTop: 2,
-  },
-  settingsRowArrow: {
-    fontSize: 16,
-  },
-  dangerRow: {
-    borderColor: "#ff525220",
-  },
+    /* Profile Card */
+    profileCard: {
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 16,
+      marginTop: 4,
+    },
+    profileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+    profileInfo: {
+      flex: 1,
+    },
+    avatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    avatarText: {
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    displayName: {
+      fontSize: 17,
+      fontWeight: "700",
+    },
+    editHint: {
+      fontSize: 11,
+      marginTop: 2,
+    },
+    editRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    nameInput: {
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      fontSize: 16,
+      minWidth: 160,
+      textAlign: "center",
+    },
+    saveBtn: {
+      borderRadius: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    saveBtnText: {
+      fontWeight: "700",
+      fontSize: 14,
+    },
 
-  /* Grouped Card */
-  groupedCard: {
-    borderWidth: 1,
-    borderRadius: tokens.radius - 2,
-    overflow: "hidden",
-  },
-  groupedRow: {
-    paddingHorizontal: tokens.pad,
-    paddingVertical: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    minHeight: tokens.rowHeight,
-  },
-  groupedDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 16,
-  },
+    /* Settings */
+    settingsSection: {
+      marginTop: 24,
+    },
+    settingsSectionTitle: {
+      fontSize: 11,
+      letterSpacing: 1.5,
+      marginBottom: 10,
+    },
+    settingsRow: {
+      borderWidth: 1,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.pad,
+      paddingVertical: 14,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+      minHeight: tokens.rowHeight,
+    },
+    settingsRowText: {
+      fontSize: scale(15),
+      fontWeight: "500",
+    },
+    settingsRowSubtext: {
+      fontSize: scale(13),
+      marginTop: 2,
+    },
+    settingsRowArrow: {
+      fontSize: 16,
+    },
+    dangerRow: {
+      borderColor: "#ff525220",
+    },
 
-  /* How To Docs */
-  faqList: {
-    gap: 8,
-    marginBottom: 14,
-  },
-  faqItem: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  faqHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  faqQuestion: {
-    fontSize: 14,
-    fontWeight: "600",
-    flex: 1,
-  },
-  faqArrow: {
-    fontSize: 16,
-  },
-  faqAnswer: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-  },
+    /* Grouped Card */
+    groupedCard: {
+      borderWidth: 1,
+      borderRadius: tokens.radius - 2,
+      overflow: "hidden",
+    },
+    groupedRow: {
+      paddingHorizontal: tokens.pad,
+      paddingVertical: 14,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      minHeight: tokens.rowHeight,
+    },
+    groupedDivider: {
+      height: StyleSheet.hairlineWidth,
+      marginHorizontal: 16,
+    },
 
-  /* What's New */
-  newsCard: {
-    borderWidth: 1,
-    borderRadius: tokens.radius,
-    overflow: "hidden",
-  },
-  newsItem: {
-    padding: tokens.pad,
-  },
-  newsBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginBottom: 8,
-  },
-  newsBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  newsTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  newsBody: {
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  newsDivider: {
-    height: 1,
-    marginHorizontal: 16,
-  },
-  newsHistoryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  newsHistoryBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
+    /* How To Docs */
+    faqList: {
+      gap: 8,
+      marginBottom: 14,
+    },
+    faqItem: {
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    faqHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    faqQuestion: {
+      fontSize: 14,
+      fontWeight: "600",
+      flex: 1,
+    },
+    faqArrow: {
+      fontSize: 16,
+    },
+    faqAnswer: {
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 8,
+    },
 
-  /* App Info */
-  appInfo: {
-    alignItems: "center",
-    marginTop: 32,
-    gap: 4,
-  },
-  appInfoText: {
-    fontSize: 12,
-  },
+    /* What's New */
+    newsCard: {
+      borderWidth: 1,
+      borderRadius: tokens.radius,
+      overflow: "hidden",
+    },
+    newsItem: {
+      padding: tokens.pad,
+    },
+    newsBadge: {
+      alignSelf: "flex-start",
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      marginBottom: 8,
+    },
+    newsBadgeText: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+    },
+    newsTitle: {
+      fontSize: 15,
+      fontWeight: "600",
+      marginBottom: 6,
+    },
+    newsBody: {
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    newsDivider: {
+      height: 1,
+      marginHorizontal: 16,
+    },
+    newsHistoryBtn: {
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    newsHistoryBtnText: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
 
-  /* Theme Modal */
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    borderTopLeftRadius: tokens.radius + 8,
-    borderTopRightRadius: tokens.radius + 8,
-    borderWidth: 1,
-    paddingTop: tokens.padLg,
-    paddingBottom: 40,
-    paddingHorizontal: tokens.padLg,
-    maxHeight: "70%",
-  },
-  modalTitle: {
-    fontSize: scale(22),
-    fontWeight: "700",
-    marginBottom: tokens.gap,
-    textAlign: "center",
-  },
-  themeList: {
-    marginBottom: 20,
-  },
-  themeOption: {
-    borderWidth: 2,
-    borderRadius: tokens.radiusSm,
-    padding: tokens.pad,
-    marginBottom: tokens.gapSm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  themeColorRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  themeSwatch: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-  },
-  themeOptionText: {
-    fontSize: scale(16),
-    fontWeight: "600",
-    flex: 1,
-  },
-  currencyOptionTextWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  checkMark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkMarkText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  closeBtn: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  closeBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
+    /* App Info */
+    appInfo: {
+      alignItems: "center",
+      marginTop: 32,
+      gap: 4,
+    },
+    appInfoText: {
+      fontSize: 12,
+    },
 
-  /* Paste Import Modal */
-  pasteModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.92)",
-    justifyContent: "flex-start",
-  },
-  pasteModalContent: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 0,
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 16,
-  },
-  pasteHint: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "left",
-    marginBottom: 16,
-  },
-  pasteInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 13,
-    fontFamily: "monospace",
-    marginBottom: 16,
-  },
-  pasteActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 10,
-  },
-  pasteBtn: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  pasteBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
+    /* Theme Modal */
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      justifyContent: "flex-end",
+    },
+    modalContent: {
+      borderTopLeftRadius: tokens.radius + 8,
+      borderTopRightRadius: tokens.radius + 8,
+      borderWidth: 1,
+      paddingTop: tokens.padLg,
+      paddingBottom: 40,
+      paddingHorizontal: tokens.padLg,
+      maxHeight: "70%",
+    },
+    modalTitle: {
+      fontSize: scale(22),
+      fontWeight: "700",
+      marginBottom: tokens.gap,
+      textAlign: "center",
+    },
+    themeList: {
+      marginBottom: 20,
+    },
+    themeOption: {
+      borderWidth: 2,
+      borderRadius: tokens.radiusSm,
+      padding: tokens.pad,
+      marginBottom: tokens.gapSm,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    themeColorRow: {
+      flexDirection: "row",
+      gap: 6,
+    },
+    themeSwatch: {
+      width: 28,
+      height: 28,
+      borderRadius: 6,
+    },
+    themeOptionText: {
+      fontSize: scale(16),
+      fontWeight: "600",
+      flex: 1,
+    },
+    currencyOptionTextWrap: {
+      flex: 1,
+      gap: 4,
+    },
+    checkMark: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    checkMarkText: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    closeBtn: {
+      borderRadius: 12,
+      paddingVertical: 16,
+      alignItems: "center",
+    },
+    closeBtnText: {
+      fontSize: 16,
+      fontWeight: "700",
+    },
 
-  /* Themed Dialog (replaces Alert.alert) */
-  dialogOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 28,
-  },
-  dialogBox: {
-    width: "100%",
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 24,
-  },
-  dialogTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  dialogMessage: {
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  dialogTip: {
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-    marginTop: -10,
-    marginBottom: 14,
-    fontStyle: "italic",
-  },
-  dialogLinkRow: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  dialogLinkText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  /* Update modal */
-  updateVersionBadge: {
-    alignSelf: "center",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    marginBottom: 12,
-  },
-  updateVersionText: {
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  updateReleaseTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  updateHighlightsList: {
-    maxHeight: 240,
-    marginBottom: 12,
-  },
-  updateHighlight: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 6,
-  },
-  updateMeta: {
-    fontSize: 11,
-    textAlign: "center",
-    marginBottom: 16,
-  },
+    /* Paste Import Modal */
+    pasteModalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.92)",
+      justifyContent: "flex-start",
+    },
+    pasteModalContent: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 0,
+      paddingHorizontal: 20,
+      paddingTop: 56,
+      paddingBottom: 16,
+    },
+    pasteHint: {
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign: "left",
+      marginBottom: 16,
+    },
+    pasteInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 14,
+      fontSize: 13,
+      fontFamily: "monospace",
+      marginBottom: 16,
+    },
+    pasteActions: {
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 10,
+    },
+    pasteBtn: {
+      flex: 1,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    pasteBtnText: {
+      fontSize: 15,
+      fontWeight: "700",
+    },
 
-  dialogActions: {
-    gap: 10,
-  },
-  dialogBtn: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  dialogBtnText: {
-    fontSize: scale(15),
-    fontWeight: "700",
-  },
+    /* Themed Dialog (replaces Alert.alert) */
+    dialogOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 28,
+    },
+    dialogBox: {
+      width: "100%",
+      borderWidth: 1,
+      borderRadius: 20,
+      padding: 24,
+    },
+    dialogTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      marginBottom: 10,
+      textAlign: "center",
+    },
+    dialogMessage: {
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: "center",
+      marginBottom: 20,
+    },
+    dialogTip: {
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign: "center",
+      marginTop: -10,
+      marginBottom: 14,
+      fontStyle: "italic",
+    },
+    dialogLinkRow: {
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    dialogLinkText: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    /* Update modal */
+    updateVersionBadge: {
+      alignSelf: "center",
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      marginBottom: 12,
+    },
+    updateVersionText: {
+      fontSize: 14,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+    },
+    updateReleaseTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      textAlign: "center",
+      marginBottom: 12,
+    },
+    updateHighlightsList: {
+      maxHeight: 240,
+      marginBottom: 12,
+    },
+    updateHighlight: {
+      fontSize: 13,
+      lineHeight: 19,
+      marginBottom: 6,
+    },
+    updateMeta: {
+      fontSize: 11,
+      textAlign: "center",
+      marginBottom: 16,
+    },
+
+    dialogActions: {
+      gap: 10,
+    },
+    dialogBtn: {
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    dialogBtnText: {
+      fontSize: scale(15),
+      fontWeight: "700",
+    },
   });
 };
 
