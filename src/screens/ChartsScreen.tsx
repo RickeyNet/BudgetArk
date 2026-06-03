@@ -59,6 +59,7 @@ import { LESSON_TOPICS } from "../types";
 import { isEntryActiveInMonth } from "../utils/recurrence";
 import SmoothSlider from "../components/SmoothSlider";
 import { CHAPTERS } from "../data/lessonChapters";
+import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
 import {
   getChapterProgress,
   getOverallProgress,
@@ -1272,6 +1273,7 @@ const ChartsScreen: React.FC = () => {
               ]}
             />
           </View>
+          <Text style={styles.courseDisclaimer}>{LEARNING_DISCLAIMER}</Text>
 
           {resumeStub && resumeChapter && (
             <TouchableOpacity
@@ -2234,7 +2236,7 @@ const ChartsScreen: React.FC = () => {
                 {/* Educational note */}
                 <View style={styles.insightCard}>
                   <Text style={styles.insightText}>
-                    Financial experts recommend saving 3-6 months of living expenses. This covers job loss, medical emergencies, or unexpected repairs without going into debt.
+                    A common target is 3-6 months of living expenses in cash. That can cover job loss, medical emergencies, or unexpected repairs without new debt. Your situation may differ.
                   </Text>
                 </View>
               </>
@@ -3005,6 +3007,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       backgroundColor: colors.accent,
       borderRadius: 999,
       minWidth: 2,
+    },
+    courseDisclaimer: {
+      fontSize: scale(10),
+      lineHeight: scale(14),
+      color: colors.textMuted,
+      marginTop: 8,
     },
     resumeStrip: {
       flexDirection: "row",

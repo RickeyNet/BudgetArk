@@ -1,4 +1,4 @@
-# BudgetArk — Development Setup Guide
+# BudgetArk - Development Setup Guide
 
 Guide for **contributing to the existing repo**, not bootstrapping a new Expo app from scratch.
 
@@ -70,7 +70,7 @@ git --version
 
 ### Editor (recommended: VS Code)
 
-**https://code.visualstudio.com** — useful extensions:
+**https://code.visualstudio.com** - useful extensions:
 
 - ES7+ React/Redux/React-Native snippets
 - React Native Tools
@@ -99,7 +99,7 @@ cd BudgetBuddy   # repo folder name on disk
 npm install
 ```
 
-Do **not** run `create-expo-app` or hand-install the dependency list from an old tutorial — everything is already in `package.json`.
+Do **not** run `create-expo-app` or hand-install the dependency list from an old tutorial - everything is already in `package.json`.
 
 Optional sanity check (no npm script today):
 
@@ -111,7 +111,7 @@ npx tsc --noEmit
 
 ## Development builds (required)
 
-A **development build** is a custom Expo dev client that includes this app’s native code — for example:
+A **development build** is a custom Expo dev client that includes this app’s native code - for example:
 
 - Local partner sync (`react-native-tcp-socket`, Zeroconf)
 - Custom native plugin (`plugins/withScreenGuard.js`)
@@ -119,7 +119,7 @@ A **development build** is a custom Expo dev client that includes this app’s n
 
 Build once (or when native deps/plugins change), then connect to Metro with `npx expo start --dev-client`.
 
-### Option A — EAS cloud build (typical)
+### Option A - EAS cloud build (typical)
 
 Requires Expo login and project access (`app.json` already points at the EAS project).
 
@@ -140,7 +140,7 @@ Install the artifact from the URL EAS prints (APK on Android; link or Simulator 
 
 `eas.json` is already configured with `development`, `development-simulator`, `preview`, and `production` profiles.
 
-### Option B — Local native run (Android)
+### Option B - Local native run (Android)
 
 With [Android Studio](https://developer.android.com/studio) and the SDK installed on the **same machine** as your terminal:
 
@@ -159,7 +159,7 @@ Rebuild the dev client (EAS or `expo run:*`) when you:
 - Change `app.json` plugins, permissions, or native identifiers
 - Edit files under `plugins/`
 
-Pure TypeScript/React changes in `src/` only need Metro reload — no native rebuild.
+Pure TypeScript/React changes in `src/` only need Metro reload - no native rebuild.
 
 ---
 
@@ -191,11 +191,11 @@ Edit files under `src/` or `App.tsx`; the dev client hot-reloads. If behavior lo
 
 There is no automated test suite in CI yet. Manually exercise the area you touched on a **dev build**:
 
-- **Debts** — payoff, payments, goal dates
-- **Budget** — entries, recurring/linked accounts, 50/30/20 card
-- **Bridge** — net worth, asset accounts, emergency fund
-- **Charts** — lessons, calculators
-- **Profile** — export/import, settings, sync pairing (two devices on same LAN if you touch `src/sync/`)
+- **Debts** - payoff, payments, goal dates
+- **Budget** - entries, recurring/linked accounts, 50/30/20 card
+- **Bridge** - net worth, asset accounts, emergency fund
+- **Charts** - lessons, calculators
+- **Profile** - export/import, settings, sync pairing (two devices on same LAN if you touch `src/sync/`)
 
 File bugs or features via GitHub **Issues** (templates under `.github/ISSUE_TEMPLATE/`).
 
@@ -212,12 +212,12 @@ File bugs or features via GitHub **Issues** (templates under `.github/ISSUE_TEMP
 
 ### Code conventions
 
-- **Shared types** live in `src/types/index.ts` — add new domain types there.
+- **Shared types** live in `src/types/index.ts` - add new domain types there.
 - **Persistence** follows `src/storage/*Storage.ts` + AsyncStorage; see `debtStorage.ts` / `budgetStorage.ts` for patterns.
 - **Pure math** belongs in `src/utils/calculations.ts` (and related utils), not in screen components.
-- **Themes** — use `useTheme()` and tokens from `src/theme/`; avoid hard-coded colors in new UI.
-- **Release notes** — user-facing bullets go in `src/data/releaseNotes.ts` (and often mirrored in `RELEASE_NOTES.md` for maintainers).
-- **Spreadsheet import/export** — schema is documented in [`docs/SPREADSHEET_SCHEMA.md`](docs/SPREADSHEET_SCHEMA.md).
+- **Themes** - use `useTheme()` and tokens from `src/theme/`; avoid hard-coded colors in new UI.
+- **Release notes** - user-facing bullets go in `src/data/releaseNotes.ts` (and often mirrored in `RELEASE_NOTES.md` for maintainers).
+- **Spreadsheet import/export** - schema is documented in [`docs/SPREADSHEET_SCHEMA.md`](docs/SPREADSHEET_SCHEMA.md).
 
 ### Do not commit
 
@@ -282,7 +282,7 @@ export ANDROID_HOME=/mnt/c/Users/<YourUser>/AppData/Local/Android/Sdk
 export PATH=$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools
 ```
 
-WSL needs **wrapper scripts** because the SDK ships Windows `.exe` files — see the [troubleshooting](#troubleshooting) table for `spawn adb EACCES`.
+WSL needs **wrapper scripts** because the SDK ships Windows `.exe` files - see the [troubleshooting](#troubleshooting) table for `spawn adb EACCES`.
 
 Start Metro with Android:
 
@@ -320,7 +320,7 @@ If Git inside WSL misbehaves during EAS:
 EAS_NO_VCS=1 eas build --profile development --platform android
 ```
 
-**Encryption prompt (iOS):** the app uses standard HTTPS/storage only — answer **Yes** (exempt) when asked; `ITSAppUsesNonExemptEncryption` is already `false` in `app.json`.
+**Encryption prompt (iOS):** the app uses standard HTTPS/storage only - answer **Yes** (exempt) when asked; `ITSAppUsesNonExemptEncryption` is already `false` in `app.json`.
 
 ---
 
@@ -402,7 +402,7 @@ Main tabs (see `src/navigation/AppNavigator.tsx`):
 | Module not found | `npm install`, then `npx expo start --dev-client --clear` |
 | Reanimated errors | `babel.config.js` must include `react-native-reanimated/plugin`; `App.tsx` already imports reanimated near the top |
 | “No development build installed” | Install a dev build (EAS or `npm run android`) |
-| Worklets / native module mismatch | Dev build is out of date — rebuild after `git pull` if native deps changed |
+| Worklets / native module mismatch | Dev build is out of date - rebuild after `git pull` if native deps changed |
 | Slow first bundle | Normal; later loads are cached |
 
 ### WSL

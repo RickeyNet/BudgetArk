@@ -2,7 +2,7 @@
  * iOS helpers for presenting UIActivityViewController safely from React Native.
  *
  * RN transparent <Modal> overlays and the ScreenGuard privacy layer both
- * interfere with expo-sharing on iOS — the share sheet may never appear, or
+ * interfere with expo-sharing on iOS - the share sheet may never appear, or
  * an orphaned dimming view can block touches until the app is force-quit.
  */
 

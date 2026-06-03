@@ -35,6 +35,7 @@ import type {
   LessonTopic,
 } from "../types";
 import { CHAPTERS } from "../data/lessonChapters";
+import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
 import {
   getLessonById,
   getNextLessonStub,
@@ -286,6 +287,8 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
 
           {stubHasBody && lesson ? (
             <>
+              <Text style={styles.disclaimer}>{LEARNING_DISCLAIMER}</Text>
+
               {lesson.summary ? (
                 <Text style={styles.summary}>{lesson.summary}</Text>
               ) : null}
@@ -520,6 +523,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     heroMeta: {
       fontSize: scale(12),
+      color: colors.textMuted,
+      textAlign: "center",
+    },
+    disclaimer: {
+      fontSize: scale(11),
+      lineHeight: scale(16),
       color: colors.textMuted,
       textAlign: "center",
     },

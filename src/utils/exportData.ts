@@ -59,7 +59,7 @@ const IV_BYTES = 16;
 /**
  * Builds the export message string (plain JSON or v2-encrypted envelope).
  * Split out from `exportAllData` so the UI can dismiss any "preparing"
- * spinner before opening the share sheet — on iOS, presenting
+ * spinner before opening the share sheet - on iOS, presenting
  * UIActivityViewController over a still-visible RN <Modal> leaves the
  * share sheet's completion callback un-fired, so `Share.share` never
  * resolves and the spinner spins forever.

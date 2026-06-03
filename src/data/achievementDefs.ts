@@ -482,6 +482,33 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     },
   },
   {
+    id: "hull_hand",
+    glyph: "⚒️",
+    tier: "silver",
+    title: "Hull Hand",
+    description: "Finished Chapter 2: Patching the Hull.",
+    hint: "Complete every lesson in Chapter 2.",
+    check: (ctx) => {
+      const ch2 = CHAPTERS.find((c) => c.id === "ch2");
+      if (!ch2) return false;
+      const authored = ch2.lessons.filter((stub) => hasLessonBody(stub.id));
+      if (authored.length === 0) return false;
+      return authored.every(
+        (stub) => !!ctx.learningProgress.completedLessons[stub.id],
+      );
+    },
+    progress: (ctx) => {
+      const ch2 = CHAPTERS.find((c) => c.id === "ch2");
+      if (!ch2) return null;
+      const authored = ch2.lessons.filter((stub) => hasLessonBody(stub.id));
+      if (authored.length === 0) return null;
+      const done = authored.filter(
+        (stub) => !!ctx.learningProgress.completedLessons[stub.id],
+      ).length;
+      return { current: done, target: authored.length };
+    },
+  },
+  {
     id: "anchored_in_knowledge",
     glyph: "⚓",
     tier: "gold",

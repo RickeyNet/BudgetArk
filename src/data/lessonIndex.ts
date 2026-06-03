@@ -38,6 +38,12 @@ import ch1l2 from "./lessons/ch1-l2-needs-wants-savings";
 import ch1l3 from "./lessons/ch1-l3-tracking-vs-budgeting";
 import ch1l4 from "./lessons/ch1-l4-zero-based";
 import ch1l5 from "./lessons/ch1-l5-monthly-review";
+import ch2l1 from "./lessons/ch2-l1-good-vs-bad-debt";
+import ch2l2 from "./lessons/ch2-l2-how-interest-works";
+import ch2l3 from "./lessons/ch2-l3-starter-emergency-fund";
+import ch2l4 from "./lessons/ch2-l4-snowball-vs-avalanche";
+import ch2l5 from "./lessons/ch2-l5-refinancing";
+import ch2l6 from "./lessons/ch2-l6-debt-snowflake";
 
 const LESSONS_BY_ID: Record<string, Lesson> = {
   [ch1l1.id]: ch1l1,
@@ -45,6 +51,12 @@ const LESSONS_BY_ID: Record<string, Lesson> = {
   [ch1l3.id]: ch1l3,
   [ch1l4.id]: ch1l4,
   [ch1l5.id]: ch1l5,
+  [ch2l1.id]: ch2l1,
+  [ch2l2.id]: ch2l2,
+  [ch2l3.id]: ch2l3,
+  [ch2l4.id]: ch2l4,
+  [ch2l5.id]: ch2l5,
+  [ch2l6.id]: ch2l6,
 };
 
 export const getLessonById = (lessonId: string): Lesson | undefined =>
