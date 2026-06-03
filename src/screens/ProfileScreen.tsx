@@ -197,6 +197,9 @@ const ProfileScreen: React.FC = () => {
   /** Whether the Ship's Log (achievements) screen is visible */
   const [showAchievements, setShowAchievements] = useState(false);
 
+  /** Whether the mission statement body is expanded */
+  const [missionExpanded, setMissionExpanded] = useState(false);
+
   const { customCategories, refresh: refreshCustomCategories } =
     useCustomCategories();
   /** Whether the manage-custom-categories modal is visible */
@@ -1193,7 +1196,14 @@ const ProfileScreen: React.FC = () => {
         </View>
 
         {/* ── Mission Statement ── */}
-        <View
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setMissionExpanded((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: missionExpanded }}
+          accessibilityLabel={`Mission statement, ${
+            missionExpanded ? "expanded" : "collapsed"
+          }`}
           style={[
             styles.missionCard,
             { backgroundColor: colors.card, borderColor: colors.cardBorder },
@@ -1205,10 +1215,15 @@ const ProfileScreen: React.FC = () => {
           <Text style={[styles.missionTitle, { color: colors.text }]}>
             {MISSION_STATEMENT.title}
           </Text>
-          <Text style={[styles.missionBody, { color: colors.textDim }]}>
-            {MISSION_STATEMENT.body}
+          {missionExpanded && (
+            <Text style={[styles.missionBody, { color: colors.textDim }]}>
+              {MISSION_STATEMENT.body}
+            </Text>
+          )}
+          <Text style={[styles.missionChevron, { color: colors.textMuted }]}>
+            {missionExpanded ? "▴" : "▾"}
           </Text>
-        </View>
+        </TouchableOpacity>
 
         {/* ── Profile Card ── */}
         <View
@@ -3760,14 +3775,22 @@ const makeStyles = (tokens: DensityTokens) => {
       fontSize: scale(11),
       fontWeight: "700",
       letterSpacing: 1.5,
+      textAlign: "center",
     },
     missionTitle: {
       fontSize: scale(17),
       fontWeight: "700",
+      textAlign: "center",
     },
     missionBody: {
       fontSize: scale(14),
       lineHeight: scale(21),
+      textAlign: "center",
+    },
+    missionChevron: {
+      fontSize: scale(14),
+      textAlign: "center",
+      marginTop: 2,
     },
 
     /* Backup reminder banner */
