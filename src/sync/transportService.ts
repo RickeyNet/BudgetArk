@@ -36,15 +36,31 @@ const pruneSeenNonces = (now: number): void => {
 
 /* ─── Encryption helpers (mirrors encryptedStorage pattern) ─── */
 
-const encryptPayload = (plaintext: string, key: string): { encrypted: string; hmac: string } => {
-  const encrypted = CryptoJS.AES.encrypt(plaintext, key).toString();
-  const hmac = CryptoJS.HmacSHA256(encrypted, key).toString(CryptoJS.enc.Hex);
-  return { encrypted, hmac };
-};
+/**
+ * Sync protocol version. v2 widened the HMAC to cover the full message
+ * envelope - v1 signed only the ciphertext, which let anyone on the LAN
+ * re-wrap a captured payload+hmac pair in a fresh envelope (new timestamp,
+ * new nonce, any message type) that passed every check, defeating replay
+ * protection. v1 frames are rejected outright: accepting them for
+ * compatibility would let an attacker downgrade back to the broken scheme.
+ * A peer still on v1 sees a sync timeout until it updates the app.
+ */
+export const PROTOCOL_VERSION = 2;
 
-const decryptPayload = (encrypted: string, hmac: string, key: string): string | null => {
-  const calculatedHmac = CryptoJS.HmacSHA256(encrypted, key).toString(CryptoJS.enc.Hex);
-  if (calculatedHmac !== hmac) return null;
+/**
+ * Canonical byte string the envelope HMAC is computed over. Every field a
+ * receiver acts on must be inside the MAC.
+ */
+const envelopeMacInput = (
+  type: string,
+  senderId: string,
+  timestamp: string,
+  nonce: string,
+  encrypted: string
+): string =>
+  `${PROTOCOL_VERSION}|${type}|${senderId}|${timestamp}|${nonce}|${encrypted}`;
+
+const decryptPayload = (encrypted: string, key: string): string | null => {
   const bytes = CryptoJS.AES.decrypt(encrypted, key);
   const plaintext = bytes.toString(CryptoJS.enc.Utf8);
   return plaintext || null;
@@ -82,12 +98,19 @@ const buildAndSend = (
   payload: object
 ): void => {
   const plaintext = JSON.stringify(payload);
-  const { encrypted, hmac } = encryptPayload(plaintext, key);
+  const encrypted = CryptoJS.AES.encrypt(plaintext, key).toString();
+  const timestamp = new Date().toISOString();
+  const nonce = generateUUID();
+  const hmac = CryptoJS.HmacSHA256(
+    envelopeMacInput(type, senderId, timestamp, nonce, encrypted),
+    key
+  ).toString(CryptoJS.enc.Hex);
   const message: SyncMessage = {
+    v: PROTOCOL_VERSION,
     type,
     senderId,
-    timestamp: new Date().toISOString(),
-    nonce: generateUUID(),
+    timestamp,
+    nonce,
     payload: encrypted,
     hmac,
   };
@@ -111,6 +134,27 @@ const validateAndDecrypt = (
     return null;
   }
 
+  if (
+    msg.v !== PROTOCOL_VERSION ||
+    typeof msg.type !== "string" ||
+    typeof msg.senderId !== "string" ||
+    typeof msg.timestamp !== "string" ||
+    typeof msg.nonce !== "string" ||
+    typeof msg.payload !== "string" ||
+    typeof msg.hmac !== "string"
+  ) {
+    return null;
+  }
+
+  // Authenticate the full envelope BEFORE trusting any field in it. The MAC
+  // covers type/senderId/timestamp/nonce, so a forged or re-wrapped envelope
+  // fails here and never reaches the replay/age checks below.
+  const calculatedHmac = CryptoJS.HmacSHA256(
+    envelopeMacInput(msg.type, msg.senderId, msg.timestamp, msg.nonce, msg.payload),
+    key
+  ).toString(CryptoJS.enc.Hex);
+  if (calculatedHmac !== msg.hmac) return null;
+
   // Verify sender (skip check during pairing when partner ID is unknown)
   if (expectedSenderId && msg.senderId !== expectedSenderId) return null;
 
@@ -126,8 +170,7 @@ const validateAndDecrypt = (
   if (seenNonces.has(msg.nonce)) return null;
   seenNonces.set(msg.nonce, now);
 
-  // Decrypt and verify integrity
-  const payload = decryptPayload(msg.payload, msg.hmac, key);
+  const payload = decryptPayload(msg.payload, key);
   if (!payload) return null;
 
   return { msg, payload };
@@ -252,6 +295,10 @@ export const connectToHost = (
     });
 
     socket.on("error", (err: any) => {
+      // After the connect callback has resolved the promise, this reject is
+      // a no-op - but the socket must still be torn down, or a mid-session
+      // connection drop leaks it (and its data listener) until app restart.
+      socket.destroy();
       reject(err);
     });
   });
