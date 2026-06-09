@@ -16,6 +16,9 @@ import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
   CUSTOM_CATEGORY_STORAGE_VERSION,
+  ACHIEVEMENTS_STORAGE_VERSION,
+  ACHIEVEMENT_STATS_VERSION,
+  type AchievementStats,
 } from "../types";
 import { isBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
 import {
@@ -60,6 +63,9 @@ const KEYS = {
   NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
   CUSTOM_CATEGORIES: "@budgetark_custom_categories",
   CATEGORY_BUCKET_OVERRIDES: "@budgetark_category_bucket_overrides",
+  ACHIEVEMENTS: "@budgetark_achievements",
+  ACHIEVEMENT_STATS: "@budgetark_achievement_stats",
+  DEBT_DUE_DISMISSALS: "@budgetark_debt_due_dismissals",
 } as const;
 
 const getCurrentMonthKey = (): string => {
@@ -93,7 +99,10 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     typeof data.payoffStrategy === "string" ||
     Array.isArray(data.netWorthSnapshots) ||
     Array.isArray(data.customCategories) ||
-    isObject(data.categoryBucketOverrides);
+    isObject(data.categoryBucketOverrides) ||
+    isObject(data.achievements) ||
+    isObject(data.achievementStats) ||
+    isObject(data.debtDueDismissals);
 
   return hasAny;
 };
@@ -112,8 +121,18 @@ interface ImportPayload {
   netWorthSnapshots?: unknown[];
   customCategories?: unknown[];
   categoryBucketOverrides?: Record<string, unknown>;
+  achievements?: Record<string, unknown>;
+  achievementStats?: Record<string, unknown>;
+  debtDueDismissals?: Record<string, unknown>;
   user?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+/** Sanitized shape of the achievements unlock store (mirrors UnlockedAchievements). */
+interface SanitizedAchievements {
+  unlocked: Record<string, number>;
+  firstEvaluatedAt?: number;
+  version: number;
 }
 
 interface SanitizedImportPayload {
@@ -130,6 +149,9 @@ interface SanitizedImportPayload {
   netWorthSnapshots: Record<string, unknown>[];
   customCategories: Record<string, unknown>[];
   categoryBucketOverrides?: Record<string, "needs" | "wants" | "savings">;
+  achievements?: SanitizedAchievements;
+  achievementStats?: AchievementStats;
+  debtDueDismissals?: Record<string, string>;
   user?: Record<string, unknown>;
 }
 
@@ -148,10 +170,20 @@ export interface ImportResult {
   staleDays?: number;
 }
 
+/**
+ * Limits exist to bound parse/merge memory on hostile or corrupt input, NOT
+ * to police real usage - they must stay far above anything the app itself
+ * can generate, or long-term users' own backups become unrestorable (a
+ * couple of years at 2-3 entries/day used to blow the old 500 KB /
+ * 2,000-item caps, discovered only at device-migration time).
+ * MAX_RAW_CHARS is checked pre-decryption (base64 inflates ~33%);
+ * MAX_JSON_CHARS bounds the decoded JSON before JSON.parse.
+ */
 const LIMITS = {
-  MAX_RAW_CHARS: 500_000,
-  MAX_COLLECTION_ITEMS: 2_000,
-  MAX_TOTAL_ITEMS: 6_000,
+  MAX_RAW_CHARS: 12_000_000,
+  MAX_JSON_CHARS: 8_000_000,
+  MAX_COLLECTION_ITEMS: 20_000,
+  MAX_TOTAL_ITEMS: 50_000,
 } as const;
 
 const sanitizeBudgetLimitsByMonth = (
@@ -244,6 +276,78 @@ const sanitizeCategoryBucketOverrides = (
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
+/**
+ * Achievements unlock map (`id → epoch-ms unlock time`). Invalid entries are
+ * dropped rather than rejecting the whole payload - achievements are
+ * cosmetic, and a corrupt badge entry must never block restoring the user's
+ * financial data. Older exports without the field return undefined and the
+ * key is left untouched.
+ */
+const sanitizeAchievements = (raw: unknown): SanitizedAchievements | undefined => {
+  if (!isObject(raw) || !isObject(raw.unlocked)) return undefined;
+  const unlocked: Record<string, number> = {};
+  for (const [id, ts] of Object.entries(raw.unlocked)) {
+    if (!isSafeText(id)) continue;
+    if (typeof ts !== "number" || !Number.isFinite(ts)) continue;
+    unlocked[id] = ts;
+  }
+  if (Object.keys(unlocked).length === 0) return undefined;
+  const out: SanitizedAchievements = {
+    unlocked,
+    version: ACHIEVEMENTS_STORAGE_VERSION,
+  };
+  if (
+    typeof raw.firstEvaluatedAt === "number" &&
+    Number.isFinite(raw.firstEvaluatedAt)
+  ) {
+    out.firstEvaluatedAt = raw.firstEvaluatedAt;
+  }
+  return out;
+};
+
+/**
+ * Achievement stats: a fixed set of monotonic counters plus the streak's
+ * last-open day. Non-numeric / negative counters degrade to 0 instead of
+ * rejecting - these back badges, not money, so a partially-corrupt stats
+ * blob should still restore whatever counters survived.
+ */
+const sanitizeAchievementStats = (raw: unknown): AchievementStats | undefined => {
+  if (!isObject(raw)) return undefined;
+  const counter = (v: unknown): number =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+  return {
+    exportCount: counter(raw.exportCount),
+    monthlyReviewOpens: counter(raw.monthlyReviewOpens),
+    appOpenStreak: counter(raw.appOpenStreak),
+    longestAppOpenStreak: counter(raw.longestAppOpenStreak),
+    lastAppOpenDay:
+      typeof raw.lastAppOpenDay === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(raw.lastAppOpenDay)
+        ? raw.lastAppOpenDay
+        : null,
+    version: ACHIEVEMENT_STATS_VERSION,
+  };
+};
+
+/**
+ * Debt due-day dismissals: `"<debtId>:<YYYY-MM>" → ISO dismissed-at`. Only
+ * the key matters to the reminder engine (the value is bookkeeping), so
+ * validation gates on key shape and a sane value string; bad pairs are
+ * dropped, not fatal.
+ */
+const sanitizeDebtDueDismissals = (
+  raw: unknown
+): Record<string, string> | undefined => {
+  if (!isObject(raw)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isSafeText(key) || !/:\d{4}-\d{2}$/.test(key)) continue;
+    if (!isSafeText(value, 40)) continue;
+    out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const debts = sanitizeCollection(data.debts, "debts", isDebtItem);
   const payments = sanitizeCollection(data.payments, "payments", isPaymentItem);
@@ -286,6 +390,9 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const categoryBucketOverrides = sanitizeCategoryBucketOverrides(
     data.categoryBucketOverrides
   );
+  const achievements = sanitizeAchievements(data.achievements);
+  const achievementStats = sanitizeAchievementStats(data.achievementStats);
+  const debtDueDismissals = sanitizeDebtDueDismissals(data.debtDueDismissals);
   const user = sanitizeUser(data.user);
 
   const limitsByMonthCount = budgetLimitsByMonth
@@ -319,6 +426,9 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     netWorthSnapshots,
     customCategories,
     categoryBucketOverrides,
+    achievements,
+    achievementStats,
+    debtDueDismissals,
     debtMilestones,
     payoffStrategy,
     payoffStrategyUpdatedAt,
@@ -377,7 +487,7 @@ export const importFromString = async (
 ): Promise<ImportResult> => {
   if (raw.length > LIMITS.MAX_RAW_CHARS) {
     throw new Error(
-      "Import file is too large. Please use an export under 500 KB."
+      "Import file is too large to be a BudgetArk export."
     );
   }
 
@@ -420,6 +530,9 @@ export const importFromString = async (
   }
 
   /* 1. Parse */
+  if (jsonString.length > LIMITS.MAX_JSON_CHARS) {
+    throw new Error("Import file is too large to be a BudgetArk export.");
+  }
   let data: unknown;
   try {
     data = JSON.parse(jsonString);
@@ -807,6 +920,245 @@ export const importFromString = async (
     return { json: JSON.stringify(store), count: touched };
   };
 
+  const parseTimestamp = (value: unknown): number => {
+    if (typeof value !== "string") return 0;
+    const t = Date.parse(value);
+    return Number.isFinite(t) ? t : 0;
+  };
+
+  /**
+   * Net-worth snapshots: replace mode takes the import verbatim; merge mode
+   * unions by dayKey, keeping whichever side captured that day later. Merge
+   * must never lose local-only days - importing an old backup in Merge mode
+   * used to overwrite the whole array, silently erasing every snapshot
+   * captured since the backup was taken.
+   */
+  const computeMergedSnapshots = async (): Promise<{
+    json: string;
+    count: number;
+  } | null> => {
+    if (sanitized.netWorthSnapshots.length === 0) return null;
+    if (mode === "replace") {
+      return {
+        json: JSON.stringify(sanitized.netWorthSnapshots),
+        count: sanitized.netWorthSnapshots.length,
+      };
+    }
+    let existing: Record<string, unknown>[] = [];
+    const existingRaw = await EncryptedStorage.getItem(KEYS.NET_WORTH_SNAPSHOTS);
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (Array.isArray(parsed)) existing = parsed;
+      } catch {
+        existing = [];
+      }
+    }
+    const byDay = new Map<string, Record<string, unknown>>();
+    for (const snap of existing) {
+      const day = (snap as any)?.dayKey;
+      if (typeof day === "string") byDay.set(day, snap);
+    }
+    for (const snap of sanitized.netWorthSnapshots) {
+      const day = (snap as any).dayKey as string;
+      const prev = byDay.get(day);
+      if (
+        !prev ||
+        parseTimestamp((snap as any).capturedAt) >=
+          parseTimestamp((prev as any).capturedAt)
+      ) {
+        byDay.set(day, snap);
+      }
+    }
+    const merged = Array.from(byDay.values()).sort((a, b) =>
+      String((a as any).dayKey).localeCompare(String((b as any).dayKey))
+    );
+    return { json: JSON.stringify(merged), count: sanitized.netWorthSnapshots.length };
+  };
+
+  /**
+   * Bucket overrides have no per-key timestamps, so merge mode is key-wise:
+   * imported keys win, local-only keys survive. Replace mode is verbatim.
+   */
+  const computeMergedBucketOverrides = async (): Promise<{ json: string } | null> => {
+    if (!sanitized.categoryBucketOverrides) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(sanitized.categoryBucketOverrides) };
+    }
+    let existing: Record<string, unknown> = {};
+    const existingRaw = await EncryptedStorage.getItem(
+      KEYS.CATEGORY_BUCKET_OVERRIDES
+    );
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          existing = parsed as Record<string, unknown>;
+        }
+      } catch {
+        existing = {};
+      }
+    }
+    return {
+      json: JSON.stringify({ ...existing, ...sanitized.categoryBucketOverrides }),
+    };
+  };
+
+  /**
+   * Achievements: merge is a union keeping the EARLIEST unlock timestamp per
+   * id - an unlock is a historical fact, and re-importing a backup must not
+   * move "first unlocked" forward (or re-trigger celebration popups for
+   * badges the user already has). Replace mode takes the import verbatim.
+   */
+  const computeMergedAchievements = async (): Promise<{ json: string } | null> => {
+    if (!sanitized.achievements) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(sanitized.achievements) };
+    }
+    let existingUnlocked: Record<string, unknown> = {};
+    let existingFirstEvaluatedAt: unknown;
+    const existingRaw = await EncryptedStorage.getItem(KEYS.ACHIEVEMENTS);
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (isObject(parsed)) {
+          if (isObject(parsed.unlocked)) existingUnlocked = parsed.unlocked;
+          existingFirstEvaluatedAt = parsed.firstEvaluatedAt;
+        }
+      } catch {
+        existingUnlocked = {};
+      }
+    }
+    const unlocked: Record<string, number> = {};
+    const keepEarliest = (id: string, ts: unknown) => {
+      if (typeof ts !== "number" || !Number.isFinite(ts)) return;
+      const prev = unlocked[id];
+      unlocked[id] = prev === undefined ? ts : Math.min(prev, ts);
+    };
+    for (const [id, ts] of Object.entries(existingUnlocked)) keepEarliest(id, ts);
+    for (const [id, ts] of Object.entries(sanitized.achievements.unlocked)) {
+      keepEarliest(id, ts);
+    }
+    // Earliest firstEvaluatedAt for the same reason: it suppresses
+    // celebrations for retroactive unlocks, so the older epoch is the truth.
+    const evaluatedCandidates = [
+      existingFirstEvaluatedAt,
+      sanitized.achievements.firstEvaluatedAt,
+    ].filter(
+      (v): v is number => typeof v === "number" && Number.isFinite(v)
+    );
+    const merged: SanitizedAchievements = {
+      unlocked,
+      version: ACHIEVEMENTS_STORAGE_VERSION,
+    };
+    if (evaluatedCandidates.length > 0) {
+      merged.firstEvaluatedAt = Math.min(...evaluatedCandidates);
+    }
+    return { json: JSON.stringify(merged) };
+  };
+
+  /**
+   * Achievement stats are monotonic counters / streak bests, so merge takes
+   * the max of each side - whichever device counted higher reflects more
+   * real activity, and summing would double-count the shared history.
+   * `lastAppOpenDay` takes the later day so the streak recorder doesn't
+   * re-count today; a max streak paired with the other side's day can
+   * over-credit by at most one open, which self-corrects on the next gap.
+   * Replace mode takes the import verbatim.
+   */
+  const computeMergedAchievementStats = async (): Promise<{ json: string } | null> => {
+    const incoming = sanitized.achievementStats;
+    if (!incoming) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(incoming) };
+    }
+    let local: AchievementStats | undefined;
+    const existingRaw = await EncryptedStorage.getItem(KEYS.ACHIEVEMENT_STATS);
+    if (existingRaw) {
+      try {
+        local = sanitizeAchievementStats(JSON.parse(existingRaw));
+      } catch {
+        local = undefined;
+      }
+    }
+    if (!local) return { json: JSON.stringify(incoming) };
+    // YYYY-MM-DD compares correctly as a string.
+    const lastAppOpenDay =
+      local.lastAppOpenDay && incoming.lastAppOpenDay
+        ? local.lastAppOpenDay >= incoming.lastAppOpenDay
+          ? local.lastAppOpenDay
+          : incoming.lastAppOpenDay
+        : local.lastAppOpenDay ?? incoming.lastAppOpenDay;
+    const merged: AchievementStats = {
+      exportCount: Math.max(local.exportCount, incoming.exportCount),
+      monthlyReviewOpens: Math.max(
+        local.monthlyReviewOpens,
+        incoming.monthlyReviewOpens
+      ),
+      appOpenStreak: Math.max(local.appOpenStreak, incoming.appOpenStreak),
+      longestAppOpenStreak: Math.max(
+        local.longestAppOpenStreak,
+        incoming.longestAppOpenStreak
+      ),
+      lastAppOpenDay,
+      version: ACHIEVEMENT_STATS_VERSION,
+    };
+    return { json: JSON.stringify(merged) };
+  };
+
+  /**
+   * Due-day dismissals are idempotent facts ("user said 'not yet' for this
+   * debt+month on some device"), so merge is a key-wise union. The value is
+   * only a dismissed-at bookkeeping stamp - either side's is fine; imported
+   * wins on conflict for consistency with the bucket-override merge.
+   * Replace mode takes the import verbatim.
+   */
+  const computeMergedDueDismissals = async (): Promise<{ json: string } | null> => {
+    if (!sanitized.debtDueDismissals) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(sanitized.debtDueDismissals) };
+    }
+    let existing: Record<string, unknown> = {};
+    const existingRaw = await EncryptedStorage.getItem(KEYS.DEBT_DUE_DISMISSALS);
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          existing = parsed as Record<string, unknown>;
+        }
+      } catch {
+        existing = {};
+      }
+    }
+    return {
+      json: JSON.stringify({ ...existing, ...sanitized.debtDueDismissals }),
+    };
+  };
+
+  /**
+   * Singleton LWW gate for merge mode: write the imported value only when
+   * it's at least as new as what's on the device. Replace mode always
+   * writes. Imports without a timestamp (older export formats) lose to any
+   * existing local value - merge is documented as non-destructive, so a
+   * stale backup must not roll back newer local edits.
+   */
+  const importedSingletonWins = async (
+    storageKey: string,
+    incomingUpdatedAt: unknown,
+    readLocalUpdatedAt: (raw: string) => unknown
+  ): Promise<boolean> => {
+    if (mode === "replace") return true;
+    const existingRaw = await EncryptedStorage.getItem(storageKey);
+    if (!existingRaw) return true;
+    let localUpdatedAt: unknown;
+    try {
+      localUpdatedAt = readLocalUpdatedAt(existingRaw);
+    } catch {
+      localUpdatedAt = undefined;
+    }
+    return parseTimestamp(incomingUpdatedAt) >= parseTimestamp(localUpdatedAt);
+  };
+
   // Phase 1: Compute all merged results in memory
   const mergedDebts = await computeMergedById(KEYS.DEBTS, sanitized.debts);
   const mergedPayments = await computeMergedById(KEYS.PAYMENTS, sanitized.payments);
@@ -820,13 +1172,12 @@ export const importFromString = async (
     KEYS.ASSET_ACCOUNTS,
     sanitized.assetAccounts
   );
-  const mergedSnapshots = sanitized.netWorthSnapshots.length > 0
-    ? { json: JSON.stringify(sanitized.netWorthSnapshots), count: sanitized.netWorthSnapshots.length }
-    : null;
+  const mergedSnapshots = await computeMergedSnapshots();
   const mergedCustomCategories = await computeMergedCustomCategories();
-  const mergedCategoryBucketOverrides = sanitized.categoryBucketOverrides
-    ? { json: JSON.stringify(sanitized.categoryBucketOverrides) }
-    : null;
+  const mergedCategoryBucketOverrides = await computeMergedBucketOverrides();
+  const mergedAchievements = await computeMergedAchievements();
+  const mergedAchievementStats = await computeMergedAchievementStats();
+  const mergedDueDismissals = await computeMergedDueDismissals();
 
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
@@ -866,13 +1217,44 @@ export const importFromString = async (
       mergedCategoryBucketOverrides.json,
     ]);
   }
-  if (sanitized.debtMilestones) {
+  if (mergedAchievements) {
+    tempWrites.push([KEYS.ACHIEVEMENTS + TEMP_SUFFIX, mergedAchievements.json]);
+  }
+  if (mergedAchievementStats) {
+    tempWrites.push([
+      KEYS.ACHIEVEMENT_STATS + TEMP_SUFFIX,
+      mergedAchievementStats.json,
+    ]);
+  }
+  if (mergedDueDismissals) {
+    tempWrites.push([
+      KEYS.DEBT_DUE_DISMISSALS + TEMP_SUFFIX,
+      mergedDueDismissals.json,
+    ]);
+  }
+  if (
+    sanitized.debtMilestones &&
+    (await importedSingletonWins(
+      KEYS.DEBT_MILESTONES,
+      (sanitized.debtMilestones as Record<string, unknown>).updatedAt,
+      (raw) => (JSON.parse(raw) as Record<string, unknown>)?.updatedAt
+    ))
+  ) {
     tempWrites.push([
       KEYS.DEBT_MILESTONES + TEMP_SUFFIX,
       JSON.stringify(sanitized.debtMilestones),
     ]);
   }
-  if (sanitized.payoffStrategy) {
+  if (
+    sanitized.payoffStrategy &&
+    (await importedSingletonWins(
+      KEYS.PAYOFF_STRATEGY,
+      sanitized.payoffStrategyUpdatedAt,
+      // Local value may be a legacy bare string (JSON.parse throws -> treated
+      // as no timestamp) or the {value, updatedAt} envelope.
+      (raw) => (JSON.parse(raw) as Record<string, unknown>)?.updatedAt
+    ))
+  ) {
     // When the export includes `payoffStrategyUpdatedAt` (v1.4.16+), persist
     // the envelope shape so paired-device LWW can resolve it correctly.
     // Older exports without the timestamp fall through to the bare-string
@@ -889,10 +1271,20 @@ export const importFromString = async (
     tempWrites.push([KEYS.USER + TEMP_SUFFIX, JSON.stringify(sanitized.user)]);
   }
 
-  // Write all temp keys
-  for (const [key, value] of tempWrites) {
-    await EncryptedStorage.setItem(key, value);
-    tempKeys.push(key);
+  // Write all temp keys. This loop sits before the promote-phase try/rollback,
+  // so a mid-loop failure (storage full, quota) used to strand every
+  // already-written *_import_tmp key in storage forever. Best-effort cleanup
+  // here; the cleanup itself must not mask the original failure.
+  try {
+    for (const [key, value] of tempWrites) {
+      await EncryptedStorage.setItem(key, value);
+      tempKeys.push(key);
+    }
+  } catch (error) {
+    if (tempKeys.length > 0) {
+      await EncryptedStorage.multiRemove(tempKeys).catch(() => {});
+    }
+    throw error;
   }
 
   // Phase 3: Promote temp keys to real keys; rollback on failure
@@ -900,19 +1292,40 @@ export const importFromString = async (
   const backups: Array<[string, string | null]> = [];
   try {
     if (mode === "replace") {
-      const keysToRemove = [
-        KEYS.DEBTS,
-        KEYS.PAYMENTS,
-        KEYS.BUDGET_ENTRIES,
-        KEYS.BUDGET_LIMITS,
-        KEYS.SAVINGS_GOALS,
-        KEYS.ASSET_ACCOUNTS,
-        KEYS.DEBT_MILESTONES,
-        KEYS.PAYOFF_STRATEGY,
-        KEYS.NET_WORTH_SNAPSHOTS,
-        KEYS.CUSTOM_CATEGORIES,
-        KEYS.CATEGORY_BUCKET_OVERRIDES,
-      ];
+      // Replace means "replace what the file carries", not "wipe the device".
+      // Only clear keys the sanitized payload actually has data for - a
+      // spreadsheet-sourced import arrives with budget collections only
+      // (CSV: just entries), so unconditionally clearing every key turned a
+      // CSV restore into silent destruction of net-worth history, milestones,
+      // achievements, and every other section the source format can't carry.
+      const keysToRemove: string[] = [];
+      if (sanitized.debts.length > 0) keysToRemove.push(KEYS.DEBTS);
+      if (sanitized.payments.length > 0) keysToRemove.push(KEYS.PAYMENTS);
+      if (sanitized.budgetEntries.length > 0) {
+        keysToRemove.push(KEYS.BUDGET_ENTRIES);
+      }
+      if (mergedLimits) keysToRemove.push(KEYS.BUDGET_LIMITS);
+      if (sanitized.savingsGoals.length > 0) keysToRemove.push(KEYS.SAVINGS_GOALS);
+      if (sanitized.assetAccounts.length > 0) {
+        keysToRemove.push(KEYS.ASSET_ACCOUNTS);
+      }
+      if (sanitized.debtMilestones) keysToRemove.push(KEYS.DEBT_MILESTONES);
+      if (sanitized.payoffStrategy) keysToRemove.push(KEYS.PAYOFF_STRATEGY);
+      if (sanitized.netWorthSnapshots.length > 0) {
+        keysToRemove.push(KEYS.NET_WORTH_SNAPSHOTS);
+      }
+      // Custom categories may be carried implicitly (entries/limits that
+      // reference a non-built-in name), so gate on the merged result, which
+      // already accounts for both sources.
+      if (mergedCustomCategories) keysToRemove.push(KEYS.CUSTOM_CATEGORIES);
+      if (sanitized.categoryBucketOverrides) {
+        keysToRemove.push(KEYS.CATEGORY_BUCKET_OVERRIDES);
+      }
+      if (sanitized.achievements) keysToRemove.push(KEYS.ACHIEVEMENTS);
+      if (sanitized.achievementStats) keysToRemove.push(KEYS.ACHIEVEMENT_STATS);
+      if (sanitized.debtDueDismissals) {
+        keysToRemove.push(KEYS.DEBT_DUE_DISMISSALS);
+      }
       for (const key of keysToRemove) {
         const original = await EncryptedStorage.getItem(key);
         backups.push([key, original]);
