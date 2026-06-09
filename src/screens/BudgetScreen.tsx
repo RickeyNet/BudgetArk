@@ -117,10 +117,10 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import {
-  countOccurrencesBetween,
   getRecurrenceTag,
   isEntryActiveInMonth,
 } from "../utils/recurrence";
+import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
 import { totalsByBucket } from "../utils/budgetBucketMath";
 
 type ExpenseCategoryEntry = {
@@ -198,8 +198,14 @@ const getBudgetMonthKeys = (): string[] => {
   return keys;
 };
 
+// Month attribution by string prefix, matching recurrence.ts and the entry
+// dates AddBudgetEntryModal stores (noon UTC inside the picked month). Local
+// Date round-tripping shifted entries near month boundaries by a month for
+// users in extreme timezones.
 const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
-  getMonthKey(new Date(dateISO)) === monthKey;
+  /^\d{4}-\d{2}/.test(dateISO)
+    ? dateISO.slice(0, 7) === monthKey
+    : getMonthKey(new Date(dateISO)) === monthKey;
 
 const getCategoryComparisonHeadline = (comparison: CategorySpendingComparison): string => {
   if (comparison.percentChange != null) {
@@ -368,69 +374,35 @@ const BudgetScreen: React.FC = () => {
         if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
         setKeelTarget(keelStep?.targetAmount ?? 1000);
-        // Process recurring contributions for linked accounts
-        const currentMonth = getMonthKey(new Date());
-        let entriesModified = false;
-        const accountBalanceDeltas = new Map<string, number>();
+        // Apply missed recurring linked-account contributions through the
+        // shared util - it carries the orphan-account skip and UTC month-key
+        // handling that this screen's old inline copy was missing.
+        const processed = applyMissedRecurringLinkedAccountContributions(
+          storedEntries,
+          storedAssets
+        );
 
-        for (const entry of storedEntries) {
-          if (!entry.recurring || !entry.linkedAccountId) continue;
-          const entryStartMonth = getMonthKey(new Date(entry.date));
-          const lastApplied = entry.lastAppliedMonth ?? entryStartMonth;
-          if (lastApplied >= currentMonth) continue;
-
-          const occurrenceCount = countOccurrencesBetween(
-            entry,
-            lastApplied,
-            currentMonth
-          );
-          if (occurrenceCount <= 0) {
-            // No occurrences this catch-up window (e.g. quarterly entry that
-            // hasn't hit a cycle month yet). Still advance the marker so we
-            // don't re-scan the same gap every load.
-            entry.lastAppliedMonth = currentMonth;
-            entriesModified = true;
-            continue;
-          }
-
-          const delta = entry.amount * occurrenceCount;
-          const prev = accountBalanceDeltas.get(entry.linkedAccountId) ?? 0;
-          accountBalanceDeltas.set(entry.linkedAccountId, prev + delta);
-          entry.lastAppliedMonth = currentMonth;
-          entriesModified = true;
-        }
-
-        // Save entries first (commits the lastAppliedMonth marker), then
-        // assets (commits the new balance). Doing the asset save first or
-        // running them concurrently allows a reader on another tab to see
-        // (newBalance, oldLastApplied) and re-apply the same contribution,
-        // silently double-crediting the asset. Same protection sits in
-        // BridgeScreen's auto-apply path.
-        if (entriesModified) {
-          await saveBudgetEntries(storedEntries);
-        }
-
-        if (accountBalanceDeltas.size > 0) {
-          for (const account of storedAssets) {
-            const delta = accountBalanceDeltas.get(account.id);
-            if (delta) {
-              account.balance += delta;
-              account.updatedAt = new Date().toISOString();
-            }
-          }
-          await saveAssetAccounts(storedAssets);
+        if (processed.changed) {
+          // Save entries first (commits the lastAppliedMonth marker), then
+          // assets (commits the new balance). Doing the asset save first or
+          // running them concurrently allows a reader on another tab to see
+          // (newBalance, oldLastApplied) and re-apply the same contribution,
+          // silently double-crediting the asset. Same protection sits in
+          // BridgeScreen's auto-apply path.
+          await saveBudgetEntries(processed.entries);
+          await saveAssetAccounts(processed.assetAccounts);
         }
 
         if (cancelled) return;
-        const nextReviewData = buildMonthlyReview(storedEntries, allLimitsByMonth);
+        const nextReviewData = buildMonthlyReview(processed.entries, allLimitsByMonth);
 
-        setEntries(storedEntries);
+        setEntries(processed.entries);
         setLimits(storedLimits);
         setDebts(storedDebts);
         setPayments(storedPayments);
         setDueDismissals(storedDueDismissals);
         setSavingsGoals(storedGoals);
-        setAssetAccounts(storedAssets);
+        setAssetAccounts(processed.assetAccounts);
         setReviewPreviewData(nextReviewData);
         setBucketOverrides(storedBucketOverrides);
         await refreshNetWorthSnapshots();
@@ -1982,7 +1954,10 @@ const BudgetScreen: React.FC = () => {
         colorForCategory={colorForCategory}
         onEditEntry={(entry) => {
           setShowBillCalendar(false);
-          setEditingEntry(entry);
+          // Wait for the calendar Modal's close animation before presenting
+          // the edit sheet - iOS doesn't reliably handle dismiss-then-present
+          // in the same frame and one of the two ends up hidden.
+          setTimeout(() => setEditingEntry(entry), 250);
         }}
       />
 
