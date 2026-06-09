@@ -270,14 +270,35 @@ export const getItem = async (key: string): Promise<string | null> => {
     if (plaintext === null) {
       throw new DecryptionError(key);
     }
-    await withTimeout(AsyncStorage.setItem(key, encrypt(plaintext, encKey)), `setItem(${key})`);
+    await migrateStoredValue(key, raw, encrypt(plaintext, encKey));
     return plaintext;
   }
 
   // Case 3: Legacy plaintext - encrypt as V2 for future reads
-  await withTimeout(AsyncStorage.setItem(key, encrypt(raw, encKey)), `setItem(${key})`);
+  await migrateStoredValue(key, raw, encrypt(raw, encKey));
   return raw;
 };
+
+/**
+ * Upgrade-in-place write for getItem's V1/plaintext migration paths. Goes
+ * through the per-key queue AND re-checks the stored value first: this read
+ * awaited a SecureStore round-trip after loading `expectedRaw`, so a
+ * legitimate setItem may have landed in between - a direct write here would
+ * silently revert the key to its pre-edit value.
+ */
+const migrateStoredValue = (
+  key: string,
+  expectedRaw: string,
+  nextValue: string
+): Promise<void> =>
+  enqueueWrite(key, async () => {
+    const current = await withTimeout(
+      AsyncStorage.getItem(key),
+      `getItem(${key})`
+    );
+    if (current !== expectedRaw) return;
+    await withTimeout(AsyncStorage.setItem(key, nextValue), `setItem(${key})`);
+  });
 
 /**
  * Per-key write queue. Concurrent saves to the same storage key (e.g.
