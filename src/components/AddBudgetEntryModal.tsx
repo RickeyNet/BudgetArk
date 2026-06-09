@@ -55,7 +55,13 @@ const createEmptyLine = (): EntryLineDraft => ({
   description: "",
 });
 
-const todayYearMonth = () => new Date().toISOString().slice(0, 7);
+// Local calendar month, NOT toISOString().slice(0,7) - the UTC month is
+// already "next month" on the evening of the last day for users west of
+// UTC, silently defaulting new entries into the wrong month's budget.
+const todayYearMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
 
 const MONTH_LABELS = [
   "Jan",
@@ -89,7 +95,12 @@ const lastDayOfYearMonth = (yearMonth: string): number => {
 const buildEntryDateISO = (yearMonth: string, day: number): string => {
   const clamped = Math.max(1, Math.min(day, lastDayOfYearMonth(yearMonth)));
   const dd = String(clamped).padStart(2, "0");
-  return new Date(`${yearMonth}-${dd}T12:00:00`).toISOString();
+  // Noon UTC, not local noon converted to UTC: for UTC+13/+14 locales local
+  // noon serializes as the previous UTC day, so a day-1 entry lands in the
+  // prior month and its recurrence fires a month early forever. Month
+  // attribution everywhere slices the YYYY-MM prefix, so the stored string
+  // must carry the month the user picked.
+  return `${yearMonth}-${dd}T12:00:00.000Z`;
 };
 
 const SELECTABLE_BUDGET_CATEGORIES: BudgetCategory[] = BUDGET_CATEGORIES.filter(
