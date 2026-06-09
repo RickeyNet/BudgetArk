@@ -40,6 +40,10 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
   }
 
   const dueDay = getEffectivePaymentDueDay(debt);
+  // Never log more than is owed - recordPayment clamps the balance at zero,
+  // which would strand the overage in the payment row (and corrupt the
+  // balance upward if that payment is later deleted).
+  const logAmount = Math.min(debt.minPayment, debt.balance);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -63,11 +67,11 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
 
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => onLogPayment(debt.id, debt.minPayment)}
+            onPress={() => onLogPayment(debt.id, logAmount)}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>
-              Yes, log {formatCurrency(debt.minPayment)}
+              Yes, log {formatCurrency(logAmount)}
             </Text>
           </TouchableOpacity>
 
