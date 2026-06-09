@@ -394,6 +394,40 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Debt-Free Countdown Timer - live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
 - [x] Annual Financial Report - selectable calendar-year summary: total debt paid, total set aside, net worth change, top spending category, months under budget, cash flow + savings rate + monthly spending sparkline. Entry card on Bridge → AnnualReportModal. Shareable as aggregates/percentages-only text (no PII). Image capture deferred to v2 (would need a native view-shot dep + EAS rebuild; kept OTA-safe per request).
 - [ ] Budget Rollover Mode - unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
+
+- [ ] Month-start checking balance + cash-flow budget - at the beginning of each calendar month, prompt the user to update their checking balance, snapshot it as the month's starting cash, and factor it into the Budget screen as a real cash-flow projection. Chosen over Budget Rollover Mode (above) because it's anchored to ground truth and self-correcting (no stateful carry-over chain that re-derives every prior month).
+
+  Builds on existing plumbing: `AssetAccount` already has a `"checking"` category + `balance` field (`src/types/index.ts:297`, `src/storage/assetAccountStorage.ts`), net-worth snapshots already exist (`netWorthSnapshotStorage.ts`), and the budget already keys income/expense entries per month. The only genuinely new data is a per-month starting-balance history.
+
+  Three parts:
+  1. **Month-start prompt** - on first app open of a new calendar month, ask "What's your checking balance today?" Idempotent-per-month via a stored `lastPromptedMonthKey` (same pattern as the app-open streak in `evaluateAchievements` and `backupReminderStorage.ts`). Skippable; also expose a manual "Update balance" entry point anytime.
+  2. **Beginning-of-month balance history** - new `src/storage/monthlyBalanceStorage.ts`: `Record<monthKey, { balance: number, capturedAt: string }>`. The prompt writes here AND updates the checking `AssetAccount.balance` in one step so net worth stays correct.
+  3. **Factor into budget** - with a real starting number, BudgetScreen shows a true cash-flow projection instead of just planned limits:
+     ```
+     Starting cash (Jun)             $3,200   ← entered at month start
+     + income this month             $4,100
+     − expenses (actual + recurring) $3,650
+     = projected end-of-month        $3,650
+       safe to spend                 $450
+     ```
+     Reuse `isEntryActiveInMonth` so recurring entries match the Spending donut math.
+
+  Free bonus: **reconciliation line** - compare last month's projected end-of-month vs. the freshly-entered actual ("ended $150 below plan"). Near-zero extra cost once the history exists.
+
+  Decisions to settle before building:
+  - **Single number vs. per-account**: sum all `category === "checking"` accounts automatically (recommended, one prompt) vs. a single manual "spendable cash" figure.
+  - **Reuse `AssetAccount.balance`** as the live value + snapshot to monthly history (recommended) vs. a fully separate balance field.
+  - **Sync**: this is real financial data and partner-relevant, so DO sync the monthly balance history (unlike per-device UX state like coachmarks/feature-discovery).
+
+  Files (proposed):
+  - `src/storage/monthlyBalanceStorage.ts` - CRUD for the `monthKey → { balance, capturedAt }` map (EncryptedStorage, sync-eligible).
+  - `src/components/MonthBalancePromptModal.tsx` - the once-per-month prompt (reuse existing modal + theme/density tokens).
+  - `src/components/CashFlowCard.tsx` - Budget-tab card showing starting cash → projected end-of-month → safe-to-spend + reconciliation line.
+  - `src/utils/cashFlow.ts` - pure helpers (startingCashForMonth, projectedEndOfMonth, safeToSpend, reconcileVsActual).
+  - `src/screens/BudgetScreen.tsx` - mount the card; wire the prompt + manual update button.
+
+  Effort: medium-small (smaller than Rollover Mode). Mostly additive - one storage module, one prompt modal, one card + math helper. No cross-month recomputation chain. OTA-eligible: yes, no new native deps.
+
 - [ ] Spending Velocity Alerts - passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
 - [ ] Partner Budget Visibility Controls - mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
 - [x] Debt Payoff Celebration Screen - confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
