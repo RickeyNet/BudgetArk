@@ -2,6 +2,7 @@ import * as EncryptedStorage from "./encryptedStorage";
 import { BudgetEntry, CategoryBudgetLimit } from "../types";
 import {
   filterLive,
+  mergePreservingTombstones,
   purgeExpiredTombstones,
   tombstone,
   untombstone,
@@ -117,7 +118,7 @@ export const getBudgetEntriesIncludingDeleted = async (): Promise<BudgetEntry[]>
     // O(1) here instead of the previous O(n × entry-size) JSON.stringify
     // diff against itself.
     if (normalizeChanged || purged !== normalized) {
-      await saveBudgetEntries(purged);
+      await writeBudgetEntries(purged);
     }
     return purged;
   } catch {
@@ -126,19 +127,37 @@ export const getBudgetEntriesIncludingDeleted = async (): Promise<BudgetEntry[]>
 };
 
 /**
- * Persists the full entries array (live + tombstones). Sync writes go
- * through this. UI screens that need to splice/delete should use the CRUD
- * helpers below - calling `saveBudgetEntries(filtered)` to delete would
- * silently drop the tombstone the next sync needs to propagate the delete.
+ * Raw write - persists exactly the array given. Only for callers that
+ * already hold the tombstone-aware array (internal CRUD helpers and the
+ * purge path, which must be able to drop expired tombstones).
+ */
+const writeBudgetEntries = async (entries: BudgetEntry[]): Promise<void> => {
+  await EncryptedStorage.setItem(BUDGET_STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
+};
+
+/**
+ * Persists the entries array. Safe to call with a live-only
+ * (`getBudgetEntries`) array: stored tombstones missing from `entries` are
+ * merged back in so a screen-level save can't erase the soft-deletes that
+ * Undo and sync need. Deletes should still go through the CRUD helpers.
  */
 export const saveBudgetEntries = async (entries: BudgetEntry[]): Promise<void> => {
-  await EncryptedStorage.setItem(BUDGET_STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
+  const raw = await EncryptedStorage.getItem(BUDGET_STORAGE_KEYS.ENTRIES);
+  let stored: BudgetEntry[] = [];
+  if (raw) {
+    try {
+      stored = JSON.parse(raw) as BudgetEntry[];
+    } catch {
+      stored = [];
+    }
+  }
+  await writeBudgetEntries(mergePreservingTombstones(entries, stored));
 };
 
 export const addBudgetEntry = async (entry: BudgetEntry): Promise<BudgetEntry[]> => {
   const entries = await getBudgetEntriesIncludingDeleted();
   entries.push(entry);
-  await saveBudgetEntries(entries);
+  await writeBudgetEntries(entries);
   return filterLive(entries);
 };
 
@@ -151,7 +170,7 @@ export const deleteBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
   const next = entries.map((entry) =>
     entry.id === id ? tombstone(entry, now) : entry
   );
-  await saveBudgetEntries(next);
+  await writeBudgetEntries(next);
   return filterLive(next);
 };
 
@@ -170,7 +189,7 @@ export const updateBudgetEntry = async (
   const next = entries.map((entry) =>
     entry.id === id ? { ...entry, ...patch, id: entry.id, updatedAt: now } : entry
   );
-  await saveBudgetEntries(next);
+  await writeBudgetEntries(next);
   return filterLive(next);
 };
 
@@ -184,7 +203,7 @@ export const restoreBudgetEntry = async (id: string): Promise<BudgetEntry[]> => 
   const next = entries.map((entry) =>
     entry.id === id && entry.deletedAt ? untombstone(entry, now) : entry
   );
-  await saveBudgetEntries(next);
+  await writeBudgetEntries(next);
   return filterLive(next);
 };
 
@@ -202,7 +221,7 @@ export const deleteBudgetEntries = async (
   const next = entries.map((entry) =>
     idSet.has(entry.id) && !entry.deletedAt ? tombstone(entry, now) : entry
   );
-  await saveBudgetEntries(next);
+  await writeBudgetEntries(next);
   return filterLive(next);
 };
 
@@ -218,7 +237,7 @@ export const restoreBudgetEntries = async (
   const next = entries.map((entry) =>
     idSet.has(entry.id) && entry.deletedAt ? untombstone(entry, now) : entry
   );
-  await saveBudgetEntries(next);
+  await writeBudgetEntries(next);
   return filterLive(next);
 };
 
@@ -238,7 +257,7 @@ export const setBudgetEntryCategories = async (
       ? { ...entry, category: nextCategory, updatedAt: now }
       : entry;
   });
-  await saveBudgetEntries(next);
+  await writeBudgetEntries(next);
   return filterLive(next);
 };
 

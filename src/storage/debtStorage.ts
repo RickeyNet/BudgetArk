@@ -15,6 +15,7 @@ import * as EncryptedStorage from "./encryptedStorage";
 import { Debt, DebtClass, DebtClassSource, DebtOwner, Payment } from "../types";
 import {
   filterLive,
+  mergePreservingTombstones,
   purgeExpiredTombstones,
   tombstone,
   untombstone,
@@ -148,7 +149,7 @@ export const getDebtsIncludingDeleted = async (): Promise<Debt[]> => {
     });
     const purged = purgeExpiredTombstones(normalized);
     if (normalizeChanged || purged !== normalized) {
-      await saveDebts(purged);
+      await writeDebts(purged);
     }
     return purged;
   } catch {
@@ -157,12 +158,30 @@ export const getDebtsIncludingDeleted = async (): Promise<Debt[]> => {
 };
 
 /**
- * Persists the full debts array (live + tombstones) to device storage.
- * Sync writes go through this so tombstones survive merges; user code
- * should prefer `addDebt`, `updateDebt`, or `deleteDebt`.
+ * Raw write - persists exactly the array given. Only for callers that
+ * already hold the tombstone-aware array (internal CRUD helpers and the
+ * purge path, which must be able to drop expired tombstones).
+ */
+const writeDebts = async (debts: Debt[]): Promise<void> => {
+  await EncryptedStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+};
+
+/**
+ * Persists the debts array. Safe to call with a live-only (`getDebts`)
+ * array: stored tombstones missing from `debts` are merged back in so a
+ * screen-level save can't erase the soft-deletes that Undo and sync need.
  */
 export const saveDebts = async (debts: Debt[]): Promise<void> => {
-  await EncryptedStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+  const raw = await EncryptedStorage.getItem(STORAGE_KEYS.DEBTS);
+  let stored: Debt[] = [];
+  if (raw) {
+    try {
+      stored = JSON.parse(raw) as Debt[];
+    } catch {
+      stored = [];
+    }
+  }
+  await writeDebts(mergePreservingTombstones(debts, stored));
 };
 
 /**
@@ -175,7 +194,7 @@ export const saveDebts = async (debts: Debt[]): Promise<void> => {
 export const addDebt = async (debt: Debt): Promise<Debt[]> => {
   const debts = await getDebtsIncludingDeleted();
   debts.push(debt);
-  await saveDebts(debts);
+  await writeDebts(debts);
   return filterLive(debts);
 };
 
@@ -193,7 +212,7 @@ export const deleteDebt = async (id: string): Promise<Debt[]> => {
   const debts = await getDebtsIncludingDeleted();
   const now = new Date().toISOString();
   const next = debts.map((d) => (d.id === id ? tombstone(d, now) : d));
-  await saveDebts(next);
+  await writeDebts(next);
   return filterLive(next);
 };
 
@@ -214,7 +233,7 @@ export const updateDebt = async (
   const updated = debts.map((d) =>
     d.id === id ? { ...d, ...updates, updatedAt: now } : d
   );
-  await saveDebts(updated);
+  await writeDebts(updated);
   return filterLive(updated);
 };
 
@@ -228,7 +247,7 @@ export const restoreDebt = async (id: string): Promise<Debt[]> => {
   const next = debts.map((d) =>
     d.id === id && d.deletedAt ? untombstone(d, now) : d
   );
-  await saveDebts(next);
+  await writeDebts(next);
   return filterLive(next);
 };
 
@@ -307,6 +326,10 @@ export const recordPayment = async (
   /* Calculate updated debt balance - only matches a live debt, never a
    * tombstone (UI couldn't have surfaced a deleted debt to pay). */
   const now = new Date().toISOString();
+  const targetDebt = debts.find((d) => d.id === payment.debtId && !d.deletedAt);
+  const applied = targetDebt
+    ? Math.min(payment.amount, Math.max(0, targetDebt.balance))
+    : 0;
   const updatedDebts = debts.map((d) => {
     if (d.id === payment.debtId && !d.deletedAt) {
       return { ...d, balance: Math.max(0, d.balance - payment.amount), updatedAt: now };
@@ -314,8 +337,9 @@ export const recordPayment = async (
     return d;
   });
 
-  /* Append the new payment, preserving any existing tombstones. */
-  const updatedPayments = [...payments, payment];
+  /* Append the new payment (stamped with the delta actually applied, so
+   * deletePayment can reverse exactly), preserving existing tombstones. */
+  const updatedPayments = [...payments, { ...payment, appliedAmount: applied }];
 
   /* Save both in one native AsyncStorage call to shrink the partial-state window. */
   await EncryptedStorage.multiSet([
@@ -356,7 +380,14 @@ export const deletePayment = async (
       ? debts
       : debts.map((d) =>
           d.id === target.debtId && !d.deletedAt
-            ? { ...d, balance: d.balance + target.amount, updatedAt: now }
+            ? {
+                ...d,
+                // Reverse only the delta the payment actually applied - an
+                // overpayment clamped at zero must not add back its full
+                // amount or the balance exceeds what was ever owed.
+                balance: d.balance + (target.appliedAmount ?? target.amount),
+                updatedAt: now,
+              }
             : d
         );
 
@@ -384,8 +415,21 @@ export const restorePayment = async (
   const now = new Date().toISOString();
   const target = payments.find((p) => p.id === paymentId && p.deletedAt);
 
+  /* Re-applying clamps at zero just like recordPayment, so restamp
+   * `appliedAmount` with the delta this restore actually applied - the
+   * balance may differ from when the payment was first recorded. */
+  const debtForRestore = target
+    ? debts.find((d) => d.id === target.debtId && !d.deletedAt)
+    : undefined;
+  const reapplied =
+    target && debtForRestore
+      ? Math.min(target.amount, Math.max(0, debtForRestore.balance))
+      : 0;
+
   const updatedPayments = payments.map((p) =>
-    p.id === paymentId && p.deletedAt ? untombstone(p, now) : p
+    p.id === paymentId && p.deletedAt
+      ? { ...untombstone(p, now), appliedAmount: reapplied }
+      : p
   );
   const updatedDebts =
     target == null
@@ -458,6 +502,11 @@ const RESET_KEYS = [
   "@budgetark_custom_categories",
   "@budgetark_category_bucket_overrides",
   "@budgetark_debt_due_dismissals",
+  // Unlocked badges + the stats that drive them (streaks, export count,
+  // review opens). Without these a fresh anonymous account inherits the
+  // previous user's achievements after "Reset All Data."
+  "@budgetark_achievements",
+  "@budgetark_achievement_stats",
 ] as const;
 
 export class ResetIncompleteError extends Error {

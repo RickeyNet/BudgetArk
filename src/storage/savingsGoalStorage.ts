@@ -2,6 +2,7 @@ import * as EncryptedStorage from "./encryptedStorage";
 import type { SavingsGoal } from "../types";
 import {
   filterLive,
+  mergePreservingTombstones,
   purgeExpiredTombstones,
   tombstone,
   untombstone,
@@ -28,7 +29,7 @@ export const getSavingsGoalsIncludingDeleted = async (): Promise<SavingsGoal[]> 
     // when nothing was dropped, so the steady-state read costs O(1) here
     // instead of the previous O(n × record-size) JSON.stringify diff.
     if (purged !== parsed) {
-      await saveSavingsGoals(purged);
+      await writeSavingsGoals(purged);
     }
     return purged;
   } catch {
@@ -37,18 +38,37 @@ export const getSavingsGoalsIncludingDeleted = async (): Promise<SavingsGoal[]> 
 };
 
 /**
- * Persists the full goals array (live + tombstones). Always pass the
- * tombstone-aware array; passing a `filterLive` result here will drop the
- * tombstones the next sync needs.
+ * Raw write - persists exactly the array given. Only for callers that
+ * already hold the tombstone-aware array (internal CRUD helpers and the
+ * purge path, which must be able to drop expired tombstones).
+ */
+const writeSavingsGoals = async (goals: SavingsGoal[]): Promise<void> => {
+  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
+};
+
+/**
+ * Persists the goals array. Safe to call with a live-only
+ * (`getSavingsGoals`) array: stored tombstones missing from `goals` are
+ * merged back in so a screen-level save can't erase the soft-deletes that
+ * Undo and sync need.
  */
 export const saveSavingsGoals = async (goals: SavingsGoal[]): Promise<void> => {
-  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
+  const raw = await EncryptedStorage.getItem(STORAGE_KEY);
+  let stored: SavingsGoal[] = [];
+  if (raw) {
+    try {
+      stored = JSON.parse(raw) as SavingsGoal[];
+    } catch {
+      stored = [];
+    }
+  }
+  await writeSavingsGoals(mergePreservingTombstones(goals, stored));
 };
 
 export const addSavingsGoal = async (goal: SavingsGoal): Promise<SavingsGoal[]> => {
   const goals = await getSavingsGoalsIncludingDeleted();
   const updated = [...goals, goal];
-  await saveSavingsGoals(updated);
+  await writeSavingsGoals(updated);
   return filterLive(updated);
 };
 
@@ -66,7 +86,7 @@ export const updateSavingsGoal = async (
         }
       : goal
   );
-  await saveSavingsGoals(updated);
+  await writeSavingsGoals(updated);
   return filterLive(updated);
 };
 
@@ -79,7 +99,7 @@ export const deleteSavingsGoal = async (goalId: string): Promise<SavingsGoal[]> 
   const next = goals.map((goal) =>
     goal.id === goalId ? tombstone(goal, now) : goal
   );
-  await saveSavingsGoals(next);
+  await writeSavingsGoals(next);
   return filterLive(next);
 };
 
@@ -94,6 +114,6 @@ export const restoreSavingsGoal = async (
   const next = goals.map((goal) =>
     goal.id === goalId && goal.deletedAt ? untombstone(goal, now) : goal
   );
-  await saveSavingsGoals(next);
+  await writeSavingsGoals(next);
   return filterLive(next);
 };

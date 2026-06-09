@@ -60,6 +60,30 @@ export const untombstone = <T extends Tombstoneable>(record: T, now: string): T 
 };
 
 /**
+ * Re-attach stored tombstones that are missing from an incoming array.
+ *
+ * Screens read live-only arrays (`getX()` → `filterLive`) and historically
+ * round-tripped them straight into `saveX()`, silently erasing every
+ * tombstone - which both broke Undo (nothing left to restore) and let the
+ * paired device resurrect the deletion on its next sync. Public `saveX`
+ * helpers now run their input through this merge so a live-only array is
+ * safe to save: records in `incoming` always win by id (so an explicit
+ * untombstone still works), and stored tombstones absent from `incoming`
+ * are carried over. Stored *live* records absent from `incoming` are
+ * intentionally dropped - that's how cleanup paths discard corrupt records.
+ */
+export const mergePreservingTombstones = <T extends Tombstoneable>(
+  incoming: T[],
+  stored: T[]
+): T[] => {
+  const incomingIds = new Set(incoming.map((record) => record.id));
+  const preserved = stored.filter(
+    (record) => record.deletedAt && !incomingIds.has(record.id)
+  );
+  return preserved.length === 0 ? incoming : [...incoming, ...preserved];
+};
+
+/**
  * Drop tombstones whose `deletedAt` is older than the TTL. Returns the
  * pruned array (a new copy if any were dropped, the original ref otherwise).
  */

@@ -2,6 +2,7 @@ import * as EncryptedStorage from "./encryptedStorage";
 import type { AssetAccount } from "../types";
 import {
   filterLive,
+  mergePreservingTombstones,
   purgeExpiredTombstones,
   tombstone,
   untombstone,
@@ -28,7 +29,7 @@ export const getAssetAccountsIncludingDeleted = async (): Promise<AssetAccount[]
     // when nothing was dropped, so the steady-state read costs O(1) here
     // instead of the previous O(n × record-size) JSON.stringify diff.
     if (purged !== parsed) {
-      await saveAssetAccounts(purged);
+      await writeAssetAccounts(purged);
     }
     return purged;
   } catch {
@@ -37,18 +38,37 @@ export const getAssetAccountsIncludingDeleted = async (): Promise<AssetAccount[]
 };
 
 /**
- * Persists the full accounts array (live + tombstones). Always pass the
- * tombstone-aware array; passing a `filterLive` result here will drop the
- * tombstones the next sync needs.
+ * Raw write - persists exactly the array given. Only for callers that
+ * already hold the tombstone-aware array (internal CRUD helpers and the
+ * purge path, which must be able to drop expired tombstones).
+ */
+const writeAssetAccounts = async (accounts: AssetAccount[]): Promise<void> => {
+  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+};
+
+/**
+ * Persists the accounts array. Safe to call with a live-only
+ * (`getAssetAccounts`) array: stored tombstones missing from `accounts` are
+ * merged back in so a screen-level save can't erase the soft-deletes that
+ * Undo and sync need.
  */
 export const saveAssetAccounts = async (accounts: AssetAccount[]): Promise<void> => {
-  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+  const raw = await EncryptedStorage.getItem(STORAGE_KEY);
+  let stored: AssetAccount[] = [];
+  if (raw) {
+    try {
+      stored = JSON.parse(raw) as AssetAccount[];
+    } catch {
+      stored = [];
+    }
+  }
+  await writeAssetAccounts(mergePreservingTombstones(accounts, stored));
 };
 
 export const addAssetAccount = async (account: AssetAccount): Promise<AssetAccount[]> => {
   const accounts = await getAssetAccountsIncludingDeleted();
   const updated = [...accounts, account];
-  await saveAssetAccounts(updated);
+  await writeAssetAccounts(updated);
   return filterLive(updated);
 };
 
@@ -66,7 +86,7 @@ export const updateAssetAccount = async (
         }
       : account
   );
-  await saveAssetAccounts(updated);
+  await writeAssetAccounts(updated);
   return filterLive(updated);
 };
 
@@ -79,7 +99,7 @@ export const deleteAssetAccount = async (accountId: string): Promise<AssetAccoun
   const next = accounts.map((account) =>
     account.id === accountId ? tombstone(account, now) : account
   );
-  await saveAssetAccounts(next);
+  await writeAssetAccounts(next);
   return filterLive(next);
 };
 
@@ -96,6 +116,6 @@ export const restoreAssetAccount = async (
       ? untombstone(account, now)
       : account
   );
-  await saveAssetAccounts(next);
+  await writeAssetAccounts(next);
   return filterLive(next);
 };
