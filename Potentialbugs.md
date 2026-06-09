@@ -323,3 +323,165 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
   - Start sync on both devices in awkward timing.
   - Cancel/retry.
   - Verify no stale advertising or weird second-connection behavior.
+
+---
+
+# Round 4 - Audit Findings (2026-06-09)
+
+Discovered via five parallel code-review agents (screens, storage/import-export,
+sync, financial calculations, components/providers). Items marked **(2x)** were
+independently found by two agents. Prior rounds' items excluded.
+
+## P0 - Critical: data loss / wrong-money risk
+
+- [x] **Screens save tombstone-stripped arrays back to storage - wipes soft-delete tombstones (2x impact: Undo no-ops + paired-device resurrection)**
+  - **Priority:** P0
+  - **Files:** `src/screens/BudgetScreen.tsx:409-421, 881-884, 924-927, 1158, 1299, 1355`, `src/screens/DebtTrackerScreen.tsx:331-334, 635-637, 813-822, 978-1006`, `src/screens/BridgeScreen.tsx:147-148, 364, 413`
+  - **What:** Storage docs (e.g. `savingsGoalStorage.ts:40-42`) require saving the tombstone-aware array, but screens read via `getX()` (live-only `filterLive` result) and round-trip that straight into `saveX()`. The BudgetScreen focus-effect recurring catch-up does this with **no user action** - merely focusing Budget when a monthly catch-up is due erases every pending budget-entry and asset tombstone.
+  - **Impact:** (1) Delete an entry/debt, then add another or trip the catch-up - tombstone erased, Undo (`restoreBudgetEntry`/`restoreDebt`) finds nothing and silently no-ops; record permanently gone via a flow advertised as undoable. (2) With the tombstone gone before next sync, the partner's stale upsert resurrects the deletion - the exact bug the tombstone work was meant to kill.
+  - **Fix:** Route screen mutations through the tombstone-aware helpers (`addDebt`, `addBudgetEntry`, ...), or make `saveX` merge the passed live array over stored records that have `deletedAt`.
+
+- [x] **Due-date prompt logs unclamped minPayment; deletePayment restores full amount - balance can exceed what was ever owed (2x)**
+  - **Priority:** P0
+  - **Files:** `src/components/DebtDuePaymentPromptModal.tsx:66`, `src/storage/debtStorage.ts:312` vs `:359`
+  - **What:** Prompt calls `onLogPayment(debt.id, debt.minPayment)` with no clamp to balance (DebtCard clamps at `DebtCard.tsx:136-138`). `recordPayment` clamps balance at 0 but stores the full payment amount; `deletePayment` adds back the full `target.amount`.
+  - **Impact:** Balance $40, minPayment $150 - prompt logs $150, balance 0. User deletes the overpayment - balance becomes **$150** on a debt that was $40. Delete/restore cycles aren't idempotent. Spreadsheet-imported payments hit the same asymmetry.
+  - **Fix:** Clamp in prompt handler (`Math.min(debt.minPayment, debt.balance)`); store the applied delta on the payment so delete/restore reverse exactly.
+
+- [x] **Merge-mode JSON import silently overwrites singletons instead of merging - erases net-worth history**
+  - **Priority:** P0
+  - **Files:** `src/utils/importData.ts:823-829, 869-887`
+  - **What:** In merge mode, net-worth snapshots, category bucket overrides, debt milestones, and payoff strategy are written verbatim from the file - no union, no `updatedAt` LWW.
+  - **Impact:** Importing a 3-month-old backup in "Merge" mode permanently erases the last 3 months of daily net-worth snapshots; stale backup rolls back newer milestone targets/strategy.
+  - **Fix:** Union snapshots by `dayKey` (keep newest `capturedAt`); merge overrides key-wise; LWW on milestones/strategy.
+
+## P1 - High: balance drift, broken reminders, unrestorable backups, security
+
+- [x] **BudgetScreen inline recurring catch-up duplicates `linkedAccountRecurring` without the Round-2/3 fixes**
+  - **Priority:** P1
+  - **Files:** `src/screens/BudgetScreen.tsx:372-422` vs `src/utils/linkedAccountRecurring.ts`
+  - **What:** The focus-effect re-implements `applyMissedRecurringLinkedAccountContributions` inline, missing (1) the Round-3 orphan-account skip - entries linked to deleted accounts get `lastAppliedMonth` stamped while the credit silently vanishes, and (2) the Round-2 local-TZ month-key fix - `getMonthKey(new Date(entry.date))` parses date-only ISO as UTC. Budget is the most-visited tab, so it usually stamps before Bridge's fixed util runs - the Round-3 fix is effectively dead in practice.
+  - **Impact:** Asset balances silently drift (lost or duplicated monthly contributions).
+  - **Fix:** Delete the inline block; call `applyMissedRecurringLinkedAccountContributions` like BridgeScreen does.
+
+- [x] **Due-date reminder month attribution: UTC payment timestamps vs local month key (2x)**
+  - **Priority:** P1
+  - **Files:** `src/utils/debtDueCalendar.ts:38-47` (used at :86, :100)
+  - **What:** `hasPaymentInMonth` does `p.date.startsWith(monthKey + "-")` - UTC ISO prefix vs local-derived month key. Denver user pays June 30 at 7:30 PM local - stored as `2026-07-01T01:30Z`.
+  - **Impact:** "MINIMUM DUE TODAY" prompt/banner keeps firing the rest of the day as if unpaid (inviting a double payment on next focus), and **July's reminder is silently suppressed for the whole month** - user can miss a real payment. Also disagrees with BudgetScreen's local-month bucketing of the same payment.
+  - **Fix:** `getMonthKey(new Date(p.date)) === monthKey` (local components, matching the rest of the reminder math).
+
+- [x] **Due-prompt "Yes, log" has no in-flight guard - double-tap logs the payment twice (2x)**
+  - **Priority:** P1
+  - **Files:** `src/components/DebtDuePaymentPromptModal.tsx:64-72`, `src/screens/DebtTrackerScreen.tsx:685-697`
+  - **What:** Button stays enabled through 100-500 ms of awaits; modal closes only after `recordPayment` + `getPayments` + `syncNetWorthSnapshot`. Storage serialization means **both** taps apply cleanly. DebtCard avoids this by clearing its input synchronously.
+  - **Fix:** Disable button on first press (local `submitting` state) or null the prompt synchronously.
+
+- [x] **App's own backups outgrow its own import caps - long-term users get unrestorable exports**
+  - **Priority:** P1
+  - **Files:** `src/utils/exportData.ts:136`, `src/utils/importData.ts:151-155, 378-382`
+  - **What:** Export pretty-prints (`JSON.stringify(payload, null, 2)`, ~3-4x compact) with no limit; import rejects >500 KB raw (checked **before** decryption, so encrypted exports lose another ~25% to base64), >2,000 items/collection, >6,000 total. ~2 years at 2-3 entries/day exceeds the cap.
+  - **Impact:** Failure discovered only at restore time (device migration), when the original data may be gone.
+  - **Fix:** Compact stringify on export; check size post-decryption; warn at export time if payload exceeds import limits.
+
+- [x] **Sync transport HMAC covers payload only - envelope (type, senderId, timestamp, nonce) unauthenticated**
+  - **Priority:** P1
+  - **Files:** `src/sync/transportService.ts:39-43, 84-96, 102-133`
+  - **What:** `buildAndSend` MACs the payload ciphertext only; `validateAndDecrypt` checks senderId/timestamp/nonce from the unauthenticated envelope. A LAN attacker who captured any valid frame can re-wrap the payload+hmac with a fresh timestamp, new nonce, and any `type` - defeating replay/age protection and enabling type confusion (SYNC_RESPONSE relabeled as SYNC_REQUEST).
+  - **Fix:** HMAC the full canonical message (type|senderId|timestamp|nonce|payload); verify before trusting any envelope field.
+
+- [x] **iOS modal stacking regressions in new flows (3 sites)**
+  - **Priority:** P1
+  - **Files:** (a) `src/screens/DebtTrackerScreen.tsx:662-697` - paying off a debt from the due prompt presents the celebration while the prompt is still up (2x); (b) `src/screens/BudgetScreen.tsx:1983-1986` + `src/components/BillCalendarModal.tsx:315-318` - Bill Calendar "edit entry" tears down two modals and presents the edit sheet in the same tick; (c) `src/achievements/AchievementsProvider.tsx:117-125` - achievement unlock modal presents mid-dismissal of lesson celebration (`LessonScreen.tsx:203-218`) or edit modal (`DebtTrackerScreen.tsx:746`).
+  - **What:** All three violate the documented dismiss-then-present constraint the codebase fixes elsewhere with 250 ms defers (`DebtTrackerScreen.tsx:738-742, 1276-1281`).
+  - **Impact:** Payoff celebration lost/flickers when final payment logged from prompt; bill-edit sheet intermittently never appears; achievement unlock celebration silently skipped (unlock persists, so it never re-shows).
+  - **Fix:** Close first, present after 250 ms defer; for achievements, centralize the defer in AchievementsProvider when the queue becomes non-empty.
+
+## P2 - Medium
+
+- [x] **`customCategories` + `categoryBucketOverrides` do not participate in sync**
+  - **Files:** `src/sync/diffEngine.ts`, `src/sync/types.ts:83-101`
+  - **What:** Both are in export/import but absent from `SyncDiff`. Synced entries referencing a custom category render with fallback icon and default "wants" bucket on the partner device - bucket math diverges between paired devices.
+  - **Fix:** Add both to `SyncDiff` with `updatedAt` LWW (validators already exist).
+
+- [x] **Reset All Data leaves achievements and achievement stats**
+  - **Files:** `src/storage/debtStorage.ts:430-461`
+  - **What:** `RESET_KEYS` omits `@budgetark_achievements` and `@budgetark_achievement_stats`; the clear helpers exist but have zero callers. Previous user's badges/streaks survive reset. Same class as the Round-1 reset gap.
+  - **Fix:** Add both keys to `RESET_KEYS`.
+
+- [x] **Backup omits achievements, achievement stats, and due-date dismissals**
+  - **Files:** `src/utils/exportData.ts:69-134`
+  - **What:** After device migration, stat-based achievements reset to zero permanently; every debt with a due day re-prompts for the current month.
+
+- [x] **`getItem` migration writes bypass the per-key write queue**
+  - **Files:** `src/storage/encryptedStorage.ts:273, 278`
+  - **What:** V1→V2 and legacy-plaintext upgrades call `AsyncStorage.setItem` directly, not `enqueueWrite`. A queued fresh write can land mid-migration and get silently reverted to the pre-edit value. Window is first-read-after-upgrade at app startup - exactly when concurrent reads/writes happen.
+  - **Fix:** Route both migration writes through `enqueueWrite`.
+
+- [x] **Add Entry modal: UTC month default + UTC+13/14 date shift (2x)**
+  - **Files:** `src/components/AddBudgetEntryModal.tsx:58, 89-93`
+  - **What:** (1) `todayYearMonth` uses `toISOString().slice(0,7)` - EST user at 8 PM on May 31 gets a "Jun 2026" default; entries quietly book into next month. (2) `buildEntryDateISO` stores local-noon-as-UTC; for UTC+13/14, day-1 entries land in the previous month and every recurrence fires a month early, permanently.
+  - **Fix:** Build month key from local components; store local date parts (or noon **UTC**).
+
+- [x] **Payoff comparison renders "Infinity mo faster" / "NaN mo faster"**
+  - **Files:** `src/screens/DebtTrackerScreen.tsx:1468, 1496`, fed by `calculations.ts:207, 221`
+  - **What:** Round-2 fix made unsolvable plans return `monthsToPayoff: Infinity`; the savings line does raw subtraction (`Infinity - 81 = Infinity`; both unsolvable = `NaN`). `totalInterestPaid` for an unsolvable plan is ~1 month of interest, so "Save $X" is garbage too.
+  - **Fix:** Guard with `Number.isFinite`; render "Makes payoff possible" instead.
+
+- [x] **Annual report counts future months of recurring entries as actuals**
+  - **Files:** `src/utils/annualReport.ts:104-130, 221-237`
+  - **What:** Current-year report sums recurring entries across all 12 months. In June, a $500/mo recurring entry shows $6,000 "set aside" when $3,000 has happened; `debtPaid` counts only real payments, so the card mixes projections and actuals.
+  - **Fix:** Cap the month loop at the current month for the current year.
+
+- [x] **Savings-streak achievement ignores recurrence and mis-parses date-only dates**
+  - **Files:** `src/data/achievementDefs.ts:91-113`
+  - **What:** (1) Builds month set from literal `entry.date` only - a recurring monthly Savings entry counts only its creation month, so the streak reads 0 despite continuous saving (and can revoke the badge). (2) `new Date(entry.date)` parses date-only strings as UTC - west-of-UTC users logging on the 1st get attributed to the prior month.
+  - **Fix:** Use `isEntryActiveInMonth` from recurrence.ts; slice month keys (`entry.date.slice(0,7)`).
+
+- [x] **Spreadsheet import: one out-of-range cell aborts the whole import**
+  - **Files:** `src/utils/spreadsheetImport.ts` (mappers), `src/utils/importData.ts:196-199`
+  - **What:** Header claims bad rows are "dropped silently" but `sanitizeCollection` throws. Mappers are looser than `recordValidators` (negative balance, unbounded rate, `(500)` parsed as -500), so rows the mappers accept reject the entire file with no row info. Caps also inconsistent (5,000 rows/sheet vs 2,000 items/collection vs 500 KB re-serialized JSON, with JSON-flavored error text for an xlsx).
+  - **Fix:** Align mapper ranges with validators; skip + count in `skippedRows`; align caps.
+
+- [x] **Replace-mode spreadsheet import destroys data the format cannot carry**
+  - **Files:** `src/utils/spreadsheetImport.ts:629-639`, `src/utils/importData.ts:902-921`
+  - **What:** Replace removes all 11 storage keys including net-worth snapshots, custom categories, milestones, strategy - none of which exist in the xlsx schema (CSV carries budget entries only).
+  - **Fix:** Scope `keysToRemove` to collections actually present in the payload.
+
+- [x] **CSV export formula injection (CWE-1236)**
+  - **Files:** `src/utils/spreadsheetExport.ts:214-228, 989-991`
+  - **What:** Descriptions/category names written verbatim; `=HYPERLINK(...)` becomes a live formula in Excel/Sheets. XLSX output is safe (string-typed cells); CSV is not.
+  - **Fix:** Prefix `'` to CSV cells starting with `=`, `+`, `-`, `@`.
+
+- [x] **Bulk-deleting payments can pop the due-date prompt over the open Payment History sheet**
+  - **Files:** `src/screens/DebtTrackerScreen.tsx:781-798`, `src/components/PaymentHistoryModal.tsx:147`
+  - **What:** `handlePaymentsChanged` ends with `setDuePromptDebt(...)` while the history modal is still presented; covers the in-modal UNDO bar during its 5-second window.
+  - **Fix:** Skip while `showHistory` is true; re-evaluate when the history modal closes.
+
+- [x] **`connectToHost` socket leak on post-connect error during pairing**
+  - **Files:** `src/sync/transportService.ts:213-258`
+  - **What:** After the connect promise resolves, a later socket error is swallowed (promise already settled) and the socket is never destroyed; mid-pairing drops rely on `joinPairing`'s 15 s timer alone.
+
+- [ ] **Net-worth snapshots do not sync between paired devices** (possibly by design - each device recomputes daily; but the unused `isNetWorthSnapshotItem` validator suggests sync was intended; history series permanently diverge)
+  - **Files:** `src/sync/diffEngine.ts`, `src/storage/netWorthSnapshotStorage.ts`
+
+- [x] **ProfileScreen: auto-sync monitor started via toggle never stopped on unmount**
+  - **Files:** `src/screens/ProfileScreen.tsx:322-367, 661-673`
+  - **What:** Unmount cleanup only stops monitoring when the mount effect started it; the toggle path recreates the listener-leak shape the prior round fixed.
+
+## P3 - Lower
+
+- [x] **`calcTotalInterest` overstates interest; returns $200 interest on a 0% loan** - currently has zero callers, latent only. `src/utils/calculations.ts:276-291`. Final partial month treated as a full payment.
+- [x] **`isMonthKey` regex accepts `9999-99`** - one corrupt key permanently occupies a `pruneLimitHistory` slot (lexicographically-last 13) and evicts a real month on every save. Fix regex to `(0[1-9]|1[0-2])`.
+- [x] **Import Phase-2 temp-key leak** - `importData.ts:893-896`: temp-write loop runs outside try/rollback; mid-loop failure strands `*_import_tmp` keys.
+- [x] **CSV export calls `recordBackup`** - clears the backup-reminder banner even though CSV carries budget entries only. `spreadsheetExport.ts:1035`.
+- [x] **UndoProvider replace-during-exit race** - `src/undo/UndoProvider.tsx:95-117`: a `pushUndo` landing during the prior bar's 160 ms exit can have the stale animation callback kill the new snackbar. Tag animations by bar key.
+
+## Verified clean this round
+
+- Charts (Sparkline, CashFlow, Donut, NetWorthHistogram, ProgressRing): divide-by-zero/NaN-to-SVG all guarded.
+- 31-day due-day tap grid: `clampDueDayToMonth` handles day 31 in February correctly in reminders and bill calendar.
+- Tombstone purge, `multiSet` tail-splicing, v1→v2 decrypt edge cases, prototype-pollution paths in JSON import: correct.
+- Both-devices-as-server sync deadlock, partial TCP frame handling, debt `paymentDueDay` sync + validation: correct.
+- Theme/Density/SurfaceStyle/Currency/CustomCategories providers: memoized, `ready`-gated.
+- Prior-round cancel-flag fixes verified correctly implemented.
