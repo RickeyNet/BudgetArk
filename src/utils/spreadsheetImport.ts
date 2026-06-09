@@ -17,8 +17,12 @@
  *   - Savings Goals
  *   - Asset Accounts
  *
- * Unknown sheets are ignored. Rows that fail validation are dropped silently
- * by the downstream sanitizer in importData.ts (which is strict).
+ * Unknown sheets are ignored. Rows that fail validation MUST be dropped here
+ * (returned as null from the row mappers, counted in `skippedRows`) - the
+ * downstream sanitizer in importData.ts THROWS on any invalid record, so a
+ * single out-of-range cell that slips past the mappers aborts the entire
+ * import. The mappers therefore mirror the range limits in
+ * src/utils/recordValidators.ts (VALIDATOR_LIMITS).
  */
 
 import * as DocumentPicker from "expo-document-picker";
@@ -30,7 +34,7 @@ import {
   DERIVED_RECURRING_PREFIX,
 } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
-import { normalizeImportCategory } from "./recordValidators";
+import { normalizeImportCategory, VALIDATOR_LIMITS } from "./recordValidators";
 import { normalizePaymentUrl } from "./paymentUrl";
 import {
   ASSET_ACCOUNT_CATEGORIES,
@@ -249,12 +253,16 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
 
   // Savings/Retirement/Investing entries may legitimately be negative
   // (correction entries when the user lowers a tracked reserve). All other
-  // categories require positive amounts.
+  // categories require positive amounts - note parseAmount turns "(500)"
+  // into -500 (accounting negatives), and the strict sanitizer downstream
+  // aborts the whole file on a negative it doesn't allow, so such rows must
+  // be skipped here. The MAX_MONEY cap mirrors isBudgetEntryItem.
   const allowsNegative =
     category !== null && NEGATIVE_AMOUNT_CATEGORIES.has(category);
   const amountValid =
     Number.isFinite(amount) &&
     Math.abs(amount) >= 0.01 &&
+    Math.abs(amount) <= VALIDATOR_LIMITS.MAX_MONEY &&
     (allowsNegative ? true : amount > 0);
 
   if (!type || !category || !amountValid || !dateIso) {
@@ -330,7 +338,15 @@ const rowToBudgetLimit = (row: Record<string, unknown>) => {
   const category: string | null = normalizeImportCategory(categoryRaw);
   const monthlyLimit = parseAmount(get(row, "MonthlyLimit", "Monthly Limit", "Limit"));
 
-  if (!category || !Number.isFinite(monthlyLimit) || monthlyLimit <= 0) {
+  // Bounds mirror isBudgetLimitItem (min 0.01, max MAX_MONEY): one
+  // out-of-range cell would otherwise make the strict sanitizer reject the
+  // whole import instead of just this row.
+  if (
+    !category ||
+    !Number.isFinite(monthlyLimit) ||
+    monthlyLimit < 0.01 ||
+    monthlyLimit > VALIDATOR_LIMITS.MAX_MONEY
+  ) {
     return null;
   }
   // Preserve `updatedAt` so a paired sync doesn't treat every imported limit
@@ -350,15 +366,24 @@ const rowToDebt = (row: Record<string, unknown>) => {
   const rate = parseAmount(get(row, "Rate", "APR"));
   const minPayment = parseAmount(get(row, "MinPayment", "Min Payment", "MinimumPayment"));
 
+  // Bounds mirror isDebtItem: balance/minPayment in [0, MAX_MONEY],
+  // originalBalance >= 0.01, rate <= MAX_RATE. A "(500)" balance parses as
+  // -500 via parseAmount; it must be skipped here, because the strict
+  // sanitizer downstream rejects the entire file over one bad row.
   if (
     !name ||
     !Number.isFinite(balance) ||
+    balance < 0 ||
+    balance > VALIDATOR_LIMITS.MAX_MONEY ||
     !Number.isFinite(originalBalance) ||
-    originalBalance <= 0 ||
+    originalBalance < 0.01 ||
+    originalBalance > VALIDATOR_LIMITS.MAX_MONEY ||
     !Number.isFinite(rate) ||
     rate < 0 ||
+    rate > VALIDATOR_LIMITS.MAX_RATE ||
     !Number.isFinite(minPayment) ||
-    minPayment < 0
+    minPayment < 0 ||
+    minPayment > VALIDATOR_LIMITS.MAX_MONEY
   ) {
     return null;
   }
@@ -420,7 +445,16 @@ const rowToPayment = (row: Record<string, unknown>) => {
   const debtId = parseString(get(row, "DebtID", "DebtId", "Debt ID"), 80);
   const amount = parseAmount(get(row, "Amount"));
   const dateIso = parseDate(get(row, "Date"));
-  if (!debtId || !Number.isFinite(amount) || amount <= 0 || !dateIso) {
+  // Bounds mirror isPaymentItem (min 0.01, max MAX_MONEY); a parenthesized
+  // "(50)" amount comes back negative from parseAmount and must be skipped
+  // rather than poisoning the whole file in the strict sanitizer.
+  if (
+    !debtId ||
+    !Number.isFinite(amount) ||
+    amount < 0.01 ||
+    amount > VALIDATOR_LIMITS.MAX_MONEY ||
+    !dateIso
+  ) {
     return null;
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
@@ -442,13 +476,18 @@ const rowToSavingsGoal = (row: Record<string, unknown>) => {
   const targetAmount = parseAmount(get(row, "TargetAmount", "Target Amount"));
   const currentAmount = parseAmount(get(row, "CurrentAmount", "Current Amount"));
 
+  // Bounds mirror isSavingsGoalItem: targetAmount in [0.01, MAX_MONEY],
+  // currentAmount in [0, MAX_MONEY]. Out-of-range rows are skipped so the
+  // strict downstream sanitizer can't abort the whole import over them.
   if (
     !name ||
     !category ||
     !Number.isFinite(targetAmount) ||
-    targetAmount <= 0 ||
+    targetAmount < 0.01 ||
+    targetAmount > VALIDATOR_LIMITS.MAX_MONEY ||
     !Number.isFinite(currentAmount) ||
-    currentAmount < 0
+    currentAmount < 0 ||
+    currentAmount > VALIDATOR_LIMITS.MAX_MONEY
   ) {
     return null;
   }
@@ -484,7 +523,16 @@ const rowToAssetAccount = (row: Record<string, unknown>) => {
     : null;
   const balance = parseAmount(get(row, "Balance"));
 
-  if (!name || !category || !Number.isFinite(balance) || balance < 0) {
+  // Bounds mirror isAssetAccountItem (balance in [0, MAX_MONEY]); an
+  // accounting-style "(500)" balance parses negative and must be skipped,
+  // not handed to the strict sanitizer which would abort the whole file.
+  if (
+    !name ||
+    !category ||
+    !Number.isFinite(balance) ||
+    balance < 0 ||
+    balance > VALIDATOR_LIMITS.MAX_MONEY
+  ) {
     return null;
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
