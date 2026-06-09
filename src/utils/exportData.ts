@@ -26,6 +26,9 @@ import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
 import { getCategoryBucketOverrides } from "../storage/categoryBucketOverridesStorage";
+import { getUnlockedAchievements } from "../storage/achievementsStorage";
+import { getAchievementStats } from "../storage/achievementStatsStorage";
+import { getDebtDueDismissals } from "../storage/debtDueReminderStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
@@ -80,6 +83,9 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     netWorthSnapshots,
     customCategories,
     categoryBucketOverrides,
+    achievements,
+    achievementStats,
+    debtDueDismissals,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
     // restore on this device, or another paired device, doesn't accidentally
@@ -103,6 +109,16 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getNetWorthSnapshots(),
     getCustomCategories(),
     getCategoryBucketOverrides(),
+    // Achievements + their backing stats are NOT derivable from financial
+    // data (export taps, Monthly Review opens, app-open streak), so leaving
+    // them out of the backup meant a device migration permanently reset the
+    // stat-based badges to zero.
+    getUnlockedAchievements(),
+    getAchievementStats(),
+    // Due-day dismissals are "<debtId>:<YYYY-MM>" facts; without them every
+    // debt with a payment due day re-prompts for the current month right
+    // after a restore.
+    getDebtDueDismissals(),
   ]);
 
   const exportPayload = {
@@ -131,9 +147,16 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     netWorthSnapshots,
     customCategories,
     categoryBucketOverrides,
+    achievements,
+    achievementStats,
+    debtDueDismissals,
   };
 
-  const json = JSON.stringify(exportPayload, null, 2);
+  // Compact, not pretty-printed: indentation tripled the file size, and
+  // long-term users' exports were outgrowing import's size cap - making
+  // the app's own backups unrestorable at exactly the moment (device
+  // migration) the user needed them.
+  const json = JSON.stringify(exportPayload);
 
   let message: string;
   if (password) {
