@@ -287,6 +287,10 @@ const countDiffEntries = (diff: SyncDiff): number => {
     diff.savingsGoals.length +
     (diff.assetAccounts?.length ?? 0) +
     diff.budgetLimits.length +
+    // Optional-chained like assetAccounts: these fields were added after
+    // launch, so a diff built by an older peer may omit them entirely.
+    (diff.customCategories?.length ?? 0) +
+    Object.keys(diff.categoryBucketOverrides ?? {}).length +
     (diff.debtMilestonePlan ? 1 : 0) +
     (diff.payoffStrategy ? 1 : 0)
   );

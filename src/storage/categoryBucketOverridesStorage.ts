@@ -30,6 +30,16 @@ const writeStore = async (overrides: CategoryBucketOverrides): Promise<void> => 
 export const getCategoryBucketOverrides = async (): Promise<CategoryBucketOverrides> =>
   readStore();
 
+/**
+ * Bulk write used by P2P sync after it has merged local + incoming
+ * overrides. The per-key setters above would need N round-trips and could
+ * interleave with a concurrent edit; sync computes the full merged map and
+ * writes it once.
+ */
+export const saveCategoryBucketOverridesFromSync = async (
+  overrides: CategoryBucketOverrides
+): Promise<void> => writeStore(overrides);
+
 export const setCategoryBucketOverride = async (
   category: string,
   bucket: BudgetBucket

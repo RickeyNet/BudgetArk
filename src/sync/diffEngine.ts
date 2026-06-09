@@ -32,7 +32,17 @@ import {
   getPayoffStrategyEnvelope,
   savePayoffStrategyEnvelope,
 } from "../storage/debtStorage";
+import {
+  getCustomCategories,
+  saveCustomCategoriesFromSync,
+} from "../storage/customCategoriesStorage";
+import {
+  getCategoryBucketOverrides,
+  saveCategoryBucketOverridesFromSync,
+} from "../storage/categoryBucketOverridesStorage";
 import * as EncryptedStorage from "../storage/encryptedStorage";
+import { isBuiltInCategory } from "../data/categoryIcons";
+import { isBudgetBucket } from "../data/categoryBuckets";
 import type {
   Debt,
   Payment,
@@ -41,6 +51,8 @@ import type {
   AssetAccount,
   DebtMilestonePlan,
   CategoryBudgetLimit,
+  CustomCategory,
+  BudgetBucket,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
@@ -52,6 +64,8 @@ import {
   isBudgetLimitItem,
   isSavingsGoalItem,
   isAssetAccountItem,
+  isCustomCategoryItem,
+  isValidImportCategory,
   isMonthKey,
   sanitizeDebtMilestones,
   VALID_PAYOFF_STRATEGIES,
@@ -68,16 +82,27 @@ const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
 export const computeOutgoingDiff = async (
   lastSyncTimestamp: string | null
 ): Promise<SyncDiff> => {
-  const [debts, payments, budgetEntries, savingsGoals, assetAccounts, milestonePlan, strategyEnvelope] =
-    await Promise.all([
-      getDebtsIncludingDeleted(),
-      getPaymentsIncludingDeleted(),
-      getBudgetEntriesIncludingDeleted(),
-      getSavingsGoalsIncludingDeleted(),
-      getAssetAccountsIncludingDeleted(),
-      getDebtMilestonePlan(),
-      getPayoffStrategyEnvelope(),
-    ]);
+  const [
+    debts,
+    payments,
+    budgetEntries,
+    savingsGoals,
+    assetAccounts,
+    milestonePlan,
+    strategyEnvelope,
+    customCategories,
+    bucketOverrides,
+  ] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+    getBudgetEntriesIncludingDeleted(),
+    getSavingsGoalsIncludingDeleted(),
+    getAssetAccountsIncludingDeleted(),
+    getDebtMilestonePlan(),
+    getPayoffStrategyEnvelope(),
+    getCustomCategories(),
+    getCategoryBucketOverrides(),
+  ]);
 
   const since = lastSyncTimestamp ? new Date(lastSyncTimestamp).getTime() : 0;
 
@@ -121,6 +146,18 @@ export const computeOutgoingDiff = async (
     savingsGoals: filterChanged(savingsGoals),
     assetAccounts: filterChanged(assetAccounts),
     budgetLimits,
+    // Custom categories are not tombstoned, so filterChanged only ever
+    // emits upserts here - deletions don't propagate (same as the
+    // export/import path). Without this field a partner renders synced
+    // entries that reference a custom name with the fallback icon and the
+    // default "wants" bucket, so bucket math diverges between devices.
+    customCategories: filterChanged(customCategories),
+    // Bucket overrides carry no per-key timestamps, so there's nothing to
+    // filter against lastSyncTimestamp - send the whole map whenever it's
+    // non-empty. The map is small (one entry per overridden category) so
+    // re-broadcasting it each sync is acceptable.
+    categoryBucketOverrides:
+      Object.keys(bucketOverrides).length > 0 ? bucketOverrides : undefined,
     debtMilestonePlan:
       !lastSyncTimestamp ||
       new Date(milestonePlan.updatedAt).getTime() > since
@@ -211,6 +248,22 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
   validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem);
   validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem);
   validateDiffEntries(diff.assetAccounts, "asset account", isAssetAccountItem);
+  validateDiffEntries(diff.customCategories, "custom category", isCustomCategoryItem);
+
+  // Bucket overrides are a bare map, not DiffEntry records, so they get
+  // their own gate: keys must pass the same bounded category-name check the
+  // import path uses, and values must be one of the three buckets. A field
+  // left absent by an older peer is fine - it just means nothing to merge.
+  if (diff.categoryBucketOverrides !== undefined) {
+    if (!isObject(diff.categoryBucketOverrides)) {
+      throw new Error("Sync rejected: malformed category bucket overrides");
+    }
+    for (const [category, bucket] of Object.entries(diff.categoryBucketOverrides)) {
+      if (!isValidImportCategory(category) || !isBudgetBucket(bucket)) {
+        throw new Error("Sync rejected: invalid category bucket override");
+      }
+    }
+  }
 
   if (Array.isArray(diff.budgetLimits)) {
     for (const bucket of diff.budgetLimits) {
@@ -338,6 +391,74 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
     await EncryptedStorage.setItem(BUDGET_LIMITS_KEY, JSON.stringify(merged));
     changedCount += diff.budgetLimits.length;
+  }
+
+  // Merge custom categories - LWW by id on updatedAt, upserts only (no
+  // tombstones exist for this type). Guarded with `diff.customCategories &&`
+  // because an older peer's diff won't carry the field at all.
+  if (diff.customCategories && diff.customCategories.length > 0) {
+    // Older exports relayed through a peer may lack updatedAt (the
+    // validator allows it); treat those as epoch so any stamped record wins.
+    const tsOf = (v: string | undefined): number => {
+      if (typeof v !== "string") return 0;
+      const t = Date.parse(v);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    const localCategories = await getCustomCategories();
+    const byId = new Map<string, CustomCategory>(
+      localCategories.map((c) => [c.id, c])
+    );
+    for (const entry of diff.customCategories) {
+      const existing = byId.get(entry.record.id);
+      if (!existing || tsOf(entry.record.updatedAt) >= tsOf(existing.updatedAt)) {
+        byId.set(entry.record.id, entry.record);
+      }
+    }
+
+    // De-dupe by lowercased name (keep newest updatedAt) and drop any that
+    // shadow a built-in - mirrors importData's computeMergedCustomCategories.
+    // Both devices can independently create "Pets" with different ids; the
+    // name is what budget entries reference, so duplicate names would make
+    // icon/bucket lookups ambiguous.
+    const nameWinner = new Map<string, string>(); // lowercased name -> winning id
+    for (const [id, rec] of byId) {
+      if (isBuiltInCategory(rec.name)) {
+        byId.delete(id);
+        continue;
+      }
+      const key = rec.name.toLowerCase();
+      const prevId = nameWinner.get(key);
+      if (prevId === undefined) {
+        nameWinner.set(key, id);
+      } else if (tsOf(rec.updatedAt) >= tsOf(byId.get(prevId)!.updatedAt)) {
+        byId.delete(prevId);
+        nameWinner.set(key, id);
+      } else {
+        byId.delete(id);
+      }
+    }
+
+    await saveCustomCategoriesFromSync(Array.from(byId.values()));
+    changedCount += diff.customCategories.length;
+  }
+
+  // Merge category bucket overrides. The store has no per-key timestamps,
+  // so there's no LWW to run: incoming keys overwrite, local-only keys
+  // survive. Override *removals* therefore don't propagate - same
+  // limitation as the import path, and far better than the prior state
+  // where overrides didn't sync at all and 50/30/20 math diverged.
+  if (
+    diff.categoryBucketOverrides &&
+    Object.keys(diff.categoryBucketOverrides).length > 0
+  ) {
+    const localOverrides = await getCategoryBucketOverrides();
+    const merged: Record<string, BudgetBucket> = {
+      ...localOverrides,
+      ...diff.categoryBucketOverrides,
+    };
+    await saveCategoryBucketOverridesFromSync(merged);
+    changedCount += Object.keys(diff.categoryBucketOverrides).length;
   }
 
   // Merge milestone plan (last-write-wins on updatedAt)
