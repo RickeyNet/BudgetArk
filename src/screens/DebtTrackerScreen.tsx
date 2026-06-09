@@ -610,6 +610,29 @@ const DebtTrackerScreen: React.FC = () => {
   const avalancheWhatIf = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "avalanche", hullExtraAmount), [payoffActiveDebts, hullExtraAmount]);
   const snowballBase = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "snowball", 0), [payoffActiveDebts]);
   const snowballWhatIf = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "snowball", hullExtraAmount), [payoffActiveDebts, hullExtraAmount]);
+  /**
+   * "Save $X • N mo faster" line under each method card. An unsolvable base
+   * plan reports monthsToPayoff: Infinity (and ~1 month of accrued interest),
+   * so raw subtraction renders "Infinity mo faster" / "NaN mo faster" with a
+   * meaningless dollar figure - describe the outcome instead.
+   */
+  const formatPlanSavings = useCallback(
+    (
+      base: { monthsToPayoff: number; totalInterestPaid: number },
+      whatIf: { monthsToPayoff: number; totalInterestPaid: number }
+    ): string => {
+      if (!Number.isFinite(base.monthsToPayoff)) {
+        return Number.isFinite(whatIf.monthsToPayoff)
+          ? "Makes payoff possible"
+          : "Still not enough to pay off";
+      }
+      const saved = Math.max(0, base.totalInterestPaid - whatIf.totalInterestPaid);
+      const faster = Math.max(0, base.monthsToPayoff - whatIf.monthsToPayoff);
+      return `Save ${formatCurrency(saved)} • ${faster} mo faster`;
+    },
+    [formatCurrency]
+  );
+
   const payoffRecommendation = React.useMemo(() => {
     if (!avalancheWhatIf.isPayoffPossible || !snowballWhatIf.isPayoffPossible) {
       return "Increase payments until both plans are solvable.";
@@ -659,7 +682,11 @@ const DebtTrackerScreen: React.FC = () => {
   );
 
   /** Record a payment against a debt */
-  const handlePayment = useCallback(async (debtId: string, amount: number) => {
+  const handlePayment = useCallback(async (
+    debtId: string,
+    amount: number,
+    opts?: { suppressCelebration?: boolean }
+  ) => {
     const paymentNow = new Date().toISOString();
     const result = await recordPayment({
       id: generateUUID(),
@@ -673,25 +700,46 @@ const DebtTrackerScreen: React.FC = () => {
     const freshPayments = await getPayments();
     setPayments(freshPayments);
     if (paidOffDebt) {
-      setCelebrationDebt(paidOffDebt);
+      // Callers with their own Modal open (the due prompt) suppress this
+      // and present the celebration themselves after their dismiss
+      // animation - presenting while another Modal is dismissing leaves
+      // one of the two hidden on iOS.
+      if (!opts?.suppressCelebration) setCelebrationDebt(paidOffDebt);
     } else {
       triggerHaptic("success");
     }
     await syncNetWorthSnapshot(paymentNow);
     void notifyAchievementCheck();
-    return { debts: result.debts, payments: freshPayments };
+    return { debts: result.debts, payments: freshPayments, paidOffDebt };
   }, [debts, notifyAchievementCheck]);
 
+  const duePromptSubmittingRef = useRef(false);
   const handleDuePromptLogPayment = useCallback(
     async (debtId: string, amount: number) => {
-      const result = await handlePayment(debtId, amount);
-      setDuePromptDebt(null);
-      advanceDuePrompt(
-        result.debts,
-        result.payments,
-        dueDismissals,
-        debtId
-      );
+      // The button stays mounted through several awaits; without this guard
+      // a double-tap records the minimum payment twice (the serialized
+      // storage queue applies both writes cleanly).
+      if (duePromptSubmittingRef.current) return;
+      duePromptSubmittingRef.current = true;
+      try {
+        const result = await handlePayment(debtId, amount, {
+          suppressCelebration: true,
+        });
+        setDuePromptDebt(null);
+        if (result.paidOffDebt) {
+          // Let the prompt finish dismissing before the celebration
+          // presents. Any remaining due debts re-prompt on next focus -
+          // advancing now would pop the prompt over the celebration.
+          const paidOff = result.paidOffDebt;
+          setTimeout(() => setCelebrationDebt(paidOff), 250);
+        } else {
+          // Batched with setDuePromptDebt(null) above, so the Modal swaps
+          // content to the next due debt without a dismiss/present cycle.
+          advanceDuePrompt(result.debts, result.payments, dueDismissals, debtId);
+        }
+      } finally {
+        duePromptSubmittingRef.current = false;
+      }
     },
     [advanceDuePrompt, dueDismissals, handlePayment]
   );
@@ -787,12 +835,10 @@ const DebtTrackerScreen: React.FC = () => {
     setDebts(fresh);
     setPayments(freshPayments);
     setDueDismissals(dismissals);
-    const dueToday = debtsDueTodayNeedingPrompt(
-      fresh,
-      freshPayments,
-      dismissals
-    );
-    setDuePromptDebt(dueToday[0] ?? null);
+    // Deliberately no due-prompt re-evaluation here: this callback fires
+    // from inside the open Payment History sheet, and presenting the prompt
+    // now would stack it over the sheet (covering its undo bar). The prompt
+    // is re-evaluated when the sheet closes.
     await syncNetWorthSnapshot();
     void notifyAchievementCheck();
   }, [notifyAchievementCheck]);
@@ -1264,7 +1310,15 @@ const DebtTrackerScreen: React.FC = () => {
 
       <PaymentHistoryModal
         visible={showHistory}
-        onClose={() => setShowHistory(false)}
+        onClose={() => {
+          setShowHistory(false);
+          // Deleting this month's payment can re-arm today's due prompt;
+          // present it only after the sheet's dismiss animation finishes.
+          setTimeout(
+            () => advanceDuePrompt(debts, payments, dueDismissals),
+            250
+          );
+        }}
         debts={debts}
         onPaymentsChanged={handlePaymentsChanged}
       />
@@ -1465,7 +1519,7 @@ const DebtTrackerScreen: React.FC = () => {
                             </View>
                           </View>
                           <Text style={[styles.msPayoffSaved, { color: colors.success }]}>
-                            Save {formatCurrency(Math.max(0, avalancheBase.totalInterestPaid - avalancheWhatIf.totalInterestPaid))} • {Math.max(0, avalancheBase.monthsToPayoff - avalancheWhatIf.monthsToPayoff)} mo faster
+                            {formatPlanSavings(avalancheBase, avalancheWhatIf)}
                           </Text>
                           <TouchableOpacity
                             style={[styles.msPayoffUseBtn, strategy === "avalanche" && { borderColor: colors.accent, backgroundColor: `${colors.accent}20` }]}
@@ -1493,7 +1547,7 @@ const DebtTrackerScreen: React.FC = () => {
                             </View>
                           </View>
                           <Text style={[styles.msPayoffSaved, { color: colors.success }]}>
-                            Save {formatCurrency(Math.max(0, snowballBase.totalInterestPaid - snowballWhatIf.totalInterestPaid))} • {Math.max(0, snowballBase.monthsToPayoff - snowballWhatIf.monthsToPayoff)} mo faster
+                            {formatPlanSavings(snowballBase, snowballWhatIf)}
                           </Text>
                           <TouchableOpacity
                             style={[styles.msPayoffUseBtn, strategy === "snowball" && { borderColor: colors.accent, backgroundColor: `${colors.accent}20` }]}
