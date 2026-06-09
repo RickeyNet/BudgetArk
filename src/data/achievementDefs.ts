@@ -89,23 +89,23 @@ const latestNetWorth = (ctx: AchievementContext): number => {
 };
 
 const consecutiveSavingsMonths = (ctx: AchievementContext): number => {
-  const months = new Set<string>();
-  for (const entry of ctx.budgetEntries) {
-    if (entry.category !== "Savings") continue;
-    const d = new Date(entry.date);
-    if (Number.isNaN(d.getTime())) continue;
-    months.add(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-    );
-  }
-  if (months.size === 0) return 0;
+  // Use the shared recurrence rule: a recurring monthly Savings entry is
+  // active every cycle month from its start, exactly how the budget screen
+  // counts it. The old literal entry.date scan credited only the creation
+  // month (one recurring contribution = streak of 1 forever) and parsed
+  // date-only strings as UTC, shifting day-1 entries into the prior month
+  // for users west of UTC.
+  const savingsEntries = ctx.budgetEntries.filter(
+    (entry) => entry.category === "Savings"
+  );
+  if (savingsEntries.length === 0) return 0;
   let cursor = new Date();
   cursor.setDate(1);
   let count = 0;
-  // Walk backwards from this month while every month has an entry.
-  while (true) {
+  // Walk backwards from this month while some Savings entry is active.
+  while (count < 1200) {
     const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
-    if (!months.has(key)) break;
+    if (!savingsEntries.some((entry) => isEntryActiveInMonth(entry, key))) break;
     count += 1;
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
   }

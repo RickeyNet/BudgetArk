@@ -307,5 +307,9 @@ export const sanitizeDebtMilestones = (
   return raw;
 };
 
+// Month must be 01-12: `\d{2}` accepted keys like "9999-99", and because
+// budgetStorage's pruneLimitHistory keeps the lexicographically-LAST 13
+// keys, one such corrupt key would permanently occupy a history slot and
+// evict a real month on every limit save.
 export const isMonthKey = (value: unknown): value is string =>
-  typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
+  typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);

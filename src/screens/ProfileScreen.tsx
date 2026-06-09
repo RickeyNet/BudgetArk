@@ -318,10 +318,18 @@ const ProfileScreen: React.FC = () => {
     setBackupState(state);
   }, []);
 
+  /**
+   * True while the auto-sync NetInfo/AppState monitor is registered.
+   * Component-level (not effect-local) because BOTH the mount effect and
+   * the auto-sync toggle can start monitoring - the unmount cleanup must
+   * stop it regardless of which path started it, or the listener (and its
+   * setLastSyncTime against a torn-down component) leaks.
+   */
+  const monitoringActiveRef = useRef(false);
+
   /** Load user on mount */
   useEffect(() => {
     let cancelled = false;
-    let didStartMonitoring = false;
     const load = async () => {
       try {
         const [u, prefs, privacy, haptics, pairState, syncMeta, backup] =
@@ -350,7 +358,7 @@ const ProfileScreen: React.FC = () => {
               setLastSyncTime(result.timestamp);
             }
           });
-          didStartMonitoring = true;
+          monitoringActiveRef.current = true;
         }
       } catch (error) {
         if (__DEV__) console.error("Failed to load profile:", error);
@@ -359,10 +367,10 @@ const ProfileScreen: React.FC = () => {
     load();
     return () => {
       cancelled = true;
-      // Stop the auto-sync listener we registered above so it doesn't fire
-      // setLastSyncTime against a torn-down component or leak the native
-      // NetInfo subscription.
-      if (didStartMonitoring) stopMonitoring();
+      if (monitoringActiveRef.current) {
+        stopMonitoring();
+        monitoringActiveRef.current = false;
+      }
     };
   }, []);
 
@@ -617,6 +625,7 @@ const ProfileScreen: React.FC = () => {
   const handleUnpair = useCallback(async () => {
     await clearPairingState();
     stopMonitoring();
+    monitoringActiveRef.current = false;
     setPairing(null);
     setLastSyncTime(null);
     setShowUnpairConfirm(false);
@@ -667,8 +676,10 @@ const ProfileScreen: React.FC = () => {
       startMonitoring((result) => {
         if (result.success) setLastSyncTime(result.timestamp);
       });
+      monitoringActiveRef.current = true;
     } else {
       stopMonitoring();
+      monitoringActiveRef.current = false;
     }
   }, [pairing]);
 
@@ -726,6 +737,7 @@ const ProfileScreen: React.FC = () => {
     }
     await clearPairingState();
     stopMonitoring();
+    monitoringActiveRef.current = false;
     await deleteAccount();
     await getOrCreateUser();
     const freshUser = await completeOnboarding();
