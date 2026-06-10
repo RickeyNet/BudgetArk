@@ -26,6 +26,19 @@ const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000;
 const seenNonces = new Map<string, number>();
 const NONCE_PRUNE_THRESHOLD = 1024;
 
+/**
+ * Set when a frame that otherwise looks like a sync message carries a
+ * missing or different protocol version (a v1 peer's frames have no `v` at
+ * all). The frame is still dropped, but the orchestrator reads this flag
+ * when the sync fails so it can say "partner needs the app update" instead
+ * of a generic timeout. Only covers the direction where the outdated peer
+ * sends first - a v1 *server* silently drops our v2 frames (its
+ * ciphertext-only HMAC never matches) and we never see a frame to inspect.
+ */
+let protocolMismatchSeen = false;
+
+export const wasProtocolMismatchSeen = (): boolean => protocolMismatchSeen;
+
 const pruneSeenNonces = (now: number): void => {
   for (const [nonce, seenAt] of seenNonces) {
     if (now - seenAt > MAX_MESSAGE_AGE_MS) {
@@ -135,7 +148,6 @@ const validateAndDecrypt = (
   }
 
   if (
-    msg.v !== PROTOCOL_VERSION ||
     typeof msg.type !== "string" ||
     typeof msg.senderId !== "string" ||
     typeof msg.timestamp !== "string" ||
@@ -143,6 +155,13 @@ const validateAndDecrypt = (
     typeof msg.payload !== "string" ||
     typeof msg.hmac !== "string"
   ) {
+    return null;
+  }
+
+  if (msg.v !== PROTOCOL_VERSION) {
+    // Shaped like a real sync frame but wrong (or pre-v2 absent) version -
+    // almost certainly a peer on a different app version, not garbage.
+    protocolMismatchSeen = true;
     return null;
   }
 
@@ -305,8 +324,11 @@ export const connectToHost = (
 };
 
 /**
- * Clear seen nonces (call at end of sync session).
+ * Clear seen nonces and the protocol-mismatch flag (call at end of sync
+ * session). The orchestrator reads the mismatch flag in its error path
+ * BEFORE its finally block calls this, so the reset never races the check.
  */
 export const resetReplayProtection = (): void => {
   seenNonces.clear();
+  protocolMismatchSeen = false;
 };
