@@ -40,6 +40,10 @@ import {
   getCategoryBucketOverrides,
   saveCategoryBucketOverridesFromSync,
 } from "../storage/categoryBucketOverridesStorage";
+import {
+  getNetWorthSnapshots,
+  saveNetWorthSnapshots,
+} from "../storage/netWorthSnapshotStorage";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import { isBuiltInCategory } from "../data/categoryIcons";
 import { isBudgetBucket } from "../data/categoryBuckets";
@@ -53,6 +57,7 @@ import type {
   CategoryBudgetLimit,
   CustomCategory,
   BudgetBucket,
+  NetWorthSnapshot,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
@@ -65,6 +70,7 @@ import {
   isSavingsGoalItem,
   isAssetAccountItem,
   isCustomCategoryItem,
+  isNetWorthSnapshotItem,
   isValidImportCategory,
   isMonthKey,
   sanitizeDebtMilestones,
@@ -72,6 +78,26 @@ import {
 } from "../utils/recordValidators";
 
 const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
+
+/**
+ * One-time backfill marker. Net-worth snapshots (and custom categories)
+ * existed before they were added to the sync diff, so for an
+ * already-paired couple the incremental updatedAt/capturedAt filter would
+ * never transfer the pre-existing backlog - lastSyncTimestamp postdates
+ * all of it. Until a sync completes with this flag set, the outgoing diff
+ * sends those collections in full; the orchestrator stamps the flag after
+ * the first successful sync. New pairings don't need it (first sync has
+ * no lastSyncTimestamp and sends everything anyway), and a lost ACK just
+ * means one redundant - idempotent - full send on the next sync.
+ */
+const SYNC_BACKFILL_KEY = "@budgetark_sync_backfill_done_v1";
+
+const isBackfillSyncDone = async (): Promise<boolean> =>
+  (await EncryptedStorage.getItem(SYNC_BACKFILL_KEY)) === "true";
+
+export const markBackfillSyncDone = async (): Promise<void> => {
+  await EncryptedStorage.setItem(SYNC_BACKFILL_KEY, "true");
+};
 
 /* ─── Outgoing Diff ─── */
 
@@ -92,6 +118,8 @@ export const computeOutgoingDiff = async (
     strategyEnvelope,
     customCategories,
     bucketOverrides,
+    netWorthSnapshots,
+    backfillDone,
   ] = await Promise.all([
     getDebtsIncludingDeleted(),
     getPaymentsIncludingDeleted(),
@@ -102,9 +130,15 @@ export const computeOutgoingDiff = async (
     getPayoffStrategyEnvelope(),
     getCustomCategories(),
     getCategoryBucketOverrides(),
+    getNetWorthSnapshots(),
+    isBackfillSyncDone(),
   ]);
 
   const since = lastSyncTimestamp ? new Date(lastSyncTimestamp).getTime() : 0;
+
+  // Send pre-feature backlogs in full until one sync has completed on a
+  // version that carries them (see SYNC_BACKFILL_KEY).
+  const sendBacklog = !lastSyncTimestamp || !backfillDone;
 
   // Records flow through here as either upserts (live records updated since
   // the last sync) or deletes (tombstoned records the partner needs to
@@ -151,7 +185,28 @@ export const computeOutgoingDiff = async (
     // export/import path). Without this field a partner renders synced
     // entries that reference a custom name with the fallback icon and the
     // default "wants" bucket, so bucket math diverges between devices.
-    customCategories: filterChanged(customCategories),
+    // Backlog mode sends all of them: categories created before the last
+    // sync predate this field and would otherwise never transfer to an
+    // already-paired partner.
+    customCategories: sendBacklog
+      ? customCategories.map((record) => ({
+          action: "upsert" as const,
+          record,
+        }))
+      : filterChanged(customCategories),
+    // Snapshots have no updatedAt - capturedAt plays that role (a re-capture
+    // during the day restamps it). Incremental syncs send only days captured
+    // since the last sync; backlog mode sends the whole history (capped at
+    // 730 records, ~90 KB of JSON) so paired devices converge on the union
+    // of their separately-built pasts.
+    netWorthSnapshots: (() => {
+      const changed = sendBacklog
+        ? netWorthSnapshots
+        : netWorthSnapshots.filter(
+            (snap) => new Date(snap.capturedAt).getTime() > since
+          );
+      return changed.length > 0 ? changed : undefined;
+    })(),
     // Bucket overrides carry no per-key timestamps, so there's nothing to
     // filter against lastSyncTimestamp - send the whole map whenever it's
     // non-empty. The map is small (one entry per overridden category) so
@@ -261,6 +316,20 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     for (const [category, bucket] of Object.entries(diff.categoryBucketOverrides)) {
       if (!isValidImportCategory(category) || !isBudgetBucket(bucket)) {
         throw new Error("Sync rejected: invalid category bucket override");
+      }
+    }
+  }
+
+  // Snapshots are bare records (no DiffEntry wrapper - they're never
+  // deleted, so there's no action to carry). Same shape/range validator as
+  // the JSON-import path.
+  if (diff.netWorthSnapshots !== undefined) {
+    if (!Array.isArray(diff.netWorthSnapshots)) {
+      throw new Error("Sync rejected: malformed net worth snapshots");
+    }
+    for (const snap of diff.netWorthSnapshots) {
+      if (!isNetWorthSnapshotItem(snap)) {
+        throw new Error("Sync rejected: invalid net worth snapshot");
       }
     }
   }
@@ -459,6 +528,35 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     };
     await saveCategoryBucketOverridesFromSync(merged);
     changedCount += Object.keys(diff.categoryBucketOverrides).length;
+  }
+
+  // Merge net-worth snapshots - union by dayKey, strictly-newer capturedAt
+  // wins (ties keep local: identical content, no churn). Mirrors
+  // importData's computeMergedSnapshots so import and sync agree on
+  // history merges. Only actually-applied days are counted and a no-op
+  // diff skips the write, since backlog mode re-sends the full history.
+  // saveNetWorthSnapshots normalizes, sorts, and prunes to the 730-day cap.
+  if (diff.netWorthSnapshots && diff.netWorthSnapshots.length > 0) {
+    const localSnapshots = await getNetWorthSnapshots();
+    const byDay = new Map<string, NetWorthSnapshot>(
+      localSnapshots.map((snap) => [snap.dayKey, snap])
+    );
+    let applied = 0;
+    for (const incoming of diff.netWorthSnapshots) {
+      const existing = byDay.get(incoming.dayKey);
+      if (
+        !existing ||
+        new Date(incoming.capturedAt).getTime() >
+          new Date(existing.capturedAt).getTime()
+      ) {
+        byDay.set(incoming.dayKey, incoming);
+        applied++;
+      }
+    }
+    if (applied > 0) {
+      await saveNetWorthSnapshots(Array.from(byDay.values()));
+    }
+    changedCount += applied;
   }
 
   // Merge milestone plan (last-write-wins on updatedAt)

@@ -507,6 +507,10 @@ const RESET_KEYS = [
   // previous user's achievements after "Reset All Data."
   "@budgetark_achievements",
   "@budgetark_achievement_stats",
+  // One-time sync backlog marker (see diffEngine.SYNC_BACKFILL_KEY). After
+  // a reset there's no history left to claim as "already backfilled" - and
+  // a backup restored later must get a full re-send, not incremental diffs.
+  "@budgetark_sync_backfill_done_v1",
 ] as const;
 
 export class ResetIncompleteError extends Error {

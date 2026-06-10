@@ -11,8 +11,9 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     title: "Reliability + Sync Security",
     releasedAt: "2026-06-09",
     highlights: [
-      "Partner sync messages are now fully authenticated end-to-end, closing a hole where someone on your WiFi could replay captured sync traffic. Both paired devices must be on 1.7.2 before they can sync with each other again - update both phones, then sync as usual.",
-      "Custom categories and your 50/30/20 bucket assignments now sync between paired devices, so entries no longer show up on your partner's phone with a generic icon and the wrong bucket.",
+      "Partner sync messages are now fully authenticated end-to-end, closing a hole where someone on your WiFi could replay captured sync traffic. Both paired devices must be on 1.7.2 before they can sync with each other again - update both phones, then sync as usual. If your partner hasn't updated yet, sync now tells you that instead of timing out with a generic error.",
+      "Net worth history now syncs between paired devices. The first sync after both phones update exchanges each device's full history, so your Bridge graphs converge on the combined past instead of each phone only knowing the days it was opened.",
+      "Custom categories and your 50/30/20 bucket assignments now sync between paired devices, so entries no longer show up on your partner's phone with a generic icon and the wrong bucket. Categories you created a while ago ride along on that same first sync, not just newly edited ones.",
       "Deletions now stick properly: deleting a debt, entry, goal, or account right before certain screens saved could quietly make the deletion un-undoable and let it reappear on your partner's device. Undo and cross-device deletes are reliable again.",
       "Deleting a payment that was larger than the remaining balance no longer inflates the debt past what you ever owed - only the amount that actually reduced the balance is added back. The due-date prompt also logs at most the remaining balance instead of the full minimum.",
       "Double-tapping 'Yes, log it' on the due-date prompt can no longer record the payment twice, and the payoff celebration now shows reliably when that payment clears a debt.",

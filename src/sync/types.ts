@@ -15,6 +15,7 @@ import type {
   AssetAccount,
   CustomCategory,
   BudgetBucket,
+  NetWorthSnapshot,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -112,6 +113,16 @@ export interface SyncDiff {
    * Optional for the same older-peer reason as customCategories.
    */
   categoryBucketOverrides?: Record<string, BudgetBucket>;
+  /**
+   * Net-worth history. Bare records (no tombstones - snapshots are never
+   * deleted, only pruned by the 730-day cap) merged by dayKey keeping the
+   * newer capturedAt. Incremental syncs send only days captured since the
+   * last sync; the first sync after pairing - and the one-time backfill
+   * sync after updating to the version that added this field - send the
+   * full history so both devices converge on the union of their pasts.
+   * Optional for older-peer tolerance like the fields above.
+   */
+  netWorthSnapshots?: NetWorthSnapshot[];
   debtMilestonePlan?: DebtMilestonePlan;
   payoffStrategy?: PayoffStrategyPreference;
   /**

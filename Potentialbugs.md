@@ -462,8 +462,9 @@ independently found by two agents. Prior rounds' items excluded.
   - **Files:** `src/sync/transportService.ts:213-258`
   - **What:** After the connect promise resolves, a later socket error is swallowed (promise already settled) and the socket is never destroyed; mid-pairing drops rely on `joinPairing`'s 15 s timer alone.
 
-- [ ] **Net-worth snapshots do not sync between paired devices** (possibly by design - each device recomputes daily; but the unused `isNetWorthSnapshotItem` validator suggests sync was intended; history series permanently diverge)
+- [x] **Net-worth snapshots do not sync between paired devices** (possibly by design - each device recomputes daily; but the unused `isNetWorthSnapshotItem` validator suggests sync was intended; history series permanently diverge)
   - **Files:** `src/sync/diffEngine.ts`, `src/storage/netWorthSnapshotStorage.ts`
+  - **Fixed (1.7.2):** `SyncDiff.netWorthSnapshots?` (bare records, no tombstones) - merged by dayKey, strictly-newer capturedAt wins, validated with the previously-unused `isNetWorthSnapshotItem`. Incremental syncs send only days captured since the last sync; a one-time backlog send (`@budgetark_sync_backfill_done_v1`, stamped after the first successful sync, cleared by Reset) transfers the pre-feature history for already-paired couples - and also re-sends the full custom-category list, which had the same never-transfers-the-backlog gap.
 
 - [x] **ProfileScreen: auto-sync monitor started via toggle never stopped on unmount**
   - **Files:** `src/screens/ProfileScreen.tsx:322-367, 661-673`
