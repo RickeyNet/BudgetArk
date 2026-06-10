@@ -67,7 +67,45 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
 
     const subjectPrefix = feedbackType === "bug" ? "[Bug Report]" : "[Feature Suggestion]";
     const subject = `${subjectPrefix} BudgetArk v${CURRENT_APP_VERSION}`;
-    const body = `${trimmed}\n\n---\n${deviceInfo}`;
+    // Structured template so reports arrive with the context needed to act
+    // on them - the in-app box only captures the first section; the rest
+    // are prompts the user fills in (or deletes) in their email composer.
+    const body =
+      feedbackType === "bug"
+        ? [
+            "WHAT HAPPENED",
+            trimmed,
+            "",
+            "STEPS TO REPRODUCE",
+            "1. ",
+            "2. ",
+            "3. ",
+            "",
+            "WHAT I EXPECTED INSTEAD",
+            "",
+            "",
+            "HOW OFTEN DOES IT HAPPEN? (every time / sometimes / once)",
+            "",
+            "",
+            "SCREENSHOTS (attach below if you have any)",
+            "",
+            "",
+            "---",
+            deviceInfo,
+          ].join("\n")
+        : [
+            "FEATURE IDEA",
+            trimmed,
+            "",
+            "WHAT PROBLEM WOULD THIS SOLVE FOR YOU?",
+            "",
+            "",
+            "HOW SHOULD IT WORK?",
+            "",
+            "",
+            "---",
+            deviceInfo,
+          ].join("\n");
 
     try {
       await openComposer({
