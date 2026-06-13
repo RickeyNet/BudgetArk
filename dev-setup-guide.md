@@ -437,4 +437,4 @@ Shipping to App Store / Play Store?
 
 ---
 
-*Last aligned with Expo SDK 55 (`expo` ~55.0.x) and app version 1.7.1.*
+*Last aligned with Expo SDK 55 (`expo` ~55.0.x) and app version 1.7.3.*

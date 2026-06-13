@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.7.3",
+    title: "Import Fixes",
+    releasedAt: "2026-06-12",
+    highlights: [
+      "Fixed importing on iPhone: choosing Merge or Replace for a spreadsheet (CSV or Excel) or a JSON backup now opens the file picker reliably. Before, the picker could silently fail to appear, and tapping again left it stuck with a 'document picking in progress' error until you force-closed the app.",
+      "When a JSON backup is rejected, the error now names the exact entry and what's wrong with it - a missing date, a missing id, or an amount typed as text instead of a number - so you can find and fix the bad record instead of guessing.",
+    ],
+  },
+  {
     version: "1.7.2",
     title: "Reliability + Sync Security",
     releasedAt: "2026-06-09",
