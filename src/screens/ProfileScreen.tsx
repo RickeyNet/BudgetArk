@@ -177,6 +177,13 @@ const ProfileScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
   const spreadsheetExportInFlightRef = useRef(false);
   const spreadsheetExportOpIdRef = useRef(0);
+  // Guards both file and spreadsheet import handlers: a double-tap on the
+  // merge/replace button during the modal-dismiss window would otherwise
+  // fire the document picker twice and trip expo-document-picker's
+  // "Different document picking in progress" lock-up. One shared ref also
+  // stops launching the spreadsheet picker while the file picker is still
+  // open (or vice versa).
+  const importPickerInFlightRef = useRef(false);
   const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", {
     scrollRef,
   });
@@ -912,6 +919,8 @@ const ProfileScreen: React.FC = () => {
    */
   const confirmFileImport = useCallback(
     async (mode: "merge" | "replace") => {
+      if (importPickerInFlightRef.current) return;
+      importPickerInFlightRef.current = true;
       setShowImportModeModal(false);
       // iOS: the document picker presented while the merge/replace <Modal> is
       // still tearing down fails silently, but expo-document-picker's
@@ -919,7 +928,11 @@ const ProfileScreen: React.FC = () => {
       // "Different document picking in progress" until the app restarts.
       await waitForIosModalTeardown(350);
       const label = mode === "merge" ? "Merged" : "Imported";
-      await executeImport((password) => importData(mode, password), label);
+      try {
+        await executeImport((password) => importData(mode, password), label);
+      } finally {
+        importPickerInFlightRef.current = false;
+      }
     },
     [executeImport],
   );
@@ -1039,6 +1052,8 @@ const ProfileScreen: React.FC = () => {
    */
   const confirmSpreadsheetImport = useCallback(
     async (mode: "merge" | "replace") => {
+      if (importPickerInFlightRef.current) return;
+      importPickerInFlightRef.current = true;
       setShowSpreadsheetImportModal(false);
       // Same iOS modal-teardown race as confirmFileImport: presenting the
       // document picker over a dismissing <Modal> strands the picker module
@@ -1078,6 +1093,8 @@ const ProfileScreen: React.FC = () => {
             error?.message ||
             "Something went wrong while importing the spreadsheet.",
         });
+      } finally {
+        importPickerInFlightRef.current = false;
       }
     },
     [],
