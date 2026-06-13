@@ -244,9 +244,40 @@ const get = (row: Record<string, unknown>, ...candidates: string[]): unknown => 
   return undefined;
 };
 
+/** Raw ID cell for a row (case-insensitive header), trimmed; "" if absent. */
+const rowId = (row: Record<string, unknown>): string => {
+  const value = get(row, "ID", "Id", "id");
+  return value == null ? "" : String(value).trim();
+};
+
+/**
+ * Rows the exporter writes purely as round-trip artifacts and that the
+ * mappers intentionally drop: projected copies of recurring entries
+ * (`__projected_recurring__:` prefix) and the synthetic Emergency Fund goal
+ * (`__derived_emergency_fund__`). They carry no user data, so they must be
+ * excluded from `skippedRows` - otherwise a normal export of a few recurring
+ * entries across several months reports dozens of "invalid" rows that were
+ * never invalid, just deliberately not re-imported.
+ */
+const isDerivedArtifactRow = (row: Record<string, unknown>): boolean => {
+  const id = rowId(row);
+  return (
+    id.startsWith(DERIVED_RECURRING_PREFIX) || id === DERIVED_EMERGENCY_FUND_ID
+  );
+};
+
 /* ── Row → entity mappers ── */
 
-const rowToBudgetEntry = (row: Record<string, unknown>) => {
+/**
+ * A mapped row is either a valid entity (`ok`) or a skip carrying a short,
+ * human-readable reason. Reasons surface to the user so they can find and fix
+ * the offending row instead of just seeing an opaque skipped-count.
+ */
+type RowResult<T> = { ok: true; value: T } | { ok: false; reason: string };
+const okRow = <T>(value: T): RowResult<T> => ({ ok: true, value });
+const skipRow = (reason: string): RowResult<never> => ({ ok: false, reason });
+
+const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const typeRaw = parseString(get(row, "Type")).toLowerCase();
   const type = typeRaw === "income" ? "income" : typeRaw === "expense" ? "expense" : null;
   const categoryRaw = parseString(get(row, "Category"), 60);
@@ -268,16 +299,30 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     Math.abs(amount) <= VALIDATOR_LIMITS.MAX_MONEY &&
     (allowsNegative ? true : amount > 0);
 
-  if (!type || !category || !amountValid || !dateIso) {
-    return null;
+  if (!type) {
+    return skipRow('Type must be "income" or "expense"');
+  }
+  if (!category) {
+    return skipRow(
+      categoryRaw
+        ? `Category "${categoryRaw}" is not a recognized category`
+        : "Category is missing"
+    );
+  }
+  if (!amountValid) {
+    return skipRow(
+      allowsNegative
+        ? "Amount is missing or out of range"
+        : "Amount must be a positive number of at least 0.01"
+    );
+  }
+  if (!dateIso) {
+    return skipRow("Date is missing or could not be read");
   }
 
+  // Projected recurring copies are removed up front by isDerivedArtifactRow,
+  // so a row reaching here is a real entry that gets a real or generated id.
   const id = parseString(get(row, "ID", "Id", "id"), 80) || generateUUID();
-  // Drop projected copies the exporter writes for recurring entries. The
-  // original row exports without this prefix and imports normally.
-  if (id.startsWith(DERIVED_RECURRING_PREFIX)) {
-    return null;
-  }
   const description = parseString(get(row, "Description", "Notes", "Memo"));
   const recurring = parseBoolean(get(row, "Recurring"));
   const recurrenceRaw = Number(
@@ -319,7 +364,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
   const createdAt = parseIsoOrNull(createdAtRaw) ?? now;
   const updatedAt = parseIsoOrNull(updatedAtRaw) ?? createdAt;
 
-  return {
+  return okRow({
     id,
     type,
     category,
@@ -333,10 +378,10 @@ const rowToBudgetEntry = (row: Record<string, unknown>) => {
     paymentUrl,
     linkedAccountId: linkedAccountId || undefined,
     lastAppliedMonth,
-  };
+  });
 };
 
-const rowToBudgetLimit = (row: Record<string, unknown>) => {
+const rowToBudgetLimit = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const categoryRaw = parseString(get(row, "Category"), 60);
   const category: string | null = normalizeImportCategory(categoryRaw);
   const monthlyLimit = parseAmount(get(row, "MonthlyLimit", "Monthly Limit", "Limit"));
@@ -344,25 +389,33 @@ const rowToBudgetLimit = (row: Record<string, unknown>) => {
   // Bounds mirror isBudgetLimitItem (min 0.01, max MAX_MONEY): one
   // out-of-range cell would otherwise make the strict sanitizer reject the
   // whole import instead of just this row.
+  if (!category) {
+    return skipRow(
+      categoryRaw
+        ? `Category "${categoryRaw}" is not a recognized category`
+        : "Category is missing"
+    );
+  }
   if (
-    !category ||
     !Number.isFinite(monthlyLimit) ||
     monthlyLimit < 0.01 ||
     monthlyLimit > VALIDATOR_LIMITS.MAX_MONEY
   ) {
-    return null;
+    return skipRow("Monthly limit must be a positive number of at least 0.01");
   }
   // Preserve `updatedAt` so a paired sync doesn't treat every imported limit
   // as "freshly edited" and clobber the partner's data via LWW. Importer
   // (`computeMergedLimitsHistory`) stamps `now` for rows that lack it, so
   // legacy spreadsheets without the column still import safely.
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
-  return updatedAtIso
-    ? { category, monthlyLimit, updatedAt: updatedAtIso }
-    : { category, monthlyLimit };
+  return okRow(
+    updatedAtIso
+      ? { category, monthlyLimit, updatedAt: updatedAtIso }
+      : { category, monthlyLimit }
+  );
 };
 
-const rowToDebt = (row: Record<string, unknown>) => {
+const rowToDebt = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const name = parseString(get(row, "Name"), 80);
   const balance = parseAmount(get(row, "Balance"));
   const originalBalance = parseAmount(get(row, "OriginalBalance", "Original Balance"));
@@ -373,22 +426,24 @@ const rowToDebt = (row: Record<string, unknown>) => {
   // originalBalance >= 0.01, rate <= MAX_RATE. A "(500)" balance parses as
   // -500 via parseAmount; it must be skipped here, because the strict
   // sanitizer downstream rejects the entire file over one bad row.
+  if (!name) {
+    return skipRow("Name is missing");
+  }
+  if (!Number.isFinite(balance) || balance < 0 || balance > VALIDATOR_LIMITS.MAX_MONEY) {
+    return skipRow("Balance must be a number of 0 or more");
+  }
   if (
-    !name ||
-    !Number.isFinite(balance) ||
-    balance < 0 ||
-    balance > VALIDATOR_LIMITS.MAX_MONEY ||
     !Number.isFinite(originalBalance) ||
     originalBalance < 0.01 ||
-    originalBalance > VALIDATOR_LIMITS.MAX_MONEY ||
-    !Number.isFinite(rate) ||
-    rate < 0 ||
-    rate > VALIDATOR_LIMITS.MAX_RATE ||
-    !Number.isFinite(minPayment) ||
-    minPayment < 0 ||
-    minPayment > VALIDATOR_LIMITS.MAX_MONEY
+    originalBalance > VALIDATOR_LIMITS.MAX_MONEY
   ) {
-    return null;
+    return skipRow("Original balance must be a positive number of at least 0.01");
+  }
+  if (!Number.isFinite(rate) || rate < 0 || rate > VALIDATOR_LIMITS.MAX_RATE) {
+    return skipRow(`Rate / APR must be between 0 and ${VALIDATOR_LIMITS.MAX_RATE}`);
+  }
+  if (!Number.isFinite(minPayment) || minPayment < 0 || minPayment > VALIDATOR_LIMITS.MAX_MONEY) {
+    return skipRow("Minimum payment must be a number of 0 or more");
   }
 
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
@@ -427,7 +482,7 @@ const rowToDebt = (row: Record<string, unknown>) => {
   // as "freshly edited" and clobber the partner's data. Falls back to
   // CreatedAt (the row pre-existed but the export was older than the
   // UpdatedAt column) and finally to `now` (no timestamp at all).
-  return {
+  return okRow({
     id,
     name,
     balance,
@@ -441,38 +496,38 @@ const rowToDebt = (row: Record<string, unknown>) => {
     paymentDueDay,
     createdAt: createdAtIso || now,
     updatedAt: updatedAtIso || createdAtIso || now,
-  };
+  });
 };
 
-const rowToPayment = (row: Record<string, unknown>) => {
+const rowToPayment = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const debtId = parseString(get(row, "DebtID", "DebtId", "Debt ID"), 80);
   const amount = parseAmount(get(row, "Amount"));
   const dateIso = parseDate(get(row, "Date"));
   // Bounds mirror isPaymentItem (min 0.01, max MAX_MONEY); a parenthesized
   // "(50)" amount comes back negative from parseAmount and must be skipped
   // rather than poisoning the whole file in the strict sanitizer.
-  if (
-    !debtId ||
-    !Number.isFinite(amount) ||
-    amount < 0.01 ||
-    amount > VALIDATOR_LIMITS.MAX_MONEY ||
-    !dateIso
-  ) {
-    return null;
+  if (!debtId) {
+    return skipRow("Debt ID is missing (the payment isn't linked to a debt)");
+  }
+  if (!Number.isFinite(amount) || amount < 0.01 || amount > VALIDATOR_LIMITS.MAX_MONEY) {
+    return skipRow("Amount must be a positive number of at least 0.01");
+  }
+  if (!dateIso) {
+    return skipRow("Date is missing or could not be read");
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
-  return {
+  return okRow({
     id,
     debtId,
     amount,
     date: dateIso,
     updatedAt: updatedAtIso || dateIso || new Date().toISOString(),
-  };
+  });
 };
 
-const rowToSavingsGoal = (row: Record<string, unknown>) => {
+const rowToSavingsGoal = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const name = parseString(get(row, "Name"), 80);
   const categoryRaw = parseString(get(row, "Category")).toLowerCase();
   const category = VALID_SAVINGS_CATEGORIES.has(categoryRaw) ? categoryRaw : null;
@@ -482,31 +537,37 @@ const rowToSavingsGoal = (row: Record<string, unknown>) => {
   // Bounds mirror isSavingsGoalItem: targetAmount in [0.01, MAX_MONEY],
   // currentAmount in [0, MAX_MONEY]. Out-of-range rows are skipped so the
   // strict downstream sanitizer can't abort the whole import over them.
+  if (!name) {
+    return skipRow("Name is missing");
+  }
+  if (!category) {
+    return skipRow(
+      `Category must be one of: ${[...VALID_SAVINGS_CATEGORIES].join(", ")}`
+    );
+  }
   if (
-    !name ||
-    !category ||
     !Number.isFinite(targetAmount) ||
     targetAmount < 0.01 ||
-    targetAmount > VALIDATOR_LIMITS.MAX_MONEY ||
+    targetAmount > VALIDATOR_LIMITS.MAX_MONEY
+  ) {
+    return skipRow("Target amount must be a positive number of at least 0.01");
+  }
+  if (
     !Number.isFinite(currentAmount) ||
     currentAmount < 0 ||
     currentAmount > VALIDATOR_LIMITS.MAX_MONEY
   ) {
-    return null;
+    return skipRow("Current amount must be a number of 0 or more");
   }
 
+  // The synthetic Emergency Fund row is removed up front by
+  // isDerivedArtifactRow, so a row reaching here is a real, explicit goal.
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
-  // Skip the synthetic Emergency Fund row that the exporter writes when a
-  // user tracks their EF implicitly through Keel + Savings entries. Importing
-  // it would materialize a duplicate explicit goal on every round-trip.
-  if (id === DERIVED_EMERGENCY_FUND_ID) {
-    return null;
-  }
   const targetDate = parseDate(get(row, "TargetDate", "Target Date"));
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
-  return {
+  return okRow({
     id,
     name,
     category,
@@ -515,10 +576,10 @@ const rowToSavingsGoal = (row: Record<string, unknown>) => {
     targetDate: targetDate || undefined,
     createdAt,
     updatedAt: updatedAtIso || createdAt,
-  };
+  });
 };
 
-const rowToAssetAccount = (row: Record<string, unknown>) => {
+const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const name = parseString(get(row, "Name"), 80);
   const categoryRaw = parseString(get(row, "Category")).toLowerCase();
   const category: AssetAccountCategory | null = VALID_ASSET_CATEGORIES.has(categoryRaw)
@@ -529,27 +590,84 @@ const rowToAssetAccount = (row: Record<string, unknown>) => {
   // Bounds mirror isAssetAccountItem (balance in [0, MAX_MONEY]); an
   // accounting-style "(500)" balance parses negative and must be skipped,
   // not handed to the strict sanitizer which would abort the whole file.
-  if (
-    !name ||
-    !category ||
-    !Number.isFinite(balance) ||
-    balance < 0 ||
-    balance > VALIDATOR_LIMITS.MAX_MONEY
-  ) {
-    return null;
+  if (!name) {
+    return skipRow("Name is missing");
+  }
+  if (!category) {
+    return skipRow(
+      `Category must be one of: ${[...VALID_ASSET_CATEGORIES].join(", ")}`
+    );
+  }
+  if (!Number.isFinite(balance) || balance < 0 || balance > VALIDATOR_LIMITS.MAX_MONEY) {
+    return skipRow("Balance must be a number of 0 or more");
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
-  return {
+  return okRow({
     id,
     name,
     category,
     balance,
     createdAt,
     updatedAt: updatedAtIso || createdAt,
-  };
+  });
+};
+
+/* ── Skipped-row reporting ── */
+
+/** One invalid row that was dropped, with enough context to find and fix it. */
+export interface SkippedRowInfo {
+  /** Sheet the row came from, e.g. "Budget Entries". */
+  sheet: string;
+  /** Short identifier built from the row's own cells, e.g. "Groceries · 2026-03-15". */
+  descriptor: string;
+  /** Why the row was rejected, e.g. "Amount must be a positive number". */
+  reason: string;
+}
+
+/**
+ * Builds a short human label for a row from whichever identifying cells are
+ * present, so a skipped-row report points at a recognizable line rather than
+ * a bare row number (total/derived filtering makes true row numbers unreliable
+ * anyway). Falls back to the first non-empty cell.
+ */
+const describeRow = (row: Record<string, unknown>): string => {
+  const fields = [
+    parseString(get(row, "Name"), 40),
+    parseString(get(row, "Category"), 40),
+    parseString(get(row, "Type"), 20),
+    parseString(get(row, "Date"), 20),
+    parseString(get(row, "Amount", "Balance", "MonthlyLimit", "Monthly Limit", "Limit"), 20),
+  ].filter((v) => v.length > 0);
+  if (fields.length > 0) return fields.slice(0, 3).join(" · ");
+  const firstValue = Object.values(row).find(
+    (v) => v != null && String(v).trim().length > 0
+  );
+  return firstValue != null ? String(firstValue).trim().slice(0, 40) : "(blank row)";
+};
+
+/**
+ * Maps every row in a sheet, splitting results into valid entities and a list
+ * of skipped rows annotated with sheet, descriptor, and reason.
+ */
+const processSheet = (
+  sheet: string,
+  rows: Record<string, unknown>[],
+  mapper: (row: Record<string, unknown>) => RowResult<Record<string, unknown>>
+): { valid: Record<string, unknown>[]; skipped: SkippedRowInfo[] } => {
+  const valid: Record<string, unknown>[] = [];
+  const skipped: SkippedRowInfo[] = [];
+  for (const row of rows) {
+    const result = mapper(row);
+    if (result.ok) {
+      valid.push(result.value);
+    } else {
+      skipped.push({ sheet, descriptor: describeRow(row), reason: result.reason });
+    }
+  }
+  return { valid, skipped };
 };
 
 /* ── Public API ── */
@@ -557,6 +675,11 @@ const rowToAssetAccount = (row: Record<string, unknown>) => {
 export interface SpreadsheetImportResult extends ImportResult {
   /** Number of rows the spreadsheet contained that we could not parse. */
   skippedRows: number;
+  /**
+   * Per-row detail for each skipped (invalid) row. Excludes the exporter's
+   * own derived/projected artifacts, which are filtered before counting.
+   */
+  skippedRowDetails: SkippedRowInfo[];
 }
 
 /**
@@ -624,11 +747,18 @@ export const importSpreadsheet = async (
   const savingsGoalsSheet = isCsv ? undefined : findSheet(workbook, "Savings Goals");
   const assetAccountsSheet = isCsv ? undefined : findSheet(workbook, "Asset Accounts");
 
-  const entryRows = sheetToRows(budgetEntriesSheet);
+  // Drop the exporter's own round-trip artifacts (projected recurring copies,
+  // synthetic Emergency Fund) up front so they count toward neither the valid
+  // total nor `skippedRows` - they carry no user data and are not "invalid".
+  const entryRows = sheetToRows(budgetEntriesSheet).filter(
+    (r) => !isDerivedArtifactRow(r)
+  );
   const limitRows = sheetToRows(budgetLimitsSheet);
   const debtRows = sheetToRows(debtsSheet);
   const paymentRows = sheetToRows(paymentsSheet);
-  const savingsRows = sheetToRows(savingsGoalsSheet);
+  const savingsRows = sheetToRows(savingsGoalsSheet).filter(
+    (r) => !isDerivedArtifactRow(r)
+  );
   const accountRows = sheetToRows(assetAccountsSheet);
 
   if (
@@ -644,22 +774,32 @@ export const importSpreadsheet = async (
     );
   }
 
-  const isPresent = <T>(v: T | null): v is T => v !== null;
+  const entryResult = processSheet("Budget Entries", entryRows, rowToBudgetEntry);
+  const limitResult = processSheet("Budget Limits", limitRows, rowToBudgetLimit);
+  const debtResult = processSheet("Debts", debtRows, rowToDebt);
+  const paymentResult = processSheet("Payments", paymentRows, rowToPayment);
+  const savingsResult = processSheet("Savings Goals", savingsRows, rowToSavingsGoal);
+  const accountResult = processSheet("Asset Accounts", accountRows, rowToAssetAccount);
 
-  const budgetEntries = entryRows.map(rowToBudgetEntry).filter(isPresent);
-  const budgetLimits = limitRows.map(rowToBudgetLimit).filter(isPresent);
-  const debts = debtRows.map(rowToDebt).filter(isPresent);
-  const payments = paymentRows.map(rowToPayment).filter(isPresent);
-  const savingsGoals = savingsRows.map(rowToSavingsGoal).filter(isPresent);
-  const assetAccounts = accountRows.map(rowToAssetAccount).filter(isPresent);
+  const budgetEntries = entryResult.valid;
+  const budgetLimits = limitResult.valid;
+  const debts = debtResult.valid;
+  const payments = paymentResult.valid;
+  const savingsGoals = savingsResult.valid;
+  const assetAccounts = accountResult.valid;
 
-  const totalRowsParsed =
-    entryRows.length +
-    limitRows.length +
-    debtRows.length +
-    paymentRows.length +
-    savingsRows.length +
-    accountRows.length;
+  // Each skipped row is genuinely invalid (derived artifacts were filtered
+  // out above), so the count and the detail list line up exactly.
+  const skippedRowDetails: SkippedRowInfo[] = [
+    ...entryResult.skipped,
+    ...limitResult.skipped,
+    ...debtResult.skipped,
+    ...paymentResult.skipped,
+    ...savingsResult.skipped,
+    ...accountResult.skipped,
+  ];
+  const skippedRows = skippedRowDetails.length;
+
   const totalEntitiesValid =
     budgetEntries.length +
     budgetLimits.length +
@@ -667,7 +807,6 @@ export const importSpreadsheet = async (
     payments.length +
     savingsGoals.length +
     assetAccounts.length;
-  const skippedRows = Math.max(0, totalRowsParsed - totalEntitiesValid);
 
   if (totalEntitiesValid === 0) {
     throw new Error(
@@ -692,5 +831,6 @@ export const importSpreadsheet = async (
   return {
     ...result,
     skippedRows,
+    skippedRowDetails,
   };
 };

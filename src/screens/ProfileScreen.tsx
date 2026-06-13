@@ -1075,7 +1075,18 @@ const ProfileScreen: React.FC = () => {
           parts.push(`${result.assetAccounts} asset accounts`);
         let message = `${label} ${parts.join(", ")} from the spreadsheet.`;
         if (result.skippedRows > 0) {
-          message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} were skipped because required fields were missing or invalid.`;
+          message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} skipped (required fields missing or invalid):`;
+          // List the first few offending rows so the user can find and fix
+          // them; cap the list so a very messy file doesn't fill the modal.
+          const MAX_LISTED = 8;
+          const shown = result.skippedRowDetails.slice(0, MAX_LISTED);
+          for (const detail of shown) {
+            message += `\n• ${detail.sheet} — ${detail.descriptor}: ${detail.reason}`;
+          }
+          const remaining = result.skippedRowDetails.length - shown.length;
+          if (remaining > 0) {
+            message += `\n• …and ${remaining} more`;
+          }
         }
         if (result.staleDays !== undefined && result.staleDays > 30) {
           message += `\n\nNote: This file is ${result.staleDays} days old. Some data may be outdated.`;
