@@ -913,6 +913,11 @@ const ProfileScreen: React.FC = () => {
   const confirmFileImport = useCallback(
     async (mode: "merge" | "replace") => {
       setShowImportModeModal(false);
+      // iOS: the document picker presented while the merge/replace <Modal> is
+      // still tearing down fails silently, but expo-document-picker's
+      // in-progress flag stays set - every later attempt then throws
+      // "Different document picking in progress" until the app restarts.
+      await waitForIosModalTeardown(350);
       const label = mode === "merge" ? "Merged" : "Imported";
       await executeImport((password) => importData(mode, password), label);
     },
@@ -1035,6 +1040,10 @@ const ProfileScreen: React.FC = () => {
   const confirmSpreadsheetImport = useCallback(
     async (mode: "merge" | "replace") => {
       setShowSpreadsheetImportModal(false);
+      // Same iOS modal-teardown race as confirmFileImport: presenting the
+      // document picker over a dismissing <Modal> strands the picker module
+      // in its "picking in progress" state.
+      await waitForIosModalTeardown(350);
       const label = mode === "merge" ? "Merged" : "Imported";
       try {
         const result = await importSpreadsheet(mode);

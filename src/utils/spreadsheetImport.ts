@@ -25,10 +25,13 @@
  * src/utils/recordValidators.ts (VALIDATOR_LIMITS).
  */
 
-import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile } from "expo-file-system";
 import * as XLSX from "xlsx";
-import { importFromString, type ImportResult } from "./importData";
+import {
+  importFromString,
+  openDocumentPicker,
+  type ImportResult,
+} from "./importData";
 import {
   DERIVED_EMERGENCY_FUND_ID,
   DERIVED_RECURRING_PREFIX,
@@ -564,7 +567,7 @@ export interface SpreadsheetImportResult extends ImportResult {
 export const importSpreadsheet = async (
   mode: "merge" | "replace" = "merge"
 ): Promise<SpreadsheetImportResult | null> => {
-  const picked = await DocumentPicker.getDocumentAsync({
+  const picked = await openDocumentPicker({
     type: [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
       "application/vnd.ms-excel", // .xls

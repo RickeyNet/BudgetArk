@@ -38,6 +38,7 @@ import {
   isDebtItem,
   isPaymentItem,
   isBudgetEntryItem,
+  explainBudgetEntryProblem,
   isBudgetLimitItem,
   isSavingsGoalItem,
   isAssetAccountItem,
@@ -201,8 +202,11 @@ const sanitizeBudgetLimitsByMonth = (
     }
     const valid = value.filter(isBudgetLimitItem);
     if (valid.length !== value.length) {
+      const firstInvalidIdx = value.findIndex((item) => !isBudgetLimitItem(item));
       throw new Error(
-        `Import rejected: budget limits for ${monthKey} contain invalid records.`
+        `Import rejected: budget limits for ${monthKey} contain invalid ` +
+          `records (first at item ${firstInvalidIdx + 1} of ${value.length}). ` +
+          `Each limit needs a valid "category" and a numeric "monthlyLimit".`
       );
     }
     out[monthKey] = valid;
@@ -213,7 +217,8 @@ const sanitizeBudgetLimitsByMonth = (
 const sanitizeCollection = (
   collection: unknown[] | undefined,
   label: string,
-  validator: (item: unknown) => item is Record<string, unknown>
+  validator: (item: unknown) => item is Record<string, unknown>,
+  explain?: (item: unknown) => string
 ): Record<string, unknown>[] => {
   if (!collection) return [];
   if (!Array.isArray(collection)) {
@@ -227,7 +232,19 @@ const sanitizeCollection = (
 
   const valid = collection.filter(validator);
   if (valid.length !== collection.length) {
-    throw new Error(`Import rejected: ${label} contains invalid records.`);
+    // Point at the first offending record (1-based, in file order) - one bad
+    // record rejects the whole collection, and hand-edited exports are
+    // impossible to debug from a bare "contains invalid records".
+    const invalidCount = collection.length - valid.length;
+    const firstInvalidIdx = collection.findIndex((item) => !validator(item));
+    let message =
+      `Import rejected: ${label} contains ${invalidCount} invalid ` +
+      `record${invalidCount === 1 ? "" : "s"} ` +
+      `(first at item ${firstInvalidIdx + 1} of ${collection.length}).`;
+    if (explain) {
+      message += ` Problem: ${explain(collection[firstInvalidIdx])}`;
+    }
+    throw new Error(message);
   }
   return valid;
 };
@@ -354,7 +371,8 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const budgetEntries = sanitizeCollection(
     data.budgetEntries,
     "budget entries",
-    isBudgetEntryItem
+    isBudgetEntryItem,
+    explainBudgetEntryProblem
   );
   const budgetLimits = sanitizeCollection(
     data.budgetLimits,
@@ -1400,6 +1418,31 @@ export const importFromString = async (
 /* ── File-picker import (original path) ── */
 
 /**
+ * Wraps DocumentPicker.getDocumentAsync to translate its "Different document
+ * picking in progress" rejection into actionable guidance. The module gets
+ * stuck in that state when a previous presentation silently failed (e.g. the
+ * picker was launched while a modal was still dismissing) - the pending
+ * promise never settles, so only an app restart clears the flag.
+ */
+export const openDocumentPicker = async (
+  options: DocumentPicker.DocumentPickerOptions
+): Promise<DocumentPicker.DocumentPickerResult> => {
+  try {
+    return await DocumentPicker.getDocumentAsync(options);
+  } catch (error: any) {
+    if (
+      typeof error?.message === "string" &&
+      error.message.includes("Different document picking in progress")
+    ) {
+      throw new Error(
+        "The file picker is stuck from an earlier attempt. Please fully close and reopen the app, then try again."
+      );
+    }
+    throw error;
+  }
+};
+
+/**
  * Opens the document picker, reads the selected JSON file, and delegates
  * to importFromString for validation and storage.
  *
@@ -1410,7 +1453,7 @@ export const importData = async (
   mode: "merge" | "replace" = "merge",
   password?: string
 ): Promise<ImportResult | null> => {
-  const result = await DocumentPicker.getDocumentAsync({
+  const result = await openDocumentPicker({
     type: ["application/json", "text/plain"],
   });
 
