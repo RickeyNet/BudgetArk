@@ -99,6 +99,23 @@ export const AchievementsProvider: React.FC<{ children: React.ReactNode }> = ({
     setQueue((prev) => prev.slice(1));
   }, []);
 
+  // Defer presentation behind the queue head. runCheck is typically fired
+  // from a screen the instant another Modal starts dismissing (lesson
+  // celebration, debt edit sheet, ...), and presenting this root Modal
+  // while that one is mid-teardown is the iOS dismiss-then-present failure:
+  // the unlock celebration silently never appears (the unlock persists, so
+  // it's skipped forever). One centralized delay covers every call site.
+  const head = queue[0] ?? null;
+  const [presented, setPresented] = useState<AchievementDef | null>(null);
+  useEffect(() => {
+    if (!head) {
+      setPresented(null);
+      return;
+    }
+    const timer = setTimeout(() => setPresented(head), 300);
+    return () => clearTimeout(timer);
+  }, [head]);
+
   const clearQueue = useCallback(() => {
     setQueue([]);
   }, []);
@@ -118,7 +135,7 @@ export const AchievementsProvider: React.FC<{ children: React.ReactNode }> = ({
     <AchievementsContext.Provider value={value}>
       {children}
       <AchievementUnlockModal
-        achievement={queue[0] ?? null}
+        achievement={presented}
         remainingCount={queue.length}
         onAdvance={advance}
       />

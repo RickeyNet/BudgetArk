@@ -174,6 +174,68 @@ export const isBudgetEntryItem = (
   );
 };
 
+/**
+ * Field-level diagnosis for a budget entry that failed isBudgetEntryItem.
+ * The JSON import path rejects a whole collection over one bad record, so
+ * "contains invalid records" alone leaves users hand-editing exports (the
+ * most common source of bad entries) with nothing to fix. Checks run in the
+ * same order as the validator; returns the first failing field's problem.
+ * Must be kept in lockstep with isBudgetEntryItem.
+ */
+export const explainBudgetEntryProblem = (item: unknown): string => {
+  if (!isObject(item)) return "the record is not a JSON object";
+  if (!isSafeText(item.id)) {
+    return item.id === undefined
+      ? 'missing "id" (each entry needs a unique string id)'
+      : '"id" must be a non-empty string';
+  }
+  if (item.type !== "income" && item.type !== "expense") {
+    return '"type" must be exactly "income" or "expense"';
+  }
+  if (!isValidImportCategory(item.category)) {
+    return `"category" must be a built-in category or a custom name up to ${MAX_IMPORTED_CATEGORY_NAME_LENGTH} characters`;
+  }
+  const allowsNegative =
+    typeof item.category === "string" &&
+    NEGATIVE_AMOUNT_CATEGORIES.has(item.category);
+  const amountValid = allowsNegative
+    ? isSafeNumber(item.amount, {
+        min: -VALIDATOR_LIMITS.MAX_MONEY,
+        max: VALIDATOR_LIMITS.MAX_MONEY,
+      }) && Math.abs(item.amount as number) >= 0.01
+    : isSafeNumber(item.amount, { min: 0.01 });
+  if (!amountValid) {
+    return typeof item.amount === "string"
+      ? '"amount" must be a JSON number, not a quoted string (use 12.5, not "12.5")'
+      : '"amount" must be a positive number of at least 0.01';
+  }
+  if (
+    item.description !== undefined &&
+    (typeof item.description !== "string" ||
+      item.description.length > VALIDATOR_LIMITS.MAX_DESCRIPTION_LENGTH)
+  ) {
+    return `"description" must be a string of at most ${VALIDATOR_LIMITS.MAX_DESCRIPTION_LENGTH} characters`;
+  }
+  if (!isAcceptablePaymentUrl(item.paymentUrl)) {
+    return '"paymentUrl" must be a valid https URL';
+  }
+  if (!isValidDateValue(item.date)) {
+    return '"date" must be a parseable date string (e.g. "2026-06-12")';
+  }
+  if (!isValidDateValue(item.createdAt)) {
+    return item.createdAt === undefined
+      ? 'missing "createdAt" (an ISO date string like "2026-06-12T00:00:00.000Z")'
+      : '"createdAt" must be a parseable date string';
+  }
+  if (!isOptionalIso(item.updatedAt)) {
+    return '"updatedAt" must be a parseable date string when present';
+  }
+  if (!isOptionalIso(item.deletedAt)) {
+    return '"deletedAt" must be a parseable date string when present';
+  }
+  return "the record has an unrecognized problem";
+};
+
 export const isBudgetLimitItem = (
   item: unknown
 ): item is Record<string, unknown> => {
@@ -307,5 +369,9 @@ export const sanitizeDebtMilestones = (
   return raw;
 };
 
+// Month must be 01-12: `\d{2}` accepted keys like "9999-99", and because
+// budgetStorage's pruneLimitHistory keeps the lexicographically-LAST 13
+// keys, one such corrupt key would permanently occupy a history slot and
+// evict a real month on every limit save.
 export const isMonthKey = (value: unknown): value is string =>
-  typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
+  typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);

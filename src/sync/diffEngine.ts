@@ -32,7 +32,21 @@ import {
   getPayoffStrategyEnvelope,
   savePayoffStrategyEnvelope,
 } from "../storage/debtStorage";
+import {
+  getCustomCategories,
+  saveCustomCategoriesFromSync,
+} from "../storage/customCategoriesStorage";
+import {
+  getCategoryBucketOverrides,
+  saveCategoryBucketOverridesFromSync,
+} from "../storage/categoryBucketOverridesStorage";
+import {
+  getNetWorthSnapshots,
+  saveNetWorthSnapshots,
+} from "../storage/netWorthSnapshotStorage";
 import * as EncryptedStorage from "../storage/encryptedStorage";
+import { isBuiltInCategory } from "../data/categoryIcons";
+import { isBudgetBucket } from "../data/categoryBuckets";
 import type {
   Debt,
   Payment,
@@ -41,6 +55,9 @@ import type {
   AssetAccount,
   DebtMilestonePlan,
   CategoryBudgetLimit,
+  CustomCategory,
+  BudgetBucket,
+  NetWorthSnapshot,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
@@ -52,12 +69,35 @@ import {
   isBudgetLimitItem,
   isSavingsGoalItem,
   isAssetAccountItem,
+  isCustomCategoryItem,
+  isNetWorthSnapshotItem,
+  isValidImportCategory,
   isMonthKey,
   sanitizeDebtMilestones,
   VALID_PAYOFF_STRATEGIES,
 } from "../utils/recordValidators";
 
 const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
+
+/**
+ * One-time backfill marker. Net-worth snapshots (and custom categories)
+ * existed before they were added to the sync diff, so for an
+ * already-paired couple the incremental updatedAt/capturedAt filter would
+ * never transfer the pre-existing backlog - lastSyncTimestamp postdates
+ * all of it. Until a sync completes with this flag set, the outgoing diff
+ * sends those collections in full; the orchestrator stamps the flag after
+ * the first successful sync. New pairings don't need it (first sync has
+ * no lastSyncTimestamp and sends everything anyway), and a lost ACK just
+ * means one redundant - idempotent - full send on the next sync.
+ */
+const SYNC_BACKFILL_KEY = "@budgetark_sync_backfill_done_v1";
+
+const isBackfillSyncDone = async (): Promise<boolean> =>
+  (await EncryptedStorage.getItem(SYNC_BACKFILL_KEY)) === "true";
+
+export const markBackfillSyncDone = async (): Promise<void> => {
+  await EncryptedStorage.setItem(SYNC_BACKFILL_KEY, "true");
+};
 
 /* ─── Outgoing Diff ─── */
 
@@ -68,18 +108,37 @@ const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
 export const computeOutgoingDiff = async (
   lastSyncTimestamp: string | null
 ): Promise<SyncDiff> => {
-  const [debts, payments, budgetEntries, savingsGoals, assetAccounts, milestonePlan, strategyEnvelope] =
-    await Promise.all([
-      getDebtsIncludingDeleted(),
-      getPaymentsIncludingDeleted(),
-      getBudgetEntriesIncludingDeleted(),
-      getSavingsGoalsIncludingDeleted(),
-      getAssetAccountsIncludingDeleted(),
-      getDebtMilestonePlan(),
-      getPayoffStrategyEnvelope(),
-    ]);
+  const [
+    debts,
+    payments,
+    budgetEntries,
+    savingsGoals,
+    assetAccounts,
+    milestonePlan,
+    strategyEnvelope,
+    customCategories,
+    bucketOverrides,
+    netWorthSnapshots,
+    backfillDone,
+  ] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+    getBudgetEntriesIncludingDeleted(),
+    getSavingsGoalsIncludingDeleted(),
+    getAssetAccountsIncludingDeleted(),
+    getDebtMilestonePlan(),
+    getPayoffStrategyEnvelope(),
+    getCustomCategories(),
+    getCategoryBucketOverrides(),
+    getNetWorthSnapshots(),
+    isBackfillSyncDone(),
+  ]);
 
   const since = lastSyncTimestamp ? new Date(lastSyncTimestamp).getTime() : 0;
+
+  // Send pre-feature backlogs in full until one sync has completed on a
+  // version that carries them (see SYNC_BACKFILL_KEY).
+  const sendBacklog = !lastSyncTimestamp || !backfillDone;
 
   // Records flow through here as either upserts (live records updated since
   // the last sync) or deletes (tombstoned records the partner needs to
@@ -121,6 +180,39 @@ export const computeOutgoingDiff = async (
     savingsGoals: filterChanged(savingsGoals),
     assetAccounts: filterChanged(assetAccounts),
     budgetLimits,
+    // Custom categories are not tombstoned, so filterChanged only ever
+    // emits upserts here - deletions don't propagate (same as the
+    // export/import path). Without this field a partner renders synced
+    // entries that reference a custom name with the fallback icon and the
+    // default "wants" bucket, so bucket math diverges between devices.
+    // Backlog mode sends all of them: categories created before the last
+    // sync predate this field and would otherwise never transfer to an
+    // already-paired partner.
+    customCategories: sendBacklog
+      ? customCategories.map((record) => ({
+          action: "upsert" as const,
+          record,
+        }))
+      : filterChanged(customCategories),
+    // Snapshots have no updatedAt - capturedAt plays that role (a re-capture
+    // during the day restamps it). Incremental syncs send only days captured
+    // since the last sync; backlog mode sends the whole history (capped at
+    // 730 records, ~90 KB of JSON) so paired devices converge on the union
+    // of their separately-built pasts.
+    netWorthSnapshots: (() => {
+      const changed = sendBacklog
+        ? netWorthSnapshots
+        : netWorthSnapshots.filter(
+            (snap) => new Date(snap.capturedAt).getTime() > since
+          );
+      return changed.length > 0 ? changed : undefined;
+    })(),
+    // Bucket overrides carry no per-key timestamps, so there's nothing to
+    // filter against lastSyncTimestamp - send the whole map whenever it's
+    // non-empty. The map is small (one entry per overridden category) so
+    // re-broadcasting it each sync is acceptable.
+    categoryBucketOverrides:
+      Object.keys(bucketOverrides).length > 0 ? bucketOverrides : undefined,
     debtMilestonePlan:
       !lastSyncTimestamp ||
       new Date(milestonePlan.updatedAt).getTime() > since
@@ -211,6 +303,36 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
   validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem);
   validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem);
   validateDiffEntries(diff.assetAccounts, "asset account", isAssetAccountItem);
+  validateDiffEntries(diff.customCategories, "custom category", isCustomCategoryItem);
+
+  // Bucket overrides are a bare map, not DiffEntry records, so they get
+  // their own gate: keys must pass the same bounded category-name check the
+  // import path uses, and values must be one of the three buckets. A field
+  // left absent by an older peer is fine - it just means nothing to merge.
+  if (diff.categoryBucketOverrides !== undefined) {
+    if (!isObject(diff.categoryBucketOverrides)) {
+      throw new Error("Sync rejected: malformed category bucket overrides");
+    }
+    for (const [category, bucket] of Object.entries(diff.categoryBucketOverrides)) {
+      if (!isValidImportCategory(category) || !isBudgetBucket(bucket)) {
+        throw new Error("Sync rejected: invalid category bucket override");
+      }
+    }
+  }
+
+  // Snapshots are bare records (no DiffEntry wrapper - they're never
+  // deleted, so there's no action to carry). Same shape/range validator as
+  // the JSON-import path.
+  if (diff.netWorthSnapshots !== undefined) {
+    if (!Array.isArray(diff.netWorthSnapshots)) {
+      throw new Error("Sync rejected: malformed net worth snapshots");
+    }
+    for (const snap of diff.netWorthSnapshots) {
+      if (!isNetWorthSnapshotItem(snap)) {
+        throw new Error("Sync rejected: invalid net worth snapshot");
+      }
+    }
+  }
 
   if (Array.isArray(diff.budgetLimits)) {
     for (const bucket of diff.budgetLimits) {
@@ -338,6 +460,103 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
     await EncryptedStorage.setItem(BUDGET_LIMITS_KEY, JSON.stringify(merged));
     changedCount += diff.budgetLimits.length;
+  }
+
+  // Merge custom categories - LWW by id on updatedAt, upserts only (no
+  // tombstones exist for this type). Guarded with `diff.customCategories &&`
+  // because an older peer's diff won't carry the field at all.
+  if (diff.customCategories && diff.customCategories.length > 0) {
+    // Older exports relayed through a peer may lack updatedAt (the
+    // validator allows it); treat those as epoch so any stamped record wins.
+    const tsOf = (v: string | undefined): number => {
+      if (typeof v !== "string") return 0;
+      const t = Date.parse(v);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    const localCategories = await getCustomCategories();
+    const byId = new Map<string, CustomCategory>(
+      localCategories.map((c) => [c.id, c])
+    );
+    for (const entry of diff.customCategories) {
+      const existing = byId.get(entry.record.id);
+      if (!existing || tsOf(entry.record.updatedAt) >= tsOf(existing.updatedAt)) {
+        byId.set(entry.record.id, entry.record);
+      }
+    }
+
+    // De-dupe by lowercased name (keep newest updatedAt) and drop any that
+    // shadow a built-in - mirrors importData's computeMergedCustomCategories.
+    // Both devices can independently create "Pets" with different ids; the
+    // name is what budget entries reference, so duplicate names would make
+    // icon/bucket lookups ambiguous.
+    const nameWinner = new Map<string, string>(); // lowercased name -> winning id
+    for (const [id, rec] of byId) {
+      if (isBuiltInCategory(rec.name)) {
+        byId.delete(id);
+        continue;
+      }
+      const key = rec.name.toLowerCase();
+      const prevId = nameWinner.get(key);
+      if (prevId === undefined) {
+        nameWinner.set(key, id);
+      } else if (tsOf(rec.updatedAt) >= tsOf(byId.get(prevId)!.updatedAt)) {
+        byId.delete(prevId);
+        nameWinner.set(key, id);
+      } else {
+        byId.delete(id);
+      }
+    }
+
+    await saveCustomCategoriesFromSync(Array.from(byId.values()));
+    changedCount += diff.customCategories.length;
+  }
+
+  // Merge category bucket overrides. The store has no per-key timestamps,
+  // so there's no LWW to run: incoming keys overwrite, local-only keys
+  // survive. Override *removals* therefore don't propagate - same
+  // limitation as the import path, and far better than the prior state
+  // where overrides didn't sync at all and 50/30/20 math diverged.
+  if (
+    diff.categoryBucketOverrides &&
+    Object.keys(diff.categoryBucketOverrides).length > 0
+  ) {
+    const localOverrides = await getCategoryBucketOverrides();
+    const merged: Record<string, BudgetBucket> = {
+      ...localOverrides,
+      ...diff.categoryBucketOverrides,
+    };
+    await saveCategoryBucketOverridesFromSync(merged);
+    changedCount += Object.keys(diff.categoryBucketOverrides).length;
+  }
+
+  // Merge net-worth snapshots - union by dayKey, strictly-newer capturedAt
+  // wins (ties keep local: identical content, no churn). Mirrors
+  // importData's computeMergedSnapshots so import and sync agree on
+  // history merges. Only actually-applied days are counted and a no-op
+  // diff skips the write, since backlog mode re-sends the full history.
+  // saveNetWorthSnapshots normalizes, sorts, and prunes to the 730-day cap.
+  if (diff.netWorthSnapshots && diff.netWorthSnapshots.length > 0) {
+    const localSnapshots = await getNetWorthSnapshots();
+    const byDay = new Map<string, NetWorthSnapshot>(
+      localSnapshots.map((snap) => [snap.dayKey, snap])
+    );
+    let applied = 0;
+    for (const incoming of diff.netWorthSnapshots) {
+      const existing = byDay.get(incoming.dayKey);
+      if (
+        !existing ||
+        new Date(incoming.capturedAt).getTime() >
+          new Date(existing.capturedAt).getTime()
+      ) {
+        byDay.set(incoming.dayKey, incoming);
+        applied++;
+      }
+    }
+    if (applied > 0) {
+      await saveNetWorthSnapshots(Array.from(byDay.values()));
+    }
+    changedCount += applied;
   }
 
   // Merge milestone plan (last-write-wins on updatedAt)

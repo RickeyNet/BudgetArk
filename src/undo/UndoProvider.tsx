@@ -81,6 +81,7 @@ export const UndoProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
   const animateOut = useCallback(
     (after?: () => void) => {
+      const keyAtStart = keyRef.current;
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 0,
@@ -93,7 +94,10 @@ export const UndoProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           useNativeDriver: true,
         }),
       ]).start(({ finished }) => {
-        if (finished) {
+        // A push that landed during the 160ms exit bumped keyRef - this
+        // completion belongs to the replaced bar, and clearing `active`
+        // now would instantly kill the new snackbar + its undo window.
+        if (finished && keyRef.current === keyAtStart) {
           setActive(null);
           after?.();
         }

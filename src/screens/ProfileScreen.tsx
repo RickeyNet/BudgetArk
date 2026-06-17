@@ -177,6 +177,13 @@ const ProfileScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
   const spreadsheetExportInFlightRef = useRef(false);
   const spreadsheetExportOpIdRef = useRef(0);
+  // Guards both file and spreadsheet import handlers: a double-tap on the
+  // merge/replace button during the modal-dismiss window would otherwise
+  // fire the document picker twice and trip expo-document-picker's
+  // "Different document picking in progress" lock-up. One shared ref also
+  // stops launching the spreadsheet picker while the file picker is still
+  // open (or vice versa).
+  const importPickerInFlightRef = useRef(false);
   const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", {
     scrollRef,
   });
@@ -318,10 +325,18 @@ const ProfileScreen: React.FC = () => {
     setBackupState(state);
   }, []);
 
+  /**
+   * True while the auto-sync NetInfo/AppState monitor is registered.
+   * Component-level (not effect-local) because BOTH the mount effect and
+   * the auto-sync toggle can start monitoring - the unmount cleanup must
+   * stop it regardless of which path started it, or the listener (and its
+   * setLastSyncTime against a torn-down component) leaks.
+   */
+  const monitoringActiveRef = useRef(false);
+
   /** Load user on mount */
   useEffect(() => {
     let cancelled = false;
-    let didStartMonitoring = false;
     const load = async () => {
       try {
         const [u, prefs, privacy, haptics, pairState, syncMeta, backup] =
@@ -350,7 +365,7 @@ const ProfileScreen: React.FC = () => {
               setLastSyncTime(result.timestamp);
             }
           });
-          didStartMonitoring = true;
+          monitoringActiveRef.current = true;
         }
       } catch (error) {
         if (__DEV__) console.error("Failed to load profile:", error);
@@ -359,10 +374,10 @@ const ProfileScreen: React.FC = () => {
     load();
     return () => {
       cancelled = true;
-      // Stop the auto-sync listener we registered above so it doesn't fire
-      // setLastSyncTime against a torn-down component or leak the native
-      // NetInfo subscription.
-      if (didStartMonitoring) stopMonitoring();
+      if (monitoringActiveRef.current) {
+        stopMonitoring();
+        monitoringActiveRef.current = false;
+      }
     };
   }, []);
 
@@ -617,6 +632,7 @@ const ProfileScreen: React.FC = () => {
   const handleUnpair = useCallback(async () => {
     await clearPairingState();
     stopMonitoring();
+    monitoringActiveRef.current = false;
     setPairing(null);
     setLastSyncTime(null);
     setShowUnpairConfirm(false);
@@ -667,8 +683,10 @@ const ProfileScreen: React.FC = () => {
       startMonitoring((result) => {
         if (result.success) setLastSyncTime(result.timestamp);
       });
+      monitoringActiveRef.current = true;
     } else {
       stopMonitoring();
+      monitoringActiveRef.current = false;
     }
   }, [pairing]);
 
@@ -726,6 +744,7 @@ const ProfileScreen: React.FC = () => {
     }
     await clearPairingState();
     stopMonitoring();
+    monitoringActiveRef.current = false;
     await deleteAccount();
     await getOrCreateUser();
     const freshUser = await completeOnboarding();
@@ -900,9 +919,20 @@ const ProfileScreen: React.FC = () => {
    */
   const confirmFileImport = useCallback(
     async (mode: "merge" | "replace") => {
+      if (importPickerInFlightRef.current) return;
+      importPickerInFlightRef.current = true;
       setShowImportModeModal(false);
+      // iOS: the document picker presented while the merge/replace <Modal> is
+      // still tearing down fails silently, but expo-document-picker's
+      // in-progress flag stays set - every later attempt then throws
+      // "Different document picking in progress" until the app restarts.
+      await waitForIosModalTeardown(350);
       const label = mode === "merge" ? "Merged" : "Imported";
-      await executeImport((password) => importData(mode, password), label);
+      try {
+        await executeImport((password) => importData(mode, password), label);
+      } finally {
+        importPickerInFlightRef.current = false;
+      }
     },
     [executeImport],
   );
@@ -1022,7 +1052,13 @@ const ProfileScreen: React.FC = () => {
    */
   const confirmSpreadsheetImport = useCallback(
     async (mode: "merge" | "replace") => {
+      if (importPickerInFlightRef.current) return;
+      importPickerInFlightRef.current = true;
       setShowSpreadsheetImportModal(false);
+      // Same iOS modal-teardown race as confirmFileImport: presenting the
+      // document picker over a dismissing <Modal> strands the picker module
+      // in its "picking in progress" state.
+      await waitForIosModalTeardown(350);
       const label = mode === "merge" ? "Merged" : "Imported";
       try {
         const result = await importSpreadsheet(mode);
@@ -1039,7 +1075,18 @@ const ProfileScreen: React.FC = () => {
           parts.push(`${result.assetAccounts} asset accounts`);
         let message = `${label} ${parts.join(", ")} from the spreadsheet.`;
         if (result.skippedRows > 0) {
-          message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} were skipped because required fields were missing or invalid.`;
+          message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} skipped (required fields missing or invalid):`;
+          // List the first few offending rows so the user can find and fix
+          // them; cap the list so a very messy file doesn't fill the modal.
+          const MAX_LISTED = 8;
+          const shown = result.skippedRowDetails.slice(0, MAX_LISTED);
+          for (const detail of shown) {
+            message += `\n• ${detail.sheet} — ${detail.descriptor}: ${detail.reason}`;
+          }
+          const remaining = result.skippedRowDetails.length - shown.length;
+          if (remaining > 0) {
+            message += `\n• …and ${remaining} more`;
+          }
         }
         if (result.staleDays !== undefined && result.staleDays > 30) {
           message += `\n\nNote: This file is ${result.staleDays} days old. Some data may be outdated.`;
@@ -1057,6 +1104,8 @@ const ProfileScreen: React.FC = () => {
             error?.message ||
             "Something went wrong while importing the spreadsheet.",
         });
+      } finally {
+        importPickerInFlightRef.current = false;
       }
     },
     [],

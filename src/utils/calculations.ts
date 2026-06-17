@@ -285,9 +285,19 @@ export const calcTotalInterest = (
   const months = calcMonthsToPayoff(balance, annualRate, monthlyPayment);
   if (months === Infinity || months === 0) return 0;
 
-  /* Total paid minus original balance = interest */
-  const totalPaid = monthlyPayment * months;
-  return Math.max(0, totalPaid - balance);
+  /* Simulate month by month rather than `monthlyPayment * ceil(months)`:
+   * treating the final partial payment as a full one overstated interest
+   * badly (it reported $200 of "interest" on a 0% loan paid in 3.33
+   * months). The last month pays only what's still owed. */
+  const monthlyRate = annualRate / 100 / 12;
+  let remaining = balance;
+  let totalInterest = 0;
+  for (let m = 0; m < months && remaining > 0; m++) {
+    const interest = remaining * monthlyRate;
+    totalInterest += interest;
+    remaining = remaining + interest - monthlyPayment;
+  }
+  return Math.max(0, totalInterest);
 };
 
 /**

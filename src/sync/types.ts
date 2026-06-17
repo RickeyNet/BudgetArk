@@ -13,6 +13,9 @@ import type {
   SavingsGoal,
   DebtMilestonePlan,
   AssetAccount,
+  CustomCategory,
+  BudgetBucket,
+  NetWorthSnapshot,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -43,6 +46,8 @@ export type SyncMessageType =
   | "SYNC_ACK";
 
 export interface SyncMessage {
+  /** Protocol version - see transportService.PROTOCOL_VERSION. */
+  v: number;
   type: SyncMessageType;
   senderId: string;
   timestamp: string;
@@ -50,7 +55,13 @@ export interface SyncMessage {
   nonce: string;
   /** Encrypted JSON payload */
   payload: string;
-  /** HMAC-SHA256 integrity check of payload */
+  /**
+   * HMAC-SHA256 over the full envelope (version, type, senderId, timestamp,
+   * nonce, ciphertext) - NOT just the ciphertext. Signing only the payload
+   * (protocol v1) let a LAN attacker re-wrap a captured payload+hmac pair in
+   * a fresh envelope with a new timestamp/nonce/type, defeating the replay
+   * and age checks entirely.
+   */
   hmac: string;
 }
 
@@ -87,6 +98,31 @@ export interface SyncDiff {
   budgetLimits: BudgetLimitDiff[];
   savingsGoals: DiffEntry<SavingsGoal>[];
   assetAccounts: DiffEntry<AssetAccount>[];
+  /**
+   * Custom category definitions. Budget entries reference these by NAME, so
+   * without syncing the definitions a partner renders synced entries with
+   * the fallback icon and the default "wants" bucket - bucket math diverges
+   * between paired devices. Upsert-only: custom categories carry no
+   * tombstones (see types/index.ts). Optional so a diff from an older peer
+   * that predates this field still applies cleanly.
+   */
+  customCategories?: DiffEntry<CustomCategory>[];
+  /**
+   * Per-category 50/30/20 bucket overrides. The store has no per-key
+   * timestamps, so the whole map is sent and merged key-wise on receipt.
+   * Optional for the same older-peer reason as customCategories.
+   */
+  categoryBucketOverrides?: Record<string, BudgetBucket>;
+  /**
+   * Net-worth history. Bare records (no tombstones - snapshots are never
+   * deleted, only pruned by the 730-day cap) merged by dayKey keeping the
+   * newer capturedAt. Incremental syncs send only days captured since the
+   * last sync; the first sync after pairing - and the one-time backfill
+   * sync after updating to the version that added this field - send the
+   * full history so both devices converge on the union of their pasts.
+   * Optional for older-peer tolerance like the fields above.
+   */
+  netWorthSnapshots?: NetWorthSnapshot[];
   debtMilestonePlan?: DebtMilestonePlan;
   payoffStrategy?: PayoffStrategyPreference;
   /**

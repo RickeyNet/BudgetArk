@@ -7,6 +7,35 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.7.3",
+    title: "Import Fixes",
+    releasedAt: "2026-06-12",
+    highlights: [
+      "Fixed importing on iPhone: choosing Merge or Replace for a spreadsheet (CSV or Excel) or a JSON backup now opens the file picker reliably. Before, the picker could silently fail to appear, and tapping again left it stuck with a 'document picking in progress' error until you force-closed the app.",
+      "When a JSON backup is rejected, the error now names the exact entry and what's wrong with it - a missing date, a missing id, or an amount typed as text instead of a number - so you can find and fix the bad record instead of guessing.",
+    ],
+  },
+  {
+    version: "1.7.2",
+    title: "Reliability + Sync Security",
+    releasedAt: "2026-06-09",
+    highlights: [
+      "Partner sync messages are now fully authenticated end-to-end, closing a hole where someone on your WiFi could replay captured sync traffic. Both paired devices must be on 1.7.2 before they can sync with each other again - update both phones, then sync as usual. If your partner hasn't updated yet, sync now tells you that instead of timing out with a generic error.",
+      "Net worth history now syncs between paired devices. The first sync after both phones update exchanges each device's full history, so your Bridge graphs converge on the combined past instead of each phone only knowing the days it was opened.",
+      "Custom categories and your 50/30/20 bucket assignments now sync between paired devices, so entries no longer show up on your partner's phone with a generic icon and the wrong bucket. Categories you created a while ago ride along on that same first sync, not just newly edited ones.",
+      "Deletions now stick properly: deleting a debt, entry, goal, or account right before certain screens saved could quietly make the deletion un-undoable and let it reappear on your partner's device. Undo and cross-device deletes are reliable again.",
+      "Deleting a payment that was larger than the remaining balance no longer inflates the debt past what you ever owed - only the amount that actually reduced the balance is added back. The due-date prompt also logs at most the remaining balance instead of the full minimum.",
+      "Double-tapping 'Yes, log it' on the due-date prompt can no longer record the payment twice, and the payoff celebration now shows reliably when that payment clears a debt.",
+      "Backups got smaller and the import size limits got much bigger - long-term users whose backups had outgrown the old cap can restore them again. Backups now also include your Ship's Log badges, their underlying stats, and due-date prompt dismissals, so a device migration no longer resets them.",
+      "Importing a backup in merge mode no longer wipes your net-worth history or rolls back milestone progress to the backup's older state.",
+      "Spreadsheet import now skips invalid rows (and tells you how many) instead of rejecting the whole file, and CSV imports in replace mode no longer erase data the CSV format doesn't carry, like net-worth history.",
+      "Due-date reminders and new budget entries now use your local calendar month - logging a payment late on the last evening of the month counts for the right month, and new entries no longer land in the wrong month in extreme timezones.",
+      "Annual Report only counts months that have actually happened, so recurring bills are no longer projected into future months as if you'd already paid them. The savings streak badge now counts recurring monthly contributions for every month they apply, not just the month you created them.",
+      "Payoff strategy comparisons no longer show 'Infinity mo faster' when a plan isn't solvable, and total-interest math no longer reports phantom interest on 0% loans.",
+      "Send Feedback emails now open pre-filled with a short template (steps to reproduce, expected behavior, how often it happens) so bug reports arrive with the info needed to fix them.",
+    ],
+  },
+  {
     version: "1.7.1",
     title: "Debt Reminders + Captain's Course Ch 2",
     releasedAt: "2026-06-02",

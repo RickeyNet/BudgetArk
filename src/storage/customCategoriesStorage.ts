@@ -67,6 +67,18 @@ const writeStore = async (categories: CustomCategory[]): Promise<void> => {
 export const getCustomCategories = async (): Promise<CustomCategory[]> =>
   readStore();
 
+/**
+ * Bulk write used by P2P sync after it has merged local + incoming
+ * definitions. Bypasses the per-mutation name validation above because the
+ * diff engine already validated each record at the trust boundary and
+ * de-duped names itself - re-running validateName here would reject the
+ * very merge sync just computed. Preserves the `{categories, version}`
+ * store shape so the normal readers keep working.
+ */
+export const saveCustomCategoriesFromSync = async (
+  categories: CustomCategory[]
+): Promise<void> => writeStore(categories);
+
 /** Normalize + bound the chosen icon to a single non-empty glyph. */
 const normalizeIcon = (icon: string): string => {
   const cleaned = sanitizeTextInput(icon).trim();

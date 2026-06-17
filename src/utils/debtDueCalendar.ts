@@ -39,12 +39,15 @@ export const hasPaymentInMonth = (
   debtId: string,
   payments: readonly Payment[],
   monthKey: string
-): boolean => {
-  const prefix = `${monthKey}-`;
-  return payments.some(
-    (p) => p.debtId === debtId && p.date.startsWith(prefix)
+): boolean =>
+  // Bucket the payment by its LOCAL calendar month, like every other piece
+  // of the reminder math. `p.date` is a UTC ISO timestamp - a prefix match
+  // against the local-derived monthKey attributes an evening payment on the
+  // last day of the month to the NEXT month for users west of UTC (keeping
+  // the reminder firing today and silently suppressing next month's).
+  payments.some(
+    (p) => p.debtId === debtId && getMonthKey(new Date(p.date)) === monthKey
   );
-};
 
 const isDebtDueOnDate = (
   debt: Debt,

@@ -1,5 +1,70 @@
 # BudgetArk Release Notes
 
+## v1.7.3 - Import Fixes (2026-06-12)
+
+Pure JS - ships OTA against the existing native runtime.
+
+### iOS document-picker race (`b6874d9`)
+
+- **Both import paths now wait for modal teardown before launching the picker.** `confirmFileImport` (JSON/backup) and `confirmSpreadsheetImport` (CSV/Excel) closed the merge/replace `<Modal>` and called `DocumentPicker.getDocumentAsync` in the same tick. On iOS the picker presented over the still-dismissing modal and failed silently, but `expo-document-picker`'s internal "picking in progress" flag stayed set - so the first tap did nothing and every later tap threw *"Different document picking in progress. Await other document picking first"* until the app was force-quit. Both handlers now `await waitForIosModalTeardown(350)` first, matching the export path's existing fix.
+- **`openDocumentPicker` wrapper.** New shared wrapper in `importData.ts` (used by both the JSON and spreadsheet pickers) translates the stuck-state rejection into actionable guidance - *"The file picker is stuck from an earlier attempt. Please fully close and reopen the app, then try again."* - for anyone who already tripped the flag before updating.
+
+### Actionable JSON rejection errors
+
+- **Indexed collection errors.** `sanitizeCollection` now reports the invalid count and the 1-based index of the first offending record (e.g. *"budget entries contains 1 invalid record (first at item 3 of 12)."*) instead of a bare *"contains invalid records."* The per-month budget-limits path gets the same index pointer.
+- **Field-level reason for budget entries (`explainBudgetEntryProblem`).** The hand-edited collection most likely to fail now names the specific problem on the first bad record - missing `id`, missing `createdAt`, a `type` that isn't exactly `income`/`expense`, an `amount` typed as a quoted string rather than a number, an out-of-range category, etc. Checks run in lockstep with `isBudgetEntryItem`.
+
+### Issue template
+
+- **GitHub bug report template (`.github/ISSUE_TEMPLATE/bug_report.md`).** Replaced the unmodified stock template's Desktop/Browser fields with an "App & device info" section that asks for the BudgetArk version (and points to where it's shown - bottom of the Profile tab), auto-applies the `bug` label, and prompts import/export reporters to include the exact error message and a redacted sample file.
+
+## v1.7.2 - Reliability + Sync Security (2026-06-09)
+
+Pure JS - ships OTA against the existing native runtime. **Sync protocol bumped to v2: both paired devices must be on 1.7.2 before they can sync with each other again.**
+
+### Sync security & data (protocol v2)
+
+- **Full-envelope authentication (`8fd1948`, breaking).** The HMAC previously covered only the payload ciphertext, leaving `type`, `senderId`, `timestamp`, and `nonce` unauthenticated - a LAN attacker could re-wrap a captured payload+HMAC pair in a fresh envelope (new timestamp, new nonce, any message type) and defeat replay protection entirely. The MAC now covers the whole envelope and is verified before any field is trusted. Protocol version bumped so v1 and v2 peers refuse to interoperate.
+- **Version-mismatch reporting (`dff2961`).** A peer on the old protocol used to surface as a generic 30s timeout (reads as a network problem right after an update). Frames shaped like sync messages with a missing/different protocol version now flag the failure so the error says the partner's app needs updating. Detection only works when the outdated peer sends first; a v1 server drops our frames silently, so that direction still times out generically.
+- **Net-worth history sync (`8d14100`).** Each phone built its own snapshot history, so Bridge graphs diverged permanently (days a device never opened were simply missing). Snapshots now ride the sync diff - merged by `dayKey`, newer `capturedAt` wins, validated like the import path. Since incremental diffs can't carry anything captured before the last sync, the first successful sync after this update sends the full history (and the full custom-category list, which had the same backlog gap).
+- **Custom categories & bucket overrides sync (`8b758fb`).** Budget entries reference custom categories by name, but the definitions never synced - partner devices rendered synced entries with the fallback icon and default "wants" bucket, so 50/30/20 math diverged for identical data. Categories now merge LWW by id (deduped by name, built-in shadows dropped); overrides merge key-wise since that store has no timestamps. Both are counted in sync results.
+
+### Deletes, tombstones & debt payments
+
+- **Tombstone preservation (`ed02e47`).** Screens read `filterLive()` results and round-tripped them back into `saveX()`, erasing every soft-delete tombstone - undo then restored nothing and the paired device resurrected the deletion on its next sync. Public `saveX` now merges stored tombstones back in; internal helpers and the TTL purge use a raw write so expired tombstones still drop.
+- **Payment delete reversal (`a7f2df1`).** `recordPayment` clamps the balance at zero but `deletePayment` added back the full amount: logging $150 against a $40 balance then deleting it showed a $150 debt - more than was ever owed. Payments now carry `appliedAmount` (the delta actually subtracted) and delete/restore reverse exactly that. The due-date prompt also clamps its logged amount to the remaining balance instead of raw `minPayment`.
+- **Due-prompt double-tap & celebration clash (`de851f6`).** "Yes, log" stayed enabled through several awaits, so a double-tap recorded the minimum twice; a payment that zeroed the debt presented the payoff celebration while the prompt was still dismissing (iOS hides one of two racing modals). Fixed with an in-flight ref guard plus the established 250ms dismiss-then-present defer. This commit also guards the strategy comparison so an unsolvable plan reads "Not solvable" instead of rendering "Infinity mo faster" / "NaN mo faster".
+- **Local-month due bucketing (`a1b1f36`).** UTC ISO prefix vs local month key: an evening payment on the last day of the month matched the *next* month for users west of UTC - the reminder kept firing all day (inviting a double payment) and next month's was silently suppressed.
+
+### Budget month attribution
+
+- **Local-month entry default (`7caeec4`).** The new-entry sheet defaulted to `toISOString()`'s UTC month ("Jun" while the user's evening was still May 31), quietly booking entries into next month. Entry dates now store noon UTC inside the picked month and `isDateInMonthKey` slices the `YYYY-MM` prefix, matching `recurrence.ts`, so extreme timezones (UTC+13/14) stop shifting entries across months.
+- **Shared recurring catch-up (`28d4953`).** The Budget focus effect re-implemented `applyMissedRecurringLinkedAccountContributions` inline, missing two prior fixes: orphaned entries got `lastAppliedMonth` stamped while their credit vanished, and date-only ISO strings parsed as UTC credited a month early west of UTC. Budget is the most-visited tab, so the broken copy usually ran first.
+
+### Import & backup
+
+- **Compact exports, bigger caps (`cf85eb0`).** Pretty-printed exports outgrew import's own 500 KB / 2,000-item caps after ~2 years of normal use - the app's own backups became unrestorable, discovered only at device migration. Exports are now compact JSON; import bounds are 12 MB pre-decryption, 8 MB post-decryption, 20k per collection, 50k total. Backups also began carrying Ship's Log badges, their stats, and due-date dismissals.
+- **Merge mode stops overwriting singletons (`86db11c`).** Merge wrote net-worth snapshots, bucket overrides, milestones, and payoff strategy verbatim from the file - importing a 3-month-old backup erased 3 months of daily snapshot history with no recovery path. Snapshots now union by `dayKey`, overrides merge key-wise, and milestones/strategy only apply when at least as new as local.
+- **Spreadsheet hardening (`fe2b806`).** One out-of-range cell used to abort the whole file (the downstream sanitizer throws), so the row mappers now mirror the validator limits and count bad rows in `skippedRows` instead. Replace mode scoped its key removals to what the payload actually carries (a CSV replace had been erasing net-worth history and milestones). CSV cells starting with `= + - @` get a leading apostrophe on the CSV path (CWE-1236 formula injection). Temp-key writes moved inside the try/rollback so a mid-loop failure can't strand `*_import_tmp` keys, and CSV export no longer calls `recordBackup` (it's a partial export and was silencing the backup reminder for exactly the user it protects).
+
+### Storage & UI reliability
+
+- **Migration write queue (`040ab3c`).** `getItem`'s V1/plaintext upgrade wrote directly via `AsyncStorage.setItem` after awaiting the SecureStore key - a queued `setItem` landing in that window was silently reverted to the pre-edit value. Migration writes now queue and re-check the stored value before overwriting.
+- **Modal presentation races (`59c012c`).** Bill calendar → edit entry presented the edit sheet in the same tick two modals tore down; achievement unlocks fired the root modal while the triggering screen's modal was mid-dismissal, so the celebration silently never appeared (and the unlock persists, so it never re-shows). The calendar path now waits the standard 250ms; the achievements queue defers presentation 300ms centrally, covering every `runCheck` call site.
+
+### Round 4 audit (misc correctness) (`6ebe608`)
+
+- Stop the auto-sync monitor on unmount regardless of which path started it (the toggle path leaked the NetInfo listener).
+- `calcTotalInterest` simulates the final partial month; it had reported $200 interest on a 0% loan.
+- `isMonthKey` rejects month > 12 - `"9999-99"` permanently occupied a lexicographic limit-history slot.
+- Savings streak uses the shared recurrence rule; a recurring monthly contribution had counted only its creation month, capping streaks at 1.
+- Annual report stops at the current month - recurring entries were projected Jul-Dec as actuals while `debtPaid` stayed real.
+- `UndoProvider` key-tag exit animation so a replace during the 160ms exit can't instantly kill the new snackbar.
+
+### Feedback
+
+- **Structured report template (`60b6f92`).** Free-form reports usually arrived without repro steps or expected behavior. Send Feedback now opens the email composer pre-filled with a template prompting for them; the in-app box still asks one question so the flow stays lightweight.
+
 ## v1.7.1 - Debt Reminders + Captain's Course Ch 2 (2026-06-02)
 
 Pure JS - ships OTA against the existing native runtime.

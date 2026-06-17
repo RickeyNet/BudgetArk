@@ -690,6 +690,40 @@ const appendTotalRow = (
   sheet["!ref"] = XLSX.utils.encode_range(range);
 };
 
+/**
+ * Excel/Sheets execute a CSV cell that begins with =, +, -, or @ as a live
+ * formula on open (CWE-1236) - a budget entry described as
+ * "=HYPERLINK(...)" or "@SUM(...)" becomes code on whatever machine the
+ * shared file lands on. Prefixing a single quote makes spreadsheet apps
+ * treat the cell as text.
+ *
+ * CSV path only. String cells alone are guarded: numeric cells (negative
+ * amounts included) serialize from `v` as numbers, and XLSX string cells
+ * are explicitly typed in the binary format, so neither can be interpreted
+ * as a formula. Returns a shallow copy so the workbook's shared sheet
+ * object stays pristine.
+ */
+const escapeCsvFormulaCells = (sheet: XLSX.WorkSheet): XLSX.WorkSheet => {
+  const out: XLSX.WorkSheet = {};
+  for (const [ref, cell] of Object.entries(sheet)) {
+    const c = cell as XLSX.CellObject;
+    if (
+      !ref.startsWith("!") &&
+      c &&
+      c.t === "s" &&
+      typeof c.v === "string" &&
+      /^[=+\-@]/.test(c.v)
+    ) {
+      // Drop the cached display text (`w`) too - sheet_to_csv prefers it
+      // over `v`, which would silently bypass the guard.
+      out[ref] = { t: "s", v: `'${c.v}` };
+    } else {
+      out[ref] = cell;
+    }
+  }
+  return out;
+};
+
 /* ── Filename helpers ── */
 
 const buildFilename = (format: SpreadsheetFormat): string => {
@@ -986,7 +1020,7 @@ export const exportSpreadsheet = async (
   const writeStartedAt = nowMs();
   try {
     if (format === "csv") {
-      const csv = XLSX.utils.sheet_to_csv(entrySheet);
+      const csv = XLSX.utils.sheet_to_csv(escapeCsvFormulaCells(entrySheet));
       file.create({ overwrite: true });
       file.write(csv, { encoding: "utf8" });
     } else {
@@ -1027,12 +1061,18 @@ export const exportSpreadsheet = async (
   });
   log("share-complete");
 
-  // Stamp the backup version so the Profile reminder banner clears.
+  // Stamp the backup version so the Profile reminder banner clears - xlsx
+  // only. CSV carries budget entries alone, so counting it as "the user
+  // took a backup" would silence the reminder while debts, goals, accounts,
+  // net worth, etc. remain unbacked-up; the user most at risk (about to
+  // migrate devices) is exactly the one the reminder exists for.
   // expo-sharing's shareAsync resolves on share-sheet dismissal regardless
-  // of the user's choice, so this is a best-effort marker - a user who
-  // opens the sheet and cancels will still clear the reminder. Worth the
-  // tradeoff vs nagging users who did successfully save the file.
-  await recordBackup(CURRENT_APP_VERSION);
+  // of the user's choice, so even for xlsx this is a best-effort marker - a
+  // user who opens the sheet and cancels will still clear the reminder.
+  // Worth the tradeoff vs nagging users who did successfully save the file.
+  if (format === "xlsx") {
+    await recordBackup(CURRENT_APP_VERSION);
+  }
   log(
     "done",
     `partial=${missingSections.size > 0 ? "yes" : "no"} missing=${

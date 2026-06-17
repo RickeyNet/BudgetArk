@@ -113,6 +113,15 @@ export interface Payment {
   /** Payment amount in dollars */
   amount: number;
 
+  /**
+   * Portion of `amount` actually subtracted from the debt's balance.
+   * `recordPayment` clamps the balance at zero, so an overpayment applies
+   * less than `amount`; deleting the payment must add back only this delta
+   * or the balance ends up higher than was ever owed. Absent on legacy
+   * records - fall back to `amount`.
+   */
+  appliedAmount?: number;
+
   /** ISO timestamp of when payment was recorded */
   date: string;
 

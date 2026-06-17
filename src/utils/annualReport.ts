@@ -110,9 +110,17 @@ const buildMonthAggregates = (
     aggs[monthKeyFor(year, m)] = { income: 0, expenses: 0, byCategory: {} };
   }
 
+  // For the current year, stop at the current month. Recurring entries
+  // "apply" to every future month too, so counting all 12 reported money
+  // not yet earned/spent/saved as actuals - while debtPaid (real payment
+  // rows only) stayed honest, mixing projections and actuals in one card.
+  const now = new Date();
+  const lastMonthIndex =
+    year === now.getFullYear() ? now.getMonth() : year > now.getFullYear() ? -1 : 11;
+
   for (const entry of entries) {
     if (!Number.isFinite(entry.amount) || entry.amount <= 0) continue;
-    for (let m = 0; m < 12; m++) {
+    for (let m = 0; m <= lastMonthIndex; m++) {
       const key = monthKeyFor(year, m);
       if (!entryAppliesToMonth(entry, key)) continue;
       const agg = aggs[key];

@@ -13,7 +13,11 @@ import { getOrCreateUser } from "../storage/userStorage";
 import { getPairingState, getSyncMetadata, updateSyncMetadata } from "./pairingStorage";
 import * as Discovery from "./discoveryService";
 import * as Transport from "./transportService";
-import { computeOutgoingDiff, applyIncomingDiff } from "./diffEngine";
+import {
+  computeOutgoingDiff,
+  applyIncomingDiff,
+  markBackfillSyncDone,
+} from "./diffEngine";
 import type { SyncResult, SyncStatus, SyncDiff } from "./types";
 
 export type SyncStatusCallback = (status: SyncStatus) => void;
@@ -104,6 +108,9 @@ const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
 
                 const now = new Date().toISOString();
                 await updateSyncMetadata(now);
+                // Full-history backlog (net worth, categories) has been
+                // delivered - future diffs can go back to incremental.
+                await markBackfillSyncDone();
 
                 connection.close();
                 Discovery.stop();
@@ -190,6 +197,8 @@ const syncAsClient = async (
 
           const now = new Date().toISOString();
           await updateSyncMetadata(now);
+          // Same backlog stamp as the server path.
+          await markBackfillSyncDone();
 
           setTimeout(() => connection.close(), 500);
           Transport.resetReplayProtection();
@@ -260,12 +269,21 @@ export const syncNow = async (
     return await serverHandle.result;
   } catch (err) {
     onStatus("error");
+    // A frame from the partner with a missing/different protocol version
+    // means "their app is on an incompatible version", not a network
+    // problem - say so instead of the generic timeout it surfaces as.
+    // (Read before `finally` runs resetReplayProtection, which clears it.)
+    const versionMismatch = Transport.wasProtocolMismatchSeen();
     return {
       success: false,
       recordsSent: 0,
       recordsReceived: 0,
       timestamp: new Date().toISOString(),
-      error: err instanceof Error ? err.message : "Sync failed",
+      error: versionMismatch
+        ? "Your partner's device is on an incompatible app version. Update BudgetArk on both devices, then sync again."
+        : err instanceof Error
+          ? err.message
+          : "Sync failed",
     };
   } finally {
     // Always tear down discovery + the replay-protection nonce set so the
@@ -287,6 +305,11 @@ const countDiffEntries = (diff: SyncDiff): number => {
     diff.savingsGoals.length +
     (diff.assetAccounts?.length ?? 0) +
     diff.budgetLimits.length +
+    // Optional-chained like assetAccounts: these fields were added after
+    // launch, so a diff built by an older peer may omit them entirely.
+    (diff.customCategories?.length ?? 0) +
+    Object.keys(diff.categoryBucketOverrides ?? {}).length +
+    (diff.netWorthSnapshots?.length ?? 0) +
     (diff.debtMilestonePlan ? 1 : 0) +
     (diff.payoffStrategy ? 1 : 0)
   );
