@@ -4,30 +4,6 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ---
 
-## Phase 1 - Budget Screen
-
-- [x] Design data model for income/expense entries (category, amount, date, type)
-- [x] Create `budgetStorage.ts` following the same AsyncStorage pattern as `debtStorage.ts`
-- [x] Add new types to `src/types/index.ts` (e.g., `BudgetEntry`, `BudgetCategory`)
-- [x] Implement income & expense entry form (modal, similar to `AddDebtModal`)
-- [x] Implement category list with monthly totals
-- [x] Add budget limit per category with warning when approaching limit
-- [x] Add pie/donut chart breakdown using Victory Native (already installed)
-- [x] Add spending alert logic (warning color when >80% of limit reached)
-
----
-
-## Phase 2 - Investment Screen
-
-- [x] Design UI for contribution calculator (inputs: monthly amount, annual return %, years)
-- [x] Wire up `calcInvestmentGrowth()` from `src/utils/calculations.ts` (already implemented)
-- [x] Add interactive sliders for "what if" exploration
-- [x] Add a line chart showing growth over time (SVG area chart)
-- [x] Show contribution vs. interest earned breakdown
-- [x] Add timeline presets (10yr, 20yr, 30yr buttons)
-
----
-
 ## Pre-Launch (Required Before Any Submission)
 
 ### App Configuration
@@ -47,7 +23,7 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Verify `icon.png` is exactly 1024×1024px (required by Apple)
 - [x] Verify `adaptive-icon.png` meets Android requirements (foreground should be ~66% of frame)
 - [x] Update splash screen `backgroundColor` in `app.json` from `"#ffffff"` to match the app's dark background (e.g., `"#232424"`)
-- [ ] Consider adding a proper splash icon that fits the dark background
+- [x] Consider adding a proper splash icon that fits the dark background
 
 ### Missing Feature: Export Data
 - [x] Implement the "Export My Data" button in `ProfileScreen.tsx`
@@ -85,9 +61,9 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Download the `.aab` file from EAS when the build finishes
 
 ### 3. Prepare Store Assets
-- [ ] App icon: 512×512 PNG
-- [ ] Feature graphic: 1024×500 PNG
-- [ ] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
+- [x] App icon: 512×512 PNG
+- [x] Feature graphic: 1024×500 PNG
+- [x] Screenshots: at least 2 phone screenshots (16:9 or 9:16)
 - [x] Short description (80 characters max)
 - [x] Full description (4,000 characters max)
 - [x] Privacy policy URL (required - host on GitHub Pages for free, state no data leaves the device)
@@ -102,10 +78,12 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Go to Play Console > Create app
 - [x] Fill in app name, default language, app/game, free/paid
 - [x] Complete all Setup checklist items
-- [x] Go to Production > Create new release
+- [x] Go to Testing > Create new release for closed testing
 - [x] Upload the `.aab` file
 - [x] Add release notes
-- [ ] Review and roll out
+- [x] Review and roll out
+- [ ] Get 12 testers for 14 days
+- [ ] Once approved, go to Production > Create new release
 
 ### 6. Wait for Review
 - [ ] Google review typically takes a few hours to a few days for first submission
@@ -114,74 +92,6 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ==============================================================================================================================================================================================
 
-## F-Droid Submission
-
-F-Droid is a free, open-source Android app store. Apps must be open source and built from source by F-Droid's servers.
-
-### 1. Prerequisites
-- [ ] Make your GitHub repo public (F-Droid requires open source code)
-- [ ] Add an open-source license to the repo (e.g., GPL-3.0, MIT, Apache-2.0) - add a `LICENSE` file
-- [ ] Remove any proprietary dependencies if possible (F-Droid prefers fully free software)
-  - Note: `expo-updates` and EAS-related code may need to be optional since F-Droid builds won't use EAS
-- [ ] Ensure the app can build with standard open-source tooling (Gradle)
-
-### 2. Prepare the Build
-- [ ] Run `npx expo prebuild` to generate the native `android/` folder
-- [ ] Verify the app builds locally: `cd android && ./gradlew assembleRelease`
-- [ ] Make sure `android/` is committed to the repo (F-Droid builds from source)
-- [ ] Tag your release in git (e.g., `git tag v1.0.0`) - F-Droid uses tags to detect new versions
-
-### 3. Create F-Droid Metadata
-- [ ] Fork the F-Droid Data repo: https://gitlab.com/fdroid/fdroiddata
-- [ ] Create metadata file at `metadata/com.budgetark.app.yml` with:
-  - App name, summary, description
-  - License type
-  - Source code URL (your GitHub repo)
-  - Build instructions (Gradle commands)
-  - Auto-update mode (git tags)
-- [ ] Example metadata structure:
-  ```yaml
-  Categories:
-    - Money
-  License: MIT
-  AuthorName: RickeyNet
-  SourceCode: https://github.com/RickeyNet/BudgetArk
-  IssueTracker: https://github.com/RickeyNet/BudgetArk/issues
-
-  AutoName: BudgetArk
-  Description: |
-    Offline-first personal finance app for debt tracking, budgeting,
-    and investment projections. All data stays on your device.
-
-  RepoType: git
-  Repo: https://github.com/RickeyNet/BudgetArk.git
-
-  Builds:
-    - versionName: 1.0.0
-      versionCode: 1
-      commit: v1.0.0
-      subdir: android/app
-      gradle:
-        - release
-
-  AutoUpdateMode: Version
-  UpdateCheckMode: Tags
-  CurrentVersion: 1.0.0
-  CurrentVersionCode: 1
-  ```
-
-### 4. Submit
-- [ ] Submit a merge request to the fdroiddata repo with your metadata file
-- [ ] F-Droid team reviews the app (can take weeks to months for first submission)
-- [ ] They will build the app from source on their servers and sign it with their key
-
-### 5. Things to Know
-- [ ] F-Droid signs the APK with their own key - it will NOT be the same signature as your Play Store/EAS builds
-- [ ] Users cannot switch between Play Store and F-Droid versions without reinstalling
-- [ ] Updates go through F-Droid's build cycle - not instant like EAS OTA
-- [ ] No analytics, tracking, or proprietary push services allowed (BudgetArk should be fine since it's fully offline)
-
-=================================================================================================================================================================================================
 
 ## Security Hardening
 
@@ -309,58 +219,11 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 ---
 
-## Code Quality & Crash Prevention
-
-### High Priority
-- [x] Fix race condition in `recordPayment()` - `src/storage/debtStorage.ts:162-177`. The `balance: undefined as any` workaround means if `updateDebt` fails after payment is written, the payment is saved but debt balance never updates. Add atomic/transactional storage operations.
-- [x] Wrap `Promise.all()` in try-catch in `DebtTrackerScreen.tsx:181-205` - was already wrapped in try-catch with fallback to empty state. Verified correct.
-- [x] Fix division by zero in `DebtTrackerScreen.tsx:339` - was already guarded with `nonMortgageOriginal > 0` ternary. Verified correct.
-- [x] Use `Number.isFinite()` for all parsed numeric inputs in `AddDebtModal.tsx:229-231` - `parseFloat(x) > 0` doesn't catch `Infinity` edge cases.
-- [x] Make decryption failures distinguishable from missing data in `encryptedStorage.ts:195-211` - now throws `DecryptionError` instead of returning `null`, so callers can distinguish corruption from missing data.
-- [x] Remove `as any` casts and replace with proper type guards - `debtStorage.ts:175`, `App.tsx:99-100`, `ProfileScreen.tsx:213-214`, plus `ProfileScreen.tsx:445`.
-
-### Medium Priority
-- [x] Fix stale closure in `useCallback` - `DebtTrackerScreen.tsx:160-178`. `primeMilestonesModal` captures `targetDraftByStep` but may not properly list it in dependencies.
-- [x] Add cleanup functions to async `useEffect` hooks - `ProfileScreen.tsx:154-167`. If component unmounts mid-load, state updates on unmounted components cause warnings/crashes.
-- [x] Fix memory leak in AppState listener - `encryptedStorage.ts:69-73`. `AppState.addEventListener` at module scope with no removal; listeners accumulate during hot-reload.
-- [x] Fix concurrent budget entry write race condition - `BudgetScreen.tsx:316-344`. `saveBudgetEntries()` is async inside a sync `setState` callback. Rapid edits can cause storage to lag behind state, leading to data loss on restart.
-- [x] Add upper bound validation on import numeric values - `importData.ts:161-168`. `monthlyLimit` validated only as `> 0.01` with no ceiling. A malformed import could inject absurd values.
-- [x] Handle chart empty state gracefully - `InvestmentScreen.tsx:68`. Chart returns `null` for < 2 data points, which could cause layout shift.
-- [x] Add safeguard for simulation loop - `calculations.ts:128-195`. Already guarded: line 185 exits early when balance isn't decreasing (`afterBalance >= beforeBalance - 0.000001`), plus hard cap at 600 iterations and input sanitization. No additional fix needed.
-
-### Low Priority
-- [x] Improve navigation error logging - `App.tsx:242-244`. Added try-catch around `navigate()` calls and `__DEV__` warnings when navigation isn't ready.
-- [x] Fix FlatList `keyExtractor` - `BudgetScreen.tsx:672`. Verified safe: `expenseRows` derives from a `Set<BudgetCategory>`, so `item.category` is guaranteed unique. No change needed.
-- [x] Reduce excessive local state in `DebtTrackerScreen.tsx:115-152` - Evaluated: `useReducer` would not reduce re-renders (React re-renders the full component on any state change regardless). The main stale-closure risk was already fixed in medium priority. Not worth the refactor risk.
-- [x] Fix missing `useCallback` dependency in `InvestmentScreen.tsx:188-191` - Verified correct: `handleSliderChange` and `adjust` only use stable `useState` setters and module-level constants (`SLIDERS`). Empty dependency arrays are appropriate.
-- [x] Add negative value validation for savings goals - `SmartPlanModal.tsx:597`. Added `Math.max(0, ...)` clamp so negative `currentAmount` from data corruption renders as 0% instead of a negative percentage.
-
----
-
 ## Nice-to-Have (Post-Launch)
 
-- [x] Payment history screen - the data is already being recorded, just needs a UI
-- [x] Edit existing debts (currently debts can only be added or deleted, not edited)
-- [x] Debt payoff order strategies (avalanche vs. snowball method)
 - [ ] Push notifications for payment reminders (requires `expo-notifications`)
-- [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
-- [ ] iPad layout improvements (`supportsTablet` is already set to `true` in `app.json`)
-- [x] Localization / currency format options beyond USD
-- [x] Recurring budget entries
-- [x] Due-date reminder banners - shipped as an in-app Budget banner for upcoming recurring bill dates (opens Bill Calendar). Push notifications still deferred.
-- [x] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
-- [x] Savings goals and emergency fund Deck tracker
-- [x] Persist user-selected payoff strategy across app restarts (no default reset to Custom)
-- [x] Build Your Ark planning hub (Hull/Deck/Supplies) integrated with Debt Tracker
-- [x] Improve debt milestone modal readability (full-screen layout + larger text + safe-area support)
-- [x] Improve theme readability and contrast across The Ark and dark themes (buttons + theme selector cards)
-- [x] Monthly review insights (category changes, spending trends, streaks)
-- [x] Custom categories and category icon support - v1 (add-only): users add their own categories (name + emoji icon) via Profile → CATEGORIES → Custom Categories. Built-in 21 stay fixed. Custom categories work everywhere built-ins do: entry pickers (Add/Edit modals), Budget category list, donut chart (deterministic name-hashed color), monthly limits, insights/streaks, Annual Report. New `customCategoriesStorage.ts` (EncryptedStorage, validated/sanitized names, dup-checked vs built-in+custom, cap 30) + `CustomCategoriesProvider` + `categoryIcons.ts` (emoji map for all 21 built-ins + curated picker grid + resolver). `BudgetEntry.category`/`CategoryBudgetLimit.category` widened to `CategoryName` (built-in autocomplete preserved). OTA-safe - emoji only, no native deps. Typecheck clean. Import/export round-trips custom categories: JSON export carries a `customCategories` collection; the shared record validator (`recordValidators.isValidImportCategory`, also on the LAN-sync path) accepts safe custom names (sanitized, ≤24 chars) instead of rejecting them; importData merges the explicit collection (LWW-by-id, name-deduped, built-in shadow dropped) AND derives definitions from any referenced-but-undefined custom names so pre-feature/foreign backups and sync-relayed entries stay usable (derived ones get the default icon). Spreadsheet import uses the same gate (`normalizeImportCategory`). Replace-mode intentionally does NOT wipe local custom categories when the import carries none, to avoid losing definitions still referenced by imported entries. Known limitation: deleting a custom category leaves tagged entries on the name with the default icon; spreadsheet export has no dedicated icon sheet (names survive via derivation, icon resets to default on round-trip).
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Currency exchange calculator (Utilities tab) - pick base + target currency, enter amount, see converted value. Decide rate source (offline lookup table snapshotted at build time vs. on-demand API call) and whether to surface a "rates last updated" timestamp. Reuse existing `useCurrency()` formatting; live in Utilities alongside the loan amortization tools.
-- [x] Undo actions and bulk edit/delete operations - SHIPPED. (1) Global single-slot Undo snackbar (`src/undo/UndoProvider.tsx`, mounted at app root, theme/density/safe-area aware, sits above tab bar via `fabBottomOffset`, 5s auto-dismiss). Storage gained `untombstone()` + restore paths: `restoreDebt`/`restoreBudgetEntry`/`restoreSavingsGoal`/`restoreAssetAccount`, compound `deletePayment`+`restorePayment` (also reverses the debt-balance effect), `restoreCustomCategory` (re-inserts exact object, same id), tombstone-safe `updateBudgetEntry`. Undo wired for deletes AND edits on: debt delete/edit, savings-goal delete, budget-entry delete/edit, asset delete - each undo also unwinds side effects (net-worth snapshot, linked-asset balance deltas, achievement re-check). (2) Bulk multi-select: long-press to enter selection. Budget entries (BudgetScreen) - per-row checkboxes on expanded category entries (auto-debt-payment rows excluded), bottom action bar with Recategorize (category picker) + Delete, single batched Undo via the global snackbar; batch storage helpers `deleteBudgetEntries`/`restoreBudgetEntries`/`setBudgetEntryCategories` (one read/write). Payments (PaymentHistoryModal) - selectable rows, batched Delete with a LOCAL in-modal undo bar (the root snackbar is occluded by the RN Modal); `onPaymentsChanged` bubbles up so DebtTrackerScreen refreshes debts/net-worth/achievements.
-
-  Deliberate exclusion: custom-category delete keeps its existing `Alert.alert` confirm instead of an undo snackbar - it's deleted from inside the Categories RN Modal, which would occlude the root snackbar (the `restoreCustomCategory` path exists for future use / import round-trip). Not yet device-tested - verify on-device: undo timing/occlusion, linked-asset balance math on bulk delete+undo, recategorize undo of a mixed selection (restores each entry's prior category, not one shared one).
 - [ ] Data confidence tools (last backup badge + backup reminders)
 - [~] Accessibility improvements (larger text mode + better screen reader labels) - Larger text mode SHIPPED: app-wide "Text Size" axis (Small / Default / Large / Extra Large) in Profile → Appearance, persisted in EncryptedStorage, multiplies the active Density's `fontScale` so every screen using `tokens.fontScale` scales for free without ballooning spacing (`src/theme/textSize.ts` + extended `DensityProvider`). Budget Spending donut + bars now also scale with it so the section zooms, not just text.
 
@@ -392,7 +255,6 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   No new deps. Uses React Native `Modal` + the existing theme/density tokens. OTA-eligible.
 - [ ] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage
 - [ ] Debt-Free Countdown Timer - live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
-- [x] Annual Financial Report - selectable calendar-year summary: total debt paid, total set aside, net worth change, top spending category, months under budget, cash flow + savings rate + monthly spending sparkline. Entry card on Bridge → AnnualReportModal. Shareable as aggregates/percentages-only text (no PII). Image capture deferred to v2 (would need a native view-shot dep + EAS rebuild; kept OTA-safe per request).
 - [ ] Budget Rollover Mode - unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
 
 - [ ] Month-start checking balance + cash-flow budget - at the beginning of each calendar month, prompt the user to update their checking balance, snapshot it as the month's starting cash, and factor it into the Budget screen as a real cash-flow projection. Chosen over Budget Rollover Mode (above) because it's anchored to ground truth and self-correcting (no stateful carry-over chain that re-derives every prior month).
@@ -430,7 +292,6 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 - [ ] Spending Velocity Alerts - passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
 - [ ] Partner Budget Visibility Controls - mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
-- [x] Debt Payoff Celebration Screen - confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
 - [ ] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
 - [ ] Big Purchase Cost/Benefit Comparison Calculator - compare long-term total cost of ownership for expensive vs cheaper options (e.g. gas car vs hybrid vs EV) using purchase price, financing, fuel/energy cost, insurance, maintenance, depreciation/resale, annual miles, and ownership length. Show break-even point, 5/10-year totals, cost per mile, and whether the higher upfront option pays off over time.
 - [ ] Net Worth Timeline Graph - plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
@@ -474,74 +335,6 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
 - [ ] Savings Streak Tracker - track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
-- [x] Trophy Room / Ark Achievements - gamification layer built entirely on existing data. Auto-unlocks retroactively for current users on first open. Shipped as "Ship's Log": 18 badges, retroactive silent first-eval, global unlock celebration modal, Bridge card + Profile → PROGRESS entry. Three badges (Cartographer/export, Crow's Nest/review opens, Lighthouse Keeper/30-day app-open streak) are backed by a new `achievementStatsStorage.ts` counter; Steady Crew + All Sails Set derive from budget limits vs. recurring-aware monthly spend. App-open streak is recorded idempotently per calendar day inside `evaluateAchievements`. OTA-safe - no native deps.
-
-  Purpose: add a dopamine-rich progress surface without changing how data is entered. Every badge is derived from debts, payments, savings goals, budget entries, milestones, and net worth that the app already stores. No new write paths, no behavior shift.
-
-  Visual approach (matches existing emoji-icon style in `AppNavigator.tsx:48`):
-  - Each badge = `react-native-svg` medal ring (already a dep) + a centered emoji glyph.
-  - Tier rings: Bronze `#A87445` (easy), Silver `#C7CBD1` (sustained), Gold `#E8C66E` (milestone-grade), Legendary gradient (capstones, via `LinearGradient` from `react-native-svg`).
-  - Locked state: same ring at 30% opacity, glyph replaced with `🔒` (or grayscale silhouette).
-  - Theme-aware: ring stroke reads from `useTheme()` tokens so Forest Gold/Synthwave/Slate each tint differently.
-  - Reuse the existing debt-payoff celebration animation when a new badge unlocks.
-
-  v1 badge list (~16-20 - sweet spot before it feels grindy):
-
-  | Achievement | Glyph | Tier | Unlock condition |
-  |---|---|---|---|
-  | First Steps | ⚓ | Bronze | First debt logged |
-  | Patched the Hull | 🔨 | Bronze | First payment recorded |
-  | Cartographer | 🗺️ | Bronze | Exported data at least once |
-  | Crow's Nest | 🔭 | Bronze | Opened Monthly Review 3 times |
-  | Steady Crew | ⚖️ | Silver | 3 consecutive months budget met |
-  | Galley Stocked | 🍞 | Silver | Emergency fund hits $1,000 |
-  | Half Mast | 🚩 | Silver | 50% of original debt total paid |
-  | Sextant Sharp | 🧭 | Silver | First savings goal completed |
-  | Lighthouse Keeper | 🗼 | Silver | 30-day app-open streak |
-  | First Mate | 🤝 | Silver | Partner sync paired successfully |
-  | Treasure Hoard I | 🪙 | Bronze | Net worth crosses $10k |
-  | Treasure Hoard II | 💎 | Silver | Net worth crosses $25k |
-  | Treasure Hoard III | 👑 | Gold | Net worth crosses $100k |
-  | Debt-Free Captain | 🏴‍☠️ | Gold | All non-mortgage debt cleared |
-  | Ark Builder | 🛠️ | Gold | Hull/Deck/Supplies milestone completed |
-  | All Sails Set | ⛵ | Gold | Every budget category under limit for a month |
-  | Doubloon Streak | 🔥 | Gold | 12-month savings streak |
-  | Admiral | 👑 | Legendary | All milestones complete |
-
-  Data model:
-  - `Achievement` type: `{ id: string, unlockedAt: number, tier: 'bronze' | 'silver' | 'gold' | 'legendary' }`
-  - Storage key `@budgetark_achievements` in EncryptedStorage: `{ unlocked: Record<string, number>, version: number }` - `unlocked[id]` is the timestamp.
-  - `version` bump invalidates definitions when badge set changes meaningfully.
-
-  Files (proposed):
-  - `src/data/achievementDefs.ts` - array of `{ id, glyph, tier, title, description, check: (ctx) => boolean }`. `ctx` is `{ debts, payments, savingsGoals, budgetEntries, milestones, user }`.
-  - `src/utils/achievements.ts` - `evaluateAchievements(ctx)` walks defs, returns newly-unlocked IDs since last evaluation. Compares against stored `unlocked` map and persists new ones.
-  - `src/storage/achievementsStorage.ts` - CRUD for the unlocked map.
-  - `src/components/Medal.tsx` - SVG ring + glyph component. Props: `{ tier, glyph, locked, size }`.
-  - `src/screens/AchievementsScreen.tsx` - grid of medals, tap for detail sheet (title, description, unlock date, "How to earn" if locked). Filter chips: All / Earned / Locked.
-  - Entry point: card on Bridge ("Ship's Log - 8/18 earned") + button in Profile.
-  - Hook into existing celebration component for unlock animation; trigger from a `useEffect` on the screen that just performed the unlocking action (payment recorded, goal completed, etc.).
-
-  Evaluation strategy:
-  - Pure derivation from existing storage - never trust user input to "set" an achievement.
-  - Run `evaluateAchievements()` lazily: on app foreground, after each major write (payment, goal contribution, debt update), and on Achievements screen mount.
-  - Cheap because it's all in-memory loops over already-loaded data. No re-reading storage in the loop.
-
-  Retroactive unlock on first open after update:
-  - Existing users immediately get every badge their current data already qualifies for, all timestamped with "now."
-  - Pleasant surprise; no migration needed beyond first evaluation.
-
-  Out of scope (v1):
-  - XP / rank system (covered separately if added later).
-  - Weekly rotating quests.
-  - Custom user-defined achievements.
-  - Sharing badges as images (revisit if Annual Financial Report ships).
-
-  Upgrade path:
-  - v1.5: replace top-tier emoji glyphs (Admiral, Debt-Free Captain) with hand-drawn SVGs from a free set (Lucide/Tabler/Phosphor). Keep emoji for tiers 1-2. No layout change.
-  - v2: commissioned art set if traction warrants.
-
-  OTA-eligible: yes. No new deps. Uses `react-native-svg` (already in app) + emoji.
 - [ ] Quick-Entry Home Screen Widget - minimal widget to log an expense (category + amount) without opening the full app.
 - [ ] Bill Calendar View - monthly calendar showing when recurring expenses hit. Visual cash flow timing.
 
@@ -636,13 +429,8 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Spending Heatmap - calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
 - [ ] Financial Health Score - single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
 - [ ] Ark Journey Timeline - visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
-- [x] Category Spending Comparison - "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
 - [ ] Dark Mode Schedule - auto-switch themes based on time of day (lighter during day, dark at night).
 - [ ] Layout density selector - Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental - screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
-- [x] fix theme selection so it doesn't close option window until you hit done
-- [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
-- [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
-- [x] create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
 - [ ] create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
 Tech options:
 1. On-device OCR library (more private, no backend)
@@ -655,142 +443,6 @@ Recommended first version:
 4. Open prefilled expense modal for confirmation.
 5. Save only after user taps confirm.
 
-
-- [x] Import / export Google Sheets and Excel files for budget data (v1: CSV + XLSX, fixed schema; multi-sheet workbook for XLSX, budget-entries-only for CSV; column-mapping UI deferred to v2). See `docs/SPREADSHEET_SCHEMA.md`.
-Goal: let users coming from spreadsheet-based budgeting (Google Sheets, Excel, Mint/YNAB exports) bring their data into BudgetArk and export back out.
-
-Scope: file-based only. No direct Google Sheets API integration in v1 - users export their sheet to CSV/XLSX and pick the file. Skip OAuth complexity.
-
-Tech stack:
-- `xlsx` (SheetJS) - pure JS, reads/writes .xlsx, .xls, .csv. No native deps. Bundles into JS bundle (no new EAS build required).
-- Reuse existing deps: `expo-document-picker` (already installed) for file picking, `expo-sharing` + `expo-file-system` for export.
-- All processing on-device - keeps offline-first/no-data-leaves-device promise intact.
-
-Data flow (import):
-1. User taps "Import Spreadsheet" in Profile or Budget screen.
-2. `expo-document-picker` opens with `type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv']`.
-3. Read file with `expo-file-system`, parse with `XLSX.read()`.
-4. Show sheet picker if workbook has multiple sheets.
-5. Show preview of first 5-10 rows.
-6. Column mapping UI - match each spreadsheet column to a BudgetArk field (Date, Amount, Category, Description, Type[income/expense]). Auto-suggest based on header names ("date" → Date, "amount"/"$" → Amount, etc.).
-7. Parse + validate each row: date formats (MM/DD/YYYY, DD/MM/YYYY, ISO, Excel serial), amount formats ($, commas, parens for negatives, minus signs), required fields.
-8. Show import summary (X rows ready, Y rows skipped with reasons).
-9. User confirms - write to budget storage using the existing transactional pattern from `importData.ts`.
-10. Apply same bounds/validation as JSON import (`MAX_MONEY`, character limits, etc.).
-
-Data flow (export):
-1. User taps "Export to Spreadsheet" in Profile.
-2. Pick format: .xlsx (recommended) or .csv.
-3. Generate workbook with sheets: `Budget Entries`, `Debts`, `Payments`, `Savings Goals`.
-4. Standard column headers so re-import is round-trip safe.
-5. `XLSX.write()` to base64, save with `expo-file-system`, share with `expo-sharing`.
-6. Add same encryption/confirmation prompt logic as existing JSON export (sensitive data warning).
-
-Column mapping UX (the hard part):
-- Header auto-detection: fuzzy match on common labels ("date"/"transaction date"/"posted", "amount"/"debit"/"credit"/"$", "category"/"type", "description"/"merchant"/"memo").
-- Manual override: dropdown per column to pick BudgetArk field, or "Skip column".
-- Sign convention: let user pick "Positive = expense" vs "Negative = expense" since banks/templates differ.
-- Save mapping presets per filename pattern for repeat imports.
-
-File structure (new):
-- `src/utils/spreadsheetImport.ts` - parse, map, validate
-- `src/utils/spreadsheetExport.ts` - generate workbook
-- `src/screens/ImportSpreadsheetScreen.tsx` - file pick → preview → mapping → confirm flow
-- `src/components/ColumnMapper.tsx` - mapping UI
-
-Validation / safety:
-- Same `MAX_RAW_CHARS` (500KB) cap as JSON import to avoid OOM on low-end devices.
-- Wrap all `XLSX.read()` calls in try-catch - malformed files must not crash app.
-- Reject files >5MB on disk before parsing.
-- Treat all imported strings as untrusted - apply existing control-char/null-byte sanitization.
-
-Recommended first version:
-1. CSV-only import to ship fast. CSV covers Google Sheets exports + most bank exports.
-2. Fixed column mapping (no UI mapper) - require users to rename headers to a documented schema. Ugly but fast.
-3. Export to CSV only.
-4. Iterate to .xlsx + auto-mapping UI in v2.
-
-Out of scope (v1):
-- Direct Google Sheets API / OAuth (revisit if user demand justifies overhead).
-- Real-time sync.
-- Formulas - read computed values only, never re-evaluate.
-
-OTA-shippable: yes. No native modules added, all deps already in current EAS build.
-
-
-- [x] Add original debt milestone program with progress tracking and actionable next steps
-Possible feature design (v1):
-- Feature name
-  - Debt Milestones (safe, generic, clear)
-- Entry point
-  - New card on Debt Tracker: Your Milestone Plan
-  - Tap opens a dedicated screen with step list + progress
-- Example milestone structure (original wording)
-  1. Build a Starter Cushion (e.g. $1,000 emergency cash)
-  2. Clear Non-Mortgage Debt
-  3. Build Core Emergency Fund (3-6 months)
-  4. Increase Retirement Contributions
-  5. Optional: Education/Long-Term Goals
-  6. Mortgage Paydown (if applicable)
-  7. Wealth Building targets
-- Screen layout
-  - Top: overall progress bar (2/7 completed)
-  - Middle: milestone cards
-    - title
-    - status (Not started / In progress / Complete)
-    - progress metric (percent or amount)
-    - next action button
-  - Bottom: “Why this step matters” short explanation
-- Data model (simple)
-  - MilestonePlan
-    - currentStep
-    - completedSteps[]
-    - per-step target config (amount/months)
-  - Persist in AsyncStorage like other modules
-- Automation hooks
-  - Use existing debt totals and budget data to auto-calc progress:
-    - debt paid %
-    - savings category totals
-    - emergency fund amount
-  - Manual override toggle per step for users who want custom flow
-- User actions
-  - Set target
-  - Mark complete
-  - Set as current step
-  - View recommended action (e.g. “Add $150 this month to emergency fund”)
-- Couples support
-  - Add “Plan owner” mode: Mine / Partner / Household
-  - Reuse your existing debt ownership concepts where possible
-
-- [x] 50/30/20 view on Budget screen - ties directly to Charts Ch 1 Lesson 2. New card on the Budget tab (below the Spending donut) that buckets every spending category into Needs / Wants / Savings and shows actual % vs. target % per bucket as three stacked bars, plus the dollar gap from each target. Helps users see at a glance whether their real month matches the 50/30/20 framework they just read about.
-
-  Bucket mapping:
-  - Built-in categories ship with a `defaultBucket: "needs" | "wants" | "savings"` in a new `categoryBuckets.ts` constants map. Sensible defaults: Housing/Utilities/Food/Grocery/Transportation/Healthcare/Insurance/Debt Payments → Needs; Restaurant/Entertainment/Shopping/Travel/Tech/Fitness → Wants; Savings/Investing/Retirement/Giving → Savings. Income categories (Salary, Freelance) feed the denominator (after-tax take-home) and aren't bucketed.
-  - Custom categories prompt for a bucket on creation. Stored alongside the existing CustomCategory fields.
-  - Per-category override per user, since edges are opinionated (e.g. "Tech" might be a need for a freelance dev, a want for someone else). Stored under a new `@budgetark_category_bucket_overrides` key as `Record<CategoryName, BudgetBucket>`. Reads merge built-in defaults + custom-category bucket + override (override wins).
-  - Surface the override UX as a long-press on a row inside the 50/30/20 card, OR as a small "Reassign" gear next to each row that opens a 3-option sheet.
-
-  Card content:
-  - Header row: "50/30/20" + "Take-home this month: $X,XXX" (sum of all income entries for the month).
-  - Three rows, one per bucket. Each row: bucket name, target % chip, actual % big number, actual $ small, progress bar showing actual fill against target. Bar color uses the existing accent / success / warning palette (under target = success, near target = accent, over target = warning).
-  - Below the bars: tiny stats line "$X under target on Needs", "$Y over target on Wants", etc. so the gap is concrete dollars not just percentages.
-  - Tap a bucket row to expand a list of the categories inside it with their individual contributions. Long-press a category row to override its bucket.
-
-  Edge cases:
-  - Months with $0 income: card shows "Add income to see the 50/30/20 split" empty state.
-  - Months with $0 spending in a bucket: 0% rendered cleanly, not as NaN.
-  - Recurring entries respected via `isEntryActiveInMonth` so the math matches the Spending donut.
-  - Debt Payments default to Needs (the minimum is a need); extra payments above minimum technically belong in Savings, but the app doesn't yet track minimum-vs-extra inside a payment entry. v1 keeps Debt Payments as Needs and accepts the slight overcount.
-
-  Files (proposed):
-  - `src/data/categoryBuckets.ts` - defaultBucket per built-in category, BudgetBucket type, label/color metadata.
-  - `src/storage/categoryBucketOverridesStorage.ts` - CRUD for the override map.
-  - `src/components/BudgetBucketCard.tsx` - the card UI.
-  - `src/utils/budgetBucketMath.ts` - pure helpers (totalsByBucket, targetForBucket, varianceForBucket).
-  - `src/screens/BudgetScreen.tsx` - mount the card; wire the long-press override.
-
-  OTA-eligible: yes. No new native deps. Theme + density aware via existing tokens.
-
 - [ ] Lean month mode - toggle that hides non-essential categories from Budget, surfacing only essentials (Rent, Food, Utilities, Transport). Helps users focus during tight months without deleting or reorganizing data. Pure UI filter, OTA-safe.
 
 - [ ] Hidden cost of debt counter - widget on Debt Tracker showing projected total interest across the remaining life of every debt, updates live as payments post. Motivational. Pure derivation from existing balances + APRs + payment schedule.
@@ -802,8 +454,6 @@ Possible feature design (v1):
 - [ ] Year-over-year comparison - pick a category (or all), see same-month-last-year vs this-year deltas in a small bar chart. Lives in Budget or Annual Report.
 
 - [ ] Photo attachments on entries (no OCR) - manual photo per budget entry, stored locally in app sandbox via `expo-file-system`. Browsable "Receipts" gallery filterable by month/category. Ships ahead of full OCR (which stays as separate TODO). New native dep: `expo-image-picker` (already common in Expo apps) - NOT OTA-eligible.
-
-- [x] Refinance break-even calculator - on Utilities. Inputs: current loan balance/rate/term based on what is listed in the debt tracker, new rate/term/closing costs. Outputs: monthly payment delta, total interest delta, months to break even. Pure math, no new deps. Shipped as a collapsible card on `UtilitiesScreen` between Loan/Mortgage and Emergency Fund. The current-loan side is a multi-select list of debts from the tracker - combined balance and balance-weighted average APR derive automatically (read-only); years-remaining auto-fills from a balance-weighted average of each selected debt's `goalDate` when every selected debt has one, and stays user-editable. New loan side: rate, term, closing costs. Math reuses `calcPaymentForGoalDate` + `generatePayoffSchedule` from `utils/calculations.ts`. Shows break-even in months (or "no break-even" when the new payment isn't lower), monthly payment delta, lifetime interest delta, net savings over the new term, and a warning when the new term extends past the current loan's remaining term. Supports the consolidation-refi case (pick multiple debts; rate is weighted by balance). Empty state when no debts exist.
 
 - [ ] Runway simulator - "how long does my current savings last with income = $0?" Uses existing recurring expenses + emergency fund + asset accounts. Shows months of runway + month it goes negative. Lives on Bridge or Utilities.
 
@@ -967,3 +617,283 @@ Prioritized gaps identified after the Round 4 audit. Items 1, 3, and 4 are JS-on
 - [ ] **Scheduled local auto-backup.** Backup story is fully manual; the reminder banner only nudges after upgrades. Add a periodic (weekly/monthly) automatic encrypted export written to the app's own sandbox via `expo-file-system` (already a dep - OTA-eligible), keeping the last N files, surfaced under Profile → Data ("Last auto-backup: ...") with a restore picker. Protects users who never tap export. Note: sandbox files die with an uninstall - this supplements, not replaces, the share-sheet export.
 
 - [ ] **Split Potentialbugs.md.** It has become the de-facto changelog and is too large to read in one pass. Move fixed/closed rounds to `docs/audit-archive.md` (or per-round files) and keep only open findings + the latest round in the root file.
+
+---
+
+## Done
+
+Fully-completed sections moved here from above. The app-store deployment sections (Pre-Launch, Apple App Store Submission, Google Play Submission) are intentionally left in place even where complete.
+
+### Phase 1 - Budget Screen
+
+- [x] Design data model for income/expense entries (category, amount, date, type)
+- [x] Create `budgetStorage.ts` following the same AsyncStorage pattern as `debtStorage.ts`
+- [x] Add new types to `src/types/index.ts` (e.g., `BudgetEntry`, `BudgetCategory`)
+- [x] Implement income & expense entry form (modal, similar to `AddDebtModal`)
+- [x] Implement category list with monthly totals
+- [x] Add budget limit per category with warning when approaching limit
+- [x] Add pie/donut chart breakdown using Victory Native (already installed)
+- [x] Add spending alert logic (warning color when >80% of limit reached)
+
+### Phase 2 - Investment Screen
+
+- [x] Design UI for contribution calculator (inputs: monthly amount, annual return %, years)
+- [x] Wire up `calcInvestmentGrowth()` from `src/utils/calculations.ts` (already implemented)
+- [x] Add interactive sliders for "what if" exploration
+- [x] Add a line chart showing growth over time (SVG area chart)
+- [x] Show contribution vs. interest earned breakdown
+- [x] Add timeline presets (10yr, 20yr, 30yr buttons)
+
+### Code Quality & Crash Prevention
+
+#### High Priority
+- [x] Fix race condition in `recordPayment()` - `src/storage/debtStorage.ts:162-177`. The `balance: undefined as any` workaround means if `updateDebt` fails after payment is written, the payment is saved but debt balance never updates. Add atomic/transactional storage operations.
+- [x] Wrap `Promise.all()` in try-catch in `DebtTrackerScreen.tsx:181-205` - was already wrapped in try-catch with fallback to empty state. Verified correct.
+- [x] Fix division by zero in `DebtTrackerScreen.tsx:339` - was already guarded with `nonMortgageOriginal > 0` ternary. Verified correct.
+- [x] Use `Number.isFinite()` for all parsed numeric inputs in `AddDebtModal.tsx:229-231` - `parseFloat(x) > 0` doesn't catch `Infinity` edge cases.
+- [x] Make decryption failures distinguishable from missing data in `encryptedStorage.ts:195-211` - now throws `DecryptionError` instead of returning `null`, so callers can distinguish corruption from missing data.
+- [x] Remove `as any` casts and replace with proper type guards - `debtStorage.ts:175`, `App.tsx:99-100`, `ProfileScreen.tsx:213-214`, plus `ProfileScreen.tsx:445`.
+
+#### Medium Priority
+- [x] Fix stale closure in `useCallback` - `DebtTrackerScreen.tsx:160-178`. `primeMilestonesModal` captures `targetDraftByStep` but may not properly list it in dependencies.
+- [x] Add cleanup functions to async `useEffect` hooks - `ProfileScreen.tsx:154-167`. If component unmounts mid-load, state updates on unmounted components cause warnings/crashes.
+- [x] Fix memory leak in AppState listener - `encryptedStorage.ts:69-73`. `AppState.addEventListener` at module scope with no removal; listeners accumulate during hot-reload.
+- [x] Fix concurrent budget entry write race condition - `BudgetScreen.tsx:316-344`. `saveBudgetEntries()` is async inside a sync `setState` callback. Rapid edits can cause storage to lag behind state, leading to data loss on restart.
+- [x] Add upper bound validation on import numeric values - `importData.ts:161-168`. `monthlyLimit` validated only as `> 0.01` with no ceiling. A malformed import could inject absurd values.
+- [x] Handle chart empty state gracefully - `InvestmentScreen.tsx:68`. Chart returns `null` for < 2 data points, which could cause layout shift.
+- [x] Add safeguard for simulation loop - `calculations.ts:128-195`. Already guarded: line 185 exits early when balance isn't decreasing (`afterBalance >= beforeBalance - 0.000001`), plus hard cap at 600 iterations and input sanitization. No additional fix needed.
+
+#### Low Priority
+- [x] Improve navigation error logging - `App.tsx:242-244`. Added try-catch around `navigate()` calls and `__DEV__` warnings when navigation isn't ready.
+- [x] Fix FlatList `keyExtractor` - `BudgetScreen.tsx:672`. Verified safe: `expenseRows` derives from a `Set<BudgetCategory>`, so `item.category` is guaranteed unique. No change needed.
+- [x] Reduce excessive local state in `DebtTrackerScreen.tsx:115-152` - Evaluated: `useReducer` would not reduce re-renders (React re-renders the full component on any state change regardless). The main stale-closure risk was already fixed in medium priority. Not worth the refactor risk.
+- [x] Fix missing `useCallback` dependency in `InvestmentScreen.tsx:188-191` - Verified correct: `handleSliderChange` and `adjust` only use stable `useState` setters and module-level constants (`SLIDERS`). Empty dependency arrays are appropriate.
+- [x] Add negative value validation for savings goals - `SmartPlanModal.tsx:597`. Added `Math.max(0, ...)` clamp so negative `currentAmount` from data corruption renders as 0% instead of a negative percentage.
+
+### Nice-to-Have (Post-Launch)
+
+- [x] Payment history screen - the data is already being recorded, just needs a UI
+- [x] Edit existing debts (currently debts can only be added or deleted, not edited)
+- [x] Debt payoff order strategies (avalanche vs. snowball method)
+- [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
+- [x] Localization / currency format options beyond USD
+- [x] Recurring budget entries
+- [x] Due-date reminder banners - shipped as an in-app Budget banner for upcoming recurring bill dates (opens Bill Calendar). Push notifications still deferred.
+- [x] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
+- [x] Savings goals and emergency fund Deck tracker
+- [x] Persist user-selected payoff strategy across app restarts (no default reset to Custom)
+- [x] Build Your Ark planning hub (Hull/Deck/Supplies) integrated with Debt Tracker
+- [x] Improve debt milestone modal readability (full-screen layout + larger text + safe-area support)
+- [x] Improve theme readability and contrast across The Ark and dark themes (buttons + theme selector cards)
+- [x] Monthly review insights (category changes, spending trends, streaks)
+- [x] Custom categories and category icon support - v1 (add-only): users add their own categories (name + emoji icon) via Profile → CATEGORIES → Custom Categories. Built-in 21 stay fixed. Custom categories work everywhere built-ins do: entry pickers (Add/Edit modals), Budget category list, donut chart (deterministic name-hashed color), monthly limits, insights/streaks, Annual Report. New `customCategoriesStorage.ts` (EncryptedStorage, validated/sanitized names, dup-checked vs built-in+custom, cap 30) + `CustomCategoriesProvider` + `categoryIcons.ts` (emoji map for all 21 built-ins + curated picker grid + resolver). `BudgetEntry.category`/`CategoryBudgetLimit.category` widened to `CategoryName` (built-in autocomplete preserved). OTA-safe - emoji only, no native deps. Typecheck clean. Import/export round-trips custom categories: JSON export carries a `customCategories` collection; the shared record validator (`recordValidators.isValidImportCategory`, also on the LAN-sync path) accepts safe custom names (sanitized, ≤24 chars) instead of rejecting them; importData merges the explicit collection (LWW-by-id, name-deduped, built-in shadow dropped) AND derives definitions from any referenced-but-undefined custom names so pre-feature/foreign backups and sync-relayed entries stay usable (derived ones get the default icon). Spreadsheet import uses the same gate (`normalizeImportCategory`). Replace-mode intentionally does NOT wipe local custom categories when the import carries none, to avoid losing definitions still referenced by imported entries. Known limitation: deleting a custom category leaves tagged entries on the name with the default icon; spreadsheet export has no dedicated icon sheet (names survive via derivation, icon resets to default on round-trip).
+- [x] Undo actions and bulk edit/delete operations - SHIPPED. (1) Global single-slot Undo snackbar (`src/undo/UndoProvider.tsx`, mounted at app root, theme/density/safe-area aware, sits above tab bar via `fabBottomOffset`, 5s auto-dismiss). Storage gained `untombstone()` + restore paths: `restoreDebt`/`restoreBudgetEntry`/`restoreSavingsGoal`/`restoreAssetAccount`, compound `deletePayment`+`restorePayment` (also reverses the debt-balance effect), `restoreCustomCategory` (re-inserts exact object, same id), tombstone-safe `updateBudgetEntry`. Undo wired for deletes AND edits on: debt delete/edit, savings-goal delete, budget-entry delete/edit, asset delete - each undo also unwinds side effects (net-worth snapshot, linked-asset balance deltas, achievement re-check). (2) Bulk multi-select: long-press to enter selection. Budget entries (BudgetScreen) - per-row checkboxes on expanded category entries (auto-debt-payment rows excluded), bottom action bar with Recategorize (category picker) + Delete, single batched Undo via the global snackbar; batch storage helpers `deleteBudgetEntries`/`restoreBudgetEntries`/`setBudgetEntryCategories` (one read/write). Payments (PaymentHistoryModal) - selectable rows, batched Delete with a LOCAL in-modal undo bar (the root snackbar is occluded by the RN Modal); `onPaymentsChanged` bubbles up so DebtTrackerScreen refreshes debts/net-worth/achievements.
+
+  Deliberate exclusion: custom-category delete keeps its existing `Alert.alert` confirm instead of an undo snackbar - it's deleted from inside the Categories RN Modal, which would occlude the root snackbar (the `restoreCustomCategory` path exists for future use / import round-trip). Not yet device-tested - verify on-device: undo timing/occlusion, linked-asset balance math on bulk delete+undo, recategorize undo of a mixed selection (restores each entry's prior category, not one shared one).
+- [x] Annual Financial Report - selectable calendar-year summary: total debt paid, total set aside, net worth change, top spending category, months under budget, cash flow + savings rate + monthly spending sparkline. Entry card on Bridge → AnnualReportModal. Shareable as aggregates/percentages-only text (no PII). Image capture deferred to v2 (would need a native view-shot dep + EAS rebuild; kept OTA-safe per request).
+- [x] Debt Payoff Celebration Screen - confetti/animation when a debt balance hits $0. Small but emotionally meaningful.
+- [x] Trophy Room / Ark Achievements - gamification layer built entirely on existing data. Auto-unlocks retroactively for current users on first open. Shipped as "Ship's Log": 18 badges, retroactive silent first-eval, global unlock celebration modal, Bridge card + Profile → PROGRESS entry. Three badges (Cartographer/export, Crow's Nest/review opens, Lighthouse Keeper/30-day app-open streak) are backed by a new `achievementStatsStorage.ts` counter; Steady Crew + All Sails Set derive from budget limits vs. recurring-aware monthly spend. App-open streak is recorded idempotently per calendar day inside `evaluateAchievements`. OTA-safe - no native deps.
+
+  Purpose: add a dopamine-rich progress surface without changing how data is entered. Every badge is derived from debts, payments, savings goals, budget entries, milestones, and net worth that the app already stores. No new write paths, no behavior shift.
+
+  Visual approach (matches existing emoji-icon style in `AppNavigator.tsx:48`):
+  - Each badge = `react-native-svg` medal ring (already a dep) + a centered emoji glyph.
+  - Tier rings: Bronze `#A87445` (easy), Silver `#C7CBD1` (sustained), Gold `#E8C66E` (milestone-grade), Legendary gradient (capstones, via `LinearGradient` from `react-native-svg`).
+  - Locked state: same ring at 30% opacity, glyph replaced with `🔒` (or grayscale silhouette).
+  - Theme-aware: ring stroke reads from `useTheme()` tokens so Forest Gold/Synthwave/Slate each tint differently.
+  - Reuse the existing debt-payoff celebration animation when a new badge unlocks.
+
+  v1 badge list (~16-20 - sweet spot before it feels grindy):
+
+  | Achievement | Glyph | Tier | Unlock condition |
+  |---|---|---|---|
+  | First Steps | ⚓ | Bronze | First debt logged |
+  | Patched the Hull | 🔨 | Bronze | First payment recorded |
+  | Cartographer | 🗺️ | Bronze | Exported data at least once |
+  | Crow's Nest | 🔭 | Bronze | Opened Monthly Review 3 times |
+  | Steady Crew | ⚖️ | Silver | 3 consecutive months budget met |
+  | Galley Stocked | 🍞 | Silver | Emergency fund hits $1,000 |
+  | Half Mast | 🚩 | Silver | 50% of original debt total paid |
+  | Sextant Sharp | 🧭 | Silver | First savings goal completed |
+  | Lighthouse Keeper | 🗼 | Silver | 30-day app-open streak |
+  | First Mate | 🤝 | Silver | Partner sync paired successfully |
+  | Treasure Hoard I | 🪙 | Bronze | Net worth crosses $10k |
+  | Treasure Hoard II | 💎 | Silver | Net worth crosses $25k |
+  | Treasure Hoard III | 👑 | Gold | Net worth crosses $100k |
+  | Debt-Free Captain | 🏴‍☠️ | Gold | All non-mortgage debt cleared |
+  | Ark Builder | 🛠️ | Gold | Hull/Deck/Supplies milestone completed |
+  | All Sails Set | ⛵ | Gold | Every budget category under limit for a month |
+  | Doubloon Streak | 🔥 | Gold | 12-month savings streak |
+  | Admiral | 👑 | Legendary | All milestones complete |
+
+  Data model:
+  - `Achievement` type: `{ id: string, unlockedAt: number, tier: 'bronze' | 'silver' | 'gold' | 'legendary' }`
+  - Storage key `@budgetark_achievements` in EncryptedStorage: `{ unlocked: Record<string, number>, version: number }` - `unlocked[id]` is the timestamp.
+  - `version` bump invalidates definitions when badge set changes meaningfully.
+
+  Files (proposed):
+  - `src/data/achievementDefs.ts` - array of `{ id, glyph, tier, title, description, check: (ctx) => boolean }`. `ctx` is `{ debts, payments, savingsGoals, budgetEntries, milestones, user }`.
+  - `src/utils/achievements.ts` - `evaluateAchievements(ctx)` walks defs, returns newly-unlocked IDs since last evaluation. Compares against stored `unlocked` map and persists new ones.
+  - `src/storage/achievementsStorage.ts` - CRUD for the unlocked map.
+  - `src/components/Medal.tsx` - SVG ring + glyph component. Props: `{ tier, glyph, locked, size }`.
+  - `src/screens/AchievementsScreen.tsx` - grid of medals, tap for detail sheet (title, description, unlock date, "How to earn" if locked). Filter chips: All / Earned / Locked.
+  - Entry point: card on Bridge ("Ship's Log - 8/18 earned") + button in Profile.
+  - Hook into existing celebration component for unlock animation; trigger from a `useEffect` on the screen that just performed the unlocking action (payment recorded, goal completed, etc.).
+
+  Evaluation strategy:
+  - Pure derivation from existing storage - never trust user input to "set" an achievement.
+  - Run `evaluateAchievements()` lazily: on app foreground, after each major write (payment, goal contribution, debt update), and on Achievements screen mount.
+  - Cheap because it's all in-memory loops over already-loaded data. No re-reading storage in the loop.
+
+  Retroactive unlock on first open after update:
+  - Existing users immediately get every badge their current data already qualifies for, all timestamped with "now."
+  - Pleasant surprise; no migration needed beyond first evaluation.
+
+  Out of scope (v1):
+  - XP / rank system (covered separately if added later).
+  - Weekly rotating quests.
+  - Custom user-defined achievements.
+  - Sharing badges as images (revisit if Annual Financial Report ships).
+
+  Upgrade path:
+  - v1.5: replace top-tier emoji glyphs (Admiral, Debt-Free Captain) with hand-drawn SVGs from a free set (Lucide/Tabler/Phosphor). Keep emoji for tiers 1-2. No layout change.
+  - v2: commissioned art set if traction warrants.
+
+  OTA-eligible: yes. No new deps. Uses `react-native-svg` (already in app) + emoji.
+- [x] Category Spending Comparison - "You spent 23% more on Dining Out this month vs your 3-month average." Surface monthly review data more prominently.
+- [x] fix theme selection so it doesn't close option window until you hit done
+- [x] fix the import data modal to go to the top of the screen so the keyboard doesn't cover the   window
+- [x] make the debts found in the debt window reflect on your budget screens as a monthly cost automatically.
+- [x] create a history for monthly budgets and allow the budget goal for each line item stay when the next month starts. keep a history of up to 6 months of budgets.
+- [x] Import / export Google Sheets and Excel files for budget data (v1: CSV + XLSX, fixed schema; multi-sheet workbook for XLSX, budget-entries-only for CSV; column-mapping UI deferred to v2). See `docs/SPREADSHEET_SCHEMA.md`.
+Goal: let users coming from spreadsheet-based budgeting (Google Sheets, Excel, Mint/YNAB exports) bring their data into BudgetArk and export back out.
+
+Scope: file-based only. No direct Google Sheets API integration in v1 - users export their sheet to CSV/XLSX and pick the file. Skip OAuth complexity.
+
+Tech stack:
+- `xlsx` (SheetJS) - pure JS, reads/writes .xlsx, .xls, .csv. No native deps. Bundles into JS bundle (no new EAS build required).
+- Reuse existing deps: `expo-document-picker` (already installed) for file picking, `expo-sharing` + `expo-file-system` for export.
+- All processing on-device - keeps offline-first/no-data-leaves-device promise intact.
+
+Data flow (import):
+1. User taps "Import Spreadsheet" in Profile or Budget screen.
+2. `expo-document-picker` opens with `type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv']`.
+3. Read file with `expo-file-system`, parse with `XLSX.read()`.
+4. Show sheet picker if workbook has multiple sheets.
+5. Show preview of first 5-10 rows.
+6. Column mapping UI - match each spreadsheet column to a BudgetArk field (Date, Amount, Category, Description, Type[income/expense]). Auto-suggest based on header names ("date" → Date, "amount"/"$" → Amount, etc.).
+7. Parse + validate each row: date formats (MM/DD/YYYY, DD/MM/YYYY, ISO, Excel serial), amount formats ($, commas, parens for negatives, minus signs), required fields.
+8. Show import summary (X rows ready, Y rows skipped with reasons).
+9. User confirms - write to budget storage using the existing transactional pattern from `importData.ts`.
+10. Apply same bounds/validation as JSON import (`MAX_MONEY`, character limits, etc.).
+
+Data flow (export):
+1. User taps "Export to Spreadsheet" in Profile.
+2. Pick format: .xlsx (recommended) or .csv.
+3. Generate workbook with sheets: `Budget Entries`, `Debts`, `Payments`, `Savings Goals`.
+4. Standard column headers so re-import is round-trip safe.
+5. `XLSX.write()` to base64, save with `expo-file-system`, share with `expo-sharing`.
+6. Add same encryption/confirmation prompt logic as existing JSON export (sensitive data warning).
+
+Column mapping UX (the hard part):
+- Header auto-detection: fuzzy match on common labels ("date"/"transaction date"/"posted", "amount"/"debit"/"credit"/"$", "category"/"type", "description"/"merchant"/"memo").
+- Manual override: dropdown per column to pick BudgetArk field, or "Skip column".
+- Sign convention: let user pick "Positive = expense" vs "Negative = expense" since banks/templates differ.
+- Save mapping presets per filename pattern for repeat imports.
+
+File structure (new):
+- `src/utils/spreadsheetImport.ts` - parse, map, validate
+- `src/utils/spreadsheetExport.ts` - generate workbook
+- `src/screens/ImportSpreadsheetScreen.tsx` - file pick → preview → mapping → confirm flow
+- `src/components/ColumnMapper.tsx` - mapping UI
+
+Validation / safety:
+- Same `MAX_RAW_CHARS` (500KB) cap as JSON import to avoid OOM on low-end devices.
+- Wrap all `XLSX.read()` calls in try-catch - malformed files must not crash app.
+- Reject files >5MB on disk before parsing.
+- Treat all imported strings as untrusted - apply existing control-char/null-byte sanitization.
+
+Recommended first version:
+1. CSV-only import to ship fast. CSV covers Google Sheets exports + most bank exports.
+2. Fixed column mapping (no UI mapper) - require users to rename headers to a documented schema. Ugly but fast.
+3. Export to CSV only.
+4. Iterate to .xlsx + auto-mapping UI in v2.
+
+Out of scope (v1):
+- Direct Google Sheets API / OAuth (revisit if user demand justifies overhead).
+- Real-time sync.
+- Formulas - read computed values only, never re-evaluate.
+
+OTA-shippable: yes. No native modules added, all deps already in current EAS build.
+- [x] Add original debt milestone program with progress tracking and actionable next steps
+Possible feature design (v1):
+- Feature name
+  - Debt Milestones (safe, generic, clear)
+- Entry point
+  - New card on Debt Tracker: Your Milestone Plan
+  - Tap opens a dedicated screen with step list + progress
+- Example milestone structure (original wording)
+  1. Build a Starter Cushion (e.g. $1,000 emergency cash)
+  2. Clear Non-Mortgage Debt
+  3. Build Core Emergency Fund (3-6 months)
+  4. Increase Retirement Contributions
+  5. Optional: Education/Long-Term Goals
+  6. Mortgage Paydown (if applicable)
+  7. Wealth Building targets
+- Screen layout
+  - Top: overall progress bar (2/7 completed)
+  - Middle: milestone cards
+    - title
+    - status (Not started / In progress / Complete)
+    - progress metric (percent or amount)
+    - next action button
+  - Bottom: “Why this step matters” short explanation
+- Data model (simple)
+  - MilestonePlan
+    - currentStep
+    - completedSteps[]
+    - per-step target config (amount/months)
+  - Persist in AsyncStorage like other modules
+- Automation hooks
+  - Use existing debt totals and budget data to auto-calc progress:
+    - debt paid %
+    - savings category totals
+    - emergency fund amount
+  - Manual override toggle per step for users who want custom flow
+- User actions
+  - Set target
+  - Mark complete
+  - Set as current step
+  - View recommended action (e.g. “Add $150 this month to emergency fund”)
+- Couples support
+  - Add “Plan owner” mode: Mine / Partner / Household
+  - Reuse your existing debt ownership concepts where possible
+- [x] 50/30/20 view on Budget screen - ties directly to Charts Ch 1 Lesson 2. New card on the Budget tab (below the Spending donut) that buckets every spending category into Needs / Wants / Savings and shows actual % vs. target % per bucket as three stacked bars, plus the dollar gap from each target. Helps users see at a glance whether their real month matches the 50/30/20 framework they just read about.
+
+  Bucket mapping:
+  - Built-in categories ship with a `defaultBucket: "needs" | "wants" | "savings"` in a new `categoryBuckets.ts` constants map. Sensible defaults: Housing/Utilities/Food/Grocery/Transportation/Healthcare/Insurance/Debt Payments → Needs; Restaurant/Entertainment/Shopping/Travel/Tech/Fitness → Wants; Savings/Investing/Retirement/Giving → Savings. Income categories (Salary, Freelance) feed the denominator (after-tax take-home) and aren't bucketed.
+  - Custom categories prompt for a bucket on creation. Stored alongside the existing CustomCategory fields.
+  - Per-category override per user, since edges are opinionated (e.g. "Tech" might be a need for a freelance dev, a want for someone else). Stored under a new `@budgetark_category_bucket_overrides` key as `Record<CategoryName, BudgetBucket>`. Reads merge built-in defaults + custom-category bucket + override (override wins).
+  - Surface the override UX as a long-press on a row inside the 50/30/20 card, OR as a small "Reassign" gear next to each row that opens a 3-option sheet.
+
+  Card content:
+  - Header row: "50/30/20" + "Take-home this month: $X,XXX" (sum of all income entries for the month).
+  - Three rows, one per bucket. Each row: bucket name, target % chip, actual % big number, actual $ small, progress bar showing actual fill against target. Bar color uses the existing accent / success / warning palette (under target = success, near target = accent, over target = warning).
+  - Below the bars: tiny stats line "$X under target on Needs", "$Y over target on Wants", etc. so the gap is concrete dollars not just percentages.
+  - Tap a bucket row to expand a list of the categories inside it with their individual contributions. Long-press a category row to override its bucket.
+
+  Edge cases:
+  - Months with $0 income: card shows "Add income to see the 50/30/20 split" empty state.
+  - Months with $0 spending in a bucket: 0% rendered cleanly, not as NaN.
+  - Recurring entries respected via `isEntryActiveInMonth` so the math matches the Spending donut.
+  - Debt Payments default to Needs (the minimum is a need); extra payments above minimum technically belong in Savings, but the app doesn't yet track minimum-vs-extra inside a payment entry. v1 keeps Debt Payments as Needs and accepts the slight overcount.
+
+  Files (proposed):
+  - `src/data/categoryBuckets.ts` - defaultBucket per built-in category, BudgetBucket type, label/color metadata.
+  - `src/storage/categoryBucketOverridesStorage.ts` - CRUD for the override map.
+  - `src/components/BudgetBucketCard.tsx` - the card UI.
+  - `src/utils/budgetBucketMath.ts` - pure helpers (totalsByBucket, targetForBucket, varianceForBucket).
+  - `src/screens/BudgetScreen.tsx` - mount the card; wire the long-press override.
+
+  OTA-eligible: yes. No new native deps. Theme + density aware via existing tokens.
+- [x] Refinance break-even calculator - on Utilities. Inputs: current loan balance/rate/term based on what is listed in the debt tracker, new rate/term/closing costs. Outputs: monthly payment delta, total interest delta, months to break even. Pure math, no new deps. Shipped as a collapsible card on `UtilitiesScreen` between Loan/Mortgage and Emergency Fund. The current-loan side is a multi-select list of debts from the tracker - combined balance and balance-weighted average APR derive automatically (read-only); years-remaining auto-fills from a balance-weighted average of each selected debt's `goalDate` when every selected debt has one, and stays user-editable. New loan side: rate, term, closing costs. Math reuses `calcPaymentForGoalDate` + `generatePayoffSchedule` from `utils/calculations.ts`. Shows break-even in months (or "no break-even" when the new payment isn't lower), monthly payment delta, lifetime interest delta, net savings over the new term, and a warning when the new term extends past the current loan's remaining term. Supports the consolidation-refi case (pick multiple debts; rate is weighted by balance). Empty state when no debts exist.

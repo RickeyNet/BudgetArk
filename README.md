@@ -1,19 +1,19 @@
 # BudgetArk
 
-A private, local-first personal finance app for budgeting, debt payoff, and net worth tracking — built with React Native and Expo. All your financial data stays on your device; nothing is sent to a server. Optional peer-to-peer sync lets you share data with a partner's device directly over your local Wi-Fi.
+A private, local-first personal finance app for budgeting, debt payoff, and net worth tracking - built with React Native and Expo. All your financial data stays on your device; nothing is sent to a server. Optional peer-to-peer sync lets you share data with a partner's device directly over your local Wi-Fi.
 
 > **Platforms:** iOS & Android (Expo / React Native) · **Status:** v1.7.2 · Private project.
 
 ## Features
 
-- **Budget** (💰) — track income and expenses with customizable category buckets and zero-based budgeting.
-- **Debt Tracker** (⛓️) — plan payoffs with snowball/avalanche strategies, payment history, and milestone celebrations.
-- **Bridge** (🧭) — net worth dashboard with accounts, history snapshots, and progress over time.
-- **Charts** (🗺️) — a learning hub of built-in finance lessons plus charting/analysis tools.
-- **Profile** (👤) — anonymous account, themes, and settings.
-- **Partner sync** — pair with a second device and sync over the local network (no cloud, no account). See [Privacy & security](#privacy--security).
-- **Import / export** — read and write spreadsheets (`.xlsx`) for backups and migration.
-- **Extras** — achievements/gamification, multiple themes with ambient backgrounds, haptics, and configurable display density.
+- **Budget** (💰) - track income and expenses with customizable category buckets and zero-based budgeting.
+- **Debt Tracker** (⛓️) - plan payoffs with snowball/avalanche strategies, payment history, and milestone celebrations.
+- **Bridge** (🧭) - net worth dashboard with accounts, history snapshots, and progress over time.
+- **Charts** (🗺️) - a learning hub of built-in finance lessons plus charting/analysis tools.
+- **Profile** (👤) - anonymous account, themes, and settings.
+- **Partner sync** - pair with a second device and sync over the local network (no cloud, no account). See [Privacy & security](#privacy--security).
+- **Import / export** - read and write spreadsheets (`.xlsx`) for backups and migration.
+- **Extras** - achievements/gamification, multiple themes with ambient backgrounds, haptics, and configurable display density.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ A private, local-first personal finance app for budgeting, debt payoff, and net 
 - For native builds:
   - **iOS:** macOS with Xcode
   - **Android:** Android Studio + SDK
-- A physical device or simulator/emulator. The app uses native modules (TCP sockets, zeroconf, secure store), so it requires a **development build** — it will **not** run in the standard Expo Go client.
+- A physical device or simulator/emulator. The app uses native modules (TCP sockets, zeroconf, secure store), so it requires a **development build** - it will **not** run in the standard Expo Go client.
 
 ## Getting started
 
@@ -88,7 +88,7 @@ assets/         Icons, splash, images
 
 BudgetArk is local-first by design:
 
-- Financial data is stored **on the device only** — there is no backend server and no account sign-in.
+- Financial data is stored **on the device only** - there is no backend server and no account sign-in.
 - Partner sync is **device-to-device over your local Wi-Fi** using Bonjour/zeroconf discovery and a direct TCP connection. Synced data is encrypted in transit.
 - Sensitive values are kept in the OS secure store; Android backups are disabled (`allowBackup: false`).
 - The app declares no usage of non-exempt encryption for App Store purposes.
@@ -110,4 +110,4 @@ Copy/rename the generated files to the names above, then build a new binary so t
 
 ## License
 
-Private project — all rights reserved. Not licensed for redistribution.
+Private project - all rights reserved. Not licensed for redistribution.
