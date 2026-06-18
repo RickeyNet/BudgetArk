@@ -26,6 +26,8 @@ A private, local-first personal finance app for budgeting, debt payoff, and net 
 
 ## Getting started
 
+> For a detailed walkthrough, see the [Dev Setup Guide](./dev-setup-guide.md).
+
 ```bash
 # 1. Install dependencies
 npm install
