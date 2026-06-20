@@ -98,6 +98,8 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
+import { convertAllStoredData } from "../utils/currencyMigration";
 import { isUpdateSafe } from "../utils/versionGuard";
 import {
   resolveUpdateInfo,
@@ -293,6 +295,18 @@ const ProfileScreen: React.FC = () => {
     message: string;
   } | null>(null);
 
+  /**
+   * Pending currency change awaiting the convert/relabel choice. Set when the
+   * user picks a currency whose code differs from the current one; cleared on
+   * Cancel or once a choice is applied.
+   */
+  const [currencyPrompt, setCurrencyPrompt] = useState<{
+    id: CurrencyPreferenceId;
+    fromLabel: string;
+    toLabel: string;
+  } | null>(null);
+  const [currencyConverting, setCurrencyConverting] = useState(false);
+
   /** OTA update preferences and status */
   const [updatePrefs, setUpdatePrefs] = useState<UpdatePreferences>({
     manualUpdateMode: false,
@@ -432,15 +446,62 @@ const ProfileScreen: React.FC = () => {
     [setTextSizeId],
   );
 
-  const handleCurrencySelect = useCallback(
+  /** Apply a currency change without touching stored amounts (relabel only). */
+  const applyCurrencyPreference = useCallback(
     async (id: CurrencyPreferenceId) => {
       await setPreferenceId(id);
       setUser((current) =>
         current ? { ...current, currencyPreferenceId: id } : current,
       );
+      setCurrencyPrompt(null);
+      setShowCurrencyModal(false);
     },
     [setPreferenceId],
   );
+
+  const handleCurrencySelect = useCallback(
+    async (id: CurrencyPreferenceId) => {
+      if (id === preference.id) {
+        setShowCurrencyModal(false);
+        return;
+      }
+      const target = getCurrencyPreferenceOption(id);
+      // Same currency code (e.g. USD vs CAD both use "$") means the stored
+      // numbers are already in the right unit - no conversion to offer.
+      if (target.currencyCode === preference.currencyCode) {
+        await applyCurrencyPreference(id);
+        return;
+      }
+      setCurrencyPrompt({
+        id,
+        fromLabel: preference.currencyCode,
+        toLabel: target.currencyCode,
+      });
+    },
+    [applyCurrencyPreference, preference.currencyCode, preference.id],
+  );
+
+  /** Convert every stored amount to the new currency, then switch to it. */
+  const handleCurrencyConvert = useCallback(async () => {
+    if (!currencyPrompt || pairing) return;
+    setCurrencyConverting(true);
+    try {
+      const toCode = getCurrencyPreferenceOption(currencyPrompt.id).currencyCode;
+      await convertAllStoredData(preference.currencyCode, toCode);
+      await setPreferenceId(currencyPrompt.id);
+      setUser((current) =>
+        current
+          ? { ...current, currencyPreferenceId: currencyPrompt.id }
+          : current,
+      );
+    } catch (error) {
+      if (__DEV__) console.error("Currency conversion failed:", error);
+    } finally {
+      setCurrencyConverting(false);
+      setCurrencyPrompt(null);
+      setShowCurrencyModal(false);
+    }
+  }, [currencyPrompt, pairing, preference.currencyCode, setPreferenceId]);
 
   const formatDateTime = useCallback((iso?: string) => {
     if (!iso) return "Unknown";
@@ -2697,6 +2758,76 @@ const ProfileScreen: React.FC = () => {
                 Done
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Currency change: convert amounts or just relabel ── */}
+      <Modal
+        visible={!!currencyPrompt}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!currencyConverting) setCurrencyPrompt(null);
+        }}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Change currency
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {pairing
+                ? `Switching to ${currencyPrompt?.toLabel} changes the currency symbol, but your amounts stay the same numbers. Your data is synced with a paired partner, so amounts can't be converted automatically — unpair first if you want to convert them.`
+                : `Convert your existing amounts from ${currencyPrompt?.fromLabel} to ${currencyPrompt?.toLabel} at today's approximate rate, or just change the symbol and keep the same numbers?`}
+            </Text>
+
+            <View style={styles.dialogActions}>
+              {!pairing && (
+                <TouchableOpacity
+                  style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                  disabled={currencyConverting}
+                  onPress={handleCurrencyConvert}
+                >
+                  {currencyConverting ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text
+                      style={[styles.dialogBtnText, { color: colors.white }]}
+                    >
+                      Convert my amounts
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                disabled={currencyConverting}
+                onPress={() => {
+                  if (currencyPrompt) void applyCurrencyPreference(currencyPrompt.id);
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  {pairing ? "Change symbol only" : "Just change the symbol"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                disabled={currencyConverting}
+                onPress={() => setCurrencyPrompt(null)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.textDim }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

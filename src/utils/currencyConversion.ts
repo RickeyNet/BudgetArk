@@ -60,3 +60,26 @@ export const localizeUsdTarget = (
   amountUsd: number,
   currencyCode: string
 ): number => roundLocalTarget(convertFromUsd(amountUsd, currencyCode));
+
+/**
+ * Convert a real stored amount from one currency to another, via USD:
+ *   value / rate[from] * rate[to]
+ * Used by the "convert my amounts" currency switch (see currencyMigration).
+ * Unlike milestone targets, real balances keep cents precision — the result
+ * is rounded to 2 decimals, NOT to a tidy round figure. Same code in/out, a
+ * zero, or a non-finite input returns the value unchanged so the migration
+ * can never turn a balance into NaN. Unknown codes fall back to rate 1.
+ */
+export const convertAmount = (
+  value: number,
+  fromCode: string,
+  toCode: string
+): number => {
+  if (!Number.isFinite(value) || value === 0 || fromCode === toCode) {
+    return Number.isFinite(value) ? value : 0;
+  }
+  const fromRate = USD_EXCHANGE_RATES[fromCode] ?? 1;
+  const toRate = USD_EXCHANGE_RATES[toCode] ?? 1;
+  const converted = (value / fromRate) * toRate;
+  return Math.round(converted * 100) / 100;
+};
