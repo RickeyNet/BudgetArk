@@ -48,8 +48,16 @@ export interface AchievementContext {
 export interface AchievementProgress {
   current: number;
   target: number;
-  /** Optional human-readable formatter override (e.g. "$1,250 / $10,000"). */
+  /** Optional human-readable formatter override (e.g. "3 / 12 mo"). */
   format?: (current: number, target: number) => string;
+  /**
+   * When true, `current`/`target` are monetary amounts already expressed in
+   * the user's currency. The UI formats them with the active currency's
+   * symbol/locale (compact, e.g. "$1.2k / $10k" or "10 tn kr / 11 tn kr")
+   * rather than this pure-data layer hardcoding a "$". Ignored if `format`
+   * is also set.
+   */
+  isCurrency?: boolean;
 }
 
 export interface AchievementDef extends Achievement {
@@ -147,18 +155,6 @@ const underBudgetMonths = (ctx: AchievementContext): string[] => {
   return result.sort();
 };
 
-/** Compact currency formatter for progress strings ("$1.2k / $10k"). */
-const formatCurrencyProgress = (current: number, target: number): string => {
-  const fmt = (n: number): string => {
-    const abs = Math.abs(n);
-    if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-    if (abs >= 10_000) return `$${Math.round(n / 1000)}k`;
-    if (abs >= 1000) return `$${(n / 1000).toFixed(1)}k`;
-    return `$${Math.round(n)}`;
-  };
-  return `${fmt(current)} / ${fmt(target)}`;
-};
-
 /** Longest run of consecutive calendar months in a sorted YYYY-MM list. */
 const longestConsecutiveRun = (sortedMonthKeys: string[]): number => {
   let best = 0;
@@ -215,7 +211,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
       if (original <= 0) return null;
       const paid = Math.max(0, original - current);
       const target = original / 2;
-      return { current: paid, target, format: formatCurrencyProgress };
+      return { current: paid, target, isCurrency: true };
     },
   },
   {
@@ -262,7 +258,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
         .filter((e) => e.type === "expense" && e.category === "Savings")
         .reduce((s, e) => s + e.amount, 0);
       const best = Math.max(efAmount, savings);
-      return { current: best, target: 1000, format: formatCurrencyProgress };
+      return { current: best, target: 1000, isCurrency: true };
     },
   },
   {
@@ -289,7 +285,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
         }
       }
       if (!best) return null;
-      return { ...best, format: formatCurrencyProgress };
+      return { ...best, isCurrency: true };
     },
   },
   {
@@ -304,7 +300,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     progress: (ctx) => ({
       current: Math.max(0, latestNetWorth(ctx)),
       target: 10_000,
-      format: formatCurrencyProgress,
+      isCurrency: true,
     }),
   },
   {
@@ -319,7 +315,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     progress: (ctx) => ({
       current: Math.max(0, latestNetWorth(ctx)),
       target: 25_000,
-      format: formatCurrencyProgress,
+      isCurrency: true,
     }),
   },
   {
@@ -334,7 +330,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     progress: (ctx) => ({
       current: Math.max(0, latestNetWorth(ctx)),
       target: 100_000,
-      format: formatCurrencyProgress,
+      isCurrency: true,
     }),
   },
   {
@@ -349,7 +345,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     progress: (ctx) => ({
       current: Math.max(0, latestNetWorth(ctx)),
       target: 1_000_000,
-      format: formatCurrencyProgress,
+      isCurrency: true,
     }),
   },
   {

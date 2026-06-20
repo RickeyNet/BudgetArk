@@ -7,6 +7,16 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.7.4",
+    title: "Swedish Krona + Localized Milestones",
+    releasedAt: "2026-06-19",
+    highlights: [
+      "Added Swedish Krona (SEK) as a currency option in Profile. Amounts format the Swedish way - 1 234,56 kr - everywhere money is shown.",
+      "Milestone targets now start in your own currency instead of US dollars. On a fresh plan, the starter emergency fund and the other dollar-based goals are converted to a sensible round figure in your currency (for example a Swedish user's keel fund starts near 12 700 kr rather than 1,200). Your existing targets are left exactly as you set them - only brand-new plans are localized.",
+      "Ship's Log badge progress now shows amounts in your selected currency's symbol instead of always using a dollar sign.",
+    ],
+  },
+  {
     version: "1.7.3",
     title: "Import Fixes",
     releasedAt: "2026-06-12",

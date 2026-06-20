@@ -362,6 +362,12 @@ export const CURRENCY_PREFERENCE_OPTIONS = [
     locale: "ja-JP",
     currencyCode: "JPY",
   },
+  {
+    id: "sek_se",
+    label: "Swedish Krona (Sweden)",
+    locale: "sv-SE",
+    currencyCode: "SEK",
+  },
 ] as const satisfies readonly CurrencyPreferenceOption[];
 
 export type CurrencyPreferenceId =
@@ -427,6 +433,16 @@ export interface DebtMilestonePlan {
   updatedAt: string;
 }
 
+/**
+ * Default milestone steps. The `targetAmount` values are canonical
+ * **USD anchors**: when a fresh plan is seeded (createDefaultPlan in
+ * debtMilestoneStorage), each is converted to the user's selected
+ * currency via localizeUsdTarget() so a non-USD user starts with a
+ * sensible local-currency target instead of a raw dollar figure. USD
+ * users are unaffected (the conversion is a no-op rounded to the same
+ * value). Descriptions stay currency-neutral — the concrete amount is
+ * shown by the target editor / progress bar in the user's currency.
+ */
 export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
   DebtMilestoneStep,
   "isCompleted" | "completedAt"
@@ -434,7 +450,7 @@ export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
   {
     key: "keel",
     title: "Keel",
-    description: "Save $1,000 for a starter emergency fund so your plan has a stable base.",
+    description: "Save a starter emergency fund so your plan has a stable base.",
     targetAmount: 1200,
   },
   {
