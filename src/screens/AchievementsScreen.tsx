@@ -29,6 +29,7 @@ import {
   type AchievementProgress,
 } from "../data/achievementDefs";
 import { evaluateAchievements } from "../utils/achievements";
+import { useCurrency } from "../currency/CurrencyProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -66,6 +67,7 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
+  const { formatCompactCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
@@ -104,9 +106,12 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
     (p: AchievementProgress): string => {
       const cur = Math.max(0, Math.min(p.current, p.target));
       if (p.format) return p.format(cur, p.target);
+      if (p.isCurrency) {
+        return `${formatCompactCurrency(cur)} / ${formatCompactCurrency(p.target)}`;
+      }
       return `${Math.floor(cur)} / ${p.target}`;
     },
-    []
+    [formatCompactCurrency]
   );
 
   const sortedDefs = useMemo(() => {

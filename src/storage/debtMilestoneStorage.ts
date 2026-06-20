@@ -5,17 +5,43 @@ import {
   DebtMilestonePlan,
   DebtMilestoneStep,
 } from "../types";
+import { getOrCreateUser } from "./userStorage";
+import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
+import { localizeUsdTarget } from "../utils/currencyConversion";
 
 const DEBT_MILESTONE_PLAN_KEY = "@budgetark_debt_milestones" as const;
 
-const createDefaultPlan = (): DebtMilestonePlan => ({
-  currentStepKey: "keel",
-  steps: DEFAULT_DEBT_MILESTONE_STEPS.map((step) => ({
-    ...step,
-    isCompleted: false,
-  })),
-  updatedAt: new Date().toISOString(),
-});
+/**
+ * Seed a fresh plan, converting each step's canonical USD target anchor into
+ * the user's selected currency so a non-USD user starts with a sensible local
+ * goal (e.g. the keel emergency fund reads ~10,600 kr, not 1,200). This only
+ * runs when no plan exists yet; existing stored plans keep their own targets
+ * (see normalizePlan) so we never silently rewrite a user's saved figures.
+ */
+const createDefaultPlan = async (): Promise<DebtMilestonePlan> => {
+  let currencyCode = "USD";
+  try {
+    const user = await getOrCreateUser();
+    currencyCode = getCurrencyPreferenceOption(
+      user.currencyPreferenceId
+    ).currencyCode;
+  } catch {
+    // Fall back to USD anchors if the user/currency can't be read.
+  }
+
+  return {
+    currentStepKey: "keel",
+    steps: DEFAULT_DEBT_MILESTONE_STEPS.map((step) => ({
+      ...step,
+      targetAmount:
+        typeof step.targetAmount === "number"
+          ? localizeUsdTarget(step.targetAmount, currencyCode)
+          : step.targetAmount,
+      isCompleted: false,
+    })),
+    updatedAt: new Date().toISOString(),
+  };
+};
 
 const normalizePlan = (raw: DebtMilestonePlan): DebtMilestonePlan => {
   const steps = DEFAULT_DEBT_MILESTONE_STEPS.map((template) => {
@@ -39,7 +65,7 @@ const normalizePlan = (raw: DebtMilestonePlan): DebtMilestonePlan => {
 export const getDebtMilestonePlan = async (): Promise<DebtMilestonePlan> => {
   const raw = await EncryptedStorage.getItem(DEBT_MILESTONE_PLAN_KEY);
   if (!raw) {
-    const plan = createDefaultPlan();
+    const plan = await createDefaultPlan();
     await EncryptedStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(plan));
     return plan;
   }
@@ -52,7 +78,7 @@ export const getDebtMilestonePlan = async (): Promise<DebtMilestonePlan> => {
     }
     return normalized;
   } catch {
-    const fallback = createDefaultPlan();
+    const fallback = await createDefaultPlan();
     await EncryptedStorage.setItem(DEBT_MILESTONE_PLAN_KEY, JSON.stringify(fallback));
     return fallback;
   }
