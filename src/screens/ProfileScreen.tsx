@@ -476,20 +476,28 @@ const ProfileScreen: React.FC = () => {
         await applyCurrencyPreference(id);
         return;
       }
+      // iOS can't present the convert dialog while the picker Modal is still
+      // open - stacked modals silently fail to appear (the same iOS quirk the
+      // import flows handle). Close the picker, wait for it to tear down, then
+      // show the prompt. The rate fetch is kicked off first so it overlaps the
+      // teardown delay rather than adding to it. Paired devices can't convert
+      // (see handleCurrencyConvert), so only the unpaired path needs a rate;
+      // getCurrentRates never throws (it falls back to cache, then static).
+      setShowCurrencyModal(false);
       setCurrencyRates(null);
+      const ratesPromise = pairing
+        ? null
+        : getCurrentRates({ forceRefresh: true });
+      setCurrencyRatesLoading(ratesPromise !== null);
+      await waitForIosModalTeardown(350);
       setCurrencyPrompt({
         id,
         fromLabel: preference.currencyCode,
         toLabel: target.currencyCode,
       });
-      // Paired devices can't convert (see handleCurrencyConvert), so only the
-      // unpaired path needs a rate. Force-refresh so the irreversible change
-      // uses the most current rate; getCurrentRates never throws (it falls
-      // back to cache, then the static table).
-      if (!pairing) {
-        setCurrencyRatesLoading(true);
+      if (ratesPromise) {
         try {
-          setCurrencyRates(await getCurrentRates({ forceRefresh: true }));
+          setCurrencyRates(await ratesPromise);
         } finally {
           setCurrencyRatesLoading(false);
         }
