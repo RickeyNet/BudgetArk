@@ -100,6 +100,7 @@ import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
 import { convertAllStoredData } from "../utils/currencyMigration";
+import { getCurrentRates, type RatesSnapshot } from "../utils/exchangeRates";
 import { isUpdateSafe } from "../utils/versionGuard";
 import {
   resolveUpdateInfo,
@@ -306,6 +307,9 @@ const ProfileScreen: React.FC = () => {
     toLabel: string;
   } | null>(null);
   const [currencyConverting, setCurrencyConverting] = useState(false);
+  /** Live rate snapshot fetched when the convert prompt opens (unpaired only). */
+  const [currencyRates, setCurrencyRates] = useState<RatesSnapshot | null>(null);
+  const [currencyRatesLoading, setCurrencyRatesLoading] = useState(false);
 
   /** OTA update preferences and status */
   const [updatePrefs, setUpdatePrefs] = useState<UpdatePreferences>({
@@ -472,22 +476,39 @@ const ProfileScreen: React.FC = () => {
         await applyCurrencyPreference(id);
         return;
       }
+      setCurrencyRates(null);
       setCurrencyPrompt({
         id,
         fromLabel: preference.currencyCode,
         toLabel: target.currencyCode,
       });
+      // Paired devices can't convert (see handleCurrencyConvert), so only the
+      // unpaired path needs a rate. Force-refresh so the irreversible change
+      // uses the most current rate; getCurrentRates never throws (it falls
+      // back to cache, then the static table).
+      if (!pairing) {
+        setCurrencyRatesLoading(true);
+        try {
+          setCurrencyRates(await getCurrentRates({ forceRefresh: true }));
+        } finally {
+          setCurrencyRatesLoading(false);
+        }
+      }
     },
-    [applyCurrencyPreference, preference.currencyCode, preference.id],
+    [applyCurrencyPreference, pairing, preference.currencyCode, preference.id],
   );
 
   /** Convert every stored amount to the new currency, then switch to it. */
   const handleCurrencyConvert = useCallback(async () => {
-    if (!currencyPrompt || pairing) return;
+    if (!currencyPrompt || pairing || !currencyRates) return;
     setCurrencyConverting(true);
     try {
       const toCode = getCurrencyPreferenceOption(currencyPrompt.id).currencyCode;
-      await convertAllStoredData(preference.currencyCode, toCode);
+      await convertAllStoredData(
+        preference.currencyCode,
+        toCode,
+        currencyRates.rates,
+      );
       await setPreferenceId(currencyPrompt.id);
       setUser((current) =>
         current
@@ -501,7 +522,13 @@ const ProfileScreen: React.FC = () => {
       setCurrencyPrompt(null);
       setShowCurrencyModal(false);
     }
-  }, [currencyPrompt, pairing, preference.currencyCode, setPreferenceId]);
+  }, [
+    currencyPrompt,
+    currencyRates,
+    pairing,
+    preference.currencyCode,
+    setPreferenceId,
+  ]);
 
   const formatDateTime = useCallback((iso?: string) => {
     if (!iso) return "Unknown";
@@ -1142,7 +1169,7 @@ const ProfileScreen: React.FC = () => {
           const MAX_LISTED = 8;
           const shown = result.skippedRowDetails.slice(0, MAX_LISTED);
           for (const detail of shown) {
-            message += `\n• ${detail.sheet} — ${detail.descriptor}: ${detail.reason}`;
+            message += `\n• ${detail.sheet} - ${detail.descriptor}: ${detail.reason}`;
           }
           const remaining = result.skippedRowDetails.length - shown.length;
           if (remaining > 0) {
@@ -2783,18 +2810,43 @@ const ProfileScreen: React.FC = () => {
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
               {pairing
-                ? `Switching to ${currencyPrompt?.toLabel} changes the currency symbol, but your amounts stay the same numbers. Your data is synced with a paired partner, so amounts can't be converted automatically — unpair first if you want to convert them.`
-                : `Convert your existing amounts from ${currencyPrompt?.fromLabel} to ${currencyPrompt?.toLabel} at today's approximate rate, or just change the symbol and keep the same numbers?`}
+                ? `Switching to ${currencyPrompt?.toLabel} changes the currency symbol, but your amounts stay the same numbers. Your data is synced with a paired partner, so amounts can't be converted automatically - unpair first if you want to convert them.`
+                : currencyRatesLoading
+                  ? "Fetching today's exchange rate..."
+                  : `Convert your existing amounts from ${currencyPrompt?.fromLabel} to ${currencyPrompt?.toLabel} at the rate below, or just change the symbol and keep the same numbers?`}
             </Text>
+
+            {!pairing && !currencyRatesLoading && currencyRates && currencyPrompt
+              ? (() => {
+                  const { fromLabel: from, toLabel: to } = currencyPrompt;
+                  const cross =
+                    (currencyRates.rates[to] ?? 1) /
+                    (currencyRates.rates[from] ?? 1);
+                  const r = cross >= 100 ? cross.toFixed(2) : cross.toFixed(4);
+                  const prefix =
+                    currencyRates.source === "live"
+                      ? "Today's rate"
+                      : currencyRates.source === "cache"
+                        ? `Rates from ${formatDateTime(currencyRates.fetchedAt)} (couldn't reach live rates)`
+                        : "Offline - using a built-in estimate";
+                  return (
+                    <Text style={[styles.dialogTip, { color: colors.text }]}>
+                      {`${prefix}: 1 ${from} = ${r} ${to}`}
+                    </Text>
+                  );
+                })()
+              : null}
 
             <View style={styles.dialogActions}>
               {!pairing && (
                 <TouchableOpacity
                   style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
-                  disabled={currencyConverting}
+                  disabled={
+                    currencyConverting || currencyRatesLoading || !currencyRates
+                  }
                   onPress={handleCurrencyConvert}
                 >
-                  {currencyConverting ? (
+                  {currencyConverting || currencyRatesLoading ? (
                     <ActivityIndicator color={colors.white} />
                   ) : (
                     <Text
