@@ -42,6 +42,9 @@ TODO.md
 # typescript
 *.tsbuildinfo
 
+# tests
+coverage/
+
 # generated native folders (Expo managed)
 ios/
 android/

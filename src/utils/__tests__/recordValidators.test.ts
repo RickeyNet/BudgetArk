@@ -1,0 +1,257 @@
+import {
+  isObject,
+  isValidDateValue,
+  isSafeText,
+  isSafeNumber,
+  isValidImportCategory,
+  normalizeImportCategory,
+  isMonthKey,
+  isDebtItem,
+  isBudgetEntryItem,
+  isSavingsGoalItem,
+  isAssetAccountItem,
+  isNetWorthSnapshotItem,
+  sanitizePayoffStrategy,
+  explainBudgetEntryProblem,
+  VALIDATOR_LIMITS,
+} from "../recordValidators";
+
+describe("primitive guards", () => {
+  it("isObject distinguishes plain objects", () => {
+    expect(isObject({})).toBe(true);
+    expect(isObject(null)).toBe(false);
+    expect(isObject([])).toBe(false);
+    expect(isObject("x")).toBe(false);
+  });
+
+  it("isValidDateValue accepts parseable date strings only", () => {
+    expect(isValidDateValue("2026-06-12")).toBe(true);
+    expect(isValidDateValue("2026-06-12T00:00:00.000Z")).toBe(true);
+    expect(isValidDateValue("not-a-date")).toBe(false);
+    expect(isValidDateValue(123)).toBe(false);
+  });
+
+  it("isSafeText enforces non-empty within a length cap", () => {
+    expect(isSafeText("hello")).toBe(true);
+    expect(isSafeText("   ")).toBe(false);
+    expect(isSafeText("a".repeat(200))).toBe(false);
+    expect(isSafeText("ab", 1)).toBe(false);
+  });
+
+  it("isSafeNumber enforces finite range bounds", () => {
+    expect(isSafeNumber(100)).toBe(true);
+    expect(isSafeNumber(-1)).toBe(false); // default min 0
+    expect(isSafeNumber(NaN)).toBe(false);
+    expect(isSafeNumber(5, { min: 0, max: 4 })).toBe(false);
+    expect(isSafeNumber(VALIDATOR_LIMITS.MAX_MONEY + 1)).toBe(false);
+  });
+});
+
+describe("isValidImportCategory / normalizeImportCategory", () => {
+  it("accepts built-in categories", () => {
+    expect(isValidImportCategory("Housing")).toBe(true);
+    expect(isValidImportCategory("Savings")).toBe(true);
+  });
+
+  it("accepts a safe custom category name within the cap", () => {
+    expect(isValidImportCategory("My Custom Cat")).toBe(true);
+  });
+
+  it("rejects control characters and overly long names", () => {
+    expect(isValidImportCategory("bad\x00name")).toBe(false);
+    expect(isValidImportCategory("a".repeat(25))).toBe(false);
+    expect(isValidImportCategory("")).toBe(false);
+    expect(isValidImportCategory(123)).toBe(false);
+  });
+
+  it("normalizeImportCategory returns the name or null", () => {
+    expect(normalizeImportCategory("Housing")).toBe("Housing");
+    expect(normalizeImportCategory("a".repeat(25))).toBeNull();
+  });
+});
+
+describe("isMonthKey", () => {
+  it("accepts YYYY-MM with a real month", () => {
+    expect(isMonthKey("2026-01")).toBe(true);
+    expect(isMonthKey("2026-12")).toBe(true);
+  });
+
+  it("rejects invalid months and shapes", () => {
+    expect(isMonthKey("2026-00")).toBe(false);
+    expect(isMonthKey("2026-13")).toBe(false);
+    expect(isMonthKey("9999-99")).toBe(false);
+    expect(isMonthKey("2026-1")).toBe(false);
+    expect(isMonthKey(202601)).toBe(false);
+  });
+});
+
+describe("sanitizePayoffStrategy", () => {
+  it("returns a known strategy", () => {
+    expect(sanitizePayoffStrategy("avalanche")).toBe("avalanche");
+    expect(sanitizePayoffStrategy("snowball")).toBe("snowball");
+    expect(sanitizePayoffStrategy("custom")).toBe("custom");
+  });
+
+  it("returns undefined for unknown or non-string values", () => {
+    expect(sanitizePayoffStrategy("nope")).toBeUndefined();
+    expect(sanitizePayoffStrategy(5)).toBeUndefined();
+  });
+});
+
+describe("isDebtItem", () => {
+  const valid = {
+    id: "d1",
+    name: "Visa",
+    balance: 1000,
+    originalBalance: 2000,
+    rate: 19.9,
+    minPayment: 50,
+    createdAt: "2026-06-01",
+  };
+
+  it("accepts a well-formed debt", () => {
+    expect(isDebtItem(valid)).toBe(true);
+  });
+
+  it("accepts an optional valid paymentDueDay", () => {
+    expect(isDebtItem({ ...valid, paymentDueDay: 15 })).toBe(true);
+  });
+
+  it("rejects an out-of-range paymentDueDay", () => {
+    expect(isDebtItem({ ...valid, paymentDueDay: 32 })).toBe(false);
+  });
+
+  it("rejects an out-of-range rate", () => {
+    expect(isDebtItem({ ...valid, rate: 999 })).toBe(false);
+  });
+
+  it("rejects a non-positive originalBalance", () => {
+    expect(isDebtItem({ ...valid, originalBalance: 0 })).toBe(false);
+  });
+
+  it("rejects a garbage deletedAt tombstone", () => {
+    expect(isDebtItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+});
+
+describe("isBudgetEntryItem", () => {
+  const valid = {
+    id: "e1",
+    type: "expense",
+    category: "Food",
+    amount: 12.5,
+    date: "2026-06-01",
+    createdAt: "2026-06-01",
+  };
+
+  it("accepts a well-formed expense", () => {
+    expect(isBudgetEntryItem(valid)).toBe(true);
+  });
+
+  it("rejects an invalid type", () => {
+    expect(isBudgetEntryItem({ ...valid, type: "transfer" })).toBe(false);
+  });
+
+  it("rejects a zero amount for a normal category", () => {
+    expect(isBudgetEntryItem({ ...valid, amount: 0 })).toBe(false);
+  });
+
+  it("allows negative amounts for reserve categories", () => {
+    expect(
+      isBudgetEntryItem({ ...valid, category: "Savings", amount: -200 })
+    ).toBe(true);
+  });
+
+  it("rejects a string amount", () => {
+    expect(isBudgetEntryItem({ ...valid, amount: "12.5" })).toBe(false);
+  });
+
+  it("rejects a too-long description", () => {
+    expect(
+      isBudgetEntryItem({ ...valid, description: "a".repeat(221) })
+    ).toBe(false);
+  });
+});
+
+describe("explainBudgetEntryProblem", () => {
+  it("describes a missing id", () => {
+    expect(explainBudgetEntryProblem({ type: "expense" })).toContain("id");
+  });
+
+  it("flags a quoted-string amount specifically", () => {
+    const msg = explainBudgetEntryProblem({
+      id: "e1",
+      type: "expense",
+      category: "Food",
+      amount: "12.5",
+    });
+    expect(msg).toContain("quoted string");
+  });
+});
+
+describe("isSavingsGoalItem", () => {
+  const valid = {
+    id: "g1",
+    name: "Emergency Fund",
+    category: "emergency_fund",
+    targetAmount: 10000,
+    currentAmount: 2500,
+    createdAt: "2026-06-01",
+  };
+
+  it("accepts a valid goal", () => {
+    expect(isSavingsGoalItem(valid)).toBe(true);
+  });
+
+  it("rejects an unknown category", () => {
+    expect(isSavingsGoalItem({ ...valid, category: "yacht" })).toBe(false);
+  });
+
+  it("rejects a non-positive target amount", () => {
+    expect(isSavingsGoalItem({ ...valid, targetAmount: 0 })).toBe(false);
+  });
+});
+
+describe("isAssetAccountItem", () => {
+  it("rejects a non-object", () => {
+    expect(isAssetAccountItem(null)).toBe(false);
+  });
+
+  it("rejects a negative balance", () => {
+    expect(
+      isAssetAccountItem({
+        id: "a1",
+        name: "Checking",
+        category: "cash",
+        balance: -1,
+        createdAt: "2026-06-01",
+      })
+    ).toBe(false);
+  });
+});
+
+describe("isNetWorthSnapshotItem", () => {
+  it("accepts a well-formed snapshot", () => {
+    expect(
+      isNetWorthSnapshotItem({
+        dayKey: "2026-06-22",
+        capturedAt: "2026-06-22T00:00:00.000Z",
+        totalAssets: 1000,
+        totalDebt: 200,
+        netWorth: 800,
+      })
+    ).toBe(true);
+  });
+
+  it("rejects a malformed dayKey", () => {
+    expect(
+      isNetWorthSnapshotItem({
+        dayKey: "2026-6-2",
+        capturedAt: "2026-06-22T00:00:00.000Z",
+        totalAssets: 1000,
+        totalDebt: 200,
+        netWorth: 800,
+      })
+    ).toBe(false);
+  });
+});
