@@ -1,0 +1,176 @@
+/**
+ * Spreadsheet round-trip test: export -> re-import.
+ *
+ * This is the schema-alignment guard. spreadsheetExport and spreadsheetImport
+ * share column headers by convention (see SPREADSHEET_SCHEMA.md). The two
+ * per-module suites each test against that schema independently, so a column
+ * renamed on one side but not the other would leave both green while real
+ * backups silently lose data. Here we run the REAL exporter, capture the bytes
+ * it writes, feed them straight into the REAL importer, and assert the entities
+ * survive the trip.
+ *
+ * Only the I/O edges are mocked. The shared `mockWritten` buffer is both the
+ * export sink and the import source, so the file genuinely flows export->import.
+ */
+
+import * as XLSX from "xlsx";
+
+const mockWritten = { content: "", encoding: "" };
+
+jest.mock("expo-file-system", () => ({
+  Paths: { document: "doc", cache: "cache" },
+  File: class {
+    uri: string;
+    constructor(a: string, b?: string) {
+      this.uri = b ? `${a}/${b}` : a;
+    }
+    create() {}
+    write(content: string, opts: { encoding: string }) {
+      mockWritten.content = content;
+      mockWritten.encoding = opts?.encoding;
+    }
+    // Import reads back exactly what export wrote.
+    async text() {
+      return mockWritten.content;
+    }
+    async base64() {
+      return mockWritten.content;
+    }
+  },
+}));
+jest.mock("react-native", () => ({
+  Platform: { OS: "android" },
+  Share: { share: jest.fn(), sharedAction: "sharedAction" },
+}));
+jest.mock("../iosNativeShare", () => ({
+  shareLocalFile: jest.fn(async () => {}),
+  waitForIosModalTeardown: jest.fn(async () => {}),
+}));
+
+// --- exporter data sources ---
+const debtFixture = {
+  id: "d1",
+  name: "Car Loan",
+  balance: 5000,
+  originalBalance: 10000,
+  rate: 6.5,
+  minPayment: 200,
+  owner: "mine",
+  debtClass: "car",
+  debtClassSource: "manual",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-02T00:00:00.000Z",
+};
+const entryFixtures = [
+  { id: "e1", type: "income", category: "Salary", amount: 4000, date: "2026-06-01", createdAt: "2026-06-01T00:00:00.000Z" },
+  { id: "e2", type: "expense", category: "Food", amount: 30.5, date: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z" },
+  // Recurring entry: the exporter projects copies across months; the importer
+  // must drop those projections and keep exactly the original row.
+  { id: "e3", type: "expense", category: "Housing", amount: 1200, date: "2026-01-01", recurring: true, createdAt: "2026-01-01T00:00:00.000Z" },
+];
+
+jest.mock("../../storage/debtStorage", () => ({
+  getDebts: jest.fn(async () => [debtRef]),
+  getPayments: jest.fn(async () => []),
+}));
+jest.mock("../../storage/budgetStorage", () => ({
+  getBudgetEntries: jest.fn(async () => entriesRef),
+  getCategoryBudgetLimits: jest.fn(async () => []),
+}));
+jest.mock("../../storage/savingsGoalStorage", () => ({ getSavingsGoals: jest.fn(async () => []) }));
+jest.mock("../../storage/assetAccountStorage", () => ({ getAssetAccounts: jest.fn(async () => []) }));
+jest.mock("../../storage/debtMilestoneStorage", () => ({ getDebtMilestonePlan: jest.fn(async () => null) }));
+jest.mock("../../storage/backupReminderStorage", () => ({ recordBackup: jest.fn(async () => {}) }));
+
+// --- importer's downstream sink (capture the normalized payload) ---
+const mockImportFromString = jest.fn(async (_json: string, _mode?: string) => ({
+  debts: 0, payments: 0, budgetEntries: 0, budgetLimits: 0,
+  savingsGoals: 0, assetAccounts: 0, debtMilestones: false,
+  payoffStrategy: false, netWorthSnapshots: 0, customCategories: 0,
+}));
+let mockPicked: any = { canceled: true };
+jest.mock("../importData", () => ({
+  importFromString: mockImportFromString,
+  openDocumentPicker: jest.fn(async () => mockPicked),
+}));
+jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
+
+const debtRef = debtFixture;
+const entriesRef = entryFixtures;
+
+import { exportSpreadsheet } from "../spreadsheetExport";
+import { importSpreadsheet } from "../spreadsheetImport";
+
+jest.spyOn(console, "info").mockImplementation(() => {});
+
+/** The payload object handed to importFromString on the last call. */
+const lastPayload = (): any =>
+  JSON.parse(mockImportFromString.mock.calls[mockImportFromString.mock.calls.length - 1][0]);
+
+beforeEach(() => {
+  mockWritten.content = "";
+  mockWritten.encoding = "";
+  mockImportFromString.mockClear();
+});
+
+describe("xlsx round-trip", () => {
+  it("preserves budget entries and debts through export -> import", async () => {
+    await exportSpreadsheet("xlsx");
+    mockPicked = {
+      canceled: false,
+      assets: [{ uri: "file:///rt.xlsx", name: "rt.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size: 2000 }],
+    };
+    const result = await importSpreadsheet("merge");
+
+    const payload = lastPayload();
+
+    // Entries: e1, e2, e3 survive; the recurring projections of e3 are dropped.
+    const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3"]);
+    expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
+    expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
+    expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
+    // Date asserted at month granularity: SheetJS shifts Excel date serials by
+    // the test runner's TZ offset on round-trip. The app pins dates to local
+    // noon (±12h slack), so on-device the calendar date is preserved; the
+    // exact-day check here would flake on the offset, not on a real regression.
+    expect(byId.e3.date).toMatch(/^2026-01/);
+
+    // Debts survive with their numeric fields intact.
+    expect(payload.debts).toHaveLength(1);
+    expect(payload.debts[0]).toMatchObject({
+      id: "d1", name: "Car Loan", balance: 5000, originalBalance: 10000, rate: 6.5, minPayment: 200,
+    });
+
+    // No data row was rejected on the way back in.
+    expect(result?.skippedRows).toBe(0);
+  });
+});
+
+describe("csv round-trip", () => {
+  it("preserves budget entries through export -> import", async () => {
+    await exportSpreadsheet("csv");
+    mockPicked = {
+      canceled: false,
+      assets: [{ uri: "file:///rt.csv", name: "rt.csv", mimeType: "text/csv", size: 800 }],
+    };
+    const result = await importSpreadsheet("merge");
+
+    const payload = lastPayload();
+    const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3"]);
+    expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
+    expect(result?.skippedRows).toBe(0);
+  });
+});
+
+describe("round-trip schema guard", () => {
+  it("confirms the captured file actually carries the exported sheets", async () => {
+    // A direct check that export produced real bytes (guards against a future
+    // change where write() is skipped and import silently reads stale content).
+    await exportSpreadsheet("xlsx");
+    expect(mockWritten.encoding).toBe("base64");
+    const wb = XLSX.read(mockWritten.content, { type: "base64" });
+    expect(wb.SheetNames).toEqual(expect.arrayContaining(["Budget Entries", "Debts"]));
+  });
+});
