@@ -98,6 +98,9 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
 import type { UpdatePreferences } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
+import { convertAllStoredData } from "../utils/currencyMigration";
+import { getCurrentRates, type RatesSnapshot } from "../utils/exchangeRates";
 import { isUpdateSafe } from "../utils/versionGuard";
 import {
   resolveUpdateInfo,
@@ -293,6 +296,21 @@ const ProfileScreen: React.FC = () => {
     message: string;
   } | null>(null);
 
+  /**
+   * Pending currency change awaiting the convert/relabel choice. Set when the
+   * user picks a currency whose code differs from the current one; cleared on
+   * Cancel or once a choice is applied.
+   */
+  const [currencyPrompt, setCurrencyPrompt] = useState<{
+    id: CurrencyPreferenceId;
+    fromLabel: string;
+    toLabel: string;
+  } | null>(null);
+  const [currencyConverting, setCurrencyConverting] = useState(false);
+  /** Live rate snapshot fetched when the convert prompt opens (unpaired only). */
+  const [currencyRates, setCurrencyRates] = useState<RatesSnapshot | null>(null);
+  const [currencyRatesLoading, setCurrencyRatesLoading] = useState(false);
+
   /** OTA update preferences and status */
   const [updatePrefs, setUpdatePrefs] = useState<UpdatePreferences>({
     manualUpdateMode: false,
@@ -432,15 +450,93 @@ const ProfileScreen: React.FC = () => {
     [setTextSizeId],
   );
 
-  const handleCurrencySelect = useCallback(
+  /** Apply a currency change without touching stored amounts (relabel only). */
+  const applyCurrencyPreference = useCallback(
     async (id: CurrencyPreferenceId) => {
       await setPreferenceId(id);
       setUser((current) =>
         current ? { ...current, currencyPreferenceId: id } : current,
       );
+      setCurrencyPrompt(null);
+      setShowCurrencyModal(false);
     },
     [setPreferenceId],
   );
+
+  const handleCurrencySelect = useCallback(
+    async (id: CurrencyPreferenceId) => {
+      if (id === preference.id) {
+        setShowCurrencyModal(false);
+        return;
+      }
+      const target = getCurrencyPreferenceOption(id);
+      // Same currency code (e.g. USD vs CAD both use "$") means the stored
+      // numbers are already in the right unit - no conversion to offer.
+      if (target.currencyCode === preference.currencyCode) {
+        await applyCurrencyPreference(id);
+        return;
+      }
+      // iOS can't present the convert dialog while the picker Modal is still
+      // open - stacked modals silently fail to appear (the same iOS quirk the
+      // import flows handle). Close the picker, wait for it to tear down, then
+      // show the prompt. The rate fetch is kicked off first so it overlaps the
+      // teardown delay rather than adding to it. Paired devices can't convert
+      // (see handleCurrencyConvert), so only the unpaired path needs a rate;
+      // getCurrentRates never throws (it falls back to cache, then static).
+      setShowCurrencyModal(false);
+      setCurrencyRates(null);
+      const ratesPromise = pairing
+        ? null
+        : getCurrentRates({ forceRefresh: true });
+      setCurrencyRatesLoading(ratesPromise !== null);
+      await waitForIosModalTeardown(350);
+      setCurrencyPrompt({
+        id,
+        fromLabel: preference.currencyCode,
+        toLabel: target.currencyCode,
+      });
+      if (ratesPromise) {
+        try {
+          setCurrencyRates(await ratesPromise);
+        } finally {
+          setCurrencyRatesLoading(false);
+        }
+      }
+    },
+    [applyCurrencyPreference, pairing, preference.currencyCode, preference.id],
+  );
+
+  /** Convert every stored amount to the new currency, then switch to it. */
+  const handleCurrencyConvert = useCallback(async () => {
+    if (!currencyPrompt || pairing || !currencyRates) return;
+    setCurrencyConverting(true);
+    try {
+      const toCode = getCurrencyPreferenceOption(currencyPrompt.id).currencyCode;
+      await convertAllStoredData(
+        preference.currencyCode,
+        toCode,
+        currencyRates.rates,
+      );
+      await setPreferenceId(currencyPrompt.id);
+      setUser((current) =>
+        current
+          ? { ...current, currencyPreferenceId: currencyPrompt.id }
+          : current,
+      );
+    } catch (error) {
+      if (__DEV__) console.error("Currency conversion failed:", error);
+    } finally {
+      setCurrencyConverting(false);
+      setCurrencyPrompt(null);
+      setShowCurrencyModal(false);
+    }
+  }, [
+    currencyPrompt,
+    currencyRates,
+    pairing,
+    preference.currencyCode,
+    setPreferenceId,
+  ]);
 
   const formatDateTime = useCallback((iso?: string) => {
     if (!iso) return "Unknown";
@@ -1081,7 +1177,7 @@ const ProfileScreen: React.FC = () => {
           const MAX_LISTED = 8;
           const shown = result.skippedRowDetails.slice(0, MAX_LISTED);
           for (const detail of shown) {
-            message += `\n• ${detail.sheet} — ${detail.descriptor}: ${detail.reason}`;
+            message += `\n• ${detail.sheet} - ${detail.descriptor}: ${detail.reason}`;
           }
           const remaining = result.skippedRowDetails.length - shown.length;
           if (remaining > 0) {
@@ -2697,6 +2793,101 @@ const ProfileScreen: React.FC = () => {
                 Done
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Currency change: convert amounts or just relabel ── */}
+      <Modal
+        visible={!!currencyPrompt}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!currencyConverting) setCurrencyPrompt(null);
+        }}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              Change currency
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {pairing
+                ? `Switching to ${currencyPrompt?.toLabel} changes the currency symbol, but your amounts stay the same numbers. Your data is synced with a paired partner, so amounts can't be converted automatically - unpair first if you want to convert them.`
+                : currencyRatesLoading
+                  ? "Fetching today's exchange rate..."
+                  : `Convert your existing amounts from ${currencyPrompt?.fromLabel} to ${currencyPrompt?.toLabel} at the rate below, or just change the symbol and keep the same numbers?`}
+            </Text>
+
+            {!pairing && !currencyRatesLoading && currencyRates && currencyPrompt
+              ? (() => {
+                  const { fromLabel: from, toLabel: to } = currencyPrompt;
+                  const cross =
+                    (currencyRates.rates[to] ?? 1) /
+                    (currencyRates.rates[from] ?? 1);
+                  const r = cross >= 100 ? cross.toFixed(2) : cross.toFixed(4);
+                  const prefix =
+                    currencyRates.source === "live"
+                      ? "Today's rate"
+                      : currencyRates.source === "cache"
+                        ? `Rates from ${formatDateTime(currencyRates.fetchedAt)} (couldn't reach live rates)`
+                        : "Offline - using a built-in estimate";
+                  return (
+                    <Text style={[styles.dialogTip, { color: colors.text }]}>
+                      {`${prefix}: 1 ${from} = ${r} ${to}`}
+                    </Text>
+                  );
+                })()
+              : null}
+
+            <View style={styles.dialogActions}>
+              {!pairing && (
+                <TouchableOpacity
+                  style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                  disabled={
+                    currencyConverting || currencyRatesLoading || !currencyRates
+                  }
+                  onPress={handleCurrencyConvert}
+                >
+                  {currencyConverting || currencyRatesLoading ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text
+                      style={[styles.dialogBtnText, { color: colors.white }]}
+                    >
+                      Convert my amounts
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                disabled={currencyConverting}
+                onPress={() => {
+                  if (currencyPrompt) void applyCurrencyPreference(currencyPrompt.id);
+                }}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  {pairing ? "Change symbol only" : "Just change the symbol"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                disabled={currencyConverting}
+                onPress={() => setCurrencyPrompt(null)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.textDim }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

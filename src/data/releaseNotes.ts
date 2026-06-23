@@ -8,10 +8,12 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.7.4",
-    title: "Swedish Krona + Localized Milestones",
+    title: "Swedish Krona, Currency Conversion + Milestones",
     releasedAt: "2026-06-19",
     highlights: [
       "Added Swedish Krona (SEK) as a currency option in Profile. Amounts format the Swedish way - 1 234,56 kr - everywhere money is shown.",
+      "Changing your currency can now convert your existing amounts. When you switch to a currency that uses a different unit, BudgetArk asks whether to convert all your figures - debts, payments, budget, savings, net worth, and milestone targets - to the new currency, or simply change the symbol and keep the same numbers. Conversion uses today's live exchange rate, fetched when you switch and shown in the prompt before you confirm; if you're offline it falls back to the last rate it saw, then to a built-in estimate.",
+      "Converting amounts is only offered when your device isn't paired with a partner, since your data is shared - unpair first if you want to convert, then both phones can move to the new currency.",
       "Milestone targets now start in your own currency instead of US dollars. On a fresh plan, the starter emergency fund and the other dollar-based goals are converted to a sensible round figure in your currency (for example a Swedish user's keel fund starts near 12 700 kr rather than 1,200). Your existing targets are left exactly as you set them - only brand-new plans are localized.",
       "Ship's Log badge progress now shows amounts in your selected currency's symbol instead of always using a dollar sign.",
     ],

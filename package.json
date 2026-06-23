@@ -8,7 +8,10 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "screenshots:generate": "node scripts/generate-appstore-screenshots.mjs",
-    "update:message": "node scripts/eas-update-message.mjs"
+    "update:message": "node scripts/eas-update-message.mjs",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -44,8 +47,11 @@
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.10",
     "@types/uuid": "^10.0.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.9.3"
   },
   "optionalDependencies": {

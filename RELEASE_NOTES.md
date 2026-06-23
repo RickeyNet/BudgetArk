@@ -1,5 +1,31 @@
 # BudgetArk Release Notes
 
+## v1.7.4 - Swedish Krona, Currency Conversion + Milestones (2026-06-19)
+
+Pure JS - ships OTA against the existing native runtime (`runtimeVersion` unchanged).
+
+### Swedish Krona
+
+- **SEK currency option (`src/types/index.ts`).** Added `sek_se` (locale `sv-SE`, code `SEK`) to `CURRENCY_PREFERENCE_OPTIONS`. Everything downstream is data-driven off that array - the Profile picker, `Intl.NumberFormat` formatting (`1 234,56 kr`), storage, validation (`isCurrencyPreferenceId`), and import/export - so no other wiring was needed. A JSON backup carrying `currencyPreferenceId: "sek_se"` now restores instead of silently falling back to USD.
+
+### Currency conversion on switch
+
+- **Live exchange rates (`src/utils/exchangeRates.ts`, new).** `getCurrentRates` resolves rates through a best-available chain: live fetch (open.er-api.com, base USD, no API key, 8s `AbortController` timeout, validated so `result==="success"`, `USD===1`, and every supported code is positive/finite) -> encrypted cache (`@budgetark_fx_rates`, 12h TTL, reused without a network call) -> the built-in static table. Never throws. The request sends no user data; conversion math stays local.
+- **`convertAmount(value, from, to, rates?)` (`src/utils/currencyConversion.ts`).** Converts a real stored amount between currencies via USD (`value / rate[from] * rate[to]`), rounded to 2 dp. `rates` is units-per-USD and defaults to the static table; the convert flow passes a live snapshot. Same-code, zero, and non-finite inputs return the value unchanged so a migration can never produce `NaN`. The static `USD_EXCHANGE_RATES` table is now the offline fallback and the source for milestone-target seeding only.
+- **`convertAllStoredData(from, to, rates?)` (`src/utils/currencyMigration.ts`, new).** One-time walk that scales every monetary field with the supplied (live) rates and writes it back: debt `balance`/`originalBalance`/`minPayment`, payment `amount`/`appliedAmount`, budget-entry `amount`, category `monthlyLimit` (all months), savings-goal `targetAmount`/`currentAmount`, asset-account `balance`, net-worth snapshot `totalAssets`/`totalDebt`/`netWorth`, and milestone `targetAmount`. Bumps `updatedAt` where present so converted values win last-write-wins on any later sync. `Debt.rate`, dates, and ids are left alone.
+- **`savePayments` bulk writer (`src/storage/debtStorage.ts`).** Payments had no exported bulk save (only `recordPayment`/`deletePayment`). Added one that writes the full payments array including tombstones, so the migration can persist scaled amounts in a single write.
+- **Convert/relabel prompt (`src/screens/ProfileScreen.tsx`).** Picking a currency whose code differs from the current one opens a themed dialog that force-fetches today's rate and shows it (with freshness/source) *before* the user commits: *Convert my amounts* (runs the migration with that snapshot, then switches), *Just change the symbol* (relabel only - correct when the stored numbers are already in the target currency), or *Cancel*. Same-code picks (e.g. USD↔CAD, both `$`) skip the prompt. The Convert button is disabled until the rate resolves.
+- **Paired-device guard.** Currency is a per-device setting but financial data is shared via sync and carries no per-record currency tag, so converting on one device would push inflated values to a partner still on the old currency. While `pairing !== null` the Convert option is hidden (and no rate is fetched) and the dialog tells the user to unpair first; conversion is offered to solo devices only.
+- **Caveats.** Conversion uses live rates, but two FX sources won't match to the last decimal at the same instant, so a converted figure can differ from another converter by a fraction of a percent; a round trip (USD→SEK→USD) is not guaranteed bit-exact due to 2-dp rounding; offline switches fall back to cached/static rates (surfaced in the prompt); paired users must unpair to convert.
+
+### Localized milestone targets
+
+- **USD anchors converted on fresh seed (`src/types/index.ts`, `src/storage/debtMilestoneStorage.ts`).** The default milestone `targetAmount`s are now treated as canonical USD anchors. `createDefaultPlan` localizes each to the user's currency via `localizeUsdTarget` (convert + round to a tidy figure) when seeding a *new* plan - e.g. a Swedish user's keel emergency fund starts near 12 700 kr instead of 1 200. `normalizePlan` still preserves any stored target, so existing plans are untouched and USD users see no change (the conversion rounds back to the same value). The keel description dropped its hardcoded `$1,000` (the amount is shown by the target editor below it), which also fixes a pre-existing 1,000-vs-1,200 text mismatch.
+
+### Achievement progress formatting
+
+- **Currency-aware progress strings (`src/data/achievementDefs.ts`, `src/screens/AchievementsScreen.tsx`).** Replaced the hardcoded-`$` `formatCurrencyProgress` helper with an `isCurrency: true` flag on the ~7 monetary progress rings (Half Mast, Galley Stocked, Sextant Sharp, Treasure I/II/III, Galleon's Hold). The screen formats those values with the active currency via `useCurrency().formatCompactCurrency`, so badge progress reads in the user's symbol (`10 tn kr`) instead of always `$`.
+
 ## v1.7.3 - Import Fixes (2026-06-12)
 
 Pure JS - ships OTA against the existing native runtime.

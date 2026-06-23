@@ -266,6 +266,21 @@ const normalizePayment = (payment: Payment): Payment => {
   };
 };
 
+/**
+ * Bulk-writes the full payments array (including tombstones) to storage.
+ * Mirrors the raw write in `recordPayment`/`deletePayment` but without
+ * touching debts. Used by the currency-conversion migration, which loads
+ * every payment via `getPaymentsIncludingDeleted`, scales the amounts, and
+ * writes them back in one shot. Callers must pass the complete set (live +
+ * tombstoned) so this never silently drops records.
+ */
+export const savePayments = async (payments: Payment[]): Promise<void> => {
+  await EncryptedStorage.setItem(
+    STORAGE_KEYS.PAYMENTS,
+    JSON.stringify(payments)
+  );
+};
+
 export const getPayments = async (): Promise<Payment[]> => {
   const all = await getPaymentsIncludingDeleted();
   return filterLive(all);

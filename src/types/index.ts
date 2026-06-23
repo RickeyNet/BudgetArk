@@ -440,7 +440,7 @@ export interface DebtMilestonePlan {
  * currency via localizeUsdTarget() so a non-USD user starts with a
  * sensible local-currency target instead of a raw dollar figure. USD
  * users are unaffected (the conversion is a no-op rounded to the same
- * value). Descriptions stay currency-neutral — the concrete amount is
+ * value). Descriptions stay currency-neutral - the concrete amount is
  * shown by the target editor / progress bar in the user's currency.
  */
 export const DEFAULT_DEBT_MILESTONE_STEPS: readonly Omit<
