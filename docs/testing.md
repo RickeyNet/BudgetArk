@@ -37,6 +37,10 @@ Tests live next to the code under `src/utils/__tests__/`:
 | `currencyPreferences.test.ts` | `currencyPreferences.ts` | Currency-preference id validation + option lookup with default fallback (incl. prototype-key safety) |
 | `exchangeRates.test.ts` | `exchangeRates.ts` | Live FX rates: response validation (USD base, all codes positive), fresh-cache reuse, stale refresh + write-back, forceRefresh, offline fallback to cache then static table, corrupt/invalid-cache handling |
 | `achievements.test.ts` | `achievements.ts` | Achievement evaluator: unlock-once, revoke only revocable, first-run silent + persist gating, progress filtering, throwing check/progress swallowed |
+| `updateReleaseNotes.test.ts` | `updateReleaseNotes.ts` | OTA update info: version normalization, release-note lookup, inline-JSON-message parsing + override, current-version inference, default-message fallback |
+| `haptics.test.ts` | `haptics.ts` | Haptic wrapper: enabled-pref caching, in-memory override, disabled/error no-op, moment→expo-haptics mapping, native error swallowed |
+| `iosNativeShare.test.ts` | `iosNativeShare.ts` | Native share: unavailable error, file+options passthrough, iOS screen-guard suspend/restore (incl. on failure), Android skip path |
+| `uuid.test.ts` | `uuid.ts` | UUID generator delegates to `uuid.v4` (package is ESM-only, so mocked) |
 | `importData.test.ts` | `importData.ts` | JSON import: validation, merge vs replace, last-write-wins, stale-age, encrypted-payload gating |
 | `exportData.test.ts` | `exportData.ts` | JSON export payload shape + a real encrypt→decrypt round-trip back through the importer |
 | `spreadsheetImport.test.ts` | `spreadsheetImport.ts` | .xlsx/.csv import: amount/date parsing, row mapping, Total-row & artifact filtering, skipped-row reporting |
