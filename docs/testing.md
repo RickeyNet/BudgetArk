@@ -21,6 +21,7 @@ Tests live next to the code under `src/utils/__tests__/`:
 | --- | --- | --- |
 | `calculations.test.ts` | `calculations.ts` | Debt payoff timelines, total interest, investment growth, goal-date payments, currency formatting, multi-debt avalanche/snowball simulation |
 | `currencyConversion.test.ts` | `currencyConversion.ts` | USD conversion table, milestone target localization, "convert my amounts" math |
+| `currencyMigration.test.ts` | `currencyMigration.ts` | "Convert my amounts" migration: scales every stored money field across all collections, bumps `updatedAt`, counts converted records |
 | `netWorth.test.ts` | `netWorth.ts` | Net worth totals, reserve-category counting, linked-account double-count guard |
 | `recurrence.test.ts` | `recurrence.ts` | Recurring-entry cadence, occurrence counting, spreadsheet month projection |
 | `budgetBucketMath.test.ts` | `budgetBucketMath.ts` | 50/30/20 bucket totals, targets, variance, percentages |
