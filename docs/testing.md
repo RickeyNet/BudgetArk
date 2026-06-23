@@ -15,7 +15,8 @@ npm run test:coverage
 
 ## What's covered
 
-Tests live next to the code under `src/utils/__tests__/`:
+Tests live next to the code under `__tests__/` folders (`src/utils/`,
+`src/sync/`, `src/data/`):
 
 | Suite | Module under test | Feature it guards |
 | --- | --- | --- |
@@ -41,6 +42,8 @@ Tests live next to the code under `src/utils/__tests__/`:
 | `haptics.test.ts` | `haptics.ts` | Haptic wrapper: enabled-pref caching, in-memory override, disabled/error no-op, moment→expo-haptics mapping, native error swallowed |
 | `iosNativeShare.test.ts` | `iosNativeShare.ts` | Native share: unavailable error, file+options passthrough, iOS screen-guard suspend/restore (incl. on failure), Android skip path |
 | `uuid.test.ts` | `uuid.ts` | UUID generator delegates to `uuid.v4` (package is ESM-only, so mocked) |
+| `diffEngine.test.ts` | `sync/diffEngine.ts` | LAN-sync trust boundary: outgoing diff filtering/backlog, incoming validation gate (rejects bad records, no writes), last-write-wins merge, tombstone resurrection guard, per-category limit + snapshot + custom-category merges, milestone/strategy LWW |
+| `achievementDefs.test.ts` | `data/achievementDefs.ts` | Ship's Log badge rules: presence badges, debt-payoff ratios (mortgage excluded), savings/net-worth thresholds, milestone completion, savings streak, under-budget consecutive runs, chapter-completion against real lesson data |
 | `importData.test.ts` | `importData.ts` | JSON import: validation, merge vs replace, last-write-wins, stale-age, encrypted-payload gating |
 | `exportData.test.ts` | `exportData.ts` | JSON export payload shape + a real encrypt→decrypt round-trip back through the importer |
 | `spreadsheetImport.test.ts` | `spreadsheetImport.ts` | .xlsx/.csv import: amount/date parsing, row mapping, Total-row & artifact filtering, skipped-row reporting |
