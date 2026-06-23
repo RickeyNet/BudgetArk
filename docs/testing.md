@@ -28,6 +28,7 @@ Tests live next to the code under `src/utils/__tests__/`:
 | `recordValidators.test.ts` | `recordValidators.ts` | Import / LAN-sync trust-boundary validation of every record type |
 | `paymentUrl.test.ts` | `paymentUrl.ts` | Payment-URL normalization and scheme rejection (security) |
 | `sanitize.test.ts` | `sanitize.ts` | Control-character stripping on text input |
+| `debtDueCalendar.test.ts` | `debtDueCalendar.ts` | Debt reminders: due-day month clamping, payment-in-month detection, upcoming-due window + sorting, "due today needing a prompt" |
 | `importData.test.ts` | `importData.ts` | JSON import: validation, merge vs replace, last-write-wins, stale-age, encrypted-payload gating |
 | `exportData.test.ts` | `exportData.ts` | JSON export payload shape + a real encrypt→decrypt round-trip back through the importer |
 | `spreadsheetImport.test.ts` | `spreadsheetImport.ts` | .xlsx/.csv import: amount/date parsing, row mapping, Total-row & artifact filtering, skipped-row reporting |
