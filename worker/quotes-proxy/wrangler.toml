@@ -1,0 +1,23 @@
+# Cloudflare Worker config for the BudgetArk stock-quote proxy.
+#
+# Before first deploy you must:
+#   1. npx wrangler login
+#   2. npx wrangler kv namespace create QUOTES   -> paste the printed id below
+#   3. npx wrangler secret put TWELVE_DATA_API_KEY
+#
+# The API key is NEVER stored in this file or in the app bundle. It lives only
+# as an encrypted Cloudflare secret (step 3) and is read at runtime as
+# env.TWELVE_DATA_API_KEY.
+
+name = "quotes-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# KV namespace used for both the per-symbol price cache and the per-device
+# throttle. Create it with the command above, then replace REPLACE_WITH_KV_ID.
+[[kv_namespaces]]
+binding = "QUOTES"
+id = "REPLACE_WITH_KV_ID"
+
+[observability]
+enabled = true
