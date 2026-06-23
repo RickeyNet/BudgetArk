@@ -32,6 +32,9 @@ Tests live next to the code under `src/utils/__tests__/`:
 | `billCalendar.test.ts` | `billCalendar.ts` | Bill calendar: end-of-month day clamping, grouping by day, next-bill lookup, upcoming window + sorting, paid-vs-remaining split |
 | `budgetInsights.test.ts` | `budgetInsights.ts` | Monthly Review: month summaries, month-over-month category changes, 3-month comparisons, streaks (net/under-budget/spending trend) |
 | `linkedAccountRecurring.test.ts` | `linkedAccountRecurring.ts` | Linked-account catch-up: credits asset balances for missed recurring months, orphan-account skip, marker advancement, no input mutation |
+| `annualReport.test.ts` | `annualReport.ts` | Year-in-review aggregation: income/expense/net totals, reserve vs spending split, debt paid, net-worth baseline, months-under-budget, sparkline, recurring projection, PII-free share text |
+| `versionGuard.test.ts` | `versionGuard.ts` | OTA downgrade guard: semver compare (numeric, padded, non-numeric), fail-closed on missing incoming / fail-open on missing current |
+| `currencyPreferences.test.ts` | `currencyPreferences.ts` | Currency-preference id validation + option lookup with default fallback (incl. prototype-key safety) |
 | `importData.test.ts` | `importData.ts` | JSON import: validation, merge vs replace, last-write-wins, stale-age, encrypted-payload gating |
 | `exportData.test.ts` | `exportData.ts` | JSON export payload shape + a real encrypt→decrypt round-trip back through the importer |
 | `spreadsheetImport.test.ts` | `spreadsheetImport.ts` | .xlsx/.csv import: amount/date parsing, row mapping, Total-row & artifact filtering, skipped-row reporting |

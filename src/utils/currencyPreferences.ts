@@ -5,12 +5,14 @@ import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
 } from "../types";
 
+// Built on a prototype-less object so `value in OPTIONS_BY_ID` matches only
+// real preference ids - not inherited keys like "toString" or "constructor".
 const OPTIONS_BY_ID = CURRENCY_PREFERENCE_OPTIONS.reduce<
   Record<string, CurrencyPreferenceOption>
 >((acc, option) => {
   acc[option.id] = option;
   return acc;
-}, {});
+}, Object.create(null));
 
 export const isCurrencyPreferenceId = (
   value: unknown
