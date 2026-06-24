@@ -1,0 +1,38 @@
+name: Dependabot auto-merge
+
+# Auto-queues a squash-merge for low-risk Dependabot PRs (minor / patch / all
+# GitHub Actions updates) once required status checks pass. Major npm bumps are
+# left for manual review. `--auto` only queues the merge — branch protection
+# still holds it until the CI checks (Typecheck & Test) go green, so nothing
+# red ever merges.
+#
+# Prerequisites (one-time, GitHub UI — see repo setup notes):
+#   1. Settings → General → "Allow auto-merge" enabled.
+#   2. Branch protection on `master` requiring the CI status checks.
+
+on: pull_request
+
+# Only what's needed to enable auto-merge; nothing else can write.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    # Only act on Dependabot's own PRs.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+
+      # Enable auto-merge for everything except major npm bumps. The grouped
+      # minor/patch and GitHub Actions PRs report a non-major update-type;
+      # the `npm-major` group reports semver-major and is skipped.
+      - name: Enable auto-merge (non-major)
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
