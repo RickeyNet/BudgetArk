@@ -30,8 +30,14 @@ jobs:
       # Enable auto-merge for everything except major npm bumps. The grouped
       # minor/patch and GitHub Actions PRs report a non-major update-type;
       # the `npm-major` group reports semver-major and is skipped.
+      #
+      # Best-effort: `gh pr merge --auto` errors if "Allow auto-merge" isn't
+      # enabled in repo settings yet. continue-on-error keeps that from adding
+      # a red check while the one-time settings are still being configured —
+      # once enabled, it queues the merge; until then you just merge manually.
       - name: Enable auto-merge (non-major)
         if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        continue-on-error: true
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
