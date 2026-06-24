@@ -6,7 +6,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     # Expo/React Native pin many packages to exact versions and expect SDK
     # upgrades to move them together, so ignore major bumps of the native
     # stack here — those are handled deliberately via `expo install` / SDK
@@ -18,12 +18,20 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "react"
         update-types: ["version-update:semver-major"]
+    # Group everything into at most two PRs so a first run can't flood the repo:
+    # one low-risk PR (minor/patch, safe to merge in bulk) and one major-bump PR
+    # (review-and-merge deliberately). `patterns: ["*"]` makes each group catch
+    # all remaining dependencies.
     groups:
-      # Collapse low-risk updates into a single PR to cut review noise.
-      minor-and-patch:
+      npm-minor-patch:
+        patterns: ["*"]
         update-types:
           - minor
           - patch
+      npm-major:
+        patterns: ["*"]
+        update-types:
+          - major
 
   # ── GitHub Actions used by the workflows ──
   - package-ecosystem: github-actions
@@ -32,8 +40,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # Single grouped PR across all action updates (major included — actions
+    # majors are low-risk and few).
     groups:
       actions:
-        update-types:
-          - minor
-          - patch
+        patterns: ["*"]
