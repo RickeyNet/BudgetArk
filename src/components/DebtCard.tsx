@@ -30,6 +30,7 @@ import {
   calcMonthsToPayoff,
   calcMonthsUntilDate,
   calcPaymentForGoalDate,
+  parseGoalDateLocal,
 } from "../utils/calculations";
 import ProgressRing from "./ProgressRing";
 import { useTheme } from "../theme/ThemeProvider";
@@ -243,7 +244,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
           ) : (
             <>
               <Text style={[styles.goalText, { color: goalInfo.onTrack ? colors.success : colors.accent }]}>
-                Goal: {new Date(debt.goalDate!).toLocaleDateString()} ({goalInfo.monthsUntilGoal} mo left)
+                Goal: {parseGoalDateLocal(debt.goalDate!).toLocaleDateString()} ({goalInfo.monthsUntilGoal} mo left)
               </Text>
               {isFinite(goalInfo.requiredPayment) && (
                 <Text style={[styles.goalText, { color: goalInfo.onTrack ? colors.success : colors.accent }]}>

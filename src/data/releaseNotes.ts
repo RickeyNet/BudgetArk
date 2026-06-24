@@ -7,6 +7,16 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.7.5",
+    title: "Payoff Goal Date Fixes",
+    releasedAt: "2026-06-23",
+    highlights: [
+      "Fixed the payoff goal date on a debt showing a day early - setting a December goal could display as the 30th of November on the debt card. Goals now show on the exact month and day you picked, in your own timezone.",
+      "Reworked the goal-date month picker so it's clearer: tapping a month now highlights it and shows a 'Selected: Dec 2026' line, and nothing is saved until you tap Done - so an accidental tap or wrong year no longer changes your goal. Cancel backs out without touching it.",
+      "The year arrows in the picker are now clearly labeled as year controls (with a YEAR caption) and have bigger tap targets, so they're no longer mistaken for changing the day.",
+    ],
+  },
+  {
     version: "1.7.4",
     title: "Swedish Krona, Currency Conversion + Milestones",
     releasedAt: "2026-06-19",

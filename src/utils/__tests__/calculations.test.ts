@@ -6,6 +6,7 @@ import {
   calcInvestmentTimeline,
   calcPaymentForGoalDate,
   calcMonthsUntilDate,
+  parseGoalDateLocal,
   formatCurrency,
   generatePayoffSchedule,
   type PayoffDebtInput,
@@ -117,6 +118,21 @@ describe("calcMonthsUntilDate", () => {
       Date.UTC(now.getUTCFullYear() + 1, now.getUTCMonth(), 1)
     );
     expect(calcMonthsUntilDate(future.toISOString())).toBe(12);
+  });
+});
+
+describe("parseGoalDateLocal", () => {
+  it("keeps the goal on its intended calendar day (no UTC roll-back)", () => {
+    const d = parseGoalDateLocal("2026-12-01");
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(11); // December, not November
+    expect(d.getDate()).toBe(1); // the 1st, not the 30th of the prior month
+  });
+
+  it("ignores any time component on the stored value", () => {
+    const d = parseGoalDateLocal("2026-07-01T00:00:00.000Z");
+    expect(d.getMonth()).toBe(6); // July
+    expect(d.getDate()).toBe(1);
   });
 });
 

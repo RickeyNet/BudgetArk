@@ -118,6 +118,10 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const [paymentDueDay, setPaymentDueDay] = useState<number | null>(null);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+  // Month highlighted inside the picker before the user confirms with "Done".
+  // null = nothing chosen yet. Kept separate from goalMonth so cancelling
+  // leaves the saved goal untouched.
+  const [pickerMonth, setPickerMonth] = useState<number | null>(null);
 
   /** Pre-fill form when editing */
   React.useEffect(() => {
@@ -232,14 +236,25 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     editDebt,
   ]);
 
-  const selectGoalMonth = useCallback(
-    (monthIndex: number) => {
-      const month = String(monthIndex + 1).padStart(2, "0");
-      setGoalMonth(`${pickerYear}-${month}`);
-      setShowMonthPicker(false);
-    },
-    [pickerYear]
-  );
+  /** Open the picker, seeding year + highlighted month from any saved goal. */
+  const openMonthPicker = useCallback(() => {
+    const [yearStr, monthStr] = goalMonth.split("-");
+    const parsedYear = Number(yearStr);
+    if (!Number.isNaN(parsedYear)) {
+      setPickerYear(parsedYear);
+    }
+    const parsedMonth = Number(monthStr);
+    setPickerMonth(Number.isNaN(parsedMonth) ? null : parsedMonth - 1);
+    setShowMonthPicker(true);
+  }, [goalMonth]);
+
+  /** Commit the highlighted month/year to the saved goal and close. */
+  const confirmGoalMonth = useCallback(() => {
+    if (pickerMonth === null) return;
+    const month = String(pickerMonth + 1).padStart(2, "0");
+    setGoalMonth(`${pickerYear}-${month}`);
+    setShowMonthPicker(false);
+  }, [pickerMonth, pickerYear]);
 
   /** Check if form is valid (for button state) */
   const balanceParsed = parseFloat(balance);
@@ -470,13 +485,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 <Text style={styles.label}>PAYOFF GOAL DATE (OPTIONAL)</Text>
                 <TouchableOpacity
                   style={styles.input}
-                  onPress={() => {
-                    const parsedYear = Number(goalMonth.split("-")[0]);
-                    if (!Number.isNaN(parsedYear)) {
-                      setPickerYear(parsedYear);
-                    }
-                    setShowMonthPicker(true);
-                  }}
+                  onPress={openMonthPicker}
                 >
                   <Text style={{ color: goalMonth ? colors.text : colors.textMuted, fontSize: 15 }}>
                     {goalMonth ? formatYearMonthLabel(goalMonth) : "Select month"}
@@ -539,24 +548,38 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       >
         <View style={styles.pickerOverlay}>
           <View style={styles.pickerCard}>
+            <Text style={styles.pickerTitle}>Set payoff goal date</Text>
+
+            {/* Year stepper - arrows change the YEAR only */}
             <View style={styles.pickerHeader}>
-              <TouchableOpacity onPress={() => setPickerYear((y) => y - 1)}>
-                <Text style={styles.pickerArrow}>←</Text>
+              <TouchableOpacity
+                style={styles.pickerYearBtn}
+                onPress={() => setPickerYear((y) => y - 1)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.pickerArrow}>‹</Text>
               </TouchableOpacity>
-              <Text style={styles.pickerYear}>{pickerYear}</Text>
-              <TouchableOpacity onPress={() => setPickerYear((y) => y + 1)}>
-                <Text style={styles.pickerArrow}>→</Text>
+              <View style={styles.pickerYearCenter}>
+                <Text style={styles.pickerYearCaption}>YEAR</Text>
+                <Text style={styles.pickerYear}>{pickerYear}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.pickerYearBtn}
+                onPress={() => setPickerYear((y) => y + 1)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.pickerArrow}>›</Text>
               </TouchableOpacity>
             </View>
+
             <View style={styles.monthGrid}>
               {MONTH_LABELS.map((label, index) => {
-                const monthValue = String(index + 1).padStart(2, "0");
-                const isSelected = goalMonth === `${pickerYear}-${monthValue}`;
+                const isSelected = pickerMonth === index;
                 return (
                   <TouchableOpacity
                     key={label}
                     style={[styles.monthBtn, isSelected && styles.monthBtnActive]}
-                    onPress={() => selectGoalMonth(index)}
+                    onPress={() => setPickerMonth(index)}
                   >
                     <Text style={[styles.monthBtnText, isSelected && styles.monthBtnTextActive]}>
                       {label}
@@ -565,9 +588,28 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 );
               })}
             </View>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowMonthPicker(false)}>
-              <Text style={styles.cancelText}>Close</Text>
-            </TouchableOpacity>
+
+            <Text style={styles.pickerSelection}>
+              {pickerMonth !== null
+                ? `Selected: ${MONTH_LABELS[pickerMonth]} ${pickerYear}`
+                : "Tap a month to set your goal"}
+            </Text>
+
+            <View style={styles.pickerActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowMonthPicker(false)}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addButton, pickerMonth === null && styles.addButtonDisabled]}
+                onPress={confirmGoalMonth}
+                disabled={pickerMonth === null}
+              >
+                <Text style={styles.addButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -677,21 +719,53 @@ const makeStyles = (colors: ThemeColors) =>
       padding: 16,
       gap: 12,
     },
+    pickerTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.text,
+      textAlign: "center",
+    },
     pickerHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
     },
+    pickerYearBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+    },
+    pickerYearCenter: {
+      alignItems: "center",
+    },
+    pickerYearCaption: {
+      fontSize: 10,
+      fontWeight: "600",
+      letterSpacing: 1,
+      color: colors.textMuted,
+    },
     pickerArrow: {
-      fontSize: 20,
+      fontSize: 22,
       color: colors.text,
       fontWeight: "700",
-      paddingHorizontal: 8,
     },
     pickerYear: {
       color: colors.text,
       fontSize: 18,
       fontWeight: "700",
+    },
+    pickerSelection: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textDim,
+      textAlign: "center",
+    },
+    pickerActions: {
+      flexDirection: "row",
+      gap: 12,
     },
     monthGrid: {
       flexDirection: "row",

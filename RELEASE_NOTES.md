@@ -1,5 +1,19 @@
 # BudgetArk Release Notes
 
+## v1.7.5 - Payoff Goal Date Fixes (2026-06-23)
+
+Pure JS - ships OTA against the existing native runtime (`runtimeVersion` unchanged).
+
+### Goal date shown a day early
+
+- **Timezone-safe goal-date display (`src/utils/calculations.ts`, `src/components/DebtCard.tsx`).** A goal of December showed as `11/30` on the debt card. Goal dates are stored as `YYYY-MM-01`, and `new Date("2026-12-01")` parses as UTC midnight, which `toLocaleDateString()` then rendered as the *previous* calendar day for any user west of UTC (Dec 1 -> "11/30"). New `parseGoalDateLocal` helper builds the Date from its parts so it stays pinned to the intended day in the user's own timezone; the card now reads `12/1/2026`. Display only - the month math (`calcMonthsUntilDate`, already UTC-consistent since v1.7.x) is unchanged. Covered by a regression test in `src/utils/__tests__/calculations.test.ts`.
+- **Context: the matching "Goal date has passed" / "too soon - not achievable" mislabels** came from the older `calcMonthsUntilDate` that compared a UTC-parsed date with local `getMonth()`, flipping the month back one for western timezones (count to 0/negative -> "passed", required payment -> `Infinity` -> "not achievable"). That was already corrected to UTC-on-both-sides; this release removes the last remaining display-side instance of the same root cause.
+
+### Clearer month picker
+
+- **Confirm-before-apply flow (`src/components/AddDebtModal.tsx`).** Tapping a month used to commit and close the picker instantly with no confirmation - easy to set the wrong month or year by accident, and the only button was a vague "Close". The picker now highlights the tapped month without saving (new `pickerMonth` state, kept separate from `goalMonth` so Cancel is non-destructive), shows a live **"Selected: Dec 2026"** confirmation line, and commits only on an explicit **Done** button (disabled until a month is chosen). **Cancel** dismisses without touching the saved goal.
+- **Unambiguous year controls.** The bare `←`/`→` arrows (mistaken for day/date steppers) are now `‹`/`›` buttons with visible chrome and larger tap targets, flanking a stacked **"YEAR / 2026"** label, so it's clear they step the year. A "Set payoff goal date" title was added to the picker.
+
 ## v1.7.4 - Swedish Krona, Currency Conversion + Milestones (2026-06-19)
 
 Pure JS - ships OTA against the existing native runtime (`runtimeVersion` unchanged).

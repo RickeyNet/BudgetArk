@@ -483,6 +483,23 @@ export const calcMonthsUntilDate = (goalDateISO: string): number => {
 };
 
 /**
+ * Parses a stored goal date (`"YYYY-MM-DD"`) into a LOCAL-time Date.
+ *
+ * `new Date("2026-12-01")` parses as UTC midnight, which `toLocaleDateString`
+ * then renders as the *previous* calendar day for users west of UTC
+ * (Dec 1 → "11/30"). Building the Date from its parts pins it to the intended
+ * day in the user's own timezone, so the displayed date matches what they
+ * picked. Use this for DISPLAY; use `calcMonthsUntilDate` for month math.
+ *
+ * @param goalDateISO - ISO date string for the goal date
+ * @returns a Date anchored to local midnight on the intended day
+ */
+export const parseGoalDateLocal = (goalDateISO: string): Date => {
+  const [year, month, day] = goalDateISO.slice(0, 10).split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
+
+/**
  * Formats a number as a localized currency string.
  *
  * @param amount - number to format
