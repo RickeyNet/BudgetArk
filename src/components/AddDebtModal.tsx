@@ -240,11 +240,21 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const openMonthPicker = useCallback(() => {
     const [yearStr, monthStr] = goalMonth.split("-");
     const parsedYear = Number(yearStr);
-    if (!Number.isNaN(parsedYear)) {
-      setPickerYear(parsedYear);
-    }
+    // Number("") === 0 (not NaN), so a debt with no goal yet would otherwise
+    // seed the picker at year 0 — making the ‹ › steppers look like a
+    // day-of-month counter. Fall back to the current year unless we have a
+    // real four-digit year already stored.
+    setPickerYear(
+      yearStr && Number.isInteger(parsedYear) && parsedYear >= 1900
+        ? parsedYear
+        : new Date().getFullYear()
+    );
     const parsedMonth = Number(monthStr);
-    setPickerMonth(Number.isNaN(parsedMonth) ? null : parsedMonth - 1);
+    setPickerMonth(
+      Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12
+        ? parsedMonth - 1
+        : null
+    );
     setShowMonthPicker(true);
   }, [goalMonth]);
 
@@ -554,7 +564,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
             <View style={styles.pickerHeader}>
               <TouchableOpacity
                 style={styles.pickerYearBtn}
-                onPress={() => setPickerYear((y) => y - 1)}
+                onPress={() =>
+                  setPickerYear((y) => Math.max(new Date().getFullYear(), y - 1))
+                }
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.pickerArrow}>‹</Text>
