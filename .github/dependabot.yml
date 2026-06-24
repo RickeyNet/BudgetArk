@@ -7,17 +7,25 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
-    # Expo/React Native pin many packages to exact versions and expect SDK
-    # upgrades to move them together, so ignore major bumps of the native
-    # stack here — those are handled deliberately via `expo install` / SDK
-    # upgrades, not piecemeal Dependabot PRs.
+    # The Expo SDK manages versions for `expo`, every `expo-*` module, React
+    # Native, and the SDK-aligned native libraries as a coordinated set — their
+    # versions must move together via `npx expo install` / `expo install --fix`
+    # during a deliberate SDK upgrade. A piecemeal Dependabot bump (e.g. an
+    # SDK-56 module against an SDK-55 core) produces an unsupported combination
+    # that breaks the native build, and CI's pure-JS tests won't catch it. So
+    # ignore this whole stack entirely; everything else stays managed.
+    # (Security advisories still surface via Dependabot security alerts.)
     ignore:
       - dependency-name: "expo"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react-native"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "babel-preset-expo"
       - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@react-native-async-storage/*"
+      - dependency-name: "@react-native-community/*"
     # Group everything into at most two PRs so a first run can't flood the repo:
     # one low-risk PR (minor/patch, safe to merge in bulk) and one major-bump PR
     # (review-and-merge deliberately). `patterns: ["*"]` makes each group catch

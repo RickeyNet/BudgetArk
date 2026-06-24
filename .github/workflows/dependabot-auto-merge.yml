@@ -2,11 +2,11 @@ name: Dependabot auto-merge
 
 # Auto-queues a squash-merge for low-risk Dependabot PRs (minor / patch / all
 # GitHub Actions updates) once required status checks pass. Major npm bumps are
-# left for manual review. `--auto` only queues the merge — branch protection
+# left for manual review. `--auto` only queues the merge - branch protection
 # still holds it until the CI checks (Typecheck & Test) go green, so nothing
 # red ever merges.
 #
-# Prerequisites (one-time, GitHub UI — see repo setup notes):
+# Prerequisites (one-time, GitHub UI - see repo setup notes):
 #   1. Settings → General → "Allow auto-merge" enabled.
 #   2. Branch protection on `master` requiring the CI status checks.
 
