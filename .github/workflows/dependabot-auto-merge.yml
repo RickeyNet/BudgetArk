@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
 
       # Enable auto-merge for everything except major npm bumps. The grouped
       # minor/patch and GitHub Actions PRs report a non-major update-type;
