@@ -20,8 +20,8 @@ jest.mock("../../data/achievementDefs", () => ({
 
 // Controllable persisted state.
 let mockState: any = { unlocked: {}, firstEvaluatedAt: 1, version: 1 };
-const mockSave = jest.fn(async () => {});
-const mockRecordStreak = jest.fn(async () => {});
+const mockSave = jest.fn(async (..._args: any[]) => {});
+const mockRecordStreak = jest.fn(async (..._args: any[]) => {});
 
 jest.mock("../../storage/achievementsStorage", () => ({
   getUnlockedAchievements: jest.fn(async () => mockState),

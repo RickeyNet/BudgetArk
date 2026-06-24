@@ -200,7 +200,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 24,
     },
     confettiLayer: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       overflow: "hidden",
     },
     confettiPiece: {

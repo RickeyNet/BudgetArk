@@ -193,7 +193,7 @@ const Spotlight: React.FC<SpotlightProps> = ({
             />
           </>
         ) : (
-          <View style={[styles.dim, StyleSheet.absoluteFillObject]} />
+          <View style={[styles.dim, StyleSheet.absoluteFill]} />
         )}
 
         {/* Tooltip card */}

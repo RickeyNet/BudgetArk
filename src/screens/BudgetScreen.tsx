@@ -2532,7 +2532,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       justifyContent: "center",
     },
     donutCenter: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: "center",
       justifyContent: "center",
     },

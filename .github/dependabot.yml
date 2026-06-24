@@ -1,0 +1,39 @@
+version: 2
+updates:
+  # ── npm dependencies ──
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    # Expo/React Native pin many packages to exact versions and expect SDK
+    # upgrades to move them together, so ignore major bumps of the native
+    # stack here — those are handled deliberately via `expo install` / SDK
+    # upgrades, not piecemeal Dependabot PRs.
+    ignore:
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Collapse low-risk updates into a single PR to cut review noise.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── GitHub Actions used by the workflows ──
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        update-types:
+          - minor
+          - patch

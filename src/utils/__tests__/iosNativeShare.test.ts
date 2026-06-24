@@ -19,7 +19,7 @@ jest.mock("react-native", () => ({
 }));
 
 const mockIsAvailable = jest.fn(async () => true);
-const mockShareAsync = jest.fn(async () => {});
+const mockShareAsync = jest.fn(async (..._a: any[]) => {});
 jest.mock("expo-sharing", () => ({
   isAvailableAsync: () => mockIsAvailable(),
   shareAsync: (...a: any[]) => mockShareAsync(...a),
