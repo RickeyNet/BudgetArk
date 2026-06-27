@@ -72,6 +72,11 @@ import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
 import { isEntryActiveInMonth } from "../utils/recurrence";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
+import {
+  HOLDINGS_DISCLOSURE_TITLE,
+  HOLDINGS_DISCLOSURE_INTRO,
+  HOLDINGS_DISCLOSURE_POINTS,
+} from "../data/holdingsDisclosure";
 
 /** Emoji glyph per asset category for the account-row icon chip. */
 const ACCOUNT_ICONS: Record<AssetAccountCategory, string> = {
@@ -838,7 +843,7 @@ const BridgeScreen: React.FC = () => {
                         },
                       ]}
                     >
-                      {priced ? formatCurrency(value) : "—"}
+                      {priced ? formatCurrency(value) : "--"}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -1113,24 +1118,14 @@ const BridgeScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Before you turn this on</Text>
-            <Text style={styles.modalSub}>
-              Live Holdings sends a little data off your device. Here's exactly
-              what:
-            </Text>
+            <Text style={styles.modalTitle}>{HOLDINGS_DISCLOSURE_TITLE}</Text>
+            <Text style={styles.modalSub}>{HOLDINGS_DISCLOSURE_INTRO}</Text>
 
-            <Text style={styles.disclosureItem}>
-              • Your tickers and share counts are stored on this device and sync
-              to your paired partner, just like your accounts.
-            </Text>
-            <Text style={styles.disclosureItem}>
-              • To show prices, only your ticker symbols are sent to BudgetArk's
-              quote service about once a week. Your share counts, balances, and
-              identity are never sent.
-            </Text>
-            <Text style={styles.disclosureItem}>
-              • Prices come from a third-party market data provider.
-            </Text>
+            {HOLDINGS_DISCLOSURE_POINTS.map((point) => (
+              <Text key={point} style={styles.disclosureItem}>
+                • {point}
+              </Text>
+            ))}
 
             <View style={styles.modalActions}>
               <TouchableOpacity

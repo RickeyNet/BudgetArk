@@ -130,6 +130,16 @@ import {
   getHapticsEnabled,
   setHapticsEnabled,
 } from "../storage/hapticsStorage";
+import {
+  getHoldingsSettings,
+  setHoldingsEnabled,
+} from "../storage/holdingsSettingsStorage";
+import type { HoldingsSettings } from "../types";
+import {
+  HOLDINGS_DISCLOSURE_TITLE,
+  HOLDINGS_DISCLOSURE_INTRO,
+  HOLDINGS_DISCLOSURE_POINTS,
+} from "../data/holdingsDisclosure";
 
 type UpdateMetadata = {
   id: string;
@@ -327,6 +337,13 @@ const ProfileScreen: React.FC = () => {
   /** Haptic feedback toggle */
   const [hapticsEnabled, setHapticsState] = useState(true);
 
+  /** Live Holdings opt-in (off by default) + its first-enable disclosure. */
+  const [holdingsSettings, setHoldingsSettings] = useState<HoldingsSettings>({
+    enabled: false,
+    disclosureAcknowledged: false,
+  });
+  const [showHoldingsDisclosure, setShowHoldingsDisclosure] = useState(false);
+
   /** Partner sync state */
   const [pairing, setPairing] = useState<PairingState | null>(null);
   const [showPairingModal, setShowPairingModal] = useState(false);
@@ -357,12 +374,13 @@ const ProfileScreen: React.FC = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [u, prefs, privacy, haptics, pairState, syncMeta, backup] =
+        const [u, prefs, privacy, haptics, holdingsSet, pairState, syncMeta, backup] =
           await Promise.all([
             getOrCreateUser(),
             getUpdatePreferences(),
             getPrivacyMode(),
             getHapticsEnabled(),
+            getHoldingsSettings(),
             getPairingState(),
             getSyncMetadata(),
             getBackupReminderState(),
@@ -374,6 +392,7 @@ const ProfileScreen: React.FC = () => {
         setPrivacyModeState(privacy);
         setHapticsState(haptics);
         setHapticsCache(haptics);
+        setHoldingsSettings(holdingsSet);
         setPairing(pairState);
         setLastSyncTime(syncMeta.lastSyncTimestamp);
         setBackupState(backup);
@@ -674,6 +693,39 @@ const ProfileScreen: React.FC = () => {
       triggerHaptic("selection");
     }
   }, [hapticsEnabled]);
+
+  /**
+   * Toggle the Live Holdings feature. Turning it off is immediate. Turning it
+   * on for the first time routes through the off-device disclosure; once that
+   * has been acknowledged a later re-enable flips straight back on.
+   */
+  const toggleHoldings = useCallback(async () => {
+    if (holdingsSettings.enabled) {
+      const next = await setHoldingsEnabled(false);
+      setHoldingsSettings(next);
+      triggerHaptic("selection");
+      return;
+    }
+    if (holdingsSettings.disclosureAcknowledged) {
+      const next = await setHoldingsEnabled(true);
+      setHoldingsSettings(next);
+      triggerHaptic("selection");
+    } else {
+      setShowHoldingsDisclosure(true);
+    }
+  }, [holdingsSettings.disclosureAcknowledged, holdingsSettings.enabled]);
+
+  const confirmEnableHoldings = useCallback(async () => {
+    const next = await setHoldingsEnabled(true);
+    setHoldingsSettings(next);
+    setShowHoldingsDisclosure(false);
+    triggerHaptic("success");
+    setInfoModal({
+      title: "Live Holdings On",
+      message:
+        "Add stocks and ETFs from the Bridge tab. Prices refresh about once a week.",
+    });
+  }, []);
 
   const togglePrivacyMode = useCallback(async () => {
     const next = !privacyMode;
@@ -2081,6 +2133,33 @@ const ProfileScreen: React.FC = () => {
                 style={[styles.settingsRowArrow, { color: colors.textDim }]}
               >
                 {privacyMode ? "On" : "Off"}
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
+
+            <TouchableOpacity style={styles.groupedRow} onPress={toggleHoldings}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Live Holdings
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  {holdingsSettings.enabled
+                    ? "Tracking stocks & ETFs in your net worth"
+                    : "Track stocks & ETFs in your net worth"}
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                {holdingsSettings.enabled ? "On" : "Off"}
               </Text>
             </TouchableOpacity>
 
@@ -3951,6 +4030,59 @@ const ProfileScreen: React.FC = () => {
               >
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>
                   Unpair
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Live Holdings off-device disclosure ── */}
+      <Modal
+        visible={showHoldingsDisclosure}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowHoldingsDisclosure(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              {HOLDINGS_DISCLOSURE_TITLE}
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {HOLDINGS_DISCLOSURE_INTRO}
+            </Text>
+            {HOLDINGS_DISCLOSURE_POINTS.map((point) => (
+              <Text
+                key={point}
+                style={[
+                  styles.dialogMessage,
+                  { color: colors.textDim, textAlign: "left", marginBottom: 10 },
+                ]}
+              >
+                • {point}
+              </Text>
+            ))}
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowHoldingsDisclosure(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Not now
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmEnableHoldings}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Enable
                 </Text>
               </TouchableOpacity>
             </View>
