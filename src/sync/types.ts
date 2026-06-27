@@ -16,6 +16,7 @@ import type {
   CustomCategory,
   BudgetBucket,
   NetWorthSnapshot,
+  Holding,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -98,6 +99,13 @@ export interface SyncDiff {
   budgetLimits: BudgetLimitDiff[];
   savingsGoals: DiffEntry<SavingsGoal>[];
   assetAccounts: DiffEntry<AssetAccount>[];
+  /**
+   * Stock/ETF positions (tombstone-aware, same LWW merge as the other
+   * collections). Prices are NOT synced - they live in a per-device quote
+   * cache, so a paired device re-fetches its own quotes. Optional so a diff
+   * from an older peer that predates the holdings feature still applies.
+   */
+  holdings?: DiffEntry<Holding>[];
   /**
    * Custom category definitions. Budget entries reference these by NAME, so
    * without syncing the definitions a partner renders synced entries with

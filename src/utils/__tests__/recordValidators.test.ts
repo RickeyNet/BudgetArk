@@ -10,6 +10,7 @@ import {
   isBudgetEntryItem,
   isSavingsGoalItem,
   isAssetAccountItem,
+  isHoldingItem,
   isNetWorthSnapshotItem,
   sanitizePayoffStrategy,
   explainBudgetEntryProblem,
@@ -227,6 +228,54 @@ describe("isAssetAccountItem", () => {
         createdAt: "2026-06-01",
       })
     ).toBe(false);
+  });
+});
+
+describe("isHoldingItem", () => {
+  const valid = {
+    id: "h1",
+    symbol: "AAPL",
+    shares: 10,
+    costBasis: 1500,
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed holding", () => {
+    expect(isHoldingItem(valid)).toBe(true);
+  });
+
+  it("accepts a holding without optional costBasis/accountId", () => {
+    expect(
+      isHoldingItem({ id: "h2", symbol: "VTI", shares: 1.5, createdAt: "2026-06-01" })
+    ).toBe(true);
+  });
+
+  it("accepts fractional shares and dotted tickers", () => {
+    expect(isHoldingItem({ ...valid, symbol: "BRK.B", shares: 0.25 })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isHoldingItem(null)).toBe(false);
+  });
+
+  it("rejects zero or negative shares", () => {
+    expect(isHoldingItem({ ...valid, shares: 0 })).toBe(false);
+    expect(isHoldingItem({ ...valid, shares: -5 })).toBe(false);
+  });
+
+  it("rejects a malformed symbol", () => {
+    expect(isHoldingItem({ ...valid, symbol: "bad symbol" })).toBe(false);
+    expect(isHoldingItem({ ...valid, symbol: "" })).toBe(false);
+    expect(isHoldingItem({ ...valid, symbol: "TOOLONGTICKER1" })).toBe(false);
+  });
+
+  it("rejects a non-ISO deletedAt (would break tombstone GC)", () => {
+    expect(isHoldingItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+
+  it("rejects a negative costBasis", () => {
+    expect(isHoldingItem({ ...valid, costBasis: -1 })).toBe(false);
   });
 });
 

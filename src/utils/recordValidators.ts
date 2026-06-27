@@ -324,6 +324,34 @@ export const isAssetAccountItem = (
   );
 };
 
+/**
+ * A holding (stock/ETF position) record. `symbol` is a short ticker
+ * (alnum plus `.`/`-` for class shares / indices), validated case-insensitively
+ * since storage may not have normalized it. `shares` must be a positive number
+ * (fractional allowed). `costBasis` (TOTAL dollars invested) and `accountId`
+ * (link to an AssetAccount) are optional. Same trust boundary as the other
+ * collections: a semi-trusted peer could send arbitrary records.
+ */
+const HOLDING_SYMBOL_PATTERN = /^[a-zA-Z0-9.-]{1,12}$/;
+
+export const isHoldingItem = (
+  item: unknown
+): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    typeof item.symbol === "string" &&
+    HOLDING_SYMBOL_PATTERN.test(item.symbol) &&
+    isSafeNumber(item.shares, { min: 0 }) &&
+    (item.shares as number) > 0 &&
+    (item.costBasis === undefined || isSafeNumber(item.costBasis, { min: 0 })) &&
+    (item.accountId === undefined || isSafeText(item.accountId)) &&
+    isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.updatedAt) &&
+    isOptionalIso(item.deletedAt)
+  );
+};
+
 export const isNetWorthSnapshotItem = (
   item: unknown
 ): item is Record<string, unknown> => {

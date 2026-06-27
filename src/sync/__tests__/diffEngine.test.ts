@@ -44,6 +44,12 @@ jest.mock("../../storage/assetAccountStorage", () => ({
     mockState.assetAccounts = v;
   }),
 }));
+jest.mock("../../storage/holdingsStorage", () => ({
+  getHoldingsIncludingDeleted: jest.fn(async () => mockState.holdings),
+  saveHoldings: jest.fn(async (v: any) => {
+    mockState.holdings = v;
+  }),
+}));
 jest.mock("../../storage/debtMilestoneStorage", () => ({
   getDebtMilestonePlan: jest.fn(async () => mockState.milestonePlan),
   saveDebtMilestonePlanFromSync: jest.fn(async (v: any) => {
@@ -122,6 +128,15 @@ const customCat = (over: Record<string, unknown> = {}): any => ({
   updatedAt: NEW,
   ...over,
 });
+const holding = (over: Record<string, unknown> = {}): any => ({
+  id: "h1",
+  symbol: "AAPL",
+  shares: 10,
+  costBasis: 1500,
+  createdAt: OLD,
+  updatedAt: NEW,
+  ...over,
+});
 
 const emptyDiff = (over: Partial<SyncDiff> = {}): SyncDiff =>
   ({
@@ -131,6 +146,7 @@ const emptyDiff = (over: Partial<SyncDiff> = {}): SyncDiff =>
     budgetLimits: [],
     savingsGoals: [],
     assetAccounts: [],
+    holdings: [],
     syncTimestamp: NEW,
     ...over,
   }) as SyncDiff;
@@ -141,6 +157,7 @@ const freshState = () => ({
   budgetEntries: [],
   savingsGoals: [],
   assetAccounts: [],
+  holdings: [],
   milestonePlan: { steps: [], updatedAt: OLD },
   strategyEnvelope: null,
   customCategories: [],
@@ -236,6 +253,20 @@ describe("applyIncomingDiff – validation gate", () => {
     const bad = emptyDiff({ payoffStrategy: "yolo" as any });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/payoff strategy/);
   });
+
+  it("rejects an invalid holding (zero shares)", async () => {
+    const bad = emptyDiff({
+      holdings: [{ action: "upsert", record: holding({ shares: 0 }) }],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/holding/);
+  });
+
+  it("rejects a holding with a malformed symbol", async () => {
+    const bad = emptyDiff({
+      holdings: [{ action: "upsert", record: holding({ symbol: "bad symbol!" }) }],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/holding/);
+  });
 });
 
 describe("applyIncomingDiff – last-write-wins merge", () => {
@@ -288,6 +319,41 @@ describe("applyIncomingDiff – last-write-wins merge", () => {
     );
     const saved = JSON.parse(mockState.encStore.get("@budgetark_payments"));
     expect(saved.find((p: any) => p.id === "p1").amount).toBe(75);
+  });
+});
+
+describe("holdings sync", () => {
+  it("includes changed holdings in the outgoing diff (upsert + delete)", async () => {
+    mockState.holdings = [
+      holding({ id: "live", updatedAt: NEW }),
+      holding({ id: "gone", deletedAt: NEW, updatedAt: NEW }),
+      holding({ id: "stale", updatedAt: OLD }),
+    ];
+    const diff = await computeOutgoingDiff(MID);
+    const byId = Object.fromEntries(
+      (diff.holdings ?? []).map((e) => [e.record.id, e.action])
+    );
+    expect(byId).toEqual({ live: "upsert", gone: "delete" });
+  });
+
+  it("merges an incoming holding with last-write-wins", async () => {
+    mockState.holdings = [holding({ id: "h1", shares: 5, updatedAt: OLD })];
+    await applyIncomingDiff(
+      emptyDiff({
+        holdings: [{ action: "upsert", record: holding({ id: "h1", shares: 20, updatedAt: NEW }) }],
+      })
+    );
+    expect(mockState.holdings.find((h: any) => h.id === "h1").shares).toBe(20);
+  });
+
+  it("does not resurrect a holding deleted locally with a newer tombstone", async () => {
+    mockState.holdings = [holding({ id: "h1", deletedAt: NEW, updatedAt: NEW })];
+    await applyIncomingDiff(
+      emptyDiff({
+        holdings: [{ action: "upsert", record: holding({ id: "h1", updatedAt: OLD }) }],
+      })
+    );
+    expect(mockState.holdings.find((h: any) => h.id === "h1").deletedAt).toBe(NEW);
   });
 });
 
