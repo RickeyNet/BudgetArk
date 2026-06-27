@@ -322,6 +322,42 @@ export interface NetWorthSnapshot {
   netWorth: number;
 }
 
+/* ─── Stock Holdings Types ─── */
+
+/**
+ * A stock/ETF position the user owns. Synced like the other collections
+ * (tombstone pattern - see `Debt.deletedAt`). Prices are NOT stored here;
+ * they live in the per-device quote cache (`quoteCacheStorage`) so quotes
+ * never sync between paired devices.
+ */
+export interface Holding {
+  id: string;
+  /** Uppercase ticker, e.g. "AAPL", "VTI". Validated before use. */
+  symbol: string;
+  shares: number;
+  /**
+   * TOTAL dollars invested across all shares (not per-share). Optional -
+   * only used to show gain/loss; market value comes from `shares × price`.
+   */
+  costBasis?: number;
+  /** Optional link to an AssetAccount this position is held within. */
+  accountId?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Tombstone marker - see Debt.deletedAt. */
+  deletedAt?: string;
+}
+
+/**
+ * A cached price for one symbol. Mirrors the quote-proxy Worker's response
+ * (`{ price, asOf }`). Stored per-device only; never synced.
+ */
+export interface CachedQuote {
+  price: number;
+  /** ISO timestamp the price was fetched (from the Worker). */
+  asOf: string;
+}
+
 /* ─── Currency + Localization Types ─── */
 
 export interface CurrencyPreferenceOption {
