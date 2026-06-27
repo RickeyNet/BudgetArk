@@ -4,6 +4,8 @@ import { getAssetAccounts } from "./assetAccountStorage";
 import { getBudgetEntries } from "./budgetStorage";
 import { getDebts } from "./debtStorage";
 import { getSavingsGoals } from "./savingsGoalStorage";
+import { getHoldings } from "./holdingsStorage";
+import { getCachedQuotes } from "./quoteCacheStorage";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 
 const STORAGE_KEY = "@budgetark_net_worth_snapshots";
@@ -79,18 +81,23 @@ export const upsertNetWorthSnapshot = async (
 export const syncNetWorthSnapshot = async (
   capturedAt: string = new Date().toISOString()
 ): Promise<NetWorthSnapshot[]> => {
-  const [entries, debts, savingsGoals, assetAccounts] = await Promise.all([
-    getBudgetEntries(),
-    getDebts(),
-    getSavingsGoals(),
-    getAssetAccounts(),
-  ]);
+  const [entries, debts, savingsGoals, assetAccounts, holdings, quotes] =
+    await Promise.all([
+      getBudgetEntries(),
+      getDebts(),
+      getSavingsGoals(),
+      getAssetAccounts(),
+      getHoldings(),
+      getCachedQuotes(),
+    ]);
 
   const totals = calculateNetWorthTotals({
     entries,
     debts,
     savingsGoals,
     assetAccounts,
+    holdings,
+    quotes,
   });
 
   return upsertNetWorthSnapshot({
