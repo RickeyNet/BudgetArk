@@ -25,7 +25,10 @@ import {
   AssetAccountCategory,
   ASSET_ACCOUNT_CATEGORIES,
   ASSET_ACCOUNT_CATEGORY_LABELS,
+  CachedQuote,
   Debt,
+  Holding,
+  HoldingsSettings,
   NetWorthSnapshot,
   SavingsGoal,
   BudgetEntry,
@@ -39,6 +42,24 @@ import {
   saveAssetAccounts,
   deleteAssetAccount,
 } from "../storage/assetAccountStorage";
+import {
+  getHoldings,
+  saveHoldings,
+  deleteHolding as deleteHoldingRecord,
+} from "../storage/holdingsStorage";
+import { getCachedQuotes } from "../storage/quoteCacheStorage";
+import {
+  getHoldingsSettings,
+  setHoldingsEnabled,
+} from "../storage/holdingsSettingsStorage";
+import { refreshQuotes } from "../services/quotesService";
+import {
+  holdingMarketValue,
+  holdingsTotalValue,
+  holdingGainLoss,
+  isValidSymbol,
+  normalizeSymbol,
+} from "../utils/holdingsMath";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -79,9 +100,22 @@ const BridgeScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [quotes, setQuotes] = useState<Record<string, CachedQuote>>({});
+  const [holdingsSettings, setHoldingsSettings] = useState<HoldingsSettings>({
+    enabled: false,
+    disclosureAcknowledged: false,
+  });
   const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
   const [keelTarget, setKeelTarget] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  const [showHoldingModal, setShowHoldingModal] = useState(false);
+  const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
+  const [holdingSymbol, setHoldingSymbol] = useState("");
+  const [holdingShares, setHoldingShares] = useState("");
+  const [holdingCostBasis, setHoldingCostBasis] = useState("");
+  const [showHoldingsDisclosure, setShowHoldingsDisclosure] = useState(false);
 
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
@@ -106,6 +140,36 @@ const BridgeScreen: React.FC = () => {
     setNetWorthSnapshots(nextSnapshots);
     return nextSnapshots;
   }, []);
+
+  /**
+   * Load holdings + cached prices into screen state. Reads the opt-in flag
+   * first: when the feature is off, holdings/quotes stay empty so they
+   * contribute nothing to net worth and the UI shows the teaser instead.
+   *
+   * `fetch` triggers a (weekly-gated, never-throwing) network refresh - used on
+   * tab focus and right after enabling. Plain reloads after add/edit/delete
+   * skip the network and just re-read the cache.
+   */
+  const loadHoldingsState = useCallback(
+    async (opts: { fetch?: boolean } = {}): Promise<HoldingsSettings> => {
+      const settings = await getHoldingsSettings();
+      setHoldingsSettings(settings);
+      if (!settings.enabled) {
+        setHoldings([]);
+        setQuotes({});
+        return settings;
+      }
+      if (opts.fetch) {
+        const result = await refreshQuotes();
+        setQuotes(result.cache.quotes);
+      } else {
+        setQuotes(await getCachedQuotes());
+      }
+      setHoldings(await getHoldings());
+      return settings;
+    },
+    []
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -156,6 +220,10 @@ const BridgeScreen: React.FC = () => {
           setKeelTarget(keelStep?.targetAmount ?? 1000);
           await refreshNetWorthSnapshots();
           if (cancelled) return;
+          // Holdings load last (and on a weekly-gated network refresh) so a
+          // slow/absent quote fetch never delays the rest of the Bridge.
+          await loadHoldingsState({ fetch: true });
+          if (cancelled) return;
         } catch (error) {
           if (cancelled) return;
           if (__DEV__) console.error("Failed to load bridge:", error);
@@ -163,6 +231,8 @@ const BridgeScreen: React.FC = () => {
           setDebts([]);
           setSavingsGoals([]);
           setAssetAccounts([]);
+          setHoldings([]);
+          setQuotes({});
           setNetWorthSnapshots([]);
           setKeelTarget(0);
         }
@@ -173,7 +243,7 @@ const BridgeScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [refreshNetWorthSnapshots])
+    }, [loadHoldingsState, refreshNetWorthSnapshots])
   );
 
   // Emergency-fund derived current amount. Only the "Savings" category
@@ -214,9 +284,27 @@ const BridgeScreen: React.FC = () => {
         debts,
         savingsGoals,
         assetAccounts,
+        holdings,
+        quotes,
       }),
-    [assetAccounts, debts, entries, savingsGoals]
+    [assetAccounts, debts, entries, holdings, quotes, savingsGoals]
   );
+
+  /** Total market value of priced holdings, for the Holdings card summary. */
+  const holdingsValue = useMemo(
+    () => holdingsTotalValue(holdings, quotes),
+    [holdings, quotes]
+  );
+
+  /** Most recent price timestamp across cached quotes, for the "as of" label. */
+  const quotesAsOf = useMemo(() => {
+    let latest = "";
+    for (const holding of holdings) {
+      const quote = quotes[normalizeSymbol(holding.symbol)];
+      if (quote?.asOf && quote.asOf > latest) latest = quote.asOf;
+    }
+    return latest;
+  }, [holdings, quotes]);
 
   const totalAssetBalance = useMemo(
     () => assetAccounts.reduce((sum, account) => sum + account.balance, 0),
@@ -375,6 +463,112 @@ const BridgeScreen: React.FC = () => {
     closeAssetModal();
     void refreshAchievements();
   }, [closeAssetModal, refreshAchievements, refreshNetWorthSnapshots]);
+
+  const openAddHoldingModal = useCallback(() => {
+    setEditingHolding(null);
+    setHoldingSymbol("");
+    setHoldingShares("");
+    setHoldingCostBasis("");
+    setShowHoldingModal(true);
+  }, []);
+
+  const openEditHoldingModal = useCallback((holding: Holding) => {
+    setEditingHolding(holding);
+    setHoldingSymbol(holding.symbol);
+    setHoldingShares(String(holding.shares));
+    setHoldingCostBasis(holding.costBasis != null ? String(holding.costBasis) : "");
+    setShowHoldingModal(true);
+  }, []);
+
+  const closeHoldingModal = useCallback(() => {
+    setShowHoldingModal(false);
+    setEditingHolding(null);
+    setHoldingSymbol("");
+    setHoldingShares("");
+    setHoldingCostBasis("");
+  }, []);
+
+  const saveHolding = useCallback(async () => {
+    const symbol = normalizeSymbol(holdingSymbol);
+    const shares = parseFloat(holdingShares);
+    if (!isValidSymbol(symbol) || !Number.isFinite(shares) || shares <= 0) return;
+
+    const trimmedCost = holdingCostBasis.trim();
+    const parsedCost = trimmedCost === "" ? NaN : parseFloat(trimmedCost);
+    const costBasis =
+      Number.isFinite(parsedCost) && parsedCost >= 0 ? parsedCost : undefined;
+
+    const now = new Date().toISOString();
+    let nextHoldings: Holding[];
+
+    if (editingHolding) {
+      nextHoldings = holdings.map((holding) =>
+        holding.id === editingHolding.id
+          ? { ...holding, symbol, shares, costBasis, updatedAt: now }
+          : holding
+      );
+    } else {
+      nextHoldings = [
+        ...holdings,
+        {
+          id: generateUUID(),
+          symbol,
+          shares,
+          costBasis,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+    }
+
+    setHoldings(nextHoldings);
+    await saveHoldings(nextHoldings);
+    await refreshNetWorthSnapshots();
+    closeHoldingModal();
+    // Re-fetch so a newly added symbol gets priced. The weekly gate means this
+    // only hits the network until the first successful fetch of the week.
+    await loadHoldingsState({ fetch: true });
+    void refreshAchievements();
+  }, [
+    closeHoldingModal,
+    editingHolding,
+    holdingCostBasis,
+    holdingShares,
+    holdingSymbol,
+    holdings,
+    loadHoldingsState,
+    refreshAchievements,
+    refreshNetWorthSnapshots,
+  ]);
+
+  const deleteHolding = useCallback(
+    async (id: string) => {
+      // Soft-delete so the partner's next sync removes this position locally.
+      const nextHoldings = await deleteHoldingRecord(id);
+      setHoldings(nextHoldings);
+      await refreshNetWorthSnapshots();
+      closeHoldingModal();
+      void refreshAchievements();
+    },
+    [closeHoldingModal, refreshAchievements, refreshNetWorthSnapshots]
+  );
+
+  const enableHoldings = useCallback(async () => {
+    const settings = await setHoldingsEnabled(true);
+    setHoldingsSettings(settings);
+    setShowHoldingsDisclosure(false);
+    await loadHoldingsState({ fetch: true });
+  }, [loadHoldingsState]);
+
+  const handleEnablePress = useCallback(() => {
+    // First time through, show the off-device disclosure; once acknowledged a
+    // later re-enable skips straight to turning the feature back on.
+    if (holdingsSettings.disclosureAcknowledged) {
+      void enableHoldings();
+    } else {
+      setShowHoldingsDisclosure(true);
+    }
+  }, [enableHoldings, holdingsSettings.disclosureAcknowledged]);
 
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);
@@ -550,6 +744,109 @@ const BridgeScreen: React.FC = () => {
           </>
         )}
       </View>
+
+      {!holdingsSettings.enabled ? (
+        <View style={styles.accountsCard}>
+          <View style={styles.topHairline} />
+          <View style={styles.accountsHeaderRow}>
+            <Text style={styles.accountsTitle}>Live Holdings</Text>
+          </View>
+          <Text style={styles.accountsEmpty}>
+            Track stocks and ETFs and fold their live market value into your net
+            worth. Prices refresh about once a week.
+          </Text>
+          <TouchableOpacity
+            style={[styles.holdingsEnableBtn, { borderColor: colors.accent }]}
+            onPress={handleEnablePress}
+            accessibilityRole="button"
+            accessibilityLabel="Enable live holdings"
+          >
+            <Text style={[styles.holdingsEnableBtnText, { color: colors.accent }]}>
+              Enable Live Holdings
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.accountsCard}>
+          <View style={styles.topHairline} />
+          <View style={styles.accountsHeaderRow}>
+            <Text style={styles.accountsTitle}>Holdings</Text>
+            <TouchableOpacity onPress={openAddHoldingModal}>
+              <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>
+                + Add
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {holdings.length === 0 ? (
+            <Text style={styles.accountsEmpty}>
+              Add a stock or ETF by ticker (e.g. AAPL, VTI) and BudgetArk will
+              price it for you.
+            </Text>
+          ) : (
+            <>
+              <View style={styles.holdingsSummaryRow}>
+                <View>
+                  <Text style={[styles.accountsSummaryLabel, { color: colors.textDim }]}>
+                    Holdings value
+                  </Text>
+                  <Text style={[styles.accountsSummaryValue, { color: colors.success }]}>
+                    {formatCurrency(holdingsValue)}
+                  </Text>
+                </View>
+                <Text style={[styles.holdingsAsOf, { color: colors.textMuted }]}>
+                  {quotesAsOf
+                    ? `Prices as of ${new Date(quotesAsOf).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}`
+                    : "Prices update weekly"}
+                </Text>
+              </View>
+
+              {holdings.map((holding) => {
+                const symbol = normalizeSymbol(holding.symbol);
+                const priced = !!quotes[symbol];
+                const value = holdingMarketValue(holding, quotes);
+                const gainLoss = holdingGainLoss(holding, quotes);
+                return (
+                  <TouchableOpacity
+                    key={holding.id}
+                    style={styles.accountRow}
+                    onPress={() => openEditHoldingModal(holding)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.accountRowLeft}>
+                      <Text style={styles.accountName} numberOfLines={1}>
+                        {symbol}
+                      </Text>
+                      <Text style={styles.accountCategory}>
+                        {holding.shares}{" "}
+                        {holding.shares === 1 ? "share" : "shares"}
+                        {gainLoss != null
+                          ? ` · ${gainLoss >= 0 ? "+" : "-"}${formatCurrency(
+                              Math.abs(gainLoss)
+                            )}`
+                          : ""}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.accountBalance,
+                        {
+                          color: priced ? colors.success : colors.textMuted,
+                        },
+                      ]}
+                    >
+                      {priced ? formatCurrency(value) : "—"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </>
+          )}
+        </View>
+      )}
 
       <TouchableOpacity
         style={styles.shipsLogCard}
@@ -736,6 +1033,120 @@ const BridgeScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showHoldingModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeHoldingModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {editingHolding ? "Edit Holding" : "Add Holding"}
+            </Text>
+            <Text style={styles.modalSub}>
+              Track a stock or ETF by ticker. Its market value feeds your net
+              worth.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ticker (e.g. AAPL, VTI)"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              value={holdingSymbol}
+              onChangeText={setHoldingSymbol}
+            />
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Shares"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+              value={holdingShares}
+              onChangeText={setHoldingShares}
+            />
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Cost basis (optional)"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+              value={holdingCostBasis}
+              onChangeText={setHoldingCostBasis}
+            />
+
+            <Text style={styles.modalHint}>
+              Cost basis is the total you invested across all shares - used to
+              show gain/loss.
+            </Text>
+
+            <View style={styles.modalActions}>
+              {editingHolding ? (
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => deleteHolding(editingHolding.id)}
+                >
+                  <Text style={[styles.modalCancelText, { color: colors.danger }]}>
+                    Delete
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={closeHoldingModal}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveHolding}>
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showHoldingsDisclosure}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHoldingsDisclosure(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Before you turn this on</Text>
+            <Text style={styles.modalSub}>
+              Live Holdings sends a little data off your device. Here's exactly
+              what:
+            </Text>
+
+            <Text style={styles.disclosureItem}>
+              • Your tickers and share counts are stored on this device and sync
+              to your paired partner, just like your accounts.
+            </Text>
+            <Text style={styles.disclosureItem}>
+              • To show prices, only your ticker symbols are sent to BudgetArk's
+              quote service about once a week. Your share counts, balances, and
+              identity are never sent.
+            </Text>
+            <Text style={styles.disclosureItem}>
+              • Prices come from a third-party market data provider.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowHoldingsDisclosure(false)}
+              >
+                <Text style={styles.modalCancelText}>Not now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={enableHoldings}>
+                <Text style={styles.modalSaveText}>Enable</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <AchievementsScreen
         visible={showAchievements}
         onClose={() => {
@@ -1027,6 +1438,34 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     assetCategoryChipText: {
       fontSize: scale(12),
       fontWeight: "600",
+    },
+    holdingsEnableBtn: {
+      borderWidth: 1,
+      borderRadius: tokens.radiusSm + 2,
+      paddingVertical: tokens.padSm,
+      alignItems: "center",
+      marginTop: tokens.gapSm,
+    },
+    holdingsEnableBtnText: {
+      fontSize: scale(14),
+      fontWeight: "700",
+    },
+    holdingsSummaryRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      paddingVertical: tokens.padSm,
+      marginBottom: tokens.gapSm,
+    },
+    holdingsAsOf: {
+      fontSize: scale(11),
+      marginBottom: 4,
+    },
+    disclosureItem: {
+      fontSize: scale(13),
+      color: colors.textDim,
+      marginBottom: 8,
+      lineHeight: scale(18),
     },
     shipsLogCard: {
       flexDirection: "row",

@@ -358,6 +358,22 @@ export interface CachedQuote {
   asOf: string;
 }
 
+/**
+ * Per-device opt-in state for the Live Stock Holdings feature. Off by default:
+ * the feature stays invisible until the user explicitly enables it and
+ * acknowledges that tickers leave the device (synced to a partner + sent to
+ * the quote proxy). See `holdingsSettingsStorage`.
+ */
+export interface HoldingsSettings {
+  /** Master switch - when false the Holdings UI and quote fetches are off. */
+  enabled: boolean;
+  /**
+   * True once the user has seen the first off-device disclosure. Kept separate
+   * from `enabled` so re-enabling later doesn't re-prompt.
+   */
+  disclosureAcknowledged: boolean;
+}
+
 /* ─── Currency + Localization Types ─── */
 
 export interface CurrencyPreferenceOption {
