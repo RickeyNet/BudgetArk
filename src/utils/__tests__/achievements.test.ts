@@ -20,6 +20,8 @@ jest.mock("../../data/achievementDefs", () => ({
 
 // Controllable persisted state.
 let mockState: any = { unlocked: {}, firstEvaluatedAt: 1, version: 1 };
+// Rest-typed so the forwarding mocks below can spread call args in, and so
+// `mockSave.mock.calls[i][j]` indexes as `any` instead of an empty tuple.
 const mockSave = jest.fn(async (..._args: any[]) => {});
 const mockRecordStreak = jest.fn(async (..._args: any[]) => {});
 
