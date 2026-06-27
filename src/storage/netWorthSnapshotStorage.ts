@@ -6,6 +6,7 @@ import { getDebts } from "./debtStorage";
 import { getSavingsGoals } from "./savingsGoalStorage";
 import { getHoldings } from "./holdingsStorage";
 import { getCachedQuotes } from "./quoteCacheStorage";
+import { getHoldingsSettings } from "./holdingsSettingsStorage";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 
 const STORAGE_KEY = "@budgetark_net_worth_snapshots";
@@ -81,14 +82,19 @@ export const upsertNetWorthSnapshot = async (
 export const syncNetWorthSnapshot = async (
   capturedAt: string = new Date().toISOString()
 ): Promise<NetWorthSnapshot[]> => {
+  // Holdings only count toward net worth while the feature is opted in - same
+  // gate the Bridge UI applies (it clears holdings to [] when disabled). Read
+  // the flag first so a disabled feature contributes nothing here either,
+  // keeping the persisted snapshot consistent with the live on-screen total.
+  const holdingsSettings = await getHoldingsSettings();
   const [entries, debts, savingsGoals, assetAccounts, holdings, quotes] =
     await Promise.all([
       getBudgetEntries(),
       getDebts(),
       getSavingsGoals(),
       getAssetAccounts(),
-      getHoldings(),
-      getCachedQuotes(),
+      holdingsSettings.enabled ? getHoldings() : Promise.resolve([]),
+      holdingsSettings.enabled ? getCachedQuotes() : Promise.resolve({}),
     ]);
 
   const totals = calculateNetWorthTotals({
