@@ -68,6 +68,11 @@ const entryFixtures = [
   // must drop those projections and keep exactly the original row.
   { id: "e3", type: "expense", category: "Housing", amount: 1200, date: "2026-01-01", recurring: true, createdAt: "2026-01-01T00:00:00.000Z" },
 ];
+const holdingsFixtures = [
+  { id: "h1", symbol: "AAPL", shares: 10, costBasis: 1500, createdAt: "2026-05-01T00:00:00.000Z", updatedAt: "2026-05-02T00:00:00.000Z" },
+  // Fractional shares + no cost basis: both must round-trip through the sheet.
+  { id: "h2", symbol: "VTI", shares: 0.25, createdAt: "2026-05-03T00:00:00.000Z", updatedAt: "2026-05-03T00:00:00.000Z" },
+];
 
 jest.mock("../../storage/debtStorage", () => ({
   getDebts: jest.fn(async () => [debtRef]),
@@ -79,13 +84,14 @@ jest.mock("../../storage/budgetStorage", () => ({
 }));
 jest.mock("../../storage/savingsGoalStorage", () => ({ getSavingsGoals: jest.fn(async () => []) }));
 jest.mock("../../storage/assetAccountStorage", () => ({ getAssetAccounts: jest.fn(async () => []) }));
+jest.mock("../../storage/holdingsStorage", () => ({ getHoldings: jest.fn(async () => holdingsRef) }));
 jest.mock("../../storage/debtMilestoneStorage", () => ({ getDebtMilestonePlan: jest.fn(async () => null) }));
 jest.mock("../../storage/backupReminderStorage", () => ({ recordBackup: jest.fn(async () => {}) }));
 
 // --- importer's downstream sink (capture the normalized payload) ---
 const mockImportFromString = jest.fn(async (_json: string, _mode?: string) => ({
   debts: 0, payments: 0, budgetEntries: 0, budgetLimits: 0,
-  savingsGoals: 0, assetAccounts: 0, debtMilestones: false,
+  savingsGoals: 0, assetAccounts: 0, holdings: 0, debtMilestones: false,
   payoffStrategy: false, netWorthSnapshots: 0, customCategories: 0,
 }));
 let mockPicked: any = { canceled: true };
@@ -97,6 +103,7 @@ jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 
 const debtRef = debtFixture;
 const entriesRef = entryFixtures;
+const holdingsRef = holdingsFixtures;
 
 import { exportSpreadsheet } from "../spreadsheetExport";
 import { importSpreadsheet } from "../spreadsheetImport";
@@ -141,6 +148,16 @@ describe("xlsx round-trip", () => {
     expect(payload.debts[0]).toMatchObject({
       id: "d1", name: "Car Loan", balance: 5000, originalBalance: 10000, rate: 6.5, minPayment: 200,
     });
+
+    // Holdings survive: symbol/shares/costBasis, including a fractional-share
+    // position with no cost basis. Prices are never in the sheet to begin with.
+    const holdingsById = Object.fromEntries(
+      payload.holdings.map((h: any) => [h.id, h])
+    );
+    expect(Object.keys(holdingsById).sort()).toEqual(["h1", "h2"]);
+    expect(holdingsById.h1).toMatchObject({ symbol: "AAPL", shares: 10, costBasis: 1500 });
+    expect(holdingsById.h2).toMatchObject({ symbol: "VTI", shares: 0.25 });
+    expect(holdingsById.h2.costBasis).toBeUndefined();
 
     // No data row was rejected on the way back in.
     expect(result?.skippedRows).toBe(0);

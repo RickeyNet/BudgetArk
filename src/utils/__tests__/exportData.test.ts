@@ -44,6 +44,16 @@ const fixtures = {
       createdAt: "2026-03-01T00:00:00.000Z",
     },
   ],
+  holdings: [
+    {
+      id: "h1",
+      symbol: "AAPL",
+      shares: 10,
+      costBasis: 1500,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    },
+  ],
   user: {
     id: "user-1",
     displayName: "Tester",
@@ -74,6 +84,9 @@ jest.mock("../../storage/savingsGoalStorage", () => ({
 }));
 jest.mock("../../storage/assetAccountStorage", () => ({
   getAssetAccountsIncludingDeleted: jest.fn(async () => []),
+}));
+jest.mock("../../storage/holdingsStorage", () => ({
+  getHoldingsIncludingDeleted: jest.fn(async () => fixturesRef.holdings),
 }));
 jest.mock("../../storage/debtMilestoneStorage", () => ({
   getDebtMilestonePlan: jest.fn(async () => null),
@@ -147,6 +160,8 @@ describe("buildExportMessage - plain JSON", () => {
     expect(payload.debts).toHaveLength(1);
     expect(payload.payments).toHaveLength(1);
     expect(payload.budgetEntries).toHaveLength(1);
+    expect(payload.holdings).toHaveLength(1);
+    expect(payload.holdings[0]).toMatchObject({ symbol: "AAPL", shares: 10 });
     expect(typeof payload.exportedAt).toBe("string");
     expect(payload.appVersion).toBeTruthy();
   });
@@ -157,6 +172,7 @@ describe("buildExportMessage - plain JSON", () => {
     expect(result.debts).toBe(1);
     expect(result.payments).toBe(1);
     expect(result.budgetEntries).toBe(1);
+    expect(result.holdings).toBe(1);
     expect(result.payoffStrategy).toBe(true);
   });
 });

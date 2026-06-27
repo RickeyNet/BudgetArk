@@ -1012,6 +1012,7 @@ const ProfileScreen: React.FC = () => {
           parts.push(`${result.savingsGoals} savings goals`);
         if (result.assetAccounts > 0)
           parts.push(`${result.assetAccounts} asset accounts`);
+        if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
         if (result.netWorthSnapshots > 0)
           parts.push(`${result.netWorthSnapshots} net worth snapshots`);
         if (result.customCategories > 0)
@@ -1221,6 +1222,7 @@ const ProfileScreen: React.FC = () => {
           parts.push(`${result.savingsGoals} savings goals`);
         if (result.assetAccounts > 0)
           parts.push(`${result.assetAccounts} asset accounts`);
+        if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
         let message = `${label} ${parts.join(", ")} from the spreadsheet.`;
         if (result.skippedRows > 0) {
           message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} skipped (required fields missing or invalid):`;

@@ -16,6 +16,7 @@
  *   - Payments
  *   - Savings Goals
  *   - Asset Accounts
+ *   - Holdings
  *
  * Unknown sheets are ignored. Rows that fail validation MUST be dropped here
  * (returned as null from the row mappers, counted in `skippedRows`) - the
@@ -38,6 +39,7 @@ import {
 } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
 import { normalizeImportCategory, VALIDATOR_LIMITS } from "./recordValidators";
+import { isValidSymbol, normalizeSymbol } from "./holdingsMath";
 import { normalizePaymentUrl } from "./paymentUrl";
 import {
   ASSET_ACCOUNT_CATEGORIES,
@@ -615,6 +617,50 @@ const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<strin
   });
 };
 
+const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
+  const symbolRaw = parseString(get(row, "Symbol", "Ticker"), 12);
+  const symbol = normalizeSymbol(symbolRaw);
+  const shares = parseAmount(get(row, "Shares"));
+  const costBasisRaw = get(row, "CostBasis", "Cost Basis");
+  const hasCostBasis =
+    costBasisRaw !== undefined &&
+    costBasisRaw !== null &&
+    String(costBasisRaw).trim() !== "";
+  const costBasis = hasCostBasis ? parseAmount(costBasisRaw) : undefined;
+
+  // Bounds mirror isHoldingItem: symbol matches the ticker pattern, shares in
+  // (0, MAX_MONEY], optional costBasis in [0, MAX_MONEY]. Out-of-range rows are
+  // skipped so the strict downstream sanitizer can't abort the whole import.
+  if (!symbolRaw) {
+    return skipRow("Symbol is missing");
+  }
+  if (!isValidSymbol(symbol)) {
+    return skipRow(`Symbol "${symbolRaw}" is not a valid ticker`);
+  }
+  if (!Number.isFinite(shares) || shares <= 0 || shares > VALIDATOR_LIMITS.MAX_MONEY) {
+    return skipRow("Shares must be a positive number");
+  }
+  if (
+    costBasis !== undefined &&
+    (!Number.isFinite(costBasis) || costBasis < 0 || costBasis > VALIDATOR_LIMITS.MAX_MONEY)
+  ) {
+    return skipRow("Cost basis must be a number of 0 or more");
+  }
+
+  const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
+  const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Preserve `updatedAt` to avoid clobbering partner data on next sync.
+  return okRow({
+    id,
+    symbol,
+    shares,
+    costBasis,
+    createdAt,
+    updatedAt: updatedAtIso || createdAt,
+  });
+};
+
 /* ── Skipped-row reporting ── */
 
 /** One invalid row that was dropped, with enough context to find and fix it. */
@@ -746,6 +792,7 @@ export const importSpreadsheet = async (
   const paymentsSheet = isCsv ? undefined : findSheet(workbook, "Payments");
   const savingsGoalsSheet = isCsv ? undefined : findSheet(workbook, "Savings Goals");
   const assetAccountsSheet = isCsv ? undefined : findSheet(workbook, "Asset Accounts");
+  const holdingsSheet = isCsv ? undefined : findSheet(workbook, "Holdings");
 
   // Drop the exporter's own round-trip artifacts (projected recurring copies,
   // synthetic Emergency Fund) up front so they count toward neither the valid
@@ -760,6 +807,7 @@ export const importSpreadsheet = async (
     (r) => !isDerivedArtifactRow(r)
   );
   const accountRows = sheetToRows(assetAccountsSheet);
+  const holdingRows = sheetToRows(holdingsSheet);
 
   if (
     entryRows.length === 0 &&
@@ -767,10 +815,11 @@ export const importSpreadsheet = async (
     debtRows.length === 0 &&
     paymentRows.length === 0 &&
     savingsRows.length === 0 &&
-    accountRows.length === 0
+    accountRows.length === 0 &&
+    holdingRows.length === 0
   ) {
     throw new Error(
-      'No recognized sheets found. Expected a "Budget Entries" sheet (or one of: Budget Limits, Debts, Payments, Savings Goals, Asset Accounts).'
+      'No recognized sheets found. Expected a "Budget Entries" sheet (or one of: Budget Limits, Debts, Payments, Savings Goals, Asset Accounts, Holdings).'
     );
   }
 
@@ -780,6 +829,7 @@ export const importSpreadsheet = async (
   const paymentResult = processSheet("Payments", paymentRows, rowToPayment);
   const savingsResult = processSheet("Savings Goals", savingsRows, rowToSavingsGoal);
   const accountResult = processSheet("Asset Accounts", accountRows, rowToAssetAccount);
+  const holdingResult = processSheet("Holdings", holdingRows, rowToHolding);
 
   const budgetEntries = entryResult.valid;
   const budgetLimits = limitResult.valid;
@@ -787,6 +837,7 @@ export const importSpreadsheet = async (
   const payments = paymentResult.valid;
   const savingsGoals = savingsResult.valid;
   const assetAccounts = accountResult.valid;
+  const holdings = holdingResult.valid;
 
   // Each skipped row is genuinely invalid (derived artifacts were filtered
   // out above), so the count and the detail list line up exactly.
@@ -797,6 +848,7 @@ export const importSpreadsheet = async (
     ...paymentResult.skipped,
     ...savingsResult.skipped,
     ...accountResult.skipped,
+    ...holdingResult.skipped,
   ];
   const skippedRows = skippedRowDetails.length;
 
@@ -806,7 +858,8 @@ export const importSpreadsheet = async (
     debts.length +
     payments.length +
     savingsGoals.length +
-    assetAccounts.length;
+    assetAccounts.length +
+    holdings.length;
 
   if (totalEntitiesValid === 0) {
     throw new Error(
@@ -824,6 +877,7 @@ export const importSpreadsheet = async (
     budgetLimits,
     savingsGoals,
     assetAccounts,
+    holdings,
   };
 
   const result = await importFromString(JSON.stringify(payload), mode);

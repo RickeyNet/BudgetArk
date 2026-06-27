@@ -121,6 +121,19 @@ const SHEETS: SheetSpec[] = [
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
     ],
   },
+  {
+    title: "Holdings",
+    xlsxOnly: true,
+    description:
+      "Stock / ETF positions. Prices are fetched on-device and never imported - only the position is.",
+    columns: [
+      { name: "ID", required: false, notes: "Auto-generated if missing." },
+      { name: "Symbol", required: true, notes: "Ticker, e.g. AAPL or VTI. Up to 12 chars (letters, digits, . and -)." },
+      { name: "Shares", required: true, notes: "Positive number. Fractional shares allowed." },
+      { name: "CostBasis", required: false, notes: "Total dollars invested, ≥ 0. Used for gain/loss." },
+      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+    ],
+  },
 ];
 
 const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
