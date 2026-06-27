@@ -7,6 +7,18 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.8.0",
+    title: "Live Stock Holdings",
+    releasedAt: "2026-06-27",
+    highlights: [
+      "Track your stocks and ETFs on the Bridge. Add each position by ticker symbol and share count (cost basis optional), and BudgetArk shows its current market value and gain/loss right alongside your accounts. Holdings count toward your net worth whenever a price is available.",
+      "Prices refresh about once a week from BudgetArk's own quote service. To look them up, only your ticker symbols are ever sent off your device - never your share counts, balances, or who you are. Prices come from a third-party market data provider.",
+      "Live Holdings stays off until you turn it on. The first time you enable it - from either the Bridge or Profile - you'll see a plain-language note explaining exactly what leaves your device, and nothing is sent until you accept it.",
+      "Your tickers and share counts sync to your paired partner just like your accounts, so you both see the same portfolio. The fetched prices stay on each device and are never synced between phones.",
+      "Holdings are included in your backups - both the encrypted JSON backup and the Excel spreadsheet (a new Holdings sheet). Prices are never exported or imported; they simply re-fetch on the device. Deleting a holding carries across to your partner and your backups like every other record.",
+    ],
+  },
+  {
     version: "1.7.5",
     title: "Payoff Goal Date Fixes",
     releasedAt: "2026-06-23",

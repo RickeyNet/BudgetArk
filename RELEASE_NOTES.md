@@ -1,5 +1,29 @@
 # BudgetArk Release Notes
 
+## v1.8.0 - Live Stock Holdings (2026-06-27)
+
+Pure JS - ships OTA against the existing native runtime (`runtimeVersion` unchanged). No new native modules; the feature reuses `expo-secure-store` and the existing networking stack.
+
+### Live Stock Holdings & weekly quote feed
+
+- **Private quote proxy (`worker/quotes-proxy/`, Cloudflare Worker).** Live prices come from Twelve Data, but a mobile client can't hide an API key, so the key lives only as a Cloudflare encrypted secret (`wrangler secret put TWELVE_DATA_API_KEY`) - never in the repo or app bundle. The Worker exposes `GET /quotes?symbols=AAPL,VTI` with an `x-device` header and is the only thing that talks to the upstream provider. Its public URL is *not* the secret: protection is server-side, a KV-backed per-symbol price cache (7-day TTL) plus a per-device throttle (one refresh per week, keyed by a SHA-256 hash of the device id). The Worker stores no portfolio data - only symbols and a throttle stamp.
+- **Holdings data model (`src/types/index.ts`).** New `Holding` (id, symbol, shares, optional `costBasis` = total dollars invested, optional `accountId`, timestamps, tombstone fields) and `CachedQuote` (price + `asOf`) types, plus `HoldingsSettings` (`enabled`, `disclosureAcknowledged`) for the opt-in.
+- **Pure math (`src/utils/holdingsMath.ts`, tested).** `isQuoteRefreshDue` (weekly gate), `collectSymbols`, `holdingMarketValue`, `holdingsTotalValue`, `holdingGainLoss`, and `isValidSymbol`/`normalizeSymbol` - all side-effect free and covered by `holdingsMath.test.ts`.
+- **Storage layers.** `holdingsStorage.ts` is a synced, tombstone-aware collection (clone of `assetAccountStorage.ts`, key `@budgetark_holdings`) so deletes propagate instead of resurrecting. `quoteCacheStorage.ts` is per-device and **never synced** (key `@budgetark_quote_cache`). `deviceIdStorage.ts` holds a stable UUID for the `x-device` throttle header. `holdingsSettingsStorage.ts` is the per-device opt-in (key `@budgetark_holdings_settings`, default off).
+- **Quote service (`src/services/quotesService.ts`).** `refreshQuotes()` gathers live symbols, applies the weekly gate, fetches through the Worker, and merges the cache. It degrades safely: a 429 stamps `lastFetchedAt` to back off, while a network/timeout keeps the stale cache without stamping so it retries. It never throws into net-worth math.
+
+### Net worth, sync & privacy
+
+- **Net-worth integration.** `calculateNetWorthTotals` takes optional `holdings`+`quotes` (default empty, backward compatible) and adds holdings market value as a fourth asset term; unpriced positions contribute 0. `syncNetWorthSnapshot` gates holdings/quotes on the opt-in flag so a disabled feature contributes nothing, keeping the persisted snapshot consistent with the on-screen total.
+- **Sync wiring.** Holdings ride the existing sync diff (registered in `sync/types.ts`, `recordValidators.isHoldingItem`, `diffEngine.ts`, and the orchestrator count) and merge tombstone-aware LWW by id. The quote cache deliberately stays **out** of sync - prices are per-device and re-fetch locally.
+- **Opt-in & off-device disclosure.** The feature is off by default. The first time it's enabled - from the Bridge teaser or the Profile → Settings toggle - an off-device disclosure must be acknowledged. The disclosure copy lives in one shared module (`src/data/holdingsDisclosure.ts`) so the Bridge and Profile surfaces can't drift. Only enabled devices send tickers to the proxy.
+
+### UI & backups
+
+- **Bridge Holdings section (`src/screens/BridgeScreen.tsx`).** A Holdings card between Accounts and Ship's Log: when disabled, a teaser + Enable button -> disclosure; when enabled, a summary (total value + "prices as of" date) and per-holding rows (ticker, shares, gain/loss, market value or `--` when unpriced), with an add/edit modal validated via `isValidSymbol`/`normalizeSymbol` (shares > 0, cost basis optional).
+- **Profile toggle (`src/screens/ProfileScreen.tsx`).** A "Live Holdings" on/off row in Settings next to Privacy Mode, wired to the same opt-in flow and disclosure copy.
+- **Export/import round-trip.** JSON backups include holdings (with tombstones); the Excel export gains a **Holdings** sheet (`ID, Symbol, Shares, CostBasis, CreatedAt, UpdatedAt` - no price column). Import normalizes tickers and skips invalid rows. Prices are never exported or imported - they re-fetch on the device. Schema reference (`SpreadsheetSchemaModal.tsx`, `docs/SPREADSHEET_SCHEMA.md`) updated.
+
 ## v1.7.5 - Payoff Goal Date Fixes (2026-06-23)
 
 Pure JS - ships OTA against the existing native runtime (`runtimeVersion` unchanged).
