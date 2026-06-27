@@ -13,11 +13,17 @@ name = "quotes-proxy"
 main = "src/index.ts"
 compatibility_date = "2026-06-01"
 
+# Serve on the workers.dev subdomain (https://quotes-proxy.budgetark.workers.dev).
+workers_dev = true
+# No per-version preview URLs — this is a single public endpoint, so keep the
+# surface minimal and silence the deploy warning.
+preview_urls = false
+
 # KV namespace used for both the per-symbol price cache and the per-device
 # throttle. Create it with the command above, then replace REPLACE_WITH_KV_ID.
 [[kv_namespaces]]
 binding = "QUOTES"
-id = "REPLACE_WITH_KV_ID"
+id = "2c1da019a9b64fe291f7a557cd9a0c39"
 
 [observability]
 enabled = true
