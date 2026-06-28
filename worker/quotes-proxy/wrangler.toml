@@ -35,13 +35,13 @@ preview_urls = false
 # the DNS record + TLS cert for this subdomain automatically on deploy. The
 # website stays on the apex/www; this only claims the `quotes` subdomain.
 #
-# COMMENTED OUT until budgetark.app is an Active zone in this account: with it
-# enabled, `wrangler deploy` fails if the zone is missing — which would also
-# block the shared-key deploy. Uncomment at step 2 of the migration, once the
-# zone is live.
-# routes = [
-#   { pattern = "quotes.budgetark.app", custom_domain = true },
-# ]
+# Active now that budgetark.app is an Active zone. The Worker serves on BOTH
+# this custom domain and the workers.dev subdomain (workers_dev still true), so
+# the cutover has no downtime. `workers_dev` flips to false only after the app
+# ships pointed at quotes.budgetark.app.
+routes = [
+  { pattern = "quotes.budgetark.app", custom_domain = true },
+]
 
 # KV namespace used for both the per-symbol price cache and the per-device
 # throttle. Create it with the command above, then replace REPLACE_WITH_KV_ID.
