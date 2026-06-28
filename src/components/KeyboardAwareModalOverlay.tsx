@@ -1,7 +1,6 @@
 import React from "react";
 import {
   KeyboardAvoidingView,
-  Platform,
   StyleProp,
   ViewStyle,
 } from "react-native";
@@ -15,16 +14,13 @@ import {
  * `<KeyboardAwareModalOverlay style={styles.modalOverlay}>...</KeyboardAwareModalOverlay>`.
  * Pass the screen's existing overlay style (flex:1, centered, dim backdrop).
  *
- * On iOS we use `behavior="padding"`, matching the pattern already used by the
- * component modals (AddDebtModal, etc.).
- *
- * On Android we deliberately leave `behavior` undefined (KAV becomes a passive
- * wrapper). Android already resizes the window when the keyboard appears, and a
- * `behavior="height"` KAV animates its own container height on top of that -
- * the two fight each other, double-shifting the card and visibly glitching the
- * screen when the keyboard is dismissed (e.g. tapping the keyboard checkmark in
- * the holdings/ticker modal). Letting the native window resize handle it alone
- * is smooth.
+ * We use `behavior="padding"` on both platforms. RN Modals render in their own
+ * Android window that the OS does NOT auto-resize for the keyboard, so the KAV
+ * has to do the lift - without it the focused input sits behind the keyboard.
+ * `padding` animates a bottom inset, which slides the card up smoothly. We avoid
+ * `behavior="height"` on Android: it re-lays-out its whole subtree on every
+ * keyboard frame, which visibly glitches the screen when the keyboard is
+ * dismissed (e.g. the keyboard checkmark in the holdings/ticker modal).
  */
 export function KeyboardAwareModalOverlay({
   style,
@@ -34,10 +30,7 @@ export function KeyboardAwareModalOverlay({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <KeyboardAvoidingView
-      style={style}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <KeyboardAvoidingView style={style} behavior="padding">
       {children}
     </KeyboardAvoidingView>
   );

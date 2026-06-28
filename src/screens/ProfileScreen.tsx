@@ -3757,10 +3757,11 @@ const ProfileScreen: React.FC = () => {
       >
         <KeyboardAvoidingView
           style={styles.pasteModalOverlay}
-          // Android: leave behavior undefined so only the native window resize
-          // moves the card. A "height" KAV double-shifts on top of that and
-          // glitches the screen when the keyboard is dismissed.
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          // padding on both platforms: the RN Modal's Android window isn't
+          // auto-resized for the keyboard, so the KAV has to do the lift or the
+          // input hides behind it. padding slides it up smoothly; "height" mode
+          // re-lays-out the subtree each frame and glitches on dismiss.
+          behavior="padding"
           keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
           <View

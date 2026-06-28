@@ -155,11 +155,12 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets. Android
-        // relies on the native window resize + the ScrollView; a "height" KAV
-        // shifts on top of that resize and glitches the screen when the
-        // keyboard is dismissed, so behavior stays undefined on both platforms.
-        behavior={undefined}
+        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets, so KAV
+        // stays off. The RN Modal's Android window isn't auto-resized for the
+        // keyboard, so Android needs the KAV to lift the sheet - padding slides
+        // it up smoothly, while "height" re-lays-out the subtree each frame and
+        // glitches on dismiss.
+        behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.overlay}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>

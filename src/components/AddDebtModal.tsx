@@ -285,11 +285,12 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     >
       <KeyboardAvoidingView
         // iOS leans on the ScrollView's automaticallyAdjustKeyboardInsets
-        // (which also scrolls the focused field into view). Android relies on
-        // the native window resize + the ScrollView; a "height" KAV shifts on
-        // top of that resize and glitches the screen when the keyboard is
-        // dismissed, so we leave behavior undefined on both platforms.
-        behavior={undefined}
+        // (which also scrolls the focused field into view), so KAV stays off.
+        // The RN Modal's Android window isn't auto-resized for the keyboard, so
+        // Android needs the KAV to lift the sheet - padding slides it up
+        // smoothly, while "height" re-lays-out the subtree each frame and
+        // glitches on dismiss.
+        behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.overlay}
       >
         {/* Modal sheet - fills from near top to bottom */}
