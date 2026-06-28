@@ -15,14 +15,40 @@
  * Response:  { "quotes": { "AAPL": { "price": 192.31, "asOf": "..." }, ... } }
  */
 
+/**
+ * Cloudflare's rate-limiting binding. Declared locally so the Worker types
+ * version doesn't need to ship it. `limit()` counts the call and reports
+ * whether it's still within the configured window.
+ */
+interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   TWELVE_DATA_API_KEY: string;
   QUOTES: KVNamespace;
+  /**
+   * Optional per-IP rate limiter (configured in wrangler.toml). Guarded at the
+   * call site so a missing/misconfigured binding never takes the Worker down -
+   * the daily budget + per-device throttle still apply.
+   */
+  QUOTES_RL?: RateLimit;
 }
 
 const QUOTE_TTL_SECONDS = 7 * 24 * 60 * 60; // cache a price for a week (matches refresh cadence)
 const THROTTLE_TTL_SECONDS = 7 * 24 * 60 * 60; // 1 request per week per device
 const MAX_SYMBOLS = 120; // Twelve Data batch limit
+
+/**
+ * Hard daily ceiling on symbols fetched upstream, across ALL callers. A backstop
+ * so distributed abuse (clients that drop x-device) can't blow past the provider
+ * quota or run up the bill. Set this to your Twelve Data plan's daily credit
+ * limit minus headroom (free tier is ~800/day -> 700 is a safe default).
+ * Counted in KV, which has no atomic increment, so this is best-effort (a small
+ * overshoot under heavy concurrency is acceptable for a soft cap).
+ */
+const DAILY_UPSTREAM_SYMBOL_BUDGET = 700;
+const DAILY_COUNTER_TTL_SECONDS = 2 * 24 * 60 * 60; // yesterday's counter auto-expires
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -30,6 +56,19 @@ export default {
 
     if (req.method !== "GET" || url.pathname !== "/quotes") {
       return json({ error: "not_found" }, 404);
+    }
+
+    // --- Per-IP burst limit (abuse defense that doesn't rely on the client
+    // sending x-device). Returns 503, NOT 429, on purpose: 429 is reserved for
+    // the per-device weekly throttle, which the app reacts to by backing off a
+    // full week. A momentary IP burst should just be retried, so 503 routes it
+    // through the app's transient-failure path instead. ---
+    if (env.QUOTES_RL) {
+      const clientIp = req.headers.get("CF-Connecting-IP") ?? "";
+      const { success } = await env.QUOTES_RL.limit({ key: clientIp || "anon" });
+      if (!success) {
+        return json({ error: "busy" }, 503, { "retry-after": "60" });
+      }
     }
 
     const symbols = parseSymbols(url.searchParams.get("symbols"));
@@ -62,27 +101,40 @@ export default {
       })
     );
 
-    // --- One batched upstream call for everything stale. ---
+    // --- One batched upstream call for everything stale, bounded by the global
+    // daily budget. Past the ceiling we serve only what's cached (no error) so
+    // the app keeps its last-known prices. ---
     if (stale.length > 0) {
-      try {
-        const fetched = await fetchFromTwelveData(stale, env.TWELVE_DATA_API_KEY);
-        const asOf = new Date().toISOString();
-        await Promise.all(
-          stale.map(async (symbol) => {
-            const price = fetched[symbol];
-            if (Number.isFinite(price)) {
-              const record: CachedQuote = { price, asOf };
-              quotes[symbol] = record;
-              await env.QUOTES.put(`quote:${symbol}`, JSON.stringify(record), {
-                expirationTtl: QUOTE_TTL_SECONDS,
-              });
-            }
-          })
-        );
-      } catch (err) {
-        // If the provider is down we still return whatever was cached.
-        if (Object.keys(quotes).length === 0) {
-          return json({ error: "upstream_unavailable" }, 502);
+      const dayKey = `upstream:${new Date().toISOString().slice(0, 10)}`;
+      const usedToday = Number(await env.QUOTES.get(dayKey)) || 0;
+      const remaining = DAILY_UPSTREAM_SYMBOL_BUDGET - usedToday;
+      const toFetch = remaining > 0 ? stale.slice(0, remaining) : [];
+
+      if (toFetch.length > 0) {
+        try {
+          const fetched = await fetchFromTwelveData(toFetch, env.TWELVE_DATA_API_KEY);
+          const asOf = new Date().toISOString();
+          await Promise.all(
+            toFetch.map(async (symbol) => {
+              const price = fetched[symbol];
+              if (Number.isFinite(price)) {
+                const record: CachedQuote = { price, asOf };
+                quotes[symbol] = record;
+                await env.QUOTES.put(`quote:${symbol}`, JSON.stringify(record), {
+                  expirationTtl: QUOTE_TTL_SECONDS,
+                });
+              }
+            })
+          );
+          // Charge the credits we actually spent against today's budget.
+          await env.QUOTES.put(dayKey, String(usedToday + toFetch.length), {
+            expirationTtl: DAILY_COUNTER_TTL_SECONDS,
+          });
+        } catch (err) {
+          // If the provider is down we still return whatever was cached.
+          if (Object.keys(quotes).length === 0) {
+            return json({ error: "upstream_unavailable" }, 502);
+          }
         }
       }
     }
@@ -151,9 +203,16 @@ async function sha256Hex(input: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function json(body: unknown, status = 200): Response {
+function json(
+  body: unknown,
+  status = 200,
+  extraHeaders: Record<string, string> = {}
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      ...extraHeaders,
+    },
   });
 }

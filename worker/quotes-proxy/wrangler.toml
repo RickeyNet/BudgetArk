@@ -25,5 +25,22 @@ preview_urls = false
 binding = "QUOTES"
 id = "2c1da019a9b64fe291f7a557cd9a0c39"
 
+# Per-IP burst rate limiter (Cloudflare Workers Rate Limiting binding). Keyed by
+# the connecting IP in code, so a client that drops the x-device header still
+# can't hammer the endpoint. `period` must be 10 or 60 seconds; `limit` is the
+# allowed requests per window. A legit app makes ~1 request/week per device, so
+# 20/min is generous and only bites abusers. `namespace_id` is any number unique
+# among your account's rate limiters.
+#
+# If your wrangler version rejects this stanza, the newer form is a top-level
+# [[ratelimit]] table with the same keys; or set an equivalent Rate Limiting
+# Rule in the dashboard (Security -> WAF -> Rate limiting). The Worker guards the
+# binding, so it runs fine even if this is absent - it just skips the IP limit.
+[[unsafe.bindings]]
+name = "QUOTES_RL"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
 [observability]
 enabled = true
