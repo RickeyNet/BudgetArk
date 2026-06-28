@@ -840,11 +840,16 @@ const ProfileScreen: React.FC = () => {
 
   const installPendingUpdate = useCallback(async () => {
     try {
-      // Mark the OTA install so the post-reload bootstrap suppresses the
-      // "what's new" prompt - the install dialog already showed it. The
-      // auto-install path in App.tsx sets the same flag; without this the
-      // manual install path would re-show release notes after reload.
-      await setOtaUpdateInstalled();
+      // Record whether this dialog actually resolved and showed the notes (same
+      // match logic the modal uses). If it did, the post-reload bootstrap skips
+      // the "what's new" prompt; if it only showed the version, the prompt still
+      // runs after reload so the baked-in notes aren't lost. The auto-install
+      // path in App.tsx records the same signal.
+      const notesShown = !!(
+        findReleaseNoteForVersion(pendingUpdate?.appVersion) ||
+        findReleaseNoteForVersion(pendingUpdate?.message)
+      );
+      await setOtaUpdateInstalled(notesShown);
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error: any) {
@@ -855,7 +860,7 @@ const ProfileScreen: React.FC = () => {
           "The update could not be applied right now. Please try again.",
       });
     }
-  }, []);
+  }, [pendingUpdate]);
 
   const toggleReleaseNote = useCallback((version: string) => {
     setExpandedReleaseNote((current) => (current === version ? null : version));

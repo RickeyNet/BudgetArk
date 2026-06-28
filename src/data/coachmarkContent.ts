@@ -89,6 +89,12 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         body:
           "Add savings, retirement, brokerage, or any account you want counted toward Net Worth. Tap a row to update its balance any time - the changes flow back into the Bridge view.",
       },
+      {
+        id: "bridge-holdings",
+        title: "Track stocks and ETFs (Live Holdings)",
+        body:
+          "Turn on Live Holdings to add stocks and ETFs by ticker symbol and share count. Their market value counts toward your Net Worth and the prices refresh about once a week. It stays off until you switch it on here or in Profile - the first time, you will see exactly what leaves your device. Only your ticker symbols are ever sent out to look up prices, never your share counts, balances, or who you are.",
+      },
     ],
   },
   Utilities: {

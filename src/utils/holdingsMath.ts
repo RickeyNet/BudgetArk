@@ -78,6 +78,23 @@ export const holdingsTotalValue = (
   holdings.reduce((sum, holding) => sum + holdingMarketValue(holding, quotes), 0);
 
 /**
+ * Total market value of the holdings belonging to one account (broker),
+ * matched by `accountId`. Used for the per-broker subtotal on the Bridge.
+ */
+export const accountHoldingsValue = (
+  accountId: string,
+  holdings: Holding[],
+  quotes: Record<string, CachedQuote>,
+): number =>
+  holdings.reduce(
+    (sum, holding) =>
+      holding.accountId === accountId
+        ? sum + holdingMarketValue(holding, quotes)
+        : sum,
+    0,
+  );
+
+/**
  * Unrealized gain/loss for a holding, or null when it can't be computed
  * (no quote, or no cost basis recorded). costBasis is the TOTAL invested.
  */

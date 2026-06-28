@@ -210,13 +210,17 @@ const AppContent: React.FC = () => {
     if (isOnboardingComplete !== true) return;
 
     const checkReleaseNotesPrompt = async () => {
-      const justInstalledOta = await consumeOtaUpdateInstalled();
-      if (justInstalledOta) {
-        // OTA update was just applied - the update modal already showed
-        // the release notes, so mark as seen and skip the prompt.
+      const ota = await consumeOtaUpdateInstalled();
+      if (ota.installed && ota.notesShown) {
+        // OTA update was just applied AND the install dialog already showed
+        // the notes for this version, so mark as seen and skip the prompt.
         await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
         return;
       }
+      // Either a normal launch, or an OTA install whose pre-install dialog
+      // could not resolve notes (published without the stamped message). In
+      // the latter case we deliberately fall through: the prompt below sources
+      // from the baked-in RELEASE_NOTES, so notes can never be missing here.
       const lastSeenVersion = await getLastSeenReleaseNotesVersion();
       if (lastSeenVersion !== CURRENT_APP_VERSION) {
         setShowReleaseNotesPrompt(true);
@@ -228,13 +232,15 @@ const AppContent: React.FC = () => {
 
   const handleInstallUpdate = useCallback(async () => {
     try {
-      await setOtaUpdateInstalled();
+      // Record whether this dialog actually showed the notes so the post-reload
+      // prompt knows whether it still needs to surface them.
+      await setOtaUpdateInstalled(!!pendingUpdate?.releaseNote);
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error) {
       if (__DEV__) console.error("Failed to apply update:", error);
     }
-  }, []);
+  }, [pendingUpdate]);
 
   const handleDismissReleaseNotesPrompt = useCallback(async () => {
     setShowReleaseNotesPrompt(false);
@@ -349,8 +355,11 @@ const AppContent: React.FC = () => {
         </View>
       </Modal>
 
+      {/* Mutually exclusive with the update prompt above: never stack the
+          "what's new" prompt on top of (or under) the "Update Ready" dialog.
+          The update prompt wins; this one shows once it clears. */}
       <Modal
-        visible={showReleaseNotesPrompt}
+        visible={showReleaseNotesPrompt && pendingUpdate === null}
         animationType="fade"
         transparent
         onRequestClose={handleDismissReleaseNotesPrompt}

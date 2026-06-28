@@ -340,7 +340,10 @@ export interface Holding {
    * only used to show gain/loss; market value comes from `shares × price`.
    */
   costBasis?: number;
-  /** Optional link to an AssetAccount this position is held within. */
+  /**
+   * Link to the Investment-category AssetAccount (the broker) this position is
+   * held in. The Bridge nests holdings under their broker via this id.
+   */
   accountId?: string;
   createdAt: string;
   updatedAt: string;
