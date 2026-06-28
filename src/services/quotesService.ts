@@ -14,7 +14,7 @@
  *     learning anything about the portfolio.
  */
 
-import { MAX_QUOTE_SYMBOLS, QUOTES_PROXY_URL } from "../config/quotesConfig";
+import { MAX_QUOTE_SYMBOLS, QUOTES_APP_KEY, QUOTES_PROXY_URL } from "../config/quotesConfig";
 import { getDeviceId } from "../storage/deviceIdStorage";
 import { getHoldings } from "../storage/holdingsStorage";
 import {
@@ -82,9 +82,13 @@ export const refreshQuotes = async (
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
+    // Always send the shared app key; add the device id when we have one (it
+    // drives the Worker's per-device weekly throttle).
+    const headers: Record<string, string> = { "x-app-key": QUOTES_APP_KEY };
+    if (deviceId) headers["x-device"] = deviceId;
     const res = await fetch(buildUrl(symbols), {
       method: "GET",
-      headers: deviceId ? { "x-device": deviceId } : undefined,
+      headers,
       signal: controller.signal,
     });
 

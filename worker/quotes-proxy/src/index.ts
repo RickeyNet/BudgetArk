@@ -33,6 +33,16 @@ export interface Env {
    * the daily budget + per-device throttle still apply.
    */
   QUOTES_RL?: RateLimit;
+  /**
+   * Shared key the app sends as the `x-app-key` header. A LOW-EFFORT BOT
+   * DETERRENT, NOT authentication: it ships in the client bundle and can be
+   * extracted, so it only filters blind internet scanners that probe the
+   * workers.dev hostname. Real cost/abuse control is the throttle + budgets
+   * below. Set it as a Cloudflare secret (`wrangler secret put APP_SHARED_KEY`)
+   * with the SAME value as the app's QUOTES_APP_KEY. Leave it unset and the
+   * check is skipped, so the Worker keeps working before you configure it.
+   */
+  APP_SHARED_KEY?: string;
 }
 
 const QUOTE_TTL_SECONDS = 7 * 24 * 60 * 60; // cache a price for a week (matches refresh cadence)
@@ -69,6 +79,14 @@ export default {
     const url = new URL(req.url);
 
     if (req.method !== "GET" || url.pathname !== "/quotes") {
+      return json({ error: "not_found" }, 404);
+    }
+
+    // Drop anything that isn't carrying our app's shared key. This is only a
+    // bot deterrent (the key ships in the client), so we answer with the same
+    // 404 as an unknown path rather than 401 - no point advertising the gate.
+    // Skipped entirely when APP_SHARED_KEY isn't configured.
+    if (env.APP_SHARED_KEY && req.headers.get("x-app-key") !== env.APP_SHARED_KEY) {
       return json({ error: "not_found" }, 404);
     }
 
