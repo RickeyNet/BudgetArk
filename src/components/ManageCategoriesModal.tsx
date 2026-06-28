@@ -109,7 +109,9 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
       onRequestClose={handleClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets; Android
+        // uses height-mode KAV. One per platform avoids a double shift.
+        behavior={Platform.OS === "android" ? "height" : undefined}
         style={styles.overlay}
       >
         <View style={styles.modalSheet}>
@@ -117,6 +119,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
           >
             <Text style={styles.title}>Custom Categories</Text>
             <Text style={styles.subtitle}>

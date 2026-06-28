@@ -249,7 +249,10 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        behavior="padding"
+        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets below;
+        // Android uses height-mode KAV. Running both per platform would
+        // double-shift, so only one is active at a time.
+        behavior={Platform.OS === "android" ? "height" : undefined}
         style={styles.overlay}
       >
         {/* Modal sheet - fills from near top to bottom */}
@@ -259,6 +262,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
           >
             <Text style={styles.title}>Add Budget Entry</Text>
             <Text style={styles.subtitle}>Track income and expenses by category.</Text>
@@ -634,6 +638,8 @@ const makeStyles = (colors: ThemeColors) =>
     scrollContent: {
       padding: 24,
       gap: 14,
+      // Extra room so the last fields can scroll clear of the keyboard.
+      paddingBottom: 56,
     },
     title: {
       fontSize: 22,

@@ -124,6 +124,7 @@ import {
 import type { PairingState, SyncStatus, SyncResult } from "../sync/types";
 import PairingModal from "../components/PairingModal";
 import FeedbackModal from "../components/FeedbackModal";
+import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import SpreadsheetSchemaModal from "../components/SpreadsheetSchemaModal";
 import { triggerHaptic, setHapticsCache } from "../utils/haptics";
 import {
@@ -3277,7 +3278,7 @@ const ProfileScreen: React.FC = () => {
         transparent
         onRequestClose={() => setShowExportModal(false)}
       >
-        <View style={styles.dialogOverlay}>
+        <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
           <View
             style={[
               styles.dialogBox,
@@ -3383,7 +3384,7 @@ const ProfileScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       {/* ── Import Password Modal ── */}
@@ -3397,7 +3398,7 @@ const ProfileScreen: React.FC = () => {
           setImportPassword("");
         }}
       >
-        <View style={styles.dialogOverlay}>
+        <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
           <View
             style={[
               styles.dialogBox,
@@ -3455,7 +3456,7 @@ const ProfileScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       {/* ── Reset Confirmation Modal ── */}

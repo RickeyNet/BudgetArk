@@ -229,7 +229,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     <>
     <Modal visible={!!entry} animationType="slide" transparent onRequestClose={onClose} onShow={handleShow}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // iOS leans on automaticallyAdjustKeyboardInsets below (also scrolls
+        // the focused field into view); Android uses height-mode KAV. One per
+        // platform avoids a double shift.
+        behavior={Platform.OS === "android" ? "height" : undefined}
         style={styles.overlay}
       >
         {/* Tap-to-dismiss area above the sheet */}
@@ -240,6 +243,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
           <ScrollView
             contentContainerStyle={[styles.modalScroll, { paddingBottom: Math.max(insets.bottom, 16) }]}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
           >
             <Text style={styles.title}>Edit Entry</Text>
             <Text style={styles.subtitle}>Update or delete this budget entry.</Text>

@@ -155,7 +155,9 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior="padding"
+        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets; Android
+        // uses height-mode KAV. One per platform avoids a double shift.
+        behavior={Platform.OS === "android" ? "height" : undefined}
         style={styles.overlay}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
@@ -164,6 +166,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
               style={styles.card}
               contentContainerStyle={styles.cardContent}
               keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
             >
               <Text style={styles.title}>Send Feedback</Text>
               <Text style={styles.subtitle}>

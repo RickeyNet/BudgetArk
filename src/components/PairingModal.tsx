@@ -214,7 +214,9 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior="padding"
+        // No ScrollView here, so KAV does the lift on both platforms (iOS
+        // padding, Android height).
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <Pressable style={styles.backdrop} onPress={onClose}>
           <View onStartShouldSetResponder={() => true}>

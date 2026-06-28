@@ -75,6 +75,7 @@ import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
 import { isEntryActiveInMonth } from "../utils/recurrence";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
+import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import {
   HOLDINGS_DISCLOSURE_TITLE,
   HOLDINGS_DISCLOSURE_INTRO,
@@ -1137,7 +1138,7 @@ const BridgeScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={closeAssetModal}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAwareModalOverlay style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editingAsset ? "Edit Account" : "Add Account"}</Text>
             <Text style={styles.modalSub}>
@@ -1260,7 +1261,7 @@ const BridgeScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       <Modal
@@ -1269,7 +1270,7 @@ const BridgeScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowEfContribModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAwareModalOverlay style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Emergency Fund</Text>
             <Text style={styles.modalSub}>
@@ -1304,7 +1305,7 @@ const BridgeScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       <Modal
@@ -1313,7 +1314,7 @@ const BridgeScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowHoldingsDisclosure(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAwareModalOverlay style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{HOLDINGS_DISCLOSURE_TITLE}</Text>
             <Text style={styles.modalSub}>{HOLDINGS_DISCLOSURE_INTRO}</Text>
@@ -1336,7 +1337,7 @@ const BridgeScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       <AchievementsScreen
