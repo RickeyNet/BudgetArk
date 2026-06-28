@@ -113,7 +113,7 @@ type TickerDraft = {
 const BridgeScreen: React.FC = () => {
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
-  const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const { formatCurrency, formatCompactCurrency, preference, rates } = useCurrency();
   const insets = useSafeAreaInsets();
   const coachmark = useTabCoachmark("Bridge");
   const listRef = useRef<FlatList>(null);
@@ -355,6 +355,14 @@ const BridgeScreen: React.FC = () => {
     return null;
   }, [keelTarget, savingsGoals, savingsReserve]);
 
+  // Convert holdings (quoted in their own currency - USD for US listings, the
+  // pair's quote side for crypto) into the user's display currency, so they
+  // sum correctly with the already-localized stored balances.
+  const holdingValueOpts = useMemo(
+    () => ({ displayCurrency: preference.currencyCode, rates }),
+    [preference.currencyCode, rates]
+  );
+
   const netWorthTotals = useMemo(
     () =>
       calculateNetWorthTotals({
@@ -364,8 +372,19 @@ const BridgeScreen: React.FC = () => {
         assetAccounts,
         holdings,
         quotes,
+        displayCurrency: preference.currencyCode,
+        rates,
       }),
-    [assetAccounts, debts, entries, holdings, quotes, savingsGoals]
+    [
+      assetAccounts,
+      debts,
+      entries,
+      holdings,
+      quotes,
+      savingsGoals,
+      preference.currencyCode,
+      rates,
+    ]
   );
 
   /**
@@ -374,8 +393,8 @@ const BridgeScreen: React.FC = () => {
    * total shown on its group header.
    */
   const holdingsValue = useMemo(
-    () => holdingsTotalValue(holdings, quotes),
-    [holdings, quotes]
+    () => holdingsTotalValue(holdings, quotes, holdingValueOpts),
+    [holdings, quotes, holdingValueOpts]
   );
 
   /** Investment-category accounts (the brokers), in display order. */
@@ -953,7 +972,7 @@ const BridgeScreen: React.FC = () => {
                   <>
                     {investmentAccounts.map((broker) => {
                       const brokerH = holdings.filter((h) => h.accountId === broker.id);
-                      const brokerTotal = accountHoldingsValue(broker.id, holdings, quotes);
+                      const brokerTotal = accountHoldingsValue(broker.id, holdings, quotes, holdingValueOpts);
                       const isOpen = expandedBrokers.has(broker.id);
                       return (
                         <View key={broker.id}>
@@ -990,8 +1009,8 @@ const BridgeScreen: React.FC = () => {
                               : brokerH.map((h) => {
                                   const symbol = normalizeSymbol(h.symbol);
                                   const priced = !!quotes[symbol];
-                                  const value = holdingMarketValue(h, quotes);
-                                  const gainLoss = holdingGainLoss(h, quotes);
+                                  const value = holdingMarketValue(h, quotes, holdingValueOpts);
+                                  const gainLoss = holdingGainLoss(h, quotes, holdingValueOpts);
                                   return (
                                     <TouchableOpacity
                                       key={h.id}
@@ -1197,7 +1216,7 @@ const BridgeScreen: React.FC = () => {
             {assetCategory === "investment" ? (
               <View style={styles.tickerEditor}>
                 <Text style={styles.modalHint}>
-                  Tickers are sent to the price service only when you tap Update prices - add them all first, then pull prices once.
+                  Add stocks/ETFs by ticker (AAPL) or crypto by pair (BTC/USD). Symbols are sent to the price service only when you tap Update prices - add them all first, then pull prices once.
                 </Text>
                 <ScrollView
                   style={styles.tickerList}
@@ -1208,7 +1227,7 @@ const BridgeScreen: React.FC = () => {
                     <View key={row.key} style={styles.tickerRow}>
                       <TextInput
                         style={[styles.modalInput, styles.tickerSymbolInput]}
-                        placeholder="Ticker"
+                        placeholder="AAPL or BTC/USD"
                         placeholderTextColor={colors.textMuted}
                         autoCapitalize="characters"
                         autoCorrect={false}

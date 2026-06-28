@@ -31,6 +31,16 @@ type NetWorthInput = {
    * never corrupt the net-worth total.
    */
   quotes?: Record<string, CachedQuote>;
+  /**
+   * The user's display currency code (e.g. "USD", "SEK"). Quote prices arrive
+   * in the symbol's own currency (USD for US listings, the pair's quote side
+   * for crypto), so holdings are converted into this before being summed with
+   * the already-localized stored balances. Omit it (or leave USD) to keep
+   * holdings in their raw quote currency - a 1:1 no-op for USD portfolios.
+   */
+  displayCurrency?: string;
+  /** units-per-USD rate table used for the conversion above (static fallback if omitted). */
+  rates?: Record<string, number>;
 };
 
 /**
@@ -52,6 +62,8 @@ export const calculateNetWorthTotals = ({
   assetAccounts,
   holdings = [],
   quotes = {},
+  displayCurrency,
+  rates,
 }: NetWorthInput): NetWorthTotals => {
   const goalSavings = savingsGoals.reduce((sum, goal) => sum + goal.currentAmount, 0);
   // Reserve-category expense entries flow money INTO savings. Entries that
@@ -70,7 +82,7 @@ export const calculateNetWorthTotals = ({
   const totalAssetBalance = assetAccounts.reduce((sum, account) => sum + account.balance, 0);
   // Market value of stock/ETF positions (shares × latest cached price).
   // Unpriced positions contribute 0, so this can only ever add real money.
-  const holdingsValue = holdingsTotalValue(holdings, quotes);
+  const holdingsValue = holdingsTotalValue(holdings, quotes, { displayCurrency, rates });
   const totalAssets = goalSavings + entrySavings + totalAssetBalance + holdingsValue;
   const totalDebt = debts.reduce((sum, debt) => sum + debt.balance, 0);
 

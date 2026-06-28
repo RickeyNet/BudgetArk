@@ -251,8 +251,9 @@ describe("isHoldingItem", () => {
     ).toBe(true);
   });
 
-  it("accepts fractional shares and dotted tickers", () => {
+  it("accepts fractional shares, dotted tickers, and crypto pairs", () => {
     expect(isHoldingItem({ ...valid, symbol: "BRK.B", shares: 0.25 })).toBe(true);
+    expect(isHoldingItem({ ...valid, symbol: "BTC/USD", shares: 0.5 })).toBe(true);
   });
 
   it("rejects a non-object", () => {
@@ -267,7 +268,7 @@ describe("isHoldingItem", () => {
   it("rejects a malformed symbol", () => {
     expect(isHoldingItem({ ...valid, symbol: "bad symbol" })).toBe(false);
     expect(isHoldingItem({ ...valid, symbol: "" })).toBe(false);
-    expect(isHoldingItem({ ...valid, symbol: "TOOLONGTICKER1" })).toBe(false);
+    expect(isHoldingItem({ ...valid, symbol: "WAYTOOLONGTICKER1" })).toBe(false); // 17 > 15 cap
   });
 
   it("rejects a non-ISO deletedAt (would break tombstone GC)", () => {

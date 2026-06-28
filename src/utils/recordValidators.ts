@@ -325,14 +325,15 @@ export const isAssetAccountItem = (
 };
 
 /**
- * A holding (stock/ETF position) record. `symbol` is a short ticker
- * (alnum plus `.`/`-` for class shares / indices), validated case-insensitively
- * since storage may not have normalized it. `shares` must be a positive number
- * (fractional allowed). `costBasis` (TOTAL dollars invested) and `accountId`
- * (link to an AssetAccount) are optional. Same trust boundary as the other
- * collections: a semi-trusted peer could send arbitrary records.
+ * A holding (stock / ETF / crypto position) record. `symbol` is a short ticker
+ * (alnum plus `.`/`-` for class shares / indices, and `/` for crypto pairs like
+ * BTC/USD), validated case-insensitively since storage may not have normalized
+ * it. `shares` must be a positive number (fractional allowed). `costBasis`
+ * (TOTAL dollars invested) and `accountId` (link to an AssetAccount) are
+ * optional. Same trust boundary as the other collections: a semi-trusted peer
+ * could send arbitrary records.
  */
-const HOLDING_SYMBOL_PATTERN = /^[a-zA-Z0-9.-]{1,12}$/;
+const HOLDING_SYMBOL_PATTERN = /^[a-zA-Z0-9./-]{1,15}$/;
 
 export const isHoldingItem = (
   item: unknown

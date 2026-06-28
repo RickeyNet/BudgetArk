@@ -1,5 +1,6 @@
 import {
   QUOTE_REFRESH_INTERVAL_MS,
+  accountHoldingsValue,
   collectSymbols,
   holdingGainLoss,
   holdingMarketValue,
@@ -7,6 +8,7 @@ import {
   isQuoteRefreshDue,
   isValidSymbol,
   normalizeSymbol,
+  quoteCurrency,
 } from "../holdingsMath";
 
 // ts-jest runs transpile-only, so light `as any` fixtures keep these concise
@@ -23,18 +25,22 @@ const holding = (over: Record<string, unknown>): any => ({
 const quote = (price: number) => ({ price, asOf: "2026-06-27T00:00:00.000Z" });
 
 describe("isValidSymbol / normalizeSymbol", () => {
-  it("accepts well-formed tickers, case-insensitively", () => {
+  it("accepts well-formed tickers and crypto pairs, case-insensitively", () => {
     expect(isValidSymbol("aapl")).toBe(true);
     expect(isValidSymbol("VTI")).toBe(true);
     expect(isValidSymbol("BRK.B")).toBe(true);
     expect(isValidSymbol(" msft ")).toBe(true);
+    // Crypto pairs use a slash (priced by the same provider).
+    expect(isValidSymbol("BTC/USD")).toBe(true);
+    expect(isValidSymbol("eth/usd")).toBe(true);
   });
 
   it("rejects empty, overlong, or illegal tickers", () => {
     expect(isValidSymbol("")).toBe(false);
-    expect(isValidSymbol("TOOLONGSYMBOL1")).toBe(false);
+    expect(isValidSymbol("WAYTOOLONGSYMBOL1")).toBe(false); // 17 chars, cap is 15
     expect(isValidSymbol("A B")).toBe(false);
     expect(isValidSymbol("$$$")).toBe(false);
+    expect(isValidSymbol("BTC\\USD")).toBe(false); // backslash, not a valid pair
   });
 
   it("normalizes to trimmed uppercase", () => {
@@ -118,6 +124,81 @@ describe("holdingsTotalValue", () => {
 
   it("is 0 for no holdings", () => {
     expect(holdingsTotalValue([], { AAPL: quote(100) })).toBe(0);
+  });
+});
+
+describe("quoteCurrency", () => {
+  it("reads the quote side of a crypto pair", () => {
+    expect(quoteCurrency("BTC/USD")).toBe("USD");
+    expect(quoteCurrency("ETH/EUR")).toBe("EUR");
+    expect(quoteCurrency("btc/usd")).toBe("USD"); // normalized first
+  });
+
+  it("assumes USD for a plain ticker (and degrades on a trailing slash)", () => {
+    expect(quoteCurrency("AAPL")).toBe("USD");
+    expect(quoteCurrency("BRK.B")).toBe("USD");
+    expect(quoteCurrency("BTC/")).toBe("USD");
+  });
+});
+
+describe("display-currency conversion", () => {
+  // 1 USD = 10 SEK in this toy table (units-per-USD).
+  const rates = { USD: 1, SEK: 10, EUR: 0.5 };
+
+  it("leaves values untouched without a display currency (raw quote currency)", () => {
+    expect(
+      holdingMarketValue(holding({ symbol: "BTC/USD", shares: 0.5 }), { "BTC/USD": quote(60000) })
+    ).toBe(30000);
+  });
+
+  it("is a 1:1 no-op when the display currency matches the quote currency", () => {
+    expect(
+      holdingMarketValue(holding({ symbol: "AAPL", shares: 2 }), { AAPL: quote(100) }, {
+        displayCurrency: "USD",
+        rates,
+      })
+    ).toBe(200);
+  });
+
+  it("converts a USD-quoted holding into the display currency", () => {
+    // 0.5 BTC * $60,000 = $30,000 USD -> 300,000 SEK at 10 SEK/USD.
+    expect(
+      holdingMarketValue(holding({ symbol: "BTC/USD", shares: 0.5 }), { "BTC/USD": quote(60000) }, {
+        displayCurrency: "SEK",
+        rates,
+      })
+    ).toBe(300000);
+  });
+
+  it("converts via USD when the pair is quoted in a third currency", () => {
+    // 2 ETH * 100 EUR = 200 EUR; 1 USD = 0.5 EUR so 200 EUR = 400 USD.
+    expect(
+      holdingMarketValue(holding({ symbol: "ETH/EUR", shares: 2 }), { "ETH/EUR": quote(100) }, {
+        displayCurrency: "USD",
+        rates,
+      })
+    ).toBe(400);
+  });
+
+  it("totals and per-account subtotals also convert", () => {
+    const holdings = [
+      holding({ symbol: "AAPL", shares: 1, accountId: "b1" }), // $100
+      holding({ symbol: "BTC/USD", shares: 0.5, accountId: "b1" }), // $30,000
+    ];
+    const quotes = { AAPL: quote(100), "BTC/USD": quote(60000) };
+    const opts = { displayCurrency: "SEK", rates };
+    expect(holdingsTotalValue(holdings, quotes, opts)).toBe(301000); // 30,100 USD * 10
+    expect(accountHoldingsValue("b1", holdings, quotes, opts)).toBe(301000);
+  });
+
+  it("converts the holding's market value before subtracting cost basis", () => {
+    // Market $200 -> 2,000 SEK; cost basis is recorded in display currency (SEK).
+    expect(
+      holdingGainLoss(holding({ symbol: "AAPL", shares: 2, costBasis: 1500 }), { AAPL: quote(100) }, {
+        displayCurrency: "SEK",
+        rates,
+      })
+    ).toBe(500); // 2000 - 1500
   });
 });
 

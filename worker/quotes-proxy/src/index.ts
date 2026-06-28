@@ -214,8 +214,9 @@ function parseSymbols(raw: string | null): string[] {
   const seen = new Set<string>();
   for (const part of raw.toUpperCase().split(",")) {
     const sym = part.trim();
-    // Tickers are short alphanumerics (allow . and - for class shares / indices).
-    if (sym && /^[A-Z0-9.\-]{1,12}$/.test(sym)) seen.add(sym);
+    // Short alphanumerics: `.`/`-` for class shares / indices, `/` for crypto
+    // pairs (e.g. BTC/USD). Kept in sync with the app's holdingsMath regex.
+    if (sym && /^[A-Z0-9./\-]{1,15}$/.test(sym)) seen.add(sym);
     if (seen.size >= MAX_SYMBOLS) break;
   }
   return [...seen];
