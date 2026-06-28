@@ -14,10 +14,34 @@ main = "src/index.ts"
 compatibility_date = "2026-06-01"
 
 # Serve on the workers.dev subdomain (https://quotes-proxy.budgetark.workers.dev).
+#
+# MIGRATION TO quotes.budgetark.app (do in order, no downtime):
+#   1. Add budgetark.app as a zone in this Cloudflare account (nameservers
+#      pointed at Cloudflare) and wait for it to go Active.
+#   2. Deploy with workers_dev = true AND the custom domain below. The Worker now
+#      answers on BOTH hosts. Cloudflare auto-provisions the DNS record + cert
+#      for quotes.budgetark.app.
+#   3. Verify: curl "https://quotes.budgetark.app/quotes?symbols=AAPL" \
+#        -H "x-app-key: <key>"   -> real prices.
+#   4. Point the app's QUOTES_PROXY_URL at https://quotes.budgetark.app and ship.
+#   5. ONLY THEN flip workers_dev = false and redeploy, retiring the enumerable
+#      workers.dev hostname. (Flipping it before step 4 ships kills the app.)
 workers_dev = true
 # No per-version preview URLs — this is a single public endpoint, so keep the
 # surface minimal and silence the deploy warning.
 preview_urls = false
+
+# Custom domain for the Worker. `custom_domain = true` makes wrangler provision
+# the DNS record + TLS cert for this subdomain automatically on deploy. The
+# website stays on the apex/www; this only claims the `quotes` subdomain.
+#
+# COMMENTED OUT until budgetark.app is an Active zone in this account: with it
+# enabled, `wrangler deploy` fails if the zone is missing — which would also
+# block the shared-key deploy. Uncomment at step 2 of the migration, once the
+# zone is live.
+# routes = [
+#   { pattern = "quotes.budgetark.app", custom_domain = true },
+# ]
 
 # KV namespace used for both the per-symbol price cache and the per-device
 # throttle. Create it with the command above, then replace REPLACE_WITH_KV_ID.
