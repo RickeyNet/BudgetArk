@@ -155,9 +155,11 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets; Android
-        // uses height-mode KAV. One per platform avoids a double shift.
-        behavior={Platform.OS === "android" ? "height" : undefined}
+        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets. Android
+        // relies on the native window resize + the ScrollView; a "height" KAV
+        // shifts on top of that resize and glitches the screen when the
+        // keyboard is dismissed, so behavior stays undefined on both platforms.
+        behavior={undefined}
         style={styles.overlay}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>

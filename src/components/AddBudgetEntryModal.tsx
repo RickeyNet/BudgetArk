@@ -249,10 +249,11 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets below;
-        // Android uses height-mode KAV. Running both per platform would
-        // double-shift, so only one is active at a time.
-        behavior={Platform.OS === "android" ? "height" : undefined}
+        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets below.
+        // Android relies on the native window resize + the ScrollView; a
+        // "height" KAV shifts on top of that resize and glitches the screen
+        // when the keyboard is dismissed, so behavior stays undefined on both.
+        behavior={undefined}
         style={styles.overlay}
       >
         {/* Modal sheet - fills from near top to bottom */}

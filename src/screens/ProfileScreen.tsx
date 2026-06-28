@@ -3757,7 +3757,10 @@ const ProfileScreen: React.FC = () => {
       >
         <KeyboardAvoidingView
           style={styles.pasteModalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          // Android: leave behavior undefined so only the native window resize
+          // moves the card. A "height" KAV double-shifts on top of that and
+          // glitches the screen when the keyboard is dismissed.
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
           <View

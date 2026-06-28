@@ -214,9 +214,10 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        // No ScrollView here, so KAV does the lift on both platforms (iOS
-        // padding, Android height).
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        // iOS: KAV does the lift via padding. Android: leave behavior undefined
+        // so only the native window resize moves the card - a "height" KAV
+        // double-shifts and glitches the screen when the keyboard is dismissed.
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <Pressable style={styles.backdrop} onPress={onClose}>
           <View onStartShouldSetResponder={() => true}>

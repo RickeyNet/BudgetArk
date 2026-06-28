@@ -3,7 +3,6 @@ import {
   InteractionManager,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -230,9 +229,11 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     <Modal visible={!!entry} animationType="slide" transparent onRequestClose={onClose} onShow={handleShow}>
       <KeyboardAvoidingView
         // iOS leans on automaticallyAdjustKeyboardInsets below (also scrolls
-        // the focused field into view); Android uses height-mode KAV. One per
-        // platform avoids a double shift.
-        behavior={Platform.OS === "android" ? "height" : undefined}
+        // the focused field into view). Android relies on the native window
+        // resize + the ScrollView; a "height" KAV shifts on top of that resize
+        // and glitches the screen when the keyboard is dismissed, so behavior
+        // stays undefined on both platforms.
+        behavior={undefined}
         style={styles.overlay}
       >
         {/* Tap-to-dismiss area above the sheet */}

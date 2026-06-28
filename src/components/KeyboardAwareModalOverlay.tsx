@@ -15,9 +15,16 @@ import {
  * `<KeyboardAwareModalOverlay style={styles.modalOverlay}>...</KeyboardAwareModalOverlay>`.
  * Pass the screen's existing overlay style (flex:1, centered, dim backdrop).
  *
- * `behavior="padding"` matches the pattern already used by the component modals
- * (AddDebtModal, etc.). On Android it's a light no-op for most cases - the
- * window's adjustResize handles the lift - but it's harmless to keep set.
+ * On iOS we use `behavior="padding"`, matching the pattern already used by the
+ * component modals (AddDebtModal, etc.).
+ *
+ * On Android we deliberately leave `behavior` undefined (KAV becomes a passive
+ * wrapper). Android already resizes the window when the keyboard appears, and a
+ * `behavior="height"` KAV animates its own container height on top of that -
+ * the two fight each other, double-shifting the card and visibly glitching the
+ * screen when the keyboard is dismissed (e.g. tapping the keyboard checkmark in
+ * the holdings/ticker modal). Letting the native window resize handle it alone
+ * is smooth.
  */
 export function KeyboardAwareModalOverlay({
   style,
@@ -29,7 +36,7 @@ export function KeyboardAwareModalOverlay({
   return (
     <KeyboardAvoidingView
       style={style}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       {children}
     </KeyboardAvoidingView>
