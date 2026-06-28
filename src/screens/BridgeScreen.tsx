@@ -26,6 +26,9 @@ import {
   AssetAccountCategory,
   ASSET_ACCOUNT_CATEGORIES,
   ASSET_ACCOUNT_CATEGORY_LABELS,
+  HOLDINGS_CATEGORIES,
+  categorySupportsHoldings,
+  categoryIsPureHoldings,
   CachedQuote,
   Debt,
   Holding,
@@ -200,11 +203,13 @@ const BridgeScreen: React.FC = () => {
       getAssetAccounts(),
       getHoldings(),
     ]);
-    const investmentIds = new Set(
-      accounts.filter((a) => a.category === "investment").map((a) => a.id)
+    // A holding is "homed" if it points at any holdings-capable account
+    // (Investment, Retirement, or HSA) - not just an Investment broker.
+    const holdingsAccountIds = new Set(
+      accounts.filter((a) => categorySupportsHoldings(a.category)).map((a) => a.id)
     );
     const isOrphan = (h: Holding) =>
-      !h.accountId || !investmentIds.has(h.accountId);
+      !h.accountId || !holdingsAccountIds.has(h.accountId);
     if (!holdings.some(isOrphan)) return;
 
     const now = new Date().toISOString();
@@ -388,20 +393,34 @@ const BridgeScreen: React.FC = () => {
   );
 
   /**
-   * Total market value of all priced holdings. Every holding belongs to an
-   * Investment (broker) account, so this doubles as the Investment category
-   * total shown on its group header.
+   * Total market value of all priced holdings across every holdings-capable
+   * category (Investment, Retirement, HSA). Used for the global tracked total.
    */
   const holdingsValue = useMemo(
     () => holdingsTotalValue(holdings, quotes, holdingValueOpts),
     [holdings, quotes, holdingValueOpts]
   );
 
-  /** Investment-category accounts (the brokers), in display order. */
-  const investmentAccounts = useMemo(
-    () => assetAccounts.filter((a) => a.category === "investment"),
-    [assetAccounts]
-  );
+  /**
+   * Per-category data for the holdings-capable sections (Investment,
+   * Retirement, HSA). Each entry carries the category's accounts (brokers /
+   * providers) and its section total. Pure-holdings categories total their
+   * tickers only; HSA adds each account's cash balance to its holdings value.
+   */
+  const holdingsCategoryData = useMemo(() => {
+    return HOLDINGS_CATEGORIES.map((category) => {
+      const accounts = assetAccounts.filter((a) => a.category === category);
+      // hasCash drives whether the cash balance is shown/editable (HSA only).
+      // The stored balance is always counted in totals regardless, so any
+      // legacy cash on a pure-holdings account stays consistent with net worth.
+      const hasCash = !categoryIsPureHoldings(category);
+      const total = accounts.reduce((sum, account) => {
+        const positions = accountHoldingsValue(account.id, holdings, quotes, holdingValueOpts);
+        return sum + positions + account.balance;
+      }, 0);
+      return { category, accounts, hasCash, total };
+    });
+  }, [assetAccounts, holdings, quotes, holdingValueOpts]);
 
   /** Whether a manual price refresh is allowed yet (weekly window). */
   const priceRefreshDue = isQuoteRefreshDue(quotesLastFetchedAt, Date.now());
@@ -456,8 +475,9 @@ const BridgeScreen: React.FC = () => {
    * regardless of insertion order.
    */
   const accountsByCategory = useMemo(() => {
-    // Investment is rendered specially (brokers -> holdings), so exclude it here.
-    return ASSET_ACCOUNT_CATEGORIES.filter((category) => category !== "investment")
+    // Holdings categories (Investment/Retirement/HSA) render in their own
+    // broker-style sections, so exclude them from the plain balance list.
+    return ASSET_ACCOUNT_CATEGORIES.filter((category) => !categorySupportsHoldings(category))
       .map((category) => {
         const accounts = assetAccounts.filter((a) => a.category === category);
         const total = accounts.reduce((sum, a) => sum + a.balance, 0);
@@ -474,16 +494,19 @@ const BridgeScreen: React.FC = () => {
         value: group.total,
         color: assetCategoryColors[group.category],
       }));
-    // Investment shows as one slice valued by its holdings.
-    if (holdingsValue > 0) {
-      slices.push({
-        label: "investment",
-        value: holdingsValue,
-        color: assetCategoryColors.investment,
-      });
+    // Each holdings category shows as one slice valued by its section total
+    // (tickers, plus cash for HSA).
+    for (const data of holdingsCategoryData) {
+      if (data.total > 0) {
+        slices.push({
+          label: data.category,
+          value: data.total,
+          color: assetCategoryColors[data.category],
+        });
+      }
     }
     return slices;
-  }, [accountsByCategory, assetCategoryColors, holdingsValue]);
+  }, [accountsByCategory, assetCategoryColors, holdingsCategoryData]);
 
   const toggleAccountCategory = useCallback((category: AssetAccountCategory) => {
     setCollapsedAccountCategories((prev) => {
@@ -530,12 +553,16 @@ const BridgeScreen: React.FC = () => {
     setShowAssetModal(true);
   }, []);
 
-  /** Open the modal pre-set to a new Investment account (broker). */
-  const openAddBrokerModal = useCallback(() => {
+  /**
+   * Open the modal pre-set to a new holdings-capable account (a broker for
+   * Investment/Retirement, a provider for HSA). The category drives whether the
+   * cash-balance field and/or ticker editor show.
+   */
+  const openAddHoldingsAccountModal = useCallback((category: AssetAccountCategory) => {
     setEditingAsset(null);
     setAssetName("");
     setAssetBalance("");
-    setAssetCategory("investment");
+    setAssetCategory(category);
     setBrokerTickers([]);
     setShowAssetModal(true);
   }, []);
@@ -608,11 +635,17 @@ const BridgeScreen: React.FC = () => {
     const name = assetName.trim();
     if (!name) return;
 
-    const isInvestment = assetCategory === "investment";
+    const isPureHoldings = categoryIsPureHoldings(assetCategory);
+    const hasHoldings = categorySupportsHoldings(assetCategory);
     const parsedBalance = parseFloat(assetBalance);
-    if (!isInvestment && (Number.isNaN(parsedBalance) || parsedBalance < 0)) return;
-    // Investment accounts derive their value from holdings, so balance is 0.
-    const balance = isInvestment ? 0 : parsedBalance;
+    if (!isPureHoldings && (Number.isNaN(parsedBalance) || parsedBalance < 0)) return;
+    // Pure-holdings accounts (Investment/Retirement) have no cash-balance field;
+    // new ones start at 0, but preserve any existing balance (e.g. a legacy 401k
+    // tracked as a plain balance) rather than silently zeroing it. HSA edits its
+    // cash balance directly.
+    const balance = isPureHoldings
+      ? editingAsset?.balance ?? 0
+      : parsedBalance;
 
     const now = new Date().toISOString();
     const accountId = editingAsset ? editingAsset.id : generateUUID();
@@ -631,7 +664,7 @@ const BridgeScreen: React.FC = () => {
     setAssetAccounts(nextAccounts);
     await saveAssetAccounts(nextAccounts);
 
-    if (isInvestment) {
+    if (hasHoldings) {
       const rows = brokerTickers
         .map((row) => {
           const symbol = normalizeSymbol(row.symbol);
@@ -720,9 +753,9 @@ const BridgeScreen: React.FC = () => {
       // Soft-delete so the partner's next sync removes this account locally.
       const nextAccounts = await deleteAssetAccount(account.id);
       setAssetAccounts(nextAccounts);
-      // Deleting a broker also tombstones its holdings - they have no home
-      // without it.
-      if (account.category === "investment") {
+      // Deleting a holdings account also tombstones its holdings - they have no
+      // home without it.
+      if (categorySupportsHoldings(account.category)) {
         for (const h of holdings) {
           if (h.accountId === account.id) await deleteHoldingRecord(h.id);
         }
@@ -766,9 +799,9 @@ const BridgeScreen: React.FC = () => {
     const settings = await setHoldingsEnabled(true);
     setHoldingsSettings(settings);
     setShowHoldingsDisclosure(false);
-    // If the broker modal is open, drop in a blank ticker row so the user can
-    // keep going right where they left off.
-    if (showAssetModal && assetCategory === "investment") {
+    // If a holdings account modal is open, drop in a blank ticker row so the
+    // user can keep going right where they left off.
+    if (showAssetModal && categorySupportsHoldings(assetCategory)) {
       setBrokerTickers((prev) => [
         ...prev,
         { key: generateUUID(), symbol: "", shares: "", costBasis: "" },
@@ -949,133 +982,162 @@ const BridgeScreen: React.FC = () => {
               );
             })}
 
-            {investmentAccounts.length > 0 ? (
-              <View>
+            {holdingsCategoryData.map((section) => {
+              if (section.accounts.length === 0) return null;
+              const isCollapsed = collapsedAccountCategories.has(section.category);
+              const sectionColor = assetCategoryColors[section.category];
+              const addLabel =
+                section.category === "hsa" ? "+ Add HSA account" : "+ Add broker";
+              return (
+                <View key={section.category}>
+                  <TouchableOpacity
+                    style={styles.accountCategoryHeader}
+                    onPress={() => toggleAccountCategory(section.category)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.categoryDot, { backgroundColor: sectionColor }]} />
+                    <Text style={[styles.accountCategoryChevron, { color: colors.textDim }]}>
+                      {isCollapsed ? "▶" : "▼"}
+                    </Text>
+                    <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
+                      {iconForCategory(section.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[section.category]}
+                    </Text>
+                    <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
+                      {formatCurrency(section.total)}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {!isCollapsed ? (
+                    <>
+                      {section.accounts.map((broker) => {
+                        const brokerH = holdings.filter((h) => h.accountId === broker.id);
+                        const positionsValue = accountHoldingsValue(broker.id, holdings, quotes, holdingValueOpts);
+                        const brokerTotal = positionsValue + broker.balance;
+                        const isOpen = expandedBrokers.has(broker.id);
+                        // HSA always shows a Cash line; pure-holdings accounts show
+                        // one only if they carry a legacy balance, so the total is
+                        // never an unexplained number.
+                        const showCashRow = section.hasCash || broker.balance > 0;
+                        return (
+                          <View key={broker.id}>
+                            <View style={[styles.accountRow, styles.accountRowNested]}>
+                              <TouchableOpacity
+                                style={styles.brokerRowMain}
+                                onPress={() => toggleBrokerExpand(broker.id)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[styles.accountCategoryChevron, { color: colors.textMuted }]}>
+                                  {isOpen ? "▼" : "▶"}
+                                </Text>
+                                <Text style={styles.accountName} numberOfLines={1}>{broker.name}</Text>
+                              </TouchableOpacity>
+                              <Text style={[styles.accountBalance, { color: colors.success }]}>
+                                {formatCurrency(brokerTotal)}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => openEditAssetModal(broker)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Edit ${broker.name}`}
+                              >
+                                <Text style={[styles.brokerEditBtn, { color: colors.accent }]}>Edit</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            {isOpen ? (
+                              <>
+                                {/* HSA shows its uninvested cash; pure-holdings
+                                    accounts show a Cash line only for legacy balances. */}
+                                {showCashRow ? (
+                                  <View style={[styles.accountRow, styles.brokerHoldingRow]}>
+                                    <View style={styles.accountRowLeft}>
+                                      <Text style={styles.accountName} numberOfLines={1}>Cash</Text>
+                                    </View>
+                                    <Text style={[styles.accountBalance, { color: colors.success }]}>
+                                      {formatCurrency(broker.balance)}
+                                    </Text>
+                                  </View>
+                                ) : null}
+                                {brokerH.length === 0
+                                  ? showCashRow
+                                    ? null
+                                    : (
+                                      <Text style={[styles.accountCategory, styles.brokerHoldingRow]}>
+                                        No holdings yet - tap Edit to add tickers.
+                                      </Text>
+                                    )
+                                  : brokerH.map((h) => {
+                                      const symbol = normalizeSymbol(h.symbol);
+                                      const priced = !!quotes[symbol];
+                                      const value = holdingMarketValue(h, quotes, holdingValueOpts);
+                                      const gainLoss = holdingGainLoss(h, quotes, holdingValueOpts);
+                                      return (
+                                        <TouchableOpacity
+                                          key={h.id}
+                                          style={[styles.accountRow, styles.brokerHoldingRow]}
+                                          onPress={() => openEditAssetModal(broker)}
+                                          activeOpacity={0.7}
+                                        >
+                                          <View style={styles.accountRowLeft}>
+                                            <Text style={styles.accountName} numberOfLines={1}>{symbol}</Text>
+                                            <Text style={styles.accountCategory}>
+                                              {h.shares} {h.shares === 1 ? "share" : "shares"}
+                                              {gainLoss != null
+                                                ? ` · ${gainLoss >= 0 ? "+" : "-"}${formatCurrency(Math.abs(gainLoss))}`
+                                                : ""}
+                                            </Text>
+                                          </View>
+                                          <Text style={[styles.accountBalance, { color: priced ? colors.success : colors.textMuted }]}>
+                                            {priced ? formatCurrency(value) : "--"}
+                                          </Text>
+                                        </TouchableOpacity>
+                                      );
+                                    })}
+                              </>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+
+                      <TouchableOpacity
+                        style={[styles.accountRow, styles.accountRowNested]}
+                        onPress={() => openAddHoldingsAccountModal(section.category)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>{addLabel}</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+                </View>
+              );
+            })}
+
+            {/* One global price-refresh row covering every holdings category. */}
+            {holdingsSettings.enabled && holdings.length > 0 ? (
+              <View style={styles.priceUpdateRow}>
+                <Text style={[styles.holdingsAsOf, { color: colors.textMuted }]}>
+                  {quotesAsOf
+                    ? `Prices as of ${new Date(quotesAsOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                    : "Prices not fetched yet"}
+                </Text>
                 <TouchableOpacity
-                  style={styles.accountCategoryHeader}
-                  onPress={() => toggleAccountCategory("investment")}
-                  activeOpacity={0.7}
+                  onPress={refreshPricesManually}
+                  disabled={!priceRefreshDue || isRefreshingPrices}
+                  accessibilityRole="button"
+                  accessibilityLabel="Update prices now"
                 >
-                  <View style={[styles.categoryDot, { backgroundColor: assetCategoryColors.investment }]} />
-                  <Text style={[styles.accountCategoryChevron, { color: colors.textDim }]}>
-                    {collapsedAccountCategories.has("investment") ? "▶" : "▼"}
-                  </Text>
-                  <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
-                    {iconForCategory("investment")} {ASSET_ACCOUNT_CATEGORY_LABELS.investment}
-                  </Text>
-                  <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
-                    {formatCurrency(holdingsValue)}
+                  <Text
+                    style={[
+                      styles.accountsAddBtn,
+                      { color: priceRefreshDue && !isRefreshingPrices ? colors.accent : colors.textMuted },
+                    ]}
+                  >
+                    {isRefreshingPrices
+                      ? "Updating..."
+                      : priceRefreshDue
+                        ? "Update prices"
+                        : `Next update in ${daysUntilRefresh}d`}
                   </Text>
                 </TouchableOpacity>
-
-                {!collapsedAccountCategories.has("investment") ? (
-                  <>
-                    {investmentAccounts.map((broker) => {
-                      const brokerH = holdings.filter((h) => h.accountId === broker.id);
-                      const brokerTotal = accountHoldingsValue(broker.id, holdings, quotes, holdingValueOpts);
-                      const isOpen = expandedBrokers.has(broker.id);
-                      return (
-                        <View key={broker.id}>
-                          <View style={[styles.accountRow, styles.accountRowNested]}>
-                            <TouchableOpacity
-                              style={styles.brokerRowMain}
-                              onPress={() => toggleBrokerExpand(broker.id)}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={[styles.accountCategoryChevron, { color: colors.textMuted }]}>
-                                {isOpen ? "▼" : "▶"}
-                              </Text>
-                              <Text style={styles.accountName} numberOfLines={1}>{broker.name}</Text>
-                            </TouchableOpacity>
-                            <Text style={[styles.accountBalance, { color: colors.success }]}>
-                              {formatCurrency(brokerTotal)}
-                            </Text>
-                            <TouchableOpacity
-                              onPress={() => openEditAssetModal(broker)}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Edit ${broker.name}`}
-                            >
-                              <Text style={[styles.brokerEditBtn, { color: colors.accent }]}>Edit</Text>
-                            </TouchableOpacity>
-                          </View>
-
-                          {isOpen
-                            ? brokerH.length === 0
-                              ? (
-                                <Text style={[styles.accountCategory, styles.brokerHoldingRow]}>
-                                  No holdings yet - tap Edit to add tickers.
-                                </Text>
-                              )
-                              : brokerH.map((h) => {
-                                  const symbol = normalizeSymbol(h.symbol);
-                                  const priced = !!quotes[symbol];
-                                  const value = holdingMarketValue(h, quotes, holdingValueOpts);
-                                  const gainLoss = holdingGainLoss(h, quotes, holdingValueOpts);
-                                  return (
-                                    <TouchableOpacity
-                                      key={h.id}
-                                      style={[styles.accountRow, styles.brokerHoldingRow]}
-                                      onPress={() => openEditAssetModal(broker)}
-                                      activeOpacity={0.7}
-                                    >
-                                      <View style={styles.accountRowLeft}>
-                                        <Text style={styles.accountName} numberOfLines={1}>{symbol}</Text>
-                                        <Text style={styles.accountCategory}>
-                                          {h.shares} {h.shares === 1 ? "share" : "shares"}
-                                          {gainLoss != null
-                                            ? ` · ${gainLoss >= 0 ? "+" : "-"}${formatCurrency(Math.abs(gainLoss))}`
-                                            : ""}
-                                        </Text>
-                                      </View>
-                                      <Text style={[styles.accountBalance, { color: priced ? colors.success : colors.textMuted }]}>
-                                        {priced ? formatCurrency(value) : "--"}
-                                      </Text>
-                                    </TouchableOpacity>
-                                  );
-                                })
-                            : null}
-                        </View>
-                      );
-                    })}
-
-                    <TouchableOpacity
-                      style={[styles.accountRow, styles.accountRowNested]}
-                      onPress={openAddBrokerModal}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add broker</Text>
-                    </TouchableOpacity>
-
-                    {holdingsSettings.enabled && holdings.length > 0 ? (
-                      <View style={styles.priceUpdateRow}>
-                        <Text style={[styles.holdingsAsOf, { color: colors.textMuted }]}>
-                          {quotesAsOf
-                            ? `Prices as of ${new Date(quotesAsOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-                            : "Prices not fetched yet"}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={refreshPricesManually}
-                          disabled={!priceRefreshDue || isRefreshingPrices}
-                          accessibilityRole="button"
-                          accessibilityLabel="Update prices now"
-                        >
-                          <Text
-                            style={[
-                              styles.accountsAddBtn,
-                              { color: priceRefreshDue && !isRefreshingPrices ? colors.accent : colors.textMuted },
-                            ]}
-                          >
-                            {isRefreshingPrices
-                              ? "Updating..."
-                              : priceRefreshDue
-                                ? "Update prices"
-                                : `Next update in ${daysUntilRefresh}d`}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
-                  </>
-                ) : null}
               </View>
             ) : null}
           </>
@@ -1161,23 +1223,31 @@ const BridgeScreen: React.FC = () => {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editingAsset ? "Edit Account" : "Add Account"}</Text>
             <Text style={styles.modalSub}>
-              {assetCategory === "investment"
-                ? "Add the broker and the stocks or ETFs it holds. Its value comes from the holdings."
-                : "Track a balance that will feed your net worth history."}
+              {assetCategory === "hsa"
+                ? "Track your HSA cash balance and any stocks or ETFs it holds."
+                : categoryIsPureHoldings(assetCategory)
+                  ? "Add the broker and the stocks or ETFs it holds. Its value comes from the holdings."
+                  : "Track a balance that will feed your net worth history."}
             </Text>
 
             <TextInput
               style={styles.modalInput}
-              placeholder={assetCategory === "investment" ? "Broker name (e.g. Fidelity)" : "Account name"}
+              placeholder={
+                categoryIsPureHoldings(assetCategory)
+                  ? "Broker name (e.g. Fidelity)"
+                  : assetCategory === "hsa"
+                    ? "HSA provider (e.g. Fidelity)"
+                    : "Account name"
+              }
               placeholderTextColor={colors.textMuted}
               value={assetName}
               onChangeText={setAssetName}
             />
 
-            {assetCategory !== "investment" ? (
+            {!categoryIsPureHoldings(assetCategory) ? (
               <TextInput
                 style={styles.modalInput}
-                placeholder="Balance"
+                placeholder={assetCategory === "hsa" ? "Cash balance" : "Balance"}
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
                 value={assetBalance}
@@ -1213,7 +1283,7 @@ const BridgeScreen: React.FC = () => {
               })}
             </View>
 
-            {assetCategory === "investment" ? (
+            {categorySupportsHoldings(assetCategory) ? (
               <View style={styles.tickerEditor}>
                 <Text style={styles.modalHint}>
                   Add stocks/ETFs by ticker (AAPL) or crypto by pair (BTC/USD). Symbols are sent to the price service only when you tap Update prices - add them all first, then pull prices once.

@@ -303,6 +303,38 @@ export const ASSET_ACCOUNT_CATEGORY_LABELS: Record<AssetAccountCategory, string>
   other: "Other",
 };
 
+/**
+ * Categories whose accounts can hold stock/ETF positions (tickers). Investment
+ * and Retirement are valued purely by their holdings; HSA also keeps an
+ * editable cash balance alongside its holdings (the uninvested cash portion
+ * most HSAs carry). These render as broker-style containers on the Bridge.
+ */
+export const HOLDINGS_CATEGORIES: readonly AssetAccountCategory[] = [
+  "investment",
+  "retirement",
+  "hsa",
+];
+
+/**
+ * Holdings categories with NO separate cash balance - their account value is
+ * entirely the market value of their tickers, so the balance field is hidden
+ * and stored as 0. (HSA is intentionally excluded: it keeps a cash balance.)
+ */
+export const PURE_HOLDINGS_CATEGORIES: readonly AssetAccountCategory[] = [
+  "investment",
+  "retirement",
+];
+
+/** True if accounts in this category can hold tickers (investment/retirement/hsa). */
+export const categorySupportsHoldings = (
+  category: AssetAccountCategory,
+): boolean => HOLDINGS_CATEGORIES.includes(category);
+
+/** True if this category is valued purely by its holdings, with no cash balance. */
+export const categoryIsPureHoldings = (
+  category: AssetAccountCategory,
+): boolean => PURE_HOLDINGS_CATEGORIES.includes(category);
+
 export interface AssetAccount {
   id: string;
   name: string;
