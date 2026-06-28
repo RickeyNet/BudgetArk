@@ -19,7 +19,7 @@
  */
 
 /** Deployed quote-proxy Worker. Endpoint: GET /quotes?symbols=AAPL,VTI */
-export const QUOTES_PROXY_URL = "https://quotes-proxy.budgetark.workers.dev";
+export const QUOTES_PROXY_URL = "https://quotes.budgetark.app";
 
 /**
  * Shared key sent as the `x-app-key` header on every quote request. This is a
