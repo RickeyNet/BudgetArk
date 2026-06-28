@@ -91,9 +91,9 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
       },
       {
         id: "bridge-holdings",
-        title: "Track stocks and ETFs (Live Holdings)",
+        title: "Track stocks and ETFs by broker (Live Holdings)",
         body:
-          "Turn on Live Holdings to add stocks and ETFs by ticker symbol and share count. Their market value counts toward your Net Worth and the prices refresh about once a week. It stays off until you switch it on here or in Profile - the first time, you will see exactly what leaves your device. Only your ticker symbols are ever sent out to look up prices, never your share counts, balances, or who you are.",
+          "Turn on Live Holdings to track stocks and ETFs, organized by broker. Each broker (like Fidelity) lives in the Investment section of your accounts - tap it to expand its holdings, with a total for that broker and a combined total across all of them. Add a position by ticker and share count, and its market value counts toward your Net Worth. Prices only update when you tap Update prices, so add all your tickers first and then pull prices once. It stays off until you switch it on here or in Profile, and the first time you will see exactly what leaves your device. Only your ticker symbols are ever sent out to look up prices, never your share counts, balances, or who you are.",
       },
     ],
   },

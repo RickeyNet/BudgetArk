@@ -11,11 +11,13 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     title: "Live Stock Holdings",
     releasedAt: "2026-06-27",
     highlights: [
-      "Track your stocks and ETFs on the Bridge. Add each position by ticker symbol and share count (cost basis optional), and BudgetArk shows its current market value and gain/loss right alongside your accounts. Holdings count toward your net worth whenever a price is available.",
-      "Prices refresh about once a week from BudgetArk's own quote service. To look them up, only your ticker symbols are ever sent off your device - never your share counts, balances, or who you are. Prices come from a third-party market data provider.",
+      "Track your stocks and ETFs, organized by broker. Each broker (like Fidelity or Robinhood) lives in the Investment section of the Bridge - tap a broker to expand its holdings, with a running total for that broker and a combined total across all of them. Add a position by ticker symbol and share count (cost basis optional); its market value counts toward your net worth.",
+      "You decide when prices update. Add all your tickers first, then tap Update prices to fetch them together - so adding several in a row no longer uses up the once-a-week price check on just the first one. When prices are looked up, only your ticker symbols leave your device - never your share counts, balances, or who you are. Prices come from a third-party market data provider.",
       "Live Holdings stays off until you turn it on. The first time you enable it - from either the Bridge or Profile - you'll see a plain-language note explaining exactly what leaves your device, and nothing is sent until you accept it.",
       "Your tickers and share counts sync to your paired partner just like your accounts, so you both see the same portfolio. The fetched prices stay on each device and are never synced between phones.",
       "Holdings are included in your backups - both the encrypted JSON backup and the Excel spreadsheet (a new Holdings sheet). Prices are never exported or imported; they simply re-fetch on the device. Deleting a holding carries across to your partner and your backups like every other record.",
+      "Fixed the update pop-ups: the 'What's New' notes and the 'Update Ready' prompt no longer appear stacked on top of each other, and the release notes always show - if an update is published without them, they appear right after it installs.",
+      "Fixed the on-screen keyboard hiding the field you're typing in on pop-up forms across the app - adding a stock, debt, or budget entry, sending feedback, managing categories, entering an export or import password, and pairing. The form now shifts up so the active field and its buttons stay visible.",
     ],
   },
   {
