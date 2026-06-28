@@ -93,6 +93,9 @@ const ACCOUNT_ICONS: Record<AssetAccountCategory, string> = {
 const iconForCategory = (category: AssetAccountCategory): string =>
   ACCOUNT_ICONS[category] ?? "💼";
 
+/** Default broker that pre-broker (orphaned) holdings get migrated into. */
+const DEFAULT_BROKER_NAME = "My Holdings";
+
 /**
  * One editable ticker row inside the broker (Investment account) modal. `id`
  * is set for rows that map to an existing Holding; new rows leave it undefined
@@ -179,6 +182,52 @@ const BridgeScreen: React.FC = () => {
    * that adding several tickers in a row doesn't spend the weekly fetch window
    * on a partial set. See `refreshPricesManually`.
    */
+  /**
+   * One-time repair for holdings created under the old flat model: they carry
+   * no accountId, so they have no broker to display under - their value still
+   * counts in the Investment total, but the position itself is invisible and
+   * can't be edited or deleted. Attach any such orphan (including one pointing
+   * at a since-deleted account) to a default "My Holdings" broker so it shows
+   * up and can be edited or moved. Idempotent: a no-op once every holding has a
+   * valid broker.
+   */
+  const migrateOrphanHoldings = useCallback(async () => {
+    const settings = await getHoldingsSettings();
+    if (!settings.enabled) return;
+
+    const [accounts, holdings] = await Promise.all([
+      getAssetAccounts(),
+      getHoldings(),
+    ]);
+    const investmentIds = new Set(
+      accounts.filter((a) => a.category === "investment").map((a) => a.id)
+    );
+    const isOrphan = (h: Holding) =>
+      !h.accountId || !investmentIds.has(h.accountId);
+    if (!holdings.some(isOrphan)) return;
+
+    const now = new Date().toISOString();
+    let broker: AssetAccount | undefined = accounts.find(
+      (a) => a.category === "investment" && a.name === DEFAULT_BROKER_NAME
+    );
+    if (!broker) {
+      broker = {
+        id: generateUUID(),
+        name: DEFAULT_BROKER_NAME,
+        category: "investment",
+        balance: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveAssetAccounts([...accounts, broker]);
+    }
+    const brokerId = broker.id;
+    const nextHoldings = holdings.map((h) =>
+      isOrphan(h) ? { ...h, accountId: brokerId, updatedAt: now } : h
+    );
+    await saveHoldings(nextHoldings);
+  }, []);
+
   const loadHoldingsState = useCallback(async (): Promise<HoldingsSettings> => {
     const settings = await getHoldingsSettings();
     setHoldingsSettings(settings);
@@ -208,6 +257,10 @@ const BridgeScreen: React.FC = () => {
       let cancelled = false;
       const loadBridgeData = async () => {
         try {
+          // Repair any pre-broker (orphaned) holdings before the loads below so
+          // the freshly-created default broker + reassigned holdings are picked
+          // up by this same pass. No-op after the first run.
+          await migrateOrphanHoldings();
           const [storedEntries, storedDebts, storedGoals, storedAssets, milestonePlan] =
             await Promise.all([
               getBudgetEntries(),
@@ -267,7 +320,7 @@ const BridgeScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [loadHoldingsState, refreshNetWorthSnapshots])
+    }, [loadHoldingsState, migrateOrphanHoldings, refreshNetWorthSnapshots])
   );
 
   // Emergency-fund derived current amount. Only the "Savings" category
