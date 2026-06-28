@@ -50,25 +50,26 @@ const MAX_SYMBOLS = 120; // Twelve Data batch limit
 const DAILY_UPSTREAM_SYMBOL_BUDGET = 700;
 const DAILY_COUNTER_TTL_SECONDS = 2 * 24 * 60 * 60; // yesterday's counter auto-expires
 
+/**
+ * Edge-cache window for an identical (normalized) symbol set. Repeat requests
+ * are served straight from Cloudflare's cache with zero KV reads / upstream
+ * calls, which is the main defense against KV-read exhaustion under load.
+ *
+ * NOTE: the Cache API is a no-op on *.workers.dev - it only takes effect once
+ * the Worker runs on a custom domain (a Cloudflare zone). The code below is
+ * written to degrade silently (every match misses) so it's safe either way.
+ */
+const EDGE_CACHE_TTL_SECONDS = 600; // 10 minutes
+
+/** Max cache-MISS requests per source IP per day (a firm per-source bound). */
+const IP_DAILY_REQUEST_CAP = 100;
+
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
     if (req.method !== "GET" || url.pathname !== "/quotes") {
       return json({ error: "not_found" }, 404);
-    }
-
-    // --- Per-IP burst limit (abuse defense that doesn't rely on the client
-    // sending x-device). Returns 503, NOT 429, on purpose: 429 is reserved for
-    // the per-device weekly throttle, which the app reacts to by backing off a
-    // full week. A momentary IP burst should just be retried, so 503 routes it
-    // through the app's transient-failure path instead. ---
-    if (env.QUOTES_RL) {
-      const clientIp = req.headers.get("CF-Connecting-IP") ?? "";
-      const { success } = await env.QUOTES_RL.limit({ key: clientIp || "anon" });
-      if (!success) {
-        return json({ error: "busy" }, 503, { "retry-after": "60" });
-      }
     }
 
     const symbols = parseSymbols(url.searchParams.get("symbols"));
@@ -76,8 +77,50 @@ export default {
       return json({ error: "no_symbols" }, 400);
     }
 
-    // --- Per-device throttle (defends against a tampered client that ignores
-    // the app's own weekly gate). Hashed so we never store the raw id. ---
+    const clientIp = req.headers.get("CF-Connecting-IP") ?? "";
+
+    // --- 1. Per-IP burst limit (cheap, no KV) BEFORE the cache lookup, so one
+    // IP can't flood even identical (cacheable) requests. Returns 503, NOT 429,
+    // on purpose: 429 is reserved for the per-device weekly throttle, which the
+    // app reacts to by backing off a full week. A momentary burst should just
+    // retry, so 503 routes it through the app's transient-failure path. ---
+    if (env.QUOTES_RL) {
+      const { success } = await env.QUOTES_RL.limit({ key: clientIp || "anon" });
+      if (!success) {
+        return json({ error: "busy" }, 503, { "retry-after": "60" });
+      }
+    }
+
+    // --- 2. Edge cache: serve an identical symbol set straight from Cloudflare
+    // with ZERO KV reads / upstream calls. Key is normalized (sorted) so order
+    // doesn't fragment it; the x-device header is intentionally NOT part of the
+    // key (prices are public, non-personal). Free; no KV quota. No-op on
+    // *.workers.dev (see EDGE_CACHE_TTL_SECONDS). ---
+    const cache = caches.default;
+    const cacheKey = new Request(
+      `${url.origin}/quotes?symbols=${[...symbols].sort().join(",")}`,
+      { method: "GET" }
+    );
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit;
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // --- 3. Per-IP daily cap (KV) - only on a cache MISS, so cache hits stay
+    // KV-free. Bounds the expensive path (KV reads + upstream) per source per
+    // day. 503 so a (rare) NAT'd legit client just retries later. ---
+    let ipDayKey: string | null = null;
+    let ipUsedToday = 0;
+    if (clientIp) {
+      ipDayKey = `ipday:${today}:${await sha256Hex(clientIp)}`;
+      ipUsedToday = Number(await env.QUOTES.get(ipDayKey)) || 0;
+      if (ipUsedToday >= IP_DAILY_REQUEST_CAP) {
+        return json({ error: "busy" }, 503, { "retry-after": "3600" });
+      }
+    }
+
+    // --- Per-device weekly throttle (cooperative clients). Hashed so we never
+    // store the raw id. ---
     const deviceId = req.headers.get("x-device") ?? "";
     let throttleKey: string | null = null;
     if (deviceId) {
@@ -87,7 +130,7 @@ export default {
       }
     }
 
-    // --- Serve fresh prices from cache; collect the stale/missing ones. ---
+    // --- Serve fresh prices from the per-symbol KV cache; collect stale. ---
     const quotes: Record<string, CachedQuote> = {};
     const stale: string[] = [];
     await Promise.all(
@@ -105,7 +148,7 @@ export default {
     // daily budget. Past the ceiling we serve only what's cached (no error) so
     // the app keeps its last-known prices. ---
     if (stale.length > 0) {
-      const dayKey = `upstream:${new Date().toISOString().slice(0, 10)}`;
+      const dayKey = `upstream:${today}`;
       const usedToday = Number(await env.QUOTES.get(dayKey)) || 0;
       const remaining = DAILY_UPSTREAM_SYMBOL_BUDGET - usedToday;
       const toFetch = remaining > 0 ? stale.slice(0, remaining) : [];
@@ -139,12 +182,25 @@ export default {
       }
     }
 
-    // Only consume the throttle budget once we've actually served something.
+    // Consume the per-device weekly budget once we've served something.
     if (throttleKey) {
       await env.QUOTES.put(throttleKey, "1", { expirationTtl: THROTTLE_TTL_SECONDS });
     }
+    // Charge this source's daily request budget (best-effort; KV has no atomic
+    // increment, which is fine for a soft cap).
+    if (ipDayKey) {
+      await env.QUOTES.put(ipDayKey, String(ipUsedToday + 1), {
+        expirationTtl: DAILY_COUNTER_TTL_SECONDS,
+      });
+    }
 
-    return json({ quotes });
+    // Cache the served response for the next identical request (no-op on
+    // workers.dev; offloads KV/upstream on a custom domain).
+    const response = json({ quotes }, 200, {
+      "cache-control": `public, max-age=${EDGE_CACHE_TTL_SECONDS}`,
+    });
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
   },
 };
 
