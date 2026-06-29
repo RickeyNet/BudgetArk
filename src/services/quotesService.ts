@@ -16,13 +16,18 @@
 
 import { MAX_QUOTE_SYMBOLS, QUOTES_APP_KEY, QUOTES_PROXY_URL } from "../config/quotesConfig";
 import { getDeviceId } from "../storage/deviceIdStorage";
-import { getHoldings } from "../storage/holdingsStorage";
+import { getHoldings, updateHolding } from "../storage/holdingsStorage";
 import {
   getQuoteCache,
   saveQuoteCache,
   type QuoteCache,
 } from "../storage/quoteCacheStorage";
-import { collectSymbols, isQuoteRefreshDue } from "../utils/holdingsMath";
+import {
+  collectSymbols,
+  holdingKind,
+  isQuoteRefreshDue,
+  normalizeSymbol,
+} from "../utils/holdingsMath";
 import type { CachedQuote } from "../types";
 
 /** Outcome of a refresh attempt, for callers that want to surface status. */
@@ -121,6 +126,20 @@ export const refreshQuotes = async (
       lastFetchedAt: new Date(now).toISOString(),
     };
     await saveQuoteCache(next);
+
+    // Anchor any proxy-tracked holding (e.g. a 401k index fund riding VOO) that
+    // doesn't have an anchor price yet, now that its proxy may be priced. This
+    // is what lets it start drifting with the index; it's one-time per holding
+    // (guarded on anchorPrice == null) so it's idempotent across refreshes.
+    for (const h of holdings) {
+      if (holdingKind(h) === "proxy" && h.anchorPrice == null) {
+        const px = mergedQuotes[normalizeSymbol(h.symbol)]?.price;
+        if (typeof px === "number" && Number.isFinite(px) && px > 0) {
+          await updateHolding(h.id, { anchorPrice: px });
+        }
+      }
+    }
+
     return { outcome: "updated", cache: next };
   } catch {
     // Network error, abort/timeout, or bad JSON - keep the stale cache and

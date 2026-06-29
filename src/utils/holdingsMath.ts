@@ -91,12 +91,32 @@ export const isQuoteRefreshDue = (
 };
 
 /**
+ * How a holding is valued:
+ *   - "ticker": a plain stock/ETF/crypto position, value = shares × live price.
+ *   - "proxy":  a 401k fund with no ticker that rides a proxy index (its value
+ *     drifts with `symbol`'s price from an entered anchor).
+ *   - "manual": a fund with no ticker and no proxy; a fixed user-entered value.
+ * Discriminated by which optional fields are set, so legacy holdings (neither
+ * field) are always "ticker".
+ */
+export type HoldingKind = "ticker" | "proxy" | "manual";
+
+export const holdingKind = (holding: Holding): HoldingKind => {
+  if (holding.anchorValue != null) return "proxy";
+  if (holding.manualValue != null) return "manual";
+  return "ticker";
+};
+
+/**
  * Distinct, normalized, valid symbols across a set of holdings. Used to build
- * the batched request to the Worker. Order follows first appearance.
+ * the batched request to the Worker. Order follows first appearance. Manual
+ * holdings carry no ticker (their "symbol" is empty), so only ticker and proxy
+ * holdings contribute a symbol to fetch.
  */
 export const collectSymbols = (holdings: Holding[]): string[] => {
   const seen = new Set<string>();
   for (const holding of holdings) {
+    if (holdingKind(holding) === "manual") continue;
     const sym = normalizeSymbol(holding.symbol);
     if (isValidSymbol(sym)) seen.add(sym);
   }
@@ -113,6 +133,33 @@ export const holdingMarketValue = (
   quotes: Record<string, CachedQuote>,
   opts?: HoldingValueOptions,
 ): number => {
+  const kind = holdingKind(holding);
+
+  // Manual-value: a fixed amount already in the user's display currency (a
+  // 401k CIT with no ticker). No quote, no conversion.
+  if (kind === "manual") {
+    return Number.isFinite(holding.manualValue) ? (holding.manualValue as number) : 0;
+  }
+
+  // Proxy-tracked: scale the anchored value by the proxy's move since the
+  // anchor. The ratio is dimensionless, so anchorValue (display currency) needs
+  // no conversion. Until the proxy has a price + an anchor price, hold flat at
+  // the entered value.
+  if (kind === "proxy") {
+    const base = Number.isFinite(holding.anchorValue) ? (holding.anchorValue as number) : 0;
+    const quote = quotes[normalizeSymbol(holding.symbol)];
+    if (
+      quote &&
+      Number.isFinite(quote.price) &&
+      holding.anchorPrice != null &&
+      Number.isFinite(holding.anchorPrice) &&
+      holding.anchorPrice > 0
+    ) {
+      return base * (quote.price / holding.anchorPrice);
+    }
+    return base;
+  }
+
   const quote = quotes[normalizeSymbol(holding.symbol)];
   if (!quote || !Number.isFinite(quote.price) || !Number.isFinite(holding.shares)) {
     return 0;
@@ -158,7 +205,11 @@ export const holdingGainLoss = (
   opts?: HoldingValueOptions,
 ): number | null => {
   if (holding.costBasis == null || !Number.isFinite(holding.costBasis)) return null;
-  const quote = quotes[normalizeSymbol(holding.symbol)];
-  if (!quote || !Number.isFinite(quote.price)) return null;
+  // A plain ticker needs a live price to be meaningful; manual/proxy holdings
+  // always have a value to compare against (entered directly or anchored).
+  if (holdingKind(holding) === "ticker") {
+    const quote = quotes[normalizeSymbol(holding.symbol)];
+    if (!quote || !Number.isFinite(quote.price)) return null;
+  }
   return holdingMarketValue(holding, quotes, opts) - holding.costBasis;
 };

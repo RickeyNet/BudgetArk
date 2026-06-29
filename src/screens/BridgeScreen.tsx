@@ -61,6 +61,7 @@ import {
   holdingMarketValue,
   holdingsTotalValue,
   holdingGainLoss,
+  holdingKind,
   isValidSymbol,
   normalizeSymbol,
   accountHoldingsValue,
@@ -101,16 +102,28 @@ const iconForCategory = (category: AssetAccountCategory): string =>
 const DEFAULT_BROKER_NAME = "My Holdings";
 
 /**
- * One editable ticker row inside the broker (Investment account) modal. `id`
- * is set for rows that map to an existing Holding; new rows leave it undefined
+ * One editable holding row inside the broker (holdings account) modal. `id` is
+ * set for rows that map to an existing Holding; new rows leave it undefined
  * until save assigns one. `key` is a stable React list key independent of id.
+ *
+ * `kind` picks the layout/fields:
+ *   - "ticker": a stock/ETF/crypto by symbol + shares (+ optional cost).
+ *   - "fund":   a 401k fund with no public ticker - a name + current value,
+ *     plus an OPTIONAL proxy ticker (e.g. VOO) entered in `symbol`. With a
+ *     proxy it becomes a proxy-tracked holding (value drifts with the index);
+ *     without one it's a manual fixed value.
  */
 type TickerDraft = {
   key: string;
   id?: string;
+  kind: "ticker" | "fund";
   symbol: string;
   shares: string;
   costBasis: string;
+  /** Fund label, e.g. "Spartan 500 Index Pool Class D" (kind === "fund"). */
+  name: string;
+  /** Fund's current value in display currency (kind === "fund"). */
+  value: string;
 };
 
 const BridgeScreen: React.FC = () => {
@@ -577,13 +590,28 @@ const BridgeScreen: React.FC = () => {
       setBrokerTickers(
         holdings
           .filter((h) => h.accountId === account.id)
-          .map((h) => ({
-            key: h.id,
-            id: h.id,
-            symbol: h.symbol,
-            shares: String(h.shares),
-            costBasis: h.costBasis != null ? String(h.costBasis) : "",
-          }))
+          .map((h) => {
+            const kind = holdingKind(h);
+            const isFund = kind !== "ticker";
+            return {
+              key: h.id,
+              id: h.id,
+              kind: isFund ? "fund" : "ticker",
+              // A proxy fund keeps its proxy ticker in `symbol`; a manual fund
+              // has none. A plain ticker uses `symbol` as usual.
+              symbol: kind === "manual" ? "" : h.symbol,
+              shares: kind === "ticker" ? String(h.shares) : "",
+              costBasis: h.costBasis != null ? String(h.costBasis) : "",
+              name: h.name ?? "",
+              // Show the last entered (anchor/manual) value; re-saving re-anchors.
+              value:
+                kind === "proxy"
+                  ? String(h.anchorValue ?? "")
+                  : kind === "manual"
+                    ? String(h.manualValue ?? "")
+                    : "",
+            } satisfies TickerDraft;
+          })
       );
       setShowAssetModal(true);
     },
@@ -608,12 +636,32 @@ const BridgeScreen: React.FC = () => {
     }
     setBrokerTickers((prev) => [
       ...prev,
-      { key: generateUUID(), symbol: "", shares: "", costBasis: "" },
+      { key: generateUUID(), kind: "ticker", symbol: "", shares: "", costBasis: "", name: "", value: "" },
+    ]);
+  }, [holdingsSettings.disclosureAcknowledged, holdingsSettings.enabled]);
+
+  /**
+   * Add a "fund" row for a 401k holding with no public ticker (e.g. a Spartan
+   * 500 CIT). Same off-device disclosure gate as a ticker, since attaching a
+   * proxy symbol sends that symbol to the quote proxy.
+   */
+  const addFundRow = useCallback(() => {
+    if (!holdingsSettings.enabled && !holdingsSettings.disclosureAcknowledged) {
+      setShowHoldingsDisclosure(true);
+      return;
+    }
+    setBrokerTickers((prev) => [
+      ...prev,
+      { key: generateUUID(), kind: "fund", symbol: "", shares: "", costBasis: "", name: "", value: "" },
     ]);
   }, [holdingsSettings.disclosureAcknowledged, holdingsSettings.enabled]);
 
   const updateTickerRow = useCallback(
-    (key: string, field: "symbol" | "shares" | "costBasis", value: string) => {
+    (
+      key: string,
+      field: "symbol" | "shares" | "costBasis" | "name" | "value",
+      value: string,
+    ) => {
       setBrokerTickers((prev) =>
         prev.map((row) => (row.key === key ? { ...row, [field]: value } : row))
       );
@@ -665,29 +713,111 @@ const BridgeScreen: React.FC = () => {
     await saveAssetAccounts(nextAccounts);
 
     if (hasHoldings) {
-      const rows = brokerTickers
-        .map((row) => {
+      const parseCost = (raw: string): number | undefined => {
+        const t = raw.trim();
+        const n = t === "" ? NaN : parseFloat(t);
+        return Number.isFinite(n) && n >= 0 ? n : undefined;
+      };
+
+      // Resolve each editor row into the holding shape for its kind. Invalid
+      // rows (missing required inputs) drop out. A "fund" row becomes a
+      // proxy-tracked holding when it carries a valid proxy ticker, else a
+      // manual fixed-value holding.
+      type ResolvedRow = {
+        id?: string;
+        kind: "ticker" | "proxy" | "manual";
+        symbol: string;
+        shares: number;
+        costBasis?: number;
+        name?: string;
+        value: number;
+      };
+
+      const rows: ResolvedRow[] = brokerTickers
+        .map((row): ResolvedRow | null => {
+          const costBasis = parseCost(row.costBasis);
+          if (row.kind === "fund") {
+            const fundName = row.name.trim();
+            const value = parseFloat(row.value);
+            if (!fundName || !Number.isFinite(value) || value < 0) return null;
+            const proxy = normalizeSymbol(row.symbol);
+            const hasProxy = proxy !== "" && isValidSymbol(proxy);
+            return {
+              id: row.id,
+              kind: hasProxy ? "proxy" : "manual",
+              symbol: hasProxy ? proxy : "",
+              shares: 0,
+              costBasis,
+              name: fundName,
+              value,
+            };
+          }
           const symbol = normalizeSymbol(row.symbol);
           const shares = parseFloat(row.shares);
           if (!isValidSymbol(symbol) || !Number.isFinite(shares) || shares <= 0) {
             return null;
           }
-          const trimmedCost = row.costBasis.trim();
-          const parsedCost = trimmedCost === "" ? NaN : parseFloat(trimmedCost);
-          const costBasis =
-            Number.isFinite(parsedCost) && parsedCost >= 0 ? parsedCost : undefined;
-          return { id: row.id, symbol, shares, costBasis };
+          return { id: row.id, kind: "ticker", symbol, shares, costBasis, value: 0 };
         })
-        .filter(
-          (
-            r
-          ): r is {
-            id: string | undefined;
-            symbol: string;
-            shares: number;
-            costBasis: number | undefined;
-          } => r !== null
-        );
+        .filter((r): r is ResolvedRow => r !== null);
+
+      // Build the mutable holding fields for a resolved row. For a proxy row we
+      // capture the proxy's current price as the anchor, but only re-anchor
+      // when the value or proxy actually changed - an incidental save must not
+      // reset accrued drift.
+      type HoldingFields = {
+        symbol: string;
+        shares: number;
+        name?: string;
+        costBasis?: number;
+        manualValue?: number;
+        anchorValue?: number;
+        anchorPrice?: number;
+      };
+      const fieldsFor = (r: ResolvedRow, existing?: Holding): HoldingFields => {
+        if (r.kind === "manual") {
+          return {
+            symbol: "",
+            shares: 0,
+            name: r.name,
+            costBasis: r.costBasis,
+            manualValue: r.value,
+            anchorValue: undefined,
+            anchorPrice: undefined,
+          };
+        }
+        if (r.kind === "proxy") {
+          const unchanged =
+            existing != null &&
+            holdingKind(existing) === "proxy" &&
+            normalizeSymbol(existing.symbol) === r.symbol &&
+            existing.anchorValue === r.value;
+          let anchorPrice = existing && unchanged ? existing.anchorPrice : undefined;
+          if (!unchanged) {
+            const px = quotes[r.symbol]?.price;
+            anchorPrice =
+              typeof px === "number" && Number.isFinite(px) && px > 0 ? px : undefined;
+          }
+          return {
+            symbol: r.symbol,
+            shares: 0,
+            name: r.name,
+            costBasis: r.costBasis,
+            manualValue: undefined,
+            anchorValue: r.value,
+            anchorPrice,
+          };
+        }
+        return {
+          symbol: r.symbol,
+          shares: r.shares,
+          name: undefined,
+          costBasis: r.costBasis,
+          manualValue: undefined,
+          anchorValue: undefined,
+          anchorPrice: undefined,
+        };
+      };
 
       const keptIds = new Set(
         rows.map((r) => r.id).filter((id): id is string => !!id)
@@ -707,22 +837,18 @@ const BridgeScreen: React.FC = () => {
         .map((h) => {
           if (h.accountId !== accountId) return h;
           const row = rows.find((r) => r.id === h.id);
-          return row
-            ? { ...h, symbol: row.symbol, shares: row.shares, costBasis: row.costBasis, updatedAt: now }
-            : h;
+          return row ? { ...h, ...fieldsFor(row, h), updatedAt: now } : h;
         })
         .filter((h) => !(h.accountId === accountId && !keptIds.has(h.id)));
 
       const created: Holding[] = rows
         .filter((r) => !r.id)
-        .map((r) => ({
+        .map((r): Holding => ({
           id: generateUUID(),
-          symbol: r.symbol,
-          shares: r.shares,
-          costBasis: r.costBasis,
           accountId,
           createdAt: now,
           updatedAt: now,
+          ...fieldsFor(r),
         }));
 
       const nextLive = [...updated, ...created];
@@ -804,7 +930,7 @@ const BridgeScreen: React.FC = () => {
     if (showAssetModal && categorySupportsHoldings(assetCategory)) {
       setBrokerTickers((prev) => [
         ...prev,
-        { key: generateUUID(), symbol: "", shares: "", costBasis: "" },
+        { key: generateUUID(), kind: "ticker", symbol: "", shares: "", costBasis: "", name: "", value: "" },
       ]);
     }
     await loadHoldingsState();
@@ -1067,9 +1193,20 @@ const BridgeScreen: React.FC = () => {
                                     )
                                   : brokerH.map((h) => {
                                       const symbol = normalizeSymbol(h.symbol);
-                                      const priced = !!quotes[symbol];
+                                      const kind = holdingKind(h);
                                       const value = holdingMarketValue(h, quotes, holdingValueOpts);
                                       const gainLoss = holdingGainLoss(h, quotes, holdingValueOpts);
+                                      // Ticker rows need a live quote to show a value; manual/proxy
+                                      // funds always have one (entered or anchored).
+                                      const hasValue = kind === "ticker" ? !!quotes[symbol] : true;
+                                      const label =
+                                        kind === "ticker" ? symbol : h.name || symbol || "Fund";
+                                      const subtitle =
+                                        kind === "ticker"
+                                          ? `${h.shares} ${h.shares === 1 ? "share" : "shares"}`
+                                          : kind === "proxy"
+                                            ? `Tracks ${symbol}`
+                                            : "Manual value";
                                       return (
                                         <TouchableOpacity
                                           key={h.id}
@@ -1078,16 +1215,16 @@ const BridgeScreen: React.FC = () => {
                                           activeOpacity={0.7}
                                         >
                                           <View style={styles.accountRowLeft}>
-                                            <Text style={styles.accountName} numberOfLines={1}>{symbol}</Text>
-                                            <Text style={styles.accountCategory}>
-                                              {h.shares} {h.shares === 1 ? "share" : "shares"}
+                                            <Text style={styles.accountName} numberOfLines={1}>{label}</Text>
+                                            <Text style={styles.accountCategory} numberOfLines={1}>
+                                              {subtitle}
                                               {gainLoss != null
                                                 ? ` · ${gainLoss >= 0 ? "+" : "-"}${formatCurrency(Math.abs(gainLoss))}`
                                                 : ""}
                                             </Text>
                                           </View>
-                                          <Text style={[styles.accountBalance, { color: priced ? colors.success : colors.textMuted }]}>
-                                            {priced ? formatCurrency(value) : "--"}
+                                          <Text style={[styles.accountBalance, { color: hasValue ? colors.success : colors.textMuted }]}>
+                                            {hasValue ? formatCurrency(value) : "--"}
                                           </Text>
                                         </TouchableOpacity>
                                       );
@@ -1286,53 +1423,109 @@ const BridgeScreen: React.FC = () => {
             {categorySupportsHoldings(assetCategory) ? (
               <View style={styles.tickerEditor}>
                 <Text style={styles.modalHint}>
-                  Add stocks/ETFs by ticker (AAPL) or crypto by pair (BTC/USD). Symbols are sent to the price service only when you tap Update prices - add them all first, then pull prices once.
+                  Add stocks/ETFs by ticker (AAPL) or crypto by pair (BTC/USD). For a 401k fund with no ticker (e.g. Spartan 500 Index Pool), use Add 401k fund. Symbols are sent to the price service only when you tap Update prices - add them all first, then pull prices once.
                 </Text>
                 <ScrollView
                   style={styles.tickerList}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
-                  {brokerTickers.map((row) => (
-                    <View key={row.key} style={styles.tickerRow}>
-                      <TextInput
-                        style={[styles.modalInput, styles.tickerSymbolInput]}
-                        placeholder="AAPL or BTC/USD"
-                        placeholderTextColor={colors.textMuted}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        value={row.symbol}
-                        onChangeText={(t) => updateTickerRow(row.key, "symbol", t)}
-                      />
-                      <TextInput
-                        style={[styles.modalInput, styles.tickerNumInput]}
-                        placeholder="Shares"
-                        placeholderTextColor={colors.textMuted}
-                        keyboardType="decimal-pad"
-                        value={row.shares}
-                        onChangeText={(t) => updateTickerRow(row.key, "shares", t)}
-                      />
-                      <TextInput
-                        style={[styles.modalInput, styles.tickerNumInput]}
-                        placeholder="Cost"
-                        placeholderTextColor={colors.textMuted}
-                        keyboardType="decimal-pad"
-                        value={row.costBasis}
-                        onChangeText={(t) => updateTickerRow(row.key, "costBasis", t)}
-                      />
-                      <TouchableOpacity
-                        onPress={() => removeTickerRow(row.key)}
-                        accessibilityRole="button"
-                        accessibilityLabel="Remove ticker"
-                      >
-                        <Text style={[styles.tickerRemove, { color: colors.danger }]}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                  {brokerTickers.map((row) => {
+                    if (row.kind === "fund") {
+                      const proxy = normalizeSymbol(row.symbol);
+                      const tracksIndex = proxy !== "" && isValidSymbol(proxy);
+                      return (
+                        <View key={row.key} style={styles.tickerFundRow}>
+                          <View style={styles.tickerFundTopRow}>
+                            <TextInput
+                              style={[styles.modalInput, styles.tickerFundNameInput]}
+                              placeholder="Fund name (e.g. Spartan 500 Index Pool)"
+                              placeholderTextColor={colors.textMuted}
+                              autoCapitalize="words"
+                              value={row.name}
+                              onChangeText={(t) => updateTickerRow(row.key, "name", t)}
+                            />
+                            <TouchableOpacity
+                              onPress={() => removeTickerRow(row.key)}
+                              accessibilityRole="button"
+                              accessibilityLabel="Remove fund"
+                            >
+                              <Text style={[styles.tickerRemove, { color: colors.danger }]}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View style={styles.tickerFundBottomRow}>
+                            <TextInput
+                              style={[styles.modalInput, styles.tickerFundProxyInput]}
+                              placeholder="Track index (optional, e.g. VOO)"
+                              placeholderTextColor={colors.textMuted}
+                              autoCapitalize="characters"
+                              autoCorrect={false}
+                              value={row.symbol}
+                              onChangeText={(t) => updateTickerRow(row.key, "symbol", t)}
+                            />
+                            <TextInput
+                              style={[styles.modalInput, styles.tickerFundValueInput]}
+                              placeholder="Current value"
+                              placeholderTextColor={colors.textMuted}
+                              keyboardType="decimal-pad"
+                              value={row.value}
+                              onChangeText={(t) => updateTickerRow(row.key, "value", t)}
+                            />
+                          </View>
+                          <Text style={styles.tickerFundHint}>
+                            {tracksIndex
+                              ? `Rides ${proxy} between updates - re-enter the value from each statement to re-anchor.`
+                              : "No index - holds the value you enter until you change it."}
+                          </Text>
+                        </View>
+                      );
+                    }
+                    return (
+                      <View key={row.key} style={styles.tickerRow}>
+                        <TextInput
+                          style={[styles.modalInput, styles.tickerSymbolInput]}
+                          placeholder="AAPL or BTC/USD"
+                          placeholderTextColor={colors.textMuted}
+                          autoCapitalize="characters"
+                          autoCorrect={false}
+                          value={row.symbol}
+                          onChangeText={(t) => updateTickerRow(row.key, "symbol", t)}
+                        />
+                        <TextInput
+                          style={[styles.modalInput, styles.tickerNumInput]}
+                          placeholder="Shares"
+                          placeholderTextColor={colors.textMuted}
+                          keyboardType="decimal-pad"
+                          value={row.shares}
+                          onChangeText={(t) => updateTickerRow(row.key, "shares", t)}
+                        />
+                        <TextInput
+                          style={[styles.modalInput, styles.tickerNumInput]}
+                          placeholder="Cost"
+                          placeholderTextColor={colors.textMuted}
+                          keyboardType="decimal-pad"
+                          value={row.costBasis}
+                          onChangeText={(t) => updateTickerRow(row.key, "costBasis", t)}
+                        />
+                        <TouchableOpacity
+                          onPress={() => removeTickerRow(row.key)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Remove ticker"
+                        >
+                          <Text style={[styles.tickerRemove, { color: colors.danger }]}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </ScrollView>
-                <TouchableOpacity onPress={addTickerRow} style={styles.tickerAddBtn}>
-                  <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add ticker</Text>
-                </TouchableOpacity>
+                <View style={styles.tickerAddRow}>
+                  <TouchableOpacity onPress={addTickerRow} style={styles.tickerAddBtn}>
+                    <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add ticker</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={addFundRow} style={styles.tickerAddBtn}>
+                    <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add 401k fund</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : null}
 
@@ -1688,6 +1881,42 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     tickerAddBtn: {
       paddingVertical: tokens.padSm,
+    },
+    tickerAddRow: {
+      flexDirection: "row",
+      gap: tokens.gap,
+    },
+    tickerFundRow: {
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: tokens.gapSm,
+      marginBottom: tokens.gapSm,
+    },
+    tickerFundTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    tickerFundBottomRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    tickerFundNameInput: {
+      flex: 1,
+      marginBottom: tokens.gapSm,
+    },
+    tickerFundProxyInput: {
+      flex: 1.4,
+      marginBottom: tokens.gapSm,
+    },
+    tickerFundValueInput: {
+      flex: 1,
+      marginBottom: tokens.gapSm,
+    },
+    tickerFundHint: {
+      fontSize: scale(11),
+      color: colors.textMuted,
     },
     modalOverlay: {
       flex: 1,

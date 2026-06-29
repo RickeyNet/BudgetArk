@@ -278,6 +278,60 @@ describe("isHoldingItem", () => {
   it("rejects a negative costBasis", () => {
     expect(isHoldingItem({ ...valid, costBasis: -1 })).toBe(false);
   });
+
+  describe("manual-value holdings", () => {
+    const manual = {
+      id: "m1",
+      name: "Spartan 500 Index Pool Class D",
+      manualValue: 42580,
+      createdAt: "2026-06-01",
+    };
+
+    it("accepts a named manual holding with no ticker", () => {
+      expect(isHoldingItem(manual)).toBe(true);
+    });
+
+    it("rejects a manual holding with no name", () => {
+      expect(isHoldingItem({ id: "m2", manualValue: 100, createdAt: "2026-06-01" })).toBe(false);
+    });
+
+    it("rejects a negative manual value", () => {
+      expect(isHoldingItem({ ...manual, manualValue: -1 })).toBe(false);
+    });
+  });
+
+  describe("proxy-tracked holdings", () => {
+    const proxy = {
+      id: "p1",
+      name: "Spartan 500 Index Pool Class D",
+      symbol: "VOO",
+      anchorValue: 1000,
+      anchorPrice: 540,
+      createdAt: "2026-06-01",
+    };
+
+    it("accepts a named proxy holding with a valid ticker and anchor", () => {
+      expect(isHoldingItem(proxy)).toBe(true);
+    });
+
+    it("rejects a proxy holding with a malformed proxy symbol", () => {
+      expect(isHoldingItem({ ...proxy, symbol: "bad symbol" })).toBe(false);
+    });
+
+    it("rejects a proxy holding with no name", () => {
+      expect(isHoldingItem({ id: "p2", symbol: "VOO", anchorValue: 1000, anchorPrice: 540, createdAt: "2026-06-01" })).toBe(false);
+    });
+
+    it("rejects a proxy holding with a zero/negative anchor price", () => {
+      expect(isHoldingItem({ ...proxy, anchorPrice: 0 })).toBe(false);
+      expect(isHoldingItem({ ...proxy, anchorPrice: -5 })).toBe(false);
+    });
+
+    it("rejects a proxy holding missing the anchor price", () => {
+      const { anchorPrice, ...noPrice } = proxy;
+      expect(isHoldingItem(noPrice)).toBe(false);
+    });
+  });
 });
 
 describe("isNetWorthSnapshotItem", () => {

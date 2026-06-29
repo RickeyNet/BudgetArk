@@ -325,13 +325,17 @@ export const isAssetAccountItem = (
 };
 
 /**
- * A holding (stock / ETF / crypto position) record. `symbol` is a short ticker
- * (alnum plus `.`/`-` for class shares / indices, and `/` for crypto pairs like
- * BTC/USD), validated case-insensitively since storage may not have normalized
- * it. `shares` must be a positive number (fractional allowed). `costBasis`
- * (TOTAL dollars invested) and `accountId` (link to an AssetAccount) are
- * optional. Same trust boundary as the other collections: a semi-trusted peer
- * could send arbitrary records.
+ * A holding record, in one of three shapes (see `holdingKind` in holdingsMath):
+ *   - ticker: a stock/ETF/crypto position. `symbol` is a short ticker (alnum
+ *     plus `.`/`-` for class shares / indices, and `/` for crypto pairs like
+ *     BTC/USD); `shares` is a positive number (fractional allowed).
+ *   - proxy:  a 401k fund with no ticker that rides a proxy index. Carries a
+ *     proxy `symbol`, a `name`, an `anchorValue`, and an `anchorPrice`.
+ *   - manual: a fund with a fixed user-entered `manualValue` and a `name`; no
+ *     ticker required.
+ * `costBasis` (TOTAL invested) and `accountId` (link to an AssetAccount) are
+ * optional in every shape. Same trust boundary as the other collections: a
+ * semi-trusted peer could send arbitrary records.
  */
 const HOLDING_SYMBOL_PATTERN = /^[a-zA-Z0-9./-]{1,15}$/;
 
@@ -339,17 +343,43 @@ export const isHoldingItem = (
   item: unknown
 ): item is Record<string, unknown> => {
   if (!isObject(item)) return false;
+
+  // Fields common to every shape.
+  if (
+    !isSafeText(item.id) ||
+    !(item.name === undefined || isSafeText(item.name)) ||
+    !(item.costBasis === undefined || isSafeNumber(item.costBasis, { min: 0 })) ||
+    !(item.accountId === undefined || isSafeText(item.accountId)) ||
+    !isValidDateValue(item.createdAt) ||
+    !isOptionalIso(item.updatedAt) ||
+    !isOptionalIso(item.deletedAt)
+  ) {
+    return false;
+  }
+
+  // Proxy-tracked: a valid proxy ticker plus a named anchor (value + price).
+  if (item.anchorValue !== undefined) {
+    return (
+      isSafeText(item.name) &&
+      typeof item.symbol === "string" &&
+      HOLDING_SYMBOL_PATTERN.test(item.symbol) &&
+      isSafeNumber(item.anchorValue, { min: 0 }) &&
+      isSafeNumber(item.anchorPrice, { min: 0 }) &&
+      (item.anchorPrice as number) > 0
+    );
+  }
+
+  // Manual fixed value: a named position with no ticker.
+  if (item.manualValue !== undefined) {
+    return isSafeText(item.name) && isSafeNumber(item.manualValue, { min: 0 });
+  }
+
+  // Plain ticker (the legacy shape).
   return (
-    isSafeText(item.id) &&
     typeof item.symbol === "string" &&
     HOLDING_SYMBOL_PATTERN.test(item.symbol) &&
     isSafeNumber(item.shares, { min: 0 }) &&
-    (item.shares as number) > 0 &&
-    (item.costBasis === undefined || isSafeNumber(item.costBasis, { min: 0 })) &&
-    (item.accountId === undefined || isSafeText(item.accountId)) &&
-    isValidDateValue(item.createdAt) &&
-    isOptionalIso(item.updatedAt) &&
-    isOptionalIso(item.deletedAt)
+    (item.shares as number) > 0
   );
 };
 

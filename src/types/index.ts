@@ -364,9 +364,42 @@ export interface NetWorthSnapshot {
  */
 export interface Holding {
   id: string;
-  /** Uppercase ticker, e.g. "AAPL", "VTI". Validated before use. */
+  /**
+   * Uppercase ticker, e.g. "AAPL", "VTI". Validated before use. For a
+   * proxy-tracked holding this is the PROXY ticker the value rides (e.g. a
+   * Spartan 500 CIT tracking "VOO"). For a manual-value holding it's empty -
+   * such positions have no ticker and `name` carries the label instead.
+   */
   symbol: string;
   shares: number;
+  /**
+   * Display label for holdings that aren't a plain ticker - i.e. 401k funds
+   * with no public symbol. Set for manual-value and proxy-tracked holdings
+   * (e.g. "Spartan 500 Index Pool Class D"); undefined for normal tickers,
+   * where `symbol` is the label.
+   */
+  name?: string;
+  /**
+   * Manual fixed market value, in the user's display currency. Set ONLY for
+   * manual-value holdings (a CIT with no ticker and no usable proxy). When
+   * present, the value is taken as-is - no quote, no conversion. Mutually
+   * exclusive with `anchorValue`.
+   */
+  manualValue?: number;
+  /**
+   * Proxy-tracked value anchor: the dollar value (display currency) entered at
+   * the time `anchorPrice` was captured. The live value is
+   * `anchorValue × proxyPrice / anchorPrice`, so it drifts with the proxy
+   * `symbol` (e.g. an S&P 500 index fund riding VOO) between manual updates.
+   * Re-entering the value re-anchors both fields.
+   */
+  anchorValue?: number;
+  /**
+   * The proxy `symbol`'s price captured when `anchorValue` was set. Undefined
+   * until the proxy is first priced (then stamped on the next quote refresh);
+   * while undefined the holding holds flat at `anchorValue`.
+   */
+  anchorPrice?: number;
   /**
    * TOTAL dollars invested across all shares (not per-share). Optional -
    * only used to show gain/loss; market value comes from `shares × price`.

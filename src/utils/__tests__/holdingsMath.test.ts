@@ -3,6 +3,7 @@ import {
   accountHoldingsValue,
   collectSymbols,
   holdingGainLoss,
+  holdingKind,
   holdingMarketValue,
   holdingsTotalValue,
   isQuoteRefreshDue,
@@ -213,5 +214,106 @@ describe("holdingGainLoss", () => {
 
   it("returns null when unpriced", () => {
     expect(holdingGainLoss(holding({ shares: 10, costBasis: 800 }), {})).toBeNull();
+  });
+
+  it("computes gain/loss for a manual holding without any quote", () => {
+    // manualValue 5000, cost basis 4000 -> +1000, no quote needed.
+    expect(
+      holdingGainLoss(holding({ symbol: "", manualValue: 5000, costBasis: 4000 }), {})
+    ).toBe(1000);
+  });
+
+  it("computes gain/loss for a proxy holding from its anchored value", () => {
+    // anchor $1000 @ 100; proxy now 120 -> value 1200; cost 900 -> +300.
+    expect(
+      holdingGainLoss(
+        holding({ symbol: "VOO", anchorValue: 1000, anchorPrice: 100, costBasis: 900 }),
+        { VOO: quote(120) }
+      )
+    ).toBe(300);
+  });
+});
+
+describe("holdingKind", () => {
+  it("classifies a plain ticker", () => {
+    expect(holdingKind(holding({ symbol: "AAPL", shares: 3 }))).toBe("ticker");
+  });
+
+  it("classifies a manual-value fund", () => {
+    expect(holdingKind(holding({ symbol: "", manualValue: 1000 }))).toBe("manual");
+  });
+
+  it("classifies a proxy-tracked fund (anchorValue wins over a present symbol)", () => {
+    expect(
+      holdingKind(holding({ symbol: "VOO", anchorValue: 1000, anchorPrice: 100 }))
+    ).toBe("proxy");
+  });
+});
+
+describe("collectSymbols with manual/proxy holdings", () => {
+  it("skips manual holdings but includes proxy tickers", () => {
+    const result = collectSymbols([
+      holding({ symbol: "AAPL", shares: 1 }), // ticker -> included
+      holding({ symbol: "", manualValue: 5000 }), // manual -> skipped (no ticker)
+      holding({ symbol: "VOO", anchorValue: 1000, anchorPrice: 100 }), // proxy -> included
+    ]);
+    expect(result).toEqual(["AAPL", "VOO"]);
+  });
+});
+
+describe("manual-value holdings", () => {
+  it("returns the manual value as-is, with no quote", () => {
+    expect(holdingMarketValue(holding({ symbol: "", manualValue: 42580 }), {})).toBe(42580);
+  });
+
+  it("ignores any display-currency conversion (already in display currency)", () => {
+    expect(
+      holdingMarketValue(holding({ symbol: "", manualValue: 1000 }), {}, {
+        displayCurrency: "SEK",
+        rates: { USD: 1, SEK: 10 },
+      })
+    ).toBe(1000);
+  });
+
+  it("returns 0 for a non-finite manual value", () => {
+    expect(holdingMarketValue(holding({ symbol: "", manualValue: NaN }), {})).toBe(0);
+  });
+});
+
+describe("proxy-tracked holdings", () => {
+  const proxy = holding({ symbol: "VOO", anchorValue: 1000, anchorPrice: 100 });
+
+  it("scales the anchored value by the proxy's move since the anchor", () => {
+    // proxy up 20% (100 -> 120) -> 1000 * 1.2 = 1200.
+    expect(holdingMarketValue(proxy, { VOO: quote(120) })).toBe(1200);
+  });
+
+  it("holds flat at the anchor value when the proxy has no fresh price", () => {
+    expect(holdingMarketValue(proxy, {})).toBe(1000);
+  });
+
+  it("holds flat at the anchor value before an anchor price is stamped", () => {
+    expect(
+      holdingMarketValue(holding({ symbol: "VOO", anchorValue: 1000 }), { VOO: quote(120) })
+    ).toBe(1000);
+  });
+
+  it("does not convert currency (the price ratio is dimensionless)", () => {
+    expect(
+      holdingMarketValue(proxy, { VOO: quote(110) }, {
+        displayCurrency: "SEK",
+        rates: { USD: 1, SEK: 10 },
+      })
+    ).toBe(1100);
+  });
+
+  it("is included in portfolio totals alongside tickers and manual funds", () => {
+    const holdings = [
+      holding({ id: "a", symbol: "AAPL", shares: 2 }), // $200
+      holding({ id: "b", symbol: "", manualValue: 5000 }), // $5000
+      holding({ id: "c", symbol: "VOO", anchorValue: 1000, anchorPrice: 100 }), // -> $1100
+    ];
+    const quotes = { AAPL: quote(100), VOO: quote(110) };
+    expect(holdingsTotalValue(holdings, quotes)).toBe(6300);
   });
 });
