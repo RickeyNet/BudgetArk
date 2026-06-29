@@ -10,7 +10,7 @@ import {
   getDebtDueDismissals,
   type DebtDueDismissals,
 } from "../storage/debtDueReminderStorage";
-import { debtsDueTodayNeedingPrompt } from "../utils/debtDueCalendar";
+import { debtsDueOrOverdueNeedingPrompt } from "../utils/debtDueCalendar";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { generateUUID } from "../utils/uuid";
 
@@ -67,7 +67,7 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
     setDebt((current) => {
       // A prompt is already up (or the user is mid-queue) - don't reshuffle it.
       if (current) return current;
-      const due = debtsDueTodayNeedingPrompt(debts, payments, dismissals);
+      const due = debtsDueOrOverdueNeedingPrompt(debts, payments, dismissals);
       return due[0] ?? null;
     });
   }, []);
@@ -89,7 +89,7 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
       dismissals: DebtDueDismissals,
       skipDebtId?: string
     ) => {
-      const due = debtsDueTodayNeedingPrompt(debts, payments, dismissals);
+      const due = debtsDueOrOverdueNeedingPrompt(debts, payments, dismissals);
       setDebt(due.find((d) => d.id !== skipDebtId) ?? null);
     },
     []

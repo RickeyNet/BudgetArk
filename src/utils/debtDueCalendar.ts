@@ -118,6 +118,56 @@ export const upcomingDebtDuesWithin = (
   });
 };
 
+/**
+ * Active debts whose minimum is due **on or before today** in the current
+ * calendar month, still unpaid this month and not dismissed.
+ *
+ * Unlike `debtsDueTodayNeedingPrompt` (which fires only on the exact due day),
+ * this also surfaces a payment whose due day has already passed this month - so
+ * a reminder keeps showing once it's overdue instead of vanishing the day
+ * after the due date. The due day is clamped to the month first, so a "due day
+ * 31" debt counts as due once the month's last day arrives. Sorted
+ * most-overdue first, then by larger minimum.
+ */
+export const debtsDueOrOverdueNeedingPrompt = (
+  debts: readonly Debt[],
+  payments: readonly Payment[],
+  dismissed: Readonly<Record<string, string>> = {},
+  fromDate: Date = new Date()
+): Debt[] => {
+  const start = new Date(
+    fromDate.getFullYear(),
+    fromDate.getMonth(),
+    fromDate.getDate()
+  );
+  const monthKey = getMonthKey(start);
+  const today = start.getDate();
+  const matched: { debt: Debt; dueDay: number }[] = [];
+  const seen = new Set<string>();
+
+  for (const debt of debts) {
+    if (debt.balance <= 0) continue;
+    if (seen.has(debt.id)) continue;
+    const dueDay = clampDueDayToMonth(
+      start.getFullYear(),
+      start.getMonth(),
+      getEffectivePaymentDueDay(debt)
+    );
+    if (dueDay > today) continue; // not due yet this month
+    if (hasPaymentInMonth(debt.id, payments, monthKey)) continue;
+    if (dismissed[dismissalKey(debt.id, monthKey)]) continue;
+    seen.add(debt.id);
+    matched.push({ debt, dueDay });
+  }
+
+  return matched
+    .sort((a, b) => {
+      if (a.dueDay !== b.dueDay) return a.dueDay - b.dueDay; // most overdue first
+      return b.debt.minPayment - a.debt.minPayment;
+    })
+    .map((m) => m.debt);
+};
+
 /** Debts due today with no payment logged this month and not dismissed. */
 export const debtsDueTodayNeedingPrompt = (
   debts: readonly Debt[],

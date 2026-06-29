@@ -62,7 +62,7 @@ import {
   type DebtDueDismissals,
 } from "../storage/debtDueReminderStorage";
 import {
-  debtsDueTodayNeedingPrompt,
+  debtsDueOrOverdueNeedingPrompt,
   upcomingDebtDuesWithin,
 } from "../utils/debtDueCalendar";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
@@ -669,12 +669,12 @@ const DebtTrackerScreen: React.FC = () => {
       dismissals: DebtDueDismissals,
       skipDebtId?: string
     ) => {
-      const dueToday = debtsDueTodayNeedingPrompt(
+      const due = debtsDueOrOverdueNeedingPrompt(
         debtList,
         paymentList,
         dismissals
       );
-      const next = dueToday.find((debt) => debt.id !== skipDebtId);
+      const next = due.find((debt) => debt.id !== skipDebtId);
       setDuePromptDebt(next ?? null);
     },
     []
@@ -1200,13 +1200,13 @@ const DebtTrackerScreen: React.FC = () => {
           payments={payments}
           dismissals={dueDismissals}
           onOpen={() => {
-            const dueToday = debtsDueTodayNeedingPrompt(
+            const due = debtsDueOrOverdueNeedingPrompt(
               debts,
               payments,
               dueDismissals
             );
-            if (dueToday[0]) {
-              setDuePromptDebt(dueToday[0]);
+            if (due[0]) {
+              setDuePromptDebt(due[0]);
               return;
             }
             const upcoming = upcomingDebtDuesWithin(
