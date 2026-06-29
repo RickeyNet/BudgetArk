@@ -19,7 +19,6 @@ import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
-import BillCalendarCard from "../components/BillCalendarCard";
 import BillCalendarModal from "../components/BillCalendarModal";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
@@ -1314,6 +1313,14 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.appLabel}>BudgetArk</Text>
         <Text style={styles.screenTitle}>Budget</Text>
         <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
+        <TouchableOpacity
+          style={styles.calendarIconBtn}
+          onPress={() => setShowBillCalendar(true)}
+          activeOpacity={0.7}
+          accessibilityLabel="Bill calendar"
+        >
+          <Text style={styles.calendarIconGlyph}>📅</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.monthPillRow}>
@@ -1444,12 +1451,6 @@ const BudgetScreen: React.FC = () => {
         dismissals={dueDismissals}
         onOpen={() => navigation.navigate("DebtTracker")}
         daysAhead={7}
-      />
-
-      <BillCalendarCard
-        entries={entries}
-        monthKey={selectedMonthKey}
-        onOpen={() => setShowBillCalendar(true)}
       />
 
       {/* Spending card - donut chart + category rows in one card */}
@@ -2161,6 +2162,23 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       paddingTop: 50,
       paddingBottom: tokens.gapSm + 2,
       alignItems: "center",
+      position: "relative",
+    },
+    calendarIconBtn: {
+      position: "absolute",
+      top: 50,
+      right: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    calendarIconGlyph: {
+      fontSize: 20,
     },
     appLabel: {
       fontSize: scale(10),
