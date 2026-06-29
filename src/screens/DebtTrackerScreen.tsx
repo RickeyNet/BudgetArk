@@ -86,6 +86,7 @@ import AddDebtModal from "../components/AddDebtModal";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
 import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal";
+import DebtPaymentCelebrationModal from "../components/DebtPaymentCelebrationModal";
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import { simulatePayoffPlan } from "../utils/calculations";
@@ -245,6 +246,12 @@ const DebtTrackerScreen: React.FC = () => {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [savingsDraft, setSavingsDraft] = useState("");
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
+  // Lighter "payment logged" confetti for a confirmed reminder payment that
+  // didn't clear the debt (a full payoff uses celebrationDebt instead).
+  const [paymentCelebration, setPaymentCelebration] = useState<{
+    debt: Debt;
+    amount: number;
+  } | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [duePromptDebt, setDuePromptDebt] = useState<Debt | null>(null);
@@ -732,9 +739,17 @@ const DebtTrackerScreen: React.FC = () => {
           const paidOff = result.paidOffDebt;
           setTimeout(() => setCelebrationDebt(paidOff), 250);
         } else {
-          // Batched with setDuePromptDebt(null) above, so the Modal swaps
-          // content to the next due debt without a dismiss/present cycle.
-          advanceDuePrompt(result.debts, result.payments, dueDismissals, debtId);
+          // Celebrate the logged payment, then advance to the next due debt
+          // once that confetti is dismissed (see the modal's onClose below).
+          const updatedDebt = result.debts.find((d) => d.id === debtId) ?? null;
+          if (updatedDebt) {
+            setTimeout(
+              () => setPaymentCelebration({ debt: updatedDebt, amount }),
+              250
+            );
+          } else {
+            advanceDuePrompt(result.debts, result.payments, dueDismissals, debtId);
+          }
         }
       } finally {
         duePromptSubmittingRef.current = false;
@@ -1341,6 +1356,21 @@ const DebtTrackerScreen: React.FC = () => {
         onLogPayment={handleDuePromptLogPayment}
         onDismissForMonth={handleDuePromptDismissMonth}
         onClose={() => setDuePromptDebt(null)}
+      />
+
+      <DebtPaymentCelebrationModal
+        visible={paymentCelebration !== null}
+        debt={paymentCelebration?.debt ?? null}
+        amount={paymentCelebration?.amount ?? 0}
+        onClose={() => {
+          setPaymentCelebration(null);
+          // Advance to the next due debt after the confetti dismisses; reads
+          // current state so it reflects the payment just recorded.
+          setTimeout(
+            () => advanceDuePrompt(debts, payments, dueDismissals),
+            250
+          );
+        }}
       />
 
       <Modal

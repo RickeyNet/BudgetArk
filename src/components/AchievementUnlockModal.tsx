@@ -16,9 +16,9 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from "react-native";
 import Medal from "./Medal";
+import ConfettiBurst from "./ConfettiBurst";
 import type { AchievementDef } from "../data/achievementDefs";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -30,19 +30,6 @@ interface AchievementUnlockModalProps {
   onAdvance: () => void;
 }
 
-const CONFETTI_SEEDS = [
-  { left: 0.06, delay: 0, rotate: "-22deg" },
-  { left: 0.16, delay: 320, rotate: "16deg" },
-  { left: 0.27, delay: 1100, rotate: "-8deg" },
-  { left: 0.36, delay: 680, rotate: "26deg" },
-  { left: 0.46, delay: 1450, rotate: "-30deg" },
-  { left: 0.55, delay: 480, rotate: "10deg" },
-  { left: 0.64, delay: 980, rotate: "-18deg" },
-  { left: 0.74, delay: 210, rotate: "22deg" },
-  { left: 0.83, delay: 1250, rotate: "-12deg" },
-  { left: 0.92, delay: 880, rotate: "16deg" },
-] as const;
-
 const tierLabel = (tier: AchievementDef["tier"]): string =>
   tier.charAt(0).toUpperCase() + tier.slice(1);
 
@@ -52,9 +39,7 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
   onAdvance,
 }) => {
   const { colors } = useTheme();
-  const { width, height } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const progress = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
 
   const visible = achievement !== null;
@@ -62,23 +47,12 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
 
   useEffect(() => {
     if (!visible) {
-      progress.stopAnimation();
       pulse.stopAnimation();
-      progress.setValue(0);
       pulse.setValue(0);
       return;
     }
 
     void triggerHaptic("success");
-
-    const confettiLoop = Animated.loop(
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 2400,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
 
     const pulseLoop = Animated.loop(
       Animated.sequence([
@@ -97,16 +71,14 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
       ])
     );
 
-    confettiLoop.start();
     pulseLoop.start();
 
     return () => {
-      confettiLoop.stop();
       pulseLoop.stop();
     };
-    // Reset animations whenever the displayed badge changes so each unlock
-    // gets its own fresh confetti pass rather than carrying state forward.
-  }, [visible, achievementId, progress, pulse]);
+    // Reset the pulse whenever the displayed badge changes so each unlock gets
+    // its own fresh pass rather than carrying state forward.
+  }, [visible, achievementId, pulse]);
 
   if (!achievement) return null;
 
@@ -125,39 +97,7 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
       onRequestClose={onAdvance}
     >
       <View style={styles.screen}>
-        <View pointerEvents="none" style={styles.confettiLayer}>
-          {CONFETTI_SEEDS.map((seed, index) => {
-            const travel = height * 0.75 + 140;
-            const translateY = progress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-100 - seed.delay * 0.08, travel - seed.delay * 0.03],
-            });
-            const opacity = progress.interpolate({
-              inputRange: [0, 0.08, 0.9, 1],
-              outputRange: [0, 1, 1, 0],
-            });
-
-            return (
-              <Animated.View
-                key={`${seed.left}-${index}`}
-                style={[
-                  styles.confettiPiece,
-                  {
-                    left: width * seed.left,
-                    backgroundColor:
-                      index % 3 === 0
-                        ? colors.accent
-                        : index % 3 === 1
-                          ? colors.success
-                          : colors.warning,
-                    opacity,
-                    transform: [{ translateY }, { rotate: seed.rotate }],
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
+        <ConfettiBurst active={visible} />
 
         <View style={styles.content}>
           <Text style={styles.kicker}>BADGE UNLOCKED</Text>
@@ -206,17 +146,6 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.bg,
       justifyContent: "center",
       paddingHorizontal: 24,
-    },
-    confettiLayer: {
-      ...StyleSheet.absoluteFill,
-      overflow: "hidden",
-    },
-    confettiPiece: {
-      position: "absolute",
-      top: 0,
-      width: 10,
-      height: 18,
-      borderRadius: 3,
     },
     content: {
       backgroundColor: colors.card,

@@ -3,7 +3,7 @@ import { AppState } from "react-native";
 import type { Debt, Payment } from "../types";
 import DebtDuePaymentPromptModal from "./DebtDuePaymentPromptModal";
 import DebtPayoffCelebrationModal from "./DebtPayoffCelebrationModal";
-import { triggerHaptic } from "../utils/haptics";
+import DebtPaymentCelebrationModal from "./DebtPaymentCelebrationModal";
 import { getDebts, getPayments, recordPayment } from "../storage/debtStorage";
 import {
   dismissDebtDueForMonth,
@@ -44,6 +44,12 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
   // Set when a logged minimum clears the last of a balance, so the payoff
   // confetti presents after the prompt finishes dismissing.
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
+  // Set after any other confirmed payment, for the lighter "payment logged"
+  // confetti. Carries the updated debt (for its new balance) and the amount.
+  const [paymentCelebration, setPaymentCelebration] = useState<{
+    debt: Debt;
+    amount: number;
+  } | null>(null);
   // Guards the record/dismiss handlers against a double-tap recording the
   // payment twice, and stops a foreground re-eval from swapping the prompt
   // mid-submit.
@@ -121,14 +127,21 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
         const paidOff =
           result.debts.find((d) => d.id === debtId && d.balance <= 0) ?? null;
         setDebt(null);
+        // Let the prompt's dismiss animation finish before a celebration
+        // presents - iOS drops one of two modals swapped in the same frame.
+        // The queue advances once the celebration is dismissed.
         if (paidOff) {
-          // Let the prompt's dismiss animation finish before the celebration
-          // presents - iOS drops one of two modals swapped in the same frame.
-          // Remaining due debts re-prompt after the celebration is dismissed.
           setTimeout(() => setCelebrationDebt(paidOff), 250);
         } else {
-          triggerHaptic("success");
-          advance(result.debts, result.payments, dismissals, debtId);
+          const updatedDebt = result.debts.find((d) => d.id === debtId) ?? null;
+          if (updatedDebt) {
+            setTimeout(
+              () => setPaymentCelebration({ debt: updatedDebt, amount }),
+              250
+            );
+          } else {
+            advance(result.debts, result.payments, dismissals, debtId);
+          }
         }
       } finally {
         submittingRef.current = false;
@@ -157,6 +170,12 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
     setTimeout(() => advance(debts, payments, dismissals), 250);
   }, [advance]);
 
+  const handlePaymentCelebrationClose = useCallback(() => {
+    setPaymentCelebration(null);
+    const { debts, payments, dismissals } = dataRef.current;
+    setTimeout(() => advance(debts, payments, dismissals), 250);
+  }, [advance]);
+
   return (
     <>
       <DebtDuePaymentPromptModal
@@ -170,6 +189,12 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
         visible={!paused && celebrationDebt !== null}
         debt={celebrationDebt}
         onClose={handleCelebrationClose}
+      />
+      <DebtPaymentCelebrationModal
+        visible={!paused && paymentCelebration !== null}
+        debt={paymentCelebration?.debt ?? null}
+        amount={paymentCelebration?.amount ?? 0}
+        onClose={handlePaymentCelebrationClose}
       />
     </>
   );

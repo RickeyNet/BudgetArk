@@ -7,13 +7,13 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { Debt } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import { triggerHaptic } from "../utils/haptics";
+import ConfettiBurst from "./ConfettiBurst";
 
 interface DebtPayoffCelebrationModalProps {
   visible: boolean;
@@ -21,20 +21,6 @@ interface DebtPayoffCelebrationModalProps {
   onClose: () => void;
   onViewHistory?: () => void;
 }
-
-const CONFETTI_SEEDS = [
-  { left: 0.05, delay: 0, rotate: "-24deg" },
-  { left: 0.13, delay: 300, rotate: "18deg" },
-  { left: 0.22, delay: 1200, rotate: "-10deg" },
-  { left: 0.31, delay: 700, rotate: "28deg" },
-  { left: 0.4, delay: 1500, rotate: "-30deg" },
-  { left: 0.5, delay: 500, rotate: "12deg" },
-  { left: 0.6, delay: 1000, rotate: "-18deg" },
-  { left: 0.69, delay: 200, rotate: "24deg" },
-  { left: 0.78, delay: 1300, rotate: "-14deg" },
-  { left: 0.87, delay: 900, rotate: "16deg" },
-  { left: 0.94, delay: 1600, rotate: "-22deg" },
-] as const;
 
 const getOwnerHeadline = (owner: Debt["owner"]): string => {
   if (owner === "partner") return "Partner debt cleared";
@@ -50,30 +36,17 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
-  const { width, height } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const progress = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!visible) {
-      progress.stopAnimation();
       pulse.stopAnimation();
-      progress.setValue(0);
       pulse.setValue(0);
       return;
     }
 
     triggerHaptic("success");
-
-    const confettiLoop = Animated.loop(
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 2600,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
 
     const pulseLoop = Animated.loop(
       Animated.sequence([
@@ -92,14 +65,12 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
       ])
     );
 
-    confettiLoop.start();
     pulseLoop.start();
 
     return () => {
-      confettiLoop.stop();
       pulseLoop.stop();
     };
-  }, [progress, pulse, visible]);
+  }, [pulse, visible]);
 
   if (!debt) return null;
 
@@ -111,37 +82,7 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
   return (
     <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose}>
       <View style={styles.screen}>
-        <View pointerEvents="none" style={styles.confettiLayer}>
-          {CONFETTI_SEEDS.map((seed, index) => {
-            const travel = height * 0.75 + 140;
-            const translateY = progress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-100 - seed.delay * 0.08, travel - seed.delay * 0.03],
-            });
-            const opacity = progress.interpolate({
-              inputRange: [0, 0.08, 0.9, 1],
-              outputRange: [0, 1, 1, 0],
-            });
-
-            return (
-              <Animated.View
-                key={`${seed.left}-${index}`}
-                style={[
-                  styles.confettiPiece,
-                  {
-                    left: width * seed.left,
-                    backgroundColor: index % 3 === 0 ? colors.accent : index % 3 === 1 ? colors.success : colors.warning,
-                    opacity,
-                    transform: [
-                      { translateY },
-                      { rotate: seed.rotate },
-                    ],
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
+        <ConfettiBurst active={visible} />
 
         <View style={styles.content}>
           <Animated.Text style={[styles.emoji, { transform: [{ scale: trophyScale }] }]}>🎉</Animated.Text>
@@ -198,17 +139,6 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.bg,
       justifyContent: "center",
       paddingHorizontal: 24,
-    },
-    confettiLayer: {
-      ...StyleSheet.absoluteFill,
-      overflow: "hidden",
-    },
-    confettiPiece: {
-      position: "absolute",
-      top: 0,
-      width: 10,
-      height: 18,
-      borderRadius: 3,
     },
     content: {
       backgroundColor: colors.card,
