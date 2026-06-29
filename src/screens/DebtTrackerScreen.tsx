@@ -336,12 +336,11 @@ const DebtTrackerScreen: React.FC = () => {
           setDebts(valid);
           setPayments(storedPayments);
           setDueDismissals(storedDismissals);
-          const dueToday = debtsDueTodayNeedingPrompt(
-            valid,
-            storedPayments,
-            storedDismissals
-          );
-          setDuePromptDebt(dueToday[0] ?? null);
+          // The "minimum due today" prompt is now opened on app launch by the
+          // app-root DebtDueReminderHost (so it fires regardless of the active
+          // tab). Auto-opening it here too would stack a second copy when the
+          // Debts tab is focused. The in-tab reminder banner below still opens
+          // this screen's own prompt on demand.
           setMilestonePlan(storedMilestones);
           if (shouldOpenArkSetup) {
             primeMilestonesModal(storedMilestones);

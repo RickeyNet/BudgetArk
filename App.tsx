@@ -24,6 +24,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
+import DebtDueReminderHost from "./src/components/DebtDueReminderHost";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
 import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
@@ -289,6 +290,13 @@ const AppContent: React.FC = () => {
         <AppNavigator />
       </NavigationContainer>
       {isSynthwave && <SynthwaveGrid color={colors.accent} />}
+
+      {/* Surfaces the "minimum due today" prompt on app open over any tab.
+          Paused while the update / release-notes dialogs own the screen so the
+          fade modals never stack (one would end up hidden on iOS). */}
+      <DebtDueReminderHost
+        paused={pendingUpdate !== null || showReleaseNotesPrompt}
+      />
 
       <Modal
         visible={pendingUpdate !== null}

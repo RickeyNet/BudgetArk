@@ -71,7 +71,7 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>
-              Yes, log {formatCurrency(logAmount)}
+              Yes, I paid {formatCurrency(logAmount)}
             </Text>
           </TouchableOpacity>
 
