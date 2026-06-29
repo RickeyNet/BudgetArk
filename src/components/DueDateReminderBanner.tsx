@@ -1,5 +1,12 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  StyleProp,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from "react-native";
 import { BudgetEntry } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -10,12 +17,14 @@ interface DueDateReminderBannerProps {
   entries: BudgetEntry[];
   onOpen: () => void;
   daysAhead?: number;
+  style?: StyleProp<ViewStyle>;
 }
 
 const DueDateReminderBanner: React.FC<DueDateReminderBannerProps> = ({
   entries,
   onOpen,
   daysAhead = 7,
+  style,
 }) => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -58,6 +67,7 @@ const DueDateReminderBanner: React.FC<DueDateReminderBannerProps> = ({
       style={[
         styles.card,
         isUrgent ? styles.cardUrgent : styles.cardUpcoming,
+        style,
       ]}
       onPress={onOpen}
       activeOpacity={0.85}

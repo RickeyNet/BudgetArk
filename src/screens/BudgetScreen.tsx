@@ -1443,6 +1443,7 @@ const BudgetScreen: React.FC = () => {
       <DueDateReminderBanner
         entries={entries}
         onOpen={() => setShowBillCalendar(true)}
+        style={styles.reminderBanner}
       />
 
       <DebtDueReminderBanner
@@ -1451,6 +1452,7 @@ const BudgetScreen: React.FC = () => {
         dismissals={dueDismissals}
         onOpen={() => navigation.navigate("DebtTracker")}
         daysAhead={7}
+        style={styles.reminderBanner}
       />
 
       {/* Spending card - donut chart + category rows in one card */}
@@ -2438,6 +2440,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: tokens.radius,
       padding: tokens.pad,
       overflow: "hidden",
+    },
+    reminderBanner: {
+      marginBottom: tokens.gap,
     },
     spendingHeaderRow: {
       flexDirection: "row",
