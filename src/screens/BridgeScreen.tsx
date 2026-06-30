@@ -66,6 +66,7 @@ import {
   normalizeSymbol,
   accountHoldingsValue,
   isQuoteRefreshDue,
+  QUOTE_REFRESH_INTERVAL_MS,
 } from "../utils/holdingsMath";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { useTheme } from "../theme/ThemeProvider";
@@ -437,12 +438,17 @@ const BridgeScreen: React.FC = () => {
 
   /** Whether a manual price refresh is allowed yet (daily window). */
   const priceRefreshDue = isQuoteRefreshDue(quotesLastFetchedAt, Date.now());
-  const daysUntilRefresh = useMemo(() => {
-    if (!quotesLastFetchedAt) return 0;
+  /** Human label for how long until the next refresh is allowed (interval-aware). */
+  const nextRefreshLabel = useMemo(() => {
+    if (!quotesLastFetchedAt) return "";
     const last = new Date(quotesLastFetchedAt).getTime();
-    if (!Number.isFinite(last)) return 0;
-    const msLeft = last + 7 * 24 * 60 * 60 * 1000 - Date.now();
-    return Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+    if (!Number.isFinite(last)) return "";
+    const msLeft = last + QUOTE_REFRESH_INTERVAL_MS - Date.now();
+    if (msLeft <= 0) return "";
+    const hours = Math.ceil(msLeft / (60 * 60 * 1000));
+    if (hours < 24) return `Next update in ${hours}h`;
+    const days = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+    return `Next update in ${days}d`;
   }, [quotesLastFetchedAt]);
 
   /** Most recent price timestamp across cached quotes, for the "as of" label. */
@@ -1272,7 +1278,7 @@ const BridgeScreen: React.FC = () => {
                       ? "Updating..."
                       : priceRefreshDue
                         ? "Update prices"
-                        : `Next update in ${daysUntilRefresh}d`}
+                        : nextRefreshLabel}
                   </Text>
                 </TouchableOpacity>
               </View>
