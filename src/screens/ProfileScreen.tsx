@@ -724,7 +724,7 @@ const ProfileScreen: React.FC = () => {
     setInfoModal({
       title: "Live Holdings On",
       message:
-        "Add stocks and ETFs from the Bridge tab. Prices refresh about once a week.",
+        "Add stocks and ETFs from the Bridge tab. Prices refresh about once a day.",
     });
   }, []);
 

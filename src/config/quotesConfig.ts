@@ -26,7 +26,7 @@ export const QUOTES_PROXY_URL = "https://quotes.budgetark.app";
  * LOW-EFFORT BOT DETERRENT, NOT a secret: like QUOTES_PROXY_URL it ships in the
  * app bundle and can be extracted from it or a TLS proxy. Its only job is to
  * make blind internet scanners that probe the workers.dev hostname get a 404.
- * Real abuse/cost control is server-side (per-device weekly throttle, per-IP
+ * Real abuse/cost control is server-side (per-device daily throttle, per-IP
  * daily cap, global daily Twelve Data budget).
  *
  * Must match the Worker's APP_SHARED_KEY secret (`wrangler secret put

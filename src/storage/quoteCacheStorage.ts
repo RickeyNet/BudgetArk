@@ -3,7 +3,7 @@
  * File: src/storage/quoteCacheStorage.ts
  *
  * Per-device cache of the most recent stock prices plus the timestamp of the
- * last successful fetch (which drives the weekly-refresh gate).
+ * last successful fetch (which drives the daily-refresh gate).
  *
  * This is deliberately NOT synced and has no tombstones: prices are public,
  * cheap to re-fetch, and device-local. Keeping them out of the sync diff

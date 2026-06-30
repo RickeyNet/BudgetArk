@@ -4,7 +4,7 @@
  *
  * Per-device opt-in state for the Live Stock Holdings feature. NOT synced -
  * each device decides for itself whether the feature is on. Default OFF: the
- * Holdings UI and the weekly quote fetch stay dormant until the user enables
+ * Holdings UI and the daily quote fetch stay dormant until the user enables
  * them and acknowledges the off-device disclosure.
  *
  * Mirrors `updatePreferencesStorage.ts` for shape/merge style.

@@ -196,7 +196,7 @@ const BridgeScreen: React.FC = () => {
    *
    * This NEVER hits the network - it only reads the per-device cache. Pulling
    * fresh prices is an explicit user action (the "Update prices" button) so
-   * that adding several tickers in a row doesn't spend the weekly fetch window
+   * that adding several tickers in a row doesn't spend the daily fetch window
    * on a partial set. See `refreshPricesManually`.
    */
   /**
@@ -435,7 +435,7 @@ const BridgeScreen: React.FC = () => {
     });
   }, [assetAccounts, holdings, quotes, holdingValueOpts]);
 
-  /** Whether a manual price refresh is allowed yet (weekly window). */
+  /** Whether a manual price refresh is allowed yet (daily window). */
   const priceRefreshDue = isQuoteRefreshDue(quotesLastFetchedAt, Date.now());
   const daysUntilRefresh = useMemo(() => {
     if (!quotesLastFetchedAt) return 0;
@@ -677,7 +677,7 @@ const BridgeScreen: React.FC = () => {
    * Persist the account, and for an Investment (broker) account reconcile its
    * holdings against the edited ticker rows: update kept rows, create new ones,
    * and tombstone any the user removed. Never fetches prices - that stays
-   * manual so adding several tickers doesn't burn the weekly window.
+   * manual so adding several tickers doesn't burn the daily window.
    */
   const saveAsset = useCallback(async () => {
     const name = assetName.trim();
@@ -904,7 +904,7 @@ const BridgeScreen: React.FC = () => {
   }, []);
 
   /**
-   * The only path that reaches out to the quote proxy. Weekly-gated by the UI
+   * The only path that reaches out to the quote proxy. Daily-gated by the UI
    * (the button is disabled until a refresh is due), so a tap always results in
    * a real fetch covering every ticker the user has added by then.
    */

@@ -43,7 +43,7 @@ id = "2c1da019a9b64fe291f7a557cd9a0c39"
 # Per-IP burst rate limiter (Cloudflare Workers Rate Limiting binding). Keyed by
 # the connecting IP in code, so a client that drops the x-device header still
 # can't hammer the endpoint. `period` must be 10 or 60 seconds; `limit` is the
-# allowed requests per window. A legit app makes ~1 request/week per device, so
+# allowed requests per window. A legit app makes ~1 request/day per device, so
 # 5/min is still wildly generous and only bites abusers. `namespace_id` is any
 # number unique among your account's rate limiters.
 #

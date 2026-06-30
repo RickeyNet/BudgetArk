@@ -2,7 +2,7 @@
  * BudgetArk - Holdings Math
  * File: src/utils/holdingsMath.ts
  *
- * Pure helpers for the Live Stock Holdings feature: the weekly-refresh gate,
+ * Pure helpers for the Live Stock Holdings feature: the daily-refresh gate,
  * market-value math, and symbol collection. Kept dependency-free (no React
  * Native, no storage) so it's unit-testable under the ts-jest/node config and
  * reusable by both the service layer and net-worth aggregation.
@@ -11,8 +11,8 @@
 import type { CachedQuote, Holding } from "../types";
 import { convertAmount } from "./currencyConversion";
 
-/** One refresh per week per device - matches the Worker's throttle window. */
-export const QUOTE_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+/** One refresh per day per device - matches the Worker's throttle window. */
+export const QUOTE_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Symbol shape the Worker accepts: uppercase alnum, `.`/`-` for class shares /

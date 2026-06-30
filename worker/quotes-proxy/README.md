@@ -56,12 +56,12 @@ so it keeps serving while you configure things.
 ```
 GET /quotes?symbols=AAPL,VTI,MSFT
 Header (required if APP_SHARED_KEY set): x-app-key: <shared app key>
-Header (optional):                       x-device: <stable per-install id>  # enables 1/week throttle
+Header (optional):                       x-device: <stable per-install id>  # enables 1/day throttle
 
 200 -> { "quotes": { "AAPL": { "price": 192.31, "asOf": "2026-06-23T..." }, ... } }
 400 -> { "error": "no_symbols" }
 404 -> { "error": "not_found" }            # unknown path OR missing/wrong x-app-key
-429 -> { "error": "rate_limited" }         # device already fetched this week
+429 -> { "error": "rate_limited" }         # device already fetched today
 502 -> { "error": "upstream_unavailable" } # provider down and nothing cached
 503 -> { "error": "busy" }                 # per-IP burst / daily cap; retry later
 ```
@@ -69,8 +69,8 @@ Header (optional):                       x-device: <stable per-install id>  # en
 ## Tuning
 
 In `src/index.ts`:
-- `QUOTE_TTL_SECONDS` — how long a price is cached (default 7 days).
-- `THROTTLE_TTL_SECONDS` — per-device cooldown (default 1 week).
+- `QUOTE_TTL_SECONDS` — how long a price is cached (default 1 day).
+- `THROTTLE_TTL_SECONDS` — per-device cooldown (default 1 day).
 - `MAX_SYMBOLS` — batch cap (Twelve Data allows 120).
 
 ## Useful commands

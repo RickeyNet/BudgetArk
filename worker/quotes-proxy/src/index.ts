@@ -45,8 +45,8 @@ export interface Env {
   APP_SHARED_KEY?: string;
 }
 
-const QUOTE_TTL_SECONDS = 7 * 24 * 60 * 60; // cache a price for a week (matches refresh cadence)
-const THROTTLE_TTL_SECONDS = 7 * 24 * 60 * 60; // 1 request per week per device
+const QUOTE_TTL_SECONDS = 24 * 60 * 60; // cache a price for a day (matches refresh cadence)
+const THROTTLE_TTL_SECONDS = 24 * 60 * 60; // 1 request per day per device
 const MAX_SYMBOLS = 120; // Twelve Data batch limit
 
 /**
@@ -99,8 +99,8 @@ export default {
 
     // --- 1. Per-IP burst limit (cheap, no KV) BEFORE the cache lookup, so one
     // IP can't flood even identical (cacheable) requests. Returns 503, NOT 429,
-    // on purpose: 429 is reserved for the per-device weekly throttle, which the
-    // app reacts to by backing off a full week. A momentary burst should just
+    // on purpose: 429 is reserved for the per-device daily throttle, which the
+    // app reacts to by backing off a full day. A momentary burst should just
     // retry, so 503 routes it through the app's transient-failure path. ---
     if (env.QUOTES_RL) {
       const { success } = await env.QUOTES_RL.limit({ key: clientIp || "anon" });
@@ -137,7 +137,7 @@ export default {
       }
     }
 
-    // --- Per-device weekly throttle (cooperative clients). Hashed so we never
+    // --- Per-device daily throttle (cooperative clients). Hashed so we never
     // store the raw id. ---
     const deviceId = req.headers.get("x-device") ?? "";
     let throttleKey: string | null = null;
@@ -200,7 +200,7 @@ export default {
       }
     }
 
-    // Consume the per-device weekly budget once we've served something.
+    // Consume the per-device daily budget once we've served something.
     if (throttleKey) {
       await env.QUOTES.put(throttleKey, "1", { expirationTtl: THROTTLE_TTL_SECONDS });
     }

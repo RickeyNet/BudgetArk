@@ -62,13 +62,17 @@ describe("isQuoteRefreshDue", () => {
   });
 
   it("is NOT due within the interval", () => {
-    const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
-    expect(isQuoteRefreshDue(oneDayAgo, now)).toBe(false);
+    const halfwayThrough = new Date(
+      now - QUOTE_REFRESH_INTERVAL_MS / 2
+    ).toISOString();
+    expect(isQuoteRefreshDue(halfwayThrough, now)).toBe(false);
   });
 
   it("is due once a full interval has elapsed", () => {
-    const exactlyAWeekAgo = new Date(now - QUOTE_REFRESH_INTERVAL_MS).toISOString();
-    expect(isQuoteRefreshDue(exactlyAWeekAgo, now)).toBe(true);
+    const exactlyOneIntervalAgo = new Date(
+      now - QUOTE_REFRESH_INTERVAL_MS
+    ).toISOString();
+    expect(isQuoteRefreshDue(exactlyOneIntervalAgo, now)).toBe(true);
   });
 
   it("is NOT due one millisecond before the interval", () => {

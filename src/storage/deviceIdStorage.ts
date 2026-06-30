@@ -3,7 +3,7 @@
  * File: src/storage/deviceIdStorage.ts
  *
  * A stable, random per-install id sent to the quote-proxy Worker as the
- * `x-device` header so the Worker can enforce its 1-request-per-week throttle.
+ * `x-device` header so the Worker can enforce its 1-request-per-day throttle.
  *
  * Privacy: this id is not tied to any account or portfolio. The Worker only
  * ever stores a SHA-256 HASH of it (keyed `throttle:<hash>`), so the raw value
