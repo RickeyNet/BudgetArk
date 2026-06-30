@@ -6,9 +6,10 @@
  * Cloudflare secret and is the only thing that talks to the provider.
  *
  * It stores NO portfolio data:
- *   - the price cache is keyed by SYMBOL only (quote:AAPL)
- *   - the throttle is keyed by a SHA-256 HASH of the device id (throttle:<hash>)
- * so nothing here records who holds what.
+ *   - the price cache is keyed by SYMBOL only (quote:<ver>:AAPL)
+ *   - the throttle is keyed by a SHA-256 HASH of the device id (throttle:<ver>:<hash>)
+ * so nothing here records who holds what. (<ver> is CACHE_VERSION - bump it to
+ * flush the cache + throttle without touching KV.)
  *
  * Endpoint:  GET /quotes?symbols=AAPL,VTI,MSFT
  * Header:    x-device: <stable per-install id>   (optional but enables throttle)
@@ -48,6 +49,17 @@ export interface Env {
 const QUOTE_TTL_SECONDS = 24 * 60 * 60; // cache a price for a day (matches refresh cadence)
 const THROTTLE_TTL_SECONDS = 24 * 60 * 60; // 1 request per day per device
 const MAX_SYMBOLS = 120; // Twelve Data batch limit
+
+/**
+ * Namespace prefix for every KV key this Worker owns (price cache + per-device
+ * throttle). Bump it to abandon all existing entries WITHOUT touching KV: old
+ * keys keep their original TTL and expire on their own, while the new version
+ * starts from an empty cache (forcing a fresh upstream fetch) and an empty
+ * throttle set (so no device is stuck behind a stale cooldown). Use this to
+ * flush after a cadence/TTL change instead of deleting keys by hand.
+ */
+const CACHE_VERSION = "v2";
+const quoteKey = (symbol: string): string => `quote:${CACHE_VERSION}:${symbol}`;
 
 /**
  * Hard daily ceiling on symbols fetched upstream, across ALL callers. A backstop
@@ -142,7 +154,7 @@ export default {
     const deviceId = req.headers.get("x-device") ?? "";
     let throttleKey: string | null = null;
     if (deviceId) {
-      throttleKey = `throttle:${await sha256Hex(deviceId)}`;
+      throttleKey = `throttle:${CACHE_VERSION}:${await sha256Hex(deviceId)}`;
       if (await env.QUOTES.get(throttleKey)) {
         return json({ error: "rate_limited" }, 429);
       }
@@ -153,7 +165,7 @@ export default {
     const stale: string[] = [];
     await Promise.all(
       symbols.map(async (symbol) => {
-        const cached = (await env.QUOTES.get(`quote:${symbol}`, "json")) as CachedQuote | null;
+        const cached = (await env.QUOTES.get(quoteKey(symbol), "json")) as CachedQuote | null;
         if (cached) {
           quotes[symbol] = cached;
         } else {
@@ -181,7 +193,7 @@ export default {
               if (Number.isFinite(price)) {
                 const record: CachedQuote = { price, asOf };
                 quotes[symbol] = record;
-                await env.QUOTES.put(`quote:${symbol}`, JSON.stringify(record), {
+                await env.QUOTES.put(quoteKey(symbol), JSON.stringify(record), {
                   expirationTtl: QUOTE_TTL_SECONDS,
                 });
               }

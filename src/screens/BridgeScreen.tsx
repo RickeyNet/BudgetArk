@@ -153,6 +153,9 @@ const BridgeScreen: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
 
   const [showHoldingsDisclosure, setShowHoldingsDisclosure] = useState(false);
+  // Count of holding records in storage even while the feature is off, so we
+  // can nudge a device whose partner shared holdings it can't yet see.
+  const [syncedHoldingsCount, setSyncedHoldingsCount] = useState(0);
   const [quotesLastFetchedAt, setQuotesLastFetchedAt] = useState<string | null>(
     null
   );
@@ -255,12 +258,18 @@ const BridgeScreen: React.FC = () => {
       setHoldings([]);
       setQuotes({});
       setQuotesLastFetchedAt(null);
+      // Still read the stored count: holdings sync to this device regardless
+      // of the opt-in, so we can surface a nudge when a partner shared some.
+      const stored = await getHoldings();
+      setSyncedHoldingsCount(stored.length);
       return settings;
     }
     const cache = await getQuoteCache();
     setQuotes(cache.quotes);
     setQuotesLastFetchedAt(cache.lastFetchedAt);
-    setHoldings(await getHoldings());
+    const live = await getHoldings();
+    setHoldings(live);
+    setSyncedHoldingsCount(live.length);
     return settings;
   }, []);
 
@@ -942,6 +951,18 @@ const BridgeScreen: React.FC = () => {
     await loadHoldingsState();
   }, [assetCategory, loadHoldingsState, showAssetModal]);
 
+  /**
+   * Entry point for the "partner shared holdings" nudge: enable straight away
+   * if the off-device disclosure was already accepted, otherwise show it first.
+   */
+  const promptEnableHoldings = useCallback(() => {
+    if (holdingsSettings.disclosureAcknowledged) {
+      void enableHoldings();
+    } else {
+      setShowHoldingsDisclosure(true);
+    }
+  }, [enableHoldings, holdingsSettings.disclosureAcknowledged]);
+
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);
     if (Number.isNaN(parsed) || parsed === 0) return;
@@ -1113,6 +1134,26 @@ const BridgeScreen: React.FC = () => {
                 </View>
               );
             })}
+
+            {!holdingsSettings.enabled && syncedHoldingsCount > 0 ? (
+              <TouchableOpacity
+                style={styles.holdingsNudge}
+                onPress={promptEnableHoldings}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Enable Live Holdings to see shared holdings"
+              >
+                <Text style={[styles.holdingsNudgeTitle, { color: colors.text }]}>
+                  📈 Holdings shared with you
+                </Text>
+                <Text style={[styles.holdingsNudgeText, { color: colors.textDim }]}>
+                  {syncedHoldingsCount} {syncedHoldingsCount === 1 ? "position" : "positions"} synced from your partner. Turn on Live Holdings to see them and include their value in your net worth.
+                </Text>
+                <Text style={[styles.holdingsNudgeCta, { color: colors.accent }]}>
+                  Enable Live Holdings ›
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             {holdingsCategoryData.map((section) => {
               if (section.accounts.length === 0) return null;
@@ -1859,6 +1900,28 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       justifyContent: "space-between",
       paddingLeft: 28,
       paddingTop: tokens.gapSm,
+    },
+    holdingsNudge: {
+      borderWidth: 1,
+      borderColor: `${colors.accent}40`,
+      backgroundColor: `${colors.accent}10`,
+      borderRadius: 12,
+      padding: 14,
+      marginTop: tokens.gapSm,
+      gap: 4,
+    },
+    holdingsNudgeTitle: {
+      fontSize: scale(14),
+      fontWeight: "700",
+    },
+    holdingsNudgeText: {
+      fontSize: scale(12),
+      lineHeight: scale(17),
+    },
+    holdingsNudgeCta: {
+      fontSize: scale(13),
+      fontWeight: "700",
+      marginTop: 2,
     },
     // Inline ticker editor inside the broker modal.
     tickerEditor: {
