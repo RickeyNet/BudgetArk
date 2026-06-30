@@ -1,5 +1,13 @@
 # BudgetArk Release Notes
 
+## v1.8.1 - Daily Holdings Prices + Fixes (2026-06-29)
+
+Pure JS - ships OTA against the existing native runtime. No new native modules.
+
+- **Holdings refresh cadence weekly → daily.** The refresh gate moved from 7 days to 1 day, enforced in both places that gate it: the client `QUOTE_REFRESH_INTERVAL_MS` (`src/utils/holdingsMath.ts`) and the Worker's `QUOTE_TTL_SECONDS` + `THROTTLE_TTL_SECONDS` (`worker/quotes-proxy/src/index.ts`). The client gate is the binding one, so the change needs both an OTA and a `wrangler deploy`. The Bridge "next update" label is now interval-aware (shows hours under a day) instead of a hardcoded "7d".
+- **Update dialogs scroll.** The "Update Ready" and "What's New" modals capped at 85% height with their body in a `ScrollView`; the title and action buttons stay pinned so Install/Later are always reachable on long release notes.
+- **Bill calendar moved to a header icon.** The Budget screen's mid-page bill-calendar card is now a compact calendar button in the top-right; the due-date reminder banners regained the standard section gap above the Spending card.
+
 ## v1.8.0 - Live Stock Holdings (2026-06-27)
 
 Pure JS - ships OTA against the existing native runtime (`runtimeVersion` unchanged). No new native modules; the feature reuses `expo-secure-store` and the existing networking stack.

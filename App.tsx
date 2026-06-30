@@ -14,6 +14,7 @@ import {
   StyleSheet,
   AppState,
   Modal,
+  ScrollView,
   Text,
   TouchableOpacity,
   NativeModules,
@@ -312,39 +313,45 @@ const AppContent: React.FC = () => {
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
-            {pendingUpdate?.appVersion ? (
-              <View style={[styles.updateVersionBadge, { backgroundColor: colors.accent }]}> 
-                <Text style={[styles.updateVersionText, { color: colors.white }]}>
-                  v{pendingUpdate.appVersion}
-                </Text>
-              </View>
-            ) : null}
-            {pendingUpdate?.releaseNote ? (
-              <>
-                <Text style={[styles.updateReleaseTitle, { color: colors.accent }]}> 
-                  {pendingUpdate.releaseNote.title}
-                </Text>
-                {pendingUpdate.releaseNote.highlights.slice(0, 4).map((line, i) => (
-                  <Text key={`${pendingUpdate.releaseNote?.version}-${i}`} style={[styles.dialogBullet, { color: colors.textDim }]}>
-                    {"\u2022"} {line}
+            <ScrollView
+              style={styles.dialogScroll}
+              contentContainerStyle={styles.dialogScrollContent}
+              showsVerticalScrollIndicator
+            >
+              {pendingUpdate?.appVersion ? (
+                <View style={[styles.updateVersionBadge, { backgroundColor: colors.accent }]}>
+                  <Text style={[styles.updateVersionText, { color: colors.white }]}>
+                    v{pendingUpdate.appVersion}
                   </Text>
-                ))}
-                {pendingUpdate.releaseNote.highlights.length > 4 ? (
-                  <Text style={[styles.dialogBullet, { color: colors.textMuted }]}> 
-                    +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                </View>
+              ) : null}
+              {pendingUpdate?.releaseNote ? (
+                <>
+                  <Text style={[styles.updateReleaseTitle, { color: colors.accent }]}>
+                    {pendingUpdate.releaseNote.title}
                   </Text>
-                ) : null}
-              </>
-            ) : (
-              <Text style={[styles.dialogMessage, { color: colors.textDim }]}> 
-                {pendingUpdate?.message ?? "A new update is ready to install."}
-              </Text>
-            )}
-            {pendingUpdate?.createdAt && (
-              <Text style={[styles.updateMeta, { color: colors.textMuted }]}> 
-                Published {formatDateTime(pendingUpdate.createdAt)}
-              </Text>
-            )}
+                  {pendingUpdate.releaseNote.highlights.slice(0, 4).map((line, i) => (
+                    <Text key={`${pendingUpdate.releaseNote?.version}-${i}`} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                      {"\u2022"} {line}
+                    </Text>
+                  ))}
+                  {pendingUpdate.releaseNote.highlights.length > 4 ? (
+                    <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                      +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+                  {pendingUpdate?.message ?? "A new update is ready to install."}
+                </Text>
+              )}
+              {pendingUpdate?.createdAt && (
+                <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
+                  Published {formatDateTime(pendingUpdate.createdAt)}
+                </Text>
+              )}
+            </ScrollView>
             <View style={styles.dialogActions}>
               <TouchableOpacity
                 style={[styles.dialogButton, { backgroundColor: colors.bg }]}
@@ -380,17 +387,23 @@ const AppContent: React.FC = () => {
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{latestRelease.version}</Text>
-            <Text style={[styles.featureTitle, { color: colors.accent }]}>{latestRelease.title}</Text>
-            {latestRelease.highlights.slice(0, 3).map((line, i) => (
-              <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
-                {"\u2022"} {line}
-              </Text>
-            ))}
-            {latestRelease.highlights.length > 3 && (
-              <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                +{latestRelease.highlights.length - 3} more
-              </Text>
-            )}
+            <ScrollView
+              style={styles.dialogScroll}
+              contentContainerStyle={styles.dialogScrollContent}
+              showsVerticalScrollIndicator
+            >
+              <Text style={[styles.featureTitle, { color: colors.accent }]}>{latestRelease.title}</Text>
+              {latestRelease.highlights.slice(0, 3).map((line, i) => (
+                <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                  {"\u2022"} {line}
+                </Text>
+              ))}
+              {latestRelease.highlights.length > 3 && (
+                <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                  +{latestRelease.highlights.length - 3} more
+                </Text>
+              )}
+            </ScrollView>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
               onPress={handleOpenReleaseHistory}
@@ -458,9 +471,17 @@ const styles = StyleSheet.create({
   },
   dialogBox: {
     width: "100%",
+    maxHeight: "85%",
     borderWidth: 1,
     borderRadius: 20,
     padding: 24,
+  },
+  dialogScroll: {
+    flexShrink: 1,
+    alignSelf: "stretch",
+  },
+  dialogScrollContent: {
+    paddingBottom: 4,
   },
   dialogTitle: {
     fontSize: 20,

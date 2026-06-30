@@ -7,6 +7,16 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.8.1",
+    title: "Daily Holdings Prices + Fixes",
+    releasedAt: "2026-06-29",
+    highlights: [
+      "Holdings prices now refresh up to once a day instead of once a week, so your portfolio value stays closer to the market. Only your ticker symbols ever leave your device, exactly as before.",
+      "Fixed the 'Update Ready' pop-up cutting off the Install button on longer release notes - the notes now scroll and the buttons stay put, so you can always install or dismiss.",
+      "The bill calendar is now a small calendar button in the top-right of the Budget screen instead of a bar in the middle of the page, leaving more room for your spending.",
+    ],
+  },
+  {
     version: "1.8.0",
     title: "Live Stock Holdings",
     releasedAt: "2026-06-27",
