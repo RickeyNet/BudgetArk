@@ -1,0 +1,61 @@
+# Cloudflare Worker config for the BudgetArk stock-quote proxy.
+#
+# Before first deploy you must:
+#   1. npx wrangler login
+#   2. npx wrangler kv namespace create QUOTES   -> paste the printed id below
+#   3. npx wrangler secret put TWELVE_DATA_API_KEY
+#
+# The API key is NEVER stored in this file or in the app bundle. It lives only
+# as an encrypted Cloudflare secret (step 3) and is read at runtime as
+# env.TWELVE_DATA_API_KEY.
+
+name = "quotes-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# The Worker serves ONLY on its custom domain (https://quotes.budgetark.app, see
+# `routes` below). The enumerable workers.dev hostname is retired: the app points
+# at quotes.budgetark.app and there are no installs left on the old URL.
+#
+# To temporarily re-expose workers.dev (e.g. debugging), set this back to true
+# and redeploy. Don't ship the app against workers.dev again - the custom domain
+# is the public endpoint now.
+workers_dev = false
+# No per-version preview URLs — this is a single public endpoint, so keep the
+# surface minimal and silence the deploy warning.
+preview_urls = false
+
+# Custom domain for the Worker. `custom_domain = true` makes wrangler provision
+# the DNS record + TLS cert for this subdomain automatically on deploy. The
+# website stays on the apex/www; this only claims the `quotes` subdomain.
+#
+# This is now the Worker's only public endpoint (workers_dev = false above).
+routes = [
+  { pattern = "quotes.budgetark.app", custom_domain = true },
+]
+
+# KV namespace used for both the per-symbol price cache and the per-device
+# throttle. Create it with the command above, then replace REPLACE_WITH_KV_ID.
+[[kv_namespaces]]
+binding = "QUOTES"
+id = "2c1da019a9b64fe291f7a557cd9a0c39"
+
+# Per-IP burst rate limiter (Cloudflare Workers Rate Limiting binding). Keyed by
+# the connecting IP in code, so a client that drops the x-device header still
+# can't hammer the endpoint. `period` must be 10 or 60 seconds; `limit` is the
+# allowed requests per window. A legit app makes ~1 request/day per device, so
+# 5/min is still wildly generous and only bites abusers. `namespace_id` is any
+# number unique among your account's rate limiters.
+#
+# If your wrangler version rejects this stanza, the newer form is a top-level
+# [[ratelimit]] table with the same keys; or set an equivalent Rate Limiting
+# Rule in the dashboard (Security -> WAF -> Rate limiting). The Worker guards the
+# binding, so it runs fine even if this is absent - it just skips the IP limit.
+[[unsafe.bindings]]
+name = "QUOTES_RL"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+[observability]
+enabled = true

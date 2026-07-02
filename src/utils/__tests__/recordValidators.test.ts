@@ -10,6 +10,7 @@ import {
   isBudgetEntryItem,
   isSavingsGoalItem,
   isAssetAccountItem,
+  isHoldingItem,
   isNetWorthSnapshotItem,
   sanitizePayoffStrategy,
   explainBudgetEntryProblem,
@@ -227,6 +228,109 @@ describe("isAssetAccountItem", () => {
         createdAt: "2026-06-01",
       })
     ).toBe(false);
+  });
+});
+
+describe("isHoldingItem", () => {
+  const valid = {
+    id: "h1",
+    symbol: "AAPL",
+    shares: 10,
+    costBasis: 1500,
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed holding", () => {
+    expect(isHoldingItem(valid)).toBe(true);
+  });
+
+  it("accepts a holding without optional costBasis/accountId", () => {
+    expect(
+      isHoldingItem({ id: "h2", symbol: "VTI", shares: 1.5, createdAt: "2026-06-01" })
+    ).toBe(true);
+  });
+
+  it("accepts fractional shares, dotted tickers, and crypto pairs", () => {
+    expect(isHoldingItem({ ...valid, symbol: "BRK.B", shares: 0.25 })).toBe(true);
+    expect(isHoldingItem({ ...valid, symbol: "BTC/USD", shares: 0.5 })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isHoldingItem(null)).toBe(false);
+  });
+
+  it("rejects zero or negative shares", () => {
+    expect(isHoldingItem({ ...valid, shares: 0 })).toBe(false);
+    expect(isHoldingItem({ ...valid, shares: -5 })).toBe(false);
+  });
+
+  it("rejects a malformed symbol", () => {
+    expect(isHoldingItem({ ...valid, symbol: "bad symbol" })).toBe(false);
+    expect(isHoldingItem({ ...valid, symbol: "" })).toBe(false);
+    expect(isHoldingItem({ ...valid, symbol: "WAYTOOLONGTICKER1" })).toBe(false); // 17 > 15 cap
+  });
+
+  it("rejects a non-ISO deletedAt (would break tombstone GC)", () => {
+    expect(isHoldingItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+
+  it("rejects a negative costBasis", () => {
+    expect(isHoldingItem({ ...valid, costBasis: -1 })).toBe(false);
+  });
+
+  describe("manual-value holdings", () => {
+    const manual = {
+      id: "m1",
+      name: "Spartan 500 Index Pool Class D",
+      manualValue: 42580,
+      createdAt: "2026-06-01",
+    };
+
+    it("accepts a named manual holding with no ticker", () => {
+      expect(isHoldingItem(manual)).toBe(true);
+    });
+
+    it("rejects a manual holding with no name", () => {
+      expect(isHoldingItem({ id: "m2", manualValue: 100, createdAt: "2026-06-01" })).toBe(false);
+    });
+
+    it("rejects a negative manual value", () => {
+      expect(isHoldingItem({ ...manual, manualValue: -1 })).toBe(false);
+    });
+  });
+
+  describe("proxy-tracked holdings", () => {
+    const proxy = {
+      id: "p1",
+      name: "Spartan 500 Index Pool Class D",
+      symbol: "VOO",
+      anchorValue: 1000,
+      anchorPrice: 540,
+      createdAt: "2026-06-01",
+    };
+
+    it("accepts a named proxy holding with a valid ticker and anchor", () => {
+      expect(isHoldingItem(proxy)).toBe(true);
+    });
+
+    it("rejects a proxy holding with a malformed proxy symbol", () => {
+      expect(isHoldingItem({ ...proxy, symbol: "bad symbol" })).toBe(false);
+    });
+
+    it("rejects a proxy holding with no name", () => {
+      expect(isHoldingItem({ id: "p2", symbol: "VOO", anchorValue: 1000, anchorPrice: 540, createdAt: "2026-06-01" })).toBe(false);
+    });
+
+    it("rejects a proxy holding with a zero/negative anchor price", () => {
+      expect(isHoldingItem({ ...proxy, anchorPrice: 0 })).toBe(false);
+      expect(isHoldingItem({ ...proxy, anchorPrice: -5 })).toBe(false);
+    });
+
+    it("rejects a proxy holding missing the anchor price", () => {
+      const { anchorPrice, ...noPrice } = proxy;
+      expect(isHoldingItem(noPrice)).toBe(false);
+    });
   });
 });
 

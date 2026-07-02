@@ -6,10 +6,19 @@
  * incoming version even though that version isn't in the user's baked-in
  * RELEASE_NOTES list yet.
  *
- * Usage:
+ * Usage (bash / git-bash):
  *   eas update --branch production --message "$(node scripts/eas-update-message.mjs)"
  *
- * Or via npm:
+ * Usage (PowerShell - the subexpression is passed as one argument):
+ *   eas update --branch production --message (node scripts/eas-update-message.mjs)
+ *
+ * Always publish through one of these so the running (older) bundle can show
+ * highlights for the incoming version. If you forget, the app still surfaces
+ * the notes from its baked-in list right after the update reloads - see the
+ * post-install fallback in App.tsx checkReleaseNotesPrompt - so notes are
+ * never silently lost, the preview just won't appear until after install.
+ *
+ * Or via npm (emits the message only):
  *   npm run update:message
  */
 

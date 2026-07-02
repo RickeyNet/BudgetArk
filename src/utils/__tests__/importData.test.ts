@@ -52,6 +52,7 @@ const storageMock = require("../../storage/encryptedStorage") as {
 const KEYS = {
   DEBTS: "@budgetark_debts",
   BUDGET_ENTRIES: "@budgetark_budget_entries",
+  HOLDINGS: "@budgetark_holdings",
 };
 
 const validDebt = (over: Record<string, unknown> = {}) => ({
@@ -72,6 +73,16 @@ const validEntry = (over: Record<string, unknown> = {}) => ({
   amount: 12.5,
   date: "2026-06-01",
   createdAt: "2026-06-01T00:00:00.000Z",
+  ...over,
+});
+
+const validHolding = (over: Record<string, unknown> = {}) => ({
+  id: "h1",
+  symbol: "AAPL",
+  shares: 10,
+  costBasis: 1500,
+  createdAt: "2026-05-01T00:00:00.000Z",
+  updatedAt: "2026-05-02T00:00:00.000Z",
   ...over,
 });
 
@@ -186,6 +197,44 @@ describe("importFromString - merge mode", () => {
       "merge"
     );
     expect(result.staleDays).toBe(10);
+  });
+});
+
+describe("importFromString - holdings", () => {
+  it("imports holdings into empty storage", async () => {
+    const result = await importFromString(
+      JSON.stringify({ holdings: [validHolding()] }),
+      "merge"
+    );
+    expect(result.holdings).toBe(1);
+    const stored = readStore(KEYS.HOLDINGS);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ id: "h1", symbol: "AAPL", shares: 10 });
+  });
+
+  it("rejects a holding with a malformed symbol", async () => {
+    await expect(
+      importFromString(
+        JSON.stringify({ holdings: [validHolding({ symbol: "bad symbol" })] })
+      )
+    ).rejects.toThrow(/holdings contains/i);
+  });
+
+  it("applies last-write-wins against an existing holding", async () => {
+    storageMock.__store.set(
+      KEYS.HOLDINGS,
+      JSON.stringify([
+        validHolding({ shares: 5, updatedAt: "2026-06-10T00:00:00.000Z" }),
+      ])
+    );
+    await importFromString(
+      JSON.stringify({
+        holdings: [validHolding({ shares: 99, updatedAt: "2026-01-01T00:00:00.000Z" })],
+      }),
+      "merge"
+    );
+    // Incoming is older -> local 5 shares preserved.
+    expect(readStore(KEYS.HOLDINGS)[0].shares).toBe(5);
   });
 });
 

@@ -3,5 +3,10 @@
   "compilerOptions": {
     "strict": true,
     "isolatedModules": true
-  }
+  },
+  // The quote-proxy Worker is a separate project with its own package.json,
+  // tsconfig, and @cloudflare/workers-types. The app is bundled by Babel and
+  // never compiles it, so keep it out of the app's typecheck - otherwise its
+  // Cloudflare globals (KVNamespace, etc.) surface as phantom errors here.
+  "exclude": ["node_modules", "worker"]
 }

@@ -214,6 +214,10 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
+        // padding on both platforms: the RN Modal's Android window isn't
+        // auto-resized for the keyboard, so the KAV has to do the lift or the
+        // input hides behind it. padding slides it up smoothly; "height" mode
+        // re-lays-out the subtree each frame and glitches on dismiss.
         behavior="padding"
       >
         <Pressable style={styles.backdrop} onPress={onClose}>

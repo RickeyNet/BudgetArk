@@ -109,7 +109,12 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
       onRequestClose={handleClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets, so KAV
+        // stays off. The RN Modal's Android window isn't auto-resized for the
+        // keyboard, so Android needs the KAV to lift the sheet - padding slides
+        // it up smoothly, while "height" re-lays-out the subtree each frame and
+        // glitches on dismiss.
+        behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.overlay}
       >
         <View style={styles.modalSheet}>
@@ -117,6 +122,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
           >
             <Text style={styles.title}>Custom Categories</Text>
             <Text style={styles.subtitle}>

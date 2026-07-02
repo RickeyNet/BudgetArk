@@ -19,6 +19,7 @@ jest.mock("react-native", () => ({
 }));
 
 const mockIsAvailable = jest.fn(async () => true);
+// Rest-typed so the forwarding wrapper below can spread its args in.
 const mockShareAsync = jest.fn(async (..._a: any[]) => {});
 jest.mock("expo-sharing", () => ({
   isAvailableAsync: () => mockIsAvailable(),

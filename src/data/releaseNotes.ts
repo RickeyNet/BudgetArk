@@ -7,6 +7,31 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.8.1",
+    title: "Daily Holdings Prices + Fixes",
+    releasedAt: "2026-06-29",
+    highlights: [
+      "Holdings prices now refresh up to once a day instead of once a week, so your portfolio value stays closer to the market. Only your ticker symbols ever leave your device, exactly as before.",
+      "Fixed the 'Update Ready' pop-up cutting off the Install button on longer release notes - the notes now scroll and the buttons stay put, so you can always install or dismiss.",
+      "The bill calendar is now a small calendar button in the top-right of the Budget screen instead of a bar in the middle of the page, leaving more room for your spending.",
+    ],
+  },
+  {
+    version: "1.8.0",
+    title: "Live Stock Holdings",
+    releasedAt: "2026-06-27",
+    highlights: [
+      "Track your stocks, ETFs, and crypto, organized by broker. Each broker (like Fidelity or Robinhood) lives in the Investment section of the Bridge - tap a broker to expand its holdings, with a running total for that broker and a combined total across all of them. Add a stock or ETF by ticker (AAPL) or crypto by pair (BTC/USD) plus a share/coin count (cost basis optional); its market value counts toward your net worth.",
+      "Holdings now convert into your chosen currency. Market prices come in their own currency (US dollars for US stocks and pairs like BTC/USD), so if your app is set to another currency the value is converted before it's added to your totals - no more mixing dollars into a non-dollar balance. If you're on US dollars, nothing changes.",
+      "You decide when prices update. Add all your tickers first, then tap Update prices to fetch them together - so adding several in a row no longer uses up the daily price check on just the first one. When prices are looked up, only your ticker symbols leave your device - never your share counts, balances, or who you are. Prices come from a third-party market data provider.",
+      "Live Holdings stays off until you turn it on. The first time you enable it - from either the Bridge or Profile - you'll see a plain-language note explaining exactly what leaves your device, and nothing is sent until you accept it.",
+      "Your tickers and share counts sync to your paired partner just like your accounts, so you both see the same portfolio. The fetched prices stay on each device and are never synced between phones.",
+      "Holdings are included in your backups - both the encrypted JSON backup and the Excel spreadsheet (a new Holdings sheet). Prices are never exported or imported; they simply re-fetch on the device. Deleting a holding carries across to your partner and your backups like every other record.",
+      "Fixed the update pop-ups: the 'What's New' notes and the 'Update Ready' prompt no longer appear stacked on top of each other, and the release notes always show - if an update is published without them, they appear right after it installs.",
+      "Fixed the on-screen keyboard hiding the field you're typing in on pop-up forms across the app - adding a stock, debt, or budget entry, sending feedback, managing categories, entering an export or import password, and pairing. The form now shifts up so the active field and its buttons stay visible.",
+    ],
+  },
+  {
     version: "1.7.5",
     title: "Payoff Goal Date Fixes",
     releasedAt: "2026-06-23",

@@ -1,5 +1,12 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  StyleProp,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from "react-native";
 import type { Debt, Payment } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -13,6 +20,7 @@ interface DebtDueReminderBannerProps {
   dismissals?: DebtDueDismissals;
   onOpen: () => void;
   daysAhead?: number;
+  style?: StyleProp<ViewStyle>;
 }
 
 const DebtDueReminderBanner: React.FC<DebtDueReminderBannerProps> = ({
@@ -21,6 +29,7 @@ const DebtDueReminderBanner: React.FC<DebtDueReminderBannerProps> = ({
   dismissals = {},
   onOpen,
   daysAhead = 7,
+  style,
 }) => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -59,7 +68,7 @@ const DebtDueReminderBanner: React.FC<DebtDueReminderBannerProps> = ({
 
   return (
     <TouchableOpacity
-      style={[styles.card, isUrgent ? styles.cardUrgent : styles.cardUpcoming]}
+      style={[styles.card, isUrgent ? styles.cardUrgent : styles.cardUpcoming, style]}
       onPress={onOpen}
       activeOpacity={0.85}
     >

@@ -7,6 +7,7 @@ import {
   hasPaymentInMonth,
   upcomingDebtDuesWithin,
   debtsDueTodayNeedingPrompt,
+  debtsDueOrOverdueNeedingPrompt,
 } from "../debtDueCalendar";
 
 // ts-jest runs transpile-only, so light `as any` casts keep fixtures concise.
@@ -191,5 +192,72 @@ describe("debtsDueTodayNeedingPrompt", () => {
     const d = debt({ id: "due", paymentDueDay: 10, name: "Car Loan" });
     const result = debtsDueTodayNeedingPrompt([d], [], {}, from());
     expect(result[0]).toBe(d);
+  });
+});
+
+describe("debtsDueOrOverdueNeedingPrompt", () => {
+  const from = () => new Date(2026, 5, 10); // 10 June 2026
+
+  it("includes a debt due today", () => {
+    const result = debtsDueOrOverdueNeedingPrompt(
+      [debt({ id: "today", paymentDueDay: 10 })],
+      [],
+      {},
+      from()
+    );
+    expect(result.map((d) => d.id)).toEqual(["today"]);
+  });
+
+  it("includes a debt whose due day already passed this month", () => {
+    // The key difference from debtsDueTodayNeedingPrompt: due day 5 < today 10.
+    const result = debtsDueOrOverdueNeedingPrompt(
+      [debt({ id: "overdue", paymentDueDay: 5 })],
+      [],
+      {},
+      from()
+    );
+    expect(result.map((d) => d.id)).toEqual(["overdue"]);
+  });
+
+  it("excludes a debt not yet due later this month", () => {
+    expect(
+      debtsDueOrOverdueNeedingPrompt(
+        [debt({ id: "future", paymentDueDay: 20 })],
+        [],
+        {},
+        from()
+      )
+    ).toEqual([]);
+  });
+
+  it("excludes a debt already paid this month", () => {
+    const debts = [debt({ id: "overdue", paymentDueDay: 5 })];
+    const payments = [payment({ debtId: "overdue", date: "2026-06-06T12:00:00.000Z" })];
+    expect(debtsDueOrOverdueNeedingPrompt(debts, payments, {}, from())).toEqual([]);
+  });
+
+  it("excludes a dismissed debt", () => {
+    const debts = [debt({ id: "overdue", paymentDueDay: 5 })];
+    const dismissed = { [dismissalKey("overdue", "2026-06")]: "x" };
+    expect(debtsDueOrOverdueNeedingPrompt(debts, [], dismissed, from())).toEqual([]);
+  });
+
+  it("excludes paid-off (zero balance) debts", () => {
+    const debts = [debt({ id: "overdue", paymentDueDay: 5, balance: 0 })];
+    expect(debtsDueOrOverdueNeedingPrompt(debts, [], {}, from())).toEqual([]);
+  });
+
+  it("lists the most overdue first, then by larger minimum", () => {
+    const debts = [
+      debt({ id: "due-today", paymentDueDay: 10, minPayment: 999 }),
+      debt({ id: "small-overdue", paymentDueDay: 3, minPayment: 25 }),
+      debt({ id: "big-overdue", paymentDueDay: 3, minPayment: 200 }),
+    ];
+    const result = debtsDueOrOverdueNeedingPrompt(debts, [], {}, from());
+    expect(result.map((d) => d.id)).toEqual([
+      "big-overdue",
+      "small-overdue",
+      "due-today",
+    ]);
   });
 });

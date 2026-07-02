@@ -19,7 +19,6 @@ import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
-import BillCalendarCard from "../components/BillCalendarCard";
 import BillCalendarModal from "../components/BillCalendarModal";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
@@ -70,7 +69,6 @@ import {
 } from "../storage/budgetStorage";
 import {
   buildMonthlyReview,
-  type CategorySpendingComparison,
   type MonthlyReviewData,
 } from "../utils/budgetInsights";
 import { getDebts, getPayments } from "../storage/debtStorage";
@@ -206,26 +204,6 @@ const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
   /^\d{4}-\d{2}/.test(dateISO)
     ? dateISO.slice(0, 7) === monthKey
     : getMonthKey(new Date(dateISO)) === monthKey;
-
-const getCategoryComparisonHeadline = (comparison: CategorySpendingComparison): string => {
-  if (comparison.percentChange != null) {
-    const direction = comparison.percentChange > 0 ? "more" : "less";
-    return `${Math.abs(comparison.percentChange).toFixed(0)}% ${direction} on ${comparison.category}`;
-  }
-  if (comparison.average === 0 && comparison.current > 0) {
-    return `New spending in ${comparison.category}`;
-  }
-  if (comparison.current === 0 && comparison.average > 0) {
-    return `No ${comparison.category} spend this month`;
-  }
-  return `${comparison.category} flat vs average`;
-};
-
-const getCategoryComparisonSubtext = (
-  comparison: CategorySpendingComparison,
-  formatCurrency: (value: number) => string
-): string =>
-  `${formatCurrency(comparison.current)} this month · ${formatCurrency(comparison.average)} avg over ${comparison.monthsAveraged} mo`;
 
 const CATEGORY_CHART_PALETTE = [
   "#4E79A7",
@@ -558,16 +536,6 @@ const BudgetScreen: React.FC = () => {
   const totalSavings = netWorthTotals.totalAssets;
   const totalDebt = netWorthTotals.totalDebt;
   const netWorth = netWorthTotals.netWorth;
-
-  const topCategoryComparison = useMemo(
-    () =>
-      reviewPreviewData?.categoryComparisons.find(
-        (comparison) =>
-          Math.max(comparison.current, comparison.average) >= 20 ||
-          Math.abs(comparison.delta) >= 10
-      ) ?? null,
-    [reviewPreviewData]
-  );
 
   const limitByCategory = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1345,6 +1313,14 @@ const BudgetScreen: React.FC = () => {
         <Text style={styles.appLabel}>BudgetArk</Text>
         <Text style={styles.screenTitle}>Budget</Text>
         <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
+        <TouchableOpacity
+          style={styles.calendarIconBtn}
+          onPress={() => setShowBillCalendar(true)}
+          activeOpacity={0.7}
+          accessibilityLabel="Bill calendar"
+        >
+          <Text style={styles.calendarIconGlyph}>📅</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.monthPillRow}>
@@ -1392,6 +1368,16 @@ const BudgetScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
       </View>
+
+      {/* Insights button - opens the monthly review/insights modal */}
+      <TouchableOpacity
+        style={styles.reviewBtn}
+        onPress={openReviewModal}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.reviewBtnText}>Insights</Text>
+        <Text style={styles.reviewBtnHint}>Trends, changes, streaks, comparisons</Text>
+      </TouchableOpacity>
 
       <View ref={anchorBudgetSummary} collapsable={false} style={styles.summaryCard}>
         <View style={styles.summaryTopRow}>
@@ -1454,42 +1440,10 @@ const BudgetScreen: React.FC = () => {
         )}
       </View>
 
-      {reviewPreviewData && (topCategoryComparison || reviewPreviewData.spendingVsAvgPercent != null) && (
-        <TouchableOpacity
-          style={styles.reviewSpotlightCard}
-          onPress={openReviewModal}
-          activeOpacity={0.75}
-        >
-          <Text style={styles.reviewSpotlightEyebrow}>Monthly Insight</Text>
-          <Text style={styles.reviewSpotlightTitle}>
-            {topCategoryComparison
-              ? getCategoryComparisonHeadline(topCategoryComparison)
-              : `${Math.abs(reviewPreviewData.spendingVsAvgPercent ?? 0).toFixed(0)}% ${
-                  (reviewPreviewData.spendingVsAvgPercent ?? 0) > 0 ? "more" : "less"
-                } vs monthly avg`}
-          </Text>
-          <Text style={styles.reviewSpotlightBody}>
-            {topCategoryComparison
-              ? getCategoryComparisonSubtext(topCategoryComparison, formatCurrency)
-              : `${formatCurrency(reviewPreviewData.currentMonthSpending)} this month · ${formatCurrency(reviewPreviewData.avgMonthlySpending)} avg`}
-          </Text>
-          <Text style={[styles.reviewSpotlightCta, { color: colors.accent }]}>Open Monthly Review →</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Monthly Review button */}
-      <TouchableOpacity
-        style={styles.reviewBtn}
-        onPress={openReviewModal}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.reviewBtnText}>Monthly Review</Text>
-        <Text style={styles.reviewBtnHint}>Trends, changes, streaks, comparisons</Text>
-      </TouchableOpacity>
-
       <DueDateReminderBanner
         entries={entries}
         onOpen={() => setShowBillCalendar(true)}
+        style={styles.reminderBanner}
       />
 
       <DebtDueReminderBanner
@@ -1498,12 +1452,7 @@ const BudgetScreen: React.FC = () => {
         dismissals={dueDismissals}
         onOpen={() => navigation.navigate("DebtTracker")}
         daysAhead={7}
-      />
-
-      <BillCalendarCard
-        entries={entries}
-        monthKey={selectedMonthKey}
-        onOpen={() => setShowBillCalendar(true)}
+        style={styles.reminderBanner}
       />
 
       {/* Spending card - donut chart + category rows in one card */}
@@ -2215,6 +2164,23 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       paddingTop: 50,
       paddingBottom: tokens.gapSm + 2,
       alignItems: "center",
+      position: "relative",
+    },
+    calendarIconBtn: {
+      position: "absolute",
+      top: 50,
+      right: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    calendarIconGlyph: {
+      fontSize: 20,
     },
     appLabel: {
       fontSize: scale(10),
@@ -2446,38 +2412,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.text,
       marginBottom: 10,
     },
-    reviewSpotlightCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: `${colors.accent}30`,
-      borderRadius: tokens.radius,
-      paddingVertical: tokens.pad,
-      paddingHorizontal: tokens.pad + 2,
-      marginBottom: tokens.gapSm,
-    },
-    reviewSpotlightEyebrow: {
-      fontSize: 11,
-      fontWeight: "700",
-      letterSpacing: 1,
-      color: colors.textDim,
-      marginBottom: 6,
-      textTransform: "uppercase",
-    },
-    reviewSpotlightTitle: {
-      fontSize: scale(17),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 6,
-    },
-    reviewSpotlightBody: {
-      fontSize: 13,
-      color: colors.textDim,
-      marginBottom: 8,
-    },
-    reviewSpotlightCta: {
-      fontSize: 13,
-      fontWeight: "700",
-    },
     reviewBtn: {
       backgroundColor: colors.card,
       borderWidth: 1,
@@ -2506,6 +2440,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: tokens.radius,
       padding: tokens.pad,
       overflow: "hidden",
+    },
+    reminderBanner: {
+      marginBottom: tokens.gap,
     },
     spendingHeaderRow: {
       flexDirection: "row",

@@ -42,6 +42,7 @@ import {
   isBudgetLimitItem,
   isSavingsGoalItem,
   isAssetAccountItem,
+  isHoldingItem,
   isNetWorthSnapshotItem,
   isCustomCategoryItem,
   isValidImportCategory,
@@ -59,6 +60,7 @@ const KEYS = {
   USER: "@budgetark_user",
   SAVINGS_GOALS: "@budgetark_savings_goals",
   ASSET_ACCOUNTS: "@budgetark_asset_accounts",
+  HOLDINGS: "@budgetark_holdings",
   DEBT_MILESTONES: "@budgetark_debt_milestones",
   PAYOFF_STRATEGY: "@budgetark_payoff_strategy",
   NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
@@ -96,6 +98,7 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     isObject(data.budgetLimitsByMonth) ||
     Array.isArray(data.savingsGoals) ||
     Array.isArray(data.assetAccounts) ||
+    Array.isArray(data.holdings) ||
     isObject(data.debtMilestones) ||
     typeof data.payoffStrategy === "string" ||
     Array.isArray(data.netWorthSnapshots) ||
@@ -116,6 +119,7 @@ interface ImportPayload {
   budgetLimitsByMonth?: Record<string, unknown>;
   savingsGoals?: unknown[];
   assetAccounts?: unknown[];
+  holdings?: unknown[];
   debtMilestones?: Record<string, unknown>;
   payoffStrategy?: unknown;
   payoffStrategyUpdatedAt?: unknown;
@@ -144,6 +148,7 @@ interface SanitizedImportPayload {
   budgetLimitsByMonth?: Record<string, Record<string, unknown>[]>;
   savingsGoals: Record<string, unknown>[];
   assetAccounts: Record<string, unknown>[];
+  holdings: Record<string, unknown>[];
   debtMilestones?: Record<string, unknown>;
   payoffStrategy?: "custom" | "avalanche" | "snowball";
   payoffStrategyUpdatedAt?: string;
@@ -163,6 +168,7 @@ export interface ImportResult {
   budgetLimits: number;
   savingsGoals: number;
   assetAccounts: number;
+  holdings: number;
   debtMilestones: boolean;
   payoffStrategy: boolean;
   netWorthSnapshots: number;
@@ -390,6 +396,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     "asset accounts",
     isAssetAccountItem
   );
+  const holdings = sanitizeCollection(data.holdings, "holdings", isHoldingItem);
   const netWorthSnapshots = sanitizeCollection(
     data.netWorthSnapshots,
     "net worth snapshots",
@@ -425,6 +432,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     limitsByMonthCount +
     savingsGoals.length +
     assetAccounts.length +
+    holdings.length +
     netWorthSnapshots.length +
     customCategories.length;
   if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
@@ -441,6 +449,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     budgetLimitsByMonth,
     savingsGoals,
     assetAccounts,
+    holdings,
     netWorthSnapshots,
     customCategories,
     categoryBucketOverrides,
@@ -587,6 +596,7 @@ export const importFromString = async (
     budgetLimits: 0,
     savingsGoals: 0,
     assetAccounts: 0,
+    holdings: 0,
     debtMilestones: false,
     payoffStrategy: false,
     netWorthSnapshots: 0,
@@ -1190,6 +1200,10 @@ export const importFromString = async (
     KEYS.ASSET_ACCOUNTS,
     sanitized.assetAccounts
   );
+  const mergedHoldings = await computeMergedById(
+    KEYS.HOLDINGS,
+    sanitized.holdings
+  );
   const mergedSnapshots = await computeMergedSnapshots();
   const mergedCustomCategories = await computeMergedCustomCategories();
   const mergedCategoryBucketOverrides = await computeMergedBucketOverrides();
@@ -1219,6 +1233,9 @@ export const importFromString = async (
   }
   if (mergedAssetAccounts) {
     tempWrites.push([KEYS.ASSET_ACCOUNTS + TEMP_SUFFIX, mergedAssetAccounts.json]);
+  }
+  if (mergedHoldings) {
+    tempWrites.push([KEYS.HOLDINGS + TEMP_SUFFIX, mergedHoldings.json]);
   }
   if (mergedSnapshots) {
     tempWrites.push([KEYS.NET_WORTH_SNAPSHOTS + TEMP_SUFFIX, mergedSnapshots.json]);
@@ -1327,6 +1344,7 @@ export const importFromString = async (
       if (sanitized.assetAccounts.length > 0) {
         keysToRemove.push(KEYS.ASSET_ACCOUNTS);
       }
+      if (sanitized.holdings.length > 0) keysToRemove.push(KEYS.HOLDINGS);
       if (sanitized.debtMilestones) keysToRemove.push(KEYS.DEBT_MILESTONES);
       if (sanitized.payoffStrategy) keysToRemove.push(KEYS.PAYOFF_STRATEGY);
       if (sanitized.netWorthSnapshots.length > 0) {
@@ -1366,6 +1384,7 @@ export const importFromString = async (
     counts.budgetLimits = mergedLimits?.totalItems ?? 0;
     counts.savingsGoals = mergedSavingsGoals?.count ?? 0;
     counts.assetAccounts = mergedAssetAccounts?.count ?? 0;
+    counts.holdings = mergedHoldings?.count ?? 0;
     counts.netWorthSnapshots = mergedSnapshots?.count ?? 0;
     counts.customCategories = mergedCustomCategories?.count ?? 0;
     counts.debtMilestones = !!sanitized.debtMilestones;

@@ -82,6 +82,9 @@ jest.mock("../../storage/savingsGoalStorage", () => ({
 jest.mock("../../storage/assetAccountStorage", () => ({
   getAssetAccounts: jest.fn(async () => []),
 }));
+jest.mock("../../storage/holdingsStorage", () => ({
+  getHoldings: jest.fn(async () => []),
+}));
 jest.mock("../../storage/debtMilestoneStorage", () => ({
   getDebtMilestonePlan: jest.fn(async () => null),
 }));

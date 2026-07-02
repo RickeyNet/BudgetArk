@@ -22,6 +22,7 @@ import {
 import { getOrCreateUser } from "../storage/userStorage";
 import { getSavingsGoalsIncludingDeleted } from "../storage/savingsGoalStorage";
 import { getAssetAccountsIncludingDeleted } from "../storage/assetAccountStorage";
+import { getHoldingsIncludingDeleted } from "../storage/holdingsStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
@@ -78,6 +79,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     user,
     savingsGoals,
     assetAccounts,
+    holdings,
     debtMilestones,
     payoffStrategyEnvelope,
     netWorthSnapshots,
@@ -99,6 +101,10 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getOrCreateUser(),
     getSavingsGoalsIncludingDeleted(),
     getAssetAccountsIncludingDeleted(),
+    // Tombstones included like the other collections (see note above). Quote
+    // prices are intentionally NOT exported - they live in a per-device cache
+    // and are cheap to re-fetch; a backup carries only the Holding records.
+    getHoldingsIncludingDeleted(),
     getDebtMilestonePlan(),
     // Pull the full envelope (value + updatedAt) rather than the bare value.
     // Without `updatedAt`, a re-import on this or a paired device stamps the
@@ -141,6 +147,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     budgetLimitsByMonth,
     savingsGoals,
     assetAccounts,
+    holdings,
     debtMilestones,
     payoffStrategy: payoffStrategyEnvelope?.value,
     payoffStrategyUpdatedAt: payoffStrategyEnvelope?.updatedAt,
