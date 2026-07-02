@@ -4,7 +4,13 @@ import { getAssetAccounts } from "./assetAccountStorage";
 import { getBudgetEntries } from "./budgetStorage";
 import { getDebts } from "./debtStorage";
 import { getSavingsGoals } from "./savingsGoalStorage";
+import { getHoldings } from "./holdingsStorage";
+import { getCachedQuotes } from "./quoteCacheStorage";
+import { getHoldingsSettings } from "./holdingsSettingsStorage";
+import { getOrCreateUser } from "./userStorage";
 import { calculateNetWorthTotals } from "../utils/netWorth";
+import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
+import { getCurrentRates } from "../utils/exchangeRates";
 
 const STORAGE_KEY = "@budgetark_net_worth_snapshots";
 const MAX_SNAPSHOTS = 730;
@@ -79,18 +85,40 @@ export const upsertNetWorthSnapshot = async (
 export const syncNetWorthSnapshot = async (
   capturedAt: string = new Date().toISOString()
 ): Promise<NetWorthSnapshot[]> => {
-  const [entries, debts, savingsGoals, assetAccounts] = await Promise.all([
-    getBudgetEntries(),
-    getDebts(),
-    getSavingsGoals(),
-    getAssetAccounts(),
-  ]);
+  // Holdings only count toward net worth while the feature is opted in - same
+  // gate the Bridge UI applies (it clears holdings to [] when disabled). Read
+  // the flag first so a disabled feature contributes nothing here either,
+  // keeping the persisted snapshot consistent with the live on-screen total.
+  const holdingsSettings = await getHoldingsSettings();
+  const [entries, debts, savingsGoals, assetAccounts, holdings, quotes, user, ratesSnapshot] =
+    await Promise.all([
+      getBudgetEntries(),
+      getDebts(),
+      getSavingsGoals(),
+      getAssetAccounts(),
+      holdingsSettings.enabled ? getHoldings() : Promise.resolve([]),
+      holdingsSettings.enabled ? getCachedQuotes() : Promise.resolve({}),
+      getOrCreateUser(),
+      getCurrentRates(),
+    ]);
+
+  // Convert holdings into the user's display currency before persisting, so the
+  // stored snapshot matches the Bridge's on-screen total (which converts the
+  // same way). Resolved here rather than passed in to keep every caller -
+  // foreground or background - consistent.
+  const displayCurrency = getCurrencyPreferenceOption(
+    user.currencyPreferenceId
+  ).currencyCode;
 
   const totals = calculateNetWorthTotals({
     entries,
     debts,
     savingsGoals,
     assetAccounts,
+    holdings,
+    quotes,
+    displayCurrency,
+    rates: ratesSnapshot.rates,
   });
 
   return upsertNetWorthSnapshot({

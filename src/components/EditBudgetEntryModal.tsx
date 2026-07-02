@@ -229,7 +229,12 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     <>
     <Modal visible={!!entry} animationType="slide" transparent onRequestClose={onClose} onShow={handleShow}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // iOS leans on automaticallyAdjustKeyboardInsets below (also scrolls
+        // the focused field into view), so KAV stays off. The RN Modal's
+        // Android window isn't auto-resized for the keyboard, so Android needs
+        // the KAV to lift the sheet - padding slides it up smoothly, while
+        // "height" re-lays-out the subtree each frame and glitches on dismiss.
+        behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.overlay}
       >
         {/* Tap-to-dismiss area above the sheet */}
@@ -240,6 +245,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
           <ScrollView
             contentContainerStyle={[styles.modalScroll, { paddingBottom: Math.max(insets.bottom, 16) }]}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
           >
             <Text style={styles.title}>Edit Entry</Text>
             <Text style={styles.subtitle}>Update or delete this budget entry.</Text>

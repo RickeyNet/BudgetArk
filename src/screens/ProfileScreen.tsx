@@ -124,12 +124,23 @@ import {
 import type { PairingState, SyncStatus, SyncResult } from "../sync/types";
 import PairingModal from "../components/PairingModal";
 import FeedbackModal from "../components/FeedbackModal";
+import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import SpreadsheetSchemaModal from "../components/SpreadsheetSchemaModal";
 import { triggerHaptic, setHapticsCache } from "../utils/haptics";
 import {
   getHapticsEnabled,
   setHapticsEnabled,
 } from "../storage/hapticsStorage";
+import {
+  getHoldingsSettings,
+  setHoldingsEnabled,
+} from "../storage/holdingsSettingsStorage";
+import type { HoldingsSettings } from "../types";
+import {
+  HOLDINGS_DISCLOSURE_TITLE,
+  HOLDINGS_DISCLOSURE_INTRO,
+  HOLDINGS_DISCLOSURE_POINTS,
+} from "../data/holdingsDisclosure";
 
 type UpdateMetadata = {
   id: string;
@@ -327,6 +338,13 @@ const ProfileScreen: React.FC = () => {
   /** Haptic feedback toggle */
   const [hapticsEnabled, setHapticsState] = useState(true);
 
+  /** Live Holdings opt-in (off by default) + its first-enable disclosure. */
+  const [holdingsSettings, setHoldingsSettings] = useState<HoldingsSettings>({
+    enabled: false,
+    disclosureAcknowledged: false,
+  });
+  const [showHoldingsDisclosure, setShowHoldingsDisclosure] = useState(false);
+
   /** Partner sync state */
   const [pairing, setPairing] = useState<PairingState | null>(null);
   const [showPairingModal, setShowPairingModal] = useState(false);
@@ -357,12 +375,13 @@ const ProfileScreen: React.FC = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [u, prefs, privacy, haptics, pairState, syncMeta, backup] =
+        const [u, prefs, privacy, haptics, holdingsSet, pairState, syncMeta, backup] =
           await Promise.all([
             getOrCreateUser(),
             getUpdatePreferences(),
             getPrivacyMode(),
             getHapticsEnabled(),
+            getHoldingsSettings(),
             getPairingState(),
             getSyncMetadata(),
             getBackupReminderState(),
@@ -374,6 +393,7 @@ const ProfileScreen: React.FC = () => {
         setPrivacyModeState(privacy);
         setHapticsState(haptics);
         setHapticsCache(haptics);
+        setHoldingsSettings(holdingsSet);
         setPairing(pairState);
         setLastSyncTime(syncMeta.lastSyncTimestamp);
         setBackupState(backup);
@@ -675,6 +695,39 @@ const ProfileScreen: React.FC = () => {
     }
   }, [hapticsEnabled]);
 
+  /**
+   * Toggle the Live Holdings feature. Turning it off is immediate. Turning it
+   * on for the first time routes through the off-device disclosure; once that
+   * has been acknowledged a later re-enable flips straight back on.
+   */
+  const toggleHoldings = useCallback(async () => {
+    if (holdingsSettings.enabled) {
+      const next = await setHoldingsEnabled(false);
+      setHoldingsSettings(next);
+      triggerHaptic("selection");
+      return;
+    }
+    if (holdingsSettings.disclosureAcknowledged) {
+      const next = await setHoldingsEnabled(true);
+      setHoldingsSettings(next);
+      triggerHaptic("selection");
+    } else {
+      setShowHoldingsDisclosure(true);
+    }
+  }, [holdingsSettings.disclosureAcknowledged, holdingsSettings.enabled]);
+
+  const confirmEnableHoldings = useCallback(async () => {
+    const next = await setHoldingsEnabled(true);
+    setHoldingsSettings(next);
+    setShowHoldingsDisclosure(false);
+    triggerHaptic("success");
+    setInfoModal({
+      title: "Live Holdings On",
+      message:
+        "Add stocks and ETFs from the Bridge tab. Prices refresh about once a day.",
+    });
+  }, []);
+
   const togglePrivacyMode = useCallback(async () => {
     const next = !privacyMode;
     await setPrivacyMode(next);
@@ -788,11 +841,16 @@ const ProfileScreen: React.FC = () => {
 
   const installPendingUpdate = useCallback(async () => {
     try {
-      // Mark the OTA install so the post-reload bootstrap suppresses the
-      // "what's new" prompt - the install dialog already showed it. The
-      // auto-install path in App.tsx sets the same flag; without this the
-      // manual install path would re-show release notes after reload.
-      await setOtaUpdateInstalled();
+      // Record whether this dialog actually resolved and showed the notes (same
+      // match logic the modal uses). If it did, the post-reload bootstrap skips
+      // the "what's new" prompt; if it only showed the version, the prompt still
+      // runs after reload so the baked-in notes aren't lost. The auto-install
+      // path in App.tsx records the same signal.
+      const notesShown = !!(
+        findReleaseNoteForVersion(pendingUpdate?.appVersion) ||
+        findReleaseNoteForVersion(pendingUpdate?.message)
+      );
+      await setOtaUpdateInstalled(notesShown);
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error: any) {
@@ -803,7 +861,7 @@ const ProfileScreen: React.FC = () => {
           "The update could not be applied right now. Please try again.",
       });
     }
-  }, []);
+  }, [pendingUpdate]);
 
   const toggleReleaseNote = useCallback((version: string) => {
     setExpandedReleaseNote((current) => (current === version ? null : version));
@@ -960,6 +1018,7 @@ const ProfileScreen: React.FC = () => {
           parts.push(`${result.savingsGoals} savings goals`);
         if (result.assetAccounts > 0)
           parts.push(`${result.assetAccounts} asset accounts`);
+        if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
         if (result.netWorthSnapshots > 0)
           parts.push(`${result.netWorthSnapshots} net worth snapshots`);
         if (result.customCategories > 0)
@@ -1169,6 +1228,7 @@ const ProfileScreen: React.FC = () => {
           parts.push(`${result.savingsGoals} savings goals`);
         if (result.assetAccounts > 0)
           parts.push(`${result.assetAccounts} asset accounts`);
+        if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
         let message = `${label} ${parts.join(", ")} from the spreadsheet.`;
         if (result.skippedRows > 0) {
           message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} skipped (required fields missing or invalid):`;
@@ -2081,6 +2141,33 @@ const ProfileScreen: React.FC = () => {
                 style={[styles.settingsRowArrow, { color: colors.textDim }]}
               >
                 {privacyMode ? "On" : "Off"}
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
+
+            <TouchableOpacity style={styles.groupedRow} onPress={toggleHoldings}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Live Holdings
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  {holdingsSettings.enabled
+                    ? "Tracking stocks & ETFs in your net worth"
+                    : "Track stocks & ETFs in your net worth"}
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                {holdingsSettings.enabled ? "On" : "Off"}
               </Text>
             </TouchableOpacity>
 
@@ -3191,7 +3278,7 @@ const ProfileScreen: React.FC = () => {
         transparent
         onRequestClose={() => setShowExportModal(false)}
       >
-        <View style={styles.dialogOverlay}>
+        <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
           <View
             style={[
               styles.dialogBox,
@@ -3297,7 +3384,7 @@ const ProfileScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       {/* ── Import Password Modal ── */}
@@ -3311,7 +3398,7 @@ const ProfileScreen: React.FC = () => {
           setImportPassword("");
         }}
       >
-        <View style={styles.dialogOverlay}>
+        <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
           <View
             style={[
               styles.dialogBox,
@@ -3369,7 +3456,7 @@ const ProfileScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       {/* ── Reset Confirmation Modal ── */}
@@ -3670,7 +3757,11 @@ const ProfileScreen: React.FC = () => {
       >
         <KeyboardAvoidingView
           style={styles.pasteModalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          // padding on both platforms: the RN Modal's Android window isn't
+          // auto-resized for the keyboard, so the KAV has to do the lift or the
+          // input hides behind it. padding slides it up smoothly; "height" mode
+          // re-lays-out the subtree each frame and glitches on dismiss.
+          behavior="padding"
           keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
           <View
@@ -3951,6 +4042,59 @@ const ProfileScreen: React.FC = () => {
               >
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>
                   Unpair
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Live Holdings off-device disclosure ── */}
+      <Modal
+        visible={showHoldingsDisclosure}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowHoldingsDisclosure(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              {HOLDINGS_DISCLOSURE_TITLE}
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {HOLDINGS_DISCLOSURE_INTRO}
+            </Text>
+            {HOLDINGS_DISCLOSURE_POINTS.map((point) => (
+              <Text
+                key={point}
+                style={[
+                  styles.dialogMessage,
+                  { color: colors.textDim, textAlign: "left", marginBottom: 10 },
+                ]}
+              >
+                • {point}
+              </Text>
+            ))}
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowHoldingsDisclosure(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Not now
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmEnableHoldings}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Enable
                 </Text>
               </TouchableOpacity>
             </View>

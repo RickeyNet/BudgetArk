@@ -284,16 +284,24 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior="padding"
+        // iOS leans on the ScrollView's automaticallyAdjustKeyboardInsets
+        // (which also scrolls the focused field into view), so KAV stays off.
+        // The RN Modal's Android window isn't auto-resized for the keyboard, so
+        // Android needs the KAV to lift the sheet - padding slides it up
+        // smoothly, while "height" re-lays-out the subtree each frame and
+        // glitches on dismiss.
+        behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.overlay}
       >
         {/* Modal sheet - fills from near top to bottom */}
         <View style={styles.modalSheet}>
-          {/* Scrollable form content */}
+          {/* Scrollable form content. automaticallyAdjustKeyboardInsets keeps
+              the focused input above the keyboard on iOS. */}
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
           >
             {/* ── Header ── */}
             <Text style={styles.title}>{isEditing ? "Edit Debt" : "Add New Debt"}</Text>
@@ -655,6 +663,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
     scrollContent: {
       padding: 24,
+      // Extra room so the last fields can scroll clear of the keyboard.
+      paddingBottom: 56,
     },
 
     /* Header */

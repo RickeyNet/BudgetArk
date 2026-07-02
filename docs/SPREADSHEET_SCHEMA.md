@@ -91,6 +91,19 @@ Imported limits land in the current month's limit set.
 
 > Imported on Excel imports - full round-trip with the export utility.
 
+## Sheet: Holdings (xlsx only)
+
+| Column       | Required | Notes                                                                |
+| ------------ | -------- | -------------------------------------------------------------------- |
+| `ID`         | No       | Auto-generated if missing.                                           |
+| `Symbol`     | Yes      | Ticker, e.g. `AAPL`, `VTI`. Up to 12 chars (letters, digits, `.`, `-`). |
+| `Shares`     | Yes      | Positive number. Fractional shares allowed.                          |
+| `CostBasis`  | No       | Total dollars invested, ≥ 0. Used for gain/loss.                    |
+| `CreatedAt`  | No       | ISO timestamp; defaults to now.                                      |
+| `UpdatedAt`  | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
+
+> Stock/ETF positions only. Live prices are fetched per-device and are **never** included in exports or imports - a spreadsheet carries the holding, not its market value.
+
 ## Limits
 
 - File size: 5 MB max
@@ -111,6 +124,7 @@ Summed columns by sheet:
 | Payments       | `Amount`                                      |
 | Savings Goals  | `TargetAmount`, `CurrentAmount`               |
 | Asset Accounts | `Balance`                                     |
+| Holdings       | `CostBasis`                                   |
 
 The Budget Entries Total row deliberately leaves the numeric column blank: income and expense rows both store positive amounts, so a raw `SUM(Amount)` mixes the two into a misleading number. Add your own `SUMIF` formulas keyed on the `Type` column if you want income / expense subtotals.
 

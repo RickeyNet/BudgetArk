@@ -14,6 +14,7 @@ import {
   StyleSheet,
   AppState,
   Modal,
+  ScrollView,
   Text,
   TouchableOpacity,
   NativeModules,
@@ -24,6 +25,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
+import DebtDueReminderHost from "./src/components/DebtDueReminderHost";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
 import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
@@ -210,13 +212,17 @@ const AppContent: React.FC = () => {
     if (isOnboardingComplete !== true) return;
 
     const checkReleaseNotesPrompt = async () => {
-      const justInstalledOta = await consumeOtaUpdateInstalled();
-      if (justInstalledOta) {
-        // OTA update was just applied - the update modal already showed
-        // the release notes, so mark as seen and skip the prompt.
+      const ota = await consumeOtaUpdateInstalled();
+      if (ota.installed && ota.notesShown) {
+        // OTA update was just applied AND the install dialog already showed
+        // the notes for this version, so mark as seen and skip the prompt.
         await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
         return;
       }
+      // Either a normal launch, or an OTA install whose pre-install dialog
+      // could not resolve notes (published without the stamped message). In
+      // the latter case we deliberately fall through: the prompt below sources
+      // from the baked-in RELEASE_NOTES, so notes can never be missing here.
       const lastSeenVersion = await getLastSeenReleaseNotesVersion();
       if (lastSeenVersion !== CURRENT_APP_VERSION) {
         setShowReleaseNotesPrompt(true);
@@ -228,13 +234,15 @@ const AppContent: React.FC = () => {
 
   const handleInstallUpdate = useCallback(async () => {
     try {
-      await setOtaUpdateInstalled();
+      // Record whether this dialog actually showed the notes so the post-reload
+      // prompt knows whether it still needs to surface them.
+      await setOtaUpdateInstalled(!!pendingUpdate?.releaseNote);
       setPendingUpdate(null);
       await Updates.reloadAsync();
     } catch (error) {
       if (__DEV__) console.error("Failed to apply update:", error);
     }
-  }, []);
+  }, [pendingUpdate]);
 
   const handleDismissReleaseNotesPrompt = useCallback(async () => {
     setShowReleaseNotesPrompt(false);
@@ -284,6 +292,13 @@ const AppContent: React.FC = () => {
       </NavigationContainer>
       {isSynthwave && <SynthwaveGrid color={colors.accent} />}
 
+      {/* Surfaces the "minimum due today" prompt on app open over any tab.
+          Paused while the update / release-notes dialogs own the screen so the
+          fade modals never stack (one would end up hidden on iOS). */}
+      <DebtDueReminderHost
+        paused={pendingUpdate !== null || showReleaseNotesPrompt}
+      />
+
       <Modal
         visible={pendingUpdate !== null}
         animationType="fade"
@@ -298,39 +313,45 @@ const AppContent: React.FC = () => {
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
-            {pendingUpdate?.appVersion ? (
-              <View style={[styles.updateVersionBadge, { backgroundColor: colors.accent }]}> 
-                <Text style={[styles.updateVersionText, { color: colors.white }]}>
-                  v{pendingUpdate.appVersion}
-                </Text>
-              </View>
-            ) : null}
-            {pendingUpdate?.releaseNote ? (
-              <>
-                <Text style={[styles.updateReleaseTitle, { color: colors.accent }]}> 
-                  {pendingUpdate.releaseNote.title}
-                </Text>
-                {pendingUpdate.releaseNote.highlights.slice(0, 4).map((line, i) => (
-                  <Text key={`${pendingUpdate.releaseNote?.version}-${i}`} style={[styles.dialogBullet, { color: colors.textDim }]}>
-                    {"\u2022"} {line}
+            <ScrollView
+              style={styles.dialogScroll}
+              contentContainerStyle={styles.dialogScrollContent}
+              showsVerticalScrollIndicator
+            >
+              {pendingUpdate?.appVersion ? (
+                <View style={[styles.updateVersionBadge, { backgroundColor: colors.accent }]}>
+                  <Text style={[styles.updateVersionText, { color: colors.white }]}>
+                    v{pendingUpdate.appVersion}
                   </Text>
-                ))}
-                {pendingUpdate.releaseNote.highlights.length > 4 ? (
-                  <Text style={[styles.dialogBullet, { color: colors.textMuted }]}> 
-                    +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                </View>
+              ) : null}
+              {pendingUpdate?.releaseNote ? (
+                <>
+                  <Text style={[styles.updateReleaseTitle, { color: colors.accent }]}>
+                    {pendingUpdate.releaseNote.title}
                   </Text>
-                ) : null}
-              </>
-            ) : (
-              <Text style={[styles.dialogMessage, { color: colors.textDim }]}> 
-                {pendingUpdate?.message ?? "A new update is ready to install."}
-              </Text>
-            )}
-            {pendingUpdate?.createdAt && (
-              <Text style={[styles.updateMeta, { color: colors.textMuted }]}> 
-                Published {formatDateTime(pendingUpdate.createdAt)}
-              </Text>
-            )}
+                  {pendingUpdate.releaseNote.highlights.slice(0, 4).map((line, i) => (
+                    <Text key={`${pendingUpdate.releaseNote?.version}-${i}`} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                      {"\u2022"} {line}
+                    </Text>
+                  ))}
+                  {pendingUpdate.releaseNote.highlights.length > 4 ? (
+                    <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                      +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+                  {pendingUpdate?.message ?? "A new update is ready to install."}
+                </Text>
+              )}
+              {pendingUpdate?.createdAt && (
+                <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
+                  Published {formatDateTime(pendingUpdate.createdAt)}
+                </Text>
+              )}
+            </ScrollView>
             <View style={styles.dialogActions}>
               <TouchableOpacity
                 style={[styles.dialogButton, { backgroundColor: colors.bg }]}
@@ -349,8 +370,11 @@ const AppContent: React.FC = () => {
         </View>
       </Modal>
 
+      {/* Mutually exclusive with the update prompt above: never stack the
+          "what's new" prompt on top of (or under) the "Update Ready" dialog.
+          The update prompt wins; this one shows once it clears. */}
       <Modal
-        visible={showReleaseNotesPrompt}
+        visible={showReleaseNotesPrompt && pendingUpdate === null}
         animationType="fade"
         transparent
         onRequestClose={handleDismissReleaseNotesPrompt}
@@ -363,17 +387,23 @@ const AppContent: React.FC = () => {
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{latestRelease.version}</Text>
-            <Text style={[styles.featureTitle, { color: colors.accent }]}>{latestRelease.title}</Text>
-            {latestRelease.highlights.slice(0, 3).map((line, i) => (
-              <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
-                {"\u2022"} {line}
-              </Text>
-            ))}
-            {latestRelease.highlights.length > 3 && (
-              <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                +{latestRelease.highlights.length - 3} more
-              </Text>
-            )}
+            <ScrollView
+              style={styles.dialogScroll}
+              contentContainerStyle={styles.dialogScrollContent}
+              showsVerticalScrollIndicator
+            >
+              <Text style={[styles.featureTitle, { color: colors.accent }]}>{latestRelease.title}</Text>
+              {latestRelease.highlights.slice(0, 3).map((line, i) => (
+                <Text key={i} style={[styles.dialogBullet, { color: colors.textDim }]}>
+                  {"\u2022"} {line}
+                </Text>
+              ))}
+              {latestRelease.highlights.length > 3 && (
+                <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
+                  +{latestRelease.highlights.length - 3} more
+                </Text>
+              )}
+            </ScrollView>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
               onPress={handleOpenReleaseHistory}
@@ -441,9 +471,17 @@ const styles = StyleSheet.create({
   },
   dialogBox: {
     width: "100%",
+    maxHeight: "85%",
     borderWidth: 1,
     borderRadius: 20,
     padding: 24,
+  },
+  dialogScroll: {
+    flexShrink: 1,
+    alignSelf: "stretch",
+  },
+  dialogScrollContent: {
+    paddingBottom: 4,
   },
   dialogTitle: {
     fontSize: 20,

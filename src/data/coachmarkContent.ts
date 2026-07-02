@@ -89,6 +89,12 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         body:
           "Add savings, retirement, brokerage, or any account you want counted toward Net Worth. Tap a row to update its balance any time - the changes flow back into the Bridge view.",
       },
+      {
+        id: "bridge-holdings",
+        title: "Track stocks and ETFs by broker (Live Holdings)",
+        body:
+          "Turn on Live Holdings to track stocks and ETFs, organized by broker. Each broker (like Fidelity) lives in the Investment section of your accounts - tap it to expand its holdings, with a total for that broker and a combined total across all of them. Add a position by ticker and share count, and its market value counts toward your Net Worth. Prices only update when you tap Update prices, so add all your tickers first and then pull prices once. It stays off until you switch it on here or in Profile, and the first time you will see exactly what leaves your device. Only your ticker symbols are ever sent out to look up prices, never your share counts, balances, or who you are.",
+      },
     ],
   },
   Utilities: {

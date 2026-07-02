@@ -16,17 +16,39 @@ export const setLastSeenReleaseNotesVersion = async (
   await EncryptedStorage.setItem(LAST_SEEN_RELEASE_NOTES_VERSION_KEY, version);
 };
 
-/** Set a flag before OTA reload so the new bundle skips the release notes prompt. */
-export const setOtaUpdateInstalled = async (): Promise<void> => {
-  await EncryptedStorage.setItem(OTA_UPDATE_INSTALLED_KEY, "true");
+export type OtaInstallState = {
+  /** True if the just-completed reload was an OTA install we initiated. */
+  installed: boolean;
+  /**
+   * True if the pre-install dialog actually displayed the release notes. When
+   * false (e.g. the update was published without the stamped message, so the
+   * dialog could only show the version), the post-reload "what's new" prompt
+   * must still run so the user sees the baked-in notes instead of nothing.
+   */
+  notesShown: boolean;
 };
 
-/** Check and clear the OTA flag. Returns true if an OTA update was just applied. */
-export const consumeOtaUpdateInstalled = async (): Promise<boolean> => {
+/**
+ * Set a flag before OTA reload recording whether the install dialog already
+ * showed the release notes. The new bundle reads this to decide whether to
+ * skip (notes shown) or still run (notes not shown) the "what's new" prompt.
+ */
+export const setOtaUpdateInstalled = async (
+  notesShown: boolean
+): Promise<void> => {
+  await EncryptedStorage.setItem(
+    OTA_UPDATE_INSTALLED_KEY,
+    notesShown ? "notes" : "plain"
+  );
+};
+
+/** Check and clear the OTA flag. */
+export const consumeOtaUpdateInstalled = async (): Promise<OtaInstallState> => {
   const value = await EncryptedStorage.getItem(OTA_UPDATE_INSTALLED_KEY);
-  if (value === "true") {
+  if (value === "notes" || value === "plain" || value === "true") {
     await EncryptedStorage.removeItem(OTA_UPDATE_INSTALLED_KEY);
-    return true;
+    // Legacy "true" (written by older bundles) meant "notes were shown, skip".
+    return { installed: true, notesShown: value !== "plain" };
   }
-  return false;
+  return { installed: false, notesShown: false };
 };

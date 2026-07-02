@@ -6,7 +6,7 @@
  *
  * CSV: budget entries only (single-sheet format).
  * XLSX: multi-sheet workbook (Budget Entries, Budget Limits, Debts, Payments,
- * Savings Goals, Asset Accounts).
+ * Savings Goals, Asset Accounts, Holdings).
  *
  * Schema is documented in SPREADSHEET_SCHEMA.md and is round-trip safe with
  * spreadsheetImport.ts - column headers must not change without bumping the
@@ -24,6 +24,7 @@ import {
 } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
+import { getHoldings } from "../storage/holdingsStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { recordBackup } from "../storage/backupReminderStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
@@ -33,6 +34,7 @@ import {
   CategoryBudgetLimit,
   DebtMilestonePlan,
   Debt,
+  Holding,
   Payment,
   SavingsGoal,
 } from "../types";
@@ -147,6 +149,18 @@ const ASSET_ACCOUNT_COLUMNS = [
   "Name",
   "Category",
   "Balance",
+  "CreatedAt",
+  "UpdatedAt",
+] as const;
+
+// Live prices are NOT exported - only the position itself (Symbol/Shares/
+// CostBasis). Prices live in a per-device cache and re-fetch on demand, so a
+// spreadsheet round-trips the holding without ever carrying a market value.
+const HOLDING_COLUMNS = [
+  "ID",
+  "Symbol",
+  "Shares",
+  "CostBasis",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
@@ -277,6 +291,15 @@ const assetAccountToRow = (account: AssetAccount) => ({
   UpdatedAt: account.updatedAt ?? "",
 });
 
+const holdingToRow = (holding: Holding) => ({
+  ID: holding.id,
+  Symbol: holding.symbol,
+  Shares: holding.shares,
+  CostBasis: holding.costBasis ?? "",
+  CreatedAt: holding.createdAt,
+  UpdatedAt: holding.updatedAt ?? "",
+});
+
 /* ── Total row ──
  *
  * Each sheet ends with a "Total" row: "Total" label in column A, SUM formulas
@@ -298,7 +321,8 @@ type SheetName =
   | "Debts"
   | "Payments"
   | "Savings Goals"
-  | "Asset Accounts";
+  | "Asset Accounts"
+  | "Holdings";
 
 // Budget Entries is built by buildBudgetEntriesSheet - see that function
 // for the per-month subtotal layout and grand-total block. The generic
@@ -312,6 +336,9 @@ const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
   Payments: ["Amount"],
   "Savings Goals": ["TargetAmount", "CurrentAmount"],
   "Asset Accounts": ["Balance"],
+  // Shares can't be summed across different tickers; only CostBasis (dollars)
+  // is meaningfully additive.
+  Holdings: ["CostBasis"],
 };
 
 /**
@@ -812,6 +839,7 @@ export const exportSpreadsheet = async (
     paymentsResult,
     savingsGoalsResult,
     assetAccountsResult,
+    holdingsResult,
     milestonePlanResult,
   ] = await Promise.allSettled([
     withTimeout(
@@ -839,6 +867,11 @@ export const exportSpreadsheet = async (
       getAssetAccounts(),
       DATA_LOAD_TIMEOUT_MS,
       "Timed out loading asset accounts for export."
+    ),
+    withTimeout(
+      getHoldings(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading holdings for export."
     ),
     withTimeout(
       getDebtMilestonePlan(),
@@ -872,6 +905,10 @@ export const exportSpreadsheet = async (
     assetAccountsResult.status === "fulfilled"
       ? assetAccountsResult.value
       : (markMissingSection("Asset Accounts"), [] as AssetAccount[]);
+  const holdings =
+    holdingsResult.status === "fulfilled"
+      ? holdingsResult.value
+      : (markMissingSection("Holdings"), [] as Holding[]);
   const milestonePlan: DebtMilestonePlan | null =
     milestonePlanResult.status === "fulfilled" ? milestonePlanResult.value : null;
 
@@ -1009,6 +1046,23 @@ export const exportSpreadsheet = async (
       XLSX.utils.book_append_sheet(wb, accountsSheet, "Asset Accounts");
     } catch {
       markMissingSection("Asset Accounts");
+    }
+
+    try {
+      const holdingRows = holdings.map(holdingToRow);
+      const holdingsSheet = XLSX.utils.json_to_sheet(holdingRows, {
+        header: [...HOLDING_COLUMNS],
+      });
+      appendTotalRow(
+        holdingsSheet,
+        holdingRows,
+        HOLDING_COLUMNS,
+        SHEET_SUM_COLUMNS["Holdings"]
+      );
+      promoteStringDateCells(holdingsSheet, HOLDING_COLUMNS, ["CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, holdingsSheet, "Holdings");
+    } catch {
+      markMissingSection("Holdings");
     }
   }
 

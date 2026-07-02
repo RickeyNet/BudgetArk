@@ -181,6 +181,28 @@ describe("importSpreadsheet - XLSX multi-sheet", () => {
     expect(payload.debts[0]).toMatchObject({ id: "d1", name: "Car Loan", balance: 5000 });
     expect(result?.skippedRows).toBe(0);
   });
+
+  it("parses a Holdings sheet, normalizing the ticker and skipping bad rows", async () => {
+    useXlsx({
+      "Budget Entries": [entryRow()],
+      Holdings: [
+        { ID: "h1", Symbol: "aapl", Shares: 10, CostBasis: 1500, CreatedAt: "2026-05-01" },
+        { ID: "h2", Symbol: "VTI", Shares: 0.25 },
+        // Invalid ticker -> skipped with a reason, not fatal.
+        { ID: "h3", Symbol: "not a ticker", Shares: 1 },
+      ],
+    });
+    const result = await importSpreadsheet("merge");
+
+    const payload = lastPayload();
+    expect(payload.holdings).toHaveLength(2);
+    // Ticker uppercased on the way in.
+    expect(payload.holdings[0]).toMatchObject({ id: "h1", symbol: "AAPL", shares: 10, costBasis: 1500 });
+    expect(payload.holdings[1].symbol).toBe("VTI");
+    expect(payload.holdings[1].costBasis).toBeUndefined();
+    expect(result?.skippedRows).toBe(1);
+    expect(result?.skippedRowDetails[0]).toMatchObject({ sheet: "Holdings" });
+  });
 });
 
 describe("importSpreadsheet - row filtering", () => {

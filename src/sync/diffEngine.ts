@@ -25,6 +25,10 @@ import {
   saveAssetAccounts,
 } from "../storage/assetAccountStorage";
 import {
+  getHoldingsIncludingDeleted,
+  saveHoldings,
+} from "../storage/holdingsStorage";
+import {
   getDebtMilestonePlan,
   saveDebtMilestonePlanFromSync,
 } from "../storage/debtMilestoneStorage";
@@ -58,6 +62,7 @@ import type {
   CustomCategory,
   BudgetBucket,
   NetWorthSnapshot,
+  Holding,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
@@ -69,6 +74,7 @@ import {
   isBudgetLimitItem,
   isSavingsGoalItem,
   isAssetAccountItem,
+  isHoldingItem,
   isCustomCategoryItem,
   isNetWorthSnapshotItem,
   isValidImportCategory,
@@ -114,6 +120,7 @@ export const computeOutgoingDiff = async (
     budgetEntries,
     savingsGoals,
     assetAccounts,
+    holdings,
     milestonePlan,
     strategyEnvelope,
     customCategories,
@@ -126,6 +133,7 @@ export const computeOutgoingDiff = async (
     getBudgetEntriesIncludingDeleted(),
     getSavingsGoalsIncludingDeleted(),
     getAssetAccountsIncludingDeleted(),
+    getHoldingsIncludingDeleted(),
     getDebtMilestonePlan(),
     getPayoffStrategyEnvelope(),
     getCustomCategories(),
@@ -179,6 +187,10 @@ export const computeOutgoingDiff = async (
     budgetEntries: filterChanged(budgetEntries),
     savingsGoals: filterChanged(savingsGoals),
     assetAccounts: filterChanged(assetAccounts),
+    // Holdings are tombstone-aware like assetAccounts. No backlog handling
+    // needed: the feature is new, so no positions predate this field for an
+    // already-paired couple to miss.
+    holdings: filterChanged(holdings),
     budgetLimits,
     // Custom categories are not tombstoned, so filterChanged only ever
     // emits upserts here - deletions don't propagate (same as the
@@ -303,6 +315,7 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
   validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem);
   validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem);
   validateDiffEntries(diff.assetAccounts, "asset account", isAssetAccountItem);
+  validateDiffEntries(diff.holdings, "holding", isHoldingItem);
   validateDiffEntries(diff.customCategories, "custom category", isCustomCategoryItem);
 
   // Bucket overrides are a bare map, not DiffEntry records, so they get
@@ -427,6 +440,15 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     const merged = mergeById(localAccounts, diff.assetAccounts);
     await saveAssetAccounts(merged);
     changedCount += diff.assetAccounts.length;
+  }
+
+  // Merge holdings - same tombstone-aware LWW as asset accounts. Guarded
+  // with `diff.holdings &&` because an older peer's diff omits the field.
+  if (diff.holdings && diff.holdings.length > 0) {
+    const localHoldings = await getHoldingsIncludingDeleted();
+    const merged = mergeById(localHoldings, diff.holdings);
+    await saveHoldings(merged);
+    changedCount += diff.holdings.length;
   }
 
   // Merge budget limits (union of months, per-category last-write-wins).

@@ -80,4 +80,46 @@ describe("calculateNetWorthTotals", () => {
     });
     expect(result.netWorth).toBe(-1000);
   });
+
+  it("adds priced holdings value to total assets", () => {
+    const result = calculateNetWorthTotals({
+      entries: [],
+      debts: [],
+      savingsGoals: [],
+      assetAccounts: [{ balance: 1000 } as any],
+      holdings: [
+        { symbol: "AAPL", shares: 2 } as any,
+        { symbol: "VTI", shares: 1 } as any,
+      ],
+      quotes: {
+        AAPL: { price: 100, asOf: "2026-06-27T00:00:00.000Z" },
+        VTI: { price: 300, asOf: "2026-06-27T00:00:00.000Z" },
+      },
+    });
+    // 1000 asset balance + (2×100 + 1×300) holdings
+    expect(result.totalAssets).toBe(1500);
+    expect(result.netWorth).toBe(1500);
+  });
+
+  it("treats an unpriced holding as zero (never corrupts the total)", () => {
+    const result = calculateNetWorthTotals({
+      entries: [],
+      debts: [],
+      savingsGoals: [],
+      assetAccounts: [],
+      holdings: [{ symbol: "TSLA", shares: 5 } as any],
+      quotes: {}, // no cached price yet
+    });
+    expect(result.totalAssets).toBe(0);
+  });
+
+  it("is unchanged when holdings/quotes are omitted (backward compatible)", () => {
+    const result = calculateNetWorthTotals({
+      entries: [],
+      debts: [],
+      savingsGoals: [{ currentAmount: 250 } as any],
+      assetAccounts: [{ balance: 750 } as any],
+    });
+    expect(result.totalAssets).toBe(1000);
+  });
 });
