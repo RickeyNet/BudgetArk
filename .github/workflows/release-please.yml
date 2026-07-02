@@ -1,0 +1,38 @@
+name: Release Please
+
+# Automates GitHub releases from Conventional Commits (feat:/fix:/etc.):
+# maintains a rolling "release PR" that accumulates the changelog and version
+# bumps (package.json + app.json expo.version, kept in sync via extra-files).
+# Merging that PR creates the git tag (vX.Y.Z) and the GitHub Release.
+#
+# Deliberately GitHub-only: no EAS build/update is triggered. Store builds and
+# OTA updates stay manual; the vX.Y.Z tag just marks the exact commit a release
+# was cut from.
+#
+# Note: the release PR is created by GITHUB_TOKEN, so CI does not run on it
+# automatically (GitHub prevents token-triggered workflow recursion). It only
+# touches CHANGELOG.md and version fields; close/reopen the PR if you want the
+# checks to run before merging.
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write # create tags + releases, update the release PR branch
+  pull-requests: write # open/update the release PR
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false # never cancel a half-finished release cut
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run release-please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

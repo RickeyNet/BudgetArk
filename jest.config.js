@@ -17,6 +17,17 @@ module.exports = {
     "src/data/**/*.ts",
     "!src/**/*.d.ts",
   ],
+  // Ratchet gate: set just below measured coverage (2026-07: L78/S77/B64/F73)
+  // so it blocks regressions without demanding new tests up front. Raise these
+  // as coverage grows; never lower them to get a red build green.
+  coverageThreshold: {
+    global: {
+      lines: 75,
+      statements: 74,
+      branches: 61,
+      functions: 70,
+    },
+  },
   // Note: `isolatedModules: true` lives in tsconfig.json so ts-jest transpiles
   // each file independently (fast; no project-wide type-check on every run).
 };

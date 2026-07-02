@@ -22,10 +22,11 @@ jobs:
     # Only act on Dependabot's own PRs.
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
 
       # Enable auto-merge for everything except major npm bumps. The grouped
       # minor/patch and GitHub Actions PRs report a non-major update-type;
