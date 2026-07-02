@@ -68,6 +68,22 @@
     }
   },
   "expo": {
+    "install": {
+      "exclude": [
+        "jest",
+        "@types/jest",
+        "expo",
+        "expo-crypto",
+        "expo-dev-client",
+        "expo-document-picker",
+        "expo-file-system",
+        "expo-haptics",
+        "expo-secure-store",
+        "expo-sharing",
+        "expo-status-bar",
+        "expo-updates"
+      ]
+    },
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
