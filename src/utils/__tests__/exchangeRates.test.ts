@@ -1,6 +1,7 @@
 import {
   fetchLiveRates,
   getCurrentRates,
+  getStoredRates,
   type RatesSnapshot,
 } from "../exchangeRates";
 import { USD_EXCHANGE_RATES } from "../currencyConversion";
@@ -97,6 +98,29 @@ describe("fetchLiveRates", () => {
         fetchResponse({ result: "success", rates: validRates({ EUR: 0 }) })
       );
     await expect(fetchLiveRates()).rejects.toThrow(/invalid or incomplete/);
+  });
+});
+
+describe("getStoredRates", () => {
+  it("returns the pinned cache regardless of age, without touching the network", async () => {
+    seedCache(365 * 24 * 60 * 60 * 1000, validRates({ EUR: 0.5 })); // a year old
+    const fetchMock = okFetch();
+    (global as any).fetch = fetchMock;
+
+    const snap = await getStoredRates();
+    expect(snap.source).toBe("cache");
+    expect(snap.rates.EUR).toBe(0.5);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the static table with no cache, still without the network", async () => {
+    const fetchMock = okFetch();
+    (global as any).fetch = fetchMock;
+
+    const snap = await getStoredRates();
+    expect(snap.source).toBe("static");
+    expect(snap.rates).toMatchObject(USD_EXCHANGE_RATES);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

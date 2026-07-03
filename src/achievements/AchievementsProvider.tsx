@@ -20,6 +20,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { InteractionManager } from "react-native";
 import AchievementUnlockModal from "../components/AchievementUnlockModal";
 import {
   ACHIEVEMENT_DEFS_BY_ID,
@@ -91,8 +92,15 @@ export const AchievementsProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Initial silent eval at app boot - stamps `firstEvaluatedAt` so future
   // checks celebrate but retroactive ones don't pop dozens of modals.
+  // Deferred past the first paint: the evaluation decrypts and scans every
+  // major collection, and nothing on screen depends on it - screens fire
+  // their own runCheck() after writes. Keeping it out of the boot window
+  // shaved a chunk of the Android time-to-tabs.
   useEffect(() => {
-    void runCheck();
+    const task = InteractionManager.runAfterInteractions(() => {
+      void runCheck();
+    });
+    return () => task.cancel();
   }, [runCheck]);
 
   const advance = useCallback(() => {

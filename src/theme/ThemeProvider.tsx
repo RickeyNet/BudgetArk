@@ -12,8 +12,7 @@ import { useBackgroundEffects } from "./BackgroundEffectsProvider";
 import { useSurfaceStyle } from "./SurfaceStyleProvider";
 import { DEFAULT_SURFACE_STYLE_ID, type SurfaceStylePreset } from "./surfaceStyles";
 import { DEFAULT_THEME_ID, THEME_BY_ID, THEME_PRESETS, ThemeColors, ThemePreset } from "./themes";
-
-const THEME_KEY = "@budgetark_theme_id" as const;
+import { THEME_KEY, getAppearanceBoot } from "./appearanceBoot";
 
 type ThemeContextValue = Readonly<{
   themeId: ThemePreset["id"];
@@ -112,7 +111,9 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     let cancelled = false;
     const load = async () => {
       try {
-        const stored = await EncryptedStorage.getItem(THEME_KEY);
+        // Shared boot read (see appearanceBoot.ts) - avoids a serialized
+        // per-provider storage round-trip on the startup path.
+        const stored = (await getAppearanceBoot()).theme;
         if (cancelled) return;
         if (stored && THEME_BY_ID[stored]) setThemeIdState(stored);
       } finally {

@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as EncryptedStorage from "../storage/encryptedStorage";
-
-const BACKGROUND_EFFECTS_KEY = "@budgetark_background_effects_enabled" as const;
+import { BACKGROUND_EFFECTS_KEY, getAppearanceBoot } from "./appearanceBoot";
 
 type BackgroundEffectsContextValue = Readonly<{
   backgroundEffectsEnabled: boolean;
@@ -18,7 +17,9 @@ export const BackgroundEffectsProvider: React.FC<React.PropsWithChildren> = ({ c
     let cancelled = false;
     const load = async () => {
       try {
-        const stored = await EncryptedStorage.getItem(BACKGROUND_EFFECTS_KEY);
+        // Shared boot read (see appearanceBoot.ts): one parallel round-trip
+        // covers every appearance provider instead of serializing per provider.
+        const stored = (await getAppearanceBoot()).backgroundEffects;
         if (cancelled) return;
         if (stored === "0") setBackgroundEffectsEnabledState(false);
         else if (stored === "1") setBackgroundEffectsEnabledState(true);

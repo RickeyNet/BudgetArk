@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { InteractionManager } from "react-native";
 import {
   CURRENCY_PREFERENCE_OPTIONS,
   CurrencyPreferenceId,
@@ -18,7 +19,7 @@ import {
 } from "../storage/userStorage";
 import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
 import { USD_EXCHANGE_RATES } from "../utils/currencyConversion";
-import { getCurrentRates } from "../utils/exchangeRates";
+import { getCurrentRates, getStoredRates } from "../utils/exchangeRates";
 
 type CurrencyContextValue = Readonly<{
   preferenceId: CurrencyPreferenceId;
@@ -84,27 +85,52 @@ export const CurrencyProvider: React.FC<React.PropsWithChildren> = ({ children }
     void load();
   }, []);
 
-  // Resolve best-available FX rates once on mount. getCurrentRates never throws
-  // (it falls back to cache, then the static table), so a failure just leaves
-  // the seeded static rates in place. USD-only users never feel this either
-  // way, since USD->USD holdings convert 1:1 regardless of the table.
+  // Load the PINNED rates snapshot - never the network. Rates are fetched
+  // exactly once, at the moment the user changes currency (see
+  // setPreferenceId), and then stay fixed so day-to-day FX moves can't
+  // wiggle converted balances the user didn't touch. USD users skip even
+  // the read: the table converts holdings quotes into a NON-USD display
+  // currency, and USD->USD is 1:1 against the static seed. Deferred past
+  // the first paint so the read never sits in the startup window.
   useEffect(() => {
+    if (getCurrencyPreferenceOption(preferenceId).currencyCode === "USD") return;
     let active = true;
-    void getCurrentRates()
-      .then((snapshot) => {
-        if (active) setRates(snapshot.rates);
-      })
-      .catch(() => {
-        // Static seed remains; nothing to do.
-      });
+    const task = InteractionManager.runAfterInteractions(() => {
+      void getStoredRates()
+        .then((snapshot) => {
+          if (active) setRates(snapshot.rates);
+        })
+        .catch(() => {
+          // Static seed remains; nothing to do.
+        });
+    });
     return () => {
       active = false;
+      task.cancel();
     };
-  }, []);
+  }, [preferenceId]);
 
   const setPreferenceId = useCallback(async (id: CurrencyPreferenceId) => {
     const updatedUser = await updateCurrencyPreference(id);
     setPreferenceIdState(updatedUser.currencyPreferenceId);
+    // Re-pin the rates snapshot at the moment of the change - the ONLY time
+    // the network is consulted for display rates. Default (non-force) resolve
+    // deliberately reuses the fresh cache the conversion prompt just wrote,
+    // so the pinned table matches the rate the amounts were converted with;
+    // a switch that skipped conversion (paired device / same currency unit)
+    // fetches live here instead. Back on USD the table is unused - reset to
+    // the static seed rather than leave a stale pin in state.
+    const code = getCurrencyPreferenceOption(updatedUser.currencyPreferenceId).currencyCode;
+    if (code === "USD") {
+      setRates(USD_EXCHANGE_RATES);
+      return;
+    }
+    try {
+      const snapshot = await getCurrentRates();
+      setRates(snapshot.rates);
+    } catch {
+      // Keep whatever table we had; getCurrentRates practically never throws.
+    }
   }, []);
 
   const preference = useMemo(

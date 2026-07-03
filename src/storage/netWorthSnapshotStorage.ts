@@ -10,7 +10,7 @@ import { getHoldingsSettings } from "./holdingsSettingsStorage";
 import { getOrCreateUser } from "./userStorage";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
-import { getCurrentRates } from "../utils/exchangeRates";
+import { getStoredRates } from "../utils/exchangeRates";
 
 const STORAGE_KEY = "@budgetark_net_worth_snapshots";
 const MAX_SNAPSHOTS = 730;
@@ -99,7 +99,10 @@ export const syncNetWorthSnapshot = async (
       holdingsSettings.enabled ? getHoldings() : Promise.resolve([]),
       holdingsSettings.enabled ? getCachedQuotes() : Promise.resolve({}),
       getOrCreateUser(),
-      getCurrentRates(),
+      // Pinned snapshot only - a snapshot write must never hit the network or
+      // pick up a rate the on-screen totals aren't using. Rates re-pin solely
+      // when the user changes currency (see exchangeRates.ts policy).
+      getStoredRates(),
     ]);
 
   // Convert holdings into the user's display currency before persisting, so the

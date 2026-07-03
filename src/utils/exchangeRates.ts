@@ -13,6 +13,13 @@
  * itself lives in currencyConversion.ts and is local - this module only
  * decides which rate numbers to feed it.
  *
+ * RATE-PINNING POLICY: the network is only consulted at the moment the user
+ * changes their currency (getCurrentRates, called from the switch flow).
+ * Everything that merely DISPLAYS converted values - the CurrencyProvider
+ * table, net-worth snapshots - reads the pinned snapshot via getStoredRates()
+ * and never refetches, so day-to-day FX moves can't wiggle balances the user
+ * didn't touch. The pin updates only on the next currency change.
+ *
  * Provider: open.er-api.com - free, no API key, base USD (includes USD: 1),
  * updated daily. The request sends no user data; it's a plain GET of the
  * public rates table, so balances never leave the device.
@@ -112,7 +119,17 @@ const writeCache = async (snapshot: RatesSnapshot): Promise<void> => {
 };
 
 /**
- * Resolve the best available rates.
+ * The pinned snapshot: last-written cache, else the static table. NO network,
+ * no TTL - this is what display paths read (see the rate-pinning policy in
+ * the module doc). Never throws.
+ */
+export const getStoredRates = async (): Promise<RatesSnapshot> =>
+  (await readCache()) ?? staticSnapshot();
+
+/**
+ * Resolve the best available rates, consulting the network if needed. Only
+ * called from the currency-change flow - the result it caches becomes the
+ * pinned snapshot that getStoredRates() serves until the next change.
  *
  * - Default: return fresh cache (< TTL) without a network call; otherwise
  *   fetch live, cache it, and return it; on failure fall back to any cache,

@@ -5,8 +5,7 @@ import {
   SURFACE_STYLE_PRESETS,
   type SurfaceStylePreset,
 } from "./surfaceStyles";
-
-const SURFACE_STYLE_KEY = "@budgetark_surface_style_id" as const;
+import { SURFACE_STYLE_KEY, getAppearanceBoot } from "./appearanceBoot";
 
 type SurfaceStyleContextValue = Readonly<{
   /** Raw persisted choice. Null means "use legacy/theme fallback". */
@@ -25,7 +24,9 @@ export const SurfaceStyleProvider: React.FC<React.PropsWithChildren> = ({ childr
     let cancelled = false;
     const load = async () => {
       try {
-        const stored = await EncryptedStorage.getItem(SURFACE_STYLE_KEY);
+        // Shared boot read (see appearanceBoot.ts) - avoids a serialized
+        // per-provider storage round-trip on the startup path.
+        const stored = (await getAppearanceBoot()).surfaceStyle;
         if (cancelled) return;
         if (stored === "solid" || stored === "glass") {
           setSurfaceStyleIdState(stored);

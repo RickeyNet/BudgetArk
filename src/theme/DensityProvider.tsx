@@ -27,9 +27,7 @@ import {
   TEXT_SIZE_PRESETS,
   TextSizePreset,
 } from "./textSize";
-
-const DENSITY_KEY = "@budgetark_density_id" as const;
-const TEXT_SIZE_KEY = "@budgetark_text_size_id" as const;
+import { DENSITY_KEY, TEXT_SIZE_KEY, getAppearanceBoot } from "./appearanceBoot";
 
 type DensityContextValue = Readonly<{
   densityId: DensityPreset["id"];
@@ -56,10 +54,10 @@ export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children })
     let cancelled = false;
     const load = async () => {
       try {
-        const [storedDensity, storedTextSize] = await Promise.all([
-          EncryptedStorage.getItem(DENSITY_KEY),
-          EncryptedStorage.getItem(TEXT_SIZE_KEY),
-        ]);
+        // Shared boot read (see appearanceBoot.ts) - avoids a serialized
+        // per-provider storage round-trip on the startup path.
+        const { density: storedDensity, textSize: storedTextSize } =
+          await getAppearanceBoot();
         if (cancelled) return;
         if (storedDensity && DENSITY_BY_ID[storedDensity]) setDensityIdState(storedDensity);
         if (storedTextSize && TEXT_SIZE_BY_ID[storedTextSize]) setTextSizeIdState(storedTextSize);

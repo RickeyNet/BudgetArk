@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, InteractionManager } from "react-native";
 import type { Debt, Payment } from "../types";
 import DebtDuePaymentPromptModal from "./DebtDuePaymentPromptModal";
 import DebtPayoffCelebrationModal from "./DebtPayoffCelebrationModal";
@@ -80,12 +80,23 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
 
   useEffect(() => {
     // Re-runs when `paused` flips back to false so a debt that was due while a
-    // higher-priority modal owned the screen still gets surfaced.
-    if (!paused) void evaluate();
+    // higher-priority modal owned the screen still gets surfaced. Deferred
+    // past the first paint: the evaluation decrypts debts + payments, and the
+    // prompt appearing a beat after launch is indistinguishable to the user -
+    // but that decryption sitting in the boot window isn't.
+    let task: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+    if (!paused) {
+      task = InteractionManager.runAfterInteractions(() => {
+        void evaluate();
+      });
+    }
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") void evaluate();
     });
-    return () => sub.remove();
+    return () => {
+      task?.cancel();
+      sub.remove();
+    };
   }, [evaluate, paused]);
 
   const advance = useCallback(

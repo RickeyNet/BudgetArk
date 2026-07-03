@@ -15,6 +15,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "The Update prices button now tells you what happened. If some tickers are still being fetched, a note under the button says how many and invites you to tap again in a few minutes - the prices already retrieved show right away, and your existing values stay put until fresh ones replace them. Connection problems and already-updated-today now say so instead of doing nothing.",
       "An explicit tap on Update prices now always makes a real attempt instead of being skipped by a stale timer, and the button hides entirely when all your holdings are manually valued funds with nothing to fetch.",
       "As before, only your ticker symbols ever leave your device - the background warming happens on the server and adds nothing new from your phone.",
+      "The app opens faster, especially on Android. Startup was doing busywork before showing your tabs - checking for updates, evaluating badges, fetching currency rates, and reading settings one at a time. That work now waits until after the screen is up, and settings load together in one pass.",
+      "Converted values hold steady. If your app is set to a non-dollar currency, the exchange rate is now locked in when you pick your currency and stays fixed until you change it again - so your holdings and net worth no longer drift a little each day from currency-market noise.",
     ],
   },
   {

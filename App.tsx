@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   AppState,
+  InteractionManager,
   Modal,
   ScrollView,
   Text,
@@ -170,7 +171,13 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (isOnboardingComplete !== true || !canCheckUpdates) return;
 
-    void runAutoUpdateCheck();
+    // Deferred past the first paint: the check (and a possible background
+    // bundle download) is network + disk work that shouldn't compete with
+    // the navigator's initial render. Foreground resumes stay immediate -
+    // the app is already painted by then.
+    const task = InteractionManager.runAfterInteractions(() => {
+      void runAutoUpdateCheck();
+    });
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         void runAutoUpdateCheck();
@@ -178,6 +185,7 @@ const AppContent: React.FC = () => {
     });
 
     return () => {
+      task.cancel();
       subscription.remove();
     };
   }, [canCheckUpdates, isOnboardingComplete, runAutoUpdateCheck]);
