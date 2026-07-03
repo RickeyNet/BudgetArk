@@ -33,6 +33,7 @@ import type { CachedQuote } from "../types";
 /** Outcome of a refresh attempt, for callers that want to surface status. */
 export type RefreshOutcome =
   | "updated" // fetched fresh prices from the Worker
+  | "partial" // got some prices; the rest are warming server-side - retry soon
   | "fresh" // cache still within the daily window; no call made
   | "no-symbols" // user holds nothing to price
   | "rate-limited" // Worker throttled this device (429)
@@ -41,6 +42,8 @@ export type RefreshOutcome =
 export interface RefreshResult {
   outcome: RefreshOutcome;
   cache: QuoteCache;
+  /** Symbols the Worker couldn't price this pass (only set for "partial"). */
+  pending?: string[];
 }
 
 /** Network timeout for the Worker call - prices are non-critical, fail fast. */
@@ -109,7 +112,10 @@ export const refreshQuotes = async (
       return { outcome: "unavailable", cache };
     }
 
-    const body = (await res.json()) as { quotes?: Record<string, CachedQuote> };
+    const body = (await res.json()) as {
+      quotes?: Record<string, CachedQuote>;
+      pending?: string[];
+    };
     const fetched = body.quotes ?? {};
 
     // Merge over the existing cache so symbols the Worker couldn't price keep
@@ -121,16 +127,12 @@ export const refreshQuotes = async (
       }
     }
 
-    const next: QuoteCache = {
-      quotes: mergedQuotes,
-      lastFetchedAt: new Date(now).toISOString(),
-    };
-    await saveQuoteCache(next);
-
     // Anchor any proxy-tracked holding (e.g. a 401k index fund riding VOO) that
     // doesn't have an anchor price yet, now that its proxy may be priced. This
     // is what lets it start drifting with the index; it's one-time per holding
-    // (guarded on anchorPrice == null) so it's idempotent across refreshes.
+    // (guarded on anchorPrice == null) so it's idempotent across refreshes -
+    // and it runs before the partial/full split so a partial pass that DID
+    // price the proxy still anchors it.
     for (const h of holdings) {
       if (holdingKind(h) === "proxy" && h.anchorPrice == null) {
         const px = mergedQuotes[normalizeSymbol(h.symbol)]?.price;
@@ -139,6 +141,30 @@ export const refreshQuotes = async (
         }
       }
     }
+
+    // The Worker prices at most a provider-minute's worth of symbols per call;
+    // anything it had to defer comes back in `pending` (and it skips the
+    // per-device throttle for such responses). Keep what we got but DON'T
+    // stamp lastFetchedAt: the daily gate stays open so a retry in a few
+    // minutes - after the Worker's cron warmer has filled the gap - completes
+    // the set.
+    const pending = Array.isArray(body.pending)
+      ? body.pending.filter((s): s is string => typeof s === "string")
+      : [];
+    if (pending.length > 0) {
+      const partial: QuoteCache = {
+        quotes: mergedQuotes,
+        lastFetchedAt: cache.lastFetchedAt,
+      };
+      await saveQuoteCache(partial);
+      return { outcome: "partial", cache: partial, pending };
+    }
+
+    const next: QuoteCache = {
+      quotes: mergedQuotes,
+      lastFetchedAt: new Date(now).toISOString(),
+    };
+    await saveQuoteCache(next);
 
     return { outcome: "updated", cache: next };
   } catch {

@@ -58,6 +58,7 @@ import {
 } from "../storage/holdingsSettingsStorage";
 import { refreshQuotes } from "../services/quotesService";
 import {
+  collectSymbols,
   holdingMarketValue,
   holdingsTotalValue,
   holdingGainLoss,
@@ -160,6 +161,10 @@ const BridgeScreen: React.FC = () => {
     null
   );
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  // Outcome of the last manual price refresh that needs explaining (a failure
+  // or a server-side throttle). Cleared on the next attempt or a fresh load -
+  // a successful update speaks for itself through the prices/labels.
+  const [priceRefreshNotice, setPriceRefreshNotice] = useState<string | null>(null);
 
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
@@ -254,6 +259,8 @@ const BridgeScreen: React.FC = () => {
   const loadHoldingsState = useCallback(async (): Promise<HoldingsSettings> => {
     const settings = await getHoldingsSettings();
     setHoldingsSettings(settings);
+    // A refresh notice describes a past attempt; don't let it survive a reload.
+    setPriceRefreshNotice(null);
     if (!settings.enabled) {
       setHoldings([]);
       setQuotes({});
@@ -447,6 +454,12 @@ const BridgeScreen: React.FC = () => {
 
   /** Whether a manual price refresh is allowed yet (daily window). */
   const priceRefreshDue = isQuoteRefreshDue(quotesLastFetchedAt, Date.now());
+  /**
+   * Whether anything is actually priceable. A portfolio of only manual-value
+   * funds has no tickers to fetch, so the update button would be a no-op -
+   * hide it rather than let it silently do nothing.
+   */
+  const hasFetchableSymbols = useMemo(() => collectSymbols(holdings).length > 0, [holdings]);
   /** Human label for how long until the next refresh is allowed (interval-aware). */
   const nextRefreshLabel = useMemo(() => {
     if (!quotesLastFetchedAt) return "";
@@ -919,18 +932,42 @@ const BridgeScreen: React.FC = () => {
   }, []);
 
   /**
-   * The only path that reaches out to the quote proxy. Daily-gated by the UI
-   * (the button is disabled until a refresh is due), so a tap always results in
-   * a real fetch covering every ticker the user has added by then.
+   * The only path that reaches out to the quote proxy. The UI still greys the
+   * button until the daily window opens, but an explicit tap forces the
+   * attempt (`force: true`) so a stale UI/storage disagreement can never eat
+   * the tap - the Worker's per-device throttle remains the cost gate. Every
+   * non-success outcome is surfaced via `priceRefreshNotice`; a silent
+   * failure here once looked identical to a dead button.
    */
   const refreshPricesManually = useCallback(async () => {
     if (isRefreshingPrices || !holdingsSettings.enabled) return;
     setIsRefreshingPrices(true);
+    setPriceRefreshNotice(null);
     try {
-      const result = await refreshQuotes();
+      const result = await refreshQuotes({ force: true });
       setQuotes(result.cache.quotes);
       setQuotesLastFetchedAt(result.cache.lastFetchedAt);
       setHoldings(await getHoldings());
+      if (result.outcome === "unavailable") {
+        setPriceRefreshNotice(
+          "Couldn't update prices right now. Check your connection and try again in a few minutes."
+        );
+      } else if (result.outcome === "rate-limited") {
+        setPriceRefreshNotice("Prices were already updated today.");
+      } else if (result.outcome === "partial") {
+        // The price service fetches a limited batch per minute; the rest are
+        // warming up server-side. The button stays enabled for the follow-up.
+        const count = result.pending?.length ?? 0;
+        setPriceRefreshNotice(
+          count > 0
+            ? `Updated most prices - still fetching ${count} ${count === 1 ? "ticker" : "tickers"}. Tap again in a few minutes to finish.`
+            : "Updated most prices - tap again in a few minutes to finish."
+        );
+      }
+    } catch {
+      setPriceRefreshNotice(
+        "Couldn't update prices right now. Check your connection and try again in a few minutes."
+      );
     } finally {
       setIsRefreshingPrices(false);
     }
@@ -1296,33 +1333,40 @@ const BridgeScreen: React.FC = () => {
             })}
 
             {/* One global price-refresh row covering every holdings category. */}
-            {holdingsSettings.enabled && holdings.length > 0 ? (
-              <View style={styles.priceUpdateRow}>
-                <Text style={[styles.holdingsAsOf, { color: colors.textMuted }]}>
-                  {quotesAsOf
-                    ? `Prices as of ${new Date(quotesAsOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-                    : "Prices not fetched yet"}
-                </Text>
-                <TouchableOpacity
-                  onPress={refreshPricesManually}
-                  disabled={!priceRefreshDue || isRefreshingPrices}
-                  accessibilityRole="button"
-                  accessibilityLabel="Update prices now"
-                >
-                  <Text
-                    style={[
-                      styles.accountsAddBtn,
-                      { color: priceRefreshDue && !isRefreshingPrices ? colors.accent : colors.textMuted },
-                    ]}
-                  >
-                    {isRefreshingPrices
-                      ? "Updating..."
-                      : priceRefreshDue
-                        ? "Update prices"
-                        : nextRefreshLabel}
+            {holdingsSettings.enabled && holdings.length > 0 && hasFetchableSymbols ? (
+              <>
+                <View style={styles.priceUpdateRow}>
+                  <Text style={[styles.holdingsAsOf, { color: colors.textMuted }]}>
+                    {quotesAsOf
+                      ? `Prices as of ${new Date(quotesAsOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                      : "Prices not fetched yet"}
                   </Text>
-                </TouchableOpacity>
-              </View>
+                  <TouchableOpacity
+                    onPress={refreshPricesManually}
+                    disabled={!priceRefreshDue || isRefreshingPrices}
+                    accessibilityRole="button"
+                    accessibilityLabel="Update prices now"
+                  >
+                    <Text
+                      style={[
+                        styles.accountsAddBtn,
+                        { color: priceRefreshDue && !isRefreshingPrices ? colors.accent : colors.textMuted },
+                      ]}
+                    >
+                      {isRefreshingPrices
+                        ? "Updating..."
+                        : priceRefreshDue
+                          ? "Update prices"
+                          : nextRefreshLabel}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {priceRefreshNotice ? (
+                  <Text style={[styles.holdingsAsOf, styles.priceRefreshNotice, { color: colors.warning }]}>
+                    {priceRefreshNotice}
+                  </Text>
+                ) : null}
+              </>
             ) : null}
           </>
         )}
@@ -1900,6 +1944,10 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       justifyContent: "space-between",
       paddingLeft: 28,
       paddingTop: tokens.gapSm,
+    },
+    priceRefreshNotice: {
+      paddingLeft: 28,
+      paddingTop: 2,
     },
     holdingsNudge: {
       borderWidth: 1,

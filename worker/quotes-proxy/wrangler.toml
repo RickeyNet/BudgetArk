@@ -59,3 +59,13 @@ simple = { limit = 5, period = 60 }
 
 [observability]
 enabled = true
+
+# Cache warmer: every 5 minutes the scheduled handler re-fetches up to 8
+# registered-but-stale symbols (Twelve Data free tier = 8 credits/minute).
+# This is what lets a portfolio hold more than 8 tickers: user requests are
+# served from the warm KV cache instead of one oversized upstream batch that
+# the provider would reject. Cost: at most one fetch per symbol per day
+# (quotes live 24h, failures negative-cache for 24h), bounded by
+# DAILY_UPSTREAM_SYMBOL_BUDGET.
+[triggers]
+crons = ["*/5 * * * *"]

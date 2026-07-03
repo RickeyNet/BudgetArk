@@ -8,8 +8,14 @@
  * It stores NO portfolio data:
  *   - the price cache is keyed by SYMBOL only (quote:<ver>:AAPL)
  *   - the throttle is keyed by a SHA-256 HASH of the device id (throttle:<ver>:<hash>)
+ *   - the warmer's symbol registry (symbols:<ver>:registry) is a flat set of
+ *     symbols with last-requested stamps - no device association
  * so nothing here records who holds what. (<ver> is CACHE_VERSION - bump it to
  * flush the cache + throttle without touching KV.)
+ *
+ * A cron trigger re-warms registered symbols a few at a time (see
+ * `scheduled`), so serving a request never needs an upstream batch bigger
+ * than the provider's per-minute credit allowance.
  *
  * Endpoint:  GET /quotes?symbols=AAPL,VTI,MSFT
  * Header:    x-device: <stable per-install id>   (optional but enables throttle)
@@ -51,6 +57,16 @@ const THROTTLE_TTL_SECONDS = 24 * 60 * 60; // 1 request per day per device
 const MAX_SYMBOLS = 120; // Twelve Data batch limit
 
 /**
+ * Max symbols fetched upstream in a single call. Twelve Data's FREE tier
+ * allows 8 API credits per minute and a batched /price call costs 1 credit
+ * per symbol, so any batch larger than 8 is rejected wholesale (HTTP 429 ->
+ * we used to surface that as a 502 and the app failed silently forever once
+ * a portfolio grew past 8 tickers). Anything beyond this cap stays stale for
+ * the current response and is picked up by the cron warmer within minutes.
+ */
+const UPSTREAM_MINUTE_BATCH_LIMIT = 8;
+
+/**
  * Namespace prefix for every KV key this Worker owns (price cache + per-device
  * throttle). Bump it to abandon all existing entries WITHOUT touching KV: old
  * keys keep their original TTL and expire on their own, while the new version
@@ -60,6 +76,66 @@ const MAX_SYMBOLS = 120; // Twelve Data batch limit
  */
 const CACHE_VERSION = "v2";
 const quoteKey = (symbol: string): string => `quote:${CACHE_VERSION}:${symbol}`;
+
+/**
+ * Registry of every symbol the app has asked for, so the cron warmer knows
+ * what to keep fresh. SYMBOLS ONLY (no device ids) - the same privacy surface
+ * as the per-symbol quote cache. Stored as { SYMBOL: lastRequestedAtISO }.
+ * Bounded two ways so a leaked app key can't turn the warmer into a budget
+ * drain: entries idle past the retention window fall out, and the map is
+ * capped by evicting the least-recently-requested symbols.
+ */
+const registryKey = (): string => `symbols:${CACHE_VERSION}:registry`;
+const REGISTRY_MAX_SYMBOLS = 200;
+const REGISTRY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+/** Skip a registry rewrite when a symbol's stamp is fresher than this. */
+const REGISTRY_RESTAMP_MS = 6 * 60 * 60 * 1000;
+
+type SymbolRegistry = Record<string, string>;
+
+const readRegistry = async (env: Env): Promise<SymbolRegistry> => {
+  const raw = (await env.QUOTES.get(registryKey(), "json")) as SymbolRegistry | null;
+  return raw && typeof raw === "object" ? raw : {};
+};
+
+/** Drop idle symbols, then oldest-first down to the cap. Pure; returns a new map. */
+const pruneRegistry = (registry: SymbolRegistry, now: number): SymbolRegistry => {
+  const alive = Object.entries(registry).filter(([, ts]) => {
+    const t = new Date(ts).getTime();
+    return Number.isFinite(t) && now - t < REGISTRY_RETENTION_MS;
+  });
+  alive.sort((a, b) => (a[1] < b[1] ? 1 : -1)); // newest first
+  return Object.fromEntries(alive.slice(0, REGISTRY_MAX_SYMBOLS));
+};
+
+/**
+ * Record that these symbols are in active use. Read-modify-write without a
+ * lock (KV has none) - a lost update just delays a stamp, and the warmer
+ * re-learns the symbol on the next request. Skips the write entirely when
+ * every stamp is still fresh, which is the common case.
+ */
+const updateSymbolRegistry = async (
+  env: Env,
+  symbols: string[],
+  now: number,
+): Promise<void> => {
+  try {
+    const registry = await readRegistry(env);
+    const nowIso = new Date(now).toISOString();
+    let changed = false;
+    for (const symbol of symbols) {
+      const prev = registry[symbol] ? new Date(registry[symbol]).getTime() : NaN;
+      if (!Number.isFinite(prev) || now - prev >= REGISTRY_RESTAMP_MS) {
+        registry[symbol] = nowIso;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    await env.QUOTES.put(registryKey(), JSON.stringify(pruneRegistry(registry, now)));
+  } catch {
+    // Best-effort: a failed stamp only postpones warming, never breaks serving.
+  }
+};
 
 /**
  * Hard daily ceiling on symbols fetched upstream, across ALL callers. A backstop
@@ -121,6 +197,12 @@ export default {
       }
     }
 
+    // Teach the cron warmer about these symbols. Off the critical path, and
+    // deliberately after the app-key gate + burst limit so scanners can't
+    // poison the registry; deliberately before the early returns below so a
+    // throttled/cached request still registers a freshly added ticker.
+    ctx.waitUntil(updateSymbolRegistry(env, symbols, Date.now()));
+
     // --- 2. Edge cache: serve an identical symbol set straight from Cloudflare
     // with ZERO KV reads / upstream calls. Key is normalized (sorted) so order
     // doesn't fragment it; the x-device header is intentionally NOT part of the
@@ -175,13 +257,20 @@ export default {
     );
 
     // --- One batched upstream call for everything stale, bounded by the global
-    // daily budget. Past the ceiling we serve only what's cached (no error) so
-    // the app keeps its last-known prices. ---
+    // daily budget AND the provider's per-minute credit allowance. Past either
+    // ceiling we serve what we have and report the rest as `pending` so the
+    // client can tell the user prices are minutes away (the cron warmer or a
+    // retry picks them up) rather than silently missing. ---
+    let pending: string[] = [];
     if (stale.length > 0) {
       const dayKey = `upstream:${today}`;
       const usedToday = Number(await env.QUOTES.get(dayKey)) || 0;
       const remaining = DAILY_UPSTREAM_SYMBOL_BUDGET - usedToday;
-      const toFetch = remaining > 0 ? stale.slice(0, remaining) : [];
+      const toFetch =
+        remaining > 0
+          ? stale.slice(0, Math.min(remaining, UPSTREAM_MINUTE_BATCH_LIMIT))
+          : [];
+      pending = stale.slice(toFetch.length);
 
       if (toFetch.length > 0) {
         try {
@@ -208,12 +297,18 @@ export default {
           if (Object.keys(quotes).length === 0) {
             return json({ error: "upstream_unavailable" }, 502);
           }
+          // Partial-from-cache: the batch we attempted is retryable too.
+          pending = [...toFetch, ...pending];
         }
       }
     }
 
-    // Consume the per-device daily budget once we've served something.
-    if (throttleKey) {
+    // Consume the per-device daily budget - but only when this response
+    // covered every stale symbol. If the minute cap (or daily budget) forced
+    // us to leave some pending, the device may retry after the warmer fills
+    // the gap instead of eating a 429 until tomorrow. The burst limit + per-IP
+    // daily cap still bound how hard an un-throttled device can retry.
+    if (throttleKey && pending.length === 0) {
       await env.QUOTES.put(throttleKey, "1", { expirationTtl: THROTTLE_TTL_SECONDS });
     }
     // Charge this source's daily request budget (best-effort; KV has no atomic
@@ -224,15 +319,99 @@ export default {
       });
     }
 
-    // Cache the served response for the next identical request (no-op on
-    // workers.dev; offloads KV/upstream on a custom domain).
-    const response = json({ quotes }, 200, {
-      "cache-control": `public, max-age=${EDGE_CACHE_TTL_SECONDS}`,
-    });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    // Cache the served response for the next identical request - but only a
+    // COMPLETE one. Edge-caching a partial answer would keep serving the same
+    // gaps for the cache window and defeat the retry the `pending` field
+    // invites. (No-op on workers.dev; offloads KV/upstream on a custom domain.)
+    // `no-store` on partials also stops the CLIENT's HTTP cache from replaying
+    // the same gaps on a quick retry - RN's fetch honors cache-control.
+    const response = json(
+      pending.length > 0 ? { quotes, pending } : { quotes },
+      200,
+      pending.length > 0
+        ? { "cache-control": "no-store" }
+        : { "cache-control": `public, max-age=${EDGE_CACHE_TTL_SECONDS}` }
+    );
+    if (pending.length === 0) {
+      ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    }
     return response;
   },
+
+  /**
+   * Cron warmer (see `crons` in wrangler.toml): keeps every registered symbol
+   * priced in KV so user requests are pure cache reads. Each pass fetches at
+   * most UPSTREAM_MINUTE_BATCH_LIMIT symbols, so the free-tier per-minute cap
+   * can never reject a batch no matter how large a portfolio grows - the cap
+   * that used to hard-fail any request with >8 stale symbols.
+   */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(warmQuoteCache(env));
+  },
 };
+
+/**
+ * Negative cache for symbols the provider couldn't price (typos, delistings,
+ * unsupported instruments). Without it the warmer would retry a dead symbol
+ * every pass and drain the daily budget; with it, one attempt per day.
+ */
+const missKey = (symbol: string): string => `miss:${CACHE_VERSION}:${symbol}`;
+const MISS_TTL_SECONDS = 24 * 60 * 60;
+
+async function warmQuoteCache(env: Env): Promise<void> {
+  const now = Date.now();
+  // In-memory prune only - idle symbols stop being warmed immediately; the
+  // stored registry shrinks on the next request-path write.
+  const registry = pruneRegistry(await readRegistry(env), now);
+  const symbols = Object.keys(registry);
+  if (symbols.length === 0) return;
+
+  // A symbol needs warming when it has neither a live quote nor a recent
+  // failed attempt. KV reads per pass stay ~2x registry size, comfortably
+  // inside the free-tier read quota at the registry cap and 5-min cadence.
+  const stale: string[] = [];
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      if (await env.QUOTES.get(quoteKey(symbol))) return;
+      if (await env.QUOTES.get(missKey(symbol))) return;
+      stale.push(symbol);
+    })
+  );
+  if (stale.length === 0) return;
+
+  const today = new Date(now).toISOString().slice(0, 10);
+  const dayKey = `upstream:${today}`;
+  const usedToday = Number(await env.QUOTES.get(dayKey)) || 0;
+  const remaining = DAILY_UPSTREAM_SYMBOL_BUDGET - usedToday;
+  const toFetch =
+    remaining > 0
+      ? stale.slice(0, Math.min(remaining, UPSTREAM_MINUTE_BATCH_LIMIT))
+      : [];
+  if (toFetch.length === 0) return;
+
+  try {
+    const fetched = await fetchFromTwelveData(toFetch, env.TWELVE_DATA_API_KEY);
+    const asOf = new Date(now).toISOString();
+    await Promise.all(
+      toFetch.map(async (symbol) => {
+        const price = fetched[symbol];
+        if (Number.isFinite(price)) {
+          const record: CachedQuote = { price, asOf };
+          await env.QUOTES.put(quoteKey(symbol), JSON.stringify(record), {
+            expirationTtl: QUOTE_TTL_SECONDS,
+          });
+        } else {
+          await env.QUOTES.put(missKey(symbol), "1", { expirationTtl: MISS_TTL_SECONDS });
+        }
+      })
+    );
+    await env.QUOTES.put(dayKey, String(usedToday + toFetch.length), {
+      expirationTtl: DAILY_COUNTER_TTL_SECONDS,
+    });
+  } catch {
+    // Provider hiccup: leave everything stale and let the next pass retry.
+  }
+}
 
 interface CachedQuote {
   price: number;
