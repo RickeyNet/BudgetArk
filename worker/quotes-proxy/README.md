@@ -59,6 +59,8 @@ Header (required if APP_SHARED_KEY set): x-app-key: <shared app key>
 Header (optional):                       x-device: <stable per-install id>  # enables 1/day throttle
 
 200 -> { "quotes": { "AAPL": { "price": 192.31, "asOf": "2026-06-23T..." }, ... } }
+       # may include "pending": ["SWTSX", ...] - symbols deferred by the
+       # per-minute upstream cap; retry in a few minutes (no throttle consumed)
 400 -> { "error": "no_symbols" }
 404 -> { "error": "not_found" }            # unknown path OR missing/wrong x-app-key
 429 -> { "error": "rate_limited" }         # device already fetched today
@@ -66,12 +68,26 @@ Header (optional):                       x-device: <stable per-install id>  # en
 503 -> { "error": "busy" }                 # per-IP burst / daily cap; retry later
 ```
 
+## Cache warmer
+
+A cron trigger (`*/5 * * * *` in `wrangler.toml`) refetches up to 8
+registered-but-stale symbols per pass, so serving a request never needs an
+upstream batch bigger than Twelve Data's free-tier allowance (8 credits/min,
+1 credit per symbol - the reason a 9+ ticker portfolio used to 502 on every
+refresh). The registry (`symbols:<ver>:registry`) stores symbols and
+last-requested stamps only - no device ids - learned from authorized requests,
+capped at 200 symbols with 30-day retention. Unpriceable symbols
+negative-cache for 24h (`miss:<ver>:<sym>`) so they can't drain the budget.
+
 ## Tuning
 
 In `src/index.ts`:
 - `QUOTE_TTL_SECONDS` — how long a price is cached (default 1 day).
 - `THROTTLE_TTL_SECONDS` — per-device cooldown (default 1 day).
-- `MAX_SYMBOLS` — batch cap (Twelve Data allows 120).
+- `MAX_SYMBOLS` — request batch cap (Twelve Data accepts 120 per call).
+- `UPSTREAM_MINUTE_BATCH_LIMIT` — max symbols fetched upstream per call/cron
+  pass (free tier: 8 credits/minute).
+- `REGISTRY_MAX_SYMBOLS` / `REGISTRY_RETENTION_MS` — warmer registry bounds.
 
 ## Useful commands
 

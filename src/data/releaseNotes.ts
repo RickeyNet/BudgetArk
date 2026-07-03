@@ -7,6 +7,17 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.8.2",
+    title: "Holdings Price Updates Fixed",
+    releasedAt: "2026-07-02",
+    highlights: [
+      "Fixed 'Update prices' silently doing nothing for portfolios with more than 8 tickers. The market data service only allows a few price lookups per minute, and a bigger portfolio tripped that limit invisibly - tapping the button looked dead while every update quietly failed. Prices are now fetched in small batches and kept warm in the background, so any number of holdings updates reliably.",
+      "The Update prices button now tells you what happened. If some tickers are still being fetched, a note under the button says how many and invites you to tap again in a few minutes - the prices already retrieved show right away, and your existing values stay put until fresh ones replace them. Connection problems and already-updated-today now say so instead of doing nothing.",
+      "An explicit tap on Update prices now always makes a real attempt instead of being skipped by a stale timer, and the button hides entirely when all your holdings are manually valued funds with nothing to fetch.",
+      "As before, only your ticker symbols ever leave your device - the background warming happens on the server and adds nothing new from your phone.",
+    ],
+  },
+  {
     version: "1.8.1",
     title: "Daily Holdings Prices + Fixes",
     releasedAt: "2026-06-29",
