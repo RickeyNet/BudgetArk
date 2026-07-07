@@ -67,6 +67,10 @@ const entryFixtures = [
   // Recurring entry: the exporter projects copies across months; the importer
   // must drop those projections and keep exactly the original row.
   { id: "e3", type: "expense", category: "Housing", amount: 1200, date: "2026-01-01", recurring: true, createdAt: "2026-01-01T00:00:00.000Z" },
+  // Bank-imported entry: Source/ExternalTxId/Merchant must round-trip -
+  // externalTxId is the connections-sync dedup identity, so losing it on a
+  // backup/restore cycle would re-offer every approved transaction.
+  { id: "e4", type: "expense", category: "Grocery", amount: 82.14, date: "2026-06-03", createdAt: "2026-06-03T00:00:00.000Z", source: "bank", externalTxId: "simplefin:ACT-1:TXN-99", merchant: "COSTCO WHSE" },
 ];
 const holdingsFixtures = [
   { id: "h1", symbol: "AAPL", shares: 10, costBasis: 1500, createdAt: "2026-05-01T00:00:00.000Z", updatedAt: "2026-05-02T00:00:00.000Z" },
@@ -131,12 +135,21 @@ describe("xlsx round-trip", () => {
 
     const payload = lastPayload();
 
-    // Entries: e1, e2, e3 survive; the recurring projections of e3 are dropped.
+    // Entries: e1-e4 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4"]);
     expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
     expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
     expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
+    // Bank provenance columns round-trip intact.
+    expect(byId.e4).toMatchObject({
+      source: "bank",
+      externalTxId: "simplefin:ACT-1:TXN-99",
+      merchant: "COSTCO WHSE",
+    });
+    // Manual entries never grow provenance fields on the way through.
+    expect(byId.e1.source).toBeUndefined();
+    expect(byId.e1.externalTxId).toBeUndefined();
     // Date asserted at month granularity: SheetJS shifts Excel date serials by
     // the test runner's TZ offset on round-trip. The app pins dates to local
     // noon (±12h slack), so on-device the calendar date is preserved; the
@@ -175,8 +188,13 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4"]);
     expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
+    expect(byId.e4).toMatchObject({
+      source: "bank",
+      externalTxId: "simplefin:ACT-1:TXN-99",
+      merchant: "COSTCO WHSE",
+    });
     expect(result?.skippedRows).toBe(0);
   });
 });

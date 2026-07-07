@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -11,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
@@ -19,6 +20,8 @@ import BudgetBucketCard from "../components/BudgetBucketCard";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
+import ReviewInboxModal from "../components/ReviewInboxModal";
+import { useConnections } from "../connections/ConnectionsProvider";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import BillCalendarModal from "../components/BillCalendarModal";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
@@ -228,6 +231,7 @@ const CATEGORY_CHART_PALETTE = [
 
 const BudgetScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+  const route = useRoute<RouteProp<RootTabParamList, "Budget">>();
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
@@ -256,6 +260,7 @@ const BudgetScreen: React.FC = () => {
     () => customCategories.map((c) => c.name),
     [customCategories]
   );
+  const { connections, pendingCount } = useConnections();
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -267,6 +272,7 @@ const BudgetScreen: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
   const [showBillCalendar, setShowBillCalendar] = useState(false);
+  const [showReviewInbox, setShowReviewInbox] = useState(false);
   const [limitModalCategory, setLimitModalCategory] = useState<CategoryName | null>(null);
   const [limitInput, setLimitInput] = useState("");
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
@@ -821,6 +827,28 @@ const BudgetScreen: React.FC = () => {
     void notifyAchievementCheck();
   }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
+  /**
+   * Reload entries after Review Inbox approvals - they're written by
+   * reviewInboxService (entry -> ledger -> inbox order), not through this
+   * screen's local state, so re-read storage and refresh the derived views.
+   */
+  const reloadAfterInboxChange = useCallback(async () => {
+    const storedEntries = await getBudgetEntries();
+    setEntries(storedEntries);
+    await Promise.all([
+      refreshNetWorthSnapshots(),
+      refreshMonthlyReview(storedEntries),
+    ]);
+    void notifyAchievementCheck();
+  }, [notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
+
+  // Profile's "Review Inbox" row navigates here with openInbox set.
+  useEffect(() => {
+    if (!route.params?.openInbox) return;
+    setShowReviewInbox(true);
+    navigation.setParams({ openInbox: undefined });
+  }, [navigation, route.params?.openInbox]);
+
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
     setEditingEntry(found);
@@ -1322,6 +1350,23 @@ const BudgetScreen: React.FC = () => {
         >
           <Text style={styles.calendarIconGlyph}>📅</Text>
         </TouchableOpacity>
+        {connections.length > 0 || pendingCount > 0 ? (
+          <TouchableOpacity
+            style={styles.inboxIconBtn}
+            onPress={() => setShowReviewInbox(true)}
+            activeOpacity={0.7}
+            accessibilityLabel={`Review inbox, ${pendingCount} waiting`}
+          >
+            <Text style={styles.calendarIconGlyph}>📥</Text>
+            {pendingCount > 0 ? (
+              <View style={styles.inboxBadge}>
+                <Text style={styles.inboxBadgeText}>
+                  {pendingCount > 99 ? "99+" : pendingCount}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.monthPillRow}>
@@ -1900,6 +1945,13 @@ const BudgetScreen: React.FC = () => {
         customCategories={customCategories}
       />
 
+      <ReviewInboxModal
+        visible={showReviewInbox}
+        onClose={() => setShowReviewInbox(false)}
+        customCategories={customCategories}
+        onChanged={reloadAfterInboxChange}
+      />
+
       <MonthlyReviewModal
         visible={showReviewModal}
         onClose={() => setShowReviewModal(false)}
@@ -2190,6 +2242,36 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       backgroundColor: colors.card,
       alignItems: "center",
       justifyContent: "center",
+    },
+    inboxIconBtn: {
+      position: "absolute",
+      top: 50,
+      left: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    inboxBadge: {
+      position: "absolute",
+      top: -6,
+      right: -6,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      paddingHorizontal: 4,
+      backgroundColor: colors.accent,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    inboxBadgeText: {
+      color: colors.white,
+      fontSize: 10,
+      fontWeight: "700",
     },
     calendarIconGlyph: {
       fontSize: 20,

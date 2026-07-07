@@ -241,6 +241,25 @@ export interface BudgetEntry {
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
   lastAppliedMonth?: string;
+  /**
+   * "bank" when this entry was created by approving a bank-imported
+   * transaction from the connections Review Inbox. Absent = manual entry.
+   */
+  source?: "bank";
+  /**
+   * Global dedup identity of the source bank transaction:
+   * `${provider}:${externalAccountId}:${providerTxId}`. Deliberately NOT
+   * connection-scoped - it survives export/import, rides P2P sync, and lets
+   * a partner device that connects to the SAME institution dedupe against
+   * entries this device already approved.
+   */
+  externalTxId?: string;
+  /**
+   * Normalized merchant key captured at approval time (see
+   * services/connections/merchant.ts). Feeds merchant-rule creation when the
+   * user later recategorizes the entry.
+   */
+  merchant?: string;
   /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
@@ -441,6 +460,171 @@ export interface HoldingsSettings {
    */
   disclosureAcknowledged: boolean;
 }
+
+/* ─── Bank Connection Types (per-device; NEVER synced, NEVER exported) ─── */
+
+/**
+ * External financial-data providers a user can connect with their OWN
+ * credentials (BYO API). Credentials stay on this device: they are excluded
+ * from export/import and from the P2P sync diff by design.
+ */
+export type BankProvider = "simplefin" | "schwab" | "teller";
+
+export const BANK_PROVIDER_LABELS: Record<BankProvider, string> = {
+  simplefin: "SimpleFIN",
+  schwab: "Charles Schwab",
+  teller: "Teller",
+};
+
+export type ConnectionAuthStatus = "ok" | "needs-reauth" | "error";
+
+/**
+ * Coarse error classification surfaced on a connection after a failed sync.
+ * Mirrors services/connections/types.ts ConnectionErrorCode - duplicated as a
+ * string union here so the types module stays dependency-free.
+ */
+export type ConnectionErrorCode =
+  | "auth-expired"
+  | "invalid-credentials"
+  | "rate-limited"
+  | "network"
+  | "provider-error";
+
+/**
+ * Non-secret metadata for one provider connection. Secrets (tokens, keys,
+ * access URLs) live under a separate storage key - see
+ * storage/connectionSecretsStorage.ts - so this record can flow through UI
+ * state without ever touching credential material.
+ */
+export interface BankConnection {
+  id: string;
+  provider: BankProvider;
+  /** User-facing label, e.g. "SimpleFIN - Chase". */
+  name: string;
+  /** User pause switch; disabled connections never fetch. */
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** ISO timestamp of the last SUCCESSFUL sync (drives the fetch window). */
+  lastSyncedAt?: string;
+  /** ISO timestamp of the last attempt, success or not (drives cooldowns). */
+  lastAttemptAt?: string;
+  authStatus: ConnectionAuthStatus;
+  lastErrorCode?: ConnectionErrorCode;
+  /** Short human-readable summary of the last error, for the UI. */
+  lastErrorMessage?: string;
+}
+
+/**
+ * Maps one provider-side account to (optionally) a local AssetAccount.
+ * Per-device, like its parent connection.
+ */
+export interface ExternalAccountLink {
+  id: string;
+  connectionId: string;
+  /** SimpleFIN account.id | Schwab account hashValue | Teller account id. */
+  externalAccountId: string;
+  /** Provider display name, for the mapping UI. */
+  externalName: string;
+  currency?: string;
+  /** Balance target; null = user chose not to map this account. */
+  assetAccountId: string | null;
+  /** Per-account toggle: pull transactions into the Review Inbox. */
+  importTransactions: boolean;
+  /** Per-account toggle: push provider balance into the mapped AssetAccount. */
+  updateBalance: boolean;
+  /**
+   * Raw provider balance (may be negative - overdraft/margin), display only.
+   * The value applied to the AssetAccount is clamped at 0 because
+   * isAssetAccountItem requires balance >= 0.
+   */
+  lastExternalBalance?: number;
+  lastExternalBalanceAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * One Review Inbox item: a fetched bank transaction awaiting user approval.
+ * `id` IS the deterministic identity key
+ * `${provider}:${externalAccountId}:${providerTxId}` (see
+ * services/connections/ingest.ts) - approved/dismissed items leave the inbox
+ * and are remembered by the ingest ledger under the same key.
+ */
+export interface PendingTransaction {
+  id: string;
+  connectionId: string;
+  externalAccountId: string;
+  providerTxId: string;
+  /** Provider still marks the transaction as pending (not yet posted). */
+  pending: boolean;
+  /** ISO date the transaction posted (or transacted, while pending). */
+  postedAt: string;
+  /** SIGNED dollars, normalized across providers: negative = outflow. */
+  amount: number;
+  /** Raw provider description, sanitized and capped. */
+  description: string;
+  /** normalizeMerchant(description) - the merchant-rule matching key. */
+  merchant: string;
+  /** Sign-derived suggestion: outflow = expense, inflow = income. */
+  suggestedType: BudgetEntryType;
+  /** From a matched MerchantRule, else undefined. */
+  suggestedCategory?: CategoryName;
+  /** Heuristic: likely an inter-account transfer. Flag only - never dropped. */
+  transferLikely?: boolean;
+  fetchedAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Remembered merchant -> category mapping, created when the user approves an
+ * inbox item with "always use this category". Unique on `merchantKey`.
+ */
+export interface MerchantRule {
+  id: string;
+  merchantKey: string;
+  category: CategoryName;
+  type: BudgetEntryType;
+  useCount: number;
+  lastUsedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Per-device consent state for Bank Connections. Mirrors HoldingsSettings:
+ * the disclosure is shown once before the first connection is added.
+ */
+export interface ConnectionsSettings {
+  disclosureAcknowledged: boolean;
+}
+
+/**
+ * One ingest-ledger decision: remembers that a fetched bank transaction
+ * (keyed by its identity key) was approved or dismissed, so overlapping
+ * re-fetches and reconnects never re-offer it. See
+ * storage/reviewInboxStorage.ts for persistence and TTL pruning.
+ */
+export interface IngestLedgerEntry {
+  status: "approved" | "dismissed";
+  /** Set when status is "approved" - the BudgetEntry created from this tx. */
+  budgetEntryId?: string;
+  /** ISO timestamp the decision was made (drives TTL pruning). */
+  at: string;
+  /**
+   * When a provider changed a transaction's id between pending and posted,
+   * the new id's ledger entry points at the original identity key.
+   */
+  aliasOf?: string;
+  /**
+   * Dedup fingerprint `${externalAccountId}|${amount}|${YYYY-MM-DD}` captured
+   * when the decided transaction was still pending - lets the ingest planner
+   * recognize the posted twin even if the provider changed its id.
+   */
+  pendingFingerprint?: string;
+}
+
+export type IngestLedger = Record<string, IngestLedgerEntry>;
 
 /* ─── Currency + Localization Types ─── */
 
@@ -854,7 +1038,10 @@ export const LEARNING_STORAGE_VERSION = 1;
  */
 export type RootTabParamList = {
   DebtTracker: undefined;
-  Budget: undefined;
+  Budget: {
+    /** When true, the Budget screen opens the connections Review Inbox on focus. */
+    openInbox?: boolean;
+  } | undefined;
   Bridge: undefined;
   Utilities: undefined;
   Profile: {

@@ -351,6 +351,16 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     ? lastAppliedRaw
     : undefined;
 
+  // Bank-connection provenance. ExternalTxId is the dedup identity of a
+  // bank-imported transaction: dropping it on a backup/restore cycle makes
+  // the next connections sync re-offer already-approved transactions, so it
+  // is round-tripped like LastAppliedMonth. Bounds mirror isBudgetEntryItem.
+  const sourceRaw = parseString(get(row, "Source"), 10).toLowerCase();
+  const source = sourceRaw === "bank" ? ("bank" as const) : undefined;
+  const externalTxId =
+    parseString(get(row, "ExternalTxId", "External Tx Id"), 200) || undefined;
+  const merchant = parseString(get(row, "Merchant"), 120) || undefined;
+
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
   // they're missing or unparseable, fall back to `now` - but prefer carrying
@@ -380,6 +390,9 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     paymentUrl,
     linkedAccountId: linkedAccountId || undefined,
     lastAppliedMonth,
+    source,
+    externalTxId,
+    merchant,
   });
 };
 

@@ -127,6 +127,13 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getDebtDueDismissals(),
   ]);
 
+  // Bank-connection data (connections, credentials/secrets, account links,
+  // the review inbox, the ingest ledger, merchant rules) is INTENTIONALLY
+  // excluded from exports: it's per-device and credential-adjacent. The
+  // BudgetEntry provenance fields (source/externalTxId/merchant) ride along
+  // inside `budgetEntries` - that's the only bank-related data that leaves
+  // the device. A regression test in __tests__/exportData.test.ts enforces
+  // this.
   const exportPayload = {
     exportedAt: new Date().toISOString(),
     appVersion: CURRENT_APP_VERSION,

@@ -92,6 +92,17 @@ export interface BudgetLimitDiff {
   limits: CategoryBudgetLimit[];
 }
 
+/**
+ * Bank-connection data is DELIBERATELY absent from SyncDiff (v1):
+ * connections, credentials/secrets, external-account links, the Review
+ * Inbox, and the ingest ledger are per-device - connection ids mean nothing
+ * on a partner device and everything in that set is credential-adjacent.
+ * Cross-device transaction dedup rides on BudgetEntry.externalTxId, which
+ * syncs inside `budgetEntries` like any other entry field. Merchant rules
+ * (no credentials, tiny) are the one candidate for a future optional
+ * `merchantRules?: DiffEntry<MerchantRule>[]` field - they'd need a
+ * tombstone added first.
+ */
 export interface SyncDiff {
   debts: DiffEntry<Debt>[];
   payments: DiffEntry<Payment>[];

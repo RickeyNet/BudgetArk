@@ -172,6 +172,42 @@ describe("isBudgetEntryItem", () => {
       isBudgetEntryItem({ ...valid, description: "a".repeat(221) })
     ).toBe(false);
   });
+
+  describe("bank-connection provenance fields", () => {
+    it("accepts a bank-sourced entry with externalTxId and merchant", () => {
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          source: "bank",
+          externalTxId: "simplefin:ACT-123:TXN-456",
+          merchant: "COSTCO WHOLESALE",
+        })
+      ).toBe(true);
+    });
+
+    it("accepts entries without any provenance fields (manual entries)", () => {
+      expect(isBudgetEntryItem(valid)).toBe(true);
+    });
+
+    it("rejects an unknown source value", () => {
+      expect(isBudgetEntryItem({ ...valid, source: "plaid" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, source: 1 })).toBe(false);
+    });
+
+    it("rejects an empty or oversized externalTxId", () => {
+      expect(isBudgetEntryItem({ ...valid, externalTxId: "" })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, externalTxId: "a".repeat(201) })
+      ).toBe(false);
+    });
+
+    it("rejects an empty or oversized merchant", () => {
+      expect(isBudgetEntryItem({ ...valid, merchant: "   " })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, merchant: "a".repeat(121) })
+      ).toBe(false);
+    });
+  });
 });
 
 describe("explainBudgetEntryProblem", () => {
@@ -187,6 +223,26 @@ describe("explainBudgetEntryProblem", () => {
       amount: "12.5",
     });
     expect(msg).toContain("quoted string");
+  });
+
+  it("explains bad bank-provenance fields (lockstep with isBudgetEntryItem)", () => {
+    const base = {
+      id: "e1",
+      type: "expense",
+      category: "Food",
+      amount: 12.5,
+      date: "2026-06-01",
+      createdAt: "2026-06-01",
+    };
+    expect(explainBudgetEntryProblem({ ...base, source: "plaid" })).toContain(
+      '"source"'
+    );
+    expect(
+      explainBudgetEntryProblem({ ...base, externalTxId: "a".repeat(201) })
+    ).toContain('"externalTxId"');
+    expect(explainBudgetEntryProblem({ ...base, merchant: "" })).toContain(
+      '"merchant"'
+    );
   });
 });
 

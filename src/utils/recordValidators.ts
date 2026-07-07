@@ -160,6 +160,13 @@ export const isBudgetEntryItem = (
 
   const paymentUrlValid = isAcceptablePaymentUrl(item.paymentUrl);
 
+  // Bank-connection provenance fields (all optional; see BudgetEntry docs).
+  const sourceValid = item.source === undefined || item.source === "bank";
+  const externalTxIdValid =
+    item.externalTxId === undefined || isSafeText(item.externalTxId, 200);
+  const merchantValid =
+    item.merchant === undefined || isSafeText(item.merchant, 120);
+
   return (
     isSafeText(item.id) &&
     typeValid &&
@@ -167,6 +174,9 @@ export const isBudgetEntryItem = (
     amountValid &&
     descriptionValid &&
     paymentUrlValid &&
+    sourceValid &&
+    externalTxIdValid &&
+    merchantValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
@@ -218,6 +228,15 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   }
   if (!isAcceptablePaymentUrl(item.paymentUrl)) {
     return '"paymentUrl" must be a valid https URL';
+  }
+  if (item.source !== undefined && item.source !== "bank") {
+    return '"source" must be exactly "bank" when present';
+  }
+  if (item.externalTxId !== undefined && !isSafeText(item.externalTxId, 200)) {
+    return '"externalTxId" must be a non-empty string of at most 200 characters when present';
+  }
+  if (item.merchant !== undefined && !isSafeText(item.merchant, 120)) {
+    return '"merchant" must be a non-empty string of at most 120 characters when present';
   }
   if (!isValidDateValue(item.date)) {
     return '"date" must be a parseable date string (e.g. "2026-06-12")';

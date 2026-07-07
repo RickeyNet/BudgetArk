@@ -141,6 +141,21 @@ import {
   HOLDINGS_DISCLOSURE_INTRO,
   HOLDINGS_DISCLOSURE_POINTS,
 } from "../data/holdingsDisclosure";
+import {
+  CONNECTIONS_DISCLOSURE_TITLE,
+  CONNECTIONS_DISCLOSURE_INTRO,
+  CONNECTIONS_DISCLOSURE_POINTS,
+} from "../data/connectionsDisclosure";
+import {
+  getConnectionsSettings,
+  acknowledgeConnectionsDisclosure,
+} from "../storage/connectionsSettingsStorage";
+import { useConnections } from "../connections/ConnectionsProvider";
+import ConnectionsModal from "../components/ConnectionsModal";
+import AddConnectionModal from "../components/AddConnectionModal";
+import { startConnectionsMonitoring } from "../services/connections/connectionsSyncService";
+import { getAssetAccounts } from "../storage/assetAccountStorage";
+import type { AssetAccount } from "../types";
 
 type UpdateMetadata = {
   id: string;
@@ -344,6 +359,27 @@ const ProfileScreen: React.FC = () => {
     disclosureAcknowledged: false,
   });
   const [showHoldingsDisclosure, setShowHoldingsDisclosure] = useState(false);
+
+  /** Bank Connections (BYO API): modals + first-use disclosure. */
+  const {
+    connections,
+    pendingCount,
+    needsAttention,
+    refresh: refreshConnections,
+    syncNow: syncConnectionsNow,
+  } = useConnections();
+  const [connectionsDisclosureAcked, setConnectionsDisclosureAcked] =
+    useState(false);
+  const [showConnectionsDisclosure, setShowConnectionsDisclosure] =
+    useState(false);
+  const [showConnectionsModal, setShowConnectionsModal] = useState(false);
+  const [showAddConnection, setShowAddConnection] = useState(false);
+  const [reauthConnectionId, setReauthConnectionId] = useState<
+    string | undefined
+  >(undefined);
+  const [wizardAssetAccounts, setWizardAssetAccounts] = useState<
+    AssetAccount[]
+  >([]);
 
   /** Partner sync state */
   const [pairing, setPairing] = useState<PairingState | null>(null);
@@ -727,6 +763,50 @@ const ProfileScreen: React.FC = () => {
         "Add stocks and ETFs from the Bridge tab. Prices refresh about once a day.",
     });
   }, []);
+
+  /* ── Bank Connections handlers ── */
+
+  useEffect(() => {
+    void getConnectionsSettings().then((settings) =>
+      setConnectionsDisclosureAcked(settings.disclosureAcknowledged),
+    );
+    // Foreground auto-sync trigger for bank connections (idempotent; the
+    // service enforces per-connection cooldowns, so this is cheap).
+    startConnectionsMonitoring();
+  }, []);
+
+  const openConnections = useCallback(() => {
+    if (connectionsDisclosureAcked) {
+      setShowConnectionsModal(true);
+    } else {
+      setShowConnectionsDisclosure(true);
+    }
+  }, [connectionsDisclosureAcked]);
+
+  const confirmConnectionsDisclosure = useCallback(async () => {
+    await acknowledgeConnectionsDisclosure();
+    setConnectionsDisclosureAcked(true);
+    setShowConnectionsDisclosure(false);
+    setShowConnectionsModal(true);
+    triggerHaptic("success");
+  }, []);
+
+  const openAddConnection = useCallback(async (reauthId?: string) => {
+    setWizardAssetAccounts(await getAssetAccounts());
+    setReauthConnectionId(reauthId);
+    setShowAddConnection(true);
+  }, []);
+
+  const handleConnectionComplete = useCallback(
+    (connectionId: string) => {
+      setShowAddConnection(false);
+      setReauthConnectionId(undefined);
+      // Populate the Review Inbox right away; failures surface as the
+      // connection's status in the manage list.
+      void syncConnectionsNow(connectionId);
+    },
+    [syncConnectionsNow],
+  );
 
   const togglePrivacyMode = useCallback(async () => {
     const next = !privacyMode;
@@ -2073,6 +2153,82 @@ const ProfileScreen: React.FC = () => {
                 Reset All Data
               </Text>
               <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>
+                →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Bank Connections (BYO API) ── */}
+        <View style={styles.settingsSection}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
+            CONNECTIONS
+          </Text>
+
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <TouchableOpacity style={styles.groupedRow} onPress={openConnections}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Bank Connections
+                </Text>
+                <Text
+                  style={[
+                    styles.settingsRowSubtext,
+                    {
+                      color: needsAttention ? colors.warning : colors.textDim,
+                    },
+                  ]}
+                >
+                  {needsAttention
+                    ? "Needs attention"
+                    : connections.length === 0
+                      ? "Import transactions from your bank"
+                      : `${connections.length} connected`}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.settingsRowArrow,
+                  { color: needsAttention ? colors.warning : colors.textDim },
+                ]}
+              >
+                {needsAttention ? "!" : "→"}
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => navigation.navigate("Budget", { openInbox: true })}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Review Inbox
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  {pendingCount > 0
+                    ? `${pendingCount} transaction${pendingCount === 1 ? "" : "s"} waiting`
+                    : "Nothing to review"}
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
                 →
               </Text>
             </TouchableOpacity>
@@ -4101,6 +4257,78 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Bank Connections first-use disclosure ── */}
+      <Modal
+        visible={showConnectionsDisclosure}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowConnectionsDisclosure(false)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              {CONNECTIONS_DISCLOSURE_TITLE}
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {CONNECTIONS_DISCLOSURE_INTRO}
+            </Text>
+            {CONNECTIONS_DISCLOSURE_POINTS.map((point) => (
+              <Text
+                key={point}
+                style={[
+                  styles.dialogMessage,
+                  { color: colors.textDim, textAlign: "left", marginBottom: 10 },
+                ]}
+              >
+                • {point}
+              </Text>
+            ))}
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setShowConnectionsDisclosure(false)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Not now
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmConnectionsDisclosure}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Continue
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Bank Connections manager + wizard ── */}
+      <ConnectionsModal
+        visible={showConnectionsModal}
+        onClose={() => setShowConnectionsModal(false)}
+        onAddConnection={() => void openAddConnection()}
+        onReauth={(connectionId) => void openAddConnection(connectionId)}
+      />
+      <AddConnectionModal
+        visible={showAddConnection}
+        onClose={() => {
+          setShowAddConnection(false);
+          setReauthConnectionId(undefined);
+          void refreshConnections();
+        }}
+        onComplete={handleConnectionComplete}
+        assetAccounts={wizardAssetAccounts}
+        reauthConnectionId={reauthConnectionId}
+      />
 
       {/* ── Ship's Log (achievements) ── */}
       <AchievementsScreen

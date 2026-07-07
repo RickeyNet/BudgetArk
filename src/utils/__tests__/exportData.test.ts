@@ -43,6 +43,21 @@ const fixtures = {
       date: "2026-03-01",
       createdAt: "2026-03-01T00:00:00.000Z",
     },
+    // A bank-imported entry: its provenance fields must survive the export
+    // round-trip (externalTxId is the connections-sync dedup identity).
+    {
+      id: "e2",
+      type: "expense",
+      category: "Grocery",
+      amount: 82.14,
+      description: "COSTCO WHSE #1234",
+      date: "2026-03-02",
+      createdAt: "2026-03-02T00:00:00.000Z",
+      updatedAt: "2026-03-02T00:00:00.000Z",
+      source: "bank",
+      externalTxId: "simplefin:ACT-1:TXN-99",
+      merchant: "COSTCO WHSE",
+    },
   ],
   holdings: [
     {
@@ -159,7 +174,7 @@ describe("buildExportMessage - plain JSON", () => {
     });
     expect(payload.debts).toHaveLength(1);
     expect(payload.payments).toHaveLength(1);
-    expect(payload.budgetEntries).toHaveLength(1);
+    expect(payload.budgetEntries).toHaveLength(2);
     expect(payload.holdings).toHaveLength(1);
     expect(payload.holdings[0]).toMatchObject({ symbol: "AAPL", shares: 10 });
     expect(typeof payload.exportedAt).toBe("string");
@@ -171,9 +186,41 @@ describe("buildExportMessage - plain JSON", () => {
     const result = await importFromString(message, "replace");
     expect(result.debts).toBe(1);
     expect(result.payments).toBe(1);
-    expect(result.budgetEntries).toBe(1);
+    expect(result.budgetEntries).toBe(2);
     expect(result.holdings).toBe(1);
     expect(result.payoffStrategy).toBe(true);
+  });
+
+  it("carries bank-entry provenance fields through the round-trip", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    expect(payload.budgetEntries[1]).toMatchObject({
+      source: "bank",
+      externalTxId: "simplefin:ACT-1:TXN-99",
+      merchant: "COSTCO WHSE",
+    });
+
+    await importFromString(message, "replace");
+    const stored = JSON.parse(
+      storageMock.__store.get("@budgetark_budget_entries") ?? "[]",
+    );
+    const bankEntry = stored.find((e: { id: string }) => e.id === "e2");
+    expect(bankEntry).toMatchObject({
+      source: "bank",
+      externalTxId: "simplefin:ACT-1:TXN-99",
+      merchant: "COSTCO WHSE",
+    });
+  });
+
+  it("never exports connection collections, credentials, or inbox data", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    // Regression fence for the never-export rule (see exportData.ts comment):
+    // no top-level key may reference the per-device bank-connection stores.
+    const forbidden = /connection|secret|pendingtransaction|merchantrule|ingestledger|accountlink/i;
+    for (const key of Object.keys(payload)) {
+      expect(key).not.toMatch(forbidden);
+    }
   });
 });
 
@@ -195,7 +242,7 @@ describe("buildExportMessage - encrypted", () => {
   it("decrypts and imports with the correct password", async () => {
     const result = await importFromString(encrypted, "replace", "hunter2");
     expect(result.debts).toBe(1);
-    expect(result.budgetEntries).toBe(1);
+    expect(result.budgetEntries).toBe(2);
   });
 
   it("fails to import with the wrong password", async () => {

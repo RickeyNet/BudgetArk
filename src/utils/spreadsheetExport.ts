@@ -96,6 +96,14 @@ const BUDGET_ENTRY_COLUMNS = [
   // start and today. Round-tripping this column is therefore required for
   // data integrity, not just convenience.
   "LastAppliedMonth",
+  // Bank-connection provenance. ExternalTxId is the dedup identity of an
+  // imported bank transaction - if it's stripped on a backup/restore cycle,
+  // the next connections sync re-offers every transaction the user already
+  // approved. Round-tripping these three columns is data integrity, not
+  // convenience. Blank for manual entries.
+  "Source",
+  "ExternalTxId",
+  "Merchant",
   // ISO timestamp the entry was created. Round-tripped so re-importing an
   // exported file doesn't reset history.
   "CreatedAt",
@@ -237,6 +245,9 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
   PaymentUrl: entry.paymentUrl ?? "",
   LinkedAccountId: entry.linkedAccountId ?? "",
   LastAppliedMonth: entry.lastAppliedMonth ?? "",
+  Source: entry.source ?? "",
+  ExternalTxId: entry.externalTxId ?? "",
+  Merchant: entry.merchant ?? "",
   CreatedAt: entry.createdAt ?? "",
   UpdatedAt: entry.updatedAt ?? "",
 });

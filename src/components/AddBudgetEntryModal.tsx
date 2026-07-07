@@ -12,9 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  BUDGET_CATEGORIES,
   BudgetEntryType,
-  BudgetCategory,
   CategoryName,
   CustomCategory,
   DEFAULT_RECURRENCE_INTERVAL,
@@ -25,7 +23,7 @@ import {
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
-import { getCategoryIcon } from "../data/categoryIcons";
+import CategoryPillPicker from "./CategoryPillPicker";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
@@ -103,13 +101,6 @@ const buildEntryDateISO = (yearMonth: string, day: number): string => {
   return `${yearMonth}-${dd}T12:00:00.000Z`;
 };
 
-const SELECTABLE_BUDGET_CATEGORIES: BudgetCategory[] = BUDGET_CATEGORIES.filter(
-  (category) =>
-    category !== "Freelance" &&
-    category !== "Debt Payments" &&
-    category !== "Food"
-) as BudgetCategory[];
-
 const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   visible,
   onClose,
@@ -120,14 +111,6 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-
-  const selectableCategories = useMemo<CategoryName[]>(
-    () => [
-      ...SELECTABLE_BUDGET_CATEGORIES,
-      ...customCategories.map((c) => c.name),
-    ],
-    [customCategories]
-  );
 
   const [type, setType] = useState<BudgetEntryType>("expense");
   const [category, setCategory] = useState<CategoryName>("Grocery");
@@ -302,27 +285,11 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
 
             <View style={styles.field}>
               <Text style={styles.label}>CATEGORY</Text>
-              <View style={styles.categoryWrap}>
-                {selectableCategories.map((item) => (
-                  <TouchableOpacity
-                    key={item}
-                    style={[
-                      styles.categoryPill,
-                      category === item && styles.categoryPillActive,
-                    ]}
-                    onPress={() => setCategory(item)}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryPillText,
-                        category === item && styles.categoryPillTextActive,
-                      ]}
-                    >
-                      {getCategoryIcon(item, customCategories)} {item}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <CategoryPillPicker
+                value={category}
+                onChange={setCategory}
+                customCategories={customCategories}
+              />
             </View>
 
             <View style={styles.field}>

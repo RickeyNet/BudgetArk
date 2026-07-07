@@ -37,6 +37,7 @@ import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
 import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
 import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
 import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvider";
+import { ConnectionsProvider } from "./src/connections/ConnectionsProvider";
 import { UndoProvider } from "./src/undo/UndoProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import {
@@ -447,9 +448,11 @@ export default function App(): React.JSX.Element {
                     <CoachmarkAnchorProvider>
                       <AchievementsProvider>
                         <CustomCategoriesProvider>
-                          <UndoProvider>
-                            <AppContent />
-                          </UndoProvider>
+                          <ConnectionsProvider>
+                            <UndoProvider>
+                              <AppContent />
+                            </UndoProvider>
+                          </ConnectionsProvider>
                         </CustomCategoriesProvider>
                       </AchievementsProvider>
                     </CoachmarkAnchorProvider>
