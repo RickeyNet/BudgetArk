@@ -7,6 +7,20 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.8.3",
+    title: "Captain's Course Complete + Debt Payment Fixes",
+    releasedAt: "2026-07-07",
+    highlights: [
+      "The Captain's Course is complete. Chapters 3 (Stocking the Galley - saving), 4 (Catching Wind - investing), and 5 (Charting Far Waters - wealth and beyond) are now fully written, finishing all 5 chapters and 24 lessons - emergency funds, high-yield savings, index funds, retirement accounts, net worth, insurance, and estate basics.",
+      "Lessons that tell you to open an account now name real places to look: SoFi, Robinhood, Fidelity, Charles Schwab, Vanguard, and your local bank or credit union - with what each is good for and what to double-check. Nobody pays BudgetArk to appear; they're simply large, established options.",
+      "The index funds lesson now teaches the expense ratio by name and lists real funds with their actual costs - FXAIX, SWPPX, VOO, and friends - plus a plain-English explainer on how ETFs trade and why they work at any brokerage. Two lessons also recommend the book Unshakeable for going deeper.",
+      "Fixed past months on the Budget screen inventing debt entries: a closed month could show a 'minimum (planned)' row next to the payment you actually made - double counting that month - and raising a debt's minimum could quietly grow months that were already over. Past months now count exactly what you paid, nothing more.",
+      "Fixed 'deleting' a debt payment row on the Budget screen doing nothing while claiming success. Those rows come from the Debts tab, so they can no longer be selected for deletion here - tapping one now tells you to manage it in that debt's payment history, where deleting actually works (and correctly restores the balance).",
+      "The final payment that clears a debt no longer vanishes from the Budget screen - paid-off debts keep their logged payments visible in every month they happened.",
+      "Debt payments logged late in the evening on the last day of a month now count toward the month you actually paid them in, matching how the due-date reminder already counted them.",
+    ],
+  },
+  {
     version: "1.8.2",
     title: "Holdings Price Updates Fixed",
     releasedAt: "2026-07-02",

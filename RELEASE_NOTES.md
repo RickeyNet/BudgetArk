@@ -1,5 +1,22 @@
 # BudgetArk Release Notes
 
+## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
+
+Pure JS - ships OTA against the existing native runtime. No Worker changes.
+
+### Captain's Course: Chapters 3-5
+
+- **All 24 lessons are now written** (`src/data/lessons/`, `lessonChapters.ts`, `lessonIndex.ts`). Chapter 3 "Stocking the Galley" (emergency fund, HYSA, sinking funds, short-term cash), Chapter 4 "Catching Wind" (compounding, index funds, 401(k)/IRA/Roth, asset allocation, big mistakes), Chapter 5 "Charting Far Waters" (net worth, buy vs rent, insurance, estate basics).
+- **Named institutions in account-opening lessons.** ch2-l3, ch3-l2, ch3-l4, ch4-l2, ch4-l3 mention SoFi, Robinhood, Fidelity, Charles Schwab, Vanguard, and local banks/credit unions as plain editorial callouts - each carries a not-sponsored note and the FDIC-vs-SIPC nuance for brokerage money market funds. No affiliate links ship in this release; book cards ("Unshakeable" in ch4-l2/ch4-l3) render info-only until `showAffiliateLinks` + `amazonUrl` light up.
+- **ch4-l2 teaches the expense ratio by name** with real tickers per broker (FXAIX/FSKAX/FZROX, SWPPX/SWTSX, VOO/VTI, SPLG), mutual fund vs ETF wrapper labels, and an ETF trading/portability explainer.
+
+### Budget screen: Debt Payments correctness (`src/screens/BudgetScreen.tsx`)
+
+- **Root cause A - phantom planned rows in past months.** The per-debt baseline (`max(paid, minPayment)`, added with the due-reminder feature) applied to every viewed month, not just the current one. A closed month where logged payments totaled less than the debt's *current* minimum grew a retroactive "minimum (planned)" top-up row - and edits to `minPayment` rewrote history. The plan builder moved to `src/utils/debtPaymentPlan.ts` (`buildDebtPaymentPlanForMonth`, unit-tested): current/future months keep the minimum floor; past months count only recorded payments. Debts paid to zero also stopped dropping their payment rows (the old `activeDebts` filter hid the final payment the moment the balance cleared).
+- **Root cause B - silent no-op deletes.** Debt Payments drilldown rows are synthetic (`payment-<id>`, `debt-min-topup-<id>`, `auto-debt-<id>`), derived from the debt tracker's Payment collection - but the selection guard (`isAutoEntry`) only recognized `auto-debt-`. A `payment-` row could be multi-selected and "deleted": `deleteBudgetEntries` matched nothing in budget storage, the undo toast still said "Deleted 1 entry", and the row re-derived on the next render. All three prefixes are now guarded; tapping a logged-payment row shows an alert pointing at the debt's payment history (where `deletePayment` correctly tombstones and restores the balance).
+- **Root cause C - UTC/local month split.** Budget bucketed payments by the UTC prefix of their ISO timestamp while the due-reminder math bucketed by local month (`hasPaymentInMonth`), so an evening payment on the last day of a month landed in the next month on Budget - one of the ways a re-prompt could double-log. New shared `paymentMonthKey` (`src/utils/debtDueCalendar.ts`): full timestamps bucket by local month, date-only strings keep their stored YYYY-MM prefix. Both consumers use it; budget *entry* dates (noon-UTC, prefix-matched) are untouched.
+- Tests: `src/utils/__tests__/debtPaymentPlan.test.ts` (12 cases - past/current/future month floors, paid-off debt retention, local-month bucketing).
+
 ## v1.8.2 - Holdings Price Updates Fixed (2026-07-02)
 
 Pure JS on the app side - ships OTA against the existing native runtime. The Worker half needs a `wrangler deploy` (it adds a cron trigger via `wrangler.toml`); the app fix degrades gracefully against the old Worker (failures surface instead of vanishing), but portfolios past the batch cap only price once the Worker is redeployed.
