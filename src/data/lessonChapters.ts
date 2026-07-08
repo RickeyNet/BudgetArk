@@ -2,13 +2,13 @@
  * BudgetArk - Learning Curriculum Chapters
  * File: src/data/lessonChapters.ts
  *
- * The Captain's Course outline: 5 chapters, 24 lessons. Ch 1 and Ch 2 are
- * the v1 shipping content (full lesson bodies live in src/data/lessons/);
- * Ch 3-5 are "coming soon" - their stubs are listed so the IA is real and
- * users see the full path on day one. Soft gating: every chapter is
- * tappable; "coming soon" chapters render lesson titles without bodies.
+ * The Captain's Course outline: 5 chapters, 24 lessons, all authored
+ * (full lesson bodies live in src/data/lessons/). The "coming soon"
+ * machinery is kept for future chapters: list stubs here with
+ * readMin: null and status "coming-soon", and they render as tappable
+ * titles without bodies until the content ships.
  *
- * Adding a lesson body later is a content-only change - drop a file into
+ * Adding a lesson body is a content-only change - drop a file into
  * src/data/lessons/, register it in lessonIndex.ts, and flip the chapter
  * status to "available" once all its lessons are authored.
  */
@@ -130,30 +130,30 @@ export const CHAPTERS: readonly Chapter[] = [
     title: "Stocking the Galley",
     subtitle: "Saving",
     glyph: "🍞",
-    status: "coming-soon",
+    status: "available",
     lessons: stubsFor("ch3", [
       {
         id: "ch3-l1-emergency-fund-full",
         title: "Emergency fund - 3 to 6 months",
-        readMin: null,
+        readMin: 5,
         topics: ["saving"],
       },
       {
         id: "ch3-l2-hysa-basics",
         title: "High-yield savings 101",
-        readMin: null,
+        readMin: 4,
         topics: ["saving"],
       },
       {
         id: "ch3-l3-sinking-funds",
         title: "Sinking funds",
-        readMin: null,
+        readMin: 5,
         topics: ["saving", "budgeting"],
       },
       {
         id: "ch3-l4-short-term-cash",
         title: "Where to park short-term cash",
-        readMin: null,
+        readMin: 5,
         topics: ["saving"],
       },
     ]),
@@ -164,36 +164,36 @@ export const CHAPTERS: readonly Chapter[] = [
     title: "Catching Wind",
     subtitle: "Investing",
     glyph: "📈",
-    status: "coming-soon",
+    status: "available",
     lessons: stubsFor("ch4", [
       {
         id: "ch4-l1-compounding",
         title: "Why compounding is the whole game",
-        readMin: null,
+        readMin: 5,
         topics: ["investing"],
       },
       {
         id: "ch4-l2-index-funds",
         title: "Index funds in one page",
-        readMin: null,
+        readMin: 5,
         topics: ["investing"],
       },
       {
         id: "ch4-l3-401k-ira-roth",
         title: "401(k), IRA, Roth - which first?",
-        readMin: null,
+        readMin: 7,
         topics: ["investing", "retirement", "taxes"],
       },
       {
         id: "ch4-l4-asset-allocation",
         title: "Asset allocation by decade",
-        readMin: null,
+        readMin: 6,
         topics: ["investing", "retirement"],
       },
       {
         id: "ch4-l5-big-mistakes",
         title: "Avoiding the big mistakes",
-        readMin: null,
+        readMin: 5,
         topics: ["investing", "mindset"],
       },
     ]),
@@ -204,30 +204,30 @@ export const CHAPTERS: readonly Chapter[] = [
     title: "Charting Far Waters",
     subtitle: "Wealth & Beyond",
     glyph: "🗺️",
-    status: "coming-soon",
+    status: "available",
     lessons: stubsFor("ch5", [
       {
         id: "ch5-l1-net-worth",
         title: "Net worth - the only score",
-        readMin: null,
+        readMin: 4,
         topics: ["mindset", "investing"],
       },
       {
         id: "ch5-l2-buy-vs-rent",
         title: "Buy vs rent the math",
-        readMin: null,
+        readMin: 6,
         topics: ["real_estate"],
       },
       {
         id: "ch5-l3-insurance",
         title: "Insurance - what you actually need",
-        readMin: null,
+        readMin: 6,
         topics: ["insurance"],
       },
       {
         id: "ch5-l4-estate-basics",
         title: "Estate basics (will, beneficiaries, TOD)",
-        readMin: null,
+        readMin: 5,
         topics: ["mindset"],
       },
     ]),

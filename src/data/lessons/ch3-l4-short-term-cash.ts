@@ -33,6 +33,12 @@ const lesson: Lesson = {
     },
     {
       type: "callout",
+      tone: "info",
+      title: "WHERE THESE LIVE",
+      text: "Money market funds and Treasury bills are bought inside a brokerage account - Fidelity, Charles Schwab, and Vanguard all offer them with no account fees (T-bills also sell direct at TreasuryDirect.gov). CDs come from banks and credit unions, and your local bank or credit union's CD rates are genuinely worth checking against the big names. None of these institutions sponsor this lesson - compare current rates before committing.",
+    },
+    {
+      type: "callout",
       tone: "warn",
       title: "THE TEMPTATION",
       text: "When markets are up, cash earning 4% feels slow and someone will tell you to 'put it to work'. Remember what this money is for. A 20% market drop the year you need the down payment doesn't 'average out' - the closing date doesn't move.",

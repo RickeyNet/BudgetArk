@@ -42,6 +42,12 @@ const lesson: Lesson = {
       text: "Without a cushion, every surprise becomes new debt at credit-card rates. You pay off $400, then put $400 back on the card for brakes. The starter fund breaks that cycle so payoff sticks.",
     },
     {
+      type: "callout",
+      tone: "info",
+      title: "WHERE TO KEEP IT",
+      text: "Separate from checking, but reachable within a day or two. A high-yield savings account at an online bank like SoFi, a money market account at Fidelity or Charles Schwab, or a plain savings account at a good local credit union all do the job. Chapter 3 covers picking one in detail - for now, separate and boring beats perfect.",
+    },
+    {
       type: "paragraph",
       text: "On the Debts tab, Build Your Ark tracks the Keel step: your starter cushion target. Savings-category budget entries count toward that reserve. Once Keel is funded, you pour more into the Hull step: clearing non-mortgage debt.",
     },

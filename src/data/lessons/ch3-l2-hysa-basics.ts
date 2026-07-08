@@ -5,7 +5,7 @@ const lesson: Lesson = {
   chapterId: "ch3",
   number: 2,
   title: "High-yield savings 101",
-  readMin: 4,
+  readMin: 5,
   topics: ["saving"],
   glyph: "🏦",
   summary:
@@ -41,6 +41,23 @@ const lesson: Lesson = {
       tone: "info",
       title: "RATES FLOAT",
       text: "HYSA rates track the Federal Reserve's rate, so they rise and fall over time. That's fine. The goal is to be in the right neighborhood, not to hold the single best rate in the country every week.",
+    },
+    {
+      type: "bullet-list",
+      title: "Well-known harbors for savings",
+      items: [
+        "SoFi - online checking + savings combo with a strong rate (the top rate requires direct deposit)",
+        "Robinhood - interest on uninvested cash, swept to FDIC-insured partner banks; the best rate needs its paid Gold tier",
+        "Fidelity - Cash Management Account with a money market fund core that earns market rates",
+        "Charles Schwab - buy a money market fund inside a free brokerage account",
+        "A good local bank or credit union - often a lower rate, but real humans, and NCUA/FDIC insured all the same",
+      ],
+    },
+    {
+      type: "callout",
+      tone: "info",
+      title: "NOT SPONSORED",
+      text: "Nobody on that list pays BudgetArk to be there - they're simply large, established options. Rates and terms change constantly, so compare current numbers before opening anything. One nuance: money market funds at brokerages like Fidelity and Schwab are very safe but SIPC-protected rather than FDIC-insured. If strict FDIC insurance matters to you, a bank or credit union HYSA is the cleanest choice.",
     },
     {
       type: "paragraph",

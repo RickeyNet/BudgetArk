@@ -44,6 +44,19 @@ import ch2l3 from "./lessons/ch2-l3-starter-emergency-fund";
 import ch2l4 from "./lessons/ch2-l4-snowball-vs-avalanche";
 import ch2l5 from "./lessons/ch2-l5-refinancing";
 import ch2l6 from "./lessons/ch2-l6-debt-snowflake";
+import ch3l1 from "./lessons/ch3-l1-emergency-fund-full";
+import ch3l2 from "./lessons/ch3-l2-hysa-basics";
+import ch3l3 from "./lessons/ch3-l3-sinking-funds";
+import ch3l4 from "./lessons/ch3-l4-short-term-cash";
+import ch4l1 from "./lessons/ch4-l1-compounding";
+import ch4l2 from "./lessons/ch4-l2-index-funds";
+import ch4l3 from "./lessons/ch4-l3-401k-ira-roth";
+import ch4l4 from "./lessons/ch4-l4-asset-allocation";
+import ch4l5 from "./lessons/ch4-l5-big-mistakes";
+import ch5l1 from "./lessons/ch5-l1-net-worth";
+import ch5l2 from "./lessons/ch5-l2-buy-vs-rent";
+import ch5l3 from "./lessons/ch5-l3-insurance";
+import ch5l4 from "./lessons/ch5-l4-estate-basics";
 
 const LESSONS_BY_ID: Record<string, Lesson> = {
   [ch1l1.id]: ch1l1,
@@ -57,6 +70,19 @@ const LESSONS_BY_ID: Record<string, Lesson> = {
   [ch2l4.id]: ch2l4,
   [ch2l5.id]: ch2l5,
   [ch2l6.id]: ch2l6,
+  [ch3l1.id]: ch3l1,
+  [ch3l2.id]: ch3l2,
+  [ch3l3.id]: ch3l3,
+  [ch3l4.id]: ch3l4,
+  [ch4l1.id]: ch4l1,
+  [ch4l2.id]: ch4l2,
+  [ch4l3.id]: ch4l3,
+  [ch4l4.id]: ch4l4,
+  [ch4l5.id]: ch4l5,
+  [ch5l1.id]: ch5l1,
+  [ch5l2.id]: ch5l2,
+  [ch5l3.id]: ch5l3,
+  [ch5l4.id]: ch5l4,
 };
 
 export const getLessonById = (lessonId: string): Lesson | undefined =>

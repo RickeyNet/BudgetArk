@@ -7,7 +7,7 @@ import {
 import { CHAPTERS } from "../lessonChapters";
 import { hasLessonBody } from "../lessonIndex";
 
-// Pure check/progress rules — no mocks. Build a minimal context and override
+// Pure check/progress rules - no mocks. Build a minimal context and override
 // per test. `as any` keeps fixtures concise (ts-jest is transpile-only).
 const ctx = (over: Partial<AchievementContext> = {}): AchievementContext =>
   ({
