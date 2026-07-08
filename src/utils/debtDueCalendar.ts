@@ -35,18 +35,26 @@ export const getMonthKey = (date: Date = new Date()): string => {
 export const dismissalKey = (debtId: string, monthKey: string): string =>
   `${debtId}:${monthKey}`;
 
+/**
+ * Month bucket for a recorded payment date. Full ISO timestamps (what
+ * `recordPayment` stamps) bucket by the LOCAL calendar month the payment was
+ * made in - a UTC prefix match would attribute an evening payment on the
+ * last day of the month to the NEXT month for users west of UTC. Date-only
+ * strings keep their stored YYYY-MM prefix (parsing them as UTC midnight
+ * would shift day-1 dates into the prior local month). Shared by the
+ * reminder math and the Budget screen so both attribute a payment to the
+ * same month.
+ */
+export const paymentMonthKey = (dateISO: string): string =>
+  dateISO.includes("T") ? getMonthKey(new Date(dateISO)) : dateISO.slice(0, 7);
+
 export const hasPaymentInMonth = (
   debtId: string,
   payments: readonly Payment[],
   monthKey: string
 ): boolean =>
-  // Bucket the payment by its LOCAL calendar month, like every other piece
-  // of the reminder math. `p.date` is a UTC ISO timestamp - a prefix match
-  // against the local-derived monthKey attributes an evening payment on the
-  // last day of the month to the NEXT month for users west of UTC (keeping
-  // the reminder firing today and silently suppressing next month's).
   payments.some(
-    (p) => p.debtId === debtId && getMonthKey(new Date(p.date)) === monthKey
+    (p) => p.debtId === debtId && paymentMonthKey(p.date) === monthKey
   );
 
 const isDebtDueOnDate = (

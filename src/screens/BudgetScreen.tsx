@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   ScrollView,
@@ -72,6 +73,8 @@ import {
   type MonthlyReviewData,
 } from "../utils/budgetInsights";
 import { getDebts, getPayments } from "../storage/debtStorage";
+import { paymentMonthKey } from "../utils/debtDueCalendar";
+import { buildDebtPaymentPlanForMonth } from "../utils/debtPaymentPlan";
 import {
   getSavingsGoals,
   saveSavingsGoals,
@@ -195,15 +198,6 @@ const getBudgetMonthKeys = (): string[] => {
   }
   return keys;
 };
-
-// Month attribution by string prefix, matching recurrence.ts and the entry
-// dates AddBudgetEntryModal stores (noon UTC inside the picked month). Local
-// Date round-tripping shifted entries near month boundaries by a month for
-// users in extreme timezones.
-const isDateInMonthKey = (dateISO: string, monthKey: string): boolean =>
-  /^\d{4}-\d{2}/.test(dateISO)
-    ? dateISO.slice(0, 7) === monthKey
-    : getMonthKey(new Date(dateISO)) === monthKey;
 
 const CATEGORY_CHART_PALETTE = [
   "#4E79A7",
@@ -413,11 +407,6 @@ const BudgetScreen: React.FC = () => {
     [monthlyEntries]
   );
 
-  const activeDebts = useMemo(
-    () => debts.filter((debt) => debt.balance > 0),
-    [debts]
-  );
-
   // Actual recorded debt payments that fall in the selected month. Sourced
   // from the Payment collection (created by `recordPayment` on the Debt
   // Tracker screen). Surfacing them on Budget closes the gap where past
@@ -426,36 +415,33 @@ const BudgetScreen: React.FC = () => {
   // debt has since been deleted are excluded - `deleteDebt` does not
   // cascade-delete payments, and a user who created a test debt, paid it
   // off, and deleted it should not see those test payments lingering on
-  // their Budget for past months.
+  // their Budget for past months. Bucketing uses `paymentMonthKey` so a
+  // payment lands in the same local month the due-reminder math credits it
+  // to.
   const recordedDebtPaymentsForMonth = useMemo(() => {
     const liveDebtIds = new Set(debts.map((d) => d.id));
     return payments.filter(
       (p) =>
-        liveDebtIds.has(p.debtId) && isDateInMonthKey(p.date, selectedMonthKey)
+        liveDebtIds.has(p.debtId) &&
+        paymentMonthKey(p.date) === selectedMonthKey
     );
   }, [debts, payments, selectedMonthKey]);
 
   /**
-   * Per-debt budget baseline for the selected month. Each active debt counts
-   * at least its minimum payment (so net income reflects planned obligations
-   * before the user logs payments). When payments exist, use the greater of
-   * paid-so-far vs minimum so extra payments raise the total but small partial
-   * payments do not understate the baseline.
+   * Per-debt budget baseline for the selected month. Current and future
+   * months floor each active debt at its minimum payment; past months count
+   * only what was actually paid. See `buildDebtPaymentPlanForMonth`.
    */
-  const debtPaymentPlanForMonth = useMemo(() => {
-    const paidByDebt = new Map<string, number>();
-    for (const payment of recordedDebtPaymentsForMonth) {
-      paidByDebt.set(
-        payment.debtId,
-        (paidByDebt.get(payment.debtId) ?? 0) + payment.amount
-      );
-    }
-    return activeDebts.map((debt) => {
-      const paid = paidByDebt.get(debt.id) ?? 0;
-      const amount = Math.max(paid, debt.minPayment);
-      return { debt, paid, amount };
-    });
-  }, [activeDebts, recordedDebtPaymentsForMonth]);
+  const debtPaymentPlanForMonth = useMemo(
+    () =>
+      buildDebtPaymentPlanForMonth(
+        debts,
+        recordedDebtPaymentsForMonth,
+        selectedMonthKey,
+        getMonthKey(new Date())
+      ),
+    [debts, recordedDebtPaymentsForMonth, selectedMonthKey]
+  );
 
   const debtPaymentsTotal = useMemo(
     () => debtPaymentPlanForMonth.reduce((sum, line) => sum + line.amount, 0),
@@ -669,7 +655,11 @@ const BudgetScreen: React.FC = () => {
                   date: payment.date,
                 });
               }
-              if (paid < debt.minPayment) {
+              // Planned shortfall on top of logged payments. `amount` only
+              // exceeds `paid` for current/future months (past months carry
+              // no minimum floor), so closed months never grow a phantom
+              // "(planned)" row next to what was actually paid.
+              if (amount > paid) {
                 entries.push({
                   id: `debt-min-topup-${debt.id}`,
                   amount: amount - paid,
@@ -680,7 +670,7 @@ const BudgetScreen: React.FC = () => {
             } else {
               entries.push({
                 id: `auto-debt-${debt.id}`,
-                amount: debt.minPayment,
+                amount,
                 description: `${debt.name} minimum payment (planned)`,
                 date: selectedMonthDate.toISOString(),
               });
@@ -944,8 +934,19 @@ const BudgetScreen: React.FC = () => {
 
   /* ─── Bulk multi-select ─── */
 
+  /**
+   * Synthetic Debt Payments rows derived from the debt tracker rather than
+   * stored budget entries: logged payments (`payment-`), planned-minimum
+   * shortfalls (`debt-min-topup-`), and unpaid planned minimums
+   * (`auto-debt-`). None exist in budget storage, so edit/select/delete
+   * must exclude all three - `deleteBudgetEntries` would silently no-op on
+   * their ids while the toast claims success and the row re-derives.
+   */
   const isAutoEntry = useCallback(
-    (id: string) => id.startsWith("auto-debt-"),
+    (id: string) =>
+      id.startsWith("auto-debt-") ||
+      id.startsWith("payment-") ||
+      id.startsWith("debt-min-topup-"),
     []
   );
 
@@ -1567,7 +1568,8 @@ const BudgetScreen: React.FC = () => {
                     Expanded - {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
                   </Text>
                   {item.entries.map((entry) => {
-                    const isAutoDebtPayment = entry.id.startsWith("auto-debt-");
+                    const isLoggedPayment = entry.id.startsWith("payment-");
+                    const isAutoDebtRow = isAutoEntry(entry.id);
                     const isSelected = selectedEntryIds.has(entry.id);
                     const entryDate = new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
                     return (
@@ -1581,17 +1583,27 @@ const BudgetScreen: React.FC = () => {
                           },
                         ]}
                         onPress={() => {
-                          if (isAutoDebtPayment) return;
+                          if (isAutoDebtRow) {
+                            // Not a stored budget entry - point at the real
+                            // home instead of silently doing nothing.
+                            if (isLoggedPayment) {
+                              Alert.alert(
+                                "Logged debt payment",
+                                "This payment was logged on the Debts tab. To edit or delete it, open the debt's payment history there."
+                              );
+                            }
+                            return;
+                          }
                           if (selectionMode) toggleSelectEntry(entry.id);
                           else handleEditEntry(entry.id);
                         }}
                         onLongPress={() => {
-                          if (!isAutoDebtPayment) enterSelectionWith(entry.id);
+                          if (!isAutoDebtRow) enterSelectionWith(entry.id);
                         }}
                         delayLongPress={300}
-                        activeOpacity={isAutoDebtPayment ? 1 : 0.6}
+                        activeOpacity={isAutoDebtRow && !isLoggedPayment ? 1 : 0.6}
                       >
-                        {selectionMode && !isAutoDebtPayment && (
+                        {selectionMode && !isAutoDebtRow && (
                           <Text
                             style={[
                               styles.entryEditHint,
@@ -1617,7 +1629,7 @@ const BudgetScreen: React.FC = () => {
                               {getRecurrenceTag(entry)}
                             </Text>
                           )}
-                          {isAutoDebtPayment ? (
+                          {isAutoDebtRow && !isLoggedPayment ? (
                             <Text style={styles.entryEditHint}>Auto</Text>
                           ) : (
                             <Text style={styles.expandedEntryDate}>{entryDate}</Text>
