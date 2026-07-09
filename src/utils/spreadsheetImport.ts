@@ -786,7 +786,7 @@ export const importSpreadsheet = async (
       const base64 = await new ExpoFile(file.uri).base64();
       workbook = XLSX.read(base64, { type: "base64", cellDates: true });
     }
-  } catch (err) {
+  } catch {
     throw new Error(
       "Could not read the spreadsheet. The file may be corrupt or in an unsupported format."
     );

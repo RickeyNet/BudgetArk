@@ -17,7 +17,6 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import BudgetBucketCard from "../components/BudgetBucketCard";
-import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
 import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
 import ReviewInboxModal from "../components/ReviewInboxModal";
@@ -54,7 +53,6 @@ import {
   ASSET_ACCOUNT_CATEGORIES,
   ASSET_ACCOUNT_CATEGORY_LABELS,
   NetWorthSnapshot,
-  CustomCategory,
   BudgetBucket,
   RootTabParamList,
 } from "../types";

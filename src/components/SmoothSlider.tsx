@@ -154,6 +154,7 @@ const SmoothSlider: React.FC<SmoothSliderProps> = React.memo(
     );
   }
 );
+SmoothSlider.displayName = "SmoothSlider";
 
 const styles = StyleSheet.create({
   touchArea: {

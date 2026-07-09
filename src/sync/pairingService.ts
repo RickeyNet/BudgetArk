@@ -10,7 +10,6 @@
 import { Platform, PermissionsAndroid } from "react-native";
 import CryptoJS from "crypto-js";
 import NetInfo from "@react-native-community/netinfo";
-import { generateUUID } from "../utils/uuid";
 import { getOrCreateUser } from "../storage/userStorage";
 import { savePairingState } from "./pairingStorage";
 import * as Discovery from "./discoveryService";
@@ -246,7 +245,7 @@ export const startPairingAsInitiator = (
               fingerprint: computeFingerprint(offer.sharedSecret),
               commit: () => savePairingState(pairingState),
             });
-          } catch (err) {
+          } catch {
             // Invalid offer payload
           }
         }
@@ -336,7 +335,7 @@ export const joinPairing = async (
             fingerprint: computeFingerprint(sharedSecret),
             commit: () => savePairingState(pairingState),
           });
-        } catch (err) {
+        } catch {
           connection.close();
           reject(new Error("Invalid pairing response"));
         }

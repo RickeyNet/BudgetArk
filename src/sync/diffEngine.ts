@@ -51,19 +51,11 @@ import * as EncryptedStorage from "../storage/encryptedStorage";
 import { isBuiltInCategory } from "../data/categoryIcons";
 import { isBudgetBucket } from "../data/categoryBuckets";
 import type {
-  Debt,
-  Payment,
-  BudgetEntry,
-  SavingsGoal,
-  AssetAccount,
-  DebtMilestonePlan,
   CategoryBudgetLimit,
   CustomCategory,
   BudgetBucket,
   NetWorthSnapshot,
-  Holding,
 } from "../types";
-import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
 import {
   isObject,

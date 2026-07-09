@@ -1389,7 +1389,7 @@ export const importFromString = async (
     counts.customCategories = mergedCustomCategories?.count ?? 0;
     counts.debtMilestones = !!sanitized.debtMilestones;
     counts.payoffStrategy = !!sanitized.payoffStrategy;
-  } catch (error) {
+  } catch {
     // Rollback: restore original values, then clean up temp keys.
     // We use `allSettled` and collect failures rather than awaiting each
     // restore in sequence - if a restore itself times out, the original

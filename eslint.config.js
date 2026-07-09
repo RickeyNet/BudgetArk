@@ -24,6 +24,14 @@ module.exports = defineConfig([
     },
   },
   {
+    // Jest tests legitimately use require() to re-import modules after
+    // jest.resetModules()/isolateModules and to grab mocked instances.
+    files: ['**/__tests__/**'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
     // Node-run tooling (screenshot/icon generators, release scripts).
     files: ['scripts/**', '*.config.js', 'babel.config.js'],
     languageOptions: {

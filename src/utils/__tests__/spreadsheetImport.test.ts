@@ -12,7 +12,6 @@
 import * as XLSX from "xlsx";
 
 const DERIVED_RECURRING_PREFIX = "__projected_recurring__:";
-const DERIVED_EMERGENCY_FUND_ID = "__derived_emergency_fund__";
 
 // Test-controlled file + picker state (mock-prefixed so jest.mock factories
 // may close over them).
@@ -43,7 +42,6 @@ jest.mock("../spreadsheetExport", () => ({
 }));
 jest.mock("expo-file-system", () => ({
   File: class {
-    constructor(_uri: string) {}
     async text() {
       return mockFileContent.text;
     }

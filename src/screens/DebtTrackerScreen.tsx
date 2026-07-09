@@ -25,7 +25,6 @@ import {
   Modal,
   ScrollView,
   TextInput,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
@@ -34,7 +33,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import {
   DEBT_CLASS_OPTIONS,
-  DEBT_OWNER_OPTIONS,
   Debt,
   DebtClass,
   DebtMilestoneKey,

@@ -292,7 +292,7 @@ export default {
           await env.QUOTES.put(dayKey, String(usedToday + toFetch.length), {
             expirationTtl: DAILY_COUNTER_TTL_SECONDS,
           });
-        } catch (err) {
+        } catch {
           // If the provider is down we still return whatever was cached.
           if (Object.keys(quotes).length === 0) {
             return json({ error: "upstream_unavailable" }, 502);

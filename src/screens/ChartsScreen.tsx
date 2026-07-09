@@ -347,6 +347,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
     );
   }
 );
+AreaChart.displayName = "AreaChart";
 
 /* ── Main Screen ── */
 

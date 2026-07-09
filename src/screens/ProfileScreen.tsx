@@ -66,7 +66,6 @@ import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import {
   importData,
   importFromString,
-  isEncryptedExport,
   type ImportResult,
 } from "../utils/importData";
 import {
@@ -121,7 +120,7 @@ import {
   stopMonitoring,
   requestLocationPermission,
 } from "../sync/autoSyncManager";
-import type { PairingState, SyncStatus, SyncResult } from "../sync/types";
+import type { PairingState, SyncStatus } from "../sync/types";
 import PairingModal from "../components/PairingModal";
 import FeedbackModal from "../components/FeedbackModal";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
