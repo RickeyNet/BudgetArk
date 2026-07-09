@@ -10,7 +10,9 @@ import {
   getDebtsIncludingDeleted,
   saveDebts,
   getPaymentsIncludingDeleted,
-} from "../storage/debtStorage";
+
+  getPayoffStrategyEnvelope,
+  savePayoffStrategyEnvelope} from "../storage/debtStorage";
 import {
   getBudgetEntriesIncludingDeleted,
   saveBudgetEntries,
@@ -32,10 +34,7 @@ import {
   getDebtMilestonePlan,
   saveDebtMilestonePlanFromSync,
 } from "../storage/debtMilestoneStorage";
-import {
-  getPayoffStrategyEnvelope,
-  savePayoffStrategyEnvelope,
-} from "../storage/debtStorage";
+
 import {
   getCustomCategories,
   saveCustomCategoriesFromSync,

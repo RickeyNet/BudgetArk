@@ -95,6 +95,8 @@ import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
+import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 
 /**
  * FAB layout constants. The vertical offset derives from the live bottom
@@ -104,8 +106,6 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
  */
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
-import type { ThemeColors } from "../theme/themes";
-import type { DensityTokens } from "../theme/density";
 
 
 type PayoffStrategy = "custom" | "avalanche" | "snowball";

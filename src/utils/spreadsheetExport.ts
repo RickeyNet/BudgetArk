@@ -373,7 +373,7 @@ const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
  *     to that month's last valid day (Jan 31 → Feb 28 / Feb 29)
  */
 const expandRecurringRows = (
-  rows: ReadonlyArray<Record<string, unknown>>
+  rows: readonly Record<string, unknown>[]
 ): Record<string, unknown>[] => {
   if (rows.length === 0) return [];
 
@@ -461,7 +461,7 @@ const expandRecurringRows = (
  * naturally excluded from the per-month and grand-total ranges they sit in.
  */
 const buildBudgetEntriesSheet = (
-  rows: ReadonlyArray<Record<string, unknown>>
+  rows: readonly Record<string, unknown>[]
 ): XLSX.WorkSheet => {
   const sheet: XLSX.WorkSheet = {};
 
@@ -670,7 +670,7 @@ const buildBudgetEntriesSheet = (
 
 const appendTotalRow = (
   sheet: XLSX.WorkSheet,
-  rows: ReadonlyArray<Record<string, unknown>>,
+  rows: readonly Record<string, unknown>[],
   columns: readonly string[],
   sumColumns: readonly string[],
   options?: {

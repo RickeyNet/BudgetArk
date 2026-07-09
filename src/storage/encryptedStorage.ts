@@ -391,7 +391,7 @@ export const multiRemove = async (keys: string[]): Promise<void> => {
  * silently leaving partial state.
  */
 export const multiSet = async (
-  pairs: ReadonlyArray<readonly [string, string]>
+  pairs: readonly (readonly [string, string])[]
 ): Promise<void> => {
   if (pairs.length === 0) return;
 
@@ -405,7 +405,7 @@ export const multiSet = async (
   }
 
   const encKey = await getEncryptionKey();
-  const encrypted: Array<[string, string]> = pairs.map(([key, value]) => [
+  const encrypted: [string, string][] = pairs.map(([key, value]) => [
     key,
     encKey === null ? value : encrypt(value, encKey),
   ]);

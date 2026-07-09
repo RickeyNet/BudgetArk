@@ -1,7 +1,7 @@
 // File: App.tsx
 
 import "react-native-get-random-values";
-import "react-native-gesture-handler";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 // Side-effect: clamps the OS font-scale multiplier app-wide. Must run before
 // any <Text>/<TextInput> renders, so keep it among the top imports.
@@ -21,7 +21,7 @@ import {
   NativeModules,
   Platform,
 } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";

@@ -26,7 +26,7 @@ import {
 } from "react-native";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { shareLocalFile } from "../utils/iosNativeShare";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect , useNavigation } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
@@ -68,7 +68,7 @@ import {
 } from "../data/lessonIndex";
 import { getLearningProgress } from "../storage/learningProgressStorage";
 import LessonScreen from "../lessons/LessonScreen";
-import { useNavigation } from "@react-navigation/native";
+
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 /* Enable LayoutAnimation on Android */
@@ -161,7 +161,7 @@ const csvEscape = (value: string | number): string => {
 };
 
 const buildLoanScheduleCsv = (
-  schedule: ReadonlyArray<LoanScheduleRow>
+  schedule: readonly LoanScheduleRow[]
 ): string => {
   const lines = [
     ["Year", "Month", "Payment", "Principal", "Interest", "RemainingBalance"].join(","),

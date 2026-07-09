@@ -42,7 +42,7 @@ interface AchievementsScreenProps {
 
 type FilterId = "all" | "earned" | "locked";
 
-const FILTERS: ReadonlyArray<{ id: FilterId; label: string }> = [
+const FILTERS: readonly { id: FilterId; label: string }[] = [
   { id: "all", label: "All" },
   { id: "earned", label: "Earned" },
   { id: "locked", label: "Locked" },

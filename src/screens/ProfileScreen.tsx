@@ -96,7 +96,7 @@ import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import { useCoachmarks } from "../onboarding/CoachmarksProvider";
 import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import { COACHMARK_TAB_IDS, COACHMARKS } from "../data/coachmarkContent";
-import type { UpdatePreferences } from "../types";
+import type { UpdatePreferences , HoldingsSettings , AssetAccount } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
 import { convertAllStoredData } from "../utils/currencyMigration";
@@ -135,7 +135,7 @@ import {
   getHoldingsSettings,
   setHoldingsEnabled,
 } from "../storage/holdingsSettingsStorage";
-import type { HoldingsSettings } from "../types";
+
 import {
   HOLDINGS_DISCLOSURE_TITLE,
   HOLDINGS_DISCLOSURE_INTRO,
@@ -155,7 +155,11 @@ import ConnectionsModal from "../components/ConnectionsModal";
 import AddConnectionModal from "../components/AddConnectionModal";
 import { startConnectionsMonitoring } from "../services/connections/connectionsSyncService";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
-import type { AssetAccount } from "../types";
+
+
+import { sanitizeTextInput } from "../utils/sanitize";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 
 type UpdateMetadata = {
   id: string;
@@ -166,10 +170,6 @@ type UpdateMetadata = {
 };
 
 type ReleaseNoteKey = string;
-
-import { sanitizeTextInput } from "../utils/sanitize";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();

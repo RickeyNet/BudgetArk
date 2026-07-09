@@ -11,6 +11,8 @@
  *   - ./uuid -> deterministic ids
  */
 
+import { importFromString, isEncryptedExport } from "../importData";
+
 const ENC_V1 = "__BUDGETARK_ENC__:";
 const ENC_V2 = "__BUDGETARK_ENC2__:";
 
@@ -42,9 +44,7 @@ let uuidCounter = 0;
 jest.mock("../uuid", () => ({
   generateUUID: () => `gen-uuid-${++uuidCounter}`,
 }));
-
-import { importFromString, isEncryptedExport } from "../importData";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const storageMock = require("../../storage/encryptedStorage") as {
   __store: Map<string, string>;
 };

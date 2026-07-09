@@ -7,35 +7,6 @@
  * so every converted value is exactly doubled (convertAmount rounds to 2 dp).
  */
 
-jest.mock("../../storage/debtStorage", () => ({
-  getDebtsIncludingDeleted: jest.fn(),
-  saveDebts: jest.fn(),
-  getPaymentsIncludingDeleted: jest.fn(),
-  savePayments: jest.fn(),
-}));
-jest.mock("../../storage/budgetStorage", () => ({
-  getBudgetEntriesIncludingDeleted: jest.fn(),
-  saveBudgetEntries: jest.fn(),
-  getAllLimitsByMonth: jest.fn(),
-  saveCategoryBudgetLimits: jest.fn(),
-}));
-jest.mock("../../storage/savingsGoalStorage", () => ({
-  getSavingsGoalsIncludingDeleted: jest.fn(),
-  saveSavingsGoals: jest.fn(),
-}));
-jest.mock("../../storage/assetAccountStorage", () => ({
-  getAssetAccountsIncludingDeleted: jest.fn(),
-  saveAssetAccounts: jest.fn(),
-}));
-jest.mock("../../storage/netWorthSnapshotStorage", () => ({
-  getNetWorthSnapshots: jest.fn(),
-  saveNetWorthSnapshots: jest.fn(),
-}));
-jest.mock("../../storage/debtMilestoneStorage", () => ({
-  getDebtMilestonePlan: jest.fn(),
-  saveDebtMilestonePlan: jest.fn(),
-}));
-
 import { convertAllStoredData } from "../currencyMigration";
 import {
   getDebtsIncludingDeleted,
@@ -65,6 +36,35 @@ import {
   getDebtMilestonePlan,
   saveDebtMilestonePlan,
 } from "../../storage/debtMilestoneStorage";
+
+jest.mock("../../storage/debtStorage", () => ({
+  getDebtsIncludingDeleted: jest.fn(),
+  saveDebts: jest.fn(),
+  getPaymentsIncludingDeleted: jest.fn(),
+  savePayments: jest.fn(),
+}));
+jest.mock("../../storage/budgetStorage", () => ({
+  getBudgetEntriesIncludingDeleted: jest.fn(),
+  saveBudgetEntries: jest.fn(),
+  getAllLimitsByMonth: jest.fn(),
+  saveCategoryBudgetLimits: jest.fn(),
+}));
+jest.mock("../../storage/savingsGoalStorage", () => ({
+  getSavingsGoalsIncludingDeleted: jest.fn(),
+  saveSavingsGoals: jest.fn(),
+}));
+jest.mock("../../storage/assetAccountStorage", () => ({
+  getAssetAccountsIncludingDeleted: jest.fn(),
+  saveAssetAccounts: jest.fn(),
+}));
+jest.mock("../../storage/netWorthSnapshotStorage", () => ({
+  getNetWorthSnapshots: jest.fn(),
+  saveNetWorthSnapshots: jest.fn(),
+}));
+jest.mock("../../storage/debtMilestoneStorage", () => ({
+  getDebtMilestonePlan: jest.fn(),
+  saveDebtMilestonePlan: jest.fn(),
+}));
 
 const m = (fn: unknown) => fn as jest.Mock;
 

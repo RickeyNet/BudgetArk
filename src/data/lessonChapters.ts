@@ -21,12 +21,12 @@ import type { Chapter, ChapterId, LessonStub, LessonTopic } from "../types";
  */
 const stubsFor = (
   chapterId: ChapterId,
-  lessons: ReadonlyArray<{
+  lessons: readonly {
     id: string;
     title: string;
     readMin: number | null;
     topics: readonly LessonTopic[];
-  }>
+  }[]
 ): readonly LessonStub[] =>
   lessons.map((lesson, idx) => ({
     id: lesson.id,

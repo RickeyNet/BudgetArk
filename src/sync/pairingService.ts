@@ -10,15 +10,15 @@
 import { Platform, PermissionsAndroid } from "react-native";
 import CryptoJS from "crypto-js";
 import NetInfo from "@react-native-community/netinfo";
-
-// Ensure SSID fetching is enabled before any NetInfo.fetch() call
-NetInfo.configure({ shouldFetchWiFiSSID: true });
 import { generateUUID } from "../utils/uuid";
 import { getOrCreateUser } from "../storage/userStorage";
 import { savePairingState } from "./pairingStorage";
 import * as Discovery from "./discoveryService";
 import * as Transport from "./transportService";
 import type { PairingState, PairOfferPayload, PairAcceptPayload } from "./types";
+
+// Ensure SSID fetching is enabled before any NetInfo.fetch() call
+NetInfo.configure({ shouldFetchWiFiSSID: true });
 
 /** Get this device's LAN IP address */
 const getLocalIp = async (): Promise<string | null> => {

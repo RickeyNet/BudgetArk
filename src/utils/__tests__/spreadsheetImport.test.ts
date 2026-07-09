@@ -54,6 +54,7 @@ jest.mock("expo-file-system", () => ({
 }));
 jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 
+// eslint-disable-next-line import/first -- must require after the jest.mock factories' captured consts initialize (ts-jest emits CJS, so import position is require order)
 import { importSpreadsheet } from "../spreadsheetImport";
 
 /** Build an xlsx workbook (base64) from a map of sheetName -> row objects. */

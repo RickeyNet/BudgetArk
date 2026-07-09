@@ -34,6 +34,11 @@ import { ThemePreset } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { completeOnboarding } from "../storage/userStorage";
 
+/**
+ * Main onboarding screen component
+ */
+import { sanitizeTextInput } from "../utils/sanitize";
+
 const { width } = Dimensions.get("window");
 
 type OnboardingStyles = ReturnType<typeof makeStyles>;
@@ -122,11 +127,6 @@ const ThemePreviewCard = React.memo<{
 });
 
 ThemePreviewCard.displayName = "ThemePreviewCard";
-
-/**
- * Main onboarding screen component
- */
-import { sanitizeTextInput } from "../utils/sanitize";
 
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { colors, presets, themeId, setThemeId } = useTheme();

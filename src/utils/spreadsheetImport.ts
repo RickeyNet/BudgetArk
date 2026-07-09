@@ -168,7 +168,7 @@ const parseString = (raw: unknown, maxLen = 220): string => {
   const s = String(raw).trim();
   if (s.length > maxLen) return s.slice(0, maxLen);
   // Strip control chars + null bytes (mirrors validation in importData)
-  // eslint-disable-next-line no-control-regex
+   
   return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 };
 

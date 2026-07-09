@@ -95,6 +95,7 @@ jest.mock("../../storage/backupReminderStorage", () => ({
 
 const entryFixturesRef = entryFixtures;
 
+// eslint-disable-next-line import/first -- must require after the jest.mock factories' captured consts initialize (ts-jest emits CJS, so import position is require order)
 import { exportSpreadsheet } from "../spreadsheetExport";
 
 // The exporter logs progress via console.info; keep test output clean.

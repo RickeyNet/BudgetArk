@@ -1214,7 +1214,7 @@ export const importFromString = async (
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
   const tempKeys: string[] = [];
-  const tempWrites: Array<[string, string]> = [];
+  const tempWrites: [string, string][] = [];
 
   if (mergedDebts) {
     tempWrites.push([KEYS.DEBTS + TEMP_SUFFIX, mergedDebts.json]);
@@ -1324,7 +1324,7 @@ export const importFromString = async (
 
   // Phase 3: Promote temp keys to real keys; rollback on failure
   // Back up originals first so we can restore them if the write loop fails
-  const backups: Array<[string, string | null]> = [];
+  const backups: [string, string | null][] = [];
   try {
     if (mode === "replace") {
       // Replace means "replace what the file carries", not "wipe the device".

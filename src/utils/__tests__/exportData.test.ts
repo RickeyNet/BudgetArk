@@ -7,6 +7,9 @@
  * mock receives whatever the round-trip import writes.
  */
 
+import { buildExportMessage, ENCRYPTED_EXPORT_PREFIX_V2 } from "../exportData";
+import { importFromString, isEncryptedExport } from "../importData";
+
 jest.mock("react-native", () => ({
   Share: { share: jest.fn(), sharedAction: "sharedAction" },
 }));
@@ -152,9 +155,6 @@ jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 // `fixturesRef` lets the jest.mock factories (hoisted above imports) reach the
 // fixtures object without a TDZ error.
 const fixturesRef = fixtures;
-
-import { buildExportMessage, ENCRYPTED_EXPORT_PREFIX_V2 } from "../exportData";
-import { importFromString, isEncryptedExport } from "../importData";
 
 const storageMock = require("../../storage/encryptedStorage") as {
   __store: Map<string, string>;

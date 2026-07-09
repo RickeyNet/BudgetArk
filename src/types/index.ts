@@ -79,19 +79,19 @@ export type DebtClass = "personal_credit" | "car" | "house";
 
 export type DebtClassSource = "manual" | "inferred";
 
-export const DEBT_CLASS_OPTIONS: ReadonlyArray<{
+export const DEBT_CLASS_OPTIONS: readonly {
   id: DebtClass;
   label: string;
-}> = [
+}[] = [
   { id: "personal_credit", label: "Credit / Personal" },
   { id: "car", label: "Car" },
   { id: "house", label: "House / Mortgage" },
 ];
 
-export const DEBT_OWNER_OPTIONS: ReadonlyArray<{
+export const DEBT_OWNER_OPTIONS: readonly {
   id: DebtOwner;
   label: string;
-}> = [
+}[] = [
   { id: "mine", label: "Mine" },
   { id: "partner", label: "Partner" },
   { id: "joint", label: "Joint" },
@@ -194,12 +194,12 @@ export type BudgetEntryType = "income" | "expense";
 /** Months between repeats for a recurring budget entry. */
 export type RecurrenceInterval = 1 | 3 | 6 | 12;
 
-export const RECURRENCE_INTERVAL_OPTIONS: ReadonlyArray<{
+export const RECURRENCE_INTERVAL_OPTIONS: readonly {
   value: RecurrenceInterval;
   label: string;
   /** Short tag shown on entry rows (e.g. "Monthly", "Quarterly"). */
   tag: string;
-}> = [
+}[] = [
   { value: 1, label: "Monthly", tag: "Monthly" },
   { value: 3, label: "Quarterly", tag: "Quarterly" },
   { value: 6, label: "Every 6 months", tag: "6 mo" },

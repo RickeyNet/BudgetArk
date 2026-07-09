@@ -107,6 +107,15 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { useUndo } from "../undo/UndoProvider";
+import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
+import { calculateNetWorthTotals } from "../utils/netWorth";
+import {
+  getRecurrenceTag,
+  isEntryActiveInMonth,
+} from "../utils/recurrence";
+import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
+import { totalsByBucket } from "../utils/budgetBucketMath";
 
 /**
  * FAB layout constants - kept here so the coachmark can compute a
@@ -117,15 +126,6 @@ import { useUndo } from "../undo/UndoProvider";
  */
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
-import type { ThemeColors } from "../theme/themes";
-import type { DensityTokens } from "../theme/density";
-import { calculateNetWorthTotals } from "../utils/netWorth";
-import {
-  getRecurrenceTag,
-  isEntryActiveInMonth,
-} from "../utils/recurrence";
-import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
-import { totalsByBucket } from "../utils/budgetBucketMath";
 
 type ExpenseCategoryEntry = {
   id: string;
@@ -571,7 +571,7 @@ const BudgetScreen: React.FC = () => {
   );
 
   const categoriesByBucket = useMemo(() => {
-    const grouped: Record<BudgetBucket, Array<{ category: string; amount: number; hasOverride: boolean }>> = {
+    const grouped: Record<BudgetBucket, { category: string; amount: number; hasOverride: boolean }[]> = {
       needs: [],
       wants: [],
       savings: [],
@@ -763,7 +763,7 @@ const BudgetScreen: React.FC = () => {
   const adjustAssetAccounts = useCallback(
     (
       accounts: AssetAccount[],
-      deltas: Array<{ accountId: string; amount: number }>
+      deltas: { accountId: string; amount: number }[]
     ): AssetAccount[] => {
       if (deltas.length === 0) return accounts;
 
@@ -861,7 +861,7 @@ const BudgetScreen: React.FC = () => {
       return;
     }
 
-    const deltas: Array<{ accountId: string; amount: number }> = [];
+    const deltas: { accountId: string; amount: number }[] = [];
     if (original.linkedAccountId) {
       deltas.push({ accountId: original.linkedAccountId, amount: -original.amount });
     }
