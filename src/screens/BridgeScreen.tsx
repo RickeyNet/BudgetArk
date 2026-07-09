@@ -900,6 +900,7 @@ const BridgeScreen: React.FC = () => {
     editingAsset,
     holdings,
     loadHoldingsState,
+    quotes,
     refreshAchievements,
     refreshNetWorthSnapshots,
   ]);

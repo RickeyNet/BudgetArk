@@ -119,13 +119,16 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
 
   /* On open, record the lesson as the user's resume target. Re-read
    * progress so the "Mark complete" button reflects the latest state when
-   * the modal reopens for a previously-completed lesson. */
+   * the modal reopens for a previously-completed lesson. Depends on the
+   * lesson id, not the stub object, so a re-created stub with the same id
+   * doesn't re-run the effect (which would also reset the scroll). */
+  const stubId = stub?.id;
   useEffect(() => {
-    if (!visible || !stub) return;
+    if (!visible || !stubId) return;
     let cancelled = false;
     (async () => {
       try {
-        await setCurrentLesson(stub.id);
+        await setCurrentLesson(stubId);
         const fresh = await getLearningProgress();
         if (!cancelled) setProgress(fresh);
       } catch (err) {
@@ -138,7 +141,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [visible, stub?.id]);
+  }, [visible, stubId]);
 
   const lesson: Lesson | undefined = stub ? getLessonById(stub.id) : undefined;
   const stubHasBody = !!stub && hasLessonBody(stub.id);

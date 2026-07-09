@@ -500,7 +500,12 @@ const ChartsScreen: React.FC = () => {
     [navigation]
   );
 
-  const completedLessonsMap = learningProgress?.completedLessons ?? {};
+  // Memoized so the `?? {}` fallback doesn't mint a fresh object every
+  // render and defeat the downstream progress memos.
+  const completedLessonsMap = useMemo(
+    () => learningProgress?.completedLessons ?? {},
+    [learningProgress?.completedLessons]
+  );
   const overallProgress = useMemo(
     () => getOverallProgress(completedLessonsMap),
     [completedLessonsMap]
