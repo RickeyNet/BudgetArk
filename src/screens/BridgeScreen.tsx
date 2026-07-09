@@ -453,6 +453,7 @@ const BridgeScreen: React.FC = () => {
   }, [assetAccounts, holdings, quotes, holdingValueOpts]);
 
   /** Whether a manual price refresh is allowed yet (daily window). */
+  // eslint-disable-next-line react-hooks/purity -- reading the clock during render is intentional; the daily-window check only needs re-render-level freshness
   const priceRefreshDue = isQuoteRefreshDue(quotesLastFetchedAt, Date.now());
   /**
    * Whether anything is actually priceable. A portfolio of only manual-value
@@ -465,6 +466,7 @@ const BridgeScreen: React.FC = () => {
     if (!quotesLastFetchedAt) return "";
     const last = new Date(quotesLastFetchedAt).getTime();
     if (!Number.isFinite(last)) return "";
+    // eslint-disable-next-line react-hooks/purity -- reading the clock during render is intentional; the countdown label only needs re-render-level freshness
     const msLeft = last + QUOTE_REFRESH_INTERVAL_MS - Date.now();
     if (msLeft <= 0) return "";
     const hours = Math.ceil(msLeft / (60 * 60 * 1000));
