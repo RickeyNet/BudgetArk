@@ -177,7 +177,6 @@ export const startPairingAsInitiator = (
   return new Promise(async (resolve, reject) => {
     const user = await getOrCreateUser();
     const tempKey = deriveKeyFromCode(code);
-    const sharedSecret = generateSharedSecret();
 
     let settled = false;
     const timer = setTimeout(() => {
@@ -192,7 +191,7 @@ export const startPairingAsInitiator = (
     try {
       // Start TCP server - onListening fires as soon as the port is assigned,
       // BEFORE any client connects, so we can advertise and show the address.
-      const { connection, port } = await Transport.startServer(
+      const { connection } = await Transport.startServer(
         user.id,
         "", // We don't know the partner ID yet during pairing
         tempKey,

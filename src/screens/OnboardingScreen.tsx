@@ -26,7 +26,6 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Dimensions,
 } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -38,8 +37,6 @@ import { completeOnboarding } from "../storage/userStorage";
  * Main onboarding screen component
  */
 import { sanitizeTextInput } from "../utils/sanitize";
-
-const { width } = Dimensions.get("window");
 
 type OnboardingStyles = ReturnType<typeof makeStyles>;
 

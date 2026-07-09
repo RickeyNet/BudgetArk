@@ -32,9 +32,7 @@ import { useUndo } from "../undo/UndoProvider";
 import { useFocusEffect } from "@react-navigation/native";
 import { generateUUID } from "../utils/uuid";
 import {
-  DEBT_CLASS_OPTIONS,
   Debt,
-  DebtClass,
   DebtMilestoneKey,
   DebtMilestonePlan,
   DebtOwner,
@@ -65,12 +63,7 @@ import {
 } from "../utils/debtDueCalendar";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
 import DebtDuePaymentPromptModal from "../components/DebtDuePaymentPromptModal";
-import {
-  getSavingsGoals,
-  saveSavingsGoals,
-  deleteSavingsGoal,
-  restoreSavingsGoal,
-} from "../storage/savingsGoalStorage";
+import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
@@ -208,14 +201,11 @@ const DebtTrackerScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
   const [showHistory, setShowHistory] = useState(false);
   const [hullExtraDraft, setHullExtraDraft] = useState("100");
   const [ownerFilter, setOwnerFilter] = useState<DebtOwnerFilter>("all");
-  const [showClassifyModal, setShowClassifyModal] = useState(false);
-  const [classDraftByDebtId, setClassDraftByDebtId] = useState<Record<string, DebtClass>>({});
   const [milestonePlan, setMilestonePlan] = useState<DebtMilestonePlan | null>(null);
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const [savingsReserve, setSavingsReserve] = useState(0);
@@ -413,7 +403,6 @@ const DebtTrackerScreen: React.FC = () => {
           if (__DEV__) console.error("Failed to load debts:", error);
           setDebts([]);
         }
-        if (!cancelled) setIsLoading(false);
       };
       loadDebts();
       return () => {
@@ -855,30 +844,6 @@ const DebtTrackerScreen: React.FC = () => {
     void notifyAchievementCheck();
   }, [notifyAchievementCheck]);
 
-  const openClassifyModal = useCallback(() => {
-    const nextDraft: Record<string, DebtClass> = {};
-    debts.forEach((debt) => {
-      nextDraft[debt.id] = debt.debtClass;
-    });
-    setClassDraftByDebtId(nextDraft);
-    setShowClassifyModal(true);
-  }, [debts]);
-
-  const setDebtClassDraft = useCallback((debtId: string, debtClass: DebtClass) => {
-    setClassDraftByDebtId((current) => ({ ...current, [debtId]: debtClass }));
-  }, []);
-
-  const saveClassifications = useCallback(async () => {
-    const updatedDebts = debts.map((debt) => ({
-      ...debt,
-      debtClass: classDraftByDebtId[debt.id] || debt.debtClass,
-      debtClassSource: "manual" as const,
-    }));
-    setDebts(updatedDebts);
-    await saveDebts(updatedDebts);
-    setShowClassifyModal(false);
-  }, [classDraftByDebtId, debts]);
-
   const handleToggleMilestoneComplete = useCallback(
     async (step: ComputedMilestone) => {
       const markingComplete = !step.isCompleted;
@@ -1032,60 +997,6 @@ const DebtTrackerScreen: React.FC = () => {
     await savePayoffStrategyPreference(nextStrategy);
   }, []);
 
-
-  const handleAddSavingsGoal = useCallback(
-    async (goal: SavingsGoal) => {
-      const updated = [...savingsGoals, goal];
-      setSavingsGoals(updated);
-      await saveSavingsGoals(updated);
-      await syncNetWorthSnapshot();
-      void notifyAchievementCheck();
-    },
-    [notifyAchievementCheck, savingsGoals]
-  );
-
-  const handleUpdateSavingsGoal = useCallback(
-    async (goalId: string, updates: Partial<SavingsGoal>) => {
-      const updated = savingsGoals.map((goal) =>
-        goal.id === goalId
-          ? {
-              ...goal,
-              ...updates,
-              updatedAt: new Date().toISOString(),
-            }
-          : goal
-      );
-      setSavingsGoals(updated);
-      await saveSavingsGoals(updated);
-      await syncNetWorthSnapshot();
-      void notifyAchievementCheck();
-    },
-    [notifyAchievementCheck, savingsGoals]
-  );
-
-  const handleDeleteSavingsGoal = useCallback(
-    async (goalId: string) => {
-      const prior = savingsGoals.find((g) => g.id === goalId) ?? null;
-      // Soft-delete so the partner sees the deletion on next sync.
-      const updated = await deleteSavingsGoal(goalId);
-      setSavingsGoals(updated);
-      await syncNetWorthSnapshot();
-      pushUndo({
-        message: prior ? `Deleted "${prior.name}"` : "Deleted savings goal",
-        onUndo: async () => {
-          const restored = await restoreSavingsGoal(goalId);
-          setSavingsGoals(restored);
-          await syncNetWorthSnapshot();
-          void notifyAchievementCheck();
-        },
-      });
-    },
-    [savingsGoals, pushUndo, notifyAchievementCheck]
-  );
-
-  const handleUpdateEssentialsEstimate = useCallback((value: number) => {
-    setMonthlyEssentialsEstimate(value);
-  }, []);
 
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
@@ -1681,80 +1592,6 @@ const DebtTrackerScreen: React.FC = () => {
             >
               <Text style={styles.msFullDoneText}>Done</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showClassifyModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowClassifyModal(false)}
-      >
-        <View style={styles.dialogOverlay}>
-          <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Debt Type Classification</Text>
-            <Text style={styles.dialogMessage}>
-              Choose whether each debt should be treated as Credit/Personal or Car/House for Snowball ordering.
-            </Text>
-            <ScrollView style={styles.classifyList} contentContainerStyle={styles.classifyListContent}>
-              {debts.map((debt) => {
-                const selectedClass = classDraftByDebtId[debt.id] || debt.debtClass;
-                return (
-                  <View key={debt.id} style={[styles.classifyRow, { borderColor: colors.cardBorder }]}>
-                    <View style={styles.classifyHeaderRow}>
-                      <Text style={styles.classifyDebtName}>{debt.name}</Text>
-                      {debt.debtClassSource !== "manual" && (
-                        <View style={[styles.classifyInferredBadge, { backgroundColor: colors.warningDim || `${colors.warning || colors.accent}20` }]}>
-                          <Text style={[styles.classifyInferredText, { color: colors.warning || colors.accent }]}>Inferred</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.classifyOptionRow}>
-                      {DEBT_CLASS_OPTIONS.map((option) => {
-                        const selected = selectedClass === option.id;
-                        return (
-                          <TouchableOpacity
-                            key={option.id}
-                            style={[
-                              styles.classifyOptionBtn,
-                              {
-                                borderColor: selected ? colors.accent : colors.cardBorder,
-                                backgroundColor: selected ? `${colors.accent}20` : colors.bg,
-                              },
-                            ]}
-                            onPress={() => setDebtClassDraft(debt.id, option.id)}
-                          >
-                            <Text
-                              style={[
-                                styles.classifyOptionText,
-                                { color: selected ? colors.accent : colors.textDim },
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              })}
-            </ScrollView>
-            <View style={styles.dialogActions}>
-              <TouchableOpacity
-                style={[styles.dialogButton, styles.dialogCancelButton]}
-                onPress={() => setShowClassifyModal(false)}
-              >
-                <Text style={styles.dialogCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.dialogButton, { backgroundColor: colors.accent }]}
-                onPress={saveClassifications}
-              >
-                <Text style={styles.dialogDeleteText}>Save Types</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -2446,56 +2283,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
-  },
-  classifyList: {
-    maxHeight: 320,
-    marginBottom: 14,
-  },
-  classifyListContent: {
-    gap: 10,
-  },
-  classifyRow: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    gap: 8,
-    backgroundColor: colors.bg,
-  },
-  classifyDebtName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  classifyHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  classifyInferredBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  classifyInferredText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  classifyOptionRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  classifyOptionBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  classifyOptionText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.textDim,
   },
   dialogCancelButton: {
     backgroundColor: colors.bg,

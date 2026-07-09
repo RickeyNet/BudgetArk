@@ -404,7 +404,6 @@ const ChartsScreen: React.FC = () => {
   const [efExpenseOverride, setEfExpenseOverride] = useState("");
   const [efMonthlySavings, setEfMonthlySavings] = useState(500);
   const [currentEfAmount, setCurrentEfAmount] = useState(0);
-  const [efTargetAmount, setEfTargetAmount] = useState(0);
   const [efDataLoaded, setEfDataLoaded] = useState(false);
 
   /* Learning progress (Captain's Course card). Refreshes on focus so
@@ -973,7 +972,6 @@ const ChartsScreen: React.FC = () => {
 
         const efGoal = goals.find((g) => g.category === "emergency_fund");
         setCurrentEfAmount(efGoal?.currentAmount ?? 0);
-        setEfTargetAmount(efGoal?.targetAmount ?? 0);
         setEfDataLoaded(true);
 
         setRefiDebts(debts);

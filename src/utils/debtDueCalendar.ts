@@ -94,7 +94,6 @@ export const upcomingDebtDuesWithin = (
     fromDate.getMonth(),
     fromDate.getDate()
   );
-  const monthKey = getMonthKey(start);
   const active = debts.filter((d) => d.balance > 0);
   const upcoming: UpcomingDebtDue[] = [];
 

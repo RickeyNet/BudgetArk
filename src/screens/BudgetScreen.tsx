@@ -49,10 +49,6 @@ import {
   RecurrenceInterval,
   SavingsGoal,
   AssetAccount,
-  AssetAccountCategory,
-  ASSET_ACCOUNT_CATEGORIES,
-  ASSET_ACCOUNT_CATEGORY_LABELS,
-  NetWorthSnapshot,
   BudgetBucket,
   RootTabParamList,
 } from "../types";
@@ -84,8 +80,6 @@ import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
   saveAssetAccounts,
-  deleteAssetAccount,
-  restoreAssetAccount,
 } from "../storage/assetAccountStorage";
 import {
   getCategoryBucketOverrides,
@@ -107,7 +101,6 @@ import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout
 import { useUndo } from "../undo/UndoProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
-import { calculateNetWorthTotals } from "../utils/netWorth";
 import {
   getRecurrenceTag,
   isEntryActiveInMonth,
@@ -287,27 +280,19 @@ const BudgetScreen: React.FC = () => {
   const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
   const [reviewPreviewData, setReviewPreviewData] = useState<MonthlyReviewData | null>(null);
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
-  const [showAssetModal, setShowAssetModal] = useState(false);
-  const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
-  const [assetName, setAssetName] = useState("");
-  const [assetBalance, setAssetBalance] = useState("");
-  const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
   const [keelTarget, setKeelTarget] = useState(0);
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
-  const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
   const [bucketOverrides, setBucketOverrides] = useState<CategoryBucketOverrides>({});
   const [bucketOverrideCategory, setBucketOverrideCategory] = useState<string | null>(null);
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
-  const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
-  const nextMonthKey = monthKeys[0];
   const selectedMonthIndex = Math.max(0, monthKeys.indexOf(selectedMonthKey));
 
+  // Persists a fresh snapshot for sync; nothing on this screen renders the
+  // result since the net-worth history card moved to the Bridge screen.
   const refreshNetWorthSnapshots = useCallback(async () => {
-    const nextSnapshots = await syncNetWorthSnapshot();
-    setNetWorthSnapshots(nextSnapshots);
-    return nextSnapshots;
+    await syncNetWorthSnapshot();
   }, []);
 
   const refreshMonthlyReview = useCallback(async (reviewEntries: BudgetEntry[]) => {
@@ -507,26 +492,6 @@ const BudgetScreen: React.FC = () => {
     return null;
   }, [savingsGoals, keelTarget, savingsReserve]);
 
-  const totalAssetBalance = useMemo(
-    () => assetAccounts.reduce((sum, a) => sum + a.balance, 0),
-    [assetAccounts]
-  );
-
-  const netWorthTotals = useMemo(
-    () =>
-      calculateNetWorthTotals({
-        entries,
-        debts,
-        savingsGoals,
-        assetAccounts,
-      }),
-    [assetAccounts, debts, entries, savingsGoals]
-  );
-
-  const totalSavings = netWorthTotals.totalAssets;
-  const totalDebt = netWorthTotals.totalDebt;
-  const netWorth = netWorthTotals.netWorth;
-
   const limitByCategory = useMemo(() => {
     const map: Record<string, number> = {};
     limits.forEach((limit) => {
@@ -590,17 +555,6 @@ const BudgetScreen: React.FC = () => {
     return grouped;
   }, [bucketByCategory, bucketOverrides, expensesByCategory]);
 
-  const incomeByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-
-    monthlyEntries
-      .filter((entry) => entry.type === "income")
-      .forEach((entry) => {
-        map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
-      });
-
-    return map;
-  }, [monthlyEntries]);
 
   const incomeEntries = useMemo(
     () =>
@@ -1209,82 +1163,6 @@ const BudgetScreen: React.FC = () => {
     await recordMonthlyReviewOpen();
     void notifyAchievementCheck();
   }, [entries, refreshMonthlyReview, reviewPreviewData, notifyAchievementCheck]);
-
-  const openAddAssetModal = useCallback(() => {
-    setEditingAsset(null);
-    setAssetName("");
-    setAssetBalance("");
-    setAssetCategory("savings");
-    setShowAssetModal(true);
-  }, []);
-
-  const openEditAssetModal = useCallback((account: AssetAccount) => {
-    setEditingAsset(account);
-    setAssetName(account.name);
-    setAssetBalance(String(account.balance));
-    setAssetCategory(account.category);
-    setShowAssetModal(true);
-  }, []);
-
-  const closeAssetModal = useCallback(() => {
-    setShowAssetModal(false);
-    setEditingAsset(null);
-  }, []);
-
-  const saveAsset = useCallback(async () => {
-    const parsedBalance = parseFloat(assetBalance);
-    if (!assetName.trim() || Number.isNaN(parsedBalance) || parsedBalance < 0) return;
-
-    const now = new Date().toISOString();
-    let nextAccounts: AssetAccount[];
-
-    if (editingAsset) {
-      nextAccounts = assetAccounts.map((account) =>
-        account.id === editingAsset.id
-          ? {
-              ...account,
-              name: assetName.trim(),
-              balance: parsedBalance,
-              category: assetCategory,
-              updatedAt: now,
-            }
-          : account
-      );
-    } else {
-      const newAccount: AssetAccount = {
-        id: generateUUID(),
-        name: assetName.trim(),
-        category: assetCategory,
-        balance: parsedBalance,
-        createdAt: now,
-        updatedAt: now,
-      };
-      nextAccounts = [...assetAccounts, newAccount];
-    }
-
-    setAssetAccounts(nextAccounts);
-    await saveAssetAccounts(nextAccounts);
-    await refreshNetWorthSnapshots();
-    closeAssetModal();
-    void notifyAchievementCheck();
-  }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, notifyAchievementCheck, refreshNetWorthSnapshots]);
-
-  const deleteAsset = useCallback(async (id: string) => {
-    const prior = assetAccounts.find((a) => a.id === id) ?? null;
-    // Soft-delete so the partner's next sync removes this account locally.
-    const nextAccounts = await deleteAssetAccount(id);
-    setAssetAccounts(nextAccounts);
-    await refreshNetWorthSnapshots();
-    closeAssetModal();
-    pushUndo({
-      message: prior ? `Deleted "${prior.name}"` : "Deleted account",
-      onUndo: async () => {
-        const restored = await restoreAssetAccount(id);
-        setAssetAccounts(restored);
-        await refreshNetWorthSnapshots();
-      },
-    });
-  }, [assetAccounts, closeAssetModal, pushUndo, refreshNetWorthSnapshots]);
 
   const handleEfContribution = useCallback(async () => {
     const parsed = parseFloat(efContribAmount);
@@ -2072,87 +1950,6 @@ const BudgetScreen: React.FC = () => {
                 <Text style={styles.limitCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.limitSaveBtn} onPress={saveLimit}>
-                <Text style={styles.limitSaveText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Asset Account Add/Edit Modal */}
-      <Modal
-        visible={showAssetModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeAssetModal}
-      >
-        <View style={styles.limitOverlay}>
-          <View style={styles.limitModalCard}>
-            <Text style={styles.limitModalTitle}>
-              {editingAsset ? "Edit Account" : "Add Account"}
-            </Text>
-            <Text style={styles.limitModalSub}>
-              Track a balance that won't affect your monthly budget.
-            </Text>
-
-            <TextInput
-              style={styles.limitInput}
-              placeholder="Account name"
-              placeholderTextColor={colors.textMuted}
-              value={assetName}
-              onChangeText={setAssetName}
-            />
-
-            <TextInput
-              style={styles.limitInput}
-              placeholder="Balance"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="decimal-pad"
-              value={assetBalance}
-              onChangeText={setAssetBalance}
-            />
-
-            <View style={styles.assetCategoryRow}>
-              {ASSET_ACCOUNT_CATEGORIES.map((cat) => {
-                const isSelected = assetCategory === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.assetCategoryChip,
-                      {
-                        borderColor: isSelected ? colors.accent : colors.cardBorder,
-                        backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
-                      },
-                    ]}
-                    onPress={() => setAssetCategory(cat)}
-                  >
-                    <Text
-                      style={[
-                        styles.assetCategoryChipText,
-                        { color: isSelected ? colors.accent : colors.textDim },
-                      ]}
-                    >
-                      {ASSET_ACCOUNT_CATEGORY_LABELS[cat]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.limitActions}>
-              {editingAsset && (
-                <TouchableOpacity
-                  style={styles.limitCancelBtn}
-                  onPress={() => deleteAsset(editingAsset.id)}
-                >
-                  <Text style={[styles.limitCancelText, { color: colors.danger }]}>Delete</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.limitCancelBtn} onPress={closeAssetModal}>
-                <Text style={styles.limitCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.limitSaveBtn} onPress={saveAsset}>
                 <Text style={styles.limitSaveText}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -3011,23 +2808,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontWeight: "700",
       fontVariant: ["tabular-nums"] as any,
     },
-    assetCategoryRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginBottom: 8,
-    },
-    assetCategoryChip: {
-      borderWidth: 1,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
-    },
-    assetCategoryChipText: {
-      fontSize: 12,
-      fontWeight: "600",
-    },
-
     /* FAB */
     fab: {
       position: "absolute",

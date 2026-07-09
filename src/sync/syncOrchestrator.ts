@@ -53,7 +53,7 @@ const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
 
     // Start TCP server - publish via Zeroconf as soon as the port is assigned
     // (before any client connects) so the partner can discover us.
-    const { connection, port } = await Transport.startServer(
+    const { connection } = await Transport.startServer(
       user.id,
       pairing.partnerId,
       pairing.sharedSecret,

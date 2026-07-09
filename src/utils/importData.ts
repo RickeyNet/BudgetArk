@@ -676,54 +676,6 @@ export const importFromString = async (
     return { json: JSON.stringify(existing), count: touched };
   };
 
-  // Compute merged budget limits in memory
-  const computeMergedLimits = async (
-    incoming: unknown[] | undefined
-  ): Promise<{ json: string; count: number } | null> => {
-    if (!incoming || incoming.length === 0) return null;
-
-    const monthKey = getCurrentMonthKey();
-
-    if (mode === "replace") {
-      return { json: JSON.stringify({ [monthKey]: incoming }), count: incoming.length };
-    }
-
-    const existingRaw = await EncryptedStorage.getItem(KEYS.BUDGET_LIMITS);
-    let parsed: unknown = {};
-    if (existingRaw) {
-      try {
-        parsed = JSON.parse(existingRaw);
-      } catch {
-        parsed = {}; // corrupted storage - treat as empty
-      }
-    }
-    const history =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-
-    const existingForMonth = Array.isArray(history[monthKey])
-      ? (history[monthKey] as Record<string, unknown>[])
-      : [];
-
-    const existingCategories = new Set(
-      existingForMonth.map((item) => (item as any).category as string).filter(Boolean)
-    );
-
-    for (const item of incoming) {
-      const cat = (item as any)?.category;
-      if (cat && existingCategories.has(cat)) {
-        const idx = existingForMonth.findIndex((e) => (e as any).category === cat);
-        if (idx >= 0) existingForMonth[idx] = item as Record<string, unknown>;
-      } else {
-        existingForMonth.push(item as Record<string, unknown>);
-      }
-    }
-
-    history[monthKey] = existingForMonth;
-    return { json: JSON.stringify(history), count: incoming.length };
-  };
-
   /**
    * Compute merged budget-limit history in memory. Prefers the full
    * `budgetLimitsByMonth` map when present. Falls back to the legacy

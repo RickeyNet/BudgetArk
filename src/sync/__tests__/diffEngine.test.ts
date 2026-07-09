@@ -84,7 +84,6 @@ jest.mock("../../storage/encryptedStorage", () => ({
 }));
 
 const debtStorage = require("../../storage/debtStorage");
-const budgetStorage = require("../../storage/budgetStorage");
 const customCatStorage = require("../../storage/customCategoriesStorage");
 const snapshotStorage = require("../../storage/netWorthSnapshotStorage");
 
