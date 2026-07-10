@@ -45,6 +45,11 @@ describe("parseAccessUrl", () => {
     expect(parseAccessUrl("https://host/simplefin")).toBeNull();
     expect(parseAccessUrl("garbage")).toBeNull();
   });
+
+  it("rejects http:// access URLs so embedded credentials never go in cleartext", () => {
+    // Same credentials/host as the happy path, only the scheme is downgraded.
+    expect(parseAccessUrl("http://demo:demo@beta-bridge.simplefin.org/simplefin")).toBeNull();
+  });
 });
 
 describe("parseAccountsResponse", () => {

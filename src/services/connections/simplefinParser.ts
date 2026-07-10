@@ -57,13 +57,16 @@ export const decodeSetupToken = (
  * credential-free base URL. React Native's fetch does not reliably send
  * URL-embedded basic auth, so the header must be explicit. Returns null when
  * the URL is malformed or carries no credentials.
+ *
+ * HTTPS only: the URL carries basic-auth credentials, so an `http://` access
+ * URL would send them in cleartext. We reject anything but https rather than
+ * let a downgraded or malformed URL expose the credentials on the wire.
  */
 export const parseAccessUrl = (accessUrl: string): ParsedAccessUrl | null => {
-  const match = /^(https?):\/\/([^:/@]+):([^@]+)@(.+)$/.exec(accessUrl.trim());
+  const match = /^https:\/\/([^:/@]+):([^@]+)@(.+)$/.exec(accessUrl.trim());
   if (!match) return null;
-  const [, scheme, user, password, rest] = match;
-  if (scheme !== "https" && scheme !== "http") return null;
-  const baseUrl = `${scheme}://${rest}`.replace(/\/+$/, "");
+  const [, user, password, rest] = match;
+  const baseUrl = `https://${rest}`.replace(/\/+$/, "");
   return {
     baseUrl,
     authHeader: basicAuthHeader(

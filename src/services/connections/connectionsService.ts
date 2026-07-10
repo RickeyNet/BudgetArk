@@ -16,6 +16,7 @@
 import type { BankConnection, BankProvider, ExternalAccountLink } from "../../types";
 import { BANK_PROVIDER_LABELS } from "../../types";
 import { addConnection, deleteConnection, updateConnection } from "../../storage/connectionsStorage";
+import { isEncryptionAvailable } from "../../storage/encryptedStorage";
 import {
   getConnectionSecrets,
   setConnectionSecrets,
@@ -34,6 +35,26 @@ import type { NormalizedAccount } from "./types";
 export type SetupResult =
   | { ok: true; connectionId: string; accounts: NormalizedAccount[] }
   | { ok: false; message: string };
+
+/**
+ * Guard every connect flow: bank credentials must never be persisted in
+ * plaintext, so if the OS secure keystore is unavailable we refuse to create
+ * the connection and return a user-ready message. Returns null when it's safe
+ * to proceed. Keeps this module's "never throws" contract intact - the storage
+ * layer throws EncryptionUnavailableError as a hard backstop, but callers here
+ * bail before reaching it.
+ */
+const encryptionUnavailableResult = async (): Promise<{
+  ok: false;
+  message: string;
+} | null> => {
+  if (await isEncryptionAvailable()) return null;
+  return {
+    ok: false,
+    message:
+      "This device can't securely store bank credentials (secure keystore unavailable), so the connection wasn't saved. This can affect rooted or sideloaded installs.",
+  };
+};
 
 const newConnection = (provider: BankProvider): BankConnection => {
   const now = new Date().toISOString();
@@ -63,6 +84,9 @@ const discoveryWindow = (): { startDate: Date; endDate: Date } => {
 export const createSimplefinConnection = async (
   setupToken: string,
 ): Promise<SetupResult> => {
+  const blocked = await encryptionUnavailableResult();
+  if (blocked) return blocked;
+
   const decoded = decodeSetupToken(setupToken);
   if (!decoded.ok) return { ok: false, message: decoded.message };
 
@@ -110,6 +134,10 @@ export const beginSchwabAuth = async (opts: {
   redirectUri?: string;
   reauthConnectionId?: string;
 }): Promise<{ ok: true; authUrl: string } | { ok: false; message: string }> => {
+  // Fail before the browser round-trip if we couldn't store the tokens anyway.
+  const blocked = await encryptionUnavailableResult();
+  if (blocked) return blocked;
+
   let { appKey, appSecret } = opts;
   let redirectUri = opts.redirectUri?.trim() || "https://127.0.0.1";
 
@@ -146,6 +174,9 @@ export const beginSchwabAuth = async (opts: {
 export const completeSchwabAuth = async (
   pastedRedirectUrl: string,
 ): Promise<SetupResult> => {
+  const blocked = await encryptionUnavailableResult();
+  if (blocked) return blocked;
+
   const pending = pendingSchwabAuth;
   if (!pending) {
     return {
@@ -223,6 +254,9 @@ export const createTellerConnection = async (opts: {
   certificatePem: string;
   privateKeyPem: string;
 }): Promise<{ ok: true; connectionId: string } | { ok: false; message: string }> => {
+  const blocked = await encryptionUnavailableResult();
+  if (blocked) return blocked;
+
   const applicationId = opts.applicationId.trim();
   if (!applicationId) {
     return { ok: false, message: "Enter your Teller application id first." };
@@ -258,6 +292,9 @@ export const addTellerEnrollment = async (
   enrollmentId: string,
   accessToken: string,
 ): Promise<SetupResult> => {
+  const blocked = await encryptionUnavailableResult();
+  if (blocked) return blocked;
+
   await setTellerAccessToken(connectionId, enrollmentId, accessToken);
   const secrets = await getConnectionSecrets(connectionId);
   if (secrets?.provider !== "teller") {

@@ -82,7 +82,13 @@ const readMap = async (): Promise<SecretsMap> => {
 };
 
 const writeMap = async (map: SecretsMap): Promise<void> => {
-  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+  // requireEncryption: bank credentials must never be written in plaintext.
+  // If the secure keystore is unavailable this throws EncryptionUnavailableError
+  // rather than degrading - connect flows preflight isEncryptionAvailable() and
+  // surface a message, so the user sees the failure instead of a silent leak.
+  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(map), {
+    requireEncryption: true,
+  });
 };
 
 export const getConnectionSecrets = async (

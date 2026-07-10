@@ -228,6 +228,28 @@ export class DecryptionError extends Error {
 }
 
 /**
+ * Thrown by `setItem`/`multiSet` when a caller requires encryption but the
+ * secure vault is unavailable. Callers holding secrets (e.g. bank
+ * credentials) pass `requireEncryption` so the value is never written in
+ * plaintext - they surface this to the user instead of degrading silently.
+ */
+export class EncryptionUnavailableError extends Error {
+  constructor(key: string) {
+    super(`Secure keystore unavailable; refusing to store "${key}" unencrypted`);
+    this.name = "EncryptionUnavailableError";
+  }
+}
+
+/**
+ * Whether the AES master key can be obtained from the OS secure vault. Returns
+ * false only when SecureStore itself fails (broken/mismatched Keystore, some
+ * sideloaded installs), which is exactly when encrypted writes would fall back
+ * to plaintext. Use this to gate features that must never persist plaintext.
+ */
+export const isEncryptionAvailable = async (): Promise<boolean> =>
+  (await getEncryptionKey()) !== null;
+
+/**
  * Reads and decrypts a value from AsyncStorage.
  *
  * Handles three cases:
@@ -322,12 +344,17 @@ const enqueueWrite = (key: string, run: () => Promise<void>): Promise<void> => {
   const next = previous.catch(() => {}).then(run);
   writeQueues.set(key, next);
   // Best-effort cleanup: if this is still the tail when it settles, drop it
-  // so the map doesn't grow unbounded.
-  next.finally(() => {
+  // so the map doesn't grow unbounded. Use then(cleanup, cleanup) rather than
+  // finally() so a *rejected* write (timeout, or an EncryptionUnavailableError
+  // from a requireEncryption caller) doesn't leave an unhandled rejection on
+  // this detached cleanup branch - finally() re-raises, the mapped handlers
+  // don't. The returned `next` still rejects for the caller to handle.
+  const cleanup = () => {
     if (writeQueues.get(key) === next) {
       writeQueues.delete(key);
     }
-  });
+  };
+  next.then(cleanup, cleanup);
   return next;
 };
 
@@ -337,11 +364,16 @@ const enqueueWrite = (key: string, run: () => Promise<void>): Promise<void> => {
  */
 export const setItem = async (
   key: string,
-  value: string
+  value: string,
+  options?: { requireEncryption?: boolean }
 ): Promise<void> => {
   return enqueueWrite(key, async () => {
     const encKey = await getEncryptionKey();
     if (encKey === null) {
+      if (options?.requireEncryption) {
+        // Secret-bearing caller: never degrade to plaintext.
+        throw new EncryptionUnavailableError(key);
+      }
       // SecureStore unavailable - store as plaintext to avoid data loss
       await withTimeout(AsyncStorage.setItem(key, value), `setItem(${key})`);
       return;
