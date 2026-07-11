@@ -238,6 +238,80 @@ describe("importFromString - holdings", () => {
   });
 });
 
+/**
+ * Golden-fixture decryption tests.
+ *
+ * These ciphertexts were produced ONCE with crypto-js 4.2.0, exactly the way
+ * the app's export code builds them (v1: legacy `CryptoJS.AES.encrypt(json,
+ * password).toString()`; v2: PBKDF2-SHA256 250k + AES-256-CBC in the
+ * `saltHex.ivHex.ctBase64` envelope), and then hard-coded here. They stand in
+ * for a backup created by an OLDER app version: if a future dependency bump
+ * (crypto-js, RN, Hermes, polyfills) changes how these decrypt, users' old
+ * encrypted backups become unrestorable - and this suite catches it before a
+ * release does.
+ *
+ * DO NOT regenerate these to make a failing test pass - a failure here means
+ * real users' existing backups are broken. Both fixtures encrypt the same
+ * payload: one debt ("golden-debt-1" / balance 1234.56) and one budget entry
+ * ("golden-entry-1" / amount 42.5), exportedAt 2026-07-01.
+ */
+describe("importFromString - golden encrypted fixtures (cross-version compat)", () => {
+  const PASSWORD = "correct horse battery staple";
+
+  const GOLDEN_V1 =
+    "__BUDGETARK_ENC__:U2FsdGVkX18NG7bLLXCwDd2m01OzAFy3EeElDQ+0EdDqq/AczxG1O8e0cQyAqKJjUzNcHeJokgQqxCH+gndcv5YRCMRLn4frSwyaN8e0umZM3EAGumplurc5u68ZVYg18CNr9pArzOOL0SCA546wi4/DNhsxAxCvbPsJVDUxSRhoZTGDPFIzpIuG5rrdFWkVAgfl72hQxmJBL/jx9boMYYT6+nUnJ0jeRUpjBpGgv+h7GyiWGBf3RVlbdVSJe00SnHku7WacaU94zodeQ5VTr9X/0k151m44YlnbtJ4V07D0K9s1A+ByTNpUoDih08AzTz6Ok1vsERpB67BR7H+6gjNpUYIgi0y+fVi5yrpa/3V4qlCvPkWVnf3/znW9umDK8tohVqa/rXu8d83oA3MGE55yw6rHNYgixORAwoxaLRo4RDbCB4u5javsPHD4AjTJrKECXQuQw/FelHWO6LBvfns7dy6hz8alHT2PRJPtmVb7TcOwRTqRLOj6SPylp9tY2041deHQlKARfc3Dmg9yIhRrk+y3OcRPmAWOzHut7t8kSuTaSebe1dOYoMpDE/IgEyan4nNKJT+Ub7Rpj9FAOKmmtXcWSM6uWHFxqammIUFCiMNqSkY2phg9mVxfAWJq";
+
+  const GOLDEN_V2 =
+    "__BUDGETARK_ENC2__:5cc8a60f88f7953938c9601f815f565c.386f7d86ad34e950b6ada09c01470016.FF+ZWKWJuomqYZ21hXdNivgRx/IBoXdJB5PUcIEc5Xk2G4Nhc4Aeg5QgwFiU2FVbW2pBtPWIiV2dwFO8/IVyfb6MJBRiloqmd0PjgY3qy314RrlEPwJpRLF1idzztDZO7MPIR28sYl2Bua/E3CnvJkRgcxKfUH2SywYw/IHR5Y1hHBbduAXMU9GsSv7ntNGnDuALjv6YoCZGnhfcHrguY6pc00rTqepVVrCmX90N9DrIYOx4cySFtHjVLAZN6cvrk8HIKoc0A7JZRBM3y646VDq2HssnrmlCv9DloGO3++YgVkSyaJaUGShTDZpOXr9QOxgTZZJK8mPvcyrtRugekJtThL2dElyss0HYU0aUfvQnXlDaXVbye5Wsd3vl29uZE/T9gfswGhCu+j2FUPOaTxRTxlP6/6gJR2ALEbmXJ+L5//IACgBe2hWE+WF+bQLd6sSI2kZCM03FblrrfSe1GaIwFJRPMn/8PJxiEB1thf2MyEcaIJ5BDmB0KIOtADdxSJlPYS+7IQYkixy0oSW09gZIqvjdiJb7QuWS7SbWXdA61QKI/jS2YQ39h5UVnNOr8cJ2Btrvanx9fo3uUb8xY8V2Qxvb+3Cg8vFi7OAH+T8=";
+
+  const expectGoldenPayloadStored = () => {
+    const debts = readStore(KEYS.DEBTS);
+    expect(debts).toHaveLength(1);
+    expect(debts[0]).toMatchObject({ id: "golden-debt-1", balance: 1234.56 });
+    const entries = readStore(KEYS.BUDGET_ENTRIES);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ id: "golden-entry-1", amount: 42.5 });
+  };
+
+  it("decrypts and imports a v1 (legacy KDF) encrypted backup", async () => {
+    const result = await importFromString(GOLDEN_V1, "merge", PASSWORD);
+    expect(result.debts).toBe(1);
+    expect(result.budgetEntries).toBe(1);
+    expectGoldenPayloadStored();
+  });
+
+  // The v2 tests each run a real 250k-iteration PBKDF2 in pure JS, which can
+  // take a few seconds on a slow CI runner - hence the raised timeouts.
+  it(
+    "decrypts and imports a v2 (PBKDF2) encrypted backup",
+    async () => {
+      const result = await importFromString(GOLDEN_V2, "merge", PASSWORD);
+      expect(result.debts).toBe(1);
+      expect(result.budgetEntries).toBe(1);
+      expectGoldenPayloadStored();
+    },
+    30_000
+  );
+
+  it("rejects the v1 backup with a wrong password", async () => {
+    await expect(
+      importFromString(GOLDEN_V1, "merge", "wrong-password")
+    ).rejects.toThrow(/password may be incorrect/i);
+    expect(storageMock.__store.size).toBe(0);
+  });
+
+  it(
+    "rejects the v2 backup with a wrong password",
+    async () => {
+      await expect(
+        importFromString(GOLDEN_V2, "merge", "wrong-password")
+      ).rejects.toThrow(/password may be incorrect/i);
+      expect(storageMock.__store.size).toBe(0);
+    },
+    30_000
+  );
+});
+
 describe("importFromString - replace mode", () => {
   it("replaces existing records wholesale", async () => {
     storageMock.__store.set(
