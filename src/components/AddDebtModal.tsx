@@ -86,6 +86,15 @@ interface AddDebtModalProps {
   onEdit?: (debtId: string, updates: Partial<Debt>) => void;
 }
 
+/**
+ * Clamp a stored payment-due-day to the valid 1-31 range, treating anything
+ * else (undefined, floats, out-of-range) as "use the app default" (null).
+ */
+const sanitizeDueDay = (day: number | undefined): number | null =>
+  typeof day === "number" && Number.isInteger(day) && day >= 1 && day <= 31
+    ? day
+    : null;
+
 /* ─── Component ─── */
 const AddDebtModal: React.FC<AddDebtModalProps> = ({
   visible,
@@ -104,18 +113,26 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
   const isEditing = !!editDebt;
 
-  /** Form field state */
-  const [name, setName] = useState("");
-  const [balance, setBalance] = useState("");
-  const [rate, setRate] = useState("");
-  const [minPayment, setMinPayment] = useState("");
-  const [goalMonth, setGoalMonth] = useState("");
-  const [owner, setOwner] = useState<DebtOwner>("mine");
-  const [debtClass, setDebtClass] = useState<DebtClass>("personal_credit");
+  /** Form field state - seeded from editDebt so a mount mid-edit prefills */
+  const [name, setName] = useState(editDebt?.name ?? "");
+  const [balance, setBalance] = useState(editDebt ? String(editDebt.balance) : "");
+  const [rate, setRate] = useState(editDebt ? String(editDebt.rate) : "");
+  const [minPayment, setMinPayment] = useState(
+    editDebt ? String(editDebt.minPayment) : ""
+  );
+  const [goalMonth, setGoalMonth] = useState(
+    editDebt?.goalDate ? editDebt.goalDate.slice(0, 7) : ""
+  );
+  const [owner, setOwner] = useState<DebtOwner>(editDebt?.owner ?? "mine");
+  const [debtClass, setDebtClass] = useState<DebtClass>(
+    editDebt?.debtClass ?? "personal_credit"
+  );
   // null = use app default (DEFAULT_DEBT_PAYMENT_DUE_DAY) without persisting a
   // value, so future default changes flow through and the user's intent stays
   // distinguishable from "I happened to pick 15."
-  const [paymentDueDay, setPaymentDueDay] = useState<number | null>(null);
+  const [paymentDueDay, setPaymentDueDay] = useState<number | null>(
+    sanitizeDueDay(editDebt?.paymentDueDay)
+  );
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   // Month highlighted inside the picker before the user confirms with "Done".
@@ -123,8 +140,15 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   // leaves the saved goal untouched.
   const [pickerMonth, setPickerMonth] = useState<number | null>(null);
 
-  /** Pre-fill form when editing */
-  React.useEffect(() => {
+  /**
+   * Pre-fill / reset the form when the target debt changes. Render-time
+   * adjustment guarded on the previous prop value (React-docs pattern) so
+   * the whole form updates in one pass instead of an effect-driven second
+   * render with stale fields.
+   */
+  const [prevEditDebt, setPrevEditDebt] = useState(editDebt);
+  if (editDebt !== prevEditDebt) {
+    setPrevEditDebt(editDebt);
     if (editDebt) {
       setName(editDebt.name);
       setBalance(String(editDebt.balance));
@@ -133,14 +157,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       setGoalMonth(editDebt.goalDate ? editDebt.goalDate.slice(0, 7) : "");
       setOwner(editDebt.owner ?? "mine");
       setDebtClass(editDebt.debtClass ?? "personal_credit");
-      setPaymentDueDay(
-        typeof editDebt.paymentDueDay === "number" &&
-          Number.isInteger(editDebt.paymentDueDay) &&
-          editDebt.paymentDueDay >= 1 &&
-          editDebt.paymentDueDay <= 31
-          ? editDebt.paymentDueDay
-          : null
-      );
+      setPaymentDueDay(sanitizeDueDay(editDebt.paymentDueDay));
     } else {
       setName("");
       setBalance("");
@@ -151,7 +168,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       setDebtClass("personal_credit");
       setPaymentDueDay(null);
     }
-  }, [editDebt]);
+  }
 
   /** Calculate required payment for goal date */
   const goalPaymentInfo = React.useMemo(() => {

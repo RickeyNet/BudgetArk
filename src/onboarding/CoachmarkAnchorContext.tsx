@@ -240,9 +240,14 @@ export const useCoachmarkComputedAnchor = (
   const { register } = useCoachmarkAnchorContext();
   // Hold the latest provider in a ref so re-renders that change `getRect`
   // identity don't trigger re-register churn. The wrapper we hand the registry
-  // is stable; it forwards to the latest closure.
+  // is stable; it forwards to the latest closure. Written from an effect (not
+  // during render) so a discarded concurrent render can't leak its closure
+  // into the ref; measures only happen on user interaction, well after the
+  // effect has flushed.
   const providerRef = useRef(getRect);
-  providerRef.current = getRect;
+  useEffect(() => {
+    providerRef.current = getRect;
+  });
 
   useEffect(() => {
     const stable: AnchorRectProvider = () => providerRef.current();

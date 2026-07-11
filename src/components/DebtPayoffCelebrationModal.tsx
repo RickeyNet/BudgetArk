@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Animated,
   Easing,
@@ -7,6 +7,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { Debt } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
@@ -37,7 +38,9 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const pulse = useRef(new Animated.Value(0)).current;
+  // useAnimatedValue instead of useRef(new Animated.Value()).current so no
+  // ref is read during render (react-hooks/refs).
+  const pulse = useAnimatedValue(0);
 
   useEffect(() => {
     if (!visible) {

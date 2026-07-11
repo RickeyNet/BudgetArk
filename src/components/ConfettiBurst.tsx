@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import {
   Animated,
   Easing,
   StyleSheet,
   View,
   useWindowDimensions,
+  useAnimatedValue,
 } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -36,7 +37,9 @@ interface ConfettiBurstProps {
 const ConfettiBurst: React.FC<ConfettiBurstProps> = ({ active }) => {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
-  const progress = useRef(new Animated.Value(0)).current;
+  // useAnimatedValue instead of useRef(new Animated.Value()).current so no
+  // ref is read during render (react-hooks/refs).
+  const progress = useAnimatedValue(0);
 
   useEffect(() => {
     if (!active) {

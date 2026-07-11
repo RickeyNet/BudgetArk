@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Modal,
   ScrollView,
   StatusBar,
@@ -794,11 +795,17 @@ const BudgetScreen: React.FC = () => {
     void notifyAchievementCheck();
   }, [notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
-  // Profile's "Review Inbox" row navigates here with openInbox set.
+  // Profile's "Review Inbox" row navigates here with openInbox set. Deferred
+  // past the tab-switch transition: presenting a Modal mid-navigation is the
+  // iOS silent-present failure this codebase keeps hitting, and it also keeps
+  // the setState out of the effect's synchronous body.
   useEffect(() => {
     if (!route.params?.openInbox) return;
-    setShowReviewInbox(true);
-    navigation.setParams({ openInbox: undefined });
+    const task = InteractionManager.runAfterInteractions(() => {
+      setShowReviewInbox(true);
+      navigation.setParams({ openInbox: undefined });
+    });
+    return () => task.cancel();
   }, [navigation, route.params?.openInbox]);
 
   const handleEditEntry = useCallback((entryId: string) => {

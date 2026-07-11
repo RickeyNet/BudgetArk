@@ -34,6 +34,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
@@ -66,8 +67,10 @@ export const UndoProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const insets = useSafeAreaInsets();
   const [active, setActive] = useState<ActiveUndo | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
+  // useAnimatedValue instead of useRef(new Animated.Value()).current so no
+  // ref is read during render (react-hooks/refs).
+  const opacity = useAnimatedValue(0);
+  const translateY = useAnimatedValue(20);
   // Monotonic key so a rapid replace re-triggers the enter animation and
   // the dismiss timer is unambiguously tied to the latest bar.
   const keyRef = useRef(0);

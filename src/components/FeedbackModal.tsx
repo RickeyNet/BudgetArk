@@ -8,7 +8,7 @@
  * Also offers a link to GitHub Issues for public tracking.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Modal,
   View,
@@ -46,12 +46,18 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
+  // Reset the form when the sheet closes. Done as a render-time adjustment
+  // guarded on the previous `visible` value (the React-docs pattern for
+  // deriving state from prop changes) rather than an effect, so the reset
+  // lands in the same render pass instead of scheduling a cascading one.
+  const [prevVisible, setPrevVisible] = useState(visible);
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
     if (!visible) {
       setFeedbackType("bug");
       setMessage("");
     }
-  }, [visible]);
+  }
 
   const deviceInfo = useMemo(() => {
     const lines = [

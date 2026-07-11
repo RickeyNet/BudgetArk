@@ -51,20 +51,24 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  const refresh = useCallback(async () => {
-    try {
-      const [nextConnections, nextPending] = await Promise.all([
-        getConnections(),
-        getPendingTransactions(),
-      ]);
-      setConnections(nextConnections);
-      setPendingTransactions(nextPending);
-    } catch (error) {
-      if (__DEV__) console.warn("Connections load failed:", error);
-    } finally {
-      setIsReady(true);
-    }
-  }, []);
+  // Promise-chain form (not async/await): every setState lives in a .then/
+  // .finally callback, so the mount effect's synchronous call path contains
+  // no setState and can't trigger a cascading render.
+  const refresh = useCallback(
+    (): Promise<void> =>
+      Promise.all([getConnections(), getPendingTransactions()])
+        .then(([nextConnections, nextPending]) => {
+          setConnections(nextConnections);
+          setPendingTransactions(nextPending);
+        })
+        .catch((error) => {
+          if (__DEV__) console.warn("Connections load failed:", error);
+        })
+        .finally(() => {
+          setIsReady(true);
+        }),
+    [],
+  );
 
   useEffect(() => {
     void refresh();

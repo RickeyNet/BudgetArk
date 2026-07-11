@@ -153,12 +153,16 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
   const prevStub = stub ? getPrevLessonStub(stub.id) : undefined;
   const nextStub = stub ? getNextLessonStub(stub.id) : undefined;
 
+  // Plain-identifier dep (not `progress?.completedLessons` inline) so the
+  // React Compiler can match the manual memoization and keep it.
+  const completedLessons = progress?.completedLessons;
+
   const handleMarkComplete = useCallback(async () => {
     if (!stub || !chapter) return;
     try {
       /* Snapshot pre-write state so we can detect the "first lesson ever"
        * case (couldn't compute this from `fresh` alone after the write). */
-      const wasEmpty = Object.keys(progress?.completedLessons ?? {}).length === 0;
+      const wasEmpty = Object.keys(completedLessons ?? {}).length === 0;
 
       await markLessonComplete(stub.id);
       const fresh = await getLearningProgress();
@@ -201,7 +205,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
     } catch (err) {
       if (__DEV__) console.warn("[LessonScreen] mark complete", err);
     }
-  }, [stub, chapter, progress?.completedLessons]);
+  }, [stub, chapter, completedLessons]);
 
   const handleCelebrationClose = useCallback(() => {
     setCelebration(null);
@@ -220,10 +224,15 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
     [onNavigateTo, runAchievementsCheck]
   );
 
-  const handleAction = useCallback(() => {
+  // No useCallback: `lesson` is a fresh getLessonById() result each render,
+  // which the React Compiler can't prove immutable, so manual memoization
+  // here blocks it from optimizing the whole component. The handler only
+  // feeds a TouchableOpacity onPress, where identity doesn't matter - let
+  // the compiler memoize it automatically.
+  const handleAction = () => {
     if (!lesson?.action || !onOpenAction) return;
     onOpenAction(lesson.action.route);
-  }, [lesson?.action, onOpenAction]);
+  };
 
   if (!stub || !chapter) {
     return (

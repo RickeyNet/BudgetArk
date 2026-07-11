@@ -71,10 +71,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   );
 
   useEffect(() => {
-    if (!selectedId) {
-      setLinks([]);
-      return;
-    }
+    if (!selectedId) return;
     let cancelled = false;
     void getLinksForConnection(selectedId).then((result) => {
       if (!cancelled) setLinks(result);
@@ -88,9 +85,18 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     if (visible) void refresh();
   }, [visible, refresh]);
 
+  // Clearing `links` happens in the selection event handlers (not the fetch
+  // effect) so the effect never sets state synchronously and a newly opened
+  // detail view can't flash the previous connection's accounts.
   const handleBack = useCallback(() => {
     setSelectedId(null);
+    setLinks([]);
     setConfirmingRemove(false);
+  }, []);
+
+  const handleSelect = useCallback((connectionId: string) => {
+    setLinks([]);
+    setSelectedId(connectionId);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -151,7 +157,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                 {index > 0 ? <View style={styles.divider} /> : null}
                 <TouchableOpacity
                   style={styles.row}
-                  onPress={() => setSelectedId(connection.id)}
+                  onPress={() => handleSelect(connection.id)}
                 >
                   <Text style={styles.rowGlyph}>
                     {PROVIDER_GLYPHS[connection.provider] ?? "🏦"}

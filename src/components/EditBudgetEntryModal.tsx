@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   InteractionManager,
   KeyboardAvoidingView,
@@ -99,25 +99,42 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const [type, setType] = useState<BudgetEntryType>("expense");
-  const [category, setCategory] = useState<CategoryName>("Grocery");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [yearMonth, setYearMonth] = useState("");
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
-  const [recurring, setRecurring] = useState(false);
-  const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
-    DEFAULT_RECURRENCE_INTERVAL
+  // Seeded from `entry` so a mount mid-edit prefills without an effect pass.
+  const [type, setType] = useState<BudgetEntryType>(entry?.type ?? "expense");
+  const [category, setCategory] = useState<CategoryName>(
+    entry?.category ?? "Grocery"
   );
-  const [recurrenceDay, setRecurrenceDay] = useState<number>(DEFAULT_RECURRENCE_DAY);
-  const [paymentUrl, setPaymentUrl] = useState("");
-  const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
+  const [amount, setAmount] = useState(entry ? String(entry.amount) : "");
+  const [description, setDescription] = useState(entry?.description ?? "");
+  const [yearMonth, setYearMonth] = useState(entry ? toYearMonth(entry.date) : "");
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => {
+    const fromEntry = entry ? Number(toYearMonth(entry.date).split("-")[0]) : NaN;
+    return fromEntry || new Date().getFullYear();
+  });
+  const [recurring, setRecurring] = useState(!!entry?.recurring);
+  const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
+    entry ? getRecurrenceInterval(entry) : DEFAULT_RECURRENCE_INTERVAL
+  );
+  const [recurrenceDay, setRecurrenceDay] = useState<number>(
+    entry ? dayOfMonthFromIso(entry.date) : DEFAULT_RECURRENCE_DAY
+  );
+  const [paymentUrl, setPaymentUrl] = useState(entry?.paymentUrl ?? "");
+  const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(
+    entry?.linkedAccountId
+  );
 
   const showDayPicker = recurring && type === "expense";
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
+  /**
+   * Re-fill the form when the edited entry changes. Render-time adjustment
+   * guarded on the previous prop value (React-docs pattern) so the form
+   * updates in one pass instead of an effect-driven second render.
+   */
+  const [prevEntry, setPrevEntry] = useState(entry);
+  if (entry !== prevEntry) {
+    setPrevEntry(entry);
     if (entry) {
       setType(entry.type);
       setCategory(entry.category);
@@ -131,14 +148,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setRecurrenceDay(dayOfMonthFromIso(entry.date));
       setPaymentUrl(entry.paymentUrl ?? "");
       setLinkedAccountId(entry.linkedAccountId);
-      setReady(false);
-      setShowMonthPicker(false);
-      return;
     }
-
     setReady(false);
     setShowMonthPicker(false);
-  }, [entry]);
+  }
 
   const isValid = parseFloat(amount) > 0;
   const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;

@@ -115,11 +115,13 @@ export const AchievementsProvider: React.FC<{ children: React.ReactNode }> = ({
   // it's skipped forever). One centralized delay covers every call site.
   const head = queue[0] ?? null;
   const [presented, setPresented] = useState<AchievementDef | null>(null);
+  // Queue drained -> hide immediately. Render-time adjustment (guarded on
+  // current state) rather than a synchronous setState inside the effect.
+  if (!head && presented !== null) {
+    setPresented(null);
+  }
   useEffect(() => {
-    if (!head) {
-      setPresented(null);
-      return;
-    }
+    if (!head) return;
     const timer = setTimeout(() => setPresented(head), 300);
     return () => clearTimeout(timer);
   }, [head]);

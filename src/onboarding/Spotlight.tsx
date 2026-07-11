@@ -56,11 +56,20 @@ const Spotlight: React.FC<SpotlightProps> = ({
   const [rect, setRect] = useState<AnchorRect | null>(null);
   const [measureToken, setMeasureToken] = useState(0);
 
-  // Re-measure whenever the step changes or visibility flips on. Clear the
-  // previous rect first so the old highlight doesn't linger over the new
-  // step's text while we wait for scroll-into-view + measure to settle.
-  useEffect(() => {
+  // Clear the previous rect the moment the measurement target changes, so
+  // the old highlight doesn't linger over the new step's text while we wait
+  // for scroll-into-view + measure to settle. Render-time adjustment guarded
+  // on the previous target key (React-docs pattern) instead of a synchronous
+  // setState in the measure effect below.
+  const measureKey = `${visible ? 1 : 0}|${stepIndex}|${step?.anchorId ?? ""}|${measureToken}`;
+  const [prevMeasureKey, setPrevMeasureKey] = useState(measureKey);
+  if (measureKey !== prevMeasureKey) {
+    setPrevMeasureKey(measureKey);
     setRect(null);
+  }
+
+  // Re-measure whenever the step changes or visibility flips on.
+  useEffect(() => {
     if (!visible || !step?.anchorId) return;
     let cancelled = false;
     const id = step.anchorId;

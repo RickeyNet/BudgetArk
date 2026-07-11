@@ -11,7 +11,7 @@
  * composition changed.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
@@ -625,10 +625,17 @@ const ChartsScreen: React.FC = () => {
   const hasMoreLoanScheduleRows = loanScheduleVisibleRows < loanSchedule.length;
   const canCollapseLoanSchedule = loanSchedule.length > LOAN_SCHEDULE_PAGE_SIZE;
 
-  useEffect(() => {
+  // Any change to the loan inputs collapses the schedule pagination and
+  // clears the stale export blurb. Render-time adjustment guarded on the
+  // previous input tuple (React-docs pattern) so the reset lands in the same
+  // pass instead of rendering the full stale schedule first.
+  const loanInputsKey = `${loanAmount}|${loanRate}|${loanTerm}`;
+  const [prevLoanInputsKey, setPrevLoanInputsKey] = useState(loanInputsKey);
+  if (loanInputsKey !== prevLoanInputsKey) {
+    setPrevLoanInputsKey(loanInputsKey);
     setLoanScheduleVisibleRows(LOAN_SCHEDULE_PAGE_SIZE);
     setLoanExportMessage(null);
-  }, [loanAmount, loanRate, loanTerm]);
+  }
 
   const adjustLoan = useCallback(
     (key: "loanAmount" | "loanRate" | "loanTerm", delta: number) => {
@@ -889,19 +896,34 @@ const ChartsScreen: React.FC = () => {
 
   // Auto-fill years remaining when every selected debt has a goal date
   // (weighted by balance). Leaves the user's manual value alone otherwise.
-  useEffect(() => {
-    if (selectedRefiDebts.length === 0) return;
-    if (!selectedRefiDebts.every((d) => Boolean(d.goalDate))) return;
-    if (refiBalance <= 0) return;
-    const weightedMonths =
-      selectedRefiDebts.reduce(
-        (s, d) =>
-          s + Math.max(0, d.balance) * calcMonthsUntilDate(d.goalDate as string),
-        0
-      ) / refiBalance;
-    const years = Math.max(1, Math.min(30, Math.round(weightedMonths / 12)));
-    setRefiCurrentTerm(years);
-  }, [selectedRefiDebts, refiBalance]);
+  // Render-time adjustment guarded on the previous inputs (React-docs
+  // pattern): it fires only when the selection/balance actually changes, so
+  // a manual edit to the term is never fought on unrelated re-renders.
+  const [prevRefiInputs, setPrevRefiInputs] = useState<{
+    debts: typeof selectedRefiDebts;
+    balance: number;
+  } | null>(null);
+  if (
+    !prevRefiInputs ||
+    prevRefiInputs.debts !== selectedRefiDebts ||
+    prevRefiInputs.balance !== refiBalance
+  ) {
+    setPrevRefiInputs({ debts: selectedRefiDebts, balance: refiBalance });
+    if (
+      selectedRefiDebts.length > 0 &&
+      selectedRefiDebts.every((d) => Boolean(d.goalDate)) &&
+      refiBalance > 0
+    ) {
+      const weightedMonths =
+        selectedRefiDebts.reduce(
+          (s, d) =>
+            s + Math.max(0, d.balance) * calcMonthsUntilDate(d.goalDate as string),
+          0
+        ) / refiBalance;
+      const years = Math.max(1, Math.min(30, Math.round(weightedMonths / 12)));
+      setRefiCurrentTerm(years);
+    }
+  }
 
   /* Refi math */
   const refiCurrentMonths = refiCurrentTerm * 12;

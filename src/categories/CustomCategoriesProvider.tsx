@@ -51,15 +51,23 @@ export const CustomCategoriesProvider: React.FC<{
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
   const [isReady, setIsReady] = useState(false);
 
-  const refresh = useCallback(async () => {
-    try {
-      setCustomCategories(await getCustomCategories());
-    } catch (error) {
-      if (__DEV__) console.warn("Custom categories load failed:", error);
-    } finally {
-      setIsReady(true);
-    }
-  }, []);
+  // Promise-chain form (not async/await): every setState lives in a .then/
+  // .finally callback, so the mount effect's synchronous call path contains
+  // no setState and can't trigger a cascading render.
+  const refresh = useCallback(
+    (): Promise<void> =>
+      getCustomCategories()
+        .then((categories) => {
+          setCustomCategories(categories);
+        })
+        .catch((error) => {
+          if (__DEV__) console.warn("Custom categories load failed:", error);
+        })
+        .finally(() => {
+          setIsReady(true);
+        }),
+    []
+  );
 
   useEffect(() => {
     void refresh();

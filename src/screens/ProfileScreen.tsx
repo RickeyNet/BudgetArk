@@ -26,6 +26,7 @@ import {
   ScrollView,
   Modal,
   ActivityIndicator,
+  InteractionManager,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -280,9 +281,13 @@ const ProfileScreen: React.FC = () => {
   /** Import password modal state (for encrypted exports) */
   const [showImportPasswordModal, setShowImportPasswordModal] = useState(false);
   const [importPassword, setImportPassword] = useState("");
-  const [pendingImportAction, setPendingImportAction] = useState<
-    ((pw: string) => void) | null
-  >(null);
+  // Stored as plain data (not a retry closure) so `executeImport` doesn't
+  // have to reference itself inside its own useCallback - a self-capture the
+  // React Compiler can't order and therefore refuses to optimize.
+  const [pendingImport, setPendingImport] = useState<{
+    importFn: (password?: string) => Promise<ImportResult | null>;
+    label: string;
+  } | null>(null);
 
   /** Whether the reset confirmation modal is visible */
   const [showResetModal, setShowResetModal] = useState(false);
@@ -458,10 +463,18 @@ const ProfileScreen: React.FC = () => {
     };
   }, []);
 
+  // "What's new" deep-link navigates here with openReleaseNotes set.
+  // Deferred past the tab-switch transition: presenting a Modal
+  // mid-navigation is the iOS silent-present failure this codebase keeps
+  // hitting, and it also keeps the setState out of the effect's synchronous
+  // body.
   useEffect(() => {
     if (!route.params?.openReleaseNotes) return;
-    setShowReleaseNotesModal(true);
-    navigation.setParams({ openReleaseNotes: undefined });
+    const task = InteractionManager.runAfterInteractions(() => {
+      setShowReleaseNotesModal(true);
+      navigation.setParams({ openReleaseNotes: undefined });
+    });
+    return () => task.cancel();
   }, [navigation, route.params?.openReleaseNotes]);
 
   /**
@@ -1132,10 +1145,9 @@ const ProfileScreen: React.FC = () => {
         });
       } catch (error: any) {
         if (error?.message?.includes("password-encrypted")) {
-          // Need password - show the password prompt
-          setPendingImportAction(
-            () => (pw: string) => executeImport(importFn, label, pw),
-          );
+          // Need password - stash the request and show the password prompt;
+          // confirmImportPassword re-runs it with the entered password.
+          setPendingImport({ importFn, label });
           setImportPassword("");
           setShowImportPasswordModal(true);
         } else {
@@ -1153,12 +1165,12 @@ const ProfileScreen: React.FC = () => {
   );
 
   const confirmImportPassword = useCallback(() => {
-    if (!pendingImportAction) return;
+    if (!pendingImport) return;
     setShowImportPasswordModal(false);
-    pendingImportAction(importPassword);
+    void executeImport(pendingImport.importFn, pendingImport.label, importPassword);
     setImportPassword("");
-    setPendingImportAction(null);
-  }, [pendingImportAction, importPassword]);
+    setPendingImport(null);
+  }, [pendingImport, importPassword, executeImport]);
 
   /**
    * File-picker: run the document picker with the chosen mode.
@@ -3561,7 +3573,7 @@ const ProfileScreen: React.FC = () => {
         transparent
         onRequestClose={() => {
           setShowImportPasswordModal(false);
-          setPendingImportAction(null);
+          setPendingImport(null);
           setImportPassword("");
         }}
       >
@@ -3605,7 +3617,7 @@ const ProfileScreen: React.FC = () => {
                 style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
                 onPress={() => {
                   setShowImportPasswordModal(false);
-                  setPendingImportAction(null);
+                  setPendingImport(null);
                   setImportPassword("");
                 }}
               >

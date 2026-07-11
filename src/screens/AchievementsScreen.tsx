@@ -79,10 +79,18 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
   const [selected, setSelected] = useState<AchievementDef | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Re-arm the loading state the moment the sheet opens - render-time
+  // adjustment guarded on the previous `visible` value (React-docs pattern)
+  // so the evaluate effect below never sets state synchronously.
+  const [prevVisible, setPrevVisible] = useState(visible);
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
+    if (visible) setIsLoaded(false);
+  }
+
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    setIsLoaded(false);
     evaluateAchievements()
       .then((result) => {
         if (cancelled) return;

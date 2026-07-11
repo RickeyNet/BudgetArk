@@ -48,19 +48,29 @@ export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
   // isFocused is critical: without it, every mounted tab's <Spotlight> Modal
   // would try to present at once after Replay, causing the modal-stacking bug
   // we saw in the screenshots.
-  useEffect(() => {
-    if (!isFocused) return;
-    if (!ready || skippedAll || hasSeen(tabId) || totalSteps === 0) return;
-    setStepIndex(0);
-    setActive(true);
-  }, [isFocused, ready, skippedAll, hasSeen, tabId, totalSteps]);
+  //
+  // Render-time adjustment guarded on the previous eligibility value (the
+  // React-docs pattern) rather than an effect. This also only fires on the
+  // false->true transition, so an unrelated context re-render mid-tour can't
+  // reset the tour to step 0 the way the old effect's dep list could.
+  const shouldStart =
+    isFocused && ready && !skippedAll && !hasSeen(tabId) && totalSteps > 0;
+  const [prevShouldStart, setPrevShouldStart] = useState(false);
+  if (shouldStart !== prevShouldStart) {
+    setPrevShouldStart(shouldStart);
+    if (shouldStart) {
+      setStepIndex(0);
+      setActive(true);
+    }
+  }
 
   // If the tab loses focus while a tour is showing, hide the modal so it
-  // doesn't bleed onto the next tab. The start effect above will re-fire
-  // cleanly when the user comes back, gated on hasSeen.
-  useEffect(() => {
-    if (!isFocused && active) setActive(false);
-  }, [isFocused, active]);
+  // doesn't bleed onto the next tab. The start guard above re-fires cleanly
+  // when the user comes back, gated on hasSeen. Conditional on `active`, so
+  // this render-time setState settles in one extra pass.
+  if (!isFocused && active) {
+    setActive(false);
+  }
 
   const handleNext = useCallback(() => {
     if (stepIndex >= totalSteps - 1) {

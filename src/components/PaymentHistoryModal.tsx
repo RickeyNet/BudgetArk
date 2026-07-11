@@ -179,19 +179,34 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     return map;
   }, [debts]);
 
-  /** Load payments when modal becomes visible; reset transient UI on close. */
-  useEffect(() => {
-    if (!visible) {
-      // Closing the sheet abandons any in-flight selection/undo so it
-      // doesn't reappear on next open.
-      clearUndoTimer();
+  /**
+   * Visibility transitions adjust state at render time (guarded on the
+   * previous `visible` value - React-docs pattern) so no setState happens
+   * synchronously inside the load effect below. Closing the sheet abandons
+   * any in-flight selection/undo so it doesn't reappear on next open;
+   * opening re-arms the spinner for the fresh load.
+   */
+  const [prevVisible, setPrevVisible] = useState(visible);
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
+    if (visible) {
+      setIsLoading(true);
+    } else {
       setUndoBatch(null);
       setSelectionMode(false);
       setSelectedIds(new Set());
+    }
+  }
+
+  /** Load payments when modal becomes visible; stop the undo timer on close. */
+  useEffect(() => {
+    if (!visible) {
+      // clearTimeout is a side effect, so it stays in the effect rather than
+      // the render-time transition block above.
+      clearUndoTimer();
       return;
     }
     let cancelled = false;
-    setIsLoading(true);
     getPayments()
       .then((payments) => {
         if (cancelled) return;
