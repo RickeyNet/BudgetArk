@@ -6,11 +6,6 @@
  * provider's accounts BEFORE the user maps them, finalize account links, and
  * remove connections. Never throws - every step returns a typed result with
  * a user-ready message on failure.
- *
- * Schwab's browser OAuth spans two calls: beginSchwabAuth stashes the
- * pending app credentials in module memory and returns the authorize URL;
- * completeSchwabAuth exchanges the pasted redirect for tokens. Nothing is
- * persisted until the exchange succeeds.
  */
 
 import type { BankConnection, BankProvider, ExternalAccountLink } from "../../types";
@@ -26,8 +21,6 @@ import { upsertLink } from "../../storage/externalAccountLinksStorage";
 import { generateUUID } from "../../utils/uuid";
 import { claimAccessUrl, fetchSimplefinAccounts } from "./simplefinClient";
 import { decodeSetupToken } from "./simplefinParser";
-import { buildAuthorizeUrl, extractAuthCode } from "./schwabParser";
-import { exchangeAuthCode, fetchSchwabData } from "./schwabClient";
 import { fetchTellerData } from "./tellerClient";
 import { INITIAL_BACKFILL_DAYS } from "./syncGate";
 import type { NormalizedAccount } from "./types";
@@ -111,134 +104,6 @@ export const createSimplefinConnection = async (
     accessUrl: claimed.accessUrl,
   });
   return { ok: true, connectionId: connection.id, accounts: fetched.accounts };
-};
-
-interface PendingSchwabAuth {
-  appKey: string;
-  appSecret: string;
-  redirectUri: string;
-  /** Set when re-authing an existing connection instead of creating one. */
-  reauthConnectionId?: string;
-}
-
-let pendingSchwabAuth: PendingSchwabAuth | null = null;
-
-/**
- * Stash the user's Schwab app credentials and return the authorize URL to
- * open in the system browser. For re-auth, pass the existing connection id -
- * stored credentials are reused when key/secret are blank.
- */
-export const beginSchwabAuth = async (opts: {
-  appKey: string;
-  appSecret: string;
-  redirectUri?: string;
-  reauthConnectionId?: string;
-}): Promise<{ ok: true; authUrl: string } | { ok: false; message: string }> => {
-  // Fail before the browser round-trip if we couldn't store the tokens anyway.
-  const blocked = await encryptionUnavailableResult();
-  if (blocked) return blocked;
-
-  let { appKey, appSecret } = opts;
-  let redirectUri = opts.redirectUri?.trim() || "https://127.0.0.1";
-
-  if (opts.reauthConnectionId && (!appKey.trim() || !appSecret.trim())) {
-    const stored = await getConnectionSecrets(opts.reauthConnectionId);
-    if (stored?.provider !== "schwab") {
-      return {
-        ok: false,
-        message: "This connection's stored credentials are missing. Remove and re-add it.",
-      };
-    }
-    appKey = stored.appKey;
-    appSecret = stored.appSecret;
-    redirectUri = stored.redirectUri;
-  }
-
-  if (!appKey.trim() || !appSecret.trim()) {
-    return { ok: false, message: "Enter your Schwab app key and secret first." };
-  }
-
-  pendingSchwabAuth = {
-    appKey: appKey.trim(),
-    appSecret: appSecret.trim(),
-    redirectUri,
-    reauthConnectionId: opts.reauthConnectionId,
-  };
-  return { ok: true, authUrl: buildAuthorizeUrl(appKey, redirectUri) };
-};
-
-/**
- * Finish the Schwab OAuth round-trip from the pasted redirect URL. Creates
- * the connection (or refreshes the re-authed one) and lists its accounts.
- */
-export const completeSchwabAuth = async (
-  pastedRedirectUrl: string,
-): Promise<SetupResult> => {
-  const blocked = await encryptionUnavailableResult();
-  if (blocked) return blocked;
-
-  const pending = pendingSchwabAuth;
-  if (!pending) {
-    return {
-      ok: false,
-      message: "The Schwab login session expired. Start again from the app key step.",
-    };
-  }
-  const code = extractAuthCode(pastedRedirectUrl);
-  if (!code) {
-    return {
-      ok: false,
-      message:
-        "No login code found in that address. Copy the FULL address from the browser after approving access (it starts with your callback URL and contains code=...).",
-    };
-  }
-
-  const exchanged = await exchangeAuthCode(
-    pending.appKey,
-    pending.appSecret,
-    code,
-    pending.redirectUri,
-  );
-  if (!exchanged.ok) return { ok: false, message: exchanged.message };
-
-  const window = discoveryWindow();
-  const fetched = await fetchSchwabData(
-    {
-      appKey: pending.appKey,
-      appSecret: pending.appSecret,
-      ...exchanged.patch,
-    },
-    window,
-  );
-  if (!fetched.ok) {
-    return {
-      ok: false,
-      message: fetched.message ?? "Schwab connected but listing accounts failed.",
-    };
-  }
-
-  let connectionId: string;
-  if (pending.reauthConnectionId) {
-    connectionId = pending.reauthConnectionId;
-    await updateConnection(connectionId, {
-      authStatus: "ok",
-      lastErrorCode: undefined,
-      lastErrorMessage: undefined,
-    });
-  } else {
-    const connection = newConnection("schwab");
-    connectionId = connection.id;
-    await addConnection(connection);
-  }
-  await setConnectionSecrets(connectionId, {
-    provider: "schwab",
-    appKey: pending.appKey,
-    appSecret: pending.appSecret,
-    redirectUri: pending.redirectUri,
-    ...exchanged.patch,
-  });
-  pendingSchwabAuth = null;
-  return { ok: true, connectionId, accounts: fetched.accounts };
 };
 
 /* ── Teller ── */

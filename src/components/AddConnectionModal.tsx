@@ -4,9 +4,7 @@
  *
  * Multi-step modal for connecting a bank with the user's OWN credentials:
  *   provider -> simplefinToken -> mapAccounts -> done
- *   provider -> schwabKeys -> schwabRedirect -> mapAccounts -> done
- * Re-auth mode (`reauthConnectionId`) jumps straight into the Schwab OAuth
- * steps using stored credentials and skips account mapping.
+ *   provider -> tellerSetup -> tellerEnroll -> mapAccounts -> done
  *
  * Layout follows AddBudgetEntryModal's sheet (scrollable body, pinned button
  * row); errors render inline under the active field, never as Alerts.
@@ -15,7 +13,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -36,8 +33,6 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import {
   addTellerEnrollment,
-  beginSchwabAuth,
-  completeSchwabAuth,
   createSimplefinConnection,
   createTellerConnection,
   finalizeAccountLinks,
@@ -55,8 +50,6 @@ import TellerConnectModal, {
 type WizardStep =
   | "provider"
   | "simplefinToken"
-  | "schwabKeys"
-  | "schwabRedirect"
   | "tellerSetup"
   | "tellerEnroll"
   | "mapAccounts"
@@ -85,11 +78,9 @@ interface DraftSelection {
 interface AddConnectionModalProps {
   visible: boolean;
   onClose: () => void;
-  /** Called after a connection is fully set up (links saved / re-auth done). */
+  /** Called after a connection is fully set up (links saved). */
   onComplete: (connectionId: string) => void;
   assetAccounts: AssetAccount[];
-  /** Re-auth mode: skip provider choice, reuse this Schwab connection's keys. */
-  reauthConnectionId?: string;
 }
 
 const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
@@ -97,22 +88,16 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   onClose,
   onComplete,
   assetAccounts,
-  reauthConnectionId,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const isReauth = !!reauthConnectionId;
-  const [step, setStep] = useState<WizardStep>(isReauth ? "schwabKeys" : "provider");
+  const [step, setStep] = useState<WizardStep>("provider");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [setupToken, setSetupToken] = useState("");
-  const [appKey, setAppKey] = useState("");
-  const [appSecret, setAppSecret] = useState("");
-  const [pastedRedirect, setPastedRedirect] = useState("");
-  const [browserOpened, setBrowserOpened] = useState(false);
 
   const [tellerAppId, setTellerAppId] = useState("");
   const [tellerEnvironment, setTellerEnvironment] =
@@ -137,14 +122,10 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   );
 
   const reset = useCallback(() => {
-    setStep(isReauth ? "schwabKeys" : "provider");
+    setStep("provider");
     setBusy(false);
     setError(null);
     setSetupToken("");
-    setAppKey("");
-    setAppSecret("");
-    setPastedRedirect("");
-    setBrowserOpened(false);
     setTellerAppId("");
     setTellerEnvironment("development");
     setTellerCertPem("");
@@ -154,7 +135,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     setSelections([]);
     setNewAccountFor(null);
     setLocalAccounts(assetAccounts);
-  }, [assetAccounts, isReauth]);
+  }, [assetAccounts]);
 
   const handleClose = useCallback(() => {
     reset();
@@ -162,7 +143,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   }, [onClose, reset]);
 
   // The modal stays mounted between uses; re-initialize the flow each time it
-  // opens so a re-auth launch starts at the Schwab step with fresh state.
+  // opens so it starts fresh at the provider picker.
   const wasVisible = useRef(false);
   useEffect(() => {
     if (visible && !wasVisible.current) reset();
@@ -194,47 +175,6 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     }
     enterMapStep(result.connectionId, result.accounts);
   }, [enterMapStep, setupToken]);
-
-  /* ── Schwab ── */
-
-  const openSchwabLogin = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    const result = await beginSchwabAuth({
-      appKey,
-      appSecret,
-      reauthConnectionId,
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.message);
-      return;
-    }
-    setBrowserOpened(true);
-    setStep("schwabRedirect");
-    try {
-      await Linking.openURL(result.authUrl);
-    } catch {
-      setError("Couldn't open the browser. Copy the login link manually from Schwab's developer portal.");
-    }
-  }, [appKey, appSecret, reauthConnectionId]);
-
-  const submitSchwabRedirect = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    const result = await completeSchwabAuth(pastedRedirect);
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.message);
-      return;
-    }
-    if (isReauth) {
-      setConnectionId(result.connectionId);
-      setStep("done");
-    } else {
-      enterMapStep(result.connectionId, result.accounts);
-    }
-  }, [enterMapStep, isReauth, pastedRedirect]);
 
   /* ── Teller ── */
 
@@ -402,19 +342,6 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         style={styles.providerCard}
         onPress={() => {
           setError(null);
-          setStep("schwabKeys");
-        }}
-      >
-        <Text style={styles.providerTitle}>📈 Charles Schwab</Text>
-        <Text style={styles.providerDescription}>
-          Bring your own Schwab developer app (free) for brokerage balances
-          and transactions. Requires re-approval every 7 days.
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.providerCard}
-        onPress={() => {
-          setError(null);
           setStep("tellerSetup");
         }}
       >
@@ -553,90 +480,6 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           anywhere else.
         </Text>
       </View>
-    </>
-  );
-
-  const renderSchwabKeysStep = () => (
-    <>
-      <Text style={styles.title}>{isReauth ? "Reconnect Schwab" : "Schwab Setup"}</Text>
-      <Text style={styles.subtitle}>
-        {isReauth
-          ? "Schwab requires re-approval every 7 days. Log in again to keep syncing."
-          : "Uses your own developer app from developer.schwab.com."}
-      </Text>
-      {!isReauth ? (
-        <>
-          <View style={styles.instructionsCard}>
-            <Text style={styles.instructionLine}>1. Register a personal app at developer.schwab.com with the Trader API product</Text>
-            <Text style={styles.instructionLine}>2. Set the callback URL to https://127.0.0.1</Text>
-            <Text style={styles.instructionLine}>3. Once Schwab approves it (takes a few days), copy the App Key and Secret below</Text>
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>APP KEY</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Your Schwab app key"
-              placeholderTextColor={colors.textMuted}
-              value={appKey}
-              onChangeText={setAppKey}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>SECRET</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Your Schwab app secret"
-              placeholderTextColor={colors.textMuted}
-              value={appSecret}
-              onChangeText={setAppSecret}
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry
-            />
-          </View>
-        </>
-      ) : null}
-      {renderError()}
-      <Text style={styles.hint}>
-        Next opens Schwab's login in your browser. After you approve access,
-        you'll copy the resulting address back into BudgetArk.
-      </Text>
-    </>
-  );
-
-  const renderSchwabRedirectStep = () => (
-    <>
-      <Text style={styles.title}>Paste the Address</Text>
-      <Text style={styles.subtitle}>
-        After you approve access, Schwab sends your browser to a page that
-        won't load (https://127.0.0.1/...). That's expected - copy the FULL
-        address from the browser's address bar and paste it here.
-      </Text>
-      <View style={styles.field}>
-        <Text style={styles.label}>REDIRECTED ADDRESS</Text>
-        <TextInput
-          style={[styles.input, styles.tokenInput]}
-          placeholder="https://127.0.0.1/?code=..."
-          placeholderTextColor={colors.textMuted}
-          value={pastedRedirect}
-          onChangeText={setPastedRedirect}
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-        />
-        {renderError()}
-      </View>
-      <TouchableOpacity onPress={openSchwabLogin} disabled={busy}>
-        <Text style={styles.linkText}>
-          {browserOpened ? "Open Schwab login again" : "Open Schwab login"}
-        </Text>
-      </TouchableOpacity>
-      <Text style={styles.hint}>
-        Login codes expire after a few minutes - if it stops working, open the
-        login again and paste the fresh address.
-      </Text>
     </>
   );
 
@@ -782,11 +625,9 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     <>
       <Text style={styles.title}>✅ Connected</Text>
       <Text style={styles.subtitle}>
-        {isReauth
-          ? "Schwab access is renewed. Syncing resumes automatically."
-          : `${selections.filter((s) => s.importTransactions).length} account${
-              selections.filter((s) => s.importTransactions).length === 1 ? "" : "s"
-            } will import transactions to your Review Inbox. New items appear after each sync.`}
+        {`${selections.filter((s) => s.importTransactions).length} account${
+          selections.filter((s) => s.importTransactions).length === 1 ? "" : "s"
+        } will import transactions to your Review Inbox. New items appear after each sync.`}
       </Text>
     </>
   );
@@ -805,18 +646,6 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           label: busy ? "Connecting..." : "Connect",
           onPress: () => void submitSimplefinToken(),
           disabled: busy || !setupToken.trim(),
-        };
-      case "schwabKeys":
-        return {
-          label: busy ? "Opening..." : "Open Schwab Login",
-          onPress: () => void openSchwabLogin(),
-          disabled: busy || (!isReauth && (!appKey.trim() || !appSecret.trim())),
-        };
-      case "schwabRedirect":
-        return {
-          label: busy ? "Verifying..." : "Verify",
-          onPress: () => void submitSchwabRedirect(),
-          disabled: busy || !pastedRedirect.trim(),
         };
       case "tellerSetup":
         return {
@@ -857,8 +686,6 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           >
             {step === "provider" && renderProviderStep()}
             {step === "simplefinToken" && renderSimplefinStep()}
-            {step === "schwabKeys" && renderSchwabKeysStep()}
-            {step === "schwabRedirect" && renderSchwabRedirectStep()}
             {step === "tellerSetup" && renderTellerSetupStep()}
             {step === "tellerEnroll" && renderTellerEnrollStep()}
             {step === "mapAccounts" && renderMapAccountsStep()}
@@ -975,11 +802,6 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.danger,
       fontSize: 13,
       lineHeight: 18,
-    },
-    linkText: {
-      color: colors.accent,
-      fontSize: 14,
-      fontWeight: "600",
     },
     providerCard: {
       backgroundColor: colors.bg,

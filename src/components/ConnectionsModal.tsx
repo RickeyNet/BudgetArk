@@ -4,9 +4,8 @@
  *
  * Modal-as-sub-screen (ManageCategoriesModal pattern) listing the user's
  * bank connections with a per-connection detail view: mapped accounts, last
- * sync, sync-now, reconnect (Schwab 7-day re-auth), and remove-with-confirm.
- * The Add Connection wizard itself is rendered by ProfileScreen; this modal
- * only signals `onAddConnection` / `onReauth`.
+ * sync, sync-now, and remove-with-confirm. The Add Connection wizard itself
+ * is rendered by ProfileScreen; this modal only signals `onAddConnection`.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,12 +29,10 @@ interface ConnectionsModalProps {
   visible: boolean;
   onClose: () => void;
   onAddConnection: () => void;
-  onReauth: (connectionId: string) => void;
 }
 
 const PROVIDER_GLYPHS: Record<string, string> = {
   simplefin: "🏦",
-  schwab: "📈",
   teller: "🔗",
 };
 
@@ -56,7 +53,6 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   visible,
   onClose,
   onAddConnection,
-  onReauth,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -205,16 +201,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         {connection.authStatus === "needs-reauth" ? (
           <View style={styles.warningBanner}>
             <Text style={styles.warningText}>
-              {connection.provider === "schwab"
-                ? "Schwab requires re-approval every 7 days. Reconnect to keep syncing."
-                : "This connection needs to be re-authorized."}
+              This connection needs to be re-authorized. Remove it and add it
+              again to reconnect.
             </Text>
-            <TouchableOpacity
-              style={styles.warningButton}
-              onPress={() => onReauth(connection.id)}
-            >
-              <Text style={styles.warningButtonText}>Reconnect</Text>
-            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -411,18 +400,6 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontSize: 13,
       lineHeight: 19,
-    },
-    warningButton: {
-      alignSelf: "flex-start",
-      backgroundColor: colors.warning,
-      borderRadius: 10,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-    },
-    warningButtonText: {
-      color: colors.bg,
-      fontSize: 13,
-      fontWeight: "700",
     },
     primaryButton: {
       paddingVertical: 14,

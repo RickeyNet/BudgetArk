@@ -3,10 +3,10 @@
  * File: src/storage/connectionSecretsStorage.ts
  *
  * Credential material for bank connections (BYO API): SimpleFIN access URLs,
- * Schwab app keys/secrets/tokens, Teller certificates and access tokens.
+ * Teller certificates and access tokens.
  *
  * Stored in EncryptedStorage (AES-256 + HMAC, master key in the OS
- * Keychain/Keystore) rather than raw SecureStore because Schwab/Teller blobs
+ * Keychain/Keystore) rather than raw SecureStore because Teller PEM blobs
  * routinely exceed SecureStore's ~2 KB Android soft limit, and
  * EncryptedStorage gives the same at-rest guarantee through one code path
  * with per-key write serialization.
@@ -29,21 +29,6 @@ export interface SimplefinSecrets {
   accessUrl: string;
 }
 
-export interface SchwabSecrets {
-  provider: "schwab";
-  /** The user's own developer-app key (client id). */
-  appKey: string;
-  appSecret: string;
-  /** Redirect URI registered on the user's Schwab app, e.g. https://127.0.0.1 */
-  redirectUri: string;
-  accessToken?: string;
-  /** ISO expiry for accessToken (~30 min horizon, minus skew). */
-  accessTokenExpiresAt?: string;
-  refreshToken?: string;
-  /** ISO issue time of refreshToken - drives the 7-day death detection. */
-  refreshTokenIssuedAt?: string;
-}
-
 export interface TellerSecrets {
   provider: "teller";
   /** The user's Teller application id (from their teller.io dashboard). */
@@ -56,15 +41,7 @@ export interface TellerSecrets {
   accessTokens: Record<string, string>;
 }
 
-export type ConnectionSecrets = SimplefinSecrets | SchwabSecrets | TellerSecrets;
-
-/** Fields a Schwab token exchange/refresh writes back. */
-export interface SchwabTokenPatch {
-  accessToken?: string;
-  accessTokenExpiresAt?: string;
-  refreshToken?: string;
-  refreshTokenIssuedAt?: string;
-}
+export type ConnectionSecrets = SimplefinSecrets | TellerSecrets;
 
 type SecretsMap = Record<string, ConnectionSecrets>;
 
@@ -113,22 +90,6 @@ export const deleteConnectionSecrets = async (
   const map = await readMap();
   if (!(connectionId in map)) return;
   delete map[connectionId];
-  await writeMap(map);
-};
-
-/**
- * Merge refreshed Schwab tokens into the stored secrets. No-op if the
- * connection is missing or isn't a Schwab connection (e.g. it was removed
- * while a sync was in flight).
- */
-export const patchSchwabTokens = async (
-  connectionId: string,
-  patch: SchwabTokenPatch,
-): Promise<void> => {
-  const map = await readMap();
-  const existing = map[connectionId];
-  if (!existing || existing.provider !== "schwab") return;
-  map[connectionId] = { ...existing, ...patch };
   await writeMap(map);
 };
 

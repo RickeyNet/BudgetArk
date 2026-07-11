@@ -2,7 +2,7 @@
  * BudgetArk - External Account Links Storage
  * File: src/storage/externalAccountLinksStorage.ts
  *
- * Maps provider-side accounts (SimpleFIN/Schwab/Teller) to local
+ * Maps provider-side accounts (SimpleFIN/Teller) to local
  * AssetAccounts and carries the per-account import/balance toggles.
  * PER-DEVICE like the parent connection - never synced, never exported.
  * No tombstones (hard-delete is correct for unsynced data).

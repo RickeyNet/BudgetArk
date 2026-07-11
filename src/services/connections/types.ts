@@ -3,7 +3,7 @@
  * File: src/services/connections/types.ts
  *
  * Normalized provider-agnostic shapes plus the error taxonomy shared by the
- * SimpleFIN/Schwab/Teller clients and the sync orchestrator. Pure types -
+ * SimpleFIN/Teller clients and the sync orchestrator. Pure types -
  * NO react-native or storage imports (this module is consumed by node-run
  * unit tests).
  */

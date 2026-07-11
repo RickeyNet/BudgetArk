@@ -10,8 +10,6 @@
  * Key behaviors:
  *  - `lastAttemptAt` is stamped BEFORE fetching so a failing/rate-limited
  *    provider is never hammered on retry loops.
- *  - Schwab token refreshes are persisted EVEN when a later request fails -
- *    dropping a rotated refresh token would strand the connection.
  *  - Applied balances are clamped at >= 0 (isAssetAccountItem rejects
  *    negatives on the sync receive path); the raw value lands on the link
  *    for display. Unchanged balances skip the write to avoid updatedAt churn
@@ -25,10 +23,7 @@ import {
   getConnections,
   updateConnection,
 } from "../../storage/connectionsStorage";
-import {
-  getConnectionSecrets,
-  patchSchwabTokens,
-} from "../../storage/connectionSecretsStorage";
+import { getConnectionSecrets } from "../../storage/connectionSecretsStorage";
 import {
   getLinksForConnection,
   updateLink,
@@ -47,7 +42,6 @@ import {
   updateAssetAccount,
 } from "../../storage/assetAccountStorage";
 import { fetchSimplefinAccounts } from "./simplefinClient";
-import { fetchSchwabData } from "./schwabClient";
 import { fetchTellerData } from "./tellerClient";
 import { planIngest } from "./ingest";
 import { computeFetchWindow, isSyncDue } from "./syncGate";
@@ -88,19 +82,6 @@ const fetchForConnection = async (
     return fetchSimplefinAccounts(secrets.accessUrl, {
       startDateEpochSec: window.startDate.getTime() / 1000,
     });
-  }
-
-  if (secrets.provider === "schwab") {
-    const result = await fetchSchwabData(secrets, {
-      startDate: window.startDate,
-      endDate: window.endDate,
-      now: nowMs,
-    });
-    // Persist rotated tokens no matter how the fetch ended.
-    if (result.tokenPatch) {
-      await patchSchwabTokens(connection.id, result.tokenPatch);
-    }
-    return result;
   }
 
   return fetchTellerData(secrets, { startDate: window.startDate });

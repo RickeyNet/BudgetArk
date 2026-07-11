@@ -468,11 +468,10 @@ export interface HoldingsSettings {
  * credentials (BYO API). Credentials stay on this device: they are excluded
  * from export/import and from the P2P sync diff by design.
  */
-export type BankProvider = "simplefin" | "schwab" | "teller";
+export type BankProvider = "simplefin" | "teller";
 
 export const BANK_PROVIDER_LABELS: Record<BankProvider, string> = {
   simplefin: "SimpleFIN",
-  schwab: "Charles Schwab",
   teller: "Teller",
 };
 
@@ -522,7 +521,7 @@ export interface BankConnection {
 export interface ExternalAccountLink {
   id: string;
   connectionId: string;
-  /** SimpleFIN account.id | Schwab account hashValue | Teller account id. */
+  /** SimpleFIN account.id | Teller account id. */
   externalAccountId: string;
   /** Provider display name, for the mapping UI. */
   externalName: string;

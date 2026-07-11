@@ -373,9 +373,6 @@ const ProfileScreen: React.FC = () => {
     useState(false);
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
   const [showAddConnection, setShowAddConnection] = useState(false);
-  const [reauthConnectionId, setReauthConnectionId] = useState<
-    string | undefined
-  >(undefined);
   const [wizardAssetAccounts, setWizardAssetAccounts] = useState<
     AssetAccount[]
   >([]);
@@ -790,16 +787,14 @@ const ProfileScreen: React.FC = () => {
     triggerHaptic("success");
   }, []);
 
-  const openAddConnection = useCallback(async (reauthId?: string) => {
+  const openAddConnection = useCallback(async () => {
     setWizardAssetAccounts(await getAssetAccounts());
-    setReauthConnectionId(reauthId);
     setShowAddConnection(true);
   }, []);
 
   const handleConnectionComplete = useCallback(
     (connectionId: string) => {
       setShowAddConnection(false);
-      setReauthConnectionId(undefined);
       // Populate the Review Inbox right away; failures surface as the
       // connection's status in the manage list.
       void syncConnectionsNow(connectionId);
@@ -4315,18 +4310,15 @@ const ProfileScreen: React.FC = () => {
         visible={showConnectionsModal}
         onClose={() => setShowConnectionsModal(false)}
         onAddConnection={() => void openAddConnection()}
-        onReauth={(connectionId) => void openAddConnection(connectionId)}
       />
       <AddConnectionModal
         visible={showAddConnection}
         onClose={() => {
           setShowAddConnection(false);
-          setReauthConnectionId(undefined);
           void refreshConnections();
         }}
         onComplete={handleConnectionComplete}
         assetAccounts={wizardAssetAccounts}
-        reauthConnectionId={reauthConnectionId}
       />
 
       {/* ── Ship's Log (achievements) ── */}
