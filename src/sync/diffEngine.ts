@@ -57,6 +57,7 @@ import type {
   NetWorthSnapshot,
 } from "../types";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
+import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
 import {
   isObject,
   isDebtItem,
@@ -398,13 +399,28 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     changedCount += diff.debts.length;
   }
 
-  // Merge payments
+  // Merge payments. After the id-based merge, collapse duplicate
+  // minimum-due rows: a partner on an app version predating deterministic
+  // prompt-payment ids still logs its "minimum due" confirmation under a
+  // random id, so the same real-world payment can arrive as a second
+  // record. The dedupe tombstones the duplicate (balance untouched - it
+  // was only ever decremented once, see debtPaymentDedupe), and the
+  // tombstone flows back to the partner on the next sync. Runs against the
+  // just-merged debts (the debts block above saves before this reads).
   if (diff.payments.length > 0) {
-    const localPayments = await getPaymentsIncludingDeleted();
+    const [localPayments, localDebts] = await Promise.all([
+      getPaymentsIncludingDeleted(),
+      getDebtsIncludingDeleted(),
+    ]);
     const merged = mergeById(localPayments, diff.payments);
+    const { payments: deduped } = dedupeMinimumDuePayments(
+      localDebts,
+      merged,
+      new Date().toISOString()
+    );
     await EncryptedStorage.setItem(
       "@budgetark_payments",
-      JSON.stringify(merged)
+      JSON.stringify(deduped)
     );
     changedCount += diff.payments.length;
   }

@@ -40,6 +40,7 @@ import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvi
 import { ConnectionsProvider } from "./src/connections/ConnectionsProvider";
 import { UndoProvider } from "./src/undo/UndoProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
+import { repairDuplicateMinimumDuePayments } from "./src/storage/debtStorage";
 import {
   getLastSeenReleaseNotesVersion,
   setLastSeenReleaseNotesVersion,
@@ -103,6 +104,23 @@ const AppContent: React.FC = () => {
     };
     checkOnboarding();
   }, []);
+
+  /**
+   * Launch-time data repair: collapse duplicate minimum-due payment rows
+   * created when both paired phones confirmed the same "minimum due"
+   * prompt before syncing (see debtPaymentDedupe). Cheap no-op on healthy
+   * data; deferred past first paint like the update check below because it
+   * decrypts debts + payments.
+   */
+  useEffect(() => {
+    if (isOnboardingComplete !== true) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      repairDuplicateMinimumDuePayments().catch((error) => {
+        if (__DEV__) console.error("Duplicate payment repair failed:", error);
+      });
+    });
+    return () => task.cancel();
+  }, [isOnboardingComplete]);
 
   /** Handle onboarding completion */
   const handleOnboardingComplete = useCallback(async (options?: { openArkSetup?: boolean }) => {

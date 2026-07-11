@@ -321,6 +321,65 @@ describe("applyIncomingDiff - last-write-wins merge", () => {
   });
 });
 
+describe("applyIncomingDiff - duplicate minimum-due payments", () => {
+  // An old-version partner logs its "minimum due" confirmation under a
+  // random id, so the same real-world payment arrives as a second record.
+  // The post-merge dedupe must tombstone it - the balance only reflects one
+  // decrement (LWW on the debt record) - without touching genuine data.
+  const dupDebt = () =>
+    debt({ balance: 1950, originalBalance: 2000, minPayment: 50, updatedAt: NEW });
+  const minPaid = (over: Record<string, unknown> = {}) =>
+    payment({ amount: 50, appliedAmount: 50, ...over });
+
+  // Noon-UTC dates so both rows land in the same LOCAL calendar month
+  // (paymentMonthKey buckets by local month) whatever timezone runs the tests.
+  const JAN_5 = "2026-01-05T12:00:00.000Z";
+  const JAN_8 = "2026-01-08T12:00:00.000Z";
+
+  it("tombstones a partner's random-id duplicate of the same month's minimum", async () => {
+    mockState.debts = [dupDebt()];
+    mockState.payments = [
+      minPaid({ id: "duemin:d1:2026-01", date: JAN_5, updatedAt: JAN_5 }),
+    ];
+    await applyIncomingDiff(
+      emptyDiff({
+        payments: [
+          {
+            action: "upsert",
+            record: minPaid({ id: "partner-uuid", date: JAN_8, updatedAt: MID }),
+          },
+        ],
+      })
+    );
+    const saved = JSON.parse(mockState.encStore.get("@budgetark_payments"));
+    const live = saved.filter((p: any) => !p.deletedAt);
+    expect(live.map((p: any) => p.id)).toEqual(["duemin:d1:2026-01"]);
+    // Tombstoned, not dropped - the delete must flow back to the partner.
+    const dup = saved.find((p: any) => p.id === "partner-uuid");
+    expect(dup.deletedAt).toBeTruthy();
+  });
+
+  it("keeps both rows when the balance shows both payments really applied", async () => {
+    // Balance 1900 = both $50 decrements applied -> a genuine double payment.
+    mockState.debts = [debt({ balance: 1900, originalBalance: 2000, minPayment: 50, updatedAt: NEW })];
+    mockState.payments = [
+      minPaid({ id: "local-uuid", date: JAN_5, updatedAt: JAN_5 }),
+    ];
+    await applyIncomingDiff(
+      emptyDiff({
+        payments: [
+          {
+            action: "upsert",
+            record: minPaid({ id: "partner-uuid", date: JAN_8, updatedAt: MID }),
+          },
+        ],
+      })
+    );
+    const saved = JSON.parse(mockState.encStore.get("@budgetark_payments"));
+    expect(saved.filter((p: any) => !p.deletedAt)).toHaveLength(2);
+  });
+});
+
 describe("holdings sync", () => {
   it("includes changed holdings in the outgoing diff (upsert + delete)", async () => {
     mockState.holdings = [

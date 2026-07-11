@@ -20,6 +20,7 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
+import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
 
 /**
@@ -317,6 +318,36 @@ export const getPaymentsIncludingDeleted = async (): Promise<Payment[]> => {
 };
 
 /**
+ * Repair pass for the double-counted minimum-payment sync bug: both
+ * partners confirmed the same "minimum due" prompt before syncing, and the
+ * merge kept both randomly-id'd rows (see debtPaymentDedupe for the full
+ * story and the safety gate). Tombstones the duplicate rows WITHOUT
+ * touching the debt balance - the balance was only ever decremented once -
+ * and the tombstones propagate to the partner on the next sync.
+ *
+ * Runs on every app launch (App.tsx, deferred past first paint): it's a
+ * cheap no-op on healthy data, and re-running also catches duplicates
+ * reintroduced later by a JSON import or a partner on an older app version.
+ *
+ * @returns number of duplicate rows tombstoned
+ */
+export const repairDuplicateMinimumDuePayments = async (): Promise<number> => {
+  const [debts, payments] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+  ]);
+  const { payments: deduped, removedCount } = dedupeMinimumDuePayments(
+    debts,
+    payments,
+    new Date().toISOString()
+  );
+  if (removedCount > 0) {
+    await savePayments(deduped);
+  }
+  return removedCount;
+};
+
+/**
  * Records a new payment and updates the associated debt's balance.
  * This is a compound operation - it modifies both payments and debts.
  *
@@ -338,6 +369,19 @@ export const recordPayment = async (
     getPaymentsIncludingDeleted(),
   ]);
 
+  /* Prompt-logged minimums carry a deterministic id (see
+   * minimumDuePaymentId), so the same real-world payment can arrive twice:
+   * if a live record with this id already exists - e.g. the partner's copy
+   * of this month's minimum synced in while the prompt was on screen -
+   * recording again must be a no-op, or one payment decrements the balance
+   * twice. A tombstoned match (the user deleted this month's log, then
+   * re-confirmed the prompt) is revived in place below instead of appended,
+   * so two records never share an id. */
+  const existing = payments.find((p) => p.id === payment.id);
+  if (existing && !existing.deletedAt) {
+    return { debts: filterLive(debts), payments: filterLive(payments) };
+  }
+
   /* Calculate updated debt balance - only matches a live debt, never a
    * tombstone (UI couldn't have surfaced a deleted debt to pay). */
   const now = new Date().toISOString();
@@ -353,8 +397,14 @@ export const recordPayment = async (
   });
 
   /* Append the new payment (stamped with the delta actually applied, so
-   * deletePayment can reverse exactly), preserving existing tombstones. */
-  const updatedPayments = [...payments, { ...payment, appliedAmount: applied }];
+   * deletePayment can reverse exactly), preserving existing tombstones. A
+   * tombstoned record with the same id is replaced in place - the fresh
+   * record has no deletedAt and a newer updatedAt, so the revival also wins
+   * LWW against the delete on the next sync. */
+  const stamped = { ...payment, appliedAmount: applied };
+  const updatedPayments = existing
+    ? payments.map((p) => (p.id === payment.id ? stamped : p))
+    : [...payments, stamped];
 
   /* Save both in one native AsyncStorage call to shrink the partial-state window. */
   await EncryptedStorage.multiSet([

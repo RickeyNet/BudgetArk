@@ -59,8 +59,10 @@ import {
 } from "../storage/debtDueReminderStorage";
 import {
   debtsDueOrOverdueNeedingPrompt,
+  getMonthKey,
   upcomingDebtDuesWithin,
 } from "../utils/debtDueCalendar";
+import { minimumDuePaymentId } from "../utils/debtPaymentDedupe";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
 import DebtDuePaymentPromptModal from "../components/DebtDuePaymentPromptModal";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
@@ -678,11 +680,14 @@ const DebtTrackerScreen: React.FC = () => {
   const handlePayment = useCallback(async (
     debtId: string,
     amount: number,
-    opts?: { suppressCelebration?: boolean }
+    opts?: { suppressCelebration?: boolean; paymentId?: string }
   ) => {
     const paymentNow = new Date().toISOString();
+    // Manual payments get a random id; the due prompt passes a
+    // deterministic one so the same month's minimum logged on both paired
+    // phones merges to a single record instead of double-counting.
     const result = await recordPayment({
-      id: generateUUID(),
+      id: opts?.paymentId ?? generateUUID(),
       debtId,
       amount,
       date: paymentNow,
@@ -717,6 +722,7 @@ const DebtTrackerScreen: React.FC = () => {
       try {
         const result = await handlePayment(debtId, amount, {
           suppressCelebration: true,
+          paymentId: minimumDuePaymentId(debtId, getMonthKey()),
         });
         setDuePromptDebt(null);
         if (result.paidOffDebt) {

@@ -10,9 +10,9 @@ import {
   getDebtDueDismissals,
   type DebtDueDismissals,
 } from "../storage/debtDueReminderStorage";
-import { debtsDueOrOverdueNeedingPrompt } from "../utils/debtDueCalendar";
+import { debtsDueOrOverdueNeedingPrompt, getMonthKey } from "../utils/debtDueCalendar";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
-import { generateUUID } from "../utils/uuid";
+import { minimumDuePaymentId } from "../utils/debtPaymentDedupe";
 
 interface DebtDueReminderHostProps {
   /**
@@ -118,8 +118,12 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
       submittingRef.current = true;
       try {
         const now = new Date().toISOString();
+        // Deterministic id (debt + month): if the partner's phone logs the
+        // same month's minimum too, sync merges the two records into one
+        // instead of double-counting the payment. recordPayment no-ops if
+        // this id is already live locally.
         const result = await recordPayment({
-          id: generateUUID(),
+          id: minimumDuePaymentId(debtId, getMonthKey()),
           debtId,
           amount,
           date: now,
