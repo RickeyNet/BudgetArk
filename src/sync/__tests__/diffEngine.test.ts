@@ -217,7 +217,7 @@ describe("computeOutgoingDiff", () => {
   });
 });
 
-describe("applyIncomingDiff – validation gate", () => {
+describe("applyIncomingDiff - validation gate", () => {
   it("rejects the whole diff if any record is invalid, writing nothing", async () => {
     const bad = emptyDiff({
       debts: [
@@ -268,7 +268,7 @@ describe("applyIncomingDiff – validation gate", () => {
   });
 });
 
-describe("applyIncomingDiff – last-write-wins merge", () => {
+describe("applyIncomingDiff - last-write-wins merge", () => {
   it("applies an incoming record that is newer than local", async () => {
     mockState.debts = [debt({ id: "d1", balance: 100, updatedAt: OLD })];
     await applyIncomingDiff(
@@ -356,7 +356,7 @@ describe("holdings sync", () => {
   });
 });
 
-describe("applyIncomingDiff – budget limits", () => {
+describe("applyIncomingDiff - budget limits", () => {
   it("merges per-category limits with last-write-wins", async () => {
     mockState.limitsByMonth = {
       "2026-06": [{ category: "Food", monthlyLimit: 100, updatedAt: OLD }],
@@ -384,7 +384,7 @@ describe("applyIncomingDiff – budget limits", () => {
   });
 });
 
-describe("applyIncomingDiff – custom category dedup", () => {
+describe("applyIncomingDiff - custom category dedup", () => {
   it("de-dupes duplicate names across devices, keeping the newest", async () => {
     mockState.customCategories = [customCat({ id: "c1", name: "Kayaking", updatedAt: OLD })];
     await applyIncomingDiff(
@@ -399,7 +399,7 @@ describe("applyIncomingDiff – custom category dedup", () => {
   });
 });
 
-describe("applyIncomingDiff – net-worth snapshots", () => {
+describe("applyIncomingDiff - net-worth snapshots", () => {
   it("unions by dayKey, newer capturedAt wins", async () => {
     mockState.snapshots = [
       snapshot({ dayKey: "2026-06-01", netWorth: 100, capturedAt: OLD }),
@@ -428,7 +428,7 @@ describe("applyIncomingDiff – net-worth snapshots", () => {
   });
 });
 
-describe("applyIncomingDiff – milestone plan & payoff strategy LWW", () => {
+describe("applyIncomingDiff - milestone plan & payoff strategy LWW", () => {
   it("applies a newer milestone plan and rejects an older one", async () => {
     mockState.milestonePlan = { steps: [{ id: "x" }], updatedAt: MID };
     await applyIncomingDiff(emptyDiff({ debtMilestonePlan: { steps: [], updatedAt: OLD } as any }));

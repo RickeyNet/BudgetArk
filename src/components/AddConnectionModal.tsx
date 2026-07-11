@@ -27,10 +27,12 @@ import {
   ASSET_ACCOUNT_CATEGORY_LABELS,
   AssetAccount,
   AssetAccountCategory,
+  BankProvider,
   categoryIsPureHoldings,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
+import ProviderSetupGuideModal from "./ProviderSetupGuideModal";
 import {
   addTellerEnrollment,
   createSimplefinConnection,
@@ -96,6 +98,8 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   const [step, setStep] = useState<WizardStep>("provider");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** When set, the full setup + privacy guide is shown for this provider. */
+  const [guideProvider, setGuideProvider] = useState<BankProvider | null>(null);
 
   const [setupToken, setSetupToken] = useState("");
 
@@ -125,6 +129,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     setStep("provider");
     setBusy(false);
     setError(null);
+    setGuideProvider(null);
     setSetupToken("");
     setTellerAppId("");
     setTellerEnvironment("development");
@@ -319,18 +324,22 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   const renderError = () =>
     error ? <Text style={styles.errorText}>{error}</Text> : null;
 
+  const startProviderSetup = useCallback((provider: BankProvider) => {
+    setGuideProvider(null);
+    setError(null);
+    setStep(provider === "simplefin" ? "simplefinToken" : "tellerSetup");
+  }, []);
+
   const renderProviderStep = () => (
     <>
       <Text style={styles.title}>Connect a Bank</Text>
       <Text style={styles.subtitle}>
-        Pick a provider. Your credentials stay encrypted on this device.
+        Pick a provider. Your credentials stay encrypted on this device. New to
+        this? Tap "Setup guide & privacy" for step-by-step help.
       </Text>
       <TouchableOpacity
         style={styles.providerCard}
-        onPress={() => {
-          setError(null);
-          setStep("simplefinToken");
-        }}
+        onPress={() => startProviderSetup("simplefin")}
       >
         <Text style={styles.providerTitle}>🏦 SimpleFIN Bridge</Text>
         <Text style={styles.providerDescription}>
@@ -339,11 +348,14 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
+        style={styles.guideLink}
+        onPress={() => setGuideProvider("simplefin")}
+      >
+        <Text style={styles.guideLinkText}>📖 SimpleFIN setup guide & privacy</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
         style={styles.providerCard}
-        onPress={() => {
-          setError(null);
-          setStep("tellerSetup");
-        }}
+        onPress={() => startProviderSetup("teller")}
       >
         <Text style={styles.providerTitle}>🔗 Teller</Text>
         <Text style={styles.providerDescription}>
@@ -351,6 +363,12 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           Uses the certificate from your teller.zip; banks connect through
           Teller's own login flow.
         </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.guideLink}
+        onPress={() => setGuideProvider("teller")}
+      >
+        <Text style={styles.guideLinkText}>📖 Teller setup guide & privacy</Text>
       </TouchableOpacity>
     </>
   );
@@ -366,6 +384,14 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         <Text style={styles.instructionLine}>2. Download and unzip the teller.zip from your dashboard (it holds certificate.pem and private_key.pem)</Text>
         <Text style={styles.instructionLine}>3. Copy your Application ID from the dashboard and import both .pem files below</Text>
       </View>
+      <TouchableOpacity
+        style={styles.guideLink}
+        onPress={() => setGuideProvider("teller")}
+      >
+        <Text style={styles.guideLinkText}>
+          📖 Full setup guide, links & privacy
+        </Text>
+      </TouchableOpacity>
       <View style={styles.field}>
         <Text style={styles.label}>APPLICATION ID</Text>
         <TextInput
@@ -462,6 +488,14 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         <Text style={styles.instructionLine}>2. Connect your bank(s) there</Text>
         <Text style={styles.instructionLine}>3. Choose "New App", copy the setup token, and paste it below</Text>
       </View>
+      <TouchableOpacity
+        style={styles.guideLink}
+        onPress={() => setGuideProvider("simplefin")}
+      >
+        <Text style={styles.guideLinkText}>
+          📖 Full setup guide, links & privacy
+        </Text>
+      </TouchableOpacity>
       <View style={styles.field}>
         <Text style={styles.label}>SETUP TOKEN</Text>
         <TextInput
@@ -732,6 +766,13 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           setError(message);
         }}
       />
+
+      <ProviderSetupGuideModal
+        visible={guideProvider !== null}
+        provider={guideProvider ?? "simplefin"}
+        onClose={() => setGuideProvider(null)}
+        onStartSetup={startProviderSetup}
+      />
     </Modal>
   );
 };
@@ -810,6 +851,16 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: 14,
       padding: 16,
       gap: 6,
+    },
+    guideLink: {
+      alignSelf: "flex-start",
+      paddingVertical: 4,
+      marginTop: -4,
+    },
+    guideLinkText: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "600",
     },
     providerTitle: {
       color: colors.text,

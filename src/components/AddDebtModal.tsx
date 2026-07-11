@@ -241,7 +241,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     const [yearStr, monthStr] = goalMonth.split("-");
     const parsedYear = Number(yearStr);
     // Number("") === 0 (not NaN), so a debt with no goal yet would otherwise
-    // seed the picker at year 0 — making the ‹ › steppers look like a
+    // seed the picker at year 0 - making the ‹ › steppers look like a
     // day-of-month counter. Fall back to the current year unless we have a
     // real four-digit year already stored.
     setPickerYear(

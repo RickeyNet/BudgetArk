@@ -12,6 +12,11 @@ module.exports = {
   roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.test.ts"],
   clearMocks: true,
+  // A few sync/pairing tests drive real-timer async handshakes; jest's 5s
+  // default is too tight for them under coverage instrumentation + parallel
+  // load (they intermittently time out even though the logic is fine). 15s
+  // gives real headroom without masking a genuinely hung test.
+  testTimeout: 15000,
   collectCoverageFrom: [
     "src/utils/**/*.ts",
     "src/data/**/*.ts",

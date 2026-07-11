@@ -75,7 +75,7 @@ const SHEETS: SheetSpec[] = [
       { name: "Name", required: true, notes: "Up to 80 characters." },
       { name: "Balance", required: true, notes: "Current remaining balance, ≥ 0." },
       { name: "OriginalBalance", required: true, notes: "Starting balance, ≥ 0.01." },
-      { name: "Rate", required: true, notes: "APR as a percentage, 0–200." },
+      { name: "Rate", required: true, notes: "APR as a percentage, 0-200." },
       { name: "MinPayment", required: true, notes: "Minimum monthly payment, ≥ 0." },
       { name: "Owner", required: false, notes: "mine / partner / joint. Defaults to mine." },
       { name: "DebtClass", required: false, notes: "personal_credit / car / house. (Legacy car_house splits to house when the name mentions a mortgage, otherwise car.)" },
