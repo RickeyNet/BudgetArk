@@ -40,6 +40,7 @@ import {
   finalizeAccountLinks,
   type AccountSelection,
 } from "../services/connections/connectionsService";
+import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
 import type { NormalizedAccount } from "../services/connections/types";
 import { addAssetAccount } from "../storage/assetAccountStorage";
 import { generateUUID } from "../utils/uuid";
@@ -83,6 +84,16 @@ interface AddConnectionModalProps {
   /** Called after a connection is fully set up (links saved). */
   onComplete: (connectionId: string) => void;
   assetAccounts: AssetAccount[];
+  /**
+   * "Add another bank" mode: skip provider choice and Teller setup, and open
+   * Teller Connect directly for this existing connection. Only its brand-new
+   * accounts are offered for mapping, so existing mappings are untouched.
+   */
+  addBank?: {
+    connectionId: string;
+    applicationId: string;
+    environment: TellerEnvironment;
+  };
 }
 
 const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
@@ -90,6 +101,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   onClose,
   onComplete,
   assetAccounts,
+  addBank,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -126,21 +138,29 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   );
 
   const reset = useCallback(() => {
-    setStep("provider");
     setBusy(false);
     setError(null);
     setGuideProvider(null);
     setSetupToken("");
-    setTellerAppId("");
-    setTellerEnvironment("development");
     setTellerCertPem("");
     setTellerKeyPem("");
     setShowTellerConnect(false);
-    setConnectionId(null);
     setSelections([]);
     setNewAccountFor(null);
     setLocalAccounts(assetAccounts);
-  }, [assetAccounts]);
+    if (addBank) {
+      // Jump straight to Teller Connect for the existing connection.
+      setConnectionId(addBank.connectionId);
+      setTellerAppId(addBank.applicationId);
+      setTellerEnvironment(addBank.environment);
+      setStep("tellerEnroll");
+    } else {
+      setConnectionId(null);
+      setTellerAppId("");
+      setTellerEnvironment("development");
+      setStep("provider");
+    }
+  }, [addBank, assetAccounts]);
 
   const handleClose = useCallback(() => {
     reset();
@@ -210,6 +230,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     setError(null);
     const result = await createTellerConnection({
       applicationId: tellerAppId,
+      environment: tellerEnvironment,
       certificatePem: tellerCertPem,
       privateKeyPem: tellerKeyPem,
     });
@@ -220,7 +241,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     }
     setConnectionId(result.connectionId);
     setStep("tellerEnroll");
-  }, [tellerAppId, tellerCertPem, tellerKeyPem]);
+  }, [tellerAppId, tellerEnvironment, tellerCertPem, tellerKeyPem]);
 
   const handleTellerEnrollment = useCallback(
     async (enrollment: { enrollmentId: string; accessToken: string }) => {
@@ -233,14 +254,30 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         enrollment.enrollmentId,
         enrollment.accessToken,
       );
-      setBusy(false);
       if (!result.ok) {
+        setBusy(false);
         setError(result.message);
         return;
       }
-      enterMapStep(result.connectionId, result.accounts);
+      let accounts = result.accounts;
+      if (addBank) {
+        // Adding a bank to an existing connection: only map accounts that
+        // aren't already linked, so we never reset existing mappings (links
+        // upsert by externalAccountId).
+        const existing = await getLinksForConnection(connectionId);
+        const linkedIds = new Set(existing.map((l) => l.externalAccountId));
+        accounts = accounts.filter((a) => !linkedIds.has(a.externalAccountId));
+        if (accounts.length === 0) {
+          // The new bank's accounts are all already mapped - nothing to do.
+          setBusy(false);
+          setStep("done");
+          return;
+        }
+      }
+      setBusy(false);
+      enterMapStep(result.connectionId, accounts);
     },
-    [connectionId, enterMapStep],
+    [addBank, connectionId, enterMapStep],
   );
 
   /* ── Account mapping ── */
@@ -457,10 +494,13 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
 
   const renderTellerEnrollStep = () => (
     <>
-      <Text style={styles.title}>Connect Your Bank</Text>
+      <Text style={styles.title}>
+        {addBank ? "Add Another Bank" : "Connect Your Bank"}
+      </Text>
       <Text style={styles.subtitle}>
-        Next, log in to your bank through Teller Connect. Your bank credentials
-        go to Teller, never to BudgetArk.
+        {addBank
+          ? "Log in to another bank through Teller Connect. It's added to this same connection - your existing banks stay as they are."
+          : "Next, log in to your bank through Teller Connect. Your bank credentials go to Teller, never to BudgetArk."}
       </Text>
       {renderError()}
       <TouchableOpacity
@@ -655,16 +695,21 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     </>
   );
 
-  const renderDoneStep = () => (
-    <>
-      <Text style={styles.title}>✅ Connected</Text>
-      <Text style={styles.subtitle}>
-        {`${selections.filter((s) => s.importTransactions).length} account${
-          selections.filter((s) => s.importTransactions).length === 1 ? "" : "s"
-        } will import transactions to your Review Inbox. New items appear after each sync.`}
-      </Text>
-    </>
-  );
+  const renderDoneStep = () => {
+    const importing = selections.filter((s) => s.importTransactions).length;
+    return (
+      <>
+        <Text style={styles.title}>✅ Connected</Text>
+        <Text style={styles.subtitle}>
+          {addBank && selections.length === 0
+            ? "That bank's accounts were already connected, so nothing changed."
+            : `${importing} account${
+                importing === 1 ? "" : "s"
+              } will import transactions to your Review Inbox. New items appear after each sync.`}
+        </Text>
+      </>
+    );
+  };
 
   const primaryAction: {
     label: string;

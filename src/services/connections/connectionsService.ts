@@ -116,6 +116,7 @@ export const createSimplefinConnection = async (
  */
 export const createTellerConnection = async (opts: {
   applicationId: string;
+  environment: "sandbox" | "development" | "production";
   certificatePem: string;
   privateKeyPem: string;
 }): Promise<{ ok: true; connectionId: string } | { ok: false; message: string }> => {
@@ -141,11 +142,32 @@ export const createTellerConnection = async (opts: {
   await setConnectionSecrets(connection.id, {
     provider: "teller",
     applicationId,
+    environment: opts.environment,
     certificatePem: opts.certificatePem,
     privateKeyPem: opts.privateKeyPem,
     accessTokens: {},
   });
   return { ok: true, connectionId: connection.id };
+};
+
+/**
+ * Info needed to re-open Teller Connect for an existing connection ("add
+ * another bank"). Returns null if the connection isn't a Teller connection or
+ * its credentials are missing. Environment defaults to "development" for
+ * connections created before it was persisted.
+ */
+export const getTellerAddBankInfo = async (
+  connectionId: string,
+): Promise<
+  | { applicationId: string; environment: "sandbox" | "development" | "production" }
+  | null
+> => {
+  const secrets = await getConnectionSecrets(connectionId);
+  if (secrets?.provider !== "teller") return null;
+  return {
+    applicationId: secrets.applicationId,
+    environment: secrets.environment ?? "development",
+  };
 };
 
 /**

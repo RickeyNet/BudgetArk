@@ -29,6 +29,8 @@ interface ConnectionsModalProps {
   visible: boolean;
   onClose: () => void;
   onAddConnection: () => void;
+  /** Add another bank to an existing Teller connection (reuses its setup). */
+  onAddBank: (connectionId: string) => void;
 }
 
 const PROVIDER_GLYPHS: Record<string, string> = {
@@ -53,6 +55,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   visible,
   onClose,
   onAddConnection,
+  onAddBank,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -231,6 +234,15 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             ))
           )}
         </View>
+
+        {connection.provider === "teller" ? (
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => onAddBank(connection.id)}
+          >
+            <Text style={styles.secondaryButtonText}>+ Add another bank</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.secondaryButton, isSyncing && styles.buttonDisabled]}

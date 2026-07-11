@@ -33,6 +33,13 @@ export interface TellerSecrets {
   provider: "teller";
   /** The user's Teller application id (from their teller.io dashboard). */
   applicationId: string;
+  /**
+   * Teller Connect environment this connection was set up in. Persisted so
+   * "add another bank" can re-open Teller Connect with the right environment.
+   * Optional for connections created before this field existed - treat a
+   * missing value as "development" (the free real-bank tier).
+   */
+  environment?: "sandbox" | "development" | "production";
   /** PEM contents of the user's client certificate (from teller.zip). */
   certificatePem: string;
   /** PEM contents of the matching private key (from teller.zip). */

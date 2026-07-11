@@ -153,6 +153,7 @@ import { useConnections } from "../connections/ConnectionsProvider";
 import ConnectionsModal from "../components/ConnectionsModal";
 import AddConnectionModal from "../components/AddConnectionModal";
 import { startConnectionsMonitoring } from "../services/connections/connectionsSyncService";
+import { getTellerAddBankInfo } from "../services/connections/connectionsService";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
 
 
@@ -376,6 +377,12 @@ const ProfileScreen: React.FC = () => {
   const [wizardAssetAccounts, setWizardAssetAccounts] = useState<
     AssetAccount[]
   >([]);
+  /** Set when the wizard is opened in "add another bank" mode for a Teller connection. */
+  const [addBankInfo, setAddBankInfo] = useState<{
+    connectionId: string;
+    applicationId: string;
+    environment: "sandbox" | "development" | "production";
+  } | null>(null);
 
   /** Partner sync state */
   const [pairing, setPairing] = useState<PairingState | null>(null);
@@ -788,13 +795,23 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   const openAddConnection = useCallback(async () => {
+    setAddBankInfo(null);
     setWizardAssetAccounts(await getAssetAccounts());
+    setShowAddConnection(true);
+  }, []);
+
+  const openAddBank = useCallback(async (connectionId: string) => {
+    const info = await getTellerAddBankInfo(connectionId);
+    if (!info) return;
+    setWizardAssetAccounts(await getAssetAccounts());
+    setAddBankInfo({ connectionId, ...info });
     setShowAddConnection(true);
   }, []);
 
   const handleConnectionComplete = useCallback(
     (connectionId: string) => {
       setShowAddConnection(false);
+      setAddBankInfo(null);
       // Populate the Review Inbox right away; failures surface as the
       // connection's status in the manage list.
       void syncConnectionsNow(connectionId);
@@ -4310,15 +4327,18 @@ const ProfileScreen: React.FC = () => {
         visible={showConnectionsModal}
         onClose={() => setShowConnectionsModal(false)}
         onAddConnection={() => void openAddConnection()}
+        onAddBank={(connectionId) => void openAddBank(connectionId)}
       />
       <AddConnectionModal
         visible={showAddConnection}
         onClose={() => {
           setShowAddConnection(false);
+          setAddBankInfo(null);
           void refreshConnections();
         }}
         onComplete={handleConnectionComplete}
         assetAccounts={wizardAssetAccounts}
+        addBank={addBankInfo ?? undefined}
       />
 
       {/* ── Ship's Log (achievements) ── */}
