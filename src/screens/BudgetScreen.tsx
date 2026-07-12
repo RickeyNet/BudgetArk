@@ -262,6 +262,8 @@ const BudgetScreen: React.FC = () => {
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  /** Category preselected by the Quick Entry widget's deep link, if any. */
+  const [quickAddCategory, setQuickAddCategory] = useState<CategoryName | undefined>(undefined);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
   const [showBillCalendar, setShowBillCalendar] = useState(false);
   const [showReviewInbox, setShowReviewInbox] = useState(false);
@@ -776,6 +778,7 @@ const BudgetScreen: React.FC = () => {
       refreshMonthlyReview(nextEntries),
     ]);
     setShowAddModal(false);
+    setQuickAddCategory(undefined);
     triggerHaptic("success");
     void notifyAchievementCheck();
   }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
@@ -807,6 +810,19 @@ const BudgetScreen: React.FC = () => {
     });
     return () => task.cancel();
   }, [navigation, route.params?.openInbox]);
+
+  // The Quick Entry home-screen widget deep-links here with quickAdd set
+  // (via QuickAddLinkHost). Same deferral rationale as openInbox above.
+  useEffect(() => {
+    const quickAdd = route.params?.quickAdd;
+    if (!quickAdd) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setQuickAddCategory(quickAdd.category);
+      setShowAddModal(true);
+      navigation.setParams({ quickAdd: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.quickAdd]);
 
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
@@ -1813,8 +1829,12 @@ const BudgetScreen: React.FC = () => {
 
       <AddBudgetEntryModal
         visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => {
+          setShowAddModal(false);
+          setQuickAddCategory(undefined);
+        }}
         onAdd={handleAddEntry}
+        initialCategory={quickAddCategory}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
       />

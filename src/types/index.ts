@@ -1040,6 +1040,12 @@ export type RootTabParamList = {
   Budget: {
     /** When true, the Budget screen opens the connections Review Inbox on focus. */
     openInbox?: boolean;
+    /**
+     * Set by the Quick Entry widget's deep link (see QuickAddLinkHost):
+     * opens the Add Entry modal, preselecting `category` when present.
+     * The category is already validated fail-closed by parseQuickAddUri.
+     */
+    quickAdd?: { category?: string };
   } | undefined;
   Bridge: undefined;
   Utilities: undefined;

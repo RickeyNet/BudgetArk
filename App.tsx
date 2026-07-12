@@ -28,6 +28,7 @@ import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import DebtDueReminderHost from "./src/components/DebtDueReminderHost";
 import TrackingReminderHost from "./src/components/TrackingReminderHost";
+import QuickAddLinkHost from "./src/components/QuickAddLinkHost";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
 import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
@@ -330,6 +331,10 @@ const AppContent: React.FC = () => {
       {/* Keeps scheduled expense-tracking check-in notifications anchored to
           the user's latest entry, and routes taps to the Budget tab. */}
       <TrackingReminderHost navigationRef={navigationRef} />
+
+      {/* Routes the home-screen Quick Entry widget's deep links
+          (budgetark://quick-add) to the Budget tab's Add Entry modal. */}
+      <QuickAddLinkHost navigationRef={navigationRef} />
 
       <Modal
         visible={pendingUpdate !== null}

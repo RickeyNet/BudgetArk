@@ -3,6 +3,7 @@
     "name": "BudgetArk",
     "slug": "BudgetArk",
     "version": "1.9.0",
+    "scheme": "budgetark",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -72,7 +73,25 @@
         }
       ],
       "expo-iap",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "QuickEntry",
+              "label": "Quick Entry",
+              "description": "Log an expense in one tap - pick a category and BudgetArk opens straight to the amount.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 0
+            }
+          ]
+        }
+      ]
     ]
   }
 }

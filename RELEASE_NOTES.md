@@ -34,6 +34,15 @@ Local notifications only - planned on-device from the user's own activity (`expo
 - **Settings:** Profile → Tracking Reminders bottom sheet - per-kind toggles, cadence (daily / 3 days / weekly), time of day (morning / afternoon / evening). Per-device, never synced; Reset All Data wipes the settings and cancels everything pending.
 - **Tests:** full suite as of 2026-07-12: 680 passing across 49 suites.
 
+### Quick Entry home-screen widget - Android (2026-07-12)
+
+One-tap expense logging from the launcher (`react-native-android-widget` - another native dep riding this same build; iOS deferred, WidgetKit needs a native Swift target).
+
+- **Widget** (`src/widgets/QuickEntryWidget.tsx` + task handler): a 4x2 grid of six everyday expense categories (Grocery, Restaurant, Transportation, Shopping, Entertainment, Other). Each button is a native `OPEN_URI` click on a `budgetark://quick-add?category=<name>` deep link - no JS runs on the widget side, and nothing financial renders on the home screen. Header tap opens quick-add with no preselection. Custom `index.js` entry point registers the headless handler (Android-only require, so none of it reaches the iOS bundle).
+- **Deep links land fail-closed** (`src/utils/quickAddLink.ts`, 10 tests - closes the standing "deep link validation" security TODO): builder + validator share one module; anything that isn't exactly a quick-add link is rejected (scheme/host anchored, length-capped, no extra path/fragment), categories decode then must exactly match a built-in or drop to "no preselection", control chars and malformed percent-encoding fail closed. `app.json` gains `"scheme": "budgetark"`.
+- **Routing** (`QuickAddLinkHost` at app root, same shape as `TrackingReminderHost`): warm taps via the `url` event, cold starts via `getInitialURL` with the once-per-launch guard, retries until navigation is ready, then navigates Budget with a new `quickAdd` route param. BudgetScreen defers past the tab transition (the iOS silent-present pattern) and opens `AddBudgetEntryModal`, which gains an `initialCategory` prop applied only on the closed→open edge so it can never clobber an in-progress draft.
+- **v2 ideas parked in TODO:** in-widget amount numpad (headless render + storage write - needs encrypted-storage-in-headless verification), user-configurable category set, iOS WidgetKit port.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

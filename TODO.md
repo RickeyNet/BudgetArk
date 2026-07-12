@@ -113,7 +113,7 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ### Low
 - [x] Replace custom `Math.random()` UUID in `src/utils/uuid.ts` with the `uuid` package (already in `package.json`)
-- [ ] Add deep link validation if deep link routing is implemented in the future
+- [x] Add deep link validation if deep link routing is implemented in the future - DONE (2026-07-12) alongside the Quick Entry widget: `src/utils/quickAddLink.ts` validates fail-closed (anchored scheme/host, length cap, no extra path/fragment, category must exactly match a built-in, control chars + bad percent-encoding rejected); unit-tested. Any future deep link route should go through the same build-and-validate-in-one-module pattern.
 - [x] Reduce import size limits (`MAX_RAW_CHARS` from 2MB to 500KB) to prevent OOM on low-end devices
 
 ### Info / Optional
@@ -328,7 +328,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
 - [ ] Big Purchase Cost/Benefit Comparison Calculator - compare long-term total cost of ownership for expensive vs cheaper options (e.g. gas car vs hybrid vs EV) using purchase price, financing, fuel/energy cost, insurance, maintenance, depreciation/resale, annual miles, and ownership length. Show break-even point, 5/10-year totals, cost per mile, and whether the higher upfront option pays off over time.
 - [ ] Net Worth Timeline Graph - plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
-- [ ] Live Stock Holdings & Quote Feed - let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
+- [x] Live Stock Holdings & Quote Feed - let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
 
   Data model:
   - New `Holding` record: `{ id, symbol, shares, costBasis?, accountId? }`. Either nest under existing `AssetAccount` or add a new top-level collection that aggregates into Net Worth the same way Asset Accounts do.
@@ -368,7 +368,24 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
 - [ ] Savings Streak Tracker - track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
-- [ ] Quick-Entry Home Screen Widget - minimal widget to log an expense (category + amount) without opening the full app.
+- [~] Quick-Entry Home Screen Widget - minimal widget to log an expense without opening the full app. Android SHIPPED app-side (2026-07-12); iOS deferred.
+
+  What shipped (v1 = launcher shortcuts, not in-widget entry):
+  - `react-native-android-widget@0.20.3` + config plugin in `app.json` (widget name `QuickEntry`, 4x2 cells, resizable). NOT OTA-eligible - new native dep + new `"scheme": "budgetark"` intent filter; rides the same pending EAS build as Teller/expo-iap/expo-notifications. Custom `index.js` entry point (package.json `main` changed from expo/AppEntry) registers the headless task handler on Android only.
+  - `src/widgets/QuickEntryWidget.tsx` - 4x2 grid: header ("⚓ Quick Entry") + six everyday expense categories (Grocery, Restaurant, Transportation, Shopping, Entertainment, Other), emoji + label per button, sourced from `CATEGORY_ICONS` so icons can't drift from the app. Every tappable uses the native `OPEN_URI` click action with a `budgetark://quick-add?category=<name>` deep link (header = no category) - zero widget-side JS on click. Fixed dark palette (widgets render headless, outside ThemeProvider). Deliberately shows NO financial data - home-screen safe.
+  - `src/utils/quickAddLink.ts` - builder + fail-closed validator in one module (see security section above). 10 unit tests.
+  - `src/components/QuickAddLinkHost.tsx` - app-root host (TrackingReminderHost pattern): warm links via `Linking` `url` event, cold start via `getInitialURL` + once-per-launch guard, retry-until-navigation-ready, navigates Budget with new `quickAdd` route param.
+  - BudgetScreen consumes `quickAdd` (deferred past the tab transition like `openInbox`) and opens `AddBudgetEntryModal`, which gained `initialCategory` - applied only on the closed→open edge (forces type=expense), so it never clobbers a draft the user already has open; cleared on every close path so a later FAB open starts clean.
+
+  Still TODO before release:
+  - Device-test on Android once the new EAS build exists: widget picker shows label/description, all 7 tap targets deep-link correctly (cold start, backgrounded, and already-on-Budget cases), modal preselects the right category, resize behavior.
+  - Optional: `previewImage` PNG for the widget picker (currently shows a default preview).
+  - Play Data Safety: no change needed (widget sends nothing anywhere), but confirm on next submission.
+
+  v2 ideas:
+  - True in-widget entry (category + amount numpad, save without opening the app) via the library's WIDGET_CLICK headless handler. Prerequisite: verify EncryptedStorage (AsyncStorage + SecureStore + quick-crypto Nitro) works in Android headless JS, and add a write-queue so a widget save can't race the app's read-modify-write on the entries array.
+  - User-configurable category set (read from storage in the headless render; needs the same headless-storage verification).
+  - iOS: WidgetKit requires a native Swift target (e.g. @bacons/apple-targets config plugin) + App Groups; interactive widgets need iOS 17 AppIntents. Big lift - the v1 iOS equivalent would be static category buttons deep-linking like Android. Deferred until Android v1 proves usage.
 - [ ] Bill Calendar View - monthly calendar showing when recurring expenses hit. Visual cash flow timing.
 
   OTA-shippable: yes. Pure RN + math against existing `BudgetEntry` data. No native modules. The only caveat is the data prerequisite below - handle that first or the calendar is useless.
@@ -462,8 +479,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Spending Heatmap - calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
 - [ ] Financial Health Score - single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
 - [ ] Ark Journey Timeline - visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
-- [ ] Dark Mode Schedule - auto-switch themes based on time of day (lighter during day, dark at night).
-- [ ] Layout density selector - Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental - screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
+- [x] Layout density selector - Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental - screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
 - [ ] create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
 Tech options:
 1. On-device OCR library (more private, no backend)

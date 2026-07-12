@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -42,6 +42,12 @@ interface AddBudgetEntryModalProps {
   visible: boolean;
   onClose: () => void;
   onAdd: (entries: NewBudgetEntryInput[]) => void;
+  /**
+   * Category to preselect when the modal opens (Quick Entry widget deep
+   * link). Applied only on the closed -> open transition so it never
+   * clobbers a selection the user makes while the modal is up.
+   */
+  initialCategory?: CategoryName;
   assetAccounts?: AssetAccount[];
   customCategories?: CustomCategory[];
 }
@@ -105,6 +111,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   visible,
   onClose,
   onAdd,
+  initialCategory,
   assetAccounts = [],
   customCategories = [],
 }) => {
@@ -125,6 +132,16 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const [recurrenceDay, setRecurrenceDay] = useState<number>(DEFAULT_RECURRENCE_DAY);
   const [paymentUrl, setPaymentUrl] = useState("");
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
+
+  // Apply the widget-provided category on the closed -> open edge only.
+  const wasVisible = useRef(false);
+  useEffect(() => {
+    if (visible && !wasVisible.current && initialCategory) {
+      setType("expense");
+      setCategory(initialCategory);
+    }
+    wasVisible.current = visible;
+  }, [visible, initialCategory]);
 
   const showDayPicker = recurring && type === "expense";
 
