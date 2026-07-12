@@ -385,7 +385,38 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   v2 ideas:
   - True in-widget entry (category + amount numpad, save without opening the app) via the library's WIDGET_CLICK headless handler. Prerequisite: verify EncryptedStorage (AsyncStorage + SecureStore + quick-crypto Nitro) works in Android headless JS, and add a write-queue so a widget save can't race the app's read-modify-write on the entries array.
   - User-configurable category set (read from storage in the headless render; needs the same headless-storage verification).
-  - iOS: WidgetKit requires a native Swift target (e.g. @bacons/apple-targets config plugin) + App Groups; interactive widgets need iOS 17 AppIntents. Big lift - the v1 iOS equivalent would be static category buttons deep-linking like Android. Deferred until Android v1 proves usage.
+  - iOS WidgetKit port - full spec in the dedicated entry below. Deferred until Android v1 proves usage.
+
+- [ ] iOS Quick Entry widget (WidgetKit) - iOS counterpart to the shipped Android widget: static, data-free category grid whose buttons deep-link into the prefilled Add Entry modal. All app-side plumbing already exists (`budgetark://` scheme, `quickAddLink.ts` validation, `QuickAddLinkHost`, `initialCategory` on the modal) - this item is purely the native extension.
+
+  Why it can't be JS: an iOS home-screen widget is a separate app extension running WidgetKit - SwiftUI only, own process, tiny memory budget, no JS runtime. No library avoids the Swift; the constraint is architectural (unlike Android, where `react-native-android-widget` renders JSX from a headless task in the app process).
+
+  Scope (v1 - mirrors Android exactly):
+  - `systemMedium` widget (4x2-ish): header "⚓ Quick Entry" + six buttons (Grocery 🛒, Restaurant 🍴, Transportation 🚗, Shopping 🛍️, Entertainment 🎬, Other 🏷️) - emoji + label, fixed dark palette matching the Android widget (bg #1a1915, buttons #2b2a26, accent #da7756, text #F2E6D0).
+  - Each button is `Link(destination: URL(string: "budgetark://quick-add?category=Grocery")!)`; header links to bare `budgetark://quick-add`. `systemSmall` variant optional: single "log an expense" tap, no grid (small widgets get ONE tap target - `widgetURL`, not `Link`).
+  - NO financial data on the widget, matching the Android posture. This deliberately avoids App Groups entirely in v1 - no shared container, no data snapshotting, nothing to keep in sync. Static timeline (`Timeline(entries: [entry], policy: .never)`) - the widget never needs refreshing.
+  - IMPORTANT: category names in the Swift file are a hardcoded copy of the six in `QuickEntryWidget.tsx` - they can't import from TS. Add a comment in BOTH files pointing at each other; the fail-closed validator means a drifted name degrades to "no preselection", never a crash.
+
+  Build plumbing:
+  - `@bacons/apple-targets` config plugin. Declare the target in its config (type `widget`); Swift sources live in `targets/quickentry/` and get injected into the Xcode project at prebuild. Files: `targets/quickentry/expo-target.config.js` (or entry in app.json), `Widget.swift` (bundle + TimelineProvider + entry view), `Info.plist` handled by the plugin.
+  - ~100-150 lines of SwiftUI total. Provider is trivial (one static entry). Set `.containerBackground(for: .widget)` for iOS 17+ and a plain background fallback for 15/16; deployment target iOS 15 is fine (SDK 57 minimum) since v1 needs no iOS 17 API.
+  - Bundle id `com.budgetark.app.quickentry` (extension ids must prefix the app id). EAS Build handles multi-target signing but needs one-time setup: the extension appears as an additional provisioning profile under the app's credentials (`eas credentials`); App Store Connect needs nothing extra - extensions ride the app record.
+  - NOT OTA-eligible, obviously - new native target, new EAS build, and every future prebuild regenerates the Xcode project through the plugin.
+
+  Verification checklist (device):
+  - Widget gallery shows name/description; add both sizes.
+  - Cold-start tap, backgrounded tap, and already-on-Budget tap all land in the prefilled modal (same matrix as the Android device-test item above).
+  - Light/dark home screen appearance (fixed dark palette should hold up on both - check contrast against iOS widget corner masking).
+  - Lock-screen "tap to unlock then open" flow.
+
+  Maintenance cost (the reason this is deferred): Swift source sits outside the TS toolchain - no shared types, no jest coverage, a second surface to smoke-test each release; @bacons/apple-targets pins to Expo SDK majors, so every SDK upgrade gains a "does the plugin still prebuild" check.
+
+  Explicitly out of scope (v2+):
+  - Any data display (spent-this-month, budget remaining) - requires App Groups + the app writing a plaintext-ish snapshot outside EncryptedStorage; conflicts with the data-free posture, decide deliberately if ever.
+  - Interactive in-widget entry - iOS 17 AppIntents run Swift in the background, so saving an entry would mean reimplementing entry-writing (and the encryption) natively. Off the table.
+  - Interim iOS option, zero native work: document in the FAQ/How-To that the Shortcuts app can wrap `budgetark://quick-add?category=...` as a home-screen icon - works as soon as the scheme-carrying EAS build ships.
+
+  Effort: ~1-2 days (mostly plugin config + signing + device verification, not the SwiftUI).
 - [ ] Bill Calendar View - monthly calendar showing when recurring expenses hit. Visual cash flow timing.
 
   OTA-shippable: yes. Pure RN + math against existing `BudgetEntry` data. No native modules. The only caveat is the data prerequisite below - handle that first or the calendar is useless.
