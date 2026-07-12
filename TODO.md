@@ -253,7 +253,20 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   Storage: `@budgetark_coachmarks` in EncryptedStorage. `{ seenTabs: string[], skippedAll: boolean, version: number }`. Bump version to invalidate the seen list when content changes meaningfully (e.g. a 6th tab gets added).
 
   No new deps. Uses React Native `Modal` + the existing theme/density tokens. OTA-eligible.
-- [ ] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage
+- [~] In-app donation support (Tip Jar) via Apple/Google billing with privacy-safe wording and no custom payment data storage - App side SHIPPED; store-console product setup still required (below).
+
+  What shipped:
+  - `expo-iap` (v4.4.1, OpenIAP/StoreKit 2/Play Billing) added; config plugin auto-added to `app.json`. NOT OTA-eligible - needs a new EAS build (pairs with the Teller build already pending on this branch).
+  - `src/components/TipJarModal.tsx` - bottom sheet opened from Profile → "Tip Jar 💛" row (in the Send Feedback card). Three consumable tiers (☕ Small / 🍕 Medium / 🚢 Large) with store-localized prices via `displayPrice`. Purchases are consumed immediately (`finishTransaction({ isConsumable: true })`) so the same tier can be tipped again; leftover unconsumed tips from interrupted sessions are swept on open (prevents Android "already owned").
+  - Privacy-safe by construction: the whole payment flow runs in Apple/Google's sheet; the modal states "BudgetArk never sees, collects, or stores any payment details" and NOTHING is persisted - no purchase history, no "has tipped" flag, thank-you state is in-memory only. Copy explicitly says tips unlock nothing (keeps it a donation, not an entitlement).
+  - Modal is mounted only while open, so the billing connection is on-demand, not at app launch. Graceful states: connecting spinner → tier list; "Tips aren't available right now" if products fail to load; user-cancel is silent; Ask-to-Buy/pending purchases get a pending note.
+
+  Store console setup still TODO (product IDs must match `TIP_TIERS` in TipJarModal.tsx):
+  - App Store Connect → BudgetArk → In-App Purchases: create 3 CONSUMABLE products with IDs `com.budgetark.app.tip.small` / `.medium` / `.large` (suggested $0.99 / $2.99 / $4.99), display names like "Small Tip", short description ("A small thank-you to support development"). Paid Apps agreement + banking/tax info must be active. Attach the IAPs to the next app version for review.
+  - Play Console → BudgetArk → Monetize → In-app products: same 3 IDs as one-time products (requires a merchant account). The app consumes them via Play Billing automatically.
+  - Data Safety / privacy forms: purchases are handled by the stores, no new data collected by the app - but Google's Data Safety form and Apple's privacy label both have a "Purchases" category handled by the platform; review whether the store forms need the purchases-handled-by-store disclosure on next submission.
+  - Build note: expo-iap needs iOS 15+ (SDK 57 default OK) and Kotlin 2.2 on Android - if the EAS Android build fails on Kotlin version, add `expo-build-properties` with `{"android": {"kotlinVersion": "2.2.0"}}`.
+  - Sandbox-test on device (sandbox Apple ID / Play license tester) before release; products can take a few hours to propagate after creation.
 - [ ] Debt-Free Countdown Timer - live countdown on Debt Tracker showing projected debt-free date based on current payment velocity. Updates dynamically as payments are made.
 - [ ] Budget Rollover Mode - unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
 

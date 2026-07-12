@@ -21,7 +21,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Private by design. Your credentials - a SimpleFIN token or your Teller certificate - are stored encrypted on this device only. They never sync to your paired partner, never appear in backups, and never touch a BudgetArk server, because there isn't one. They're also never written unencrypted: if your phone's secure storage isn't available, BudgetArk tells you plainly instead of quietly saving credentials in plain text, and SimpleFIN connections are accepted over secure https only. Before your first connection, a plain-language note explains exactly what talks to whom, and nothing connects until you accept it.",
       "Syncing is polite and automatic: connections refresh when you open the app (at most every few hours, respecting provider limits), with a Sync Now button when you want it immediately. If a connection needs attention, the Profile row shows a warning.",
       "Also fixed: when both partners' phones confirmed the same debt payment from the due-date reminder, sync could count it twice. The prompt now records one shared entry across paired devices, and any duplicates it already created are cleaned up automatically - genuine double payments are never touched.",
-      "Note: connecting via Teller requires this update to be installed from the app store (it adds a new component); SimpleFIN works right away.",
+      "New: a Tip Jar in Profile. If BudgetArk has helped you, you can leave a small one-time tip - completely optional, and it unlocks nothing because every feature is already free. Tips are handled entirely by the App Store or Google Play: BudgetArk never sees, collects, or stores any payment details, and keeps no record of whether you tipped.",
+      "Note: connecting via Teller and the Tip Jar require this update to be installed from the app store (they add new components); SimpleFIN works right away.",
     ],
   },
   {

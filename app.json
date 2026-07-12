@@ -70,7 +70,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#F2E6D0"
         }
-      ]
+      ],
+      "expo-iap"
     ]
   }
 }

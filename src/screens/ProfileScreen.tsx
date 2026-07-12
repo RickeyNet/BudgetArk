@@ -124,6 +124,7 @@ import {
 import type { PairingState, SyncStatus } from "../sync/types";
 import PairingModal from "../components/PairingModal";
 import FeedbackModal from "../components/FeedbackModal";
+import TipJarModal from "../components/TipJarModal";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import SpreadsheetSchemaModal from "../components/SpreadsheetSchemaModal";
 import { triggerHaptic, setHapticsCache } from "../utils/haptics";
@@ -396,6 +397,9 @@ const ProfileScreen: React.FC = () => {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [showUnpairConfirm, setShowUnpairConfirm] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  /** Tip Jar sheet - mounted only while open so the store connection
+   *  (expo-iap) is established on demand, not at app start. */
+  const [showTipJar, setShowTipJar] = useState(false);
 
   /** Backup reminder banner state */
   const [backupState, setBackupState] = useState<BackupReminderState>({});
@@ -1594,7 +1598,7 @@ const ProfileScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* ── Send Feedback ── */}
+        {/* ── Send Feedback + Tip Jar ── */}
         <View style={styles.settingsSection}>
           <View
             style={[
@@ -1614,6 +1618,34 @@ const ProfileScreen: React.FC = () => {
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
                   Bug reports & feature requests
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowTipJar(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Tip Jar 💛
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  Optional support - nothing to unlock
                 </Text>
               </View>
               <Text
@@ -4177,6 +4209,11 @@ const ProfileScreen: React.FC = () => {
           setInfoModal(result);
         }}
       />
+
+      {/* ── Tip Jar Modal ── */}
+      {/* Mounted on demand: useIAP inside opens the billing connection on
+          mount and closes it on unmount. */}
+      {showTipJar ? <TipJarModal onClose={() => setShowTipJar(false)} /> : null}
 
       {/* ── Pairing Modal ── */}
       <PairingModal
