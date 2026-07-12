@@ -108,6 +108,19 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
     },
   });
 
+  /**
+   * If the store connection never comes up (no Play services, region
+   * without the store), stop spinning after a bit and show the
+   * unavailable state instead. Self-healing: a late connection flips
+   * `connected` and the normal load path takes over.
+   */
+  const [connectTimedOut, setConnectTimedOut] = useState(false);
+  useEffect(() => {
+    if (connected) return;
+    const timer = setTimeout(() => setConnectTimedOut(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [connected]);
+
   /** Load products once the store connection is up. */
   const startedRef = useRef(false);
   useEffect(() => {
@@ -166,8 +179,10 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
     if (!busySku) onClose();
   }, [busySku, onClose]);
 
-  const loading = !connected || fetchState === "loading";
-  const unavailable = !loading && (fetchState === "failed" || tierRows.length === 0);
+  const loading = connected ? fetchState === "loading" : !connectTimedOut;
+  const unavailable =
+    !loading &&
+    (!connected || fetchState === "failed" || tierRows.length === 0);
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={handleBackdrop}>
