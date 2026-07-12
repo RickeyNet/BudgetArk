@@ -223,25 +223,25 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 - [x] Push notifications: expense-tracking check-ins (requires `expo-notifications`) - SHIPPED app-side (2026-07-12). Decision: payment-due push notifications were explicitly REJECTED - banks already remind users about bills, and the in-app due banners cover it. Instead, notifications are habit nudges: "you haven't logged your spending in a while - check in." Local notifications only, planned on-device from the user's own entry history. No push token, no server, nothing leaves the device.
 
-  How it behaves:
-  - The next check-in is anchored `cadenceDays` after the user's most recent budget entry (newest `createdAt`; `updatedAt` ignored so sync merges don't count as tracking). The schedule is recomputed on every app open and background transition, so logging an entry silently pushes every pending nudge out a full cadence - active trackers never hear from it, lapsed users get nudged at their cadence until they log again.
-  - Already-overdue users (last entry older than the cadence) get nudged at the next occurrence of their chosen hour, not a full cadence later.
-  - Rotating, deliberately content-free copy (no amounts, no account names - lock-screen safe), lightly Ark-themed ("Keep your Ark on course - jot down any expenses from the last few days."). Rotation is deterministic by calendar day so replans don't reshuffle messages.
+  How it behaves - two reminder kinds, each behind its own toggle:
+  - **Quiet-spell check-ins**: anchored `cadenceDays` after the user's most recent budget entry (newest `createdAt`; `updatedAt` ignored so sync merges don't count as tracking). The schedule is recomputed on every app open and background transition, so logging an entry silently pushes every pending nudge out a full cadence - active trackers never hear from it, lapsed users get nudged at their cadence until they log again. Already-overdue users (last entry older than the cadence) get nudged at the next occurrence of their chosen hour, not a full cadence later.
+  - **Month-start planning**: on the 1st of each month at the chosen hour - "Set this month's budget goals and review how last month went." Points users at the budget-limit setup + Monthly Review that already exist on the Budget tab. Copy rotates by month. A check-in landing on the same day as a month-start nudge is dropped so the user never gets two notifications in one day.
+  - Rotating, deliberately content-free copy (no amounts, no account names - lock-screen safe), lightly Ark-themed ("Keep your Ark on course - jot down any expenses from the last few days."). Rotation is deterministic by calendar day/month so replans don't reshuffle messages.
   - Tap (warm or cold-start) opens the Budget tab.
 
   What shipped:
   - `expo-notifications@~57.0.3` (config plugin in `app.json`). NOT OTA-eligible - rides the same pending EAS build as Teller/expo-iap on this branch.
-  - `src/utils/trackingReminderPlanner.ts` - pure, unit-tested planner (13 tests): anchor math, overdue roll-forward, 30-day window, 32-notification cap (iOS keeps 64 pending), deterministic identifiers (`budgetark-checkin-YYYY-MM-DD`) so replans are idempotent.
+  - `src/utils/trackingReminderPlanner.ts` - pure, unit-tested planner (20 tests): anchor math, overdue roll-forward, month-start scheduling + same-day dedupe, 30-day window, 32-notification cap (iOS keeps 64 pending), deterministic identifiers (`budgetark-checkin-YYYY-MM-DD`, `budgetark-monthstart-YYYY-MM`) so replans are idempotent.
   - `src/notifications/trackingReminders.ts` - scheduler: Android channel ("Expense check-ins"), permission flow, idempotent cancel-ours-then-reschedule (`data.type === "tracking-reminder"` marks ours). Foreground handler suppresses banners while the app is open.
   - `src/components/TrackingReminderHost.tsx` - app-root host: reschedules on launch (deferred past first paint) + on background; routes taps to Budget.
-  - Settings: Profile → Tracking Reminders row → bottom sheet (`TrackingRemindersModal.tsx`). Master toggle (OFF by default - strictly opt-in; enabling runs the permission request, denial deep-links to OS Settings), cadence (daily / every 3 days / weekly), time of day (morning / afternoon / evening). Stored in `trackingReminderSettingsStorage.ts` (EncryptedStorage, per-device, deliberately NOT synced to partner).
+  - Settings: Profile → Tracking Reminders row → bottom sheet (`TrackingRemindersModal.tsx`). Master toggle (OFF by default - strictly opt-in; enabling runs the permission request, denial deep-links to OS Settings), per-kind toggles (logging check-ins / month-start planning, both default ON under the master), cadence (daily / every 3 days / weekly), time of day (morning / afternoon / evening, shared by both kinds). Stored in `trackingReminderSettingsStorage.ts` (EncryptedStorage, per-device, deliberately NOT synced to partner).
   - Reset All Data wipes the settings key (in `RESET_KEYS`) and cancels all pending scheduled check-ins immediately.
 
   Still TODO before release:
   - Device-test on iOS + Android 13+ (permission prompt, channel, lock-screen presentation, tap routing, reschedule-on-background actually pushing nudges out after logging an entry) once the new EAS build exists.
   - Optional polish: dedicated monochrome Android notification icon via the `expo-notifications` plugin options (currently default).
   - Release-notes entry + version bump when the EAS build that carries this is cut.
-  - v2 ideas: streak-aware copy ("day 12 of your streak - keep it alive"), a "weekly recap" variant, snooze action button on the notification.
+  - v2 ideas: streak-aware copy ("day 12 of your streak - keep it alive"), a "weekly recap" variant, snooze action button on the notification, month-start tap deep-linking straight to the Monthly Review sheet instead of the Budget tab.
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Currency exchange calculator (Utilities tab) - pick base + target currency, enter amount, see converted value. Decide rate source (offline lookup table snapshotted at build time vs. on-demand API call) and whether to surface a "rates last updated" timestamp. Reuse existing `useCurrency()` formatting; live in Utilities alongside the loan amortization tools.
 - [ ] Data confidence tools (last backup badge + backup reminders)

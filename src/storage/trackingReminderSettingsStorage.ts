@@ -18,9 +18,11 @@ const sanitize = (raw: unknown): TrackingReminderSettings => {
   const obj = raw as Record<string, unknown>;
   return {
     enabled: obj.enabled === true,
+    checkInsEnabled: obj.checkInsEnabled !== false,
     cadenceDays: VALID_CADENCES.includes(obj.cadenceDays as ReminderCadenceDays)
       ? (obj.cadenceDays as ReminderCadenceDays)
       : DEFAULT_TRACKING_REMINDER_SETTINGS.cadenceDays,
+    monthStartEnabled: obj.monthStartEnabled !== false,
     hour: VALID_HOURS.includes(obj.hour as ReminderHour)
       ? (obj.hour as ReminderHour)
       : DEFAULT_TRACKING_REMINDER_SETTINGS.hour,

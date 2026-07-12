@@ -23,15 +23,24 @@ export type ReminderHour = 9 | 13 | 19;
 export interface TrackingReminderSettings {
   /** Master switch. Off by default - reminders are strictly opt-in. */
   enabled: boolean;
+  /** Quiet-spell check-ins: nudge when nothing has been logged for a while. */
+  checkInsEnabled: boolean;
   /** Days of no logged entries before a check-in fires (and repeats). */
   cadenceDays: ReminderCadenceDays;
-  /** Local hour of day (see ReminderHour) check-ins fire at. */
+  /**
+   * Month-start planning nudge on the 1st: set this month's budget goals and
+   * review how last month went.
+   */
+  monthStartEnabled: boolean;
+  /** Local hour of day (see ReminderHour) all reminders fire at. */
   hour: ReminderHour;
 }
 
 export const DEFAULT_TRACKING_REMINDER_SETTINGS: TrackingReminderSettings = {
   enabled: false,
+  checkInsEnabled: true,
   cadenceDays: 3,
+  monthStartEnabled: true,
   hour: 19,
 };
 
@@ -85,6 +94,23 @@ export const CHECK_IN_MESSAGES: readonly { title: string; body: string }[] = [
   },
 ];
 
+/** Month-start copy, rotated by month so January doesn't read like December. */
+export const MONTH_START_MESSAGES: readonly { title: string; body: string }[] =
+  [
+    {
+      title: "A new month begins",
+      body: "Set this month's budget goals and review how last month went.",
+    },
+    {
+      title: "Chart this month's course",
+      body: "Look back at last month's spending and set your goals for the month ahead.",
+    },
+    {
+      title: "Fresh month, fresh start",
+      body: "Take a few minutes to plan this month's budget and check last month's review.",
+    },
+  ];
+
 const dayKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate()
@@ -112,17 +138,45 @@ export interface PlanTrackingRemindersInput {
 }
 
 /**
- * Plans the check-ins to schedule right now: the first fires `cadenceDays`
- * after the last logged entry at the chosen hour - or, when the user is
- * already overdue, at the next occurrence of that hour - then repeats every
- * `cadenceDays` through the scheduling window.
+ * Month-start planning nudges: the 1st of every month inside the window, at
+ * the chosen hour. A 30-day window holds at most one (occasionally two when
+ * "now" is the 1st before the hour).
  */
-export const planTrackingReminders = (
-  input: PlanTrackingRemindersInput
-): PlannedReminder[] => {
-  const { entries, settings } = input;
-  if (!settings.enabled) return [];
-  const now = input.now ?? new Date();
+const planMonthStarts = (now: Date, hour: ReminderHour, windowEnd: Date) => {
+  const planned: PlannedReminder[] = [];
+  // Start from this month's 1st; the past-check below drops it when gone.
+  for (let offset = 0; offset <= 2; offset++) {
+    const fire = new Date(now.getFullYear(), now.getMonth() + offset, 1, hour, 0, 0);
+    if (fire.getTime() <= now.getTime()) continue;
+    if (fire.getTime() > windowEnd.getTime()) break;
+    const message =
+      MONTH_START_MESSAGES[
+        (fire.getFullYear() * 12 + fire.getMonth()) % MONTH_START_MESSAGES.length
+      ];
+    planned.push({
+      identifier: `budgetark-monthstart-${fire.getFullYear()}-${String(
+        fire.getMonth() + 1
+      ).padStart(2, "0")}`,
+      title: message.title,
+      body: message.body,
+      fireDate: fire,
+    });
+  }
+  return planned;
+};
+
+/**
+ * Quiet-spell check-ins: the first fires `cadenceDays` after the last logged
+ * entry at the chosen hour - or, when the user is already overdue, at the
+ * next occurrence of that hour - then repeats every `cadenceDays` through
+ * the scheduling window.
+ */
+const planCheckIns = (
+  entries: readonly BudgetEntry[],
+  settings: TrackingReminderSettings,
+  now: Date,
+  windowEnd: Date
+) => {
   const { cadenceDays, hour } = settings;
 
   // Someone with no entries yet is treated as having tracked "now" - the
@@ -154,15 +208,6 @@ export const planTrackingReminders = (
     }
   }
 
-  const windowEnd = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + REMINDER_WINDOW_DAYS,
-    23,
-    59,
-    59
-  );
-
   const planned: PlannedReminder[] = [];
   while (
     fire.getTime() <= windowEnd.getTime() &&
@@ -189,6 +234,44 @@ export const planTrackingReminders = (
       0
     );
   }
-
   return planned;
+};
+
+/**
+ * Plans every reminder to schedule right now: month-start planning nudges
+ * (1st of the month) plus quiet-spell check-ins, each behind its own toggle.
+ * A check-in landing on the same day as a month-start nudge is dropped -
+ * the month-start message already brings the user into the app, and two
+ * notifications in one day reads as nagging.
+ */
+export const planTrackingReminders = (
+  input: PlanTrackingRemindersInput
+): PlannedReminder[] => {
+  const { entries, settings } = input;
+  if (!settings.enabled) return [];
+  const now = input.now ?? new Date();
+
+  const windowEnd = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + REMINDER_WINDOW_DAYS,
+    23,
+    59,
+    59
+  );
+
+  const monthStarts = settings.monthStartEnabled
+    ? planMonthStarts(now, settings.hour, windowEnd)
+    : [];
+  const monthStartDays = new Set(monthStarts.map((r) => dayKey(r.fireDate)));
+
+  const checkIns = settings.checkInsEnabled
+    ? planCheckIns(entries, settings, now, windowEnd).filter(
+        (r) => !monthStartDays.has(dayKey(r.fireDate))
+      )
+    : [];
+
+  return [...monthStarts, ...checkIns]
+    .sort((a, b) => a.fireDate.getTime() - b.fireDate.getTime())
+    .slice(0, MAX_SCHEDULED_REMINDERS);
 };

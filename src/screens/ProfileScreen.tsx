@@ -177,12 +177,12 @@ type UpdateMetadata = {
 
 type ReleaseNoteKey = string;
 
-/** Settings-row subtext summarizing the current check-in reminder setup. */
+/** Settings-row subtext summarizing the current tracking-reminder setup. */
 const reminderRowSubtext = (
   settings: TrackingReminderSettings | null
 ): string => {
   if (!settings?.enabled) {
-    return "Nudge me to log my spending";
+    return "Nudges to log spending & plan each month";
   }
   const cadence =
     settings.cadenceDays === 1
@@ -190,13 +190,21 @@ const reminderRowSubtext = (
       : settings.cadenceDays === 7
         ? "After a quiet week"
         : `After ${settings.cadenceDays} quiet days`;
+  const what =
+    settings.checkInsEnabled && settings.monthStartEnabled
+      ? "Check-ins & month-start planning"
+      : settings.checkInsEnabled
+        ? cadence
+        : settings.monthStartEnabled
+          ? "Month-start planning"
+          : "Nothing selected";
   const when =
     settings.hour === 9
       ? "mornings"
       : settings.hour === 13
         ? "afternoons"
         : "evenings";
-  return `${cadence} · ${when}`;
+  return `${what} · ${when}`;
 };
 
 const ProfileScreen: React.FC = () => {

@@ -138,8 +138,8 @@ const TrackingRemindersModal: React.FC<TrackingRemindersModalProps> = ({
           <View style={styles.card}>
             <Text style={styles.title}>Tracking Reminders</Text>
             <Text style={styles.subtitle}>
-              A gentle nudge to log your spending when you've gone quiet for a
-              while - so your budget stays honest.
+              Gentle nudges that keep your budget honest - a check-in when
+              you've gone quiet, and a fresh-month reminder to plan ahead.
             </Text>
 
             <TouchableOpacity
@@ -148,11 +148,11 @@ const TrackingRemindersModal: React.FC<TrackingRemindersModalProps> = ({
               disabled={settings === null}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>Remind me to log expenses</Text>
+                <Text style={styles.rowLabel}>Enable reminders</Text>
                 <Text style={styles.rowSubtext}>
                   {enabled
-                    ? "Logging an entry resets the timer - you'll only hear from us when you've drifted"
-                    : "No check-ins scheduled"}
+                    ? "Scheduled on this device from your own activity"
+                    : "No reminders scheduled"}
                 </Text>
               </View>
               <Text style={styles.rowValue}>{enabled ? "On" : "Off"}</Text>
@@ -160,31 +160,79 @@ const TrackingRemindersModal: React.FC<TrackingRemindersModalProps> = ({
 
             {enabled && settings ? (
               <>
-                <Text style={styles.sectionLabel}>AFTER NOT TRACKING FOR</Text>
-                <View style={styles.chipRow}>
-                  {CADENCE_OPTIONS.map((option) => {
-                    const selected =
-                      settings.cadenceDays === option.cadenceDays;
-                    return (
-                      <TouchableOpacity
-                        key={option.cadenceDays}
-                        style={[styles.chip, selected && styles.chipSelected]}
-                        onPress={() =>
-                          updateSetting({ cadenceDays: option.cadenceDays })
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            selected && styles.chipTextSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <Text style={styles.sectionLabel}>REMIND ME ABOUT</Text>
+                <TouchableOpacity
+                  style={styles.row}
+                  onPress={() =>
+                    updateSetting({
+                      checkInsEnabled: !settings.checkInsEnabled,
+                    })
+                  }
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowLabel}>Logging expenses</Text>
+                    <Text style={styles.rowSubtext}>
+                      When you haven't tracked for a while - logging an entry
+                      resets the timer
+                    </Text>
+                  </View>
+                  <Text style={styles.rowValue}>
+                    {settings.checkInsEnabled ? "On" : "Off"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.row}
+                  onPress={() =>
+                    updateSetting({
+                      monthStartEnabled: !settings.monthStartEnabled,
+                    })
+                  }
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowLabel}>Month-start planning</Text>
+                    <Text style={styles.rowSubtext}>
+                      On the 1st: set this month's goals & review last month
+                    </Text>
+                  </View>
+                  <Text style={styles.rowValue}>
+                    {settings.monthStartEnabled ? "On" : "Off"}
+                  </Text>
+                </TouchableOpacity>
+
+                {settings.checkInsEnabled ? (
+                  <>
+                    <Text style={styles.sectionLabel}>
+                      AFTER NOT TRACKING FOR
+                    </Text>
+                    <View style={styles.chipRow}>
+                      {CADENCE_OPTIONS.map((option) => {
+                        const selected =
+                          settings.cadenceDays === option.cadenceDays;
+                        return (
+                          <TouchableOpacity
+                            key={option.cadenceDays}
+                            style={[
+                              styles.chip,
+                              selected && styles.chipSelected,
+                            ]}
+                            onPress={() =>
+                              updateSetting({ cadenceDays: option.cadenceDays })
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.chipText,
+                                selected && styles.chipTextSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
 
                 <Text style={styles.sectionLabel}>TIME OF DAY</Text>
                 <View style={styles.chipRow}>
