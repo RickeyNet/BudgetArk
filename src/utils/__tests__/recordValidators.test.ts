@@ -12,6 +12,7 @@ import {
   isAssetAccountItem,
   isHoldingItem,
   isNetWorthSnapshotItem,
+  isBusinessItem,
   sanitizePayoffStrategy,
   explainBudgetEntryProblem,
   VALIDATOR_LIMITS,
@@ -208,6 +209,157 @@ describe("isBudgetEntryItem", () => {
       ).toBe(false);
     });
   });
+
+  describe("attachments (receipt-photo metadata)", () => {
+    const attachment = (over: Record<string, unknown> = {}) => ({
+      id: "a1",
+      createdAt: "2026-06-01T12:00:00.000Z",
+      width: 1600,
+      height: 1200,
+      ...over,
+    });
+
+    it("accepts an entry with valid attachments", () => {
+      expect(
+        isBudgetEntryItem({ ...valid, attachments: [attachment()] })
+      ).toBe(true);
+    });
+
+    it("accepts attachments without dimensions and an empty array", () => {
+      const { width, height, ...bare } = attachment();
+      void width;
+      void height;
+      expect(isBudgetEntryItem({ ...valid, attachments: [bare] })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, attachments: [] })).toBe(true);
+    });
+
+    it("rejects more than 10 items (blob-smuggling boundary, UI caps at 3)", () => {
+      const eleven = Array.from({ length: 11 }, (_, i) =>
+        attachment({ id: `a${i}` })
+      );
+      expect(isBudgetEntryItem({ ...valid, attachments: eleven })).toBe(false);
+      const ten = eleven.slice(0, 10);
+      expect(isBudgetEntryItem({ ...valid, attachments: ten })).toBe(true);
+    });
+
+    it("rejects non-array, non-object items, and unsafe ids", () => {
+      expect(isBudgetEntryItem({ ...valid, attachments: "a1" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, attachments: ["a1"] })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, attachments: [attachment({ id: "" })] })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ id: "a".repeat(81) })],
+        })
+      ).toBe(false);
+    });
+
+    it("rejects garbage createdAt and out-of-range dimensions", () => {
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ createdAt: "garbage" })],
+        })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ width: 0 })],
+        })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ height: 20_001 })],
+        })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ width: Infinity })],
+        })
+      ).toBe(false);
+    });
+  });
+
+  describe("businessId", () => {
+    it("accepts an entry with a businessId", () => {
+      expect(isBudgetEntryItem({ ...valid, businessId: "b1" })).toBe(true);
+    });
+
+    it("accepts an entry without a businessId", () => {
+      expect(isBudgetEntryItem(valid)).toBe(true);
+    });
+
+    it("rejects an empty, oversized, or non-string businessId", () => {
+      expect(isBudgetEntryItem({ ...valid, businessId: "" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, businessId: "   " })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, businessId: "a".repeat(121) })
+      ).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, businessId: 42 })).toBe(false);
+    });
+
+    it("accepts any id isBusinessItem accepts (cap 120) - a tagged entry must not brick a diff its business passed", () => {
+      const longId = "a".repeat(120);
+      expect(isBusinessItem({ id: longId, name: "Acme", createdAt: "2026-06-01" })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, businessId: longId })).toBe(true);
+    });
+  });
+});
+
+describe("isBusinessItem", () => {
+  const valid = {
+    id: "b1",
+    name: "Acme Consulting LLC",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed business", () => {
+    expect(isBusinessItem(valid)).toBe(true);
+  });
+
+  it("accepts a tombstoned business (deletes must ride sync)", () => {
+    expect(isBusinessItem({ ...valid, deletedAt: "2026-06-03" })).toBe(true);
+  });
+
+  it("accepts a business without updatedAt", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isBusinessItem(rest)).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isBusinessItem(null)).toBe(false);
+    expect(isBusinessItem("Acme")).toBe(false);
+  });
+
+  it("rejects an empty or oversized name (cap 40)", () => {
+    expect(isBusinessItem({ ...valid, name: "  " })).toBe(false);
+    expect(isBusinessItem({ ...valid, name: "a".repeat(41) })).toBe(false);
+    expect(isBusinessItem({ ...valid, name: "a".repeat(40) })).toBe(true);
+  });
+
+  it("rejects a missing id or createdAt", () => {
+    const { id, ...noId } = valid;
+    void id;
+    expect(isBusinessItem(noId)).toBe(false);
+    const { createdAt, ...noCreated } = valid;
+    void createdAt;
+    expect(isBusinessItem(noCreated)).toBe(false);
+  });
+
+  it("rejects a garbage deletedAt tombstone (would break tombstone GC)", () => {
+    expect(isBusinessItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+
+  it("does NOT reject duplicate names (one bad record would kill a whole sync diff)", () => {
+    expect(isBusinessItem(valid)).toBe(true);
+    expect(isBusinessItem({ ...valid, id: "b2" })).toBe(true);
+  });
 });
 
 describe("explainBudgetEntryProblem", () => {
@@ -243,6 +395,43 @@ describe("explainBudgetEntryProblem", () => {
     expect(explainBudgetEntryProblem({ ...base, merchant: "" })).toContain(
       '"merchant"'
     );
+  });
+
+  it("explains a bad businessId (lockstep with isBudgetEntryItem)", () => {
+    const base = {
+      id: "e1",
+      type: "expense",
+      category: "Food",
+      amount: 12.5,
+      date: "2026-06-01",
+      createdAt: "2026-06-01",
+    };
+    expect(
+      explainBudgetEntryProblem({ ...base, businessId: "a".repeat(121) })
+    ).toContain('"businessId"');
+    expect(explainBudgetEntryProblem({ ...base, businessId: "" })).toContain(
+      '"businessId"'
+    );
+  });
+
+  it("explains bad attachments (lockstep with isBudgetEntryItem)", () => {
+    const base = {
+      id: "e1",
+      type: "expense",
+      category: "Food",
+      amount: 12.5,
+      date: "2026-06-01",
+      createdAt: "2026-06-01",
+    };
+    expect(
+      explainBudgetEntryProblem({ ...base, attachments: "not-an-array" })
+    ).toContain('"attachments"');
+    expect(
+      explainBudgetEntryProblem({
+        ...base,
+        attachments: [{ id: "a1", createdAt: "garbage" }],
+      })
+    ).toContain('"attachments"');
   });
 });
 

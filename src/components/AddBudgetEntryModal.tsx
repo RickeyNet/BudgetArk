@@ -20,10 +20,14 @@ import {
   RECURRENCE_INTERVAL_OPTIONS,
   RecurrenceInterval,
   AssetAccount,
+  Business,
+  EntryAttachment,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import CategoryPillPicker from "./CategoryPillPicker";
+import AttachmentSection from "./AttachmentSection";
+import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
@@ -50,6 +54,7 @@ interface AddBudgetEntryModalProps {
   initialCategory?: CategoryName;
   assetAccounts?: AssetAccount[];
   customCategories?: CustomCategory[];
+  businesses?: Business[];
 }
 
 let nextLineId = 0;
@@ -114,6 +119,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   initialCategory,
   assetAccounts = [],
   customCategories = [],
+  businesses = [],
 }) => {
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
@@ -132,6 +138,17 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const [recurrenceDay, setRecurrenceDay] = useState<number>(DEFAULT_RECURRENCE_DAY);
   const [paymentUrl, setPaymentUrl] = useState("");
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
+  const [businessId, setBusinessId] = useState<string | undefined>(undefined);
+  // Staged receipt photos: files are ALREADY encrypted on disk (import
+  // happens at pick time - the entry id doesn't exist yet, but attachment
+  // ids are independent UUIDs). Committed to the first valid line's entry
+  // on submit; deleted on cancel; a crash mid-staging is collected by the
+  // orphan sweep's 48h age gate.
+  const [stagedAttachments, setStagedAttachments] = useState<EntryAttachment[]>([]);
+  // Bumped by reset() (submit and cancel both go through it) so a photo
+  // import still in flight when the staging context ends is discarded by
+  // AttachmentSection instead of ghost-staging onto the next entry.
+  const [stagingSession, setStagingSession] = useState(0);
 
   // Apply the widget-provided category on the closed -> open edge only.
   const wasVisible = useRef(false);
@@ -146,6 +163,10 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const showDayPicker = recurring && type === "expense";
 
   const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
+
+  // Business tagging is expense-only; the row only appears once the user has
+  // created at least one business (Profile -> Manage Businesses).
+  const showBusinessPicker = type === "expense" && businesses.length > 0;
 
   const validLineCount = useMemo(
     () => lines.filter((line) => parseFloat(line.amount) > 0).length,
@@ -183,6 +204,11 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     setRecurrenceDay(DEFAULT_RECURRENCE_DAY);
     setPaymentUrl("");
     setLinkedAccountId(undefined);
+    setBusinessId(undefined);
+    // Deliberately does NOT delete staged photo files - submit commits them
+    // to the saved entry, so only the cancel path (handleClose) deletes.
+    setStagedAttachments([]);
+    setStagingSession((s) => s + 1);
   }, []);
 
   const handleSubmit = useCallback(() => {
@@ -197,7 +223,10 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     const payloads: NewBudgetEntryInput[] = [];
     for (const line of lines) {
       const amountNum = parseFloat(line.amount);
-      if (amountNum <= 0) continue;
+      // NaN-safe: parseFloat("") is NaN and `NaN <= 0` is false, so a bare
+      // `<= 0` check would let a blank extra line through as a NaN entry -
+      // which would also steal the payloads[0] attachments slot below.
+      if (!(amountNum > 0)) continue;
 
       payloads.push({
         type,
@@ -209,16 +238,25 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
         recurrenceInterval: recurring ? recurrenceInterval : undefined,
         paymentUrl: normalizedPaymentUrl,
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
+        businessId: showBusinessPicker ? businessId : undefined,
+        // Photos land on the FIRST valid line (the UI hints at this when
+        // multiple lines are open).
+        attachments: undefined,
       });
     }
 
     if (payloads.length === 0) return;
+    if (stagedAttachments.length > 0) {
+      payloads[0] = { ...payloads[0], attachments: stagedAttachments };
+    }
 
     onAdd(payloads);
     reset();
   }, [
+    businessId,
     category,
     lines,
+    stagedAttachments,
     linkedAccountId,
     onAdd,
     paymentUrl,
@@ -227,6 +265,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     recurrenceInterval,
     reset,
     showAccountPicker,
+    showBusinessPicker,
     showDayPicker,
     type,
     yearMonth,
@@ -242,9 +281,15 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   }, [pickerYear]);
 
   const handleClose = useCallback(() => {
+    // Cancel path: staged photo files were written at pick time and no
+    // entry will reference them - delete now (fire-and-forget; a failure
+    // is covered by the orphan sweep).
+    if (stagedAttachments.length > 0) {
+      void deleteAttachmentFiles(stagedAttachments.map((a) => a.id));
+    }
     reset();
     onClose();
-  }, [onClose, reset]);
+  }, [onClose, reset, stagedAttachments]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
@@ -527,6 +572,71 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
                   ))}
                 </View>
               </View>
+            )}
+
+            {showBusinessPicker && (
+              <View style={styles.field}>
+                <Text style={styles.label}>BUSINESS (OPTIONAL)</Text>
+                <Text style={styles.accountPickerHint}>
+                  Tag this expense to a business for the tax-time report. It
+                  still counts in your personal budget.
+                </Text>
+                <View style={styles.categoryWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryPill,
+                      !businessId && styles.categoryPillActive,
+                    ]}
+                    onPress={() => setBusinessId(undefined)}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryPillText,
+                        !businessId && styles.categoryPillTextActive,
+                      ]}
+                    >
+                      Personal
+                    </Text>
+                  </TouchableOpacity>
+                  {businesses.map((business) => (
+                    <TouchableOpacity
+                      key={business.id}
+                      style={[
+                        styles.categoryPill,
+                        businessId === business.id && styles.categoryPillActive,
+                      ]}
+                      onPress={() => setBusinessId(business.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryPillText,
+                          businessId === business.id && styles.categoryPillTextActive,
+                        ]}
+                      >
+                        💼 {business.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <AttachmentSection
+              attachments={stagedAttachments}
+              stagingSession={stagingSession}
+              onAdd={(attachment) =>
+                setStagedAttachments((prev) => [...prev, attachment])
+              }
+              onRemove={(id) => {
+                // Staged-only removal: the file is ours alone, delete now.
+                void deleteAttachmentFiles([id]);
+                setStagedAttachments((prev) => prev.filter((a) => a.id !== id));
+              }}
+            />
+            {stagedAttachments.length > 0 && validLineCount > 1 && (
+              <Text style={styles.linesHint}>
+                Photos attach to the first entry.
+              </Text>
             )}
           </ScrollView>
 

@@ -31,6 +31,7 @@ import { getHoldingsIncludingDeleted } from "../storage/holdingsStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
+import { getBusinessesIncludingDeleted } from "../storage/businessStorage";
 import { getCategoryBucketOverrides } from "../storage/categoryBucketOverridesStorage";
 import { getUnlockedAchievements } from "../storage/achievementsStorage";
 import { getAchievementStats } from "../storage/achievementStatsStorage";
@@ -89,6 +90,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     payoffStrategyEnvelope,
     netWorthSnapshots,
     customCategories,
+    businesses,
     categoryBucketOverrides,
     achievements,
     achievementStats,
@@ -119,6 +121,9 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getPayoffStrategyEnvelope(),
     getNetWorthSnapshots(),
     getCustomCategories(),
+    // Tombstones included so a restore doesn't resurrect a deleted business
+    // whose id entries may still reference (see note above).
+    getBusinessesIncludingDeleted(),
     getCategoryBucketOverrides(),
     // Achievements + their backing stats are NOT derivable from financial
     // data (export taps, Monthly Review opens, app-open streak), so leaving
@@ -165,6 +170,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     payoffStrategyUpdatedAt: payoffStrategyEnvelope?.updatedAt,
     netWorthSnapshots,
     customCategories,
+    businesses,
     categoryBucketOverrides,
     achievements,
     achievementStats,

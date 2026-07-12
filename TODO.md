@@ -511,17 +511,38 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Financial Health Score - single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
 - [ ] Ark Journey Timeline - visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
 - [x] Layout density selector - Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental - screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
-- [ ] create the ability to take a photo of a reciept from a purchase and have it enter it into a line item expense on your budget.
-Tech options:
-1. On-device OCR library (more private, no backend)
-2. Cloud OCR/API (better accuracy, adds cost/privacy implications)
-3. Hybrid: on-device first, manual fallback (best practical start)
-Recommended first version:
-1. Add “Scan Receipt” button in Budget.
-2. Take/select photo.
-3. OCR text -> extract best amount/date/merchant.
-4. Open prefilled expense modal for confirmation.
-5. Save only after user taps confirm.
+- [~] Receipt photo attachments on budget entries (no OCR) - SHIPPED app-side (2026-07-12). Photo plumbing only; the OCR pipeline below stays future work and can layer on top of this storage/UI.
+
+  What shipped:
+  - `expo-image-picker` + `expo-image-manipulator` (~57.0.2, config plugin with camera/photo-library permission strings in `app.json`). NOT OTA-eligible - rides the same pending EAS build as Teller/expo-iap/expo-notifications/widget. IMPORTANT: bump `version` + `runtimeVersion` when that build is cut - an OTA bundle importing expo-image-picker served to the current 1.9.0 runtime would crash at module init.
+  - **Encrypted at rest**: every photo is downscaled (max 1600px long edge, JPEG q0.7) + thumbnailed (240px), then encrypted with the master key using the same fixture-tested V3 envelope as all other data (`encryptStringWithMasterKey`/`decryptStringWithMasterKey` in `encryptedStorage.ts`). Files: `<document>/attachments/<id>.jpg.enc` + `<id>.thumb.jpg.enc` (`src/services/attachments/attachmentStore.ts`). Vault-unavailable devices get an alert and photos are refused - never plaintext.
+  - Data model: `BudgetEntry.attachments?: EntryAttachment[]` ({id, createdAt, width?, height?}), UI cap 3/entry. Metadata rides sync/JSON-export; image files are DEVICE-LOCAL in v1 - partner devices show a "photo on partner's device" placeholder; JSON export carries metadata only (regression test pins "no image bytes in export"); spreadsheets never carry photos (documented in schema doc + modal), and merge-mode imports never strip local attachment references (an incoming entry without attachments keeps the local photos - otherwise the sweep would delete the files after a no-op spreadsheet re-import).
+  - UI: `AttachmentSection` (shared by Add/Edit entry modals - camera/library buttons, encrypted thumb strip, remove) + `AttachmentViewerModal` (full-screen pager). Budget expanded rows show a 📷 count indicator. Add modal stages photos before the entry exists (attachment ids are independent UUIDs; cancel deletes files); Edit modal is cancel-safe (`newlyStagedIds` - only photos added this session are ever eagerly deleted; removing a pre-existing photo just drops the reference and the orphan sweep collects the files, so the Undo toast can always restore them). Both modals pass a `stagingSession` counter so a photo import still in flight when the modal closes/submits is discarded instead of ghost-staging onto the next entry; the picker/camera's plaintext cache copy is deleted right after import.
+  - Lifecycle: files are NEVER deleted when an entry is deleted (soft-delete + Undo + 90-day sync tombstones must restore photos). Sole GC = cold-start orphan sweep, once/24h (`attachmentSweepRunner.ts` from App.tsx): deletes files unreferenced by live AND tombstoned entries, with a 48h age gate protecting in-flight staging. Covers tombstone TTL purge, sync deletes, replace-mode imports, save races, crashed staging. Reset All Data wipes the attachments dir (ProfileScreen reset flow - RESET_KEYS only clears AsyncStorage). Validator gate: attachments metadata bounded at the sync/import trust boundary (≤10 items, short ids, sane dims) so a hostile peer can't smuggle blobs; permissive vs the UI cap of 3 so a merged record can't brick a whole sync diff.
+  - Unit-tested: sweep planning, V3 helper round-trip/tamper, validator matrix, export regression.
+
+  Still TODO before release:
+  - Device-test on iOS + Android once the new EAS build exists: camera + library capture, permission-denied path, vault-unavailable alert, thumbnails + viewer, Add-modal cancel deletes staged files, Edit-modal cancel restores removed photos, Undo restores a deleted entry's photos, partner placeholder after sync, Reset All Data leaves no files in `<document>/attachments/`, iCloud/device-transfer restore shows unreadable-photo placeholders (expected - key is device-only).
+  - Release-notes entry + version/runtimeVersion bump when the EAS build is cut.
+  - v2 ideas: OCR autofill (original plan below), photo sync over LAN (chunked binary transfer), export photos as a zip archive.
+
+  Original OCR plan (still future):
+  1. On-device OCR library (more private, no backend)
+  2. Cloud OCR/API (better accuracy, adds cost/privacy implications)
+  3. Hybrid: on-device first, manual fallback (best practical start)
+  Recommended: "Scan Receipt" button -> photo -> OCR extract amount/date/merchant -> prefilled expense modal -> save on confirm.
+
+- [~] Business expense tracking - SHIPPED app-side (2026-07-12), fully OTA-eligible (pure JS).
+
+  What shipped:
+  - `Business` entity ({id, name, createdAt, updatedAt, deletedAt?}, cap 20, name ≤40 chars) in `businessStorage.ts` (`@budgetark_businesses`, in RESET_KEYS). TOMBSTONED (unlike custom categories) because entries reference businesses by id - deletes propagate through P2P sync and are Undo-able. `BudgetEntry.businessId?` (expenses only; cleared when an entry's type flips to income, mirroring linkedAccountId).
+  - Decision: business expenses REMAIN in all personal budget math (donut/limits/monthly review) - it's still money leaving your accounts. They get a 💼 badge on entry rows and a separated report. A per-business "exclude from personal budget" toggle is a possible fast-follow.
+  - Sync: new optional `SyncDiff.businesses` collection (older peers unaffected; no backfill flag needed - new feature). Validators deliberately permissive at the trust boundary (no dup-name rejection - one invalid record kills a whole diff).
+  - Export/import: JSON carries businesses incl. tombstones; spreadsheet schema bumped v1→v2 (Budget Entries + `BusinessId` round-trip column + `Business` readable export-only column; new `Businesses` xlsx sheet; v1 files still import). `SPREADSHEET_SCHEMA.md` + in-app schema modal updated.
+  - UI: Profile → "BUSINESS EXPENSES" section - Manage Businesses (add/rename/delete with tagged-entry counts) + Business Expense Report (year stepper, per-business totals/category breakdown/receipt counts, recurring expanded per app cadence, deleted businesses flagged, CSV export `budgetark-business-expenses-<year>.csv`). Add/Edit entry modals: "BUSINESS (OPTIONAL)" pill row (shown for expenses once ≥1 business exists).
+  - Unit-tested: storage validators, diffEngine LWW/tombstone/reject, JSON + spreadsheet round-trips, report math (recurrence expansion, deleted grouping, CSV escaping/formula-injection).
+
+  Still TODO: release-notes entry when the next release is cut; consider a Budget-tab filter chip ("Business only") as a fast-follow.
 
 - [ ] Lean month mode - toggle that hides non-essential categories from Budget, surfacing only essentials (Rent, Food, Utilities, Transport). Helps users focus during tight months without deleting or reorganizing data. Pure UI filter, OTA-safe.
 

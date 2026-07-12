@@ -200,6 +200,151 @@ describe("importFromString - merge mode", () => {
   });
 });
 
+describe("importFromString - merge preserves device-local attachments", () => {
+  // Attachment metadata points at encrypted photo files on THIS device, and
+  // spreadsheet rows carry no attachments column. A merge re-import of an
+  // unchanged entry (updatedAt tie -> incoming wins) must not strip the
+  // local attachments - the orphan sweep would then delete the photo files.
+  const attachment = { id: "att-1", createdAt: "2026-06-01T00:00:00.000Z", width: 1600, height: 1200 };
+
+  it("keeps local attachments when the winning incoming entry has none (spreadsheet round-trip)", async () => {
+    const ts = "2026-06-05T00:00:00.000Z";
+    storageMock.__store.set(
+      KEYS.BUDGET_ENTRIES,
+      JSON.stringify([validEntry({ updatedAt: ts, attachments: [attachment] })])
+    );
+    await importFromString(
+      JSON.stringify({
+        budgetEntries: [validEntry({ updatedAt: ts, amount: 99 })],
+      }),
+      "merge"
+    );
+    const stored = readStore(KEYS.BUDGET_ENTRIES)[0];
+    expect(stored.amount).toBe(99); // incoming won the tie...
+    expect(stored.attachments).toEqual([attachment]); // ...but photos survive
+  });
+
+  it("keeps local attachments even when the incoming entry is strictly newer without any", async () => {
+    storageMock.__store.set(
+      KEYS.BUDGET_ENTRIES,
+      JSON.stringify([
+        validEntry({ updatedAt: "2026-06-01T00:00:00.000Z", attachments: [attachment] }),
+      ])
+    );
+    await importFromString(
+      JSON.stringify({
+        budgetEntries: [validEntry({ updatedAt: "2026-06-10T00:00:00.000Z" })],
+      }),
+      "merge"
+    );
+    expect(readStore(KEYS.BUDGET_ENTRIES)[0].attachments).toEqual([attachment]);
+  });
+
+  it("lets an incoming entry that carries its own attachments win (JSON round-trip)", async () => {
+    const incomingAttachment = { id: "att-2", createdAt: "2026-06-08T00:00:00.000Z" };
+    storageMock.__store.set(
+      KEYS.BUDGET_ENTRIES,
+      JSON.stringify([
+        validEntry({ updatedAt: "2026-06-01T00:00:00.000Z", attachments: [attachment] }),
+      ])
+    );
+    await importFromString(
+      JSON.stringify({
+        budgetEntries: [
+          validEntry({
+            updatedAt: "2026-06-10T00:00:00.000Z",
+            attachments: [incomingAttachment],
+          }),
+        ],
+      }),
+      "merge"
+    );
+    expect(readStore(KEYS.BUDGET_ENTRIES)[0].attachments).toEqual([incomingAttachment]);
+  });
+});
+
+describe("importFromString - businesses", () => {
+  const BUSINESSES_KEY = "@budgetark_businesses";
+  const validBusiness = (over: Record<string, unknown> = {}) => ({
+    id: "b1",
+    name: "Acme Consulting LLC",
+    createdAt: "2026-02-01T00:00:00.000Z",
+    updatedAt: "2026-02-01T00:00:00.000Z",
+    ...over,
+  });
+
+  it("imports businesses into empty storage in the {businesses, version} store shape", async () => {
+    const result = await importFromString(
+      JSON.stringify({ businesses: [validBusiness()] }),
+      "merge"
+    );
+    expect(result.businesses).toBe(1);
+    const stored = readStore(BUSINESSES_KEY);
+    expect(stored.businesses).toHaveLength(1);
+    expect(stored.businesses[0].name).toBe("Acme Consulting LLC");
+    expect(stored.version).toBe(1);
+  });
+
+  it("applies last-write-wins against an existing business", async () => {
+    storageMock.__store.set(
+      BUSINESSES_KEY,
+      JSON.stringify({
+        businesses: [
+          validBusiness({ name: "Newer Local", updatedAt: "2026-06-10T00:00:00.000Z" }),
+        ],
+        version: 1,
+      })
+    );
+    await importFromString(
+      JSON.stringify({
+        businesses: [
+          validBusiness({ name: "Stale Import", updatedAt: "2026-01-01T00:00:00.000Z" }),
+        ],
+      }),
+      "merge"
+    );
+    expect(readStore(BUSINESSES_KEY).businesses[0].name).toBe("Newer Local");
+  });
+
+  it("does not resurrect a locally-tombstoned business from a stale import", async () => {
+    storageMock.__store.set(
+      BUSINESSES_KEY,
+      JSON.stringify({
+        businesses: [
+          validBusiness({
+            deletedAt: "2026-06-10T00:00:00.000Z",
+            updatedAt: "2026-06-10T00:00:00.000Z",
+          }),
+        ],
+        version: 1,
+      })
+    );
+    await importFromString(
+      JSON.stringify({
+        businesses: [validBusiness({ updatedAt: "2026-01-01T00:00:00.000Z" })],
+      }),
+      "merge"
+    );
+    expect(readStore(BUSINESSES_KEY).businesses[0].deletedAt).toBeTruthy();
+  });
+
+  it("rejects a business with an oversized name", async () => {
+    await expect(
+      importFromString(
+        JSON.stringify({ businesses: [validBusiness({ name: "a".repeat(41) })] })
+      )
+    ).rejects.toThrow(/businesses contains/i);
+  });
+
+  it("imports entries carrying a businessId", async () => {
+    await importFromString(
+      JSON.stringify({ budgetEntries: [validEntry({ businessId: "b1" })] }),
+      "merge"
+    );
+    expect(readStore(KEYS.BUDGET_ENTRIES)[0].businessId).toBe("b1");
+  });
+});
+
 describe("importFromString - holdings", () => {
   it("imports holdings into empty storage", async () => {
     const result = await importFromString(

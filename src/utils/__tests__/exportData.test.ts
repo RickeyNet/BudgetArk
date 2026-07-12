@@ -61,6 +61,42 @@ const fixtures = {
       externalTxId: "simplefin:ACT-1:TXN-99",
       merchant: "COSTCO WHSE",
     },
+    // A business-tagged expense with a receipt photo: businessId and the
+    // attachment METADATA must survive the round-trip; image bytes must not
+    // exist anywhere in the export (files are device-local).
+    {
+      id: "e3",
+      type: "expense",
+      category: "Tech",
+      amount: 129.99,
+      date: "2026-03-03",
+      createdAt: "2026-03-03T00:00:00.000Z",
+      businessId: "b1",
+      attachments: [
+        {
+          id: "att-1",
+          createdAt: "2026-03-03T00:00:00.000Z",
+          width: 1600,
+          height: 1200,
+        },
+      ],
+    },
+  ],
+  businesses: [
+    {
+      id: "b1",
+      name: "Acme Consulting LLC",
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    },
+    // Tombstoned business: must be exported so a restore can't resurrect it.
+    {
+      id: "b2",
+      name: "Old Side Hustle",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-02-15T00:00:00.000Z",
+      deletedAt: "2026-02-15T00:00:00.000Z",
+    },
   ],
   holdings: [
     {
@@ -114,6 +150,9 @@ jest.mock("../../storage/netWorthSnapshotStorage", () => ({
 }));
 jest.mock("../../storage/customCategoriesStorage", () => ({
   getCustomCategories: jest.fn(async () => []),
+}));
+jest.mock("../../storage/businessStorage", () => ({
+  getBusinessesIncludingDeleted: jest.fn(async () => fixturesRef.businesses),
 }));
 jest.mock("../../storage/categoryBucketOverridesStorage", () => ({
   getCategoryBucketOverrides: jest.fn(async () => ({})),
@@ -174,8 +213,9 @@ describe("buildExportMessage - plain JSON", () => {
     });
     expect(payload.debts).toHaveLength(1);
     expect(payload.payments).toHaveLength(1);
-    expect(payload.budgetEntries).toHaveLength(2);
+    expect(payload.budgetEntries).toHaveLength(3);
     expect(payload.holdings).toHaveLength(1);
+    expect(payload.businesses).toHaveLength(2);
     expect(payload.holdings[0]).toMatchObject({ symbol: "AAPL", shares: 10 });
     expect(typeof payload.exportedAt).toBe("string");
     expect(payload.appVersion).toBeTruthy();
@@ -186,9 +226,32 @@ describe("buildExportMessage - plain JSON", () => {
     const result = await importFromString(message, "replace");
     expect(result.debts).toBe(1);
     expect(result.payments).toBe(1);
-    expect(result.budgetEntries).toBe(2);
+    expect(result.budgetEntries).toBe(3);
     expect(result.holdings).toBe(1);
+    expect(result.businesses).toBe(2);
     expect(result.payoffStrategy).toBe(true);
+  });
+
+  it("carries businesses (incl. tombstones) and entry businessId through the round-trip", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    expect(payload.businesses.find((b: any) => b.id === "b2").deletedAt).toBe(
+      "2026-02-15T00:00:00.000Z"
+    );
+
+    await importFromString(message, "replace");
+    const storedBusinesses = JSON.parse(
+      storageMock.__store.get("@budgetark_businesses") ?? "{}",
+    );
+    expect(storedBusinesses.businesses).toHaveLength(2);
+    expect(
+      storedBusinesses.businesses.find((b: any) => b.id === "b2").deletedAt
+    ).toBeTruthy();
+
+    const storedEntries = JSON.parse(
+      storageMock.__store.get("@budgetark_budget_entries") ?? "[]",
+    );
+    expect(storedEntries.find((e: any) => e.id === "e3").businessId).toBe("b1");
   });
 
   it("carries bank-entry provenance fields through the round-trip", async () => {
@@ -210,6 +273,41 @@ describe("buildExportMessage - plain JSON", () => {
       externalTxId: "simplefin:ACT-1:TXN-99",
       merchant: "COSTCO WHSE",
     });
+  });
+
+  it("carries attachment metadata but never image bytes", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    const tagged = payload.budgetEntries.find((e: any) => e.id === "e3");
+    expect(tagged.attachments).toEqual([
+      {
+        id: "att-1",
+        createdAt: "2026-03-03T00:00:00.000Z",
+        width: 1600,
+        height: 1200,
+      },
+    ]);
+    // Regression fence: photos are device-local encrypted files; the JSON
+    // backup must never embed image content (data URIs or base64 blobs).
+    expect(message).not.toMatch(/data:image/i);
+    expect(message).not.toMatch(/"base64"/i);
+    // No string value anywhere in the export is remotely image-sized.
+    const walk = (value: unknown): void => {
+      if (typeof value === "string") {
+        expect(value.length).toBeLessThan(10_000);
+      } else if (Array.isArray(value)) {
+        value.forEach(walk);
+      } else if (value && typeof value === "object") {
+        Object.values(value).forEach(walk);
+      }
+    };
+    walk(payload);
+
+    await importFromString(message, "replace");
+    const stored = JSON.parse(
+      storageMock.__store.get("@budgetark_budget_entries") ?? "[]",
+    );
+    expect(stored.find((e: any) => e.id === "e3").attachments).toHaveLength(1);
   });
 
   it("never exports connection collections, credentials, or inbox data", async () => {
@@ -242,7 +340,7 @@ describe("buildExportMessage - encrypted", () => {
   it("decrypts and imports with the correct password", async () => {
     const result = await importFromString(encrypted, "replace", "hunter2");
     expect(result.debts).toBe(1);
-    expect(result.budgetEntries).toBe(2);
+    expect(result.budgetEntries).toBe(3);
   });
 
   it("fails to import with the wrong password", async () => {

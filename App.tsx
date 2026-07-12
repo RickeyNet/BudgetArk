@@ -43,6 +43,7 @@ import { ConnectionsProvider } from "./src/connections/ConnectionsProvider";
 import { UndoProvider } from "./src/undo/UndoProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import { repairDuplicateMinimumDuePayments } from "./src/storage/debtStorage";
+import { runAttachmentSweepIfDue } from "./src/services/attachments/attachmentSweepRunner";
 import {
   getLastSeenReleaseNotesVersion,
   setLastSeenReleaseNotesVersion,
@@ -120,6 +121,9 @@ const AppContent: React.FC = () => {
       repairDuplicateMinimumDuePayments().catch((error) => {
         if (__DEV__) console.error("Duplicate payment repair failed:", error);
       });
+      // Receipt-photo orphan sweep (throttled to once/24h internally) - the
+      // ONLY garbage collector for attachment files; see attachmentSweep.ts.
+      void runAttachmentSweepIfDue();
     });
     return () => task.cancel();
   }, [isOnboardingComplete]);

@@ -58,11 +58,14 @@ import {
   completeOnboarding,
 } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
+import { clearAllAttachments } from "../services/attachments/attachmentStore";
 import { buildExportMessage, shareExportMessage } from "../utils/exportData";
 import { recordExport } from "../storage/achievementStatsStorage";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import AchievementsScreen from "./AchievementsScreen";
 import ManageCategoriesModal from "../components/ManageCategoriesModal";
+import ManageBusinessesModal from "../components/ManageBusinessesModal";
+import BusinessReportModal from "../components/BusinessReportModal";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import {
   importData,
@@ -276,6 +279,8 @@ const ProfileScreen: React.FC = () => {
     useCustomCategories();
   /** Whether the manage-custom-categories modal is visible */
   const [showManageCategories, setShowManageCategories] = useState(false);
+  const [showManageBusinesses, setShowManageBusinesses] = useState(false);
+  const [showBusinessReport, setShowBusinessReport] = useState(false);
 
   /** Current user account state */
   const [user, setUser] = useState<UserAccount | null>(null);
@@ -1048,6 +1053,10 @@ const ProfileScreen: React.FC = () => {
     await clearPairingState();
     stopMonitoring();
     monitoringActiveRef.current = false;
+    // RESET_KEYS only clears AsyncStorage - receipt photo files live in the
+    // document directory and must be wiped separately or a fresh account
+    // inherits the previous user's encrypted receipts on disk.
+    await clearAllAttachments();
     // The reminder settings key was just wiped (disabled by default), so any
     // pending check-in notifications are orphaned - cancel them now.
     await cancelAllTrackingReminders();
@@ -1176,6 +1185,8 @@ const ProfileScreen: React.FC = () => {
           parts.push(`${result.netWorthSnapshots} net worth snapshots`);
         if (result.customCategories > 0)
           parts.push(`${result.customCategories} custom categories`);
+        if (result.businesses > 0)
+          parts.push(`${result.businesses} businesses`);
         const extras: string[] = [];
         if (result.debtMilestones) extras.push("milestone plan");
         if (result.payoffStrategy) extras.push("payoff strategy");
@@ -2108,6 +2119,78 @@ const ProfileScreen: React.FC = () => {
                   {customCategories.length === 0
                     ? "Add your own budget categories"
                     : `${customCategories.length} custom`}
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ── Business expenses ── */}
+        <View style={styles.settingsSection}>
+          <Text
+            style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+          >
+            BUSINESS EXPENSES
+          </Text>
+
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                triggerHaptic("selection");
+                setShowManageBusinesses(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Manage businesses"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Businesses 💼
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  Tag expenses to a company or side gig
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]}
+            />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                triggerHaptic("selection");
+                setShowBusinessReport(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open business expense report"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Business Expense Report
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  Per-business totals by year, with CSV export
                 </Text>
               </View>
               <Text
@@ -4483,6 +4566,14 @@ const ProfileScreen: React.FC = () => {
       <ManageCategoriesModal
         visible={showManageCategories}
         onClose={() => setShowManageCategories(false)}
+      />
+      <ManageBusinessesModal
+        visible={showManageBusinesses}
+        onClose={() => setShowManageBusinesses(false)}
+      />
+      <BusinessReportModal
+        visible={showBusinessReport}
+        onClose={() => setShowBusinessReport(false)}
       />
       {coachmark}
     </>

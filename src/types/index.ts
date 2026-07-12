@@ -189,6 +189,44 @@ export interface CustomCategory {
 
 export const CUSTOM_CATEGORY_STORAGE_VERSION = 1;
 
+/**
+ * A business the user tags expense entries with (freelance clients, an
+ * LLC, a side company). Unlike CustomCategory this IS tombstoned: entries
+ * reference businesses by id, so deletes must propagate through P2P sync
+ * instead of silently dropping from one device's list.
+ */
+export interface Business {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Tombstone marker - see Debt.deletedAt. */
+  deletedAt?: string;
+}
+
+export const BUSINESS_STORAGE_VERSION = 1;
+export const MAX_BUSINESSES = 20;
+export const MAX_BUSINESS_NAME_LENGTH = 40;
+
+/**
+ * Metadata for one receipt photo attached to a budget entry. The image
+ * itself lives as an encrypted file in the app's document directory
+ * (attachments/<id>.jpg.enc + <id>.thumb.jpg.enc - see
+ * services/attachments/attachmentStore.ts); only this metadata rides the
+ * entry through storage, P2P sync, and JSON export. Files are
+ * device-local in v1 - a partner device shows a placeholder.
+ */
+export interface EntryAttachment {
+  /** UUID; also the on-disk filename stem. */
+  id: string;
+  createdAt: string;
+  /** Post-downscale pixel dimensions, for viewer aspect ratio. */
+  width?: number;
+  height?: number;
+}
+
+export const MAX_ATTACHMENTS_PER_ENTRY = 3;
+
 export type BudgetEntryType = "income" | "expense";
 
 /** Months between repeats for a recurring budget entry. */
@@ -260,6 +298,19 @@ export interface BudgetEntry {
    * user later recategorizes the entry.
    */
   merchant?: string;
+  /**
+   * Business this expense belongs to (see `Business`). Expenses only - the
+   * UI never sets it on income and clears it when an entry's type flips.
+   * A dangling id (business deleted, or not yet arrived via sync) is
+   * harmless: report/badge surfaces show it as "(deleted business)".
+   */
+  businessId?: string;
+  /**
+   * Receipt photos (metadata only - see EntryAttachment). UI caps at
+   * MAX_ATTACHMENTS_PER_ENTRY; the sync/import validator tolerates up to 10
+   * so a merged record can't brick a whole diff.
+   */
+  attachments?: EntryAttachment[];
   /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }

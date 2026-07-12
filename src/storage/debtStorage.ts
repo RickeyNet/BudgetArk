@@ -565,6 +565,9 @@ const RESET_KEYS = [
   // unread and clear the Resume card.
   "@budgetark_learning_progress",
   "@budgetark_custom_categories",
+  // Businesses expense entries are tagged with (tombstones included - a
+  // fresh account must not inherit the previous user's client list).
+  "@budgetark_businesses",
   "@budgetark_category_bucket_overrides",
   "@budgetark_debt_due_dismissals",
   // Unlocked badges + the stats that drive them (streaks, export count,

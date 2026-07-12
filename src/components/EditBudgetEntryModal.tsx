@@ -22,11 +22,15 @@ import {
   RECURRENCE_INTERVAL_OPTIONS,
   RecurrenceInterval,
   AssetAccount,
+  Business,
+  EntryAttachment,
 } from "../types";
 import { getRecurrenceInterval } from "../utils/recurrence";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import CategoryPillPicker from "./CategoryPillPicker";
+import AttachmentSection from "./AttachmentSection";
+import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 import { useValueChanged } from "../hooks/useValueChanged";
 
@@ -43,6 +47,7 @@ interface EditBudgetEntryModalProps {
   onDelete: (id: string) => void;
   assetAccounts?: AssetAccount[];
   customCategories?: CustomCategory[];
+  businesses?: Business[];
 }
 
 const MONTH_LABELS = [
@@ -105,6 +110,8 @@ interface EntryFormState {
   recurrenceDay: number;
   paymentUrl: string;
   linkedAccountId: string | undefined;
+  businessId: string | undefined;
+  attachments: EntryAttachment[];
 }
 
 const entryFormState = (entry: BudgetEntry | null): EntryFormState => {
@@ -124,6 +131,8 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => {
     recurrenceDay: entry ? dayOfMonthFromIso(entry.date) : DEFAULT_RECURRENCE_DAY,
     paymentUrl: entry?.paymentUrl ?? "",
     linkedAccountId: entry?.linkedAccountId,
+    businessId: entry?.businessId,
+    attachments: entry?.attachments ?? [],
   };
 };
 
@@ -134,6 +143,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   onDelete,
   assetAccounts = [],
   customCategories = [],
+  businesses = [],
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -160,6 +170,21 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(
     initialForm.linkedAccountId
   );
+  const [businessId, setBusinessId] = useState<string | undefined>(
+    initialForm.businessId
+  );
+  // Cancel-safe photo editing: added photos are imported (files written)
+  // immediately but tracked in newlyStagedIds so Cancel can delete them.
+  // Removing a pre-existing photo NEVER deletes its files here - the
+  // Budget screen's Undo toast can restore the pre-edit entry (attachments
+  // included), so the files must outlive the save; the orphan sweep
+  // collects them once nothing references the ids anymore.
+  const [attachments, setAttachments] = useState<EntryAttachment[]>(
+    initialForm.attachments
+  );
+  const [newlyStagedIds, setNewlyStagedIds] = useState<Set<string>>(new Set());
+  // Same ghost-staging guard as the Add modal - see AttachmentSection.
+  const [stagingSession, setStagingSession] = useState(0);
 
   const showDayPicker = recurring && type === "expense";
   const [ready, setReady] = useState(false);
@@ -184,13 +209,23 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setRecurrenceDay(next.recurrenceDay);
       setPaymentUrl(next.paymentUrl);
       setLinkedAccountId(next.linkedAccountId);
+      setBusinessId(next.businessId);
+      setAttachments(next.attachments);
     }
+    setNewlyStagedIds(new Set());
+    setStagingSession((s) => s + 1);
     setReady(false);
     setShowMonthPicker(false);
   }
 
   const isValid = parseFloat(amount) > 0;
   const showAccountPicker = LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
+  // Expense-only, but also shown when the entry is already tagged with a
+  // business that has since been deleted - the user must be able to untag.
+  const showBusinessPicker =
+    type === "expense" && (businesses.length > 0 || !!businessId);
+  const taggedBusinessMissing =
+    !!businessId && !businesses.some((b) => b.id === businessId);
 
   const handleSave = useCallback(() => {
     if (!entry || !isValid) return;
@@ -210,10 +245,23 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       recurrenceInterval: recurring ? recurrenceInterval : undefined,
       paymentUrl: showDayPicker ? normalizePaymentUrl(paymentUrl) ?? undefined : undefined,
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
+      // Cleared when the type flips to income (mirrors linkedAccountId).
+      businessId: type === "expense" ? businessId : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
       updatedAt: new Date().toISOString(),
     });
+
+    // Save confirmed. Removed photos' files are intentionally NOT deleted
+    // here: the Undo toast can restore the pre-edit entry (and the parent's
+    // persist is async and may still fail) - the orphan sweep collects the
+    // files once no entry references them. Newly staged photos now belong
+    // to the saved entry and must not be deleted by any later cancel path.
+    setNewlyStagedIds(new Set());
+    setStagingSession((s) => s + 1);
   }, [
     amount,
+    attachments,
+    businessId,
     category,
     description,
     entry,
@@ -230,6 +278,44 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     yearMonth,
   ]);
 
+  /**
+   * Cancel/dismiss path: delete only the files added THIS session; photos
+   * removed from the strip keep their files (the entry still references
+   * them - Cancel restored the reference).
+   */
+  const handleCancel = useCallback(() => {
+    if (newlyStagedIds.size > 0) {
+      void deleteAttachmentFiles(Array.from(newlyStagedIds));
+      setNewlyStagedIds(new Set());
+    }
+    setStagingSession((s) => s + 1);
+    onClose();
+  }, [newlyStagedIds, onClose]);
+
+  const handleAttachmentAdd = useCallback((attachment: EntryAttachment) => {
+    setAttachments((prev) => [...prev, attachment]);
+    setNewlyStagedIds((prev) => new Set(prev).add(attachment.id));
+  }, []);
+
+  const handleAttachmentRemove = useCallback(
+    (id: string) => {
+      setAttachments((prev) => prev.filter((a) => a.id !== id));
+      if (newlyStagedIds.has(id)) {
+        // Added this session and removed again - the file is ours alone.
+        void deleteAttachmentFiles([id]);
+        setNewlyStagedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+      // Pre-existing photo: only the reference goes (on Save). The files
+      // stay so the Undo toast can restore them; the orphan sweep collects
+      // them once no live/tombstoned entry references the id.
+    },
+    [newlyStagedIds]
+  );
+
   const selectMonth = useCallback(
     (monthIndex: number) => {
       const month = String(monthIndex + 1).padStart(2, "0");
@@ -241,8 +327,16 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
 
   const handleDelete = useCallback(() => {
     if (!entry) return;
+    // Photos staged this session were never saved onto any entry - clean
+    // them up like Cancel does. The entry's own photos stay (the delete is
+    // soft and undoable).
+    if (newlyStagedIds.size > 0) {
+      void deleteAttachmentFiles(Array.from(newlyStagedIds));
+      setNewlyStagedIds(new Set());
+    }
+    setStagingSession((s) => s + 1);
     onDelete(entry.id);
-  }, [entry, onDelete]);
+  }, [entry, newlyStagedIds, onDelete]);
 
   const handleShow = useCallback(() => {
     InteractionManager.runAfterInteractions(() => {
@@ -254,7 +348,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
 
   return (
     <>
-    <Modal visible={!!entry} animationType="slide" transparent onRequestClose={onClose} onShow={handleShow}>
+    <Modal visible={!!entry} animationType="slide" transparent onRequestClose={handleCancel} onShow={handleShow}>
       <KeyboardAvoidingView
         // iOS leans on automaticallyAdjustKeyboardInsets below (also scrolls
         // the focused field into view), so KAV stays off. The RN Modal's
@@ -265,7 +359,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
         style={styles.overlay}
       >
         {/* Tap-to-dismiss area above the sheet */}
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={handleCancel} />
 
         {/* Modal sheet */}
         <View style={styles.modalContent}>
@@ -513,11 +607,74 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                   </View>
                 )}
 
+                {showBusinessPicker && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>BUSINESS (OPTIONAL)</Text>
+                    <Text style={styles.accountPickerHint}>
+                      Tag this expense to a business for the tax-time report.
+                    </Text>
+                    <View style={styles.categoryWrap}>
+                      <TouchableOpacity
+                        style={[
+                          styles.categoryPill,
+                          !businessId && styles.categoryPillActive,
+                        ]}
+                        onPress={() => setBusinessId(undefined)}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryPillText,
+                            !businessId && styles.categoryPillTextActive,
+                          ]}
+                        >
+                          Personal
+                        </Text>
+                      </TouchableOpacity>
+                      {businesses.map((business) => (
+                        <TouchableOpacity
+                          key={business.id}
+                          style={[
+                            styles.categoryPill,
+                            businessId === business.id && styles.categoryPillActive,
+                          ]}
+                          onPress={() => setBusinessId(business.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryPillText,
+                              businessId === business.id && styles.categoryPillTextActive,
+                            ]}
+                          >
+                            💼 {business.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                      {taggedBusinessMissing && (
+                        <TouchableOpacity
+                          style={[styles.categoryPill, styles.categoryPillActive]}
+                          onPress={() => setBusinessId(undefined)}
+                        >
+                          <Text style={[styles.categoryPillText, styles.categoryPillTextActive]}>
+                            💼 (deleted business)
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                <AttachmentSection
+                  attachments={attachments}
+                  stagingSession={stagingSession}
+                  onAdd={handleAttachmentAdd}
+                  onRemove={handleAttachmentRemove}
+                />
+
                 <View style={styles.buttonRow}>
                   <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
                     <Text style={styles.deleteText}>Delete</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
                     <Text style={styles.cancelText}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity

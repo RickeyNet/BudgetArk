@@ -1,9 +1,13 @@
-# BudgetArk Spreadsheet Schema (v1)
+# BudgetArk Spreadsheet Schema (v2)
 
 This is the column schema for `.csv` and `.xlsx` files exchanged with BudgetArk.
 The schema is shared by `src/utils/spreadsheetExport.ts` and `src/utils/spreadsheetImport.ts`. Header names are matched case-insensitively and tolerate whitespace, but the column meanings are fixed.
 
-CSV files contain a single sheet (Budget Entries). Excel files contain a multi-sheet workbook with all six sheets below. Sheet names are matched case-insensitively.
+CSV files contain a single sheet (Budget Entries). Excel files contain a multi-sheet workbook with all sheets below. Sheet names are matched case-insensitively.
+
+**v2 changes:** Budget Entries gained `BusinessId` (round-trips) and `Business` (readable name, export-only); Excel workbooks gained a `Businesses` sheet. v1 files still import - the new columns are simply absent.
+
+> **Receipt photos do not round-trip.** Photo attachments on entries live as encrypted files on the device and are not part of the spreadsheet schema (or the JSON export). A **merge**-mode import never removes an entry's local photos - an entry updated from a spreadsheet row keeps the photos already on the device. A **replace**-mode spreadsheet restore keeps the entry but not its photos; the in-app JSON backup preserves the entry's photo *references* (files stay on the original device).
 
 ## Sheet: Budget Entries
 
@@ -16,8 +20,15 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 | `Amount`          | Yes      | Positive number for most categories. Strips `$`, commas, and treats `(50.00)` as `-50.00`. Exception: `Savings`, `Retirement`, and `Investing` accept negative amounts - these represent app-generated correction entries when a tracked reserve is lowered. |
 | `Description`     | No       | Free-form note (max 220 chars).                                                        |
 | `Recurring`       | No       | `yes` / `no` / `true` / `false` / `1` / `0`.                                           |
+| `RecurrenceInterval` | No    | Months between repeats when `Recurring` is `yes`: `1`, `3`, `6`, or `12`.              |
+| `PaymentUrl`      | No       | Optional `https` payment link for recurring expenses.                                  |
 | `LinkedAccountId` | No       | UUID of an asset account (used for savings entries).                                   |
 | `LastAppliedMonth`| No       | `YYYY-MM` of the last month a recurring entry was credited to its linked account. Round-tripped to avoid double-applying contributions. |
+| `Source`          | No       | `bank` for entries created from a bank-imported transaction; blank for manual entries. Round-tripped. |
+| `ExternalTxId`    | No       | Dedup identity of the source bank transaction. Round-tripped - losing it makes the next bank sync re-offer already-approved transactions. |
+| `Merchant`        | No       | Normalized merchant key captured at approval time. Round-tripped.                      |
+| `BusinessId`      | No       | UUID of the business this expense is tagged with (see the `Businesses` sheet). Round-tripped. |
+| `Business`        | No       | Human-readable business name at export time. **Export-only - ignored on import** (matching by name would fork identities on rename). Shows `(deleted)` for a dangling id. |
 | `CreatedAt`       | No       | ISO timestamp the entry was created. Round-tripped so re-importing doesn't reset history. |
 | `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
 
@@ -103,6 +114,17 @@ Imported limits land in the current month's limit set.
 | `UpdatedAt`  | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
 
 > Stock/ETF positions only. Live prices are fetched per-device and are **never** included in exports or imports - a spreadsheet carries the holding, not its market value.
+
+## Sheet: Businesses (xlsx only)
+
+| Column      | Required | Notes                                                                |
+| ----------- | -------- | -------------------------------------------------------------------- |
+| `ID`        | No       | Auto-generated if missing. Budget entries reference this via `BusinessId`. |
+| `Name`      | Yes      | Max 40 chars.                                                        |
+| `CreatedAt` | No       | ISO timestamp; defaults to now.                                      |
+| `UpdatedAt` | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
+
+> Only live (non-deleted) businesses are exported. Entries whose `BusinessId` has no matching row still import - the business may arrive later via sync or a JSON restore. No Total row (nothing numeric to sum).
 
 ## Limits
 

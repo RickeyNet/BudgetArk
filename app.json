@@ -75,6 +75,13 @@
       "expo-iap",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "BudgetArk uses your photo library so you can attach receipt photos to expenses. Photos stay encrypted on your device.",
+          "cameraPermission": "BudgetArk uses the camera so you can photograph receipts for your expenses. Photos stay encrypted on your device."
+        }
+      ],
+      [
         "react-native-android-widget",
         {
           "widgets": [

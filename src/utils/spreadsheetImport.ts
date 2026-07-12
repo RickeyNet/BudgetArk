@@ -360,6 +360,10 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
   const externalTxId =
     parseString(get(row, "ExternalTxId", "External Tx Id"), 200) || undefined;
   const merchant = parseString(get(row, "Merchant"), 120) || undefined;
+  // BusinessId round-trips; the readable "Business" name column is
+  // deliberately IGNORED - matching by name would fork identities on rename.
+  const businessId =
+    parseString(get(row, "BusinessId", "Business Id"), 80) || undefined;
 
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
@@ -393,6 +397,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     source,
     externalTxId,
     merchant,
+    businessId,
   });
 };
 
@@ -674,6 +679,25 @@ const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, un
   });
 };
 
+const rowToBusiness = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
+  // Cap mirrors MAX_BUSINESS_NAME_LENGTH / isBusinessItem (40).
+  const name = parseString(get(row, "Name"), 40);
+  if (!name) {
+    return skipRow("Name is missing");
+  }
+  const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
+  const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Preserve `updatedAt` so the LWW merge in importData / paired sync can
+  // order this row against local edits instead of treating it as fresh.
+  return okRow({
+    id,
+    name,
+    createdAt,
+    updatedAt: updatedAtIso || createdAt,
+  });
+};
+
 /* ── Skipped-row reporting ── */
 
 /** One invalid row that was dropped, with enough context to find and fix it. */
@@ -806,6 +830,7 @@ export const importSpreadsheet = async (
   const savingsGoalsSheet = isCsv ? undefined : findSheet(workbook, "Savings Goals");
   const assetAccountsSheet = isCsv ? undefined : findSheet(workbook, "Asset Accounts");
   const holdingsSheet = isCsv ? undefined : findSheet(workbook, "Holdings");
+  const businessesSheet = isCsv ? undefined : findSheet(workbook, "Businesses");
 
   // Drop the exporter's own round-trip artifacts (projected recurring copies,
   // synthetic Emergency Fund) up front so they count toward neither the valid
@@ -821,6 +846,7 @@ export const importSpreadsheet = async (
   );
   const accountRows = sheetToRows(assetAccountsSheet);
   const holdingRows = sheetToRows(holdingsSheet);
+  const businessRows = sheetToRows(businessesSheet);
 
   if (
     entryRows.length === 0 &&
@@ -829,7 +855,8 @@ export const importSpreadsheet = async (
     paymentRows.length === 0 &&
     savingsRows.length === 0 &&
     accountRows.length === 0 &&
-    holdingRows.length === 0
+    holdingRows.length === 0 &&
+    businessRows.length === 0
   ) {
     throw new Error(
       'No recognized sheets found. Expected a "Budget Entries" sheet (or one of: Budget Limits, Debts, Payments, Savings Goals, Asset Accounts, Holdings).'
@@ -843,6 +870,7 @@ export const importSpreadsheet = async (
   const savingsResult = processSheet("Savings Goals", savingsRows, rowToSavingsGoal);
   const accountResult = processSheet("Asset Accounts", accountRows, rowToAssetAccount);
   const holdingResult = processSheet("Holdings", holdingRows, rowToHolding);
+  const businessResult = processSheet("Businesses", businessRows, rowToBusiness);
 
   const budgetEntries = entryResult.valid;
   const budgetLimits = limitResult.valid;
@@ -851,6 +879,7 @@ export const importSpreadsheet = async (
   const savingsGoals = savingsResult.valid;
   const assetAccounts = accountResult.valid;
   const holdings = holdingResult.valid;
+  const businesses = businessResult.valid;
 
   // Each skipped row is genuinely invalid (derived artifacts were filtered
   // out above), so the count and the detail list line up exactly.
@@ -862,6 +891,7 @@ export const importSpreadsheet = async (
     ...savingsResult.skipped,
     ...accountResult.skipped,
     ...holdingResult.skipped,
+    ...businessResult.skipped,
   ];
   const skippedRows = skippedRowDetails.length;
 
@@ -872,7 +902,8 @@ export const importSpreadsheet = async (
     payments.length +
     savingsGoals.length +
     assetAccounts.length +
-    holdings.length;
+    holdings.length +
+    businesses.length;
 
   if (totalEntitiesValid === 0) {
     throw new Error(
@@ -891,6 +922,7 @@ export const importSpreadsheet = async (
     savingsGoals,
     assetAccounts,
     holdings,
+    businesses,
   };
 
   const result = await importFromString(JSON.stringify(payload), mode);

@@ -21,6 +21,7 @@ import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
   CUSTOM_CATEGORY_STORAGE_VERSION,
+  BUSINESS_STORAGE_VERSION,
   ACHIEVEMENTS_STORAGE_VERSION,
   ACHIEVEMENT_STATS_VERSION,
   type AchievementStats,
@@ -50,6 +51,7 @@ import {
   isHoldingItem,
   isNetWorthSnapshotItem,
   isCustomCategoryItem,
+  isBusinessItem,
   isValidImportCategory,
   isMonthKey,
   sanitizePayoffStrategy,
@@ -70,6 +72,7 @@ const KEYS = {
   PAYOFF_STRATEGY: "@budgetark_payoff_strategy",
   NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
   CUSTOM_CATEGORIES: "@budgetark_custom_categories",
+  BUSINESSES: "@budgetark_businesses",
   CATEGORY_BUCKET_OVERRIDES: "@budgetark_category_bucket_overrides",
   ACHIEVEMENTS: "@budgetark_achievements",
   ACHIEVEMENT_STATS: "@budgetark_achievement_stats",
@@ -108,6 +111,7 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     typeof data.payoffStrategy === "string" ||
     Array.isArray(data.netWorthSnapshots) ||
     Array.isArray(data.customCategories) ||
+    Array.isArray(data.businesses) ||
     isObject(data.categoryBucketOverrides) ||
     isObject(data.achievements) ||
     isObject(data.achievementStats) ||
@@ -130,6 +134,7 @@ interface ImportPayload {
   payoffStrategyUpdatedAt?: unknown;
   netWorthSnapshots?: unknown[];
   customCategories?: unknown[];
+  businesses?: unknown[];
   categoryBucketOverrides?: Record<string, unknown>;
   achievements?: Record<string, unknown>;
   achievementStats?: Record<string, unknown>;
@@ -159,6 +164,7 @@ interface SanitizedImportPayload {
   payoffStrategyUpdatedAt?: string;
   netWorthSnapshots: Record<string, unknown>[];
   customCategories: Record<string, unknown>[];
+  businesses: Record<string, unknown>[];
   categoryBucketOverrides?: Record<string, "needs" | "wants" | "savings">;
   achievements?: SanitizedAchievements;
   achievementStats?: AchievementStats;
@@ -178,6 +184,7 @@ export interface ImportResult {
   payoffStrategy: boolean;
   netWorthSnapshots: number;
   customCategories: number;
+  businesses: number;
   /** Number of days since the export was created, or undefined if no exportedAt timestamp */
   staleDays?: number;
 }
@@ -412,6 +419,11 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     "custom categories",
     isCustomCategoryItem
   );
+  const businesses = sanitizeCollection(
+    data.businesses,
+    "businesses",
+    isBusinessItem
+  );
   const debtMilestones = sanitizeDebtMilestones(data.debtMilestones);
   const payoffStrategy = sanitizePayoffStrategy(data.payoffStrategy);
   const payoffStrategyUpdatedAt = isValidDateValue(data.payoffStrategyUpdatedAt)
@@ -439,7 +451,8 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     assetAccounts.length +
     holdings.length +
     netWorthSnapshots.length +
-    customCategories.length;
+    customCategories.length +
+    businesses.length;
   if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
     throw new Error(
       `Import rejected: payload is too large. Maximum total records is ${LIMITS.MAX_TOTAL_ITEMS}.`
@@ -457,6 +470,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     holdings,
     netWorthSnapshots,
     customCategories,
+    businesses,
     categoryBucketOverrides,
     achievements,
     achievementStats,
@@ -605,6 +619,7 @@ export const importFromString = async (
     payoffStrategy: false,
     netWorthSnapshots: 0,
     customCategories: 0,
+    businesses: 0,
     staleDays,
   };
 
@@ -623,7 +638,14 @@ export const importFromString = async (
   // fresh import.
   const computeMergedById = async (
     storageKey: string,
-    incoming: unknown[] | undefined
+    incoming: unknown[] | undefined,
+    // Optional hook to reconcile an incoming record with the local one it
+    // replaces (merge mode only). Used for budget entries to preserve
+    // device-local attachment metadata - see preserveLocalAttachments.
+    reconcile?: (
+      incoming: Record<string, unknown>,
+      existing: Record<string, unknown>
+    ) => Record<string, unknown>
   ): Promise<{ json: string; count: number } | null> => {
     if (!incoming || incoming.length === 0) return null;
 
@@ -672,12 +694,41 @@ export const importFromString = async (
       // Both rows present. LWW on updatedAt; ties go to the incoming record
       // since the user explicitly chose to import.
       if (tsOf(item) >= tsOf(existing[existingIdx])) {
-        existing[existingIdx] = item;
+        existing[existingIdx] = reconcile
+          ? reconcile(item, existing[existingIdx])
+          : item;
         touched++;
       }
     }
 
     return { json: JSON.stringify(existing), count: touched };
+  };
+
+  /**
+   * Budget-entry reconcile hook: attachment metadata points at encrypted
+   * photo files that exist only on THIS device, and spreadsheet rows carry
+   * no attachments at all (there is no column). Without this, a merge-mode
+   * re-import of an unchanged entry (updatedAt tie goes to incoming) would
+   * replace it with an attachment-less copy - and the orphan sweep would
+   * then permanently delete the photo files. An import may therefore never
+   * REMOVE local attachment references; when the incoming record carries
+   * its own list (JSON exports do), the incoming list wins as usual.
+   */
+  const preserveLocalAttachments = (
+    incoming: Record<string, unknown>,
+    existing: Record<string, unknown>
+  ): Record<string, unknown> => {
+    const incomingHasAttachments =
+      Array.isArray(incoming.attachments) && incoming.attachments.length > 0;
+    const existingAttachments = existing.attachments;
+    if (
+      !incomingHasAttachments &&
+      Array.isArray(existingAttachments) &&
+      existingAttachments.length > 0
+    ) {
+      return { ...incoming, attachments: existingAttachments };
+    }
+    return incoming;
   };
 
   /**
@@ -908,6 +959,66 @@ export const importFromString = async (
     if (typeof value !== "string") return 0;
     const t = Date.parse(value);
     return Number.isFinite(t) ? t : 0;
+  };
+
+  /**
+   * Businesses live in a `{businesses, version}` store (not a bare array),
+   * so computeMergedById can't be reused directly. Same LWW-by-id semantics:
+   * a tombstoned business survives a stale import, a newer import wins.
+   * Tombstones ride along so a restore can't resurrect a deleted business.
+   */
+  const computeMergedBusinesses = async (): Promise<{
+    json: string;
+    count: number;
+  } | null> => {
+    if (sanitized.businesses.length === 0) return null;
+    const wrap = (arr: Record<string, unknown>[]): string =>
+      JSON.stringify({ businesses: arr, version: BUSINESS_STORAGE_VERSION });
+
+    if (mode === "replace") {
+      return {
+        json: wrap(sanitized.businesses),
+        count: sanitized.businesses.length,
+      };
+    }
+
+    let existing: Record<string, unknown>[] = [];
+    const existingRaw = await EncryptedStorage.getItem(KEYS.BUSINESSES);
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (Array.isArray(parsed?.businesses)) existing = parsed.businesses;
+      } catch {
+        existing = [];
+      }
+    }
+
+    const indexById = new Map<string, number>();
+    existing.forEach((item, idx) => {
+      const id = (item as any).id;
+      if (typeof id === "string") indexById.set(id, idx);
+    });
+
+    let touched = 0;
+    for (const item of sanitized.businesses) {
+      const id = item.id as string;
+      const existingIdx = indexById.get(id);
+      if (existingIdx === undefined) {
+        existing.push(item);
+        indexById.set(id, existing.length - 1);
+        touched++;
+        continue;
+      }
+      if (
+        parseTimestamp(item.updatedAt) >=
+        parseTimestamp(existing[existingIdx].updatedAt)
+      ) {
+        existing[existingIdx] = item;
+        touched++;
+      }
+    }
+
+    return { json: wrap(existing), count: touched };
   };
 
   /**
@@ -1146,7 +1257,11 @@ export const importFromString = async (
   // Phase 1: Compute all merged results in memory
   const mergedDebts = await computeMergedById(KEYS.DEBTS, sanitized.debts);
   const mergedPayments = await computeMergedById(KEYS.PAYMENTS, sanitized.payments);
-  const mergedBudgetEntries = await computeMergedById(KEYS.BUDGET_ENTRIES, sanitized.budgetEntries);
+  const mergedBudgetEntries = await computeMergedById(
+    KEYS.BUDGET_ENTRIES,
+    sanitized.budgetEntries,
+    preserveLocalAttachments
+  );
   const mergedLimits = await computeMergedLimitsHistory();
   const mergedSavingsGoals = await computeMergedById(
     KEYS.SAVINGS_GOALS,
@@ -1162,6 +1277,7 @@ export const importFromString = async (
   );
   const mergedSnapshots = await computeMergedSnapshots();
   const mergedCustomCategories = await computeMergedCustomCategories();
+  const mergedBusinesses = await computeMergedBusinesses();
   const mergedCategoryBucketOverrides = await computeMergedBucketOverrides();
   const mergedAchievements = await computeMergedAchievements();
   const mergedAchievementStats = await computeMergedAchievementStats();
@@ -1201,6 +1317,9 @@ export const importFromString = async (
       KEYS.CUSTOM_CATEGORIES + TEMP_SUFFIX,
       mergedCustomCategories.json,
     ]);
+  }
+  if (mergedBusinesses) {
+    tempWrites.push([KEYS.BUSINESSES + TEMP_SUFFIX, mergedBusinesses.json]);
   }
   if (mergedCategoryBucketOverrides) {
     tempWrites.push([
@@ -1310,6 +1429,7 @@ export const importFromString = async (
       // reference a non-built-in name), so gate on the merged result, which
       // already accounts for both sources.
       if (mergedCustomCategories) keysToRemove.push(KEYS.CUSTOM_CATEGORIES);
+      if (sanitized.businesses.length > 0) keysToRemove.push(KEYS.BUSINESSES);
       if (sanitized.categoryBucketOverrides) {
         keysToRemove.push(KEYS.CATEGORY_BUCKET_OVERRIDES);
       }
@@ -1343,6 +1463,7 @@ export const importFromString = async (
     counts.holdings = mergedHoldings?.count ?? 0;
     counts.netWorthSnapshots = mergedSnapshots?.count ?? 0;
     counts.customCategories = mergedCustomCategories?.count ?? 0;
+    counts.businesses = mergedBusinesses?.count ?? 0;
     counts.debtMilestones = !!sanitized.debtMilestones;
     counts.payoffStrategy = !!sanitized.payoffStrategy;
   } catch {

@@ -62,6 +62,12 @@ jest.mock("../../storage/customCategoriesStorage", () => ({
     mockState.customCategories = v;
   }),
 }));
+jest.mock("../../storage/businessStorage", () => ({
+  getBusinessesIncludingDeleted: jest.fn(async () => mockState.businesses),
+  saveBusinessesFromSync: jest.fn(async (v: any) => {
+    mockState.businesses = v;
+  }),
+}));
 jest.mock("../../storage/categoryBucketOverridesStorage", () => ({
   getCategoryBucketOverrides: jest.fn(async () => mockState.bucketOverrides),
   saveCategoryBucketOverridesFromSync: jest.fn(async (v: any) => {
@@ -136,6 +142,13 @@ const holding = (over: Record<string, unknown> = {}): any => ({
   updatedAt: NEW,
   ...over,
 });
+const business = (over: Record<string, unknown> = {}): any => ({
+  id: "b1",
+  name: "Acme Consulting LLC",
+  createdAt: OLD,
+  updatedAt: NEW,
+  ...over,
+});
 
 const emptyDiff = (over: Partial<SyncDiff> = {}): SyncDiff =>
   ({
@@ -160,6 +173,7 @@ const freshState = () => ({
   milestonePlan: { steps: [], updatedAt: OLD },
   strategyEnvelope: null,
   customCategories: [],
+  businesses: [],
   bucketOverrides: {},
   snapshots: [],
   limitsByMonth: {},
@@ -412,6 +426,85 @@ describe("holdings sync", () => {
       })
     );
     expect(mockState.holdings.find((h: any) => h.id === "h1").deletedAt).toBe(NEW);
+  });
+});
+
+describe("businesses sync", () => {
+  it("includes changed businesses in the outgoing diff (upsert + delete)", async () => {
+    mockState.businesses = [
+      business({ id: "live", updatedAt: NEW }),
+      business({ id: "gone", deletedAt: NEW, updatedAt: NEW }),
+      business({ id: "stale", updatedAt: OLD }),
+    ];
+    const diff = await computeOutgoingDiff(MID);
+    const byId = Object.fromEntries(
+      (diff.businesses ?? []).map((e) => [e.record.id, e.action])
+    );
+    expect(byId).toEqual({ live: "upsert", gone: "delete" });
+  });
+
+  it("merges an incoming business with last-write-wins", async () => {
+    mockState.businesses = [business({ id: "b1", name: "Old Name", updatedAt: OLD })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [
+          { action: "upsert", record: business({ id: "b1", name: "New Name", updatedAt: NEW }) },
+        ],
+      })
+    );
+    expect(mockState.businesses.find((b: any) => b.id === "b1").name).toBe("New Name");
+  });
+
+  it("does not resurrect a business deleted locally with a newer tombstone", async () => {
+    mockState.businesses = [business({ id: "b1", deletedAt: NEW, updatedAt: NEW })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [{ action: "upsert", record: business({ id: "b1", updatedAt: OLD }) }],
+      })
+    );
+    expect(mockState.businesses.find((b: any) => b.id === "b1").deletedAt).toBe(NEW);
+  });
+
+  it("applies an incoming business delete that is newer than the live local record", async () => {
+    mockState.businesses = [business({ id: "b1", updatedAt: OLD })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [
+          { action: "delete", record: business({ id: "b1", deletedAt: NEW, updatedAt: NEW }) },
+        ],
+      })
+    );
+    expect(mockState.businesses.find((b: any) => b.id === "b1").deletedAt).toBe(NEW);
+  });
+
+  it("accepts duplicate business names (no dedupe on receive - would brick the merge)", async () => {
+    mockState.businesses = [business({ id: "b1", name: "Acme" })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [{ action: "upsert", record: business({ id: "b2", name: "Acme" }) }],
+      })
+    );
+    expect(mockState.businesses).toHaveLength(2);
+  });
+
+  it("rejects the whole diff on an invalid business record, writing nothing", async () => {
+    const businessStorage = require("../../storage/businessStorage");
+    const bad = emptyDiff({
+      businesses: [
+        { action: "upsert", record: business({ id: "ok" }) },
+        { action: "upsert", record: business({ id: "bad", name: "a".repeat(41) }) },
+      ],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/invalid business/);
+    expect(businessStorage.saveBusinessesFromSync).not.toHaveBeenCalled();
+  });
+
+  it("applies cleanly when an older peer's diff omits the businesses field", async () => {
+    mockState.businesses = [business({ id: "b1" })];
+    const diff = emptyDiff({});
+    delete (diff as any).businesses;
+    await expect(applyIncomingDiff(diff)).resolves.toBe(0);
+    expect(mockState.businesses).toHaveLength(1);
   });
 });
 

@@ -25,12 +25,14 @@ import {
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getHoldings } from "../storage/holdingsStorage";
+import { getBusinesses } from "../storage/businessStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { recordBackup } from "../storage/backupReminderStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import {
   AssetAccount,
   BudgetEntry,
+  Business,
   CategoryBudgetLimit,
   DebtMilestonePlan,
   Debt,
@@ -42,8 +44,13 @@ import { getRecurrenceInterval } from "./recurrence";
 
 export type SpreadsheetFormat = "csv" | "xlsx";
 
-/** Schema version. Bump if column shape changes incompatibly. */
-export const SPREADSHEET_SCHEMA_VERSION = 1;
+/**
+ * Schema version. Bump if column shape changes incompatibly.
+ * v2 (1.10): Budget Entries gained BusinessId (round-trip) + Business
+ * (readable name, export-only); new Businesses sheet in xlsx workbooks.
+ * v1 files still import - the new columns are simply absent.
+ */
+export const SPREADSHEET_SCHEMA_VERSION = 2;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -104,6 +111,11 @@ const BUDGET_ENTRY_COLUMNS = [
   "Source",
   "ExternalTxId",
   "Merchant",
+  // Business the expense is tagged with. BusinessId round-trips (it's the
+  // reference entries carry); Business is the human-readable name at export
+  // time and is IGNORED on import - renames must not fork identities.
+  "BusinessId",
+  "Business",
   // ISO timestamp the entry was created. Round-tripped so re-importing an
   // exported file doesn't reset history.
   "CreatedAt",
@@ -173,6 +185,10 @@ const HOLDING_COLUMNS = [
   "UpdatedAt",
 ] as const;
 
+// Live businesses only - tombstones stay in the JSON backup (the lossless
+// path); a human-facing spreadsheet listing deleted clients is just noise.
+const BUSINESS_COLUMNS = ["ID", "Name", "CreatedAt", "UpdatedAt"] as const;
+
 /* ── Row builders - convert app types to flat row objects ── */
 
 const formatDateOnly = (iso: string): string => {
@@ -233,7 +249,10 @@ const promoteStringDateCells = (
   }
 };
 
-const budgetEntryToRow = (entry: BudgetEntry) => ({
+const budgetEntryToRow = (
+  entry: BudgetEntry,
+  businessNameById?: Map<string, string>
+) => ({
   ID: entry.id,
   Date: formatDateOnly(entry.date),
   Type: entry.type,
@@ -248,6 +267,12 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
   Source: entry.source ?? "",
   ExternalTxId: entry.externalTxId ?? "",
   Merchant: entry.merchant ?? "",
+  BusinessId: entry.businessId ?? "",
+  // Readable name, export-only. A dangling id (business deleted) shows
+  // "(deleted)" so tax-time filtering still groups those rows visibly.
+  Business: entry.businessId
+    ? businessNameById?.get(entry.businessId) ?? "(deleted)"
+    : "",
   CreatedAt: entry.createdAt ?? "",
   UpdatedAt: entry.updatedAt ?? "",
 });
@@ -309,6 +334,13 @@ const holdingToRow = (holding: Holding) => ({
   CostBasis: holding.costBasis ?? "",
   CreatedAt: holding.createdAt,
   UpdatedAt: holding.updatedAt ?? "",
+});
+
+const businessToRow = (business: Business) => ({
+  ID: business.id,
+  Name: business.name,
+  CreatedAt: business.createdAt,
+  UpdatedAt: business.updatedAt ?? "",
 });
 
 /* ── Total row ──
@@ -852,6 +884,7 @@ export const exportSpreadsheet = async (
     assetAccountsResult,
     holdingsResult,
     milestonePlanResult,
+    businessesResult,
   ] = await Promise.allSettled([
     withTimeout(
       getBudgetEntries(),
@@ -889,6 +922,11 @@ export const exportSpreadsheet = async (
       DATA_LOAD_TIMEOUT_MS,
       "Timed out loading milestone plan for export."
     ),
+    withTimeout(
+      getBusinesses(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading businesses for export."
+    ),
   ]);
   log("data-loaded", `ms=${nowMs() - loadStartedAt}`);
 
@@ -922,6 +960,11 @@ export const exportSpreadsheet = async (
       : (markMissingSection("Holdings"), [] as Holding[]);
   const milestonePlan: DebtMilestonePlan | null =
     milestonePlanResult.status === "fulfilled" ? milestonePlanResult.value : null;
+  const businesses =
+    businessesResult.status === "fulfilled"
+      ? businessesResult.value
+      : (markMissingSection("Businesses"), [] as Business[]);
+  const businessNameById = new Map(businesses.map((b) => [b.id, b.name]));
 
   // Build the savings-goal list shown in the spreadsheet. If the user has no
   // explicit emergency_fund goal but is tracking one via the Keel milestone
@@ -970,7 +1013,9 @@ export const exportSpreadsheet = async (
   // subtotals, and finish with a grand-total block. See buildBudgetEntriesSheet.
   let entrySheet: XLSX.WorkSheet;
   try {
-    const entryRows = expandRecurringRows(budgetEntries.map(budgetEntryToRow));
+    const entryRows = expandRecurringRows(
+      budgetEntries.map((entry) => budgetEntryToRow(entry, businessNameById))
+    );
     entrySheet = buildBudgetEntriesSheet(entryRows);
   } catch {
     markMissingSection("Budget Entries");
@@ -1074,6 +1119,18 @@ export const exportSpreadsheet = async (
       XLSX.utils.book_append_sheet(wb, holdingsSheet, "Holdings");
     } catch {
       markMissingSection("Holdings");
+    }
+
+    // No Total row - nothing numeric to sum on a name list.
+    try {
+      const businessRows = businesses.map(businessToRow);
+      const businessesSheet = XLSX.utils.json_to_sheet(businessRows, {
+        header: [...BUSINESS_COLUMNS],
+      });
+      promoteStringDateCells(businessesSheet, BUSINESS_COLUMNS, ["CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, businessesSheet, "Businesses");
+    } catch {
+      markMissingSection("Businesses");
     }
   }
 

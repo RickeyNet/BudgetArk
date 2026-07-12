@@ -40,6 +40,10 @@ import {
   saveCustomCategoriesFromSync,
 } from "../storage/customCategoriesStorage";
 import {
+  getBusinessesIncludingDeleted,
+  saveBusinessesFromSync,
+} from "../storage/businessStorage";
+import {
   getCategoryBucketOverrides,
   saveCategoryBucketOverridesFromSync,
 } from "../storage/categoryBucketOverridesStorage";
@@ -68,6 +72,7 @@ import {
   isAssetAccountItem,
   isHoldingItem,
   isCustomCategoryItem,
+  isBusinessItem,
   isNetWorthSnapshotItem,
   isValidImportCategory,
   isMonthKey,
@@ -116,6 +121,7 @@ export const computeOutgoingDiff = async (
     milestonePlan,
     strategyEnvelope,
     customCategories,
+    businesses,
     bucketOverrides,
     netWorthSnapshots,
     backfillDone,
@@ -129,6 +135,7 @@ export const computeOutgoingDiff = async (
     getDebtMilestonePlan(),
     getPayoffStrategyEnvelope(),
     getCustomCategories(),
+    getBusinessesIncludingDeleted(),
     getCategoryBucketOverrides(),
     getNetWorthSnapshots(),
     isBackfillSyncDone(),
@@ -198,6 +205,10 @@ export const computeOutgoingDiff = async (
           record,
         }))
       : filterChanged(customCategories),
+    // Businesses are tombstone-aware like holdings. No backlog handling
+    // needed: the feature is new, so no businesses predate this field for
+    // an already-paired couple to miss.
+    businesses: filterChanged(businesses),
     // Snapshots have no updatedAt - capturedAt plays that role (a re-capture
     // during the day restamps it). Incremental syncs send only days captured
     // since the last sync; backlog mode sends the whole history (capped at
@@ -309,6 +320,7 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
   validateDiffEntries(diff.assetAccounts, "asset account", isAssetAccountItem);
   validateDiffEntries(diff.holdings, "holding", isHoldingItem);
   validateDiffEntries(diff.customCategories, "custom category", isCustomCategoryItem);
+  validateDiffEntries(diff.businesses, "business", isBusinessItem);
 
   // Bucket overrides are a bare map, not DiffEntry records, so they get
   // their own gate: keys must pass the same bounded category-name check the
@@ -456,6 +468,19 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     const merged = mergeById(localHoldings, diff.holdings);
     await saveHoldings(merged);
     changedCount += diff.holdings.length;
+  }
+
+  // Merge businesses - same tombstone-aware LWW as holdings. Guarded with
+  // `diff.businesses &&` because an older peer's diff omits the field.
+  // Written via the raw sync setter: the merge already carries every local
+  // tombstone, and re-running name validation here would reject the very
+  // merge we just computed (dup names are cosmetic - entries reference by
+  // id).
+  if (diff.businesses && diff.businesses.length > 0) {
+    const localBusinesses = await getBusinessesIncludingDeleted();
+    const merged = mergeById(localBusinesses, diff.businesses);
+    await saveBusinessesFromSync(merged);
+    changedCount += diff.businesses.length;
   }
 
   // Merge budget limits (union of months, per-category last-write-wins).

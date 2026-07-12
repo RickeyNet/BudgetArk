@@ -55,7 +55,11 @@ const SHEETS: SheetSpec[] = [
       { name: "Description", required: false, notes: "Optional note. Up to 220 characters." },
       { name: "Recurring", required: false, notes: "yes / no / true / false / 1 / 0." },
       { name: "LinkedAccountId", required: false, notes: "Asset account UUID for savings entries." },
+      { name: "BusinessId", required: false, notes: "UUID from the Businesses sheet for business-tagged expenses. Round-trips." },
+      { name: "Business", required: false, notes: "Readable business name. Export-only - ignored on import." },
     ],
+    footer:
+      "Receipt photos never round-trip through spreadsheets - photo files stay on the device that took them.",
   },
   {
     title: "Budget Limits",
@@ -118,6 +122,17 @@ const SHEETS: SheetSpec[] = [
       { name: "Name", required: true, notes: "Up to 80 characters." },
       { name: "Category", required: true, notes: "savings / retirement / hsa / investment / other." },
       { name: "Balance", required: true, notes: "Number, ≥ 0." },
+      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+    ],
+  },
+  {
+    title: "Businesses",
+    xlsxOnly: true,
+    description:
+      "Businesses that expense entries can be tagged with (via BusinessId). Only live businesses are exported.",
+    columns: [
+      { name: "ID", required: false, notes: "Auto-generated if missing. Budget entries reference this via BusinessId." },
+      { name: "Name", required: true, notes: "Up to 40 characters." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
     ],
   },

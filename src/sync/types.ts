@@ -17,6 +17,7 @@ import type {
   BudgetBucket,
   NetWorthSnapshot,
   Holding,
+  Business,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -126,6 +127,15 @@ export interface SyncDiff {
    * that predates this field still applies cleanly.
    */
   customCategories?: DiffEntry<CustomCategory>[];
+  /**
+   * Businesses expense entries are tagged with (`BudgetEntry.businessId`).
+   * Tombstone-aware with the same LWW merge as the other collections -
+   * entries reference businesses by id, so deletes must propagate or a
+   * partner would resurrect a deleted client list. Optional so a diff from
+   * an older peer that predates this field still applies. Brand-new
+   * feature, so no backfill flag needed (same as holdings).
+   */
+  businesses?: DiffEntry<Business>[];
   /**
    * Per-category 50/30/20 bucket overrides. The store has no per-key
    * timestamps, so the whole map is sent and merged key-wise on receipt.

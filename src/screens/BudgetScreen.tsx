@@ -51,6 +51,7 @@ import {
   SavingsGoal,
   AssetAccount,
   BudgetBucket,
+  Business,
   RootTabParamList,
 } from "../types";
 import {
@@ -82,6 +83,7 @@ import {
   getAssetAccounts,
   saveAssetAccounts,
 } from "../storage/assetAccountStorage";
+import { getBusinesses } from "../storage/businessStorage";
 import {
   getCategoryBucketOverrides,
   removeCategoryBucketOverride,
@@ -126,6 +128,8 @@ type ExpenseCategoryEntry = {
   date: string;
   recurring?: boolean;
   recurrenceInterval?: RecurrenceInterval;
+  businessId?: string;
+  attachmentCount?: number;
 };
 
 type ExpenseCategoryRow = {
@@ -283,11 +287,18 @@ const BudgetScreen: React.FC = () => {
   const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
   const [reviewPreviewData, setReviewPreviewData] = useState<MonthlyReviewData | null>(null);
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
+  // Reloaded on every focus, so edits in Profile -> Businesses show up here.
+  const [businesses, setBusinesses] = useState<Business[]>([]);
   const [keelTarget, setKeelTarget] = useState(0);
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
   const [bucketOverrides, setBucketOverrides] = useState<CategoryBucketOverrides>({});
   const [bucketOverrideCategory, setBucketOverrideCategory] = useState<string | null>(null);
+
+  const businessNameById = useMemo(
+    () => new Map(businesses.map((b) => [b.id, b.name])),
+    [businesses]
+  );
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const selectedMonthIndex = Math.max(0, monthKeys.indexOf(selectedMonthKey));
@@ -323,6 +334,7 @@ const BudgetScreen: React.FC = () => {
           allLimitsByMonth,
           storedBucketOverrides,
           storedDueDismissals,
+          storedBusinesses,
         ] = await Promise.all([
           getBudgetEntries(),
           getCategoryBudgetLimits(selectedMonthKey),
@@ -334,6 +346,7 @@ const BudgetScreen: React.FC = () => {
           getAllLimitsByMonth(),
           getCategoryBucketOverrides(),
           getDebtDueDismissals(),
+          getBusinesses(),
         ]);
         if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
@@ -367,6 +380,7 @@ const BudgetScreen: React.FC = () => {
         setDueDismissals(storedDueDismissals);
         setSavingsGoals(storedGoals);
         setAssetAccounts(processed.assetAccounts);
+        setBusinesses(storedBusinesses);
         setReviewPreviewData(nextReviewData);
         setBucketOverrides(storedBucketOverrides);
         await refreshNetWorthSnapshots();
@@ -594,6 +608,8 @@ const BudgetScreen: React.FC = () => {
             date: e.date,
             recurring: e.recurring,
             recurrenceInterval: e.recurrenceInterval,
+            businessId: e.businessId,
+            attachmentCount: e.attachments?.length,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -1568,6 +1584,19 @@ const BudgetScreen: React.FC = () => {
                           ) : null}
                         </View>
                         <View style={styles.expandedEntryRight}>
+                          {(entry.attachmentCount ?? 0) > 0 && (
+                            <Text style={styles.entryEditHint}>
+                              📷{(entry.attachmentCount ?? 0) > 1 ? ` ${entry.attachmentCount}` : ""}
+                            </Text>
+                          )}
+                          {entry.businessId && (
+                            <Text
+                              style={[styles.entryEditHint, { color: colors.accent }]}
+                              numberOfLines={1}
+                            >
+                              💼 {businessNameById.get(entry.businessId) ?? "(deleted)"}
+                            </Text>
+                          )}
                           {entry.recurring && (
                             <Text style={[styles.entryEditHint, { color: colors.accent }]}>
                               {getRecurrenceTag(entry)}
@@ -1837,6 +1866,7 @@ const BudgetScreen: React.FC = () => {
         initialCategory={quickAddCategory}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
+        businesses={businesses}
       />
 
       <EditBudgetEntryModal
@@ -1846,6 +1876,7 @@ const BudgetScreen: React.FC = () => {
         onDelete={handleDeleteEntry}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
+        businesses={businesses}
       />
 
       <ReviewInboxModal

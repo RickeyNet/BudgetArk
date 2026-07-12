@@ -71,6 +71,12 @@ const entryFixtures = [
   // externalTxId is the connections-sync dedup identity, so losing it on a
   // backup/restore cycle would re-offer every approved transaction.
   { id: "e4", type: "expense", category: "Grocery", amount: 82.14, date: "2026-06-03", createdAt: "2026-06-03T00:00:00.000Z", source: "bank", externalTxId: "simplefin:ACT-1:TXN-99", merchant: "COSTCO WHSE" },
+  // Business-tagged expense: BusinessId must round-trip; the readable
+  // Business name column is export-only and ignored on import.
+  { id: "e5", type: "expense", category: "Tech", amount: 199, date: "2026-06-04", createdAt: "2026-06-04T00:00:00.000Z", businessId: "b1" },
+];
+const businessFixtures = [
+  { id: "b1", name: "Acme Consulting LLC", createdAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-02-01T00:00:00.000Z" },
 ];
 const holdingsFixtures = [
   { id: "h1", symbol: "AAPL", shares: 10, costBasis: 1500, createdAt: "2026-05-01T00:00:00.000Z", updatedAt: "2026-05-02T00:00:00.000Z" },
@@ -89,6 +95,7 @@ jest.mock("../../storage/budgetStorage", () => ({
 jest.mock("../../storage/savingsGoalStorage", () => ({ getSavingsGoals: jest.fn(async () => []) }));
 jest.mock("../../storage/assetAccountStorage", () => ({ getAssetAccounts: jest.fn(async () => []) }));
 jest.mock("../../storage/holdingsStorage", () => ({ getHoldings: jest.fn(async () => holdingsRef) }));
+jest.mock("../../storage/businessStorage", () => ({ getBusinesses: jest.fn(async () => businessesRef) }));
 jest.mock("../../storage/debtMilestoneStorage", () => ({ getDebtMilestonePlan: jest.fn(async () => null) }));
 jest.mock("../../storage/backupReminderStorage", () => ({ recordBackup: jest.fn(async () => {}) }));
 
@@ -97,6 +104,7 @@ const mockImportFromString = jest.fn(async (_json: string, _mode?: string) => ({
   debts: 0, payments: 0, budgetEntries: 0, budgetLimits: 0,
   savingsGoals: 0, assetAccounts: 0, holdings: 0, debtMilestones: false,
   payoffStrategy: false, netWorthSnapshots: 0, customCategories: 0,
+  businesses: 0,
 }));
 let mockPicked: any = { canceled: true };
 jest.mock("../importData", () => ({
@@ -108,6 +116,7 @@ jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 const debtRef = debtFixture;
 const entriesRef = entryFixtures;
 const holdingsRef = holdingsFixtures;
+const businessesRef = businessFixtures;
 
 // eslint-disable-next-line import/first -- must require after the jest.mock factories' captured consts initialize (ts-jest emits CJS, so import position is require order)
 import { exportSpreadsheet } from "../spreadsheetExport";
@@ -137,9 +146,9 @@ describe("xlsx round-trip", () => {
 
     const payload = lastPayload();
 
-    // Entries: e1-e4 survive; the recurring projections of e3 are dropped.
+    // Entries: e1-e5 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5"]);
     expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
     expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
     expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
@@ -152,6 +161,20 @@ describe("xlsx round-trip", () => {
     // Manual entries never grow provenance fields on the way through.
     expect(byId.e1.source).toBeUndefined();
     expect(byId.e1.externalTxId).toBeUndefined();
+
+    // BusinessId round-trips; untagged entries stay untagged; the readable
+    // "Business" name column never becomes a field on the imported entry.
+    expect(byId.e5.businessId).toBe("b1");
+    expect(byId.e1.businessId).toBeUndefined();
+    expect(byId.e5.Business).toBeUndefined();
+
+    // The Businesses sheet round-trips with timestamps intact (LWW needs them).
+    expect(payload.businesses).toHaveLength(1);
+    expect(payload.businesses[0]).toMatchObject({
+      id: "b1",
+      name: "Acme Consulting LLC",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    });
     // Date asserted at month granularity: SheetJS shifts Excel date serials by
     // the test runner's TZ offset on round-trip. The app pins dates to local
     // noon (±12h slack), so on-device the calendar date is preserved; the
@@ -190,13 +213,16 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5"]);
     expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
     expect(byId.e4).toMatchObject({
       source: "bank",
       externalTxId: "simplefin:ACT-1:TXN-99",
       merchant: "COSTCO WHSE",
     });
+    // CSV carries the entry-level BusinessId even though the Businesses
+    // sheet is xlsx-only.
+    expect(byId.e5.businessId).toBe("b1");
     expect(result?.skippedRows).toBe(0);
   });
 });
@@ -208,6 +234,8 @@ describe("round-trip schema guard", () => {
     await exportSpreadsheet("xlsx");
     expect(mockWritten.encoding).toBe("base64");
     const wb = XLSX.read(mockWritten.content, { type: "base64" });
-    expect(wb.SheetNames).toEqual(expect.arrayContaining(["Budget Entries", "Debts"]));
+    expect(wb.SheetNames).toEqual(
+      expect.arrayContaining(["Budget Entries", "Debts", "Businesses"])
+    );
   });
 });

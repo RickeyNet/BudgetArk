@@ -8,8 +8,17 @@
  * broken keystore doesn't cause data loss.
  */
 
+// Captured so tests can simulate a background transition (which clears the
+// module's in-memory key cache - needed to test vault-unavailable paths
+// after a key has already been cached by earlier tests).
+let mockAppStateCallback: ((state: string) => void) | undefined;
 jest.mock("react-native", () => ({
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  AppState: {
+    addEventListener: (_event: string, cb: (state: string) => void) => {
+      mockAppStateCallback = cb;
+      return { remove: () => {} };
+    },
+  },
 }));
 
 const mockAsyncStorage = {
@@ -38,6 +47,8 @@ import {
   isEncryptionAvailable,
   DecryptionError,
   EncryptionUnavailableError,
+  encryptStringWithMasterKey,
+  decryptStringWithMasterKey,
 } from "../encryptedStorage";
 
 describe("encryptedStorage: no plaintext for secret-bearing writes", () => {
@@ -164,5 +175,41 @@ describe("encryptedStorage: V3 format + V1/V2/plaintext migration", () => {
     const ciphertext = CryptoJS.AES.encrypt("secret", MASTER_KEY).toString();
     store.set("@k", "__ENCV2__:" + "0".repeat(64) + "." + ciphertext);
     await expect(getItem("@k")).rejects.toBeInstanceOf(DecryptionError);
+  });
+
+  /**
+   * Master-key string helpers used by the receipt-attachment store to
+   * encrypt image files that live OUTSIDE AsyncStorage. Same V3 envelope,
+   * so the fixtures above already pin the format.
+   */
+  describe("encryptStringWithMasterKey / decryptStringWithMasterKey", () => {
+    it("round-trips an arbitrary string through the V3 envelope", async () => {
+      const blob = await encryptStringWithMasterKey("jpeg-base64-payload==");
+      expect(blob).not.toBeNull();
+      expect(blob!.startsWith("__ENCV3__:")).toBe(true);
+      expect(blob).not.toContain("jpeg-base64-payload");
+      await expect(decryptStringWithMasterKey(blob!)).resolves.toBe(
+        "jpeg-base64-payload=="
+      );
+    });
+
+    it("returns null on tampered or non-V3 input instead of throwing", async () => {
+      const blob = (await encryptStringWithMasterKey("receipt"))!;
+      const lastDot = blob.lastIndexOf(".");
+      const flipped =
+        blob.slice(0, lastDot + 1) +
+        (blob[lastDot + 1] === "A" ? "B" : "A") +
+        blob.slice(lastDot + 2);
+      await expect(decryptStringWithMasterKey(flipped)).resolves.toBeNull();
+      await expect(decryptStringWithMasterKey("not-an-envelope")).resolves.toBeNull();
+    });
+
+    it("returns null (never plaintext) when the vault is unavailable", async () => {
+      // Drop the in-memory key cache, then make the vault fail.
+      mockAppStateCallback?.("background");
+      mockSecureStore.getItemAsync.mockResolvedValue(null);
+      mockSecureStore.setItemAsync.mockRejectedValue(new Error("keystore down"));
+      await expect(encryptStringWithMasterKey("receipt")).resolves.toBeNull();
+    });
   });
 });

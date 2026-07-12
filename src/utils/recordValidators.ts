@@ -137,6 +137,34 @@ export const isPaymentItem = (
   );
 };
 
+/**
+ * Receipt-attachment metadata on a budget entry. Bounded so a hostile peer
+ * or hand-edited import can't smuggle megabyte blobs inside an entry: at
+ * most 10 items (UI caps at 3 - the generous boundary means a merged or
+ * legacy record can't brick a whole sync diff), each with a short id, a
+ * parseable createdAt, and sane optional pixel dimensions. The image BYTES
+ * never ride the entry - only this metadata does.
+ */
+const MAX_IMPORTED_ATTACHMENTS = 10;
+
+export const isEntryAttachmentsValue = (value: unknown): boolean => {
+  if (value === undefined) return true;
+  if (!Array.isArray(value)) return false;
+  if (value.length > MAX_IMPORTED_ATTACHMENTS) return false;
+  return value.every((item) => {
+    if (!isObject(item)) return false;
+    const dimensionValid = (v: unknown): boolean =>
+      v === undefined ||
+      (typeof v === "number" && Number.isFinite(v) && v >= 1 && v <= 20_000);
+    return (
+      isSafeText(item.id, 80) &&
+      isValidDateValue(item.createdAt) &&
+      dimensionValid(item.width) &&
+      dimensionValid(item.height)
+    );
+  });
+};
+
 export const isBudgetEntryItem = (
   item: unknown
 ): item is Record<string, unknown> => {
@@ -166,6 +194,12 @@ export const isBudgetEntryItem = (
     item.externalTxId === undefined || isSafeText(item.externalTxId, 200);
   const merchantValid =
     item.merchant === undefined || isSafeText(item.merchant, 120);
+  // Cap matches what isBusinessItem accepts for a business id (default
+  // isSafeText cap, 120) - a tagged entry must never fail validation where
+  // its business passed, or one entry bricks the whole sync diff.
+  const businessIdValid =
+    item.businessId === undefined || isSafeText(item.businessId, 120);
+  const attachmentsValid = isEntryAttachmentsValue(item.attachments);
 
   return (
     isSafeText(item.id) &&
@@ -177,6 +211,8 @@ export const isBudgetEntryItem = (
     sourceValid &&
     externalTxIdValid &&
     merchantValid &&
+    businessIdValid &&
+    attachmentsValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
@@ -238,6 +274,12 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   if (item.merchant !== undefined && !isSafeText(item.merchant, 120)) {
     return '"merchant" must be a non-empty string of at most 120 characters when present';
   }
+  if (item.businessId !== undefined && !isSafeText(item.businessId, 120)) {
+    return '"businessId" must be a non-empty string of at most 120 characters when present';
+  }
+  if (!isEntryAttachmentsValue(item.attachments)) {
+    return `"attachments" must be an array of at most ${MAX_IMPORTED_ATTACHMENTS} items, each with a string "id", a parseable "createdAt", and optional numeric "width"/"height"`;
+  }
   if (!isValidDateValue(item.date)) {
     return '"date" must be a parseable date string (e.g. "2026-06-12")';
   }
@@ -295,6 +337,27 @@ export const isCustomCategoryItem = (
     defaultBucketValid &&
     isValidDateValue(item.createdAt) &&
     (item.updatedAt === undefined || isValidDateValue(item.updatedAt))
+  );
+};
+
+/**
+ * A business record (the export/sync `businesses` collection). Deliberately
+ * permissive at this trust boundary: NO duplicate-name or cap check here -
+ * one rejected record kills an entire sync diff (see diffEngine), and dup
+ * names are cosmetic since entries reference businesses by id. Name length
+ * mirrors MAX_BUSINESS_NAME_LENGTH (kept as a literal so this module stays
+ * free of storage-layer imports, same as the category cap above).
+ */
+export const isBusinessItem = (
+  item: unknown
+): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    isSafeText(item.name, 40) &&
+    isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.updatedAt) &&
+    isOptionalIso(item.deletedAt)
   );
 };
 

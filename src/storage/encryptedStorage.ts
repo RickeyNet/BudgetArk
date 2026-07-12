@@ -309,6 +309,37 @@ export const isEncryptionAvailable = async (): Promise<boolean> =>
   (await getEncryptionKey()) !== null;
 
 /**
+ * Encrypts an arbitrary string with the master key into the same
+ * fixture-tested V3 envelope this module writes to AsyncStorage. Used by the
+ * receipt-attachment store to encrypt image files (plaintext = JPEG base64)
+ * that live OUTSIDE AsyncStorage, so photos get the identical AES+HMAC
+ * protection as every other piece of data. Returns null when the secure
+ * vault is unavailable - callers must refuse to persist, never fall back to
+ * plaintext (mirrors the requireEncryption philosophy).
+ */
+export const encryptStringWithMasterKey = async (
+  plaintext: string
+): Promise<string | null> => {
+  const encKey = await getEncryptionKey();
+  if (encKey === null) return null;
+  return encrypt(plaintext, encKey);
+};
+
+/**
+ * Counterpart to encryptStringWithMasterKey: verifies the HMAC and decrypts
+ * a V3 envelope. Returns null on a missing vault key, a non-V3 blob, or any
+ * tamper/corruption - callers treat null as "unreadable", not empty.
+ */
+export const decryptStringWithMasterKey = async (
+  blob: string
+): Promise<string | null> => {
+  const encKey = await getEncryptionKey();
+  if (encKey === null) return null;
+  if (!isEncryptedV3(blob)) return null;
+  return decryptV3(blob, encKey);
+};
+
+/**
  * Reads and decrypts a value from AsyncStorage.
  *
  * Handles four cases:
