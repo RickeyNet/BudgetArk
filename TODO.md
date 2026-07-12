@@ -221,7 +221,27 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 ## Nice-to-Have (Post-Launch)
 
-- [ ] Push notifications for payment reminders (requires `expo-notifications`)
+- [x] Push notifications: expense-tracking check-ins (requires `expo-notifications`) - SHIPPED app-side (2026-07-12). Decision: payment-due push notifications were explicitly REJECTED - banks already remind users about bills, and the in-app due banners cover it. Instead, notifications are habit nudges: "you haven't logged your spending in a while - check in." Local notifications only, planned on-device from the user's own entry history. No push token, no server, nothing leaves the device.
+
+  How it behaves:
+  - The next check-in is anchored `cadenceDays` after the user's most recent budget entry (newest `createdAt`; `updatedAt` ignored so sync merges don't count as tracking). The schedule is recomputed on every app open and background transition, so logging an entry silently pushes every pending nudge out a full cadence - active trackers never hear from it, lapsed users get nudged at their cadence until they log again.
+  - Already-overdue users (last entry older than the cadence) get nudged at the next occurrence of their chosen hour, not a full cadence later.
+  - Rotating, deliberately content-free copy (no amounts, no account names - lock-screen safe), lightly Ark-themed ("Keep your Ark on course - jot down any expenses from the last few days."). Rotation is deterministic by calendar day so replans don't reshuffle messages.
+  - Tap (warm or cold-start) opens the Budget tab.
+
+  What shipped:
+  - `expo-notifications@~57.0.3` (config plugin in `app.json`). NOT OTA-eligible - rides the same pending EAS build as Teller/expo-iap on this branch.
+  - `src/utils/trackingReminderPlanner.ts` - pure, unit-tested planner (13 tests): anchor math, overdue roll-forward, 30-day window, 32-notification cap (iOS keeps 64 pending), deterministic identifiers (`budgetark-checkin-YYYY-MM-DD`) so replans are idempotent.
+  - `src/notifications/trackingReminders.ts` - scheduler: Android channel ("Expense check-ins"), permission flow, idempotent cancel-ours-then-reschedule (`data.type === "tracking-reminder"` marks ours). Foreground handler suppresses banners while the app is open.
+  - `src/components/TrackingReminderHost.tsx` - app-root host: reschedules on launch (deferred past first paint) + on background; routes taps to Budget.
+  - Settings: Profile → Tracking Reminders row → bottom sheet (`TrackingRemindersModal.tsx`). Master toggle (OFF by default - strictly opt-in; enabling runs the permission request, denial deep-links to OS Settings), cadence (daily / every 3 days / weekly), time of day (morning / afternoon / evening). Stored in `trackingReminderSettingsStorage.ts` (EncryptedStorage, per-device, deliberately NOT synced to partner).
+  - Reset All Data wipes the settings key (in `RESET_KEYS`) and cancels all pending scheduled check-ins immediately.
+
+  Still TODO before release:
+  - Device-test on iOS + Android 13+ (permission prompt, channel, lock-screen presentation, tap routing, reschedule-on-background actually pushing nudges out after logging an entry) once the new EAS build exists.
+  - Optional polish: dedicated monochrome Android notification icon via the `expo-notifications` plugin options (currently default).
+  - Release-notes entry + version bump when the EAS build that carries this is cut.
+  - v2 ideas: streak-aware copy ("day 12 of your streak - keep it alive"), a "weekly recap" variant, snooze action button on the notification.
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Currency exchange calculator (Utilities tab) - pick base + target currency, enter amount, see converted value. Decide rate source (offline lookup table snapshotted at build time vs. on-demand API call) and whether to surface a "rates last updated" timestamp. Reuse existing `useCurrency()` formatting; live in Utilities alongside the loan amortization tools.
 - [ ] Data confidence tools (last backup badge + backup reminders)
@@ -691,7 +711,7 @@ Fully-completed sections moved here from above. The app-store deployment section
 - [x] Additional themes beyond Forest Gold and Neon Purple (added Slate, Rose, Synthwave)
 - [x] Localization / currency format options beyond USD
 - [x] Recurring budget entries
-- [x] Due-date reminder banners - shipped as an in-app Budget banner for upcoming recurring bill dates (opens Bill Calendar). Push notifications still deferred.
+- [x] Due-date reminder banners - shipped as an in-app Budget banner for upcoming recurring bill dates (opens Bill Calendar). Payment-due push notifications deliberately NOT built (banks already send those); push notifications went to expense-tracking check-ins instead - see the tracking check-ins entry above.
 - [x] Smarter payoff planner with what-if extra payment comparison(how much interest you will pay or will save from paying early)
 - [x] Savings goals and emergency fund Deck tracker
 - [x] Persist user-selected payoff strategy across app restarts (no default reset to Custom)

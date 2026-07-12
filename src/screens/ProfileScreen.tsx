@@ -136,6 +136,10 @@ import {
   getHoldingsSettings,
   setHoldingsEnabled,
 } from "../storage/holdingsSettingsStorage";
+import TrackingRemindersModal from "../components/TrackingRemindersModal";
+import { getTrackingReminderSettings } from "../storage/trackingReminderSettingsStorage";
+import { cancelAllTrackingReminders } from "../notifications/trackingReminders";
+import type { TrackingReminderSettings } from "../utils/trackingReminderPlanner";
 
 import {
   HOLDINGS_DISCLOSURE_TITLE,
@@ -172,6 +176,28 @@ type UpdateMetadata = {
 };
 
 type ReleaseNoteKey = string;
+
+/** Settings-row subtext summarizing the current check-in reminder setup. */
+const reminderRowSubtext = (
+  settings: TrackingReminderSettings | null
+): string => {
+  if (!settings?.enabled) {
+    return "Nudge me to log my spending";
+  }
+  const cadence =
+    settings.cadenceDays === 1
+      ? "After a quiet day"
+      : settings.cadenceDays === 7
+        ? "After a quiet week"
+        : `After ${settings.cadenceDays} quiet days`;
+  const when =
+    settings.hour === 9
+      ? "mornings"
+      : settings.hour === 13
+        ? "afternoons"
+        : "evenings";
+  return `${cadence} · ${when}`;
+};
 
 const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
@@ -401,6 +427,11 @@ const ProfileScreen: React.FC = () => {
    *  (expo-iap) is established on demand, not at app start. */
   const [showTipJar, setShowTipJar] = useState(false);
 
+  /** Expense-tracking check-in settings (row subtext + sheet). */
+  const [showTrackingReminders, setShowTrackingReminders] = useState(false);
+  const [reminderSettings, setReminderSettings] =
+    useState<TrackingReminderSettings | null>(null);
+
   /** Backup reminder banner state */
   const [backupState, setBackupState] = useState<BackupReminderState>({});
 
@@ -423,7 +454,7 @@ const ProfileScreen: React.FC = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [u, prefs, privacy, haptics, holdingsSet, pairState, syncMeta, backup] =
+        const [u, prefs, privacy, haptics, holdingsSet, pairState, syncMeta, backup, reminders] =
           await Promise.all([
             getOrCreateUser(),
             getUpdatePreferences(),
@@ -433,6 +464,7 @@ const ProfileScreen: React.FC = () => {
             getPairingState(),
             getSyncMetadata(),
             getBackupReminderState(),
+            getTrackingReminderSettings(),
           ]);
         if (cancelled) return;
         setUser(u);
@@ -442,6 +474,7 @@ const ProfileScreen: React.FC = () => {
         setHapticsState(haptics);
         setHapticsCache(haptics);
         setHoldingsSettings(holdingsSet);
+        setReminderSettings(reminders);
         setPairing(pairState);
         setLastSyncTime(syncMeta.lastSyncTimestamp);
         setBackupState(backup);
@@ -1007,6 +1040,10 @@ const ProfileScreen: React.FC = () => {
     await clearPairingState();
     stopMonitoring();
     monitoringActiveRef.current = false;
+    // The reminder settings key was just wiped (disabled by default), so any
+    // pending check-in notifications are orphaned - cancel them now.
+    await cancelAllTrackingReminders();
+    setReminderSettings(null);
     await deleteAccount();
     await getOrCreateUser();
     const freshUser = await completeOnboarding();
@@ -2406,6 +2443,34 @@ const ProfileScreen: React.FC = () => {
                 style={[styles.settingsRowArrow, { color: colors.textDim }]}
               >
                 {hapticsEnabled ? "On" : "Off"}
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowTrackingReminders(true)}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Tracking Reminders
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  {reminderRowSubtext(reminderSettings)}
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                {reminderSettings?.enabled ? "On" : "Off"}
               </Text>
             </TouchableOpacity>
 
@@ -4214,6 +4279,17 @@ const ProfileScreen: React.FC = () => {
       {/* Mounted on demand: useIAP inside opens the billing connection on
           mount and closes it on unmount. */}
       {showTipJar ? <TipJarModal onClose={() => setShowTipJar(false)} /> : null}
+
+      {/* ── Tracking Reminders Modal ── */}
+      {showTrackingReminders ? (
+        <TrackingRemindersModal
+          onClose={() => {
+            setShowTrackingReminders(false);
+            // Refresh the settings-row subtext with whatever was saved.
+            void getTrackingReminderSettings().then(setReminderSettings);
+          }}
+        />
+      ) : null}
 
       {/* ── Pairing Modal ── */}
       <PairingModal

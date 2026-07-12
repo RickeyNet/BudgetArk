@@ -576,6 +576,10 @@ const RESET_KEYS = [
   // a reset there's no history left to claim as "already backfilled" - and
   // a backup restored later must get a full re-send, not incremental diffs.
   "@budgetark_sync_backfill_done_v1",
+  // Expense-tracking check-in notification settings. The nudge schedule is
+  // anchored to the user's entry history, so it resets with the data (the
+  // reset flow also cancels any already-scheduled notifications).
+  "@budgetark_tracking_reminder_settings",
 ] as const;
 
 export class ResetIncompleteError extends Error {

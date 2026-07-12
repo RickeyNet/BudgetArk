@@ -71,7 +71,8 @@
           "backgroundColor": "#F2E6D0"
         }
       ],
-      "expo-iap"
+      "expo-iap",
+      "expo-notifications"
     ]
   }
 }
