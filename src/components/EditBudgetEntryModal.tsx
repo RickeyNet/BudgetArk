@@ -28,6 +28,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import CategoryPillPicker from "./CategoryPillPicker";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Savings",
@@ -87,6 +88,45 @@ const formatYearMonthLabel = (yearMonth: string): string => {
   return `${monthLabel} ${yearStr}`;
 };
 
+/**
+ * Single source of truth for mapping an entry (or none) to the form fields.
+ * Feeds both the useState initializers and the render-time reset, so the
+ * two can't drift when a field is added.
+ */
+interface EntryFormState {
+  type: BudgetEntryType;
+  category: CategoryName;
+  amount: string;
+  description: string;
+  yearMonth: string;
+  pickerYear: number;
+  recurring: boolean;
+  recurrenceInterval: RecurrenceInterval;
+  recurrenceDay: number;
+  paymentUrl: string;
+  linkedAccountId: string | undefined;
+}
+
+const entryFormState = (entry: BudgetEntry | null): EntryFormState => {
+  const ym = entry ? toYearMonth(entry.date) : "";
+  return {
+    type: entry?.type ?? "expense",
+    category: entry?.category ?? "Grocery",
+    amount: entry ? String(entry.amount) : "",
+    description: entry?.description ?? "",
+    yearMonth: ym,
+    pickerYear:
+      (entry ? Number(ym.split("-")[0]) : NaN) || new Date().getFullYear(),
+    recurring: !!entry?.recurring,
+    recurrenceInterval: entry
+      ? getRecurrenceInterval(entry)
+      : DEFAULT_RECURRENCE_INTERVAL,
+    recurrenceDay: entry ? dayOfMonthFromIso(entry.date) : DEFAULT_RECURRENCE_DAY,
+    paymentUrl: entry?.paymentUrl ?? "",
+    linkedAccountId: entry?.linkedAccountId,
+  };
+};
+
 const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   entry,
   onClose,
@@ -99,29 +139,26 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  // Seeded from `entry` so a mount mid-edit prefills without an effect pass.
-  const [type, setType] = useState<BudgetEntryType>(entry?.type ?? "expense");
-  const [category, setCategory] = useState<CategoryName>(
-    entry?.category ?? "Grocery"
-  );
-  const [amount, setAmount] = useState(entry ? String(entry.amount) : "");
-  const [description, setDescription] = useState(entry?.description ?? "");
-  const [yearMonth, setYearMonth] = useState(entry ? toYearMonth(entry.date) : "");
+  // Seeded from `entry` (via entryFormState - the one field mapping) so a
+  // mount mid-edit prefills without an effect pass.
+  const [initialForm] = useState(() => entryFormState(entry));
+  const [type, setType] = useState<BudgetEntryType>(initialForm.type);
+  const [category, setCategory] = useState<CategoryName>(initialForm.category);
+  const [amount, setAmount] = useState(initialForm.amount);
+  const [description, setDescription] = useState(initialForm.description);
+  const [yearMonth, setYearMonth] = useState(initialForm.yearMonth);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [pickerYear, setPickerYear] = useState(() => {
-    const fromEntry = entry ? Number(toYearMonth(entry.date).split("-")[0]) : NaN;
-    return fromEntry || new Date().getFullYear();
-  });
-  const [recurring, setRecurring] = useState(!!entry?.recurring);
+  const [pickerYear, setPickerYear] = useState(initialForm.pickerYear);
+  const [recurring, setRecurring] = useState(initialForm.recurring);
   const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
-    entry ? getRecurrenceInterval(entry) : DEFAULT_RECURRENCE_INTERVAL
+    initialForm.recurrenceInterval
   );
   const [recurrenceDay, setRecurrenceDay] = useState<number>(
-    entry ? dayOfMonthFromIso(entry.date) : DEFAULT_RECURRENCE_DAY
+    initialForm.recurrenceDay
   );
-  const [paymentUrl, setPaymentUrl] = useState(entry?.paymentUrl ?? "");
+  const [paymentUrl, setPaymentUrl] = useState(initialForm.paymentUrl);
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(
-    entry?.linkedAccountId
+    initialForm.linkedAccountId
   );
 
   const showDayPicker = recurring && type === "expense";
@@ -129,25 +166,24 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
 
   /**
    * Re-fill the form when the edited entry changes. Render-time adjustment
-   * guarded on the previous prop value (React-docs pattern) so the form
-   * updates in one pass instead of an effect-driven second render.
+   * (see useValueChanged) so the form updates in one pass instead of an
+   * effect-driven second render. Field values come from entryFormState so
+   * this block can't drift from the initializers above.
    */
-  const [prevEntry, setPrevEntry] = useState(entry);
-  if (entry !== prevEntry) {
-    setPrevEntry(entry);
+  if (useValueChanged(entry)) {
     if (entry) {
-      setType(entry.type);
-      setCategory(entry.category);
-      setAmount(String(entry.amount));
-      setDescription(entry.description ?? "");
-      const ym = toYearMonth(entry.date);
-      setYearMonth(ym);
-      setPickerYear(Number(ym.split("-")[0]) || new Date().getFullYear());
-      setRecurring(!!entry.recurring);
-      setRecurrenceInterval(getRecurrenceInterval(entry));
-      setRecurrenceDay(dayOfMonthFromIso(entry.date));
-      setPaymentUrl(entry.paymentUrl ?? "");
-      setLinkedAccountId(entry.linkedAccountId);
+      const next = entryFormState(entry);
+      setType(next.type);
+      setCategory(next.category);
+      setAmount(next.amount);
+      setDescription(next.description);
+      setYearMonth(next.yearMonth);
+      setPickerYear(next.pickerYear);
+      setRecurring(next.recurring);
+      setRecurrenceInterval(next.recurrenceInterval);
+      setRecurrenceDay(next.recurrenceDay);
+      setPaymentUrl(next.paymentUrl);
+      setLinkedAccountId(next.linkedAccountId);
     }
     setReady(false);
     setShowMonthPicker(false);

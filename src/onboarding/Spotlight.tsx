@@ -13,6 +13,7 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import type { CoachmarkStep } from "../data/coachmarkContent";
 import { useMeasureAnchor, type AnchorRect } from "./CoachmarkAnchorContext";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 type SpotlightProps = {
   visible: boolean;
@@ -58,13 +59,11 @@ const Spotlight: React.FC<SpotlightProps> = ({
 
   // Clear the previous rect the moment the measurement target changes, so
   // the old highlight doesn't linger over the new step's text while we wait
-  // for scroll-into-view + measure to settle. Render-time adjustment guarded
-  // on the previous target key (React-docs pattern) instead of a synchronous
-  // setState in the measure effect below.
+  // for scroll-into-view + measure to settle. Render-time adjustment (see
+  // useValueChanged) instead of a synchronous setState in the measure effect
+  // below.
   const measureKey = `${visible ? 1 : 0}|${stepIndex}|${step?.anchorId ?? ""}|${measureToken}`;
-  const [prevMeasureKey, setPrevMeasureKey] = useState(measureKey);
-  if (measureKey !== prevMeasureKey) {
-    setPrevMeasureKey(measureKey);
+  if (useValueChanged(measureKey)) {
     setRect(null);
   }
 

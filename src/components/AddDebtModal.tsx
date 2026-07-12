@@ -45,6 +45,7 @@ import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 
 import { sanitizeTextInput } from "../utils/sanitize";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 const MONTH_LABELS = [
   "Jan",
@@ -95,6 +96,33 @@ const sanitizeDueDay = (day: number | undefined): number | null =>
     ? day
     : null;
 
+/**
+ * Single source of truth for mapping a debt (or none, for add mode) to the
+ * form fields. Feeds both the useState initializers and the render-time
+ * reset, so the two can't drift when a field is added.
+ */
+interface DebtFormState {
+  name: string;
+  balance: string;
+  rate: string;
+  minPayment: string;
+  goalMonth: string;
+  owner: DebtOwner;
+  debtClass: DebtClass;
+  paymentDueDay: number | null;
+}
+
+const debtFormState = (editDebt: Debt | null | undefined): DebtFormState => ({
+  name: editDebt?.name ?? "",
+  balance: editDebt ? String(editDebt.balance) : "",
+  rate: editDebt ? String(editDebt.rate) : "",
+  minPayment: editDebt ? String(editDebt.minPayment) : "",
+  goalMonth: editDebt?.goalDate ? editDebt.goalDate.slice(0, 7) : "",
+  owner: editDebt?.owner ?? "mine",
+  debtClass: editDebt?.debtClass ?? "personal_credit",
+  paymentDueDay: sanitizeDueDay(editDebt?.paymentDueDay),
+});
+
 /* ─── Component ─── */
 const AddDebtModal: React.FC<AddDebtModalProps> = ({
   visible,
@@ -113,25 +141,21 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
   const isEditing = !!editDebt;
 
-  /** Form field state - seeded from editDebt so a mount mid-edit prefills */
-  const [name, setName] = useState(editDebt?.name ?? "");
-  const [balance, setBalance] = useState(editDebt ? String(editDebt.balance) : "");
-  const [rate, setRate] = useState(editDebt ? String(editDebt.rate) : "");
-  const [minPayment, setMinPayment] = useState(
-    editDebt ? String(editDebt.minPayment) : ""
-  );
-  const [goalMonth, setGoalMonth] = useState(
-    editDebt?.goalDate ? editDebt.goalDate.slice(0, 7) : ""
-  );
-  const [owner, setOwner] = useState<DebtOwner>(editDebt?.owner ?? "mine");
-  const [debtClass, setDebtClass] = useState<DebtClass>(
-    editDebt?.debtClass ?? "personal_credit"
-  );
+  // Form field state - seeded from editDebt (via debtFormState, the one
+  // field mapping) so a mount mid-edit prefills without an effect pass.
+  const [initialForm] = useState(() => debtFormState(editDebt));
+  const [name, setName] = useState(initialForm.name);
+  const [balance, setBalance] = useState(initialForm.balance);
+  const [rate, setRate] = useState(initialForm.rate);
+  const [minPayment, setMinPayment] = useState(initialForm.minPayment);
+  const [goalMonth, setGoalMonth] = useState(initialForm.goalMonth);
+  const [owner, setOwner] = useState<DebtOwner>(initialForm.owner);
+  const [debtClass, setDebtClass] = useState<DebtClass>(initialForm.debtClass);
   // null = use app default (DEFAULT_DEBT_PAYMENT_DUE_DAY) without persisting a
   // value, so future default changes flow through and the user's intent stays
   // distinguishable from "I happened to pick 15."
   const [paymentDueDay, setPaymentDueDay] = useState<number | null>(
-    sanitizeDueDay(editDebt?.paymentDueDay)
+    initialForm.paymentDueDay
   );
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
@@ -142,32 +166,21 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
   /**
    * Pre-fill / reset the form when the target debt changes. Render-time
-   * adjustment guarded on the previous prop value (React-docs pattern) so
-   * the whole form updates in one pass instead of an effect-driven second
-   * render with stale fields.
+   * adjustment (see useValueChanged) so the whole form updates in one pass
+   * instead of an effect-driven second render with stale fields. Values come
+   * from debtFormState (which maps null to the add-mode defaults), so this
+   * block can't drift from the initializers above.
    */
-  const [prevEditDebt, setPrevEditDebt] = useState(editDebt);
-  if (editDebt !== prevEditDebt) {
-    setPrevEditDebt(editDebt);
-    if (editDebt) {
-      setName(editDebt.name);
-      setBalance(String(editDebt.balance));
-      setRate(String(editDebt.rate));
-      setMinPayment(String(editDebt.minPayment));
-      setGoalMonth(editDebt.goalDate ? editDebt.goalDate.slice(0, 7) : "");
-      setOwner(editDebt.owner ?? "mine");
-      setDebtClass(editDebt.debtClass ?? "personal_credit");
-      setPaymentDueDay(sanitizeDueDay(editDebt.paymentDueDay));
-    } else {
-      setName("");
-      setBalance("");
-      setRate("");
-      setMinPayment("");
-      setGoalMonth("");
-      setOwner("mine");
-      setDebtClass("personal_credit");
-      setPaymentDueDay(null);
-    }
+  if (useValueChanged(editDebt)) {
+    const next = debtFormState(editDebt);
+    setName(next.name);
+    setBalance(next.balance);
+    setRate(next.rate);
+    setMinPayment(next.minPayment);
+    setGoalMonth(next.goalMonth);
+    setOwner(next.owner);
+    setDebtClass(next.debtClass);
+    setPaymentDueDay(next.paymentDueDay);
   }
 
   /** Calculate required payment for goal date */

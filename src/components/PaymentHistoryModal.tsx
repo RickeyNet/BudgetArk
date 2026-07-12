@@ -26,6 +26,7 @@ import { triggerHaptic } from "../utils/haptics";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 interface PaymentHistoryModalProps {
   visible: boolean;
@@ -180,15 +181,12 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   }, [debts]);
 
   /**
-   * Visibility transitions adjust state at render time (guarded on the
-   * previous `visible` value - React-docs pattern) so no setState happens
-   * synchronously inside the load effect below. Closing the sheet abandons
-   * any in-flight selection/undo so it doesn't reappear on next open;
-   * opening re-arms the spinner for the fresh load.
+   * Visibility transitions adjust state at render time (see useValueChanged)
+   * so no setState happens synchronously inside the load effect below.
+   * Closing the sheet abandons any in-flight selection/undo so it doesn't
+   * reappear on next open; opening re-arms the spinner for the fresh load.
    */
-  const [prevVisible, setPrevVisible] = useState(visible);
-  if (visible !== prevVisible) {
-    setPrevVisible(visible);
+  if (useValueChanged(visible)) {
     if (visible) {
       setIsLoading(true);
     } else {

@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 interface FeedbackModalProps {
   visible: boolean;
@@ -46,17 +47,11 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
   const [message, setMessage] = useState("");
 
-  // Reset the form when the sheet closes. Done as a render-time adjustment
-  // guarded on the previous `visible` value (the React-docs pattern for
-  // deriving state from prop changes) rather than an effect, so the reset
-  // lands in the same render pass instead of scheduling a cascading one.
-  const [prevVisible, setPrevVisible] = useState(visible);
-  if (visible !== prevVisible) {
-    setPrevVisible(visible);
-    if (!visible) {
-      setFeedbackType("bug");
-      setMessage("");
-    }
+  // Reset the form when the sheet closes (render-time adjustment - see
+  // useValueChanged for why this beats a setState-in-effect).
+  if (useValueChanged(visible) && !visible) {
+    setFeedbackType("bug");
+    setMessage("");
   }
 
   const deviceInfo = useMemo(() => {

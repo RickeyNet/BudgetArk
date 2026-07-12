@@ -34,6 +34,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 interface AchievementsScreenProps {
   visible: boolean;
@@ -80,12 +81,10 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Re-arm the loading state the moment the sheet opens - render-time
-  // adjustment guarded on the previous `visible` value (React-docs pattern)
-  // so the evaluate effect below never sets state synchronously.
-  const [prevVisible, setPrevVisible] = useState(visible);
-  if (visible !== prevVisible) {
-    setPrevVisible(visible);
-    if (visible) setIsLoaded(false);
+  // adjustment (see useValueChanged) so the evaluate effect below never sets
+  // state synchronously.
+  if (useValueChanged(visible) && visible) {
+    setIsLoaded(false);
   }
 
   useEffect(() => {

@@ -24,6 +24,7 @@ import type { ThemeColors } from "../theme/themes";
 import { useConnections } from "../connections/ConnectionsProvider";
 import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
 import { removeConnection } from "../services/connections/connectionsService";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 interface ConnectionsModalProps {
   visible: boolean;
@@ -70,6 +71,14 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     (c) => c.id === selectedId,
   );
 
+  // Structural stale-links guard: whenever the selected connection changes -
+  // no matter which code path changed it - drop the previous connection's
+  // account list before the fetch effect below repopulates it. Render-time
+  // adjustment (see useValueChanged), not a per-call-site convention.
+  if (useValueChanged(selectedId)) {
+    setLinks([]);
+  }
+
   useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
@@ -85,18 +94,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     if (visible) void refresh();
   }, [visible, refresh]);
 
-  // Clearing `links` happens in the selection event handlers (not the fetch
-  // effect) so the effect never sets state synchronously and a newly opened
-  // detail view can't flash the previous connection's accounts.
   const handleBack = useCallback(() => {
     setSelectedId(null);
-    setLinks([]);
     setConfirmingRemove(false);
-  }, []);
-
-  const handleSelect = useCallback((connectionId: string) => {
-    setLinks([]);
-    setSelectedId(connectionId);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -157,7 +157,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                 {index > 0 ? <View style={styles.divider} /> : null}
                 <TouchableOpacity
                   style={styles.row}
-                  onPress={() => handleSelect(connection.id)}
+                  onPress={() => setSelectedId(connection.id)}
                 >
                   <Text style={styles.rowGlyph}>
                     {PROVIDER_GLYPHS[connection.provider] ?? "🏦"}

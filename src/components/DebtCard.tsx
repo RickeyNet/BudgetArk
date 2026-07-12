@@ -36,6 +36,7 @@ import ProgressRing from "./ProgressRing";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 /* ─── Props Interface ─── */
 interface DebtCardProps {
@@ -72,11 +73,9 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   // Keep expanded state in sync with focus changes - when the avalanche/snowball
   // strategy switches the focus debt, the previously-focused card should
   // collapse and the newly-focused card should open. Render-time adjustment
-  // guarded on the previous prop value (React-docs pattern) instead of an
-  // effect, so the collapse/expand lands without a cascading re-render.
-  const [prevIsFocusDebt, setPrevIsFocusDebt] = useState(isFocusDebt);
-  if (isFocusDebt !== prevIsFocusDebt) {
-    setPrevIsFocusDebt(isFocusDebt);
+  // (see useValueChanged) so the collapse/expand lands without a cascading
+  // re-render.
+  if (useValueChanged(isFocusDebt)) {
     setExpanded(isFocusDebt);
   }
 

@@ -3,6 +3,7 @@ import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { useCoachmarks } from "./CoachmarksProvider";
 import Spotlight from "./Spotlight";
 import { COACHMARKS, type CoachmarkTabId } from "../data/coachmarkContent";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 /**
  * Hook each tab calls once. Drives a step sequence: while the tab is focused
@@ -49,19 +50,16 @@ export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
   // would try to present at once after Replay, causing the modal-stacking bug
   // we saw in the screenshots.
   //
-  // Render-time adjustment guarded on the previous eligibility value (the
-  // React-docs pattern) rather than an effect. This also only fires on the
-  // false->true transition, so an unrelated context re-render mid-tour can't
-  // reset the tour to step 0 the way the old effect's dep list could.
+  // Render-time adjustment (see useValueChanged) rather than an effect. It
+  // only fires when eligibility actually flips, so an unrelated context
+  // re-render mid-tour can't reset the tour to step 0 the way the old
+  // effect's dep list could. fireOnMount covers lazily-mounted tabs that are
+  // already focused and eligible on their first render.
   const shouldStart =
     isFocused && ready && !skippedAll && !hasSeen(tabId) && totalSteps > 0;
-  const [prevShouldStart, setPrevShouldStart] = useState(false);
-  if (shouldStart !== prevShouldStart) {
-    setPrevShouldStart(shouldStart);
-    if (shouldStart) {
-      setStepIndex(0);
-      setActive(true);
-    }
+  if (useValueChanged(shouldStart, true) && shouldStart) {
+    setStepIndex(0);
+    setActive(true);
   }
 
   // If the tab loses focus while a tour is showing, hide the modal so it

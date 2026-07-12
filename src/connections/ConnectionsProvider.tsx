@@ -51,9 +51,12 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  // Promise-chain form (not async/await): every setState lives in a .then/
-  // .finally callback, so the mount effect's synchronous call path contains
-  // no setState and can't trigger a cascading render.
+  // Promise-chain form purely to satisfy react-hooks/set-state-in-effect,
+  // whose syntactic analysis flags any setState-containing local function
+  // called from an effect - even when every setState sits behind an await
+  // (post-await code always runs in a microtask, never synchronously in the
+  // effect body). Callbacks passed to .then/.finally are recognized as
+  // async, so this shape lints clean. Behaviorally identical to async/await.
   const refresh = useCallback(
     (): Promise<void> =>
       Promise.all([getConnections(), getPendingTransactions()])

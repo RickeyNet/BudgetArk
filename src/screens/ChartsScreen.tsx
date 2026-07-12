@@ -70,6 +70,7 @@ import { getLearningProgress } from "../storage/learningProgressStorage";
 import LessonScreen from "../lessons/LessonScreen";
 
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 /* Enable LayoutAnimation on Android */
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -626,13 +627,10 @@ const ChartsScreen: React.FC = () => {
   const canCollapseLoanSchedule = loanSchedule.length > LOAN_SCHEDULE_PAGE_SIZE;
 
   // Any change to the loan inputs collapses the schedule pagination and
-  // clears the stale export blurb. Render-time adjustment guarded on the
-  // previous input tuple (React-docs pattern) so the reset lands in the same
-  // pass instead of rendering the full stale schedule first.
-  const loanInputsKey = `${loanAmount}|${loanRate}|${loanTerm}`;
-  const [prevLoanInputsKey, setPrevLoanInputsKey] = useState(loanInputsKey);
-  if (loanInputsKey !== prevLoanInputsKey) {
-    setPrevLoanInputsKey(loanInputsKey);
+  // clears the stale export blurb. Render-time adjustment (see
+  // useValueChanged) so the reset lands in the same pass instead of
+  // rendering the full stale schedule first.
+  if (useValueChanged(`${loanAmount}|${loanRate}|${loanTerm}`)) {
     setLoanScheduleVisibleRows(LOAN_SCHEDULE_PAGE_SIZE);
     setLoanExportMessage(null);
   }
@@ -896,19 +894,13 @@ const ChartsScreen: React.FC = () => {
 
   // Auto-fill years remaining when every selected debt has a goal date
   // (weighted by balance). Leaves the user's manual value alone otherwise.
-  // Render-time adjustment guarded on the previous inputs (React-docs
-  // pattern): it fires only when the selection/balance actually changes, so
-  // a manual edit to the term is never fought on unrelated re-renders.
-  const [prevRefiInputs, setPrevRefiInputs] = useState<{
-    debts: typeof selectedRefiDebts;
-    balance: number;
-  } | null>(null);
-  if (
-    !prevRefiInputs ||
-    prevRefiInputs.debts !== selectedRefiDebts ||
-    prevRefiInputs.balance !== refiBalance
-  ) {
-    setPrevRefiInputs({ debts: selectedRefiDebts, balance: refiBalance });
+  // Render-time adjustment (see useValueChanged): it fires only when the
+  // selection/balance actually changes, so a manual edit to the term is
+  // never fought on unrelated re-renders. fireOnMount matches the deleted
+  // effect, which also auto-filled on first mount.
+  const refiDebtsChanged = useValueChanged(selectedRefiDebts, true);
+  const refiBalanceChanged = useValueChanged(refiBalance, true);
+  if (refiDebtsChanged || refiBalanceChanged) {
     if (
       selectedRefiDebts.length > 0 &&
       selectedRefiDebts.every((d) => Boolean(d.goalDate)) &&
