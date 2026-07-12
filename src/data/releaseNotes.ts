@@ -22,7 +22,9 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Syncing is polite and automatic: connections refresh when you open the app (at most every few hours, respecting provider limits), with a Sync Now button when you want it immediately. If a connection needs attention, the Profile row shows a warning.",
       "Also fixed: when both partners' phones confirmed the same debt payment from the due-date reminder, sync could count it twice. The prompt now records one shared entry across paired devices, and any duplicates it already created are cleaned up automatically - genuine double payments are never touched.",
       "New: a Tip Jar in Profile. If BudgetArk has helped you, you can leave a small one-time tip - completely optional, and it unlocks nothing because every feature is already free. Tips are handled entirely by the App Store or Google Play: BudgetArk never sees, collects, or stores any payment details, and keeps no record of whether you tipped.",
-      "Note: connecting via Teller and the Tip Jar require this update to be installed from the app store (they add new components); SimpleFIN works right away.",
+      "New: optional Tracking Reminders (Profile → Tracking Reminders, off unless you turn them on). Two gentle nudges you can mix and match: a check-in when you haven't logged spending in a while (daily, every 3 days, or weekly - logging an entry quietly resets the timer, so if you're keeping up you'll never hear from it), and a fresh-month reminder on the 1st to set your budget goals and review how last month went. You pick the time of day.",
+      "Tracking Reminders are private like everything else: they're scheduled entirely on your phone from your own activity - no amounts or account names ever appear on your lock screen, and nothing is sent anywhere, because BudgetArk has no server. These are deliberately NOT bill-due alerts - your bank already sends those.",
+      "Note: connecting via Teller, the Tip Jar, and Tracking Reminders require this update to be installed from the app store (they add new components); SimpleFIN works right away.",
     ],
   },
   {
