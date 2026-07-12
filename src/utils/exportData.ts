@@ -8,7 +8,12 @@
  */
 
 import { Share } from "react-native";
-import CryptoJS from "crypto-js";
+import {
+  aesCbcEncryptToBase64,
+  hexToBytes,
+  pbkdf2Sha256,
+  randomHex,
+} from "../crypto/nativeCrypto";
 import {
   getDebtsIncludingDeleted,
   getPaymentsIncludingDeleted,
@@ -56,7 +61,7 @@ export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
 export const ENCRYPTED_EXPORT_PREFIX_V2 = "__BUDGETARK_ENC2__:";
 
 const PBKDF2_ITERATIONS = 250_000;
-const PBKDF2_KEY_SIZE_WORDS = 256 / 32; // 256-bit key
+const PBKDF2_KEY_BYTES = 32; // 256-bit key
 const SALT_BYTES = 16;
 const IV_BYTES = 16;
 
@@ -178,21 +183,22 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     // the AES key so a short password isn't a few seconds of offline brute
     // force. v1 path (insecure default KDF) is still decryptable on import
     // for legacy backups but no longer produced here.
-    const salt = CryptoJS.lib.WordArray.random(SALT_BYTES);
-    const iv = CryptoJS.lib.WordArray.random(IV_BYTES);
-    const key = CryptoJS.PBKDF2(password, salt, {
-      keySize: PBKDF2_KEY_SIZE_WORDS,
-      iterations: PBKDF2_ITERATIONS,
-      hasher: CryptoJS.algo.SHA256,
-    });
-    const cipherParams = CryptoJS.AES.encrypt(json, key, {
-      iv,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7,
-    });
-    const saltHex = salt.toString(CryptoJS.enc.Hex);
-    const ivHex = iv.toString(CryptoJS.enc.Hex);
-    const ctB64 = cipherParams.ciphertext.toString(CryptoJS.enc.Base64);
+    //
+    // Native crypto (quick-crypto/OpenSSL) with the exact parameters the old
+    // crypto-js code used - the envelope stays byte-compatible in both
+    // directions (old app reads new export, new app reads old export); the
+    // golden fixtures in importData.test.ts enforce it. PBKDF2 runs async on
+    // a native thread, so building an encrypted export no longer freezes the
+    // UI for seconds.
+    const saltHex = randomHex(SALT_BYTES);
+    const ivHex = randomHex(IV_BYTES);
+    const key = await pbkdf2Sha256(
+      password,
+      hexToBytes(saltHex),
+      PBKDF2_ITERATIONS,
+      PBKDF2_KEY_BYTES
+    );
+    const ctB64 = aesCbcEncryptToBase64(json, key, hexToBytes(ivHex));
     message = `${ENCRYPTED_EXPORT_PREFIX_V2}${saltHex}.${ivHex}.${ctB64}`;
   } else {
     message = json;

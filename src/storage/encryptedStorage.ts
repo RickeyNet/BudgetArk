@@ -34,24 +34,46 @@
  *   if anything changes, the seal breaks and we know not to trust the data.
  *
  * LEGACY MIGRATION:
- *   If the app reads data that was stored before encryption was added (plain
- *   JSON text), it automatically encrypts it in the new format. This means
- *   users upgrading from older versions don't lose their data.
+ *   If the app reads data stored in an older format - plain JSON text from
+ *   before encryption existed, or the V1/V2 crypto-js formats from before the
+ *   native-crypto migration - it automatically re-encrypts it as V3. Users
+ *   upgrading from any older version keep their data.
+ *
+ * IMPLEMENTATION (2026-07): crypto runs natively (react-native-quick-crypto /
+ * OpenSSL) instead of pure-JS crypto-js. This layer wraps EVERY storage
+ * read/write, so moving AES+HMAC off the JS interpreter speeds up the whole
+ * app. V1/V2 values decrypt through an EVP_BytesToKey-compatible helper
+ * (byte-identical to crypto-js's passphrase mode - pinned by fixtures in
+ * encryptedStorage.test.ts) and upgrade to V3 on first read.
  */
 
 import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
-import CryptoJS from "crypto-js";
+import {
+  aesCbcDecryptFromBase64,
+  aesCbcEncryptToBase64,
+  decryptLegacyCryptoJsBlob,
+  hexToBytes,
+  hmacSha256Hex,
+  randomHex,
+  sha256Bytes,
+} from "../crypto/nativeCrypto";
 
 /** Key name used to store/retrieve the encryption key from the secure vault */
 const ENCRYPTION_KEY_ALIAS = "budgetark_encryption_key";
 
 /**
  * Prefix markers to identify encrypted data in storage.
- * __ENCV2__: = current format (AES + HMAC integrity check)
- * __ENC__:   = old format (AES only, no HMAC) - still readable for migration
+ * __ENCV3__: = current format (native AES-256-CBC with explicit IV + HMAC).
+ *              Layout: prefix + hmac-hex + "." + iv-hex + "." + ct-base64,
+ *              HMAC-SHA256 over "iv-hex.ct-base64" so the IV is
+ *              tamper-protected too. AES key = the 32 raw bytes of the hex
+ *              master key (not passphrase-derived - no weak EVP KDF).
+ * __ENCV2__: = crypto-js format (passphrase AES + HMAC) - readable, migrated
+ * __ENC__:   = oldest format (passphrase AES, no HMAC) - readable, migrated
  */
+const ENCRYPTED_V3_PREFIX = "__ENCV3__:";
 const ENCRYPTED_V2_PREFIX = "__ENCV2__:";
 const ENCRYPTED_V1_PREFIX = "__ENC__:";
 
@@ -120,7 +142,7 @@ const getEncryptionKey = async (): Promise<string | null> => {
     let key = await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS);
     if (!key) {
       // Generate 32 random bytes = 256-bit key, converted to a hex string
-      key = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Hex);
+      key = randomHex(32);
       await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key);
     }
 
@@ -136,39 +158,75 @@ const getEncryptionKey = async (): Promise<string | null> => {
 };
 
 /**
- * Encrypts plaintext and creates an HMAC integrity signature.
+ * Converts the SecureStore master key into raw AES key bytes. Keys generated
+ * by this module are always 64 hex chars (32 bytes); anything else (never
+ * observed, but a bricked storage layer is the worst failure mode we have)
+ * degrades to SHA-256 of the string, which still yields a stable 32 bytes.
+ */
+const aesKeyBytes = (key: string): Uint8Array =>
+  /^[0-9a-fA-F]{64}$/.test(key) ? hexToBytes(key) : sha256Bytes(key);
+
+/**
+ * Encrypts plaintext into the V3 format and signs it.
  *
  * Steps:
- *   1. AES.encrypt() scrambles the plaintext using the key.
- *      CryptoJS automatically generates a random salt each time, so
- *      encrypting the same text twice produces different ciphertexts.
- *   2. HmacSHA256() creates a "fingerprint" of the ciphertext using the key.
- *      If even one character of the ciphertext is changed, the fingerprint
- *      will be completely different.
- *   3. We combine them as: prefix + hmac + "." + ciphertext
+ *   1. Generate a fresh random IV, so encrypting the same text twice
+ *      produces different ciphertexts.
+ *   2. AES-256-CBC encrypt the plaintext with the master key's raw bytes.
+ *   3. HMAC-SHA256 over "iv.ciphertext" creates a tamper-evident
+ *      fingerprint - if anything changes, verification fails on read.
+ *   4. Combine as: prefix + hmac + "." + iv-hex + "." + ct-base64
  *
  * @param plaintext - the original data to protect
- * @param key - the encryption key from the secure vault
+ * @param key - the hex master key from the secure vault
  * @returns the encrypted string with integrity signature
  */
 const encrypt = (plaintext: string, key: string): string => {
-  const ciphertext = CryptoJS.AES.encrypt(plaintext, key).toString();
-  const hmac = CryptoJS.HmacSHA256(ciphertext, key).toString(CryptoJS.enc.Hex);
-  return ENCRYPTED_V2_PREFIX + hmac + "." + ciphertext;
+  const ivHex = randomHex(16);
+  const ciphertext = aesCbcEncryptToBase64(
+    plaintext,
+    aesKeyBytes(key),
+    hexToBytes(ivHex)
+  );
+  const payload = ivHex + "." + ciphertext;
+  const hmac = hmacSha256Hex(payload, key);
+  return ENCRYPTED_V3_PREFIX + hmac + "." + payload;
 };
 
 /**
- * Decrypts a V2 encrypted value after verifying its HMAC integrity.
- *
- * Steps:
- *   1. Split the stored value into the HMAC and ciphertext parts.
- *   2. Recalculate what the HMAC should be for this ciphertext.
- *   3. Compare our calculated HMAC with the stored HMAC.
- *      - If they match: data is untampered, safe to decrypt.
- *      - If they don't match: data was modified, reject it.
- *   4. If valid, decrypt the ciphertext back to the original plaintext.
- *
- * @returns the decrypted plaintext, or null if integrity check fails
+ * Decrypts a V3 value after verifying its HMAC integrity.
+ * Returns the plaintext (an empty string is a legitimate value), or null if
+ * the value is malformed or fails verification/decryption.
+ */
+const decryptV3 = (stored: string, key: string): string | null => {
+  // Remove the prefix to get "hmac.ivHex.ctBase64"
+  const body = stored.slice(ENCRYPTED_V3_PREFIX.length);
+  const dotIndex = body.indexOf(".");
+  if (dotIndex === -1) return null; // malformed data
+
+  const storedHmac = body.slice(0, dotIndex);
+  const payload = body.slice(dotIndex + 1); // "ivHex.ctBase64"
+  if (storedHmac !== hmacSha256Hex(payload, key)) {
+    return null; // integrity check failed - data has been tampered with
+  }
+
+  const ivDot = payload.indexOf(".");
+  if (ivDot === -1) return null;
+  try {
+    return aesCbcDecryptFromBase64(
+      payload.slice(ivDot + 1),
+      aesKeyBytes(key),
+      hexToBytes(payload.slice(0, ivDot))
+    );
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Decrypts a V2 value (crypto-js passphrase format + HMAC) after verifying
+ * integrity. Read-only: V2 is never written anymore; a successful read
+ * upgrades the value to V3 in place.
  */
 const decryptV2 = (stored: string, key: string): string | null => {
   // Remove the prefix to get "hmac.ciphertext"
@@ -180,36 +238,37 @@ const decryptV2 = (stored: string, key: string): string | null => {
   const storedHmac = payload.slice(0, dotIndex);
   const ciphertext = payload.slice(dotIndex + 1);
 
-  // Recalculate the HMAC and compare
-  const calculatedHmac = CryptoJS.HmacSHA256(ciphertext, key).toString(
-    CryptoJS.enc.Hex
-  );
-
-  if (storedHmac !== calculatedHmac) {
-    // Integrity check failed - data has been tampered with
-    return null;
+  // Recalculate the HMAC and compare (same string-keyed HMAC crypto-js used)
+  if (storedHmac !== hmacSha256Hex(ciphertext, key)) {
+    return null; // integrity check failed - data has been tampered with
   }
 
-  // HMAC matches - safe to decrypt. We trust the bytes here (HMAC just
-  // validated them) so an empty plaintext is a legitimate value, not a
-  // failure. Returning `plaintext || null` previously collapsed the empty
-  // string into a tampering throw at the call site.
-  const bytes = CryptoJS.AES.decrypt(ciphertext, key);
-  return bytes.toString(CryptoJS.enc.Utf8);
+  // HMAC matches - safe to decrypt. An empty plaintext is a legitimate
+  // value, not a failure, so no `|| null` collapse here.
+  try {
+    return decryptLegacyCryptoJsBlob(ciphertext, key);
+  } catch {
+    return null;
+  }
 };
 
 /**
- * Decrypts a V1 encrypted value (no HMAC - legacy format).
- * Used only for migrating data from the old encryption format to V2.
+ * Decrypts a V1 value (crypto-js passphrase format, no HMAC - oldest).
+ * Used only for migrating data from the old encryption format forward.
  */
 const decryptV1 = (stored: string, key: string): string | null => {
   const ciphertext = stored.slice(ENCRYPTED_V1_PREFIX.length);
-  const bytes = CryptoJS.AES.decrypt(ciphertext, key);
-  const plaintext = bytes.toString(CryptoJS.enc.Utf8);
-  return plaintext || null;
+  try {
+    return decryptLegacyCryptoJsBlob(ciphertext, key) || null;
+  } catch {
+    return null;
+  }
 };
 
 /** Checks which format (if any) the stored value uses */
+const isEncryptedV3 = (value: string): boolean =>
+  value.startsWith(ENCRYPTED_V3_PREFIX);
+
 const isEncryptedV2 = (value: string): boolean =>
   value.startsWith(ENCRYPTED_V2_PREFIX);
 
@@ -252,10 +311,11 @@ export const isEncryptionAvailable = async (): Promise<boolean> =>
 /**
  * Reads and decrypts a value from AsyncStorage.
  *
- * Handles three cases:
- *   1. V2 encrypted (current) - verify HMAC, then decrypt.
- *   2. V1 encrypted (old format without HMAC) - decrypt and re-encrypt as V2.
- *   3. Legacy plaintext (pre-encryption) - re-encrypt as V2.
+ * Handles four cases:
+ *   1. V3 encrypted (current, native) - verify HMAC, then decrypt.
+ *   2. V2 encrypted (crypto-js era) - verify, decrypt, re-encrypt as V3.
+ *   3. V1 encrypted (no HMAC) - decrypt and re-encrypt as V3.
+ *   4. Legacy plaintext (pre-encryption) - re-encrypt as V3.
  *
  * Returns null only when the key does not exist in storage.
  * Throws DecryptionError if HMAC verification or decryption fails (tampered/corrupted data).
@@ -269,7 +329,7 @@ export const getItem = async (key: string): Promise<string | null> => {
   // If SecureStore is unavailable, fall back to plaintext read-only mode.
   // Don't encrypt data we can't decrypt later.
   if (encKey === null) {
-    if (isEncryptedV2(raw) || isEncryptedV1(raw)) {
+    if (isEncryptedV3(raw) || isEncryptedV2(raw) || isEncryptedV1(raw)) {
       // Data was encrypted but we can't access the key - treat as unreadable
       throw new DecryptionError(key);
     }
@@ -277,16 +337,26 @@ export const getItem = async (key: string): Promise<string | null> => {
     return raw;
   }
 
-  // Case 1: Current V2 format - verify integrity then decrypt
-  if (isEncryptedV2(raw)) {
-    const result = decryptV2(raw, encKey);
+  // Case 1: Current V3 format - verify integrity then decrypt
+  if (isEncryptedV3(raw)) {
+    const result = decryptV3(raw, encKey);
     if (result === null) {
       throw new DecryptionError(key);
     }
     return result;
   }
 
-  // Case 2: Old V1 format (no HMAC) - decrypt and upgrade to V2
+  // Case 2: V2 crypto-js format - verify, decrypt, upgrade to V3
+  if (isEncryptedV2(raw)) {
+    const result = decryptV2(raw, encKey);
+    if (result === null) {
+      throw new DecryptionError(key);
+    }
+    await migrateStoredValue(key, raw, encrypt(result, encKey));
+    return result;
+  }
+
+  // Case 3: Old V1 format (no HMAC) - decrypt and upgrade to V3
   if (isEncryptedV1(raw)) {
     const plaintext = decryptV1(raw, encKey);
     if (plaintext === null) {
@@ -296,7 +366,7 @@ export const getItem = async (key: string): Promise<string | null> => {
     return plaintext;
   }
 
-  // Case 3: Legacy plaintext - encrypt as V2 for future reads
+  // Case 4: Legacy plaintext - encrypt as V3 for future reads
   await migrateStoredValue(key, raw, encrypt(raw, encKey));
   return raw;
 };

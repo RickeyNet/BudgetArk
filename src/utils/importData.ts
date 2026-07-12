@@ -11,7 +11,12 @@
 
 import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile } from "expo-file-system";
-import CryptoJS from "crypto-js";
+import {
+  aesCbcDecryptFromBase64,
+  decryptLegacyCryptoJsBlob,
+  hexToBytes,
+  pbkdf2Sha256,
+} from "../crypto/nativeCrypto";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
@@ -484,27 +489,24 @@ export const isEncryptedExport = (raw: string): boolean => {
   );
 };
 
-/** Decrypts a v2 envelope: salt-hex "." iv-hex "." ciphertext-base64. */
-const decryptV2Envelope = (envelope: string, password: string): string => {
+/**
+ * Decrypts a v2 envelope: salt-hex "." iv-hex "." ciphertext-base64.
+ * Native crypto with the same parameters the crypto-js implementation used
+ * (PBKDF2-SHA256 250k / AES-256-CBC) - old exports decrypt unchanged, and
+ * the 250k iterations now run async on a native thread instead of freezing
+ * the UI. Golden fixtures in importData.test.ts pin the compatibility.
+ */
+const decryptV2Envelope = async (
+  envelope: string,
+  password: string
+): Promise<string> => {
   const parts = envelope.split(".");
   if (parts.length !== 3) {
     throw new Error("Decryption failed. The encrypted export is malformed.");
   }
   const [saltHex, ivHex, ctB64] = parts;
-  const salt = CryptoJS.enc.Hex.parse(saltHex);
-  const iv = CryptoJS.enc.Hex.parse(ivHex);
-  const ciphertext = CryptoJS.enc.Base64.parse(ctB64);
-  const key = CryptoJS.PBKDF2(password, salt, {
-    keySize: 256 / 32,
-    iterations: 250_000,
-    hasher: CryptoJS.algo.SHA256,
-  });
-  const decrypted = CryptoJS.AES.decrypt(
-    CryptoJS.lib.CipherParams.create({ ciphertext }),
-    key,
-    { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
-  );
-  return decrypted.toString(CryptoJS.enc.Utf8);
+  const key = await pbkdf2Sha256(password, hexToBytes(saltHex), 250_000, 32);
+  return aesCbcDecryptFromBase64(ctB64, key, hexToBytes(ivHex));
 };
 
 export const importFromString = async (
@@ -531,7 +533,7 @@ export const importFromString = async (
     }
     const envelope = trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V2.length);
     try {
-      jsonString = decryptV2Envelope(envelope, password);
+      jsonString = await decryptV2Envelope(envelope, password);
     } catch {
       throw new Error("Decryption failed. The password may be incorrect.");
     }
@@ -544,10 +546,12 @@ export const importFromString = async (
         "This export is password-encrypted. Please enter the password to decrypt it."
       );
     }
+    // Legacy v1: crypto-js's passphrase format (EVP_BytesToKey KDF), decrypted
+    // via the native EVP-compatible helper. A wrong password surfaces as a
+    // padding/parse throw.
     const ciphertext = trimmed.slice(ENCRYPTED_EXPORT_PREFIX.length);
     try {
-      const bytes = CryptoJS.AES.decrypt(ciphertext, password);
-      jsonString = bytes.toString(CryptoJS.enc.Utf8);
+      jsonString = decryptLegacyCryptoJsBlob(ciphertext, password);
     } catch {
       throw new Error("Decryption failed. The password may be incorrect.");
     }

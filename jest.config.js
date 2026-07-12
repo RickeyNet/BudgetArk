@@ -12,6 +12,11 @@ module.exports = {
   roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.test.ts"],
   clearMocks: true,
+  moduleNameMapper: {
+    // quick-crypto is a native (Nitro) module; Node's crypto implements the
+    // same OpenSSL-backed API, so tests run the real math. See the shim.
+    "^react-native-quick-crypto$": "<rootDir>/src/crypto/quickCryptoNodeShim.js",
+  },
   // A few sync/pairing tests drive real-timer async handshakes; jest's 5s
   // default is too tight for them under coverage instrumentation + parallel
   // load (they intermittently time out even though the logic is fine). 15s
