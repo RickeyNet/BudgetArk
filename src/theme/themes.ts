@@ -257,7 +257,38 @@ const DEEP_SPACE: ThemePreset = {
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, DEEP_SPACE] as const;
+/**
+ * Deep Sea - third of the "Deep" ambient themes (Space / Forest / Sea).
+ *
+ * Abyssal navy-teal base with a bioluminescent cyan-green accent. Like
+ * Deep Space, cards are opaque here so the surface-style layer can turn
+ * them into glass and let the underwater ambient background show through.
+ */
+const DEEP_SEA: ThemePreset = {
+  id: "deep_sea",
+  name: "Deep Sea",
+  colors: {
+    bg: "#030b11",
+    card: "#0a1b24",
+    cardBorder: "#164a58",
+    accent: "#3fd9c0",
+    success: "#4fd98a",
+    successDim: "rgba(79, 217, 138, 0.14)",
+    warning: "#e0b45c",
+    warningDim: "rgba(224, 180, 92, 0.14)",
+    danger: "#e06868",
+    dangerDim: "rgba(224, 104, 104, 0.14)",
+    text: "#dcedf1",
+    textDim: "#82a9b6",
+    textMuted: "#3e6371",
+    white: "#f0fafc",
+    teal: "#54b8e8",
+    tealDim: "rgba(84, 184, 232, 0.14)",
+    accentButtonText: "#000000",
+  },
+};
+
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, DEEP_SPACE, DEEP_SEA] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";

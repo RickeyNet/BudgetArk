@@ -35,6 +35,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import ForestBackground from "../components/ForestBackground";
 import SpaceBackground from "../components/SpaceBackground";
+import DeepSeaBackground from "../components/DeepSeaBackground";
 
 /* ── Screen Imports ── */
 import DebtTrackerScreen from "../screens/DebtTrackerScreen";
@@ -80,6 +81,8 @@ const AppNavigator: React.FC = () => {
       <SpaceBackground />
     ) : showAmbientBackground && themeId === "deepforest" ? (
       <ForestBackground />
+    ) : showAmbientBackground && themeId === "deep_sea" ? (
+      <DeepSeaBackground />
     ) : null;
 
   return (

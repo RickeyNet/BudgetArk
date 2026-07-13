@@ -1769,7 +1769,8 @@ const ProfileScreen: React.FC = () => {
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
                   {currentSurfaceStyle?.name || "Solid"}
-                  {storedSurfaceStyleId == null && themeId === "deep_space"
+                  {storedSurfaceStyleId == null &&
+                  (themeId === "deep_space" || themeId === "deep_sea")
                     ? " · theme default"
                     : ""}
                 </Text>
@@ -2901,15 +2902,17 @@ const ProfileScreen: React.FC = () => {
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               Design Style
             </Text>
-            {storedSurfaceStyleId == null && themeId === "deep_space" ? (
+            {storedSurfaceStyleId == null &&
+            (themeId === "deep_space" || themeId === "deep_sea") ? (
               <Text
                 style={[
                   styles.settingsRowSubtext,
                   { color: colors.textDim, marginBottom: 12 },
                 ]}
               >
-                Deep Space currently defaults to Glass. Pick a style here to
-                keep it across all themes.
+                {themeId === "deep_sea" ? "Deep Sea" : "Deep Space"} currently
+                defaults to Glass. Pick a style here to keep it across all
+                themes.
               </Text>
             ) : null}
 

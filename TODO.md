@@ -698,6 +698,18 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 ---
 
+## Themes
+
+Ideas for new color themes (all pure JS - a `ThemePreset` in `src/theme/themes.ts` plus an optional ambient background component - so every one of these is OTA-safe). Existing lineup for reference: The Ark, Forest Gold, Neon Purple, Easy, Rose, Synthwave, Deep Forest, Coral, Deep Space; ambient backgrounds currently on the "Deep" themes only.
+
+- [x] **Deep Sea** - SHIPPED (2026-07-12). Completes the "Deep trilogy" (Space / Forest / Sea) and is the strongest brand fit for Budget*Ark*: abyssal navy-teal background (`deep_sea` in `themes.ts`), dark teal cards, bioluminescent cyan-green accent. Ambient background `DeepSeaBackground.tsx`: light shafts from the surface, seeded plankton motes in cyan/teal/green, abyss vignette - same static-SVG approach as `ForestBackground`/`SpaceBackground`. Defaults to Glass like Deep Space (Profile "theme default" labels cover both). Pure JS/OTA-safe; release-notes entries written. Visual check on device/simulator recommended (palette + background are untestable in Jest).
+- [ ] **Lighthouse** - deliberately high-contrast accessibility theme: near-black background, warm beam-yellow accent, thick borders, AAA contrast ratios throughout. Positions accessibility as on-brand ("when the fog rolls in, follow the light") rather than clinical; pairs with the shipped Text Size axis. Consider auditing every `ThemeColors` slot against WCAG AAA before shipping this one - it's the theme's whole promise.
+- [ ] **Chart Room** - vintage nautical map: aged-paper light background, dark teal ink text (chart contour lines), brass/sepia accent, optional faint compass-rose ambient watermark. The Ark's parchment sensibility but cartographic; rhymes with the Captain's Course branding.
+- [ ] **Harbor Dawn** - light theme (lineup is dark-heavy: only Rose + The Ark are light). Soft horizon gradient - pale peach into seafoam - cool gray cards, muted gold accent. "New month, fresh start" energy for users who find dark finance apps gloomy.
+- [ ] **Ledger** - nostalgic banker's theme: cream paper, ruled-line dividers, classic accounting green accent, leaning into tabular numbers. Novelty pick for budget nerds.
+
+---
+
 ## Engineering Health - Post-1.7.2 Assessment (2026-06-09)
 
 Prioritized gaps identified after the Round 4 audit. Items 1, 3, and 4 are JS-only (OTA-eligible); 2 and 5 need a new EAS build and should ride the next runtimeVersion bump together.

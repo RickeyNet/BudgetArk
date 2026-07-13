@@ -23,6 +23,7 @@
 - **Native crypto.** `react-native-quick-crypto` (OpenSSL) replaces crypto-js on the hot paths (backups, encrypted storage) - dramatically faster PBKDF2 on low-end devices. Legacy backup/storage formats still decrypt; golden-fixture tests pin that compatibility. LAN sync stays on crypto-js for wire compatibility.
 - **Expo SDK 57 / RN 0.86 / TypeScript 6.0 upgrade.** `npx expo install --check` clean; eslint stays on 9.x (plugin ceiling). Golden-fixture tests lock v1/v2 encrypted-backup decryption so future dependency changes can't strand old backups.
 - **React Compiler compliance.** All 43 `react-hooks` lint warnings refactored away across 23 files so the compiler optimizes those components; also fixes a latent coachmark reset bug. Repo lint: 0 warnings.
+- **New theme: Deep Sea** (`deep_sea`, 2026-07-12) - third "Deep" ambient theme: abyssal navy-teal palette with a bioluminescent cyan-green accent; static seeded-SVG underwater background (`DeepSeaBackground.tsx` - surface light shafts, plankton motes, abyss vignette, same approach as Space/Forest). Defaults to the Glass surface style like Deep Space (explicit user choice wins). Pure JS - OTA-safe. Theme idea backlog added to TODO.md (Lighthouse, Chart Room, Harbor Dawn, Ledger).
 
 ### Tracking Reminders - opt-in check-in notifications (2026-07-12)
 
