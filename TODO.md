@@ -240,7 +240,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   Still TODO before release:
   - Device-test on iOS + Android 13+ (permission prompt, channel, lock-screen presentation, tap routing, reschedule-on-background actually pushing nudges out after logging an entry) once the new EAS build exists.
   - Optional polish: dedicated monochrome Android notification icon via the `expo-notifications` plugin options (currently default).
-  - Release-notes entry + version bump when the EAS build that carries this is cut.
+  - Release-notes entry: DONE (in-app 1.9.0 notes + RELEASE_NOTES.md). Version bump still due when the EAS build that carries this is cut.
   - v2 ideas: streak-aware copy ("day 12 of your streak - keep it alive"), a "weekly recap" variant, snooze action button on the notification, month-start tap deep-linking straight to the Monthly Review sheet instead of the Budget tab.
 - [ ] Search and advanced filters across debts, payments, and budget entries
 - [ ] Currency exchange calculator (Utilities tab) - pick base + target currency, enter amount, see converted value. Decide rate source (offline lookup table snapshotted at build time vs. on-demand API call) and whether to surface a "rates last updated" timestamp. Reuse existing `useCurrency()` formatting; live in Utilities alongside the loan amortization tools.
@@ -524,7 +524,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   Still TODO before release:
   - Device-test on iOS + Android once the new EAS build exists: camera + library capture, permission-denied path, vault-unavailable alert, thumbnails + viewer, Add-modal cancel deletes staged files, Edit-modal cancel restores removed photos, Undo restores a deleted entry's photos, partner placeholder after sync, Reset All Data leaves no files in `<document>/attachments/`, iCloud/device-transfer restore shows unreadable-photo placeholders (expected - key is device-only). Receipt zip: export a year with multiple businesses/photos, verify names match the CSV, zip opens on desktop, archive gone from the app sandbox after sharing, partner-photos-skipped alert.
-  - Release-notes entry + version/runtimeVersion bump when the EAS build is cut.
+  - Release-notes entry: DONE 2026-07-12 (in-app 1.9.0 notes + RELEASE_NOTES.md, incl. the receipt zip export). Version/runtimeVersion bump still due when the EAS build is cut.
   - v2 ideas: OCR autofill (original plan below), photo sync over LAN (chunked binary transfer).
 
   Original OCR plan (still future):
@@ -543,7 +543,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   - UI: Profile → "BUSINESS EXPENSES" section - Manage Businesses (add/rename/delete with tagged-entry counts) + Business Expense Report (year stepper, per-business totals/category breakdown/receipt counts, recurring expanded per app cadence, deleted businesses flagged, CSV export `budgetark-business-expenses-<year>.csv`). Add/Edit entry modals: "BUSINESS (OPTIONAL)" pill row (shown for expenses once ≥1 business exists).
   - Unit-tested: storage validators, diffEngine LWW/tombstone/reject, JSON + spreadsheet round-trips, report math (recurrence expansion, deleted grouping, CSV escaping/formula-injection).
 
-  Still TODO: release-notes entry when the next release is cut; consider a Budget-tab filter chip ("Business only") as a fast-follow.
+  Still TODO: consider a Budget-tab filter chip ("Business only") as a fast-follow. (Release-notes entry DONE 2026-07-12 - in-app 1.9.0 notes + RELEASE_NOTES.md.)
 
 - [ ] Lean month mode - toggle that hides non-essential categories from Budget, surfacing only essentials (Rent, Food, Utilities, Transport). Helps users focus during tight months without deleting or reorganizing data. Pure UI filter, OTA-safe.
 
@@ -555,7 +555,7 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 - [ ] Year-over-year comparison - pick a category (or all), see same-month-last-year vs this-year deltas in a small bar chart. Lives in Budget or Annual Report.
 
-- [ ] Photo attachments on entries (no OCR) - manual photo per budget entry, stored locally in app sandbox via `expo-file-system`. Browsable "Receipts" gallery filterable by month/category. Ships ahead of full OCR (which stays as separate TODO). New native dep: `expo-image-picker` (already common in Expo apps) - NOT OTA-eligible.
+- [x] Photo attachments on entries (no OCR) - manual photo per budget entry, stored locally in app sandbox via `expo-file-system`. Browsable "Receipts" gallery filterable by month/category. Ships ahead of full OCR (which stays as separate TODO). New native dep: `expo-image-picker` (already common in Expo apps) - NOT OTA-eligible.
 
 - [ ] Runway simulator - "how long does my current savings last with income = $0?" Uses existing recurring expenses + emergency fund + asset accounts. Shows months of runway + month it goes negative. Lives on Bridge or Utilities.
 
