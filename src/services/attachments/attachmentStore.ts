@@ -161,6 +161,8 @@ const writeEncrypted = async (fileName: string, base64: string): Promise<void> =
   file.write(blob, { encoding: "utf8" });
 };
 
+const JPEG_DATA_URI_PREFIX = "data:image/jpeg;base64,";
+
 const readDecryptedDataUri = async (fileName: string): Promise<string | null> => {
   const file = new ExpoFile(attachmentsDir(), fileName);
   if (!file.exists) return null;
@@ -172,7 +174,7 @@ const readDecryptedDataUri = async (fileName: string): Promise<string | null> =>
   }
   const base64 = await decryptStringWithMasterKey(blob);
   if (base64 === null) return null;
-  return `data:image/jpeg;base64,${base64}`;
+  return JPEG_DATA_URI_PREFIX + base64;
 };
 
 /**
@@ -211,6 +213,18 @@ export const importAttachment = async (
     width: full.width,
     height: full.height,
   };
+};
+
+/**
+ * Full-resolution image as raw JPEG base64, or null when missing/unreadable.
+ * Deliberately uncached: used by the bulk receipt-zip export, which streams
+ * many photos once and must not churn the viewer's tiny LRU.
+ */
+export const getAttachmentJpegBase64 = async (
+  id: string
+): Promise<string | null> => {
+  const dataUri = await readDecryptedDataUri(fullFileName(id));
+  return dataUri ? dataUri.slice(JPEG_DATA_URI_PREFIX.length) : null;
 };
 
 /** Full-resolution image as a data URI, or null when missing/unreadable. */

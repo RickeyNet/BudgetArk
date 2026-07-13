@@ -34,6 +34,11 @@ import {
 } from "../utils/businessReport";
 import { shareLocalFile } from "../utils/iosNativeShare";
 import { useValueChanged } from "../hooks/useValueChanged";
+import {
+  buildReceiptZip,
+  countPlannedReceipts,
+  deleteReceiptZip,
+} from "../services/attachments/receiptZipExport";
 import type { BudgetEntry, Business } from "../types";
 
 interface BusinessReportModalProps {
@@ -55,6 +60,7 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
   const [year, setYear] = useState(new Date().getFullYear());
   const [loaded, setLoaded] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingZip, setExportingZip] = useState(false);
 
   // Render-time adjustment: drop the previous open's data on a fresh open
   // so stale totals don't flash while the reload below is in flight.
@@ -118,7 +124,68 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
     }
   }, [exporting, report]);
 
+  const runZipExport = useCallback(async () => {
+    setExportingZip(true);
+    try {
+      const result = await buildReceiptZip(report, entries);
+      if (!result.file) {
+        Alert.alert(
+          "No photos on this device",
+          "Every receipt photo for this year lives on your partner's device - photos never sync, so export the zip from there."
+        );
+        return;
+      }
+      try {
+        await shareLocalFile(result.file.uri, {
+          mimeType: "application/zip",
+          dialogTitle: "Export Receipt Photos",
+          UTI: "public.zip-archive",
+        });
+      } finally {
+        // The archive holds decrypted photos - don't leave it on disk once
+        // the share sheet is done with it.
+        deleteReceiptZip(result.file);
+      }
+      if (result.missing > 0) {
+        Alert.alert(
+          "Some photos skipped",
+          `${result.missing} ${result.missing === 1 ? "photo lives" : "photos live"} on your partner's device (or couldn't be read) and ${result.missing === 1 ? "was" : "were"} not included.`
+        );
+      }
+    } catch (error: any) {
+      Alert.alert(
+        "Export failed",
+        error?.message || "Could not create the zip file."
+      );
+    } finally {
+      setExportingZip(false);
+    }
+  }, [entries, report]);
+
+  const handleExportReceipts = useCallback(() => {
+    if (exportingZip) return;
+    const planned = countPlannedReceipts(report, entries);
+    if (planned === 0) {
+      Alert.alert(
+        "No receipts",
+        `No business expenses in ${report.year} have receipt photos.`
+      );
+      return;
+    }
+    // Photos are encrypted at rest and never leave the device otherwise -
+    // make the decrypt-and-share step an explicit, informed choice.
+    Alert.alert(
+      "Export receipt photos?",
+      `This creates an unencrypted zip of up to ${planned} receipt ${planned === 1 ? "photo" : "photos"} for ${report.year}, named to match the CSV rows, for sharing (e.g. with your accountant). It isn't protected by BudgetArk's encryption once shared.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Export", onPress: () => void runZipExport() },
+      ]
+    );
+  }, [entries, exportingZip, report, runZipExport]);
+
   const hasData = report.perBusiness.length > 0;
+  const hasReceipts = report.perBusiness.some((g) => g.receiptCount > 0);
 
   return (
     <Modal
@@ -212,6 +279,29 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                   ))}
                 </View>
               ))
+            )}
+
+            {/* ── Receipt zip export ── */}
+            {loaded && hasData && hasReceipts && (
+              <TouchableOpacity
+                style={[
+                  styles.zipButton,
+                  exportingZip && styles.exportButtonDisabled,
+                ]}
+                onPress={handleExportReceipts}
+                disabled={exportingZip}
+                accessibilityRole="button"
+                accessibilityLabel="Export receipt photos as a zip archive"
+              >
+                <Text style={styles.zipButtonText}>
+                  {exportingZip
+                    ? "Preparing zip…"
+                    : "🧾 Export Receipt Photos (ZIP)"}
+                </Text>
+                <Text style={styles.zipButtonHint}>
+                  File names match the CSV rows (date_business_amount.jpg).
+                </Text>
+              </TouchableOpacity>
             )}
           </ScrollView>
 
@@ -401,6 +491,26 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.white,
       fontSize: 15,
       fontWeight: "700",
+    },
+    zipButton: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: colors.bg,
+    },
+    zipButtonText: {
+      color: colors.accent,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    zipButtonHint: {
+      color: colors.textMuted,
+      fontSize: 11,
+      textAlign: "center",
     },
   });
 
