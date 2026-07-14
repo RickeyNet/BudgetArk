@@ -27,7 +27,16 @@ import type { NormalizedAccount } from "./types";
 
 export type SetupResult =
   | { ok: true; connectionId: string; accounts: NormalizedAccount[] }
-  | { ok: false; message: string };
+  | {
+      ok: false;
+      message: string;
+      /**
+       * Set when the failure happened AFTER the provider consumed the user's
+       * single-use credential: the connection and its secrets were saved, so
+       * setup can resume later without a fresh token.
+       */
+      savedConnectionId?: string;
+    };
 
 /**
  * Guard every connect flow: bank credentials must never be persisted in
@@ -72,7 +81,11 @@ const discoveryWindow = (): { startDate: Date; endDate: Date } => {
 
 /**
  * SimpleFIN: decode + claim the pasted setup token, then list accounts.
- * The connection is persisted only after the claim and first fetch succeed.
+ * The claim consumes the single-use token, so the connection + access URL are
+ * persisted as soon as the claim succeeds - a failed first fetch (e.g.
+ * Bridge's 402 when billing lapses) must not throw the claimed credential
+ * away. On such a failure the saved connection id is returned so the wizard
+ * can resume account mapping later without a fresh token.
  */
 export const createSimplefinConnection = async (
   setupToken: string,
@@ -86,24 +99,64 @@ export const createSimplefinConnection = async (
   const claimed = await claimAccessUrl(decoded.claimUrl);
   if (!claimed.ok) return { ok: false, message: claimed.message };
 
-  const window = discoveryWindow();
-  const fetched = await fetchSimplefinAccounts(claimed.accessUrl, {
-    startDateEpochSec: window.startDate.getTime() / 1000,
-  });
-  if (!fetched.ok) {
-    return {
-      ok: false,
-      message: fetched.message ?? "SimpleFIN connected but listing accounts failed.",
-    };
-  }
-
   const connection = newConnection("simplefin");
   await addConnection(connection);
   await setConnectionSecrets(connection.id, {
     provider: "simplefin",
     accessUrl: claimed.accessUrl,
   });
+
+  const window = discoveryWindow();
+  const fetched = await fetchSimplefinAccounts(claimed.accessUrl, {
+    startDateEpochSec: window.startDate.getTime() / 1000,
+  });
+  if (!fetched.ok) {
+    const message =
+      fetched.message ?? "SimpleFIN connected but listing accounts failed.";
+    await updateConnection(connection.id, {
+      authStatus: "error",
+      lastErrorCode: fetched.error,
+      lastErrorMessage: message,
+    });
+    return { ok: false, message, savedConnectionId: connection.id };
+  }
+
   return { ok: true, connectionId: connection.id, accounts: fetched.accounts };
+};
+
+/**
+ * Re-list accounts for a saved SimpleFIN connection whose setup didn't finish
+ * (the first fetch after claiming failed). Uses the stored access URL, so no
+ * new setup token is needed.
+ */
+export const discoverSimplefinAccounts = async (
+  connectionId: string,
+): Promise<SetupResult> => {
+  const secrets = await getConnectionSecrets(connectionId);
+  if (secrets?.provider !== "simplefin") {
+    return {
+      ok: false,
+      message: "This connection's stored credentials are missing. Remove and re-add it.",
+    };
+  }
+  const fetched = await fetchSimplefinAccounts(secrets.accessUrl, {
+    startDateEpochSec: discoveryWindow().startDate.getTime() / 1000,
+  });
+  if (!fetched.ok) {
+    const message = fetched.message ?? "Listing SimpleFIN accounts failed.";
+    await updateConnection(connectionId, {
+      authStatus: "error",
+      lastErrorCode: fetched.error,
+      lastErrorMessage: message,
+    });
+    return { ok: false, message, savedConnectionId: connectionId };
+  }
+  await updateConnection(connectionId, {
+    authStatus: "ok",
+    lastErrorCode: undefined,
+    lastErrorMessage: undefined,
+  });
+  return { ok: true, connectionId, accounts: fetched.accounts };
 };
 
 /* ── Teller ── */

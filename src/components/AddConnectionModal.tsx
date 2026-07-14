@@ -37,6 +37,7 @@ import {
   addTellerEnrollment,
   createSimplefinConnection,
   createTellerConnection,
+  discoverSimplefinAccounts,
   finalizeAccountLinks,
   type AccountSelection,
 } from "../services/connections/connectionsService";
@@ -94,6 +95,12 @@ interface AddConnectionModalProps {
     applicationId: string;
     environment: TellerEnvironment;
   };
+  /**
+   * "Finish setup" mode for a saved SimpleFIN connection whose token was
+   * claimed but whose first account fetch failed: skip the token step and
+   * re-list accounts from the stored access URL (no new token needed).
+   */
+  resumeSimplefin?: { connectionId: string };
 }
 
 const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
@@ -102,6 +109,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   onComplete,
   assetAccounts,
   addBank,
+  resumeSimplefin,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -154,13 +162,20 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
       setTellerAppId(addBank.applicationId);
       setTellerEnvironment(addBank.environment);
       setStep("tellerEnroll");
+    } else if (resumeSimplefin) {
+      // A set connectionId on the SimpleFIN step means "already claimed" -
+      // the step renders its resume variant (Load Accounts, no token input).
+      setConnectionId(resumeSimplefin.connectionId);
+      setTellerAppId("");
+      setTellerEnvironment("development");
+      setStep("simplefinToken");
     } else {
       setConnectionId(null);
       setTellerAppId("");
       setTellerEnvironment("development");
       setStep("provider");
     }
-  }, [addBank, assetAccounts]);
+  }, [addBank, assetAccounts, resumeSimplefin]);
 
   const handleClose = useCallback(() => {
     reset();
@@ -195,11 +210,29 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     const result = await createSimplefinConnection(setupToken);
     setBusy(false);
     if (!result.ok) {
+      // Token claimed but the first fetch failed: the connection was saved,
+      // so flip this step into its resume variant (Load Accounts) instead of
+      // letting the user burn another token.
+      if (result.savedConnectionId) setConnectionId(result.savedConnectionId);
       setError(result.message);
       return;
     }
     enterMapStep(result.connectionId, result.accounts);
   }, [enterMapStep, setupToken]);
+
+  /** Resume path: the token is already claimed; list accounts from stored secrets. */
+  const loadSavedSimplefinAccounts = useCallback(async () => {
+    if (!connectionId) return;
+    setBusy(true);
+    setError(null);
+    const result = await discoverSimplefinAccounts(connectionId);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    enterMapStep(result.connectionId, result.accounts);
+  }, [connectionId, enterMapStep]);
 
   /* ── Teller ── */
 
@@ -519,43 +552,68 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     </>
   );
 
-  const renderSimplefinStep = () => (
-    <>
-      <Text style={styles.title}>SimpleFIN Setup</Text>
-      <Text style={styles.subtitle}>Three steps on SimpleFIN's site, then paste one token here.</Text>
-      <View style={styles.instructionsCard}>
-        <Text style={styles.instructionLine}>1. Create an account at beta-bridge.simplefin.org</Text>
-        <Text style={styles.instructionLine}>2. Connect your bank(s) there</Text>
-        <Text style={styles.instructionLine}>3. Choose "New App", copy the setup token, and paste it below</Text>
-      </View>
-      <TouchableOpacity
-        style={styles.guideLink}
-        onPress={() => setGuideProvider("simplefin")}
-      >
-        <Text style={styles.guideLinkText}>
-          📖 Full setup guide, links & privacy
-        </Text>
-      </TouchableOpacity>
-      <View style={styles.field}>
-        <Text style={styles.label}>SETUP TOKEN</Text>
-        <TextInput
-          style={[styles.input, styles.tokenInput]}
-          placeholder="Paste your SimpleFIN setup token"
-          placeholderTextColor={colors.textMuted}
-          value={setupToken}
-          onChangeText={setSetupToken}
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-        />
-        {renderError()}
-        <Text style={styles.hint}>
-          Tokens are single-use: once BudgetArk claims it, it can't be pasted
-          anywhere else.
-        </Text>
-      </View>
-    </>
-  );
+  const renderSimplefinStep = () => {
+    // Resume variant: the token was already claimed and the connection saved;
+    // only the account listing remains. No token input - retrying uses the
+    // stored access URL.
+    if (connectionId) {
+      return (
+        <>
+          <Text style={styles.title}>Finish SimpleFIN Setup</Text>
+          <Text style={styles.subtitle}>
+            Your setup token was already claimed and this connection is saved
+            on this device - you don't need a new token.
+          </Text>
+          <View style={styles.instructionsCard}>
+            <Text style={styles.instructionLine}>
+              Listing your accounts failed, most often because SimpleFIN
+              Bridge needs an active subscription. Check your billing at
+              beta-bridge.simplefin.org, then load your accounts to finish
+              setup.
+            </Text>
+          </View>
+          {renderError()}
+        </>
+      );
+    }
+    return (
+      <>
+        <Text style={styles.title}>SimpleFIN Setup</Text>
+        <Text style={styles.subtitle}>Three steps on SimpleFIN's site, then paste one token here.</Text>
+        <View style={styles.instructionsCard}>
+          <Text style={styles.instructionLine}>1. Create an account at beta-bridge.simplefin.org</Text>
+          <Text style={styles.instructionLine}>2. Connect your bank(s) there</Text>
+          <Text style={styles.instructionLine}>3. Choose "New App", copy the setup token, and paste it below</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.guideLink}
+          onPress={() => setGuideProvider("simplefin")}
+        >
+          <Text style={styles.guideLinkText}>
+            📖 Full setup guide, links & privacy
+          </Text>
+        </TouchableOpacity>
+        <View style={styles.field}>
+          <Text style={styles.label}>SETUP TOKEN</Text>
+          <TextInput
+            style={[styles.input, styles.tokenInput]}
+            placeholder="Paste your SimpleFIN setup token"
+            placeholderTextColor={colors.textMuted}
+            value={setupToken}
+            onChangeText={setSetupToken}
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+          />
+          {renderError()}
+          <Text style={styles.hint}>
+            Tokens are single-use: once BudgetArk claims it, it can't be pasted
+            anywhere else.
+          </Text>
+        </View>
+      </>
+    );
+  };
 
   const renderMapAccountsStep = () => (
     <>
@@ -721,11 +779,17 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
       case "provider":
         return { label: "Next", onPress: () => {}, hidden: true };
       case "simplefinToken":
-        return {
-          label: busy ? "Connecting..." : "Connect",
-          onPress: () => void submitSimplefinToken(),
-          disabled: busy || !setupToken.trim(),
-        };
+        return connectionId
+          ? {
+              label: busy ? "Loading accounts..." : "Load Accounts",
+              onPress: () => void loadSavedSimplefinAccounts(),
+              disabled: busy,
+            }
+          : {
+              label: busy ? "Connecting..." : "Connect",
+              onPress: () => void submitSimplefinToken(),
+              disabled: busy || !setupToken.trim(),
+            };
       case "tellerSetup":
         return {
           label: busy ? "Saving..." : "Continue",

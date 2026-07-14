@@ -32,6 +32,11 @@ interface ConnectionsModalProps {
   onAddConnection: () => void;
   /** Add another bank to an existing Teller connection (reuses its setup). */
   onAddBank: (connectionId: string) => void;
+  /**
+   * Finish an interrupted SimpleFIN setup (token claimed, but account mapping
+   * never ran). Re-opens the wizard at the account listing step.
+   */
+  onFinishSetup: (connectionId: string) => void;
 }
 
 const PROVIDER_GLYPHS: Record<string, string> = {
@@ -57,6 +62,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   onClose,
   onAddConnection,
   onAddBank,
+  onFinishSetup,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -64,6 +70,8 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [links, setLinks] = useState<ExternalAccountLink[]>([]);
+  /** Distinguishes "no links" from "links not fetched yet" in the detail view. */
+  const [linksLoaded, setLinksLoaded] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
 
@@ -77,13 +85,17 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   // adjustment (see useValueChanged), not a per-call-site convention.
   if (useValueChanged(selectedId)) {
     setLinks([]);
+    setLinksLoaded(false);
   }
 
   useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
     void getLinksForConnection(selectedId).then((result) => {
-      if (!cancelled) setLinks(result);
+      if (!cancelled) {
+        setLinks(result);
+        setLinksLoaded(true);
+      }
     });
     return () => {
       cancelled = true;
@@ -213,6 +225,22 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
               This connection needs to be re-authorized. Remove it and add it
               again to reconnect.
             </Text>
+          </View>
+        ) : null}
+
+        {connection.provider === "simplefin" && linksLoaded && links.length === 0 ? (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningText}>
+              Setup didn't finish - no accounts are mapped yet, so nothing
+              imports. Your setup token was already claimed, so you can finish
+              without a new one.
+            </Text>
+            <TouchableOpacity
+              style={styles.warningButton}
+              onPress={() => onFinishSetup(connection.id)}
+            >
+              <Text style={styles.warningButtonText}>Finish Account Setup</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -418,6 +446,18 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontSize: 13,
       lineHeight: 19,
+    },
+    warningButton: {
+      alignSelf: "flex-start",
+      backgroundColor: colors.accent,
+      borderRadius: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    warningButtonText: {
+      color: colors.accentButtonText,
+      fontSize: 13,
+      fontWeight: "700",
     },
     primaryButton: {
       paddingVertical: 14,

@@ -20,6 +20,10 @@ export type ClaimResult =
   | { ok: true; accessUrl: string }
   | { ok: false; error: ConnectionErrorCode; message: string };
 
+/** SimpleFIN Bridge answers 402 when the account's subscription has lapsed. */
+const PAYMENT_REQUIRED_MESSAGE =
+  "SimpleFIN Bridge says payment is required. Check your subscription at bridge.simplefin.org, then try again.";
+
 /**
  * Exchange a (single-use) claim URL for the permanent access URL. The
  * response BODY is the access URL. A 403 nearly always means the token was
@@ -46,7 +50,10 @@ export const claimAccessUrl = async (claimUrl: string): Promise<ClaimResult> => 
       return {
         ok: false,
         error: errorCodeForStatus(res.status),
-        message: `SimpleFIN returned an unexpected response (HTTP ${res.status}).`,
+        message:
+          res.status === 402
+            ? PAYMENT_REQUIRED_MESSAGE
+            : `SimpleFIN returned an unexpected response (HTTP ${res.status}).`,
       };
     }
     const body = (await res.text()).trim();
@@ -103,9 +110,11 @@ export const fetchSimplefinAccounts = async (
         message:
           res.status === 401 || res.status === 403
             ? "SimpleFIN rejected this connection's credentials."
-            : res.status === 429
-              ? "SimpleFIN's daily request limit was reached. Try again later."
-              : `SimpleFIN returned an unexpected response (HTTP ${res.status}).`,
+            : res.status === 402
+              ? PAYMENT_REQUIRED_MESSAGE
+              : res.status === 429
+                ? "SimpleFIN's daily request limit was reached. Try again later."
+                : `SimpleFIN returned an unexpected response (HTTP ${res.status}).`,
         httpStatus: res.status,
       };
     }

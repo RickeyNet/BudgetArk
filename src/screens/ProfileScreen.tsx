@@ -428,6 +428,8 @@ const ProfileScreen: React.FC = () => {
     applicationId: string;
     environment: "sandbox" | "development" | "production";
   } | null>(null);
+  /** Set when the wizard is opened to finish an interrupted SimpleFIN setup. */
+  const [resumeSimplefinId, setResumeSimplefinId] = useState<string | null>(null);
 
   /** Partner sync state */
   const [pairing, setPairing] = useState<PairingState | null>(null);
@@ -859,6 +861,7 @@ const ProfileScreen: React.FC = () => {
 
   const openAddConnection = useCallback(async () => {
     setAddBankInfo(null);
+    setResumeSimplefinId(null);
     setWizardAssetAccounts(await getAssetAccounts());
     setShowAddConnection(true);
   }, []);
@@ -868,6 +871,14 @@ const ProfileScreen: React.FC = () => {
     if (!info) return;
     setWizardAssetAccounts(await getAssetAccounts());
     setAddBankInfo({ connectionId, ...info });
+    setResumeSimplefinId(null);
+    setShowAddConnection(true);
+  }, []);
+
+  const openFinishSetup = useCallback(async (connectionId: string) => {
+    setAddBankInfo(null);
+    setResumeSimplefinId(connectionId);
+    setWizardAssetAccounts(await getAssetAccounts());
     setShowAddConnection(true);
   }, []);
 
@@ -875,6 +886,7 @@ const ProfileScreen: React.FC = () => {
     (connectionId: string) => {
       setShowAddConnection(false);
       setAddBankInfo(null);
+      setResumeSimplefinId(null);
       // Populate the Review Inbox right away; failures surface as the
       // connection's status in the manage list.
       void syncConnectionsNow(connectionId);
@@ -4547,17 +4559,22 @@ const ProfileScreen: React.FC = () => {
         onClose={() => setShowConnectionsModal(false)}
         onAddConnection={() => void openAddConnection()}
         onAddBank={(connectionId) => void openAddBank(connectionId)}
+        onFinishSetup={(connectionId) => void openFinishSetup(connectionId)}
       />
       <AddConnectionModal
         visible={showAddConnection}
         onClose={() => {
           setShowAddConnection(false);
           setAddBankInfo(null);
+          setResumeSimplefinId(null);
           void refreshConnections();
         }}
         onComplete={handleConnectionComplete}
         assetAccounts={wizardAssetAccounts}
         addBank={addBankInfo ?? undefined}
+        resumeSimplefin={
+          resumeSimplefinId ? { connectionId: resumeSimplefinId } : undefined
+        }
       />
 
       {/* ── Ship's Log (achievements) ── */}
