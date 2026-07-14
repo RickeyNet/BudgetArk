@@ -177,10 +177,12 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     }
   }, [addBank, assetAccounts, resumeSimplefin]);
 
+  // No reset() when closing: the wizard re-initializes on the next open (see
+  // the visibility effect below), and resetting while the close animation
+  // runs swaps the visible content back to step 1 mid-slide.
   const handleClose = useCallback(() => {
-    reset();
     onClose();
-  }, [onClose, reset]);
+  }, [onClose]);
 
   // The modal stays mounted between uses; re-initialize the flow each time it
   // opens so it starts fresh at the provider picker.
@@ -383,11 +385,13 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     }
   }, [connectionId, selections]);
 
+  // Same no-reset rule as handleClose - and connectionId must survive the
+  // press, so a repeat tap (e.g. while the close animation is still pending)
+  // stays a valid onComplete instead of silently doing nothing.
   const finish = useCallback(() => {
-    const id = connectionId;
-    reset();
-    if (id) onComplete(id);
-  }, [connectionId, onComplete, reset]);
+    if (connectionId) onComplete(connectionId);
+    else onClose();
+  }, [connectionId, onComplete, onClose]);
 
   /* ── Rendering ── */
 

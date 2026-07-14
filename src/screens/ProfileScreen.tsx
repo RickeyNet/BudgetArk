@@ -888,8 +888,12 @@ const ProfileScreen: React.FC = () => {
       setAddBankInfo(null);
       setResumeSimplefinId(null);
       // Populate the Review Inbox right away; failures surface as the
-      // connection's status in the manage list.
-      void syncConnectionsNow(connectionId);
+      // connection's status in the manage list. Deferred so the first sync's
+      // fetch/ingest/re-render storm doesn't stall the wizard's close
+      // animation (it made the Done button feel dead on-device).
+      InteractionManager.runAfterInteractions(() => {
+        void syncConnectionsNow(connectionId);
+      });
     },
     [syncConnectionsNow],
   );
