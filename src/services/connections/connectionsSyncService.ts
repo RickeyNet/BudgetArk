@@ -179,6 +179,15 @@ const syncOneConnection = async (
   for (const entry of allEntries) {
     if (entry.externalTxId) knownEntryExternalIds.add(entry.externalTxId);
   }
+  // Live manually-entered entries: candidates for duplicateLikely flagging
+  // (the user tracked a purchase by hand before the bank imported it).
+  const manualEntries = allEntries
+    .filter((entry) => !entry.deletedAt && entry.source !== "bank")
+    .map((entry) => ({
+      amount: entry.amount,
+      type: entry.type,
+      date: entry.date,
+    }));
 
   const plan = planIngest({
     provider: connection.provider,
@@ -189,11 +198,13 @@ const syncOneConnection = async (
     ledger,
     knownEntryExternalIds,
     rules,
+    manualEntries,
     now: new Date(opts.nowMs).toISOString(),
   });
 
-  if (Object.keys(plan.ledgerAliases).length > 0) {
-    await recordLedgerEntries(plan.ledgerAliases);
+  const ledgerWrites = { ...plan.ledgerAliases, ...plan.autoDismissed };
+  if (Object.keys(ledgerWrites).length > 0) {
+    await recordLedgerEntries(ledgerWrites);
   }
   const migratedIds = plan.updatedInboxItems.filter(
     (item) => !inbox.some((existing) => existing.id === item.id),

@@ -3,10 +3,12 @@
  * File: src/components/ReviewInboxModal.tsx
  *
  * Where imported bank transactions wait for the user's decision. Grouped by
- * posted date (with a separate "Likely transfers" section), each row expands
- * into a category picker with an "always use this category" rule checkbox,
- * plus Approve / Skip actions. A bulk bar approves everything that already
- * has a rule-suggested category.
+ * posted date, with heuristic sections ("Likely transfers", "Possibly already
+ * in your budget") that offer a Skip-all shortcut. Each row expands into a
+ * category picker with an "always do this" rule checkbox - on Approve it
+ * remembers the category; on Skip it creates an ignore rule so the merchant
+ * (credit-card payments, debt payments) never imports again. A bulk bar
+ * approves everything that already has a rule-suggested category.
  *
  * Approvals run through reviewInboxService (entry -> ledger -> inbox write
  * order); the host screen refreshes its entry list via `onChanged`.
@@ -38,6 +40,7 @@ import { useConnections } from "../connections/ConnectionsProvider";
 import CategoryPillPicker from "./CategoryPillPicker";
 import {
   approvePendingTransaction,
+  dismissAndIgnoreMerchant,
   dismissPendingTransactions,
 } from "../services/connections/reviewInboxService";
 import { getLinks } from "../storage/externalAccountLinksStorage";
@@ -54,6 +57,8 @@ interface ReviewInboxModalProps {
 interface InboxSection {
   title: string;
   data: PendingTransaction[];
+  /** Show a "Skip all" action on the section header (heuristic sections). */
+  bulkSkippable?: boolean;
 }
 
 const DEFAULT_CATEGORY: CategoryName = "Other";
@@ -108,7 +113,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   }, [links]);
 
   const sections = useMemo<InboxSection[]>(() => {
-    const regular = pendingTransactions.filter((item) => !item.transferLikely);
+    const regular = pendingTransactions.filter(
+      (item) => !item.transferLikely && !item.duplicateLikely,
+    );
+    const duplicates = pendingTransactions.filter(
+      (item) => item.duplicateLikely && !item.transferLikely,
+    );
     const transfers = pendingTransactions.filter((item) => item.transferLikely);
 
     const byDay = new Map<string, PendingTransaction[]>();
@@ -121,10 +131,18 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     const result: InboxSection[] = Array.from(byDay.entries())
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([day, data]) => ({ title: formatDayLabel(`${day}T12:00:00Z`), data }));
+    if (duplicates.length > 0) {
+      result.push({
+        title: "Possibly already in your budget",
+        data: duplicates,
+        bulkSkippable: true,
+      });
+    }
     if (transfers.length > 0) {
       result.push({
         title: "Likely transfers",
         data: transfers,
+        bulkSkippable: true,
       });
     }
     return result;
@@ -133,7 +151,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const suggestedReadyCount = useMemo(
     () =>
       pendingTransactions.filter(
-        (item) => item.suggestedCategory && !item.transferLikely,
+        (item) =>
+          item.suggestedCategory && !item.transferLikely && !item.duplicateLikely,
       ).length,
     [pendingTransactions],
   );
@@ -168,10 +187,16 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   );
 
   const handleSkip = useCallback(
-    async (item: PendingTransaction) => {
+    async (item: PendingTransaction, remember: boolean) => {
       setBusyId(item.id);
       try {
-        await dismissPendingTransactions([item.id]);
+        // "Always" + Skip = ignore this merchant on every future sync (and
+        // clear its other inbox items right now).
+        if (remember && item.merchant) {
+          await dismissAndIgnoreMerchant(item.id);
+        } else {
+          await dismissPendingTransactions([item.id]);
+        }
         await refresh();
         triggerHaptic("selection");
         setExpandedId(null);
@@ -182,9 +207,24 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     [refresh],
   );
 
+  const handleSkipSection = useCallback(
+    async (items: PendingTransaction[]) => {
+      setBulkBusy(true);
+      try {
+        await dismissPendingTransactions(items.map((item) => item.id));
+        await refresh();
+        triggerHaptic("selection");
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [refresh],
+  );
+
   const handleBulkApprove = useCallback(async () => {
     const ready = pendingTransactions.filter(
-      (item) => item.suggestedCategory && !item.transferLikely,
+      (item) =>
+        item.suggestedCategory && !item.transferLikely && !item.duplicateLikely,
     );
     if (ready.length === 0) return;
     setBulkBusy(true);
@@ -262,17 +302,20 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   {rememberRule ? <Text style={styles.checkboxCheck}>✓</Text> : null}
                 </View>
                 <Text style={styles.rememberLabel}>
-                  Always use this category for "{item.merchant}"
+                  Always do this for "{item.merchant}" - use this category on
+                  Approve, or never import it again on Skip
                 </Text>
               </TouchableOpacity>
             ) : null}
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.skipButton, busy && styles.buttonDisabled]}
-                onPress={() => void handleSkip(item)}
+                onPress={() => void handleSkip(item, rememberRule)}
                 disabled={busy}
               >
-                <Text style={styles.skipButtonText}>Skip</Text>
+                <Text style={styles.skipButtonText}>
+                  {rememberRule && item.merchant ? "Always Skip" : "Skip"}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.approveButton, busy && styles.buttonDisabled]}
@@ -348,11 +391,29 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
               renderSectionHeader={({ section }) => (
-                <Text style={styles.sectionHeader}>{section.title}</Text>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionHeader}>{section.title}</Text>
+                  {section.bulkSkippable ? (
+                    <TouchableOpacity
+                      onPress={() => void handleSkipSection(section.data)}
+                      disabled={bulkBusy}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text
+                        style={[
+                          styles.sectionSkipAll,
+                          bulkBusy && styles.buttonDisabled,
+                        ]}
+                      >
+                        Skip all
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               )}
               contentContainerStyle={styles.listContent}
               stickySectionHeadersEnabled={false}
-              extraData={[expandedId, draftCategory, rememberRule, busyId]}
+              extraData={[expandedId, draftCategory, rememberRule, busyId, bulkBusy]}
             />
           )}
 
@@ -443,6 +504,12 @@ const makeStyles = (colors: ThemeColors) =>
       paddingBottom: 32,
       gap: 8,
     },
+    sectionHeaderRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      gap: 12,
+    },
     sectionHeader: {
       fontSize: 11,
       color: colors.textDim,
@@ -451,6 +518,11 @@ const makeStyles = (colors: ThemeColors) =>
       textTransform: "uppercase",
       marginTop: 14,
       marginBottom: 6,
+    },
+    sectionSkipAll: {
+      color: colors.accent,
+      fontSize: 12,
+      fontWeight: "700",
     },
     itemCard: {
       backgroundColor: colors.bg,

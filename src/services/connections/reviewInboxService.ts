@@ -13,6 +13,7 @@ import type {
   BudgetEntryType,
   CategoryName,
   IngestLedgerEntry,
+  MerchantRule,
   PendingTransaction,
 } from "../../types";
 import { addBudgetEntry } from "../../storage/budgetStorage";
@@ -25,6 +26,7 @@ import {
 import { upsertMerchantRule } from "../../storage/merchantRulesStorage";
 import { generateUUID } from "../../utils/uuid";
 import { pendingFingerprintFor } from "./ingest";
+import { matchMerchantRule } from "./merchant";
 
 const MAX_DESCRIPTION_LENGTH = 220;
 
@@ -124,3 +126,47 @@ export const dismissPendingTransactions = async (
 
 export const dismissPendingTransaction = (pendingId: string): Promise<void> =>
   dismissPendingTransactions([pendingId]);
+
+/**
+ * Skip one item AND remember an "ignore" rule for its merchant, so future
+ * syncs auto-dismiss it (credit-card payments, debt payments, transfers).
+ * Every other inbox item matching the new rule is dismissed in the same
+ * pass. Returns how many items were dismissed. Items without a usable
+ * merchant key fall back to a plain single dismiss.
+ */
+export const dismissAndIgnoreMerchant = async (
+  pendingId: string,
+): Promise<number> => {
+  const inbox = await getPendingTransactions();
+  const item = inbox.find((p) => p.id === pendingId);
+  if (!item) return 0;
+  if (!item.merchant) {
+    await dismissPendingTransactions([pendingId]);
+    return 1;
+  }
+
+  const now = new Date().toISOString();
+  const rule: MerchantRule = {
+    id: generateUUID(),
+    merchantKey: item.merchant,
+    action: "ignore",
+    // Placeholders - never read while action is "ignore".
+    category: "Other",
+    type: item.suggestedType,
+    useCount: 1,
+    lastUsedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await upsertMerchantRule(rule);
+
+  const ids = inbox
+    .filter(
+      (p) =>
+        p.id === pendingId ||
+        (p.merchant ? matchMerchantRule(p.merchant, [rule]) !== undefined : false),
+    )
+    .map((p) => p.id);
+  await dismissPendingTransactions(ids);
+  return ids.length;
+};

@@ -296,3 +296,81 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].transferLikely).toBeUndefined();
   });
 });
+
+describe("planIngest - ignore rules", () => {
+  const ignoreRule: MerchantRule = {
+    id: "r-ignore",
+    merchantKey: "COSTCO WHSE",
+    action: "ignore",
+    category: "Other",
+    type: "expense",
+    useCount: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+
+  it("auto-dismisses a matching transaction instead of creating an inbox item", () => {
+    const plan = planIngest(baseInputs({ rules: [ignoreRule] }));
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.autoDismissed[KEY]).toMatchObject({ status: "dismissed", at: NOW });
+    expect(plan.autoDismissed[KEY].pendingFingerprint).toBeUndefined();
+  });
+
+  it("records the pending fingerprint so the posted twin aliases to the dismissal", () => {
+    const plan = planIngest(
+      baseInputs({ fetched: [tx({ pending: true })], rules: [ignoreRule] }),
+    );
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.autoDismissed[KEY].pendingFingerprint).toBe(
+      pendingFingerprintFor("ACT-1", -25.0, "2026-06-28T00:00:00.000Z"),
+    );
+  });
+
+  it("stays dismissed on re-fetch once the ledger entry is written", () => {
+    const plan = planIngest(
+      baseInputs({
+        rules: [ignoreRule],
+        ledger: { [KEY]: { status: "dismissed", at: NOW } },
+      }),
+    );
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.autoDismissed[KEY]).toBeUndefined();
+  });
+
+  it("does not auto-dismiss when the rule is categorize (absent action)", () => {
+    const categorize: MerchantRule = { ...ignoreRule, action: undefined, category: "Grocery" };
+    const plan = planIngest(baseInputs({ rules: [categorize] }));
+    expect(plan.newInboxItems).toHaveLength(1);
+    expect(plan.newInboxItems[0].suggestedCategory).toBe("Grocery");
+  });
+});
+
+describe("planIngest - manual-entry duplicate flagging", () => {
+  it("flags a bank tx matching a manual entry's amount, direction, and date window", () => {
+    const plan = planIngest(
+      baseInputs({
+        manualEntries: [
+          { amount: 25.0, type: "expense", date: "2026-06-27T00:00:00.000Z" },
+        ],
+      }),
+    );
+    expect(plan.newInboxItems[0].duplicateLikely).toBe(true);
+  });
+
+  it("does not flag on amount, direction, or date-window mismatches", () => {
+    const cases = [
+      { amount: 26.0, type: "expense" as const, date: "2026-06-28T00:00:00.000Z" },
+      { amount: 25.0, type: "income" as const, date: "2026-06-28T00:00:00.000Z" },
+      { amount: 25.0, type: "expense" as const, date: "2026-06-20T00:00:00.000Z" },
+    ];
+    for (const entry of cases) {
+      const plan = planIngest(baseInputs({ manualEntries: [entry] }));
+      expect(plan.newInboxItems[0].duplicateLikely).toBeUndefined();
+    }
+  });
+
+  it("is off when no manual entries are provided", () => {
+    const plan = planIngest(baseInputs());
+    expect(plan.newInboxItems[0].duplicateLikely).toBeUndefined();
+  });
+});

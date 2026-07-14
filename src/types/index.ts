@@ -620,6 +620,12 @@ export interface PendingTransaction {
   suggestedType: BudgetEntryType;
   /** From a matched MerchantRule, else undefined. */
   suggestedCategory?: CategoryName;
+  /**
+   * Heuristic: a manually-entered budget entry with the same amount and
+   * direction exists within a few days - approving would double count.
+   * Flag only, like transferLikely - never dropped automatically.
+   */
+  duplicateLikely?: boolean;
   /** Heuristic: likely an inter-account transfer. Flag only - never dropped. */
   transferLikely?: boolean;
   fetchedAt: string;
@@ -633,6 +639,13 @@ export interface PendingTransaction {
 export interface MerchantRule {
   id: string;
   merchantKey: string;
+  /**
+   * What to do with future imports from this merchant. Absent or
+   * "categorize": suggest `category`. "ignore": auto-skip the transaction
+   * entirely (credit-card payments, transfers) - `category`/`type` are
+   * placeholders on such rules.
+   */
+  action?: "categorize" | "ignore";
   category: CategoryName;
   type: BudgetEntryType;
   useCount: number;

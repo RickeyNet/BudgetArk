@@ -76,6 +76,17 @@ export const pendingFingerprintFor = (
 const daysBetween = (aIso: string, bIso: string): number =>
   Math.abs(Date.parse(aIso) - Date.parse(bIso)) / (24 * 3600_000);
 
+/** Days of slack when flagging a bank tx as a likely manual-entry duplicate. */
+export const DUPLICATE_MATCH_WINDOW_DAYS = 3;
+
+/** The bits of a manually-entered BudgetEntry that duplicate matching needs. */
+export interface ManualEntrySignature {
+  /** Positive dollars (BudgetEntry.amount); `type` carries the direction. */
+  amount: number;
+  type: BudgetEntryType;
+  date: string;
+}
+
 export interface IngestInputs {
   provider: BankProvider;
   connectionId: string;
@@ -86,6 +97,8 @@ export interface IngestInputs {
   /** externalTxId of ALL budget entries, including tombstoned ones. */
   knownEntryExternalIds: Set<string>;
   rules: MerchantRule[];
+  /** Live manually-entered budget entries, for duplicateLikely flagging. */
+  manualEntries?: ManualEntrySignature[];
   /** ISO timestamp stamped on new/updated inbox items. */
   now: string;
 }
@@ -95,6 +108,9 @@ export interface IngestPlan {
   updatedInboxItems: PendingTransaction[];
   /** New-id -> original-key ledger aliases discovered via fingerprints. */
   ledgerAliases: Record<string, IngestLedgerEntry>;
+  /** Transactions auto-skipped by an "ignore" merchant rule - recorded as
+   *  dismissed so they stay gone even if the rule is later deleted. */
+  autoDismissed: Record<string, IngestLedgerEntry>;
 }
 
 export const planIngest = (input: IngestInputs): IngestPlan => {
@@ -102,6 +118,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     newInboxItems: [],
     updatedInboxItems: [],
     ledgerAliases: {},
+    autoDismissed: {},
   };
 
   const importableAccounts = new Set(
@@ -132,6 +149,23 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     list.push(tx);
     amountBuckets.set(bucket, list);
   }
+  // Manual entries bucketed by absolute amount, for duplicateLikely flagging.
+  const manualByAmount = new Map<string, ManualEntrySignature[]>();
+  for (const entry of input.manualEntries ?? []) {
+    const bucket = entry.amount.toFixed(2);
+    const list = manualByAmount.get(bucket) ?? [];
+    list.push(entry);
+    manualByAmount.set(bucket, list);
+  }
+  const looksLikeManualDuplicate = (tx: NormalizedTransaction): boolean => {
+    const candidates = manualByAmount.get(Math.abs(tx.amount).toFixed(2)) ?? [];
+    return candidates.some(
+      (entry) =>
+        entry.type === (tx.amount < 0 ? "expense" : "income") &&
+        daysBetween(entry.date, tx.postedAt) <= DUPLICATE_MATCH_WINDOW_DAYS,
+    );
+  };
+
   const looksLikeTransfer = (tx: NormalizedTransaction): boolean => {
     if (TRANSFER_DESCRIPTION_PATTERN.test(tx.description)) return true;
     const peers = amountBuckets.get(Math.abs(tx.amount).toFixed(2)) ?? [];
@@ -235,6 +269,21 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     const merchant = normalizeMerchant(tx.description);
     const suggestedType: BudgetEntryType = tx.amount < 0 ? "expense" : "income";
     const rule = matchMerchantRule(merchant, input.rules);
+
+    // "Ignore" rule: auto-skip, recorded as dismissed. The fingerprint is
+    // kept for pending transactions so the posted twin (possibly under a new
+    // id) aliases to this decision instead of resurfacing.
+    if (rule?.action === "ignore") {
+      plan.autoDismissed[key] = {
+        status: "dismissed",
+        at: input.now,
+        pendingFingerprint: tx.pending
+          ? pendingFingerprintFor(tx.externalAccountId, tx.amount, tx.postedAt)
+          : undefined,
+      };
+      continue;
+    }
+
     plan.newInboxItems.push({
       id: key,
       connectionId: input.connectionId,
@@ -248,6 +297,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       suggestedType,
       suggestedCategory: rule?.category,
       transferLikely: looksLikeTransfer(tx) || undefined,
+      duplicateLikely: looksLikeManualDuplicate(tx) || undefined,
       fetchedAt: input.now,
       updatedAt: input.now,
     });
