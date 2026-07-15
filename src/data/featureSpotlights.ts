@@ -1,0 +1,178 @@
+/**
+ * BudgetArk - Feature Spotlights
+ * File: src/data/featureSpotlights.ts
+ *
+ * Curated "debut" content for marquee features, shown once as a swipeable
+ * carousel after an update (see FeatureSpotlightModal + App.tsx). This is
+ * deliberately separate from RELEASE_NOTES: notes are the exhaustive
+ * changelog, spotlights are the 3-5 things worth a guided introduction,
+ * each with a call-to-action that deep-links straight into the feature.
+ *
+ * Seen-state is tracked PER FEATURE, not per version (see
+ * featureSpotlightStorage). That matters because some features ship dormant
+ * in an OTA bundle and only come alive when the store build with their
+ * native modules arrives - `requiresRuntimeVersion` gates those, so their
+ * debut waits until the feature actually works on this install.
+ */
+
+import { compareVersions } from "../utils/versionGuard";
+
+/** Profile-screen surfaces a spotlight CTA (or the openSection deep link) can open. */
+export type ProfileSpotlightSection =
+  | "connections"
+  | "businesses"
+  | "tipJar"
+  | "trackingReminders"
+  | "theme";
+
+export type SpotlightCta =
+  | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
+  | { label: string; kind: "budget-add-entry" };
+
+export type FeatureSpotlight = {
+  /** Stable id - persisted in seen/acked storage, never rename after release. */
+  id: string;
+  /** Version the feature debuted in; shown on the slide's "NEW IN x.y.z" pill. */
+  sinceVersion: string;
+  /**
+   * Minimum native runtimeVersion the feature needs (features whose release
+   * note says "requires this update from the app store"). Omit for features
+   * that work via OTA alone. Compared against Updates.runtimeVersion;
+   * fail-open when the current runtime is unknown (dev builds).
+   */
+  requiresRuntimeVersion?: string;
+  /**
+   * True for features that get a NEW badge on their Profile row but no
+   * carousel slide (minor features that shouldn't dilute the debut).
+   */
+  badgeOnly?: boolean;
+  /** Big emoji rendered as the slide's hero. */
+  icon: string;
+  title: string;
+  /** Two sentences max - the carousel is a teaser, not the changelog. */
+  blurb: string;
+  cta?: SpotlightCta;
+};
+
+export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
+  {
+    id: "bank-connections",
+    sinceVersion: "1.9.0",
+    icon: "🏦",
+    title: "Your bank, on autopilot",
+    blurb:
+      "Connect your bank and let transactions import themselves - nothing enters your budget until you approve it in the Review Inbox. Your credentials stay encrypted on this device; BudgetArk has no server and never sits between you and your bank.",
+    cta: {
+      label: "Set up a connection",
+      kind: "profile-section",
+      section: "connections",
+    },
+  },
+  {
+    id: "business-expenses",
+    sinceVersion: "1.9.0",
+    icon: "💼",
+    title: "Business expenses, sorted",
+    blurb:
+      "Tag any expense to a company or side gig, then pull a tax-time report with per-business totals and a CSV for your accountant. Tagged entries still count in your regular budget - the separation happens in the report.",
+    cta: {
+      label: "Create a business",
+      kind: "profile-section",
+      section: "businesses",
+    },
+  },
+  {
+    id: "receipt-photos",
+    sinceVersion: "1.9.0",
+    requiresRuntimeVersion: "1.9.0",
+    icon: "🧾",
+    title: "Attach the receipt",
+    blurb:
+      "Snap up to three receipt photos onto any entry, right from the Add and Edit forms. Photos are encrypted before they touch storage and never leave your phone unless you export them yourself.",
+    cta: { label: "Add an entry", kind: "budget-add-entry" },
+  },
+  {
+    id: "tracking-reminders",
+    sinceVersion: "1.9.0",
+    requiresRuntimeVersion: "1.9.0",
+    icon: "⏰",
+    title: "Gentle tracking nudges",
+    blurb:
+      "Opt in to a check-in when you haven't logged spending in a while, or a fresh-month reminder to set your goals. Scheduled entirely on your phone - nothing about your finances ever appears on your lock screen.",
+    cta: {
+      label: "Set up reminders",
+      kind: "profile-section",
+      section: "trackingReminders",
+    },
+  },
+  {
+    id: "deep-sea-theme",
+    sinceVersion: "1.9.0",
+    icon: "🌊",
+    title: "New theme: Deep Sea",
+    blurb:
+      "Abyssal blues with a bioluminescent glow, plus its own ambient background - light rays filtering down from the surface with drifting plankton. It joins Deep Space and Deep Forest under Appearance.",
+    cta: { label: "Try Deep Sea", kind: "profile-section", section: "theme" },
+  },
+  {
+    id: "tip-jar",
+    sinceVersion: "1.9.0",
+    requiresRuntimeVersion: "1.9.0",
+    badgeOnly: true,
+    icon: "💛",
+    title: "Tip Jar",
+    blurb:
+      "Optional one-time tips, handled entirely by the app store. Unlocks nothing - every feature is already free.",
+  },
+];
+
+export const ALL_SPOTLIGHT_IDS: readonly string[] = FEATURE_SPOTLIGHTS.map(
+  (spotlight) => spotlight.id
+);
+
+/**
+ * Whether the feature behind a spotlight actually works on this install.
+ * Fail-open on unknown current runtime (dev builds report none), fail-closed
+ * on an older store build - the debut waits for the build that enables it.
+ */
+export const isSpotlightAvailable = (
+  spotlight: FeatureSpotlight,
+  currentRuntimeVersion: string | undefined
+): boolean => {
+  if (!spotlight.requiresRuntimeVersion) return true;
+  if (!currentRuntimeVersion) return true;
+  return (
+    compareVersions(currentRuntimeVersion, spotlight.requiresRuntimeVersion) >= 0
+  );
+};
+
+/** Carousel slides still owed to this user, in declaration order. */
+export const selectUnseenSpotlights = (
+  spotlights: readonly FeatureSpotlight[],
+  seenIds: readonly string[],
+  currentRuntimeVersion: string | undefined
+): FeatureSpotlight[] => {
+  const seen = new Set(seenIds);
+  return spotlights.filter(
+    (spotlight) =>
+      !spotlight.badgeOnly &&
+      !seen.has(spotlight.id) &&
+      isSpotlightAvailable(spotlight, currentRuntimeVersion)
+  );
+};
+
+/** Ids whose Profile rows should show a NEW badge (until first tapped). */
+export const selectNewBadgeIds = (
+  spotlights: readonly FeatureSpotlight[],
+  ackedIds: readonly string[],
+  currentRuntimeVersion: string | undefined
+): string[] => {
+  const acked = new Set(ackedIds);
+  return spotlights
+    .filter(
+      (spotlight) =>
+        !acked.has(spotlight.id) &&
+        isSpotlightAvailable(spotlight, currentRuntimeVersion)
+    )
+    .map((spotlight) => spotlight.id);
+};

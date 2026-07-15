@@ -1115,5 +1115,11 @@ export type RootTabParamList = {
   Utilities: undefined;
   Profile: {
     openReleaseNotes?: boolean;
+    /**
+     * Set by a feature-spotlight CTA (see FeatureSpotlightModal): opens the
+     * named Profile surface on focus - e.g. "connections" opens the Bank
+     * Connections modal - and clears that feature's NEW badge.
+     */
+    openSection?: import("../data/featureSpotlights").ProfileSpotlightSection;
   } | undefined;
 };

@@ -164,6 +164,16 @@ import AddConnectionModal from "../components/AddConnectionModal";
 import { startConnectionsMonitoring } from "../services/connections/connectionsSyncService";
 import { getTellerAddBankInfo } from "../services/connections/connectionsService";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
+import NewFeatureBadge from "../components/NewFeatureBadge";
+import {
+  FEATURE_SPOTLIGHTS,
+  selectNewBadgeIds,
+  type ProfileSpotlightSection,
+} from "../data/featureSpotlights";
+import {
+  ackFeatureBadge,
+  getAckedFeatureBadgeIds,
+} from "../storage/featureSpotlightStorage";
 
 
 import { sanitizeTextInput } from "../utils/sanitize";
@@ -179,6 +189,15 @@ type UpdateMetadata = {
 };
 
 type ReleaseNoteKey = string;
+
+/** Which feature's NEW badge each openSection deep-link target clears. */
+const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
+  connections: "bank-connections",
+  businesses: "business-expenses",
+  tipJar: "tip-jar",
+  trackingReminders: "tracking-reminders",
+  theme: "deep-sea-theme",
+};
 
 /** Settings-row subtext summarizing the current tracking-reminder setup. */
 const reminderRowSubtext = (
@@ -281,6 +300,44 @@ const ProfileScreen: React.FC = () => {
   const [showManageCategories, setShowManageCategories] = useState(false);
   const [showManageBusinesses, setShowManageBusinesses] = useState(false);
   const [showBusinessReport, setShowBusinessReport] = useState(false);
+
+  /** Feature ids whose settings rows currently show a NEW badge. */
+  const [newFeatureIds, setNewFeatureIds] = useState<ReadonlySet<string>>(
+    new Set()
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAckedFeatureBadgeIds().then((acked) => {
+      if (cancelled) return;
+      setNewFeatureIds(
+        new Set(
+          selectNewBadgeIds(
+            FEATURE_SPOTLIGHTS,
+            acked,
+            Updates.runtimeVersion ?? undefined
+          )
+        )
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Clear a row's NEW badge on first open (no-op once acked). */
+  const dismissNewBadge = useCallback(
+    (featureId: string) => {
+      if (!newFeatureIds.has(featureId)) return;
+      setNewFeatureIds((prev) => {
+        const next = new Set(prev);
+        next.delete(featureId);
+        return next;
+      });
+      void ackFeatureBadge(featureId);
+    },
+    [newFeatureIds]
+  );
 
   /** Current user account state */
   const [user, setUser] = useState<UserAccount | null>(null);
@@ -850,6 +907,37 @@ const ProfileScreen: React.FC = () => {
       setShowConnectionsDisclosure(true);
     }
   }, [connectionsDisclosureAcked]);
+
+  // Feature-spotlight CTAs deep-link here with openSection set. Same
+  // deferral rationale as the openReleaseNotes effect above: never present
+  // a Modal mid-tab-transition. Opening the surface also clears its NEW
+  // badge - the user has now seen the feature.
+  useEffect(() => {
+    const section = route.params?.openSection;
+    if (!section) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      switch (section) {
+        case "connections":
+          openConnections();
+          break;
+        case "businesses":
+          setShowManageBusinesses(true);
+          break;
+        case "tipJar":
+          setShowTipJar(true);
+          break;
+        case "trackingReminders":
+          setShowTrackingReminders(true);
+          break;
+        case "theme":
+          setShowThemeModal(true);
+          break;
+      }
+      dismissNewBadge(SECTION_FEATURE_IDS[section]);
+      navigation.setParams({ openSection: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.openSection, openConnections, dismissNewBadge]);
 
   const confirmConnectionsDisclosure = useCallback(async () => {
     await acknowledgeConnectionsDisclosure();
@@ -1708,12 +1796,18 @@ const ProfileScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.groupedRow}
-              onPress={() => setShowTipJar(true)}
+              onPress={() => {
+                dismissNewBadge("tip-jar");
+                setShowTipJar(true);
+              }}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Tip Jar 💛
-                </Text>
+                <View style={styles.rowTitleWithBadge}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Tip Jar 💛
+                  </Text>
+                  {newFeatureIds.has("tip-jar") && <NewFeatureBadge />}
+                </View>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
@@ -1747,12 +1841,18 @@ const ProfileScreen: React.FC = () => {
           >
             <TouchableOpacity
               style={styles.groupedRow}
-              onPress={() => setShowThemeModal(true)}
+              onPress={() => {
+                dismissNewBadge("deep-sea-theme");
+                setShowThemeModal(true);
+              }}
             >
               <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Theme
-                </Text>
+                <View style={styles.rowTitleWithBadge}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Theme
+                  </Text>
+                  {newFeatureIds.has("deep-sea-theme") && <NewFeatureBadge />}
+                </View>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
@@ -2165,15 +2265,19 @@ const ProfileScreen: React.FC = () => {
               style={styles.groupedRow}
               onPress={() => {
                 triggerHaptic("selection");
+                dismissNewBadge("business-expenses");
                 setShowManageBusinesses(true);
               }}
               accessibilityRole="button"
               accessibilityLabel="Manage businesses"
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Businesses 💼
-                </Text>
+                <View style={styles.rowTitleWithBadge}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Businesses 💼
+                  </Text>
+                  {newFeatureIds.has("business-expenses") && <NewFeatureBadge />}
+                </View>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
@@ -2373,11 +2477,20 @@ const ProfileScreen: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <TouchableOpacity style={styles.groupedRow} onPress={openConnections}>
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => {
+                dismissNewBadge("bank-connections");
+                openConnections();
+              }}
+            >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Bank Connections
-                </Text>
+                <View style={styles.rowTitleWithBadge}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Bank Connections
+                  </Text>
+                  {newFeatureIds.has("bank-connections") && <NewFeatureBadge />}
+                </View>
                 <Text
                   style={[
                     styles.settingsRowSubtext,
@@ -2563,12 +2676,18 @@ const ProfileScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.groupedRow}
-              onPress={() => setShowTrackingReminders(true)}
+              onPress={() => {
+                dismissNewBadge("tracking-reminders");
+                setShowTrackingReminders(true);
+              }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Tracking Reminders
-                </Text>
+                <View style={styles.rowTitleWithBadge}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Tracking Reminders
+                  </Text>
+                  {newFeatureIds.has("tracking-reminders") && <NewFeatureBadge />}
+                </View>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
@@ -4790,6 +4909,10 @@ const makeStyles = (tokens: DensityTokens) => {
     settingsRowSubtext: {
       fontSize: scale(13),
       marginTop: 2,
+    },
+    rowTitleWithBadge: {
+      flexDirection: "row",
+      alignItems: "center",
     },
     settingsRowArrow: {
       fontSize: 16,

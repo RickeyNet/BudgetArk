@@ -50,6 +50,17 @@ import {
   setOtaUpdateInstalled,
   consumeOtaUpdateInstalled,
 } from "./src/storage/releaseNotesStorage";
+import {
+  getSeenSpotlightIds,
+  markSpotlightsSeen,
+  seedAllFeatureDebutsSeen,
+} from "./src/storage/featureSpotlightStorage";
+import {
+  FEATURE_SPOTLIGHTS,
+  selectUnseenSpotlights,
+  type FeatureSpotlight,
+} from "./src/data/featureSpotlights";
+import FeatureSpotlightModal from "./src/components/FeatureSpotlightModal";
 import { CURRENT_APP_VERSION, RELEASE_NOTES, type ReleaseNote } from "./src/data/releaseNotes";
 import type { RootTabParamList } from "./src/types";
 import {
@@ -90,6 +101,7 @@ const AppContent: React.FC = () => {
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
   const [showReleaseNotesPrompt, setShowReleaseNotesPrompt] = useState(false);
+  const [spotlightQueue, setSpotlightQueue] = useState<FeatureSpotlight[] | null>(null);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
   const latestRelease = RELEASE_NOTES[0];
@@ -136,6 +148,14 @@ const AppContent: React.FC = () => {
       }
     } catch (error) {
       if (__DEV__) console.error("Failed to request ark setup:", error);
+    }
+    try {
+      // A fresh install must never get a "NEW!" debut for features that were
+      // always there for this user. Await it: the spotlight check effect
+      // fires as soon as the flag below flips.
+      await seedAllFeatureDebutsSeen();
+    } catch (error) {
+      if (__DEV__) console.error("Failed to seed feature debuts:", error);
     }
     setIsOnboardingComplete(true);
   }, []);
@@ -246,6 +266,25 @@ const AppContent: React.FC = () => {
 
     const checkReleaseNotesPrompt = async () => {
       const ota = await consumeOtaUpdateInstalled();
+
+      // Feature spotlights outrank the plain release-notes prompt: when a
+      // debut is owed, the carousel IS this version's "what's new" moment
+      // (its last slide links to the full notes, and dismissing it marks the
+      // version seen). Checked per-feature rather than per-version because a
+      // feature can debut later than its version - e.g. it shipped dormant
+      // via OTA and only works once the store build with its native modules
+      // arrives (see requiresRuntimeVersion in featureSpotlights.ts).
+      const seenSpotlightIds = await getSeenSpotlightIds();
+      const unseenSpotlights = selectUnseenSpotlights(
+        FEATURE_SPOTLIGHTS,
+        seenSpotlightIds,
+        Updates.runtimeVersion ?? undefined
+      );
+      if (unseenSpotlights.length > 0) {
+        setSpotlightQueue(unseenSpotlights);
+        return;
+      }
+
       if (ota.installed && ota.notesShown) {
         // OTA update was just applied AND the install dialog already showed
         // the notes for this version, so mark as seen and skip the prompt.
@@ -301,6 +340,64 @@ const AppContent: React.FC = () => {
     }
   }, [navigationRef]);
 
+  /**
+   * Close the debut carousel: every queued spotlight counts as seen (skip
+   * included - re-showing a skipped tour reads as nagging), and the release
+   * version is marked seen so the plain "what's new" prompt the carousel
+   * replaced doesn't pop on the next launch.
+   */
+  const closeSpotlights = useCallback(async () => {
+    const ids = (spotlightQueue ?? []).map((spotlight) => spotlight.id);
+    setSpotlightQueue(null);
+    await markSpotlightsSeen(ids);
+    await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+  }, [spotlightQueue]);
+
+  const handleSpotlightDone = useCallback(() => {
+    void closeSpotlights();
+  }, [closeSpotlights]);
+
+  const handleSpotlightCta = useCallback(
+    async (spotlight: FeatureSpotlight) => {
+      const cta = spotlight.cta;
+      await closeSpotlights();
+
+      // Same deferral as handleOpenReleaseHistory: let the modal's fade-out
+      // finish before navigating, or iOS can silently drop the presentation.
+      await new Promise((resolve) => {
+        setTimeout(resolve, 220);
+      });
+
+      if (!cta || !navigationRef.isReady()) return;
+      try {
+        if (cta.kind === "budget-add-entry") {
+          navigationRef.navigate("Budget", { quickAdd: {} });
+        } else {
+          navigationRef.navigate("Profile", { openSection: cta.section });
+        }
+      } catch (e) {
+        if (__DEV__) console.warn("Spotlight navigation failed:", e);
+      }
+    },
+    [closeSpotlights, navigationRef]
+  );
+
+  const handleSpotlightOpenNotes = useCallback(async () => {
+    await closeSpotlights();
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 220);
+    });
+
+    if (navigationRef.isReady()) {
+      try {
+        navigationRef.navigate("Profile", { openReleaseNotes: true });
+      } catch (e) {
+        if (__DEV__) console.warn("Navigation to Profile failed:", e);
+      }
+    }
+  }, [closeSpotlights, navigationRef]);
+
   /** Show loading indicator while checking onboarding status */
   if (isOnboardingComplete === null) {
     return (
@@ -329,7 +426,11 @@ const AppContent: React.FC = () => {
           Paused while the update / release-notes dialogs own the screen so the
           fade modals never stack (one would end up hidden on iOS). */}
       <DebtDueReminderHost
-        paused={pendingUpdate !== null || showReleaseNotesPrompt}
+        paused={
+          pendingUpdate !== null ||
+          showReleaseNotesPrompt ||
+          spotlightQueue !== null
+        }
       />
 
       {/* Keeps scheduled expense-tracking check-in notifications anchored to
@@ -460,6 +561,18 @@ const AppContent: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Debut carousel for newly-arrived features. Replaces the plain
+          release-notes prompt when a debut is owed (the check effect never
+          sets both), and defers to the "Update Ready" dialog the same way
+          the release-notes prompt does. */}
+      <FeatureSpotlightModal
+        visible={spotlightQueue !== null && pendingUpdate === null}
+        spotlights={spotlightQueue ?? []}
+        onDone={handleSpotlightDone}
+        onCtaPress={handleSpotlightCta}
+        onOpenReleaseNotes={handleSpotlightOpenNotes}
+      />
     </View>
   );
 };
