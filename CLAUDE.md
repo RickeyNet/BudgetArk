@@ -3,8 +3,112 @@
 Privacy-first personal finance app (Expo / React Native). There is **no BudgetArk
 server**: all data lives encrypted on the device, and every marketing claim in
 RELEASE_NOTES.md ("never leaves your phone", "encrypted on this device only")
-is a promise the code must keep. The rules below exist because breaking one is
-usually silent — nothing crashes when a key ships in a backup.
+is a promise the code must keep. The security rules exist because breaking one
+is usually silent — nothing crashes when a key ships in a backup.
+
+## Git workflow — the user drives git
+
+- **Never run `git commit`.** Stage changes with `git add` and provide a
+  suggested commit message; the user commits.
+- **Never create, switch, or delete branches.** Work happens on whatever
+  branch is checked out; branch management is the user's call.
+- Never push, amend, rebase, or otherwise rewrite history.
+- Destructive git operations (`reset --hard`, `checkout -- <file>`, `clean`)
+  only when the user explicitly asks.
+
+## Commands
+
+```bash
+npm test               # full Jest suite (pure-logic tests, fast, offline)
+npm run typecheck      # tsc --noEmit  (ts-jest does NOT type-check; run this)
+npm run lint           # eslint .
+npm run update:message # stamp an EAS OTA update with release-note JSON
+```
+
+Run typecheck + lint + test before handing work back. There is no
+device-capable test rig here: UI changes get verified on the next dev build /
+EAS build by the user — say so explicitly instead of claiming a UI flow works.
+
+## Architecture in 60 seconds
+
+- **Five bottom tabs** (`src/navigation/AppNavigator.tsx`, initial route
+  `Bridge`): DebtTracker, Budget, Bridge, Utilities, Profile. The `Utilities`
+  route is *displayed* as "Charts" — never rename the route key; persisted
+  state and sync depend on it.
+- **Deep links** flow from App-root "Host" components via
+  `navigationRef.navigate(tab, params)`, typed in `RootTabParamList`
+  (`src/types/index.ts`). Screens consume a param and immediately
+  `setParams({ ...: undefined })` to clear it.
+- **Storage**: one module per domain in `src/storage/`, keys prefixed
+  `@budgetark_*`. `encryptedStorage` serializes writes per key — rely on it.
+  Sync-aware domains expose `get*IncludingDeleted` + tombstone helpers
+  (`src/storage/tombstones.ts`); last-write-wins by `updatedAt` (missing →
+  epoch).
+- **Cross-cutting state** = a `…Provider.tsx` context with a `use*()` hook
+  that throws outside its provider. The provider nesting order in `App.tsx`
+  is load-bearing (Theme depends on SurfaceStyle/BackgroundEffects above it).
+- **P2P LAN sync** (`src/sync/`): mDNS discovery → paired handshake →
+  HMAC-authenticated TCP frames → last-write-wins diff merge. **`SyncDiff`
+  (`sync/types.ts`) is a cross-version wire contract**: new collections must
+  be optional fields so older peers still interoperate; deletable collections
+  need tombstones; don't touch `PROTOCOL_VERSION`, HMAC coverage, or envelope
+  field order without cross-device compat handling.
+- The Cloudflare Worker lives in `worker/quotes-proxy/` and is excluded from
+  the app's typecheck — check it separately when editing it.
+
+## Conventions & known gotchas
+
+- **Never present a Modal (or share sheet) mid-navigation** — it's "the iOS
+  silent-present failure this codebase keeps hitting." Wrap the
+  `setShowX(true)` in `InteractionManager.runAfterInteractions(...)`, keep the
+  task, and cancel it on unmount. Grep BudgetScreen/ProfileScreen for the
+  pattern before adding any deep-link-triggered modal.
+- **Colors come only from `useTheme()`** — no hardcoded hex in components.
+  Style factories are `makeStyles(colors, tokens)` memoized on
+  `[colors, tokens]`; use density tokens (`tokens.pad/gap/radius/fontScale`)
+  for spacing where the file already does.
+- **Adding a theme**: a `ThemePreset` in `src/theme/themes.ts` (opaque cards
+  only — glass is derived at runtime). Ambient themes also need a
+  `*Background` component, `AMBIENT_BACKGROUND_THEMES`, and the AppNavigator
+  ambient switch.
+- **Comments saying "deliberately" or "intentionally" mark load-bearing
+  decisions.** Don't "fix" them; grep for them before changing behavior.
+- Every source file starts with a `BudgetArk - <Name>` header comment
+  explaining *why* the file exists. Match that in new files.
+- ESLint downgrades some react-hooks v6 rules to warnings for legacy code —
+  new code should still satisfy them (zero new warnings).
+
+## Testing
+
+- Pure-logic Jest + ts-jest on Node (`jest.config.js`); tests live in
+  `__tests__/` next to the code (`src/utils`, `src/data`, `src/sync`). See
+  `docs/testing.md` for the full suite map.
+- **Never add `jest-expo` or React Native imports to this config** — if
+  component tests are ever needed, add a separate Jest project.
+- Coverage thresholds are a ratchet: raise them as coverage grows, never
+  lower them to green a build.
+- New feature logic: extract the pure part into a helper and test that;
+  keep the side-effecting shell thin.
+
+## Release flow
+
+- **Release notes live in TWO files and BOTH must be updated together —
+  never just one:**
+  - `src/data/releaseNotes.ts` — the `ReleaseNote[]` the app reads (update
+    dialog, what's-new prompt, Release Notes screen). Prepend the new entry;
+    the app version single-sources from it
+    (`CURRENT_APP_VERSION = RELEASE_NOTES[0].version`).
+  - `RELEASE_NOTES.md` — the human-facing/store-listing changelog.
+  If they drift, users see stale or missing notes in-app while the store
+  says otherwise. Keep `app.json` `version` in step with both.
+- **Native module added/changed → bump `app.json` `runtimeVersion`** → store
+  build required. Same runtime → OTA-eligible.
+- Publish OTA updates with the stamped message so older bundles can preview
+  the incoming highlights:
+  `eas update --branch production --message "$(node scripts/eas-update-message.mjs)"`.
+- Marquee features also get a `FEATURE_SPOTLIGHTS` entry
+  (`src/data/featureSpotlights.ts`) for the debut carousel + NEW badges; set
+  `requiresRuntimeVersion` when the feature needs the store build.
 
 ## Security invariants — never break these
 
