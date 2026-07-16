@@ -74,6 +74,10 @@ const entryFixtures = [
   // Business-tagged expense: BusinessId must round-trip; the readable
   // Business name column is export-only and ignored on import.
   { id: "e5", type: "expense", category: "Tech", amount: 199, date: "2026-06-04", createdAt: "2026-06-04T00:00:00.000Z", businessId: "b1" },
+  // W-2 paycheck: incomeType + retirementContribution must round-trip.
+  { id: "e6", type: "income", category: "Salary", amount: 2500, date: "2026-06-05", createdAt: "2026-06-05T00:00:00.000Z", incomeType: "w2", retirementContribution: 150 },
+  // 1099 payment: incomeType + taxSetAsideRate must round-trip.
+  { id: "e7", type: "income", category: "Freelance", amount: 1000, date: "2026-06-06", createdAt: "2026-06-06T00:00:00.000Z", incomeType: "1099", taxSetAsideRate: 25 },
 ];
 const businessFixtures = [
   { id: "b1", name: "Acme Consulting LLC", createdAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-02-01T00:00:00.000Z" },
@@ -146,9 +150,9 @@ describe("xlsx round-trip", () => {
 
     const payload = lastPayload();
 
-    // Entries: e1-e5 survive; the recurring projections of e3 are dropped.
+    // Entries: e1-e7 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7"]);
     expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
     expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
     expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
@@ -167,6 +171,15 @@ describe("xlsx round-trip", () => {
     expect(byId.e5.businessId).toBe("b1");
     expect(byId.e1.businessId).toBeUndefined();
     expect(byId.e5.Business).toBeUndefined();
+
+    // W-2 / 1099 paycheck fields round-trip; plain income never grows them.
+    expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });
+    expect(byId.e6.taxSetAsideRate).toBeUndefined();
+    expect(byId.e7).toMatchObject({ incomeType: "1099", taxSetAsideRate: 25 });
+    expect(byId.e7.retirementContribution).toBeUndefined();
+    expect(byId.e1.incomeType).toBeUndefined();
+    expect(byId.e1.retirementContribution).toBeUndefined();
+    expect(byId.e1.taxSetAsideRate).toBeUndefined();
 
     // The Businesses sheet round-trips with timestamps intact (LWW needs them).
     expect(payload.businesses).toHaveLength(1);
@@ -213,8 +226,11 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7"]);
     expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
+    // Paycheck fields survive the single-sheet CSV path too.
+    expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });
+    expect(byId.e7).toMatchObject({ incomeType: "1099", taxSetAsideRate: 25 });
     expect(byId.e4).toMatchObject({
       source: "bank",
       externalTxId: "simplefin:ACT-1:TXN-99",

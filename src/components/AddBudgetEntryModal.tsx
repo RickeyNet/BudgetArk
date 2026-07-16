@@ -16,6 +16,8 @@ import {
   CategoryName,
   CustomCategory,
   DEFAULT_RECURRENCE_INTERVAL,
+  DEFAULT_TAX_SET_ASIDE_RATE,
+  IncomeType,
   NewBudgetEntryInput,
   RECURRENCE_INTERVAL_OPTIONS,
   RecurrenceInterval,
@@ -29,6 +31,17 @@ import CategoryPillPicker from "./CategoryPillPicker";
 import AttachmentSection from "./AttachmentSection";
 import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
+import { clampTaxSetAsideRate } from "../utils/paycheckMath";
+import { useCurrency } from "../currency/CurrencyProvider";
+
+const INCOME_TYPE_OPTIONS: readonly {
+  value: IncomeType | undefined;
+  label: string;
+}[] = [
+  { value: undefined, label: "Regular" },
+  { value: "w2", label: "W-2 paycheck" },
+  { value: "1099", label: "1099 / contractor" },
+];
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Savings",
@@ -124,6 +137,7 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const { formatCurrency } = useCurrency();
 
   const [type, setType] = useState<BudgetEntryType>("expense");
   const [category, setCategory] = useState<CategoryName>("Grocery");
@@ -139,6 +153,11 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
   const [paymentUrl, setPaymentUrl] = useState("");
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(undefined);
   const [businessId, setBusinessId] = useState<string | undefined>(undefined);
+  const [incomeType, setIncomeType] = useState<IncomeType | undefined>(undefined);
+  const [retirementContribution, setRetirementContribution] = useState("");
+  const [taxSetAsideRate, setTaxSetAsideRate] = useState(
+    String(DEFAULT_TAX_SET_ASIDE_RATE)
+  );
   // Staged receipt photos: files are ALREADY encrypted on disk (import
   // happens at pick time - the entry id doesn't exist yet, but attachment
   // ids are independent UUIDs). Committed to the first valid line's entry
@@ -175,6 +194,19 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
 
   const isValid = validLineCount > 0;
 
+  // Live "set aside $X for taxes" preview for 1099 income - the sum of the
+  // valid lines times the entered rate (each saved entry carries the rate,
+  // so the per-entry math downstream matches this total).
+  const taxSetAsidePreview = useMemo(() => {
+    if (type !== "income" || incomeType !== "1099") return 0;
+    const total = lines.reduce((sum, line) => {
+      const amountNum = parseFloat(line.amount);
+      return amountNum > 0 ? sum + amountNum : sum;
+    }, 0);
+    const rate = clampTaxSetAsideRate(parseFloat(taxSetAsideRate));
+    return Math.round(total * rate) / 100;
+  }, [incomeType, lines, taxSetAsideRate, type]);
+
   const updateLine = useCallback((lineId: string, patch: Partial<Pick<EntryLineDraft, "amount" | "description">>) => {
     setLines((prev) =>
       prev.map((line) => (line.id === lineId ? { ...line, ...patch } : line))
@@ -205,6 +237,9 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     setPaymentUrl("");
     setLinkedAccountId(undefined);
     setBusinessId(undefined);
+    setIncomeType(undefined);
+    setRetirementContribution("");
+    setTaxSetAsideRate(String(DEFAULT_TAX_SET_ASIDE_RATE));
     // Deliberately does NOT delete staged photo files - submit commits them
     // to the saved entry, so only the cancel path (handleClose) deletes.
     setStagedAttachments([]);
@@ -219,6 +254,13 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     const normalizedPaymentUrl = showDayPicker
       ? normalizePaymentUrl(paymentUrl) ?? undefined
       : undefined;
+
+    const entryIncomeType = type === "income" ? incomeType : undefined;
+    const contributionNum = parseFloat(retirementContribution);
+    const entryTaxSetAsideRate =
+      entryIncomeType === "1099"
+        ? clampTaxSetAsideRate(parseFloat(taxSetAsideRate))
+        : undefined;
 
     const payloads: NewBudgetEntryInput[] = [];
     for (const line of lines) {
@@ -239,6 +281,8 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
         paymentUrl: normalizedPaymentUrl,
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
         businessId: showBusinessPicker ? businessId : undefined,
+        incomeType: entryIncomeType,
+        taxSetAsideRate: entryTaxSetAsideRate,
         // Photos land on the FIRST valid line (the UI hints at this when
         // multiple lines are open).
         attachments: undefined,
@@ -249,12 +293,19 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     if (stagedAttachments.length > 0) {
       payloads[0] = { ...payloads[0], attachments: stagedAttachments };
     }
+    // Like photos, the 401(k) contribution lands on the FIRST valid line -
+    // it was withheld once from one paycheck, so duplicating it across
+    // extra lines would double-count the monthly rollup.
+    if (entryIncomeType === "w2" && contributionNum > 0) {
+      payloads[0] = { ...payloads[0], retirementContribution: contributionNum };
+    }
 
     onAdd(payloads);
     reset();
   }, [
     businessId,
     category,
+    incomeType,
     lines,
     stagedAttachments,
     linkedAccountId,
@@ -264,9 +315,11 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
     recurrenceDay,
     recurrenceInterval,
     reset,
+    retirementContribution,
     showAccountPicker,
     showBusinessPicker,
     showDayPicker,
+    taxSetAsideRate,
     type,
     yearMonth,
   ]);
@@ -344,6 +397,86 @@ const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({
                 ))}
               </View>
             </View>
+
+            {type === "income" && (
+              <View style={styles.field}>
+                <Text style={styles.label}>INCOME TYPE</Text>
+                <Text style={styles.accountPickerHint}>
+                  W-2 tracks your take-home paycheck and 401(k). 1099 shows how
+                  much of each payment to set aside for taxes.
+                </Text>
+                <View style={styles.categoryWrap}>
+                  {INCOME_TYPE_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.label}
+                      style={[
+                        styles.categoryPill,
+                        incomeType === opt.value && styles.categoryPillActive,
+                      ]}
+                      onPress={() => setIncomeType(opt.value)}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryPillText,
+                          incomeType === opt.value && styles.categoryPillTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {type === "income" && incomeType === "w2" && (
+              <View style={styles.field}>
+                <Text style={styles.label}>401(K) THIS PAYCHECK (OPTIONAL)</Text>
+                <Text style={styles.accountPickerHint}>
+                  Enter your take-home (net) pay as the amount below. If part of
+                  this paycheck went to a 401(k), record it here - it's tracked
+                  separately, not added to income.
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.textMuted}
+                  value={retirementContribution}
+                  onChangeText={setRetirementContribution}
+                  keyboardType="decimal-pad"
+                />
+                {validLineCount > 1 && parseFloat(retirementContribution) > 0 && (
+                  <Text style={styles.linesHint}>
+                    The 401(k) amount attaches to the first entry.
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {type === "income" && incomeType === "1099" && (
+              <View style={styles.field}>
+                <Text style={styles.label}>TAX SET-ASIDE PERCENT</Text>
+                <Text style={styles.accountPickerHint}>
+                  Nothing is withheld from 1099 pay, so set a slice aside for
+                  end-of-year taxes. 25-30% is a common starting point.
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={String(DEFAULT_TAX_SET_ASIDE_RATE)}
+                  placeholderTextColor={colors.textMuted}
+                  value={taxSetAsideRate}
+                  onChangeText={setTaxSetAsideRate}
+                  keyboardType="decimal-pad"
+                  maxLength={5}
+                />
+                {taxSetAsidePreview > 0 && (
+                  <Text style={[styles.helperText, { color: colors.success }]}>
+                    Set aside {formatCurrency(taxSetAsidePreview)} of this for
+                    taxes.
+                  </Text>
+                )}
+              </View>
+            )}
 
             <View style={styles.field}>
               <Text style={styles.label}>CATEGORY</Text>

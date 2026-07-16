@@ -210,6 +210,64 @@ describe("isBudgetEntryItem", () => {
     });
   });
 
+  describe("income-type paycheck fields", () => {
+    const income = { ...valid, type: "income", category: "Income" };
+
+    it("accepts a W-2 entry with a retirement contribution", () => {
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "w2", retirementContribution: 150 })
+      ).toBe(true);
+    });
+
+    it("accepts a 1099 entry with a set-aside rate", () => {
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "1099", taxSetAsideRate: 25 })
+      ).toBe(true);
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "1099", taxSetAsideRate: 0 })
+      ).toBe(true);
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "1099", taxSetAsideRate: 100 })
+      ).toBe(true);
+    });
+
+    it("rejects an unknown incomeType", () => {
+      expect(isBudgetEntryItem({ ...income, incomeType: "W2" })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, incomeType: "contractor" })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, incomeType: 1099 })).toBe(false);
+    });
+
+    it("rejects an out-of-range or non-numeric retirementContribution", () => {
+      expect(
+        isBudgetEntryItem({ ...income, retirementContribution: -1 })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...income, retirementContribution: "150" })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...income, retirementContribution: NaN })
+      ).toBe(false);
+    });
+
+    it("rejects an out-of-range taxSetAsideRate", () => {
+      expect(isBudgetEntryItem({ ...income, taxSetAsideRate: -5 })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, taxSetAsideRate: 101 })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, taxSetAsideRate: "25" })).toBe(false);
+    });
+
+    it("explains each failing paycheck field", () => {
+      expect(
+        explainBudgetEntryProblem({ ...income, incomeType: "contractor" })
+      ).toContain('"incomeType"');
+      expect(
+        explainBudgetEntryProblem({ ...income, retirementContribution: -1 })
+      ).toContain('"retirementContribution"');
+      expect(
+        explainBudgetEntryProblem({ ...income, taxSetAsideRate: 101 })
+      ).toContain('"taxSetAsideRate"');
+    });
+  });
+
   describe("attachments (receipt-photo metadata)", () => {
     const attachment = (over: Record<string, unknown> = {}) => ({
       id: "a1",

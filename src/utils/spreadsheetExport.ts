@@ -48,9 +48,11 @@ export type SpreadsheetFormat = "csv" | "xlsx";
  * Schema version. Bump if column shape changes incompatibly.
  * v2 (1.10): Budget Entries gained BusinessId (round-trip) + Business
  * (readable name, export-only); new Businesses sheet in xlsx workbooks.
- * v1 files still import - the new columns are simply absent.
+ * v3: Budget Entries gained IncomeType / Retirement401k / TaxSetAsideRate
+ * (all round-trip; blank for expenses and plain income).
+ * Older files still import - the new columns are simply absent.
  */
-export const SPREADSHEET_SCHEMA_VERSION = 2;
+export const SPREADSHEET_SCHEMA_VERSION = 3;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -116,6 +118,14 @@ const BUDGET_ENTRY_COLUMNS = [
   // time and is IGNORED on import - renames must not fork identities.
   "BusinessId",
   "Business",
+  // W-2 / 1099 paycheck fields. IncomeType is "w2" or "1099" (blank for
+  // expenses and plain income). Retirement401k is the 401(k) dollars
+  // withheld from a W-2 paycheck; TaxSetAsideRate is the percent of a 1099
+  // payment reserved for taxes. All three round-trip so a backup/restore
+  // cycle doesn't strip the user's paycheck tracking.
+  "IncomeType",
+  "Retirement401k",
+  "TaxSetAsideRate",
   // ISO timestamp the entry was created. Round-tripped so re-importing an
   // exported file doesn't reset history.
   "CreatedAt",
@@ -273,6 +283,9 @@ const budgetEntryToRow = (
   Business: entry.businessId
     ? businessNameById?.get(entry.businessId) ?? "(deleted)"
     : "",
+  IncomeType: entry.incomeType ?? "",
+  Retirement401k: entry.retirementContribution ?? "",
+  TaxSetAsideRate: entry.taxSetAsideRate ?? "",
   CreatedAt: entry.createdAt ?? "",
   UpdatedAt: entry.updatedAt ?? "",
 });

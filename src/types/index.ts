@@ -229,6 +229,24 @@ export const MAX_ATTACHMENTS_PER_ENTRY = 3;
 
 export type BudgetEntryType = "income" | "expense";
 
+/**
+ * How an income entry was earned. Optional - plain income entries (bank
+ * imports, misc cash) carry no income type.
+ * - "w2": a W-2 paycheck. `BudgetEntry.amount` is the NET (take-home)
+ *   deposit; taxes were already withheld by the employer.
+ * - "1099": self-employment / contractor pay. `BudgetEntry.amount` is the
+ *   gross payment; nothing was withheld, so a slice must be set aside for
+ *   end-of-year taxes (see `taxSetAsideRate`).
+ */
+export type IncomeType = "w2" | "1099";
+
+/**
+ * Default percent of a 1099 payment to set aside for taxes. A deliberately
+ * conservative middle-of-the-road starting point (self-employment tax +
+ * federal income tax for common brackets); the user can tune it per entry.
+ */
+export const DEFAULT_TAX_SET_ASIDE_RATE = 25;
+
 /** Months between repeats for a recurring budget entry. */
 export type RecurrenceInterval = 1 | 3 | 6 | 12;
 
@@ -305,6 +323,25 @@ export interface BudgetEntry {
    * harmless: report/badge surfaces show it as "(deleted business)".
    */
   businessId?: string;
+  /**
+   * How this income was earned (W-2 paycheck vs 1099 contractor pay).
+   * Income only - the UI never sets it on expenses and clears it (plus the
+   * two companion fields below) when an entry's type flips to expense.
+   */
+  incomeType?: IncomeType;
+  /**
+   * Dollars contributed to a 401(k)/retirement plan out of this W-2
+   * paycheck. Withheld before the deposit, so it is deliberately NOT part
+   * of `amount` and never added to income totals - it surfaces separately
+   * ("401(k) contributed this month"). W-2 entries only.
+   */
+  retirementContribution?: number;
+  /**
+   * Percent (0-100) of this 1099 payment to set aside for end-of-year
+   * taxes. The set-aside dollars are derived, never stored - see
+   * utils/paycheckMath.ts. 1099 entries only.
+   */
+  taxSetAsideRate?: number;
   /**
    * Receipt photos (metadata only - see EntryAttachment). UI caps at
    * MAX_ATTACHMENTS_PER_ENTRY; the sync/import validator tolerates up to 10

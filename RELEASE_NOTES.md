@@ -56,6 +56,18 @@ Two features built together: encrypted receipt attachments on entries (photo plu
 - **Adversarial review pass** (4 parallel reviewers over the staged diff) caught and fixed 9 defects pre-commit, incl. the Undo/eager-delete conflict, the plaintext picker copy, the ghost-staging race, and a NaN-amount entry from a blank multi-line row that would have stolen the attachments slot.
 - **Tests:** validator matrices, diffEngine business LWW/tombstone/reject, JSON+spreadsheet round-trips, report math + CSV escaping, sweep planning, V3 helper round-trip/tamper, export no-image-bytes regression, attachment-preserving merge, zip naming/dedupe. Full suite as of 2026-07-12: 753 passing across 53 suites.
 
+### Income-type tracking - W-2 / 1099 paychecks (2026-07-15)
+
+Pure JS - no new native deps; rides the same build.
+
+- **`BudgetEntry` gains three optional fields:** `incomeType` (`"w2" | "1099"`), `retirementContribution` (401(k) dollars withheld from a W-2 paycheck), and `taxSetAsideRate` (percent, 1099 only). Income-only - the Add/Edit modals clear the trio when an entry flips to expense, mirroring `businessId` in the other direction. Plain income (incl. bank-imported) carries none of them.
+- **W-2 semantics:** `amount` is the NET take-home deposit (the modal says so). The 401(k) contribution is deliberately NOT added to income totals - it never hits a bank account - and surfaces as its own Budget summary-card line ("Plus $X into your 401(k) this month"). In multi-line adds it attaches to the first valid line only (same rule as photos) so it can't double-count the monthly rollup.
+- **1099 semantics:** `amount` is gross; set-aside dollars are always derived (`amount × rate`), never stored, so edits can't leave a stale figure. Default rate 25 (`DEFAULT_TAX_SET_ASIDE_RATE`), clamped 0-100, NaN-safe. Live "Set aside $X of this for taxes" preview in both modals; monthly rollup line on the summary card; W-2/1099 tags on the income summary rows.
+- **Pure math** in `src/utils/paycheckMath.ts` (per-entry set-aside/contribution + `summarizePaychecks` rollup, cents-rounded); BudgetScreen memoizes it over the month's recurring-aware entries.
+- **Trust boundary:** `isBudgetEntryItem` / `explainBudgetEntryProblem` (lockstep) accept the fields with bounds - the rate is capped at 100 so a hostile sync peer can't render an absurd set-aside figure. The fields ride JSON export/import and P2P sync as part of the whole record; older peers ignore them (optional fields, no `SyncDiff` shape change).
+- **Spreadsheet schema v2 → v3:** `IncomeType` / `Retirement401k` / `TaxSetAsideRate` columns round-trip on Budget Entries (CSV + xlsx). Importer keeps them on income rows only, tolerates hand-edited `W-2`/`W2` variants, and drops the trio fail-closed on anything unrecognized. Older files still import - the columns are simply absent. `docs/SPREADSHEET_SCHEMA.md` updated.
+- **Tests:** paycheckMath suite, validator matrix, spreadsheet round-trip fixtures (W-2 + 1099 entries through export → import on both formats). Full suite as of 2026-07-15: 791 passing across 55 suites.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

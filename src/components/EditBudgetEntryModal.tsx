@@ -19,6 +19,8 @@ import {
   CategoryName,
   CustomCategory,
   DEFAULT_RECURRENCE_INTERVAL,
+  DEFAULT_TAX_SET_ASIDE_RATE,
+  IncomeType,
   RECURRENCE_INTERVAL_OPTIONS,
   RecurrenceInterval,
   AssetAccount,
@@ -32,6 +34,8 @@ import CategoryPillPicker from "./CategoryPillPicker";
 import AttachmentSection from "./AttachmentSection";
 import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
+import { clampTaxSetAsideRate } from "../utils/paycheckMath";
+import { useCurrency } from "../currency/CurrencyProvider";
 import { useValueChanged } from "../hooks/useValueChanged";
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
@@ -39,6 +43,15 @@ const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Retirement",
   "Investing",
 ]);
+
+const INCOME_TYPE_OPTIONS: readonly {
+  value: IncomeType | undefined;
+  label: string;
+}[] = [
+  { value: undefined, label: "Regular" },
+  { value: "w2", label: "W-2 paycheck" },
+  { value: "1099", label: "1099 / contractor" },
+];
 
 interface EditBudgetEntryModalProps {
   entry: BudgetEntry | null;
@@ -111,6 +124,9 @@ interface EntryFormState {
   paymentUrl: string;
   linkedAccountId: string | undefined;
   businessId: string | undefined;
+  incomeType: IncomeType | undefined;
+  retirementContribution: string;
+  taxSetAsideRate: string;
   attachments: EntryAttachment[];
 }
 
@@ -132,6 +148,15 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => {
     paymentUrl: entry?.paymentUrl ?? "",
     linkedAccountId: entry?.linkedAccountId,
     businessId: entry?.businessId,
+    incomeType: entry?.incomeType,
+    retirementContribution:
+      entry?.retirementContribution !== undefined
+        ? String(entry.retirementContribution)
+        : "",
+    taxSetAsideRate:
+      entry?.taxSetAsideRate !== undefined
+        ? String(entry.taxSetAsideRate)
+        : String(DEFAULT_TAX_SET_ASIDE_RATE),
     attachments: entry?.attachments ?? [],
   };
 };
@@ -148,6 +173,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const { formatCurrency } = useCurrency();
 
   // Seeded from `entry` (via entryFormState - the one field mapping) so a
   // mount mid-edit prefills without an effect pass.
@@ -172,6 +198,15 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   );
   const [businessId, setBusinessId] = useState<string | undefined>(
     initialForm.businessId
+  );
+  const [incomeType, setIncomeType] = useState<IncomeType | undefined>(
+    initialForm.incomeType
+  );
+  const [retirementContribution, setRetirementContribution] = useState(
+    initialForm.retirementContribution
+  );
+  const [taxSetAsideRate, setTaxSetAsideRate] = useState(
+    initialForm.taxSetAsideRate
   );
   // Cancel-safe photo editing: added photos are imported (files written)
   // immediately but tracked in newlyStagedIds so Cancel can delete them.
@@ -210,6 +245,9 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       setPaymentUrl(next.paymentUrl);
       setLinkedAccountId(next.linkedAccountId);
       setBusinessId(next.businessId);
+      setIncomeType(next.incomeType);
+      setRetirementContribution(next.retirementContribution);
+      setTaxSetAsideRate(next.taxSetAsideRate);
       setAttachments(next.attachments);
     }
     setNewlyStagedIds(new Set());
@@ -227,9 +265,21 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
   const taggedBusinessMissing =
     !!businessId && !businesses.some((b) => b.id === businessId);
 
+  // Live "set aside $X for taxes" preview for 1099 income.
+  const taxSetAsidePreview = useMemo(() => {
+    if (type !== "income" || incomeType !== "1099") return 0;
+    const amountNum = parseFloat(amount);
+    if (!(amountNum > 0)) return 0;
+    const rate = clampTaxSetAsideRate(parseFloat(taxSetAsideRate));
+    return Math.round(amountNum * rate) / 100;
+  }, [amount, incomeType, taxSetAsideRate, type]);
+
   const handleSave = useCallback(() => {
     if (!entry || !isValid) return;
     const amountNum = parseFloat(amount);
+
+    const entryIncomeType = type === "income" ? incomeType : undefined;
+    const contributionNum = parseFloat(retirementContribution);
 
     onSave({
       ...entry,
@@ -247,6 +297,17 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       // Cleared when the type flips to income (mirrors linkedAccountId).
       businessId: type === "expense" ? businessId : undefined,
+      // Cleared when the type flips to expense or the income type changes
+      // (mirrors businessId in the other direction).
+      incomeType: entryIncomeType,
+      retirementContribution:
+        entryIncomeType === "w2" && contributionNum > 0
+          ? contributionNum
+          : undefined,
+      taxSetAsideRate:
+        entryIncomeType === "1099"
+          ? clampTaxSetAsideRate(parseFloat(taxSetAsideRate))
+          : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
       updatedAt: new Date().toISOString(),
     });
@@ -265,6 +326,7 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     category,
     description,
     entry,
+    incomeType,
     isValid,
     linkedAccountId,
     onSave,
@@ -272,8 +334,10 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
     recurring,
     recurrenceDay,
     recurrenceInterval,
+    retirementContribution,
     showAccountPicker,
     showDayPicker,
+    taxSetAsideRate,
     type,
     yearMonth,
   ]);
@@ -403,6 +467,82 @@ const EditBudgetEntryModal: React.FC<EditBudgetEntryModalProps> = ({
                     ))}
                   </View>
                 </View>
+
+                {type === "income" && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>INCOME TYPE</Text>
+                    <Text style={styles.accountPickerHint}>
+                      W-2 tracks your take-home paycheck and 401(k). 1099 shows
+                      how much of each payment to set aside for taxes.
+                    </Text>
+                    <View style={styles.categoryWrap}>
+                      {INCOME_TYPE_OPTIONS.map((opt) => (
+                        <TouchableOpacity
+                          key={opt.label}
+                          style={[
+                            styles.categoryPill,
+                            incomeType === opt.value && styles.categoryPillActive,
+                          ]}
+                          onPress={() => setIncomeType(opt.value)}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryPillText,
+                              incomeType === opt.value &&
+                                styles.categoryPillTextActive,
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {type === "income" && incomeType === "w2" && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>401(K) THIS PAYCHECK (OPTIONAL)</Text>
+                    <Text style={styles.accountPickerHint}>
+                      The amount below is your take-home (net) pay. If part of
+                      this paycheck went to a 401(k), record it here - it's
+                      tracked separately, not added to income.
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textMuted}
+                      value={retirementContribution}
+                      onChangeText={setRetirementContribution}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                )}
+
+                {type === "income" && incomeType === "1099" && (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>TAX SET-ASIDE PERCENT</Text>
+                    <Text style={styles.accountPickerHint}>
+                      Nothing is withheld from 1099 pay, so set a slice aside
+                      for end-of-year taxes. 25-30% is a common starting point.
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder={String(DEFAULT_TAX_SET_ASIDE_RATE)}
+                      placeholderTextColor={colors.textMuted}
+                      value={taxSetAsideRate}
+                      onChangeText={setTaxSetAsideRate}
+                      keyboardType="decimal-pad"
+                      maxLength={5}
+                    />
+                    {taxSetAsidePreview > 0 && (
+                      <Text style={[styles.helperText, { color: colors.success }]}>
+                        Set aside {formatCurrency(taxSetAsidePreview)} of this
+                        for taxes.
+                      </Text>
+                    )}
+                  </View>
+                )}
 
                 <View style={styles.field}>
                   <Text style={styles.label}>CATEGORY</Text>

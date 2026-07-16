@@ -1,4 +1,4 @@
-# BudgetArk Spreadsheet Schema (v2)
+# BudgetArk Spreadsheet Schema (v3)
 
 This is the column schema for `.csv` and `.xlsx` files exchanged with BudgetArk.
 The schema is shared by `src/utils/spreadsheetExport.ts` and `src/utils/spreadsheetImport.ts`. Header names are matched case-insensitively and tolerate whitespace, but the column meanings are fixed.
@@ -6,6 +6,8 @@ The schema is shared by `src/utils/spreadsheetExport.ts` and `src/utils/spreadsh
 CSV files contain a single sheet (Budget Entries). Excel files contain a multi-sheet workbook with all sheets below. Sheet names are matched case-insensitively.
 
 **v2 changes:** Budget Entries gained `BusinessId` (round-trips) and `Business` (readable name, export-only); Excel workbooks gained a `Businesses` sheet. v1 files still import - the new columns are simply absent.
+
+**v3 changes:** Budget Entries gained `IncomeType`, `Retirement401k`, and `TaxSetAsideRate` (all round-trip; blank for expenses and plain income). Older files still import - the new columns are simply absent.
 
 > **Receipt photos do not round-trip.** Photo attachments on entries live as encrypted files on the device and are not part of the spreadsheet schema (or the JSON export). A **merge**-mode import never removes an entry's local photos - an entry updated from a spreadsheet row keeps the photos already on the device. A **replace**-mode spreadsheet restore keeps the entry but not its photos; the in-app JSON backup preserves the entry's photo *references* (files stay on the original device).
 
@@ -29,6 +31,9 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 | `Merchant`        | No       | Normalized merchant key captured at approval time. Round-tripped.                      |
 | `BusinessId`      | No       | UUID of the business this expense is tagged with (see the `Businesses` sheet). Round-tripped. |
 | `Business`        | No       | Human-readable business name at export time. **Export-only - ignored on import** (matching by name would fork identities on rename). Shows `(deleted)` for a dangling id. |
+| `IncomeType`      | No       | `w2` or `1099` for income rows (`W-2` / `W2` are accepted). Blank for expenses and plain income. Round-tripped. |
+| `Retirement401k`  | No       | 401(k) dollars withheld from a W-2 paycheck. Only kept when `IncomeType` is `w2`. Not part of `Amount` (which is the net deposit). Round-tripped. |
+| `TaxSetAsideRate` | No       | Percent (0-100) of a 1099 payment to set aside for taxes. Only kept when `IncomeType` is `1099`. Round-tripped. |
 | `CreatedAt`       | No       | ISO timestamp the entry was created. Round-tripped so re-importing doesn't reset history. |
 | `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
 

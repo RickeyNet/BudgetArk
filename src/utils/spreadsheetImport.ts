@@ -365,6 +365,41 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
   const businessId =
     parseString(get(row, "BusinessId", "Business Id"), 80) || undefined;
 
+  // W-2 / 1099 paycheck fields - income rows only, mirroring the UI
+  // invariant (the modals clear them when an entry flips to expense).
+  // Tolerant of hand-edited variants ("W-2", "W2"); anything else drops the
+  // whole trio so a corrupt cell can't smuggle a bogus rate past the
+  // downstream validator. Bounds mirror isBudgetEntryItem.
+  const incomeTypeRaw = parseString(get(row, "IncomeType", "Income Type"), 12)
+    .toLowerCase()
+    .replace(/-/g, "");
+  const incomeType =
+    type === "income" && incomeTypeRaw === "w2"
+      ? ("w2" as const)
+      : type === "income" && incomeTypeRaw === "1099"
+      ? ("1099" as const)
+      : undefined;
+  const retirement401k = parseAmount(
+    get(row, "Retirement401k", "Retirement 401k")
+  );
+  const retirementContribution =
+    incomeType === "w2" &&
+    Number.isFinite(retirement401k) &&
+    retirement401k > 0 &&
+    retirement401k <= VALIDATOR_LIMITS.MAX_MONEY
+      ? retirement401k
+      : undefined;
+  const setAsideRaw = parseAmount(
+    get(row, "TaxSetAsideRate", "Tax Set Aside Rate")
+  );
+  const taxSetAsideRate =
+    incomeType === "1099" &&
+    Number.isFinite(setAsideRaw) &&
+    setAsideRaw >= 0 &&
+    setAsideRaw <= 100
+      ? setAsideRaw
+      : undefined;
+
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
   // they're missing or unparseable, fall back to `now` - but prefer carrying
@@ -398,6 +433,9 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     externalTxId,
     merchant,
     businessId,
+    incomeType,
+    retirementContribution,
+    taxSetAsideRate,
   });
 };
 

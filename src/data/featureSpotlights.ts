@@ -56,6 +56,15 @@ export type FeatureSpotlight = {
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   {
+    id: "income-types",
+    sinceVersion: "1.9.0",
+    icon: "💵",
+    title: "W-2 or 1099? Tag your paychecks",
+    blurb:
+      "Mark income as a W-2 paycheck or 1099 contractor pay. W-2 entries can track the 401(k) withheld from each check, and 1099 entries show exactly how much to set aside for taxes - totaled monthly on your Budget.",
+    cta: { label: "Log a paycheck", kind: "budget-add-entry" },
+  },
+  {
     id: "bank-connections",
     sinceVersion: "1.9.0",
     icon: "🏦",

@@ -199,6 +199,19 @@ export const isBudgetEntryItem = (
   // its business passed, or one entry bricks the whole sync diff.
   const businessIdValid =
     item.businessId === undefined || isSafeText(item.businessId, 120);
+  // W-2 / 1099 paycheck fields (all optional; see BudgetEntry docs). The
+  // rate is bounded 0-100 - a hostile peer's 10_000% rate would otherwise
+  // render an absurd "set aside" figure on the summary card.
+  const incomeTypeValid =
+    item.incomeType === undefined ||
+    item.incomeType === "w2" ||
+    item.incomeType === "1099";
+  const retirementContributionValid =
+    item.retirementContribution === undefined ||
+    isSafeNumber(item.retirementContribution, { min: 0 });
+  const taxSetAsideRateValid =
+    item.taxSetAsideRate === undefined ||
+    isSafeNumber(item.taxSetAsideRate, { min: 0, max: 100 });
   const attachmentsValid = isEntryAttachmentsValue(item.attachments);
 
   return (
@@ -212,6 +225,9 @@ export const isBudgetEntryItem = (
     externalTxIdValid &&
     merchantValid &&
     businessIdValid &&
+    incomeTypeValid &&
+    retirementContributionValid &&
+    taxSetAsideRateValid &&
     attachmentsValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
@@ -276,6 +292,25 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   }
   if (item.businessId !== undefined && !isSafeText(item.businessId, 120)) {
     return '"businessId" must be a non-empty string of at most 120 characters when present';
+  }
+  if (
+    item.incomeType !== undefined &&
+    item.incomeType !== "w2" &&
+    item.incomeType !== "1099"
+  ) {
+    return '"incomeType" must be exactly "w2" or "1099" when present';
+  }
+  if (
+    item.retirementContribution !== undefined &&
+    !isSafeNumber(item.retirementContribution, { min: 0 })
+  ) {
+    return '"retirementContribution" must be a non-negative number when present';
+  }
+  if (
+    item.taxSetAsideRate !== undefined &&
+    !isSafeNumber(item.taxSetAsideRate, { min: 0, max: 100 })
+  ) {
+    return '"taxSetAsideRate" must be a number between 0 and 100 when present';
   }
   if (!isEntryAttachmentsValue(item.attachments)) {
     return `"attachments" must be an array of at most ${MAX_IMPORTED_ATTACHMENTS} items, each with a string "id", a parseable "createdAt", and optional numeric "width"/"height"`;

@@ -110,6 +110,7 @@ import {
 } from "../utils/recurrence";
 import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
 import { totalsByBucket } from "../utils/budgetBucketMath";
+import { summarizePaychecks } from "../utils/paycheckMath";
 
 /**
  * FAB layout constants - kept here so the coachmark can compute a
@@ -578,6 +579,14 @@ const BudgetScreen: React.FC = () => {
       monthlyEntries
         .filter((e) => e.type === "income")
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [monthlyEntries]
+  );
+
+  // W-2 / 1099 rollup for the selected month: 401(k) dollars withheld from
+  // paychecks (not part of income totals) and the tax set-aside owed on
+  // 1099 income. monthlyEntries is already recurring-aware.
+  const paycheckSummary = useMemo(
+    () => summarizePaychecks(monthlyEntries),
     [monthlyEntries]
   );
 
@@ -1386,6 +1395,11 @@ const BudgetScreen: React.FC = () => {
                   {entry.description || entry.category}
                 </Text>
                 <View style={styles.incomeSummaryRight}>
+                  {entry.incomeType && (
+                    <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]}>
+                      {entry.incomeType === "w2" ? "W-2" : "1099"}
+                    </Text>
+                  )}
                   {entry.recurring && (
                     <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
                       {getRecurrenceTag(entry)}
@@ -1398,6 +1412,18 @@ const BudgetScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
           </View>
+        )}
+        {paycheckSummary.retirementContribution > 0 && (
+          <Text style={styles.autoDebtHint}>
+            Plus {formatCurrency(paycheckSummary.retirementContribution)} into your
+            401(k) this month (not counted as income)
+          </Text>
+        )}
+        {paycheckSummary.taxSetAside > 0 && (
+          <Text style={[styles.autoDebtHint, { color: colors.warning }]}>
+            Set aside {formatCurrency(paycheckSummary.taxSetAside)} of this
+            month's 1099 income for taxes
+          </Text>
         )}
       </View>
 
