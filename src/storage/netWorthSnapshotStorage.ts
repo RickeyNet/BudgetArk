@@ -23,7 +23,20 @@ const getDayKey = (input: string | Date): string => {
   return `${year}-${month}-${day}`;
 };
 
+// Returns the SAME ref when the snapshot is already canonical - the getter
+// detects "needs repair" by identity instead of the previous O(n)
+// JSON.stringify diff against itself (same treatment budgetStorage's
+// entries getter documents).
 const normalizeSnapshot = (snapshot: NetWorthSnapshot): NetWorthSnapshot => {
+  if (
+    snapshot.capturedAt &&
+    snapshot.dayKey &&
+    Number.isFinite(snapshot.totalAssets) &&
+    Number.isFinite(snapshot.totalDebt) &&
+    Number.isFinite(snapshot.netWorth)
+  ) {
+    return snapshot;
+  }
   const capturedAt = snapshot.capturedAt || new Date().toISOString();
   return {
     dayKey: snapshot.dayKey || getDayKey(capturedAt),
@@ -40,9 +53,31 @@ const normalizeSnapshot = (snapshot: NetWorthSnapshot): NetWorthSnapshot => {
 const sortSnapshots = (snapshots: NetWorthSnapshot[]): NetWorthSnapshot[] =>
   [...snapshots].sort((a, b) => a.dayKey.localeCompare(b.dayKey));
 
+// Same ref when already sorted and under the cap; copies only when a repair
+// is actually needed.
 const pruneSnapshots = (snapshots: NetWorthSnapshot[]): NetWorthSnapshot[] => {
-  const sorted = sortSnapshots(snapshots);
-  return sorted.slice(-MAX_SNAPSHOTS);
+  let alreadySorted = true;
+  for (let i = 1; i < snapshots.length; i++) {
+    if (snapshots[i - 1].dayKey.localeCompare(snapshots[i].dayKey) > 0) {
+      alreadySorted = false;
+      break;
+    }
+  }
+  const inOrder = alreadySorted ? snapshots : sortSnapshots(snapshots);
+  return inOrder.length > MAX_SNAPSHOTS ? inOrder.slice(-MAX_SNAPSHOTS) : inOrder;
+};
+
+const repairSnapshots = (
+  parsed: NetWorthSnapshot[]
+): { snapshots: NetWorthSnapshot[]; changed: boolean } => {
+  let changed = false;
+  const normalized = parsed.map((snapshot) => {
+    const next = normalizeSnapshot(snapshot);
+    if (next !== snapshot) changed = true;
+    return next;
+  });
+  const pruned = pruneSnapshots(normalized);
+  return { snapshots: pruned, changed: changed || pruned !== normalized };
 };
 
 export const getNetWorthSnapshots = async (): Promise<NetWorthSnapshot[]> => {
@@ -51,11 +86,22 @@ export const getNetWorthSnapshots = async (): Promise<NetWorthSnapshot[]> => {
 
   try {
     const parsed = JSON.parse(raw) as NetWorthSnapshot[];
-    const normalized = pruneSnapshots(parsed.map(normalizeSnapshot));
-    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    const { snapshots, changed } = repairSnapshots(parsed);
+    if (changed) {
+      // Atomic recompute instead of persisting our own snapshot of the
+      // repair: a concurrent capture/sync write landing between the read
+      // above and this write must not be reverted.
+      await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+        if (!current) return null;
+        try {
+          const repair = repairSnapshots(JSON.parse(current) as NetWorthSnapshot[]);
+          return repair.changed ? JSON.stringify(repair.snapshots) : null;
+        } catch {
+          return null;
+        }
+      });
     }
-    return normalized;
+    return snapshots;
   } catch {
     return [];
   }

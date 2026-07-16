@@ -32,6 +32,11 @@ import AttachmentSection from "./AttachmentSection";
 import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 import { clampTaxSetAsideRate } from "../utils/paycheckMath";
+import {
+  DEFAULT_RECURRENCE_DAY,
+  buildEntryDateISO,
+  lastDayOfYearMonth,
+} from "../utils/entryDate";
 import { useCurrency } from "../currency/CurrencyProvider";
 
 const INCOME_TYPE_OPTIONS: readonly {
@@ -105,24 +110,6 @@ const formatYearMonthLabel = (yearMonth: string): string => {
   const monthIndex = Number(monthStr) - 1;
   const monthLabel = MONTH_LABELS[monthIndex] || "Jan";
   return `${monthLabel} ${yearStr}`;
-};
-
-const DEFAULT_RECURRENCE_DAY = 15;
-
-const lastDayOfYearMonth = (yearMonth: string): number => {
-  const [yStr, mStr] = yearMonth.split("-");
-  return new Date(Number(yStr), Number(mStr), 0).getDate();
-};
-
-const buildEntryDateISO = (yearMonth: string, day: number): string => {
-  const clamped = Math.max(1, Math.min(day, lastDayOfYearMonth(yearMonth)));
-  const dd = String(clamped).padStart(2, "0");
-  // Noon UTC, not local noon converted to UTC: for UTC+13/+14 locales local
-  // noon serializes as the previous UTC day, so a day-1 entry lands in the
-  // prior month and its recurrence fires a month early forever. Month
-  // attribution everywhere slices the YYYY-MM prefix, so the stored string
-  // must carry the month the user picked.
-  return `${yearMonth}-${dd}T12:00:00.000Z`;
 };
 
 const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({

@@ -190,6 +190,56 @@ describe("importFromString - merge mode", () => {
     expect(readStore(KEYS.DEBTS)[0].balance).toBe(999);
   });
 
+  it("keeps the newer local budget limit when the incoming one is older (LWW)", async () => {
+    // Regression: the limits merge used to replace per-category limits
+    // unconditionally, so importing a stale backup rolled back limits the
+    // user had edited since the export - and the import stamp made the
+    // rollback propagate to a sync partner as a "fresh" edit.
+    const LIMITS_KEY = "@budgetark_budget_limits_by_month";
+    storageMock.__store.set(
+      LIMITS_KEY,
+      JSON.stringify({
+        "2026-06": [
+          { category: "Food", monthlyLimit: 500, updatedAt: "2026-06-10T00:00:00.000Z" },
+        ],
+      })
+    );
+    await importFromString(
+      JSON.stringify({
+        budgetLimitsByMonth: {
+          "2026-06": [
+            { category: "Food", monthlyLimit: 100, updatedAt: "2026-01-01T00:00:00.000Z" },
+          ],
+        },
+      }),
+      "merge"
+    );
+    expect(readStore(LIMITS_KEY)["2026-06"][0].monthlyLimit).toBe(500);
+  });
+
+  it("applies the incoming budget limit when it is newer", async () => {
+    const LIMITS_KEY = "@budgetark_budget_limits_by_month";
+    storageMock.__store.set(
+      LIMITS_KEY,
+      JSON.stringify({
+        "2026-06": [
+          { category: "Food", monthlyLimit: 500, updatedAt: "2026-01-01T00:00:00.000Z" },
+        ],
+      })
+    );
+    await importFromString(
+      JSON.stringify({
+        budgetLimitsByMonth: {
+          "2026-06": [
+            { category: "Food", monthlyLimit: 100, updatedAt: "2026-06-10T00:00:00.000Z" },
+          ],
+        },
+      }),
+      "merge"
+    );
+    expect(readStore(LIMITS_KEY)["2026-06"][0].monthlyLimit).toBe(100);
+  });
+
   it("computes staleDays from exportedAt", async () => {
     const tenDaysAgo = new Date(Date.now() - 10 * 86400_000).toISOString();
     const result = await importFromString(

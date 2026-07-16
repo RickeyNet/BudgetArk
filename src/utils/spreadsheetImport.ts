@@ -89,9 +89,17 @@ const VALID_DEBT_CLASS_SOURCES = new Set(["manual", "inferred"]);
  *
  * Handles:
  *   - Plain numbers (Excel returns numbers natively)
- *   - "$1,234.56", "1.234,56" (some locales), " 42 "
+ *   - "$1,234.56" / "1,234.56" (US convention)
+ *   - "1.234,56" / "1,50" / "1.234.567,89" (decimal-comma locales)
  *   - Parenthesized negatives like "(50.00)"
  *   - Leading/trailing whitespace
+ *
+ * Separator convention is detected per value: when both "." and "," appear,
+ * the rightmost one is the decimal separator and the other is grouping. A
+ * lone comma followed by 1-2 trailing digits is a decimal comma ("1,50");
+ * otherwise commas are grouping. This used to strip ALL commas blindly, so
+ * "1.234,56" imported as 1.23456 and "1,50" as 150 - silently wrong money
+ * that passed every downstream bounds check.
  *
  * Returns NaN if not parseable.
  */
@@ -109,15 +117,47 @@ const parseAmount = (raw: unknown): number => {
     s = s.slice(1, -1).trim();
   }
 
-  // Strip currency symbols and thousands separators (US convention)
-  s = s.replace(/[$£€¥₹]/g, "");
-  s = s.replace(/,/g, "");
+  // Strip currency symbols
+  s = s.replace(/[$£€¥₹]/g, "").trim();
+
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      // Decimal comma: "1.234,56" - dots are grouping. A second comma
+      // survives into Number() and yields NaN (fail closed, not a guess).
+      s = s.replace(/\./g, "").replace(/,/g, ".");
+    } else {
+      // Decimal dot: "1,234.56" - commas are grouping.
+      s = s.replace(/,/g, "");
+    }
+  } else if (lastComma >= 0) {
+    const commaCount = s.split(",").length - 1;
+    const digitsAfter = s.length - lastComma - 1;
+    if (commaCount === 1 && digitsAfter >= 1 && digitsAfter <= 2) {
+      // "1,50" - decimal comma. (A single comma with exactly 3 trailing
+      // digits, "1,234", stays grouping per the US-format default.)
+      s = s.replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (lastDot >= 0 && s.indexOf(".") !== lastDot) {
+    // Multiple dots with no comma: "1.234.567" - grouping in decimal-comma
+    // locales; never a valid US decimal.
+    s = s.replace(/\./g, "");
+  }
   s = s.trim();
 
   const n = Number(s);
   if (!Number.isFinite(n)) return NaN;
   return negative ? -n : n;
 };
+
+/** Formats calendar parts as noon-UTC ISO (the canonical entry-date anchor). */
+const dateOnlyToNoonUtcIso = (y: number, m: number, d: number): string =>
+  `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(
+    d
+  ).padStart(2, "0")}T12:00:00.000Z`;
 
 /**
  * Normalizes a date cell into ISO 8601.
@@ -128,36 +168,84 @@ const parseAmount = (raw: unknown): number => {
  *   - ISO strings ("2026-04-30", "2026-04-30T12:00:00Z")
  *   - US-format strings ("4/30/2026", "04/30/2026")
  *
+ * Date-only inputs are anchored at NOON UTC, matching how the app stores
+ * entry dates (see utils/entryDate.ts). Month attribution app-wide slices
+ * the YYYY-MM prefix, so a date-only cell parsed at local midnight (the old
+ * behavior) landed on the previous UTC day for any user east of UTC -
+ * first-of-month entries silently moved into the prior month's budget.
+ *
  * Returns "" if unparseable.
  */
 const parseDate = (raw: unknown): string => {
   if (raw instanceof Date) {
     if (Number.isNaN(raw.getTime())) return "";
-    return raw.toISOString();
+    // SheetJS (cellDates:true) reconstructs date cells as local wall-clock
+    // Dates, so the LOCAL calendar parts carry the day the sheet displays;
+    // raw.toISOString() would shift that day for users east of UTC. Export
+    // anchors cells at noon, so local parts are stable in every offset.
+    return dateOnlyToNoonUtcIso(
+      raw.getFullYear(),
+      raw.getMonth() + 1,
+      raw.getDate()
+    );
   }
   if (typeof raw === "number") {
-    // Excel serial date (days since 1899-12-30)
+    // Excel serial date (days since 1899-12-30) - UTC arithmetic, so the
+    // UTC parts carry the intended calendar day.
     if (!Number.isFinite(raw)) return "";
     const ms = Math.round((raw - 25569) * 86400 * 1000);
     const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+    if (Number.isNaN(d.getTime())) return "";
+    return dateOnlyToNoonUtcIso(
+      d.getUTCFullYear(),
+      d.getUTCMonth() + 1,
+      d.getUTCDate()
+    );
   }
   if (typeof raw !== "string") return "";
 
   const s = raw.trim();
   if (!s) return "";
 
-  // Direct parse first (handles ISO + many native formats)
-  const direct = Date.parse(s);
-  if (!Number.isNaN(direct)) return new Date(direct).toISOString();
+  // Date-only ISO: anchor at noon UTC directly.
+  const isoDay = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDay) {
+    return dateOnlyToNoonUtcIso(
+      Number(isoDay[1]),
+      Number(isoDay[2]),
+      Number(isoDay[3])
+    );
+  }
 
-  // Try US-style M/D/YYYY
+  // US-style M/D/YYYY. Built via Date.UTC with a rollover check so 13/40/26
+  // is rejected instead of silently rolling into a different month.
   const usMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (usMatch) {
     const [, m, d, yRaw] = usMatch;
     const y = yRaw.length === 2 ? 2000 + Number(yRaw) : Number(yRaw);
-    const dt = new Date(y, Number(m) - 1, Number(d));
-    if (!Number.isNaN(dt.getTime())) return dt.toISOString();
+    const dt = new Date(Date.UTC(y, Number(m) - 1, Number(d), 12));
+    if (
+      Number.isNaN(dt.getTime()) ||
+      dt.getUTCMonth() !== Number(m) - 1 ||
+      dt.getUTCDate() !== Number(d)
+    ) {
+      return "";
+    }
+    return dt.toISOString();
+  }
+
+  // Everything else goes through the engine parser. Strings carrying an
+  // explicit time keep it; date-only formats ("June 1, 2026") parse at
+  // local midnight, so the local parts carry the intended day.
+  const direct = Date.parse(s);
+  if (!Number.isNaN(direct)) {
+    const dt = new Date(direct);
+    if (/\d:\d/.test(s)) return dt.toISOString();
+    return dateOnlyToNoonUtcIso(
+      dt.getFullYear(),
+      dt.getMonth() + 1,
+      dt.getDate()
+    );
   }
 
   return "";
@@ -843,7 +931,13 @@ export const importSpreadsheet = async (
   try {
     if (isCsv) {
       const csvText = await new ExpoFile(file.uri).text();
-      workbook = XLSX.read(csvText, { type: "string", cellDates: true });
+      // raw:true disables SheetJS's CSV type inference so every cell reaches
+      // the row mappers as the string the user actually wrote. Inference is
+      // lossy in exactly the ways the mappers guard against: fuzzynum strips
+      // commas ("1.234,56" -> 1.23456, silently wrong money) and fuzzydate
+      // rolls invalid dates over ("2/30/2026" -> March 2) before parseAmount
+      // / parseDate can fail closed.
+      workbook = XLSX.read(csvText, { type: "string", cellDates: true, raw: true });
     } else {
       const base64 = await new ExpoFile(file.uri).base64();
       workbook = XLSX.read(base64, { type: "base64", cellDates: true });

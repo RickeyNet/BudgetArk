@@ -7,6 +7,7 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
+import { repairCollectionInPlace } from "./collectionRepair";
 
 const STORAGE_KEY = "@budgetark_asset_accounts";
 
@@ -29,7 +30,10 @@ export const getAssetAccountsIncludingDeleted = async (): Promise<AssetAccount[]
     // when nothing was dropped, so the steady-state read costs O(1) here
     // instead of the previous O(n × record-size) JSON.stringify diff.
     if (purged !== parsed) {
-      await writeAssetAccounts(purged);
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot: a mutation or sync write landing between the read above
+      // and this write must not be reverted by the purge.
+      await repairCollectionInPlace<AssetAccount>(STORAGE_KEY, (a) => a);
     }
     return purged;
   } catch {

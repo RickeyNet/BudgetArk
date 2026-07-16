@@ -111,6 +111,15 @@ export const markBackfillSyncDone = async (): Promise<void> => {
 export const computeOutgoingDiff = async (
   lastSyncTimestamp: string | null
 ): Promise<SyncDiff> => {
+  // Watermark captured BEFORE any collection is read. This value (returned
+  // as syncTimestamp) is what the orchestrator persists as the next
+  // lastSyncTimestamp. Stamping it after the sync instead would make any
+  // record edited while the sync was in flight (reads -> network round-trip
+  // -> apply) sort as "older than the last sync" and be excluded from every
+  // future diff - silently, forever. With the early watermark such records
+  // are simply re-sent next sync, which last-write-wins makes idempotent.
+  const computedAt = new Date().toISOString();
+
   const [
     debts,
     payments,
@@ -235,7 +244,7 @@ export const computeOutgoingDiff = async (
         : undefined,
     payoffStrategy: strategyEnvelope?.value,
     payoffStrategyUpdatedAt: strategyEnvelope?.updatedAt,
-    syncTimestamp: new Date().toISOString(),
+    syncTimestamp: computedAt,
   };
 };
 

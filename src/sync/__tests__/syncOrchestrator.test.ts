@@ -123,7 +123,11 @@ describe("client role (partner discovered first)", () => {
     expect(diffEngine.applyIncomingDiff).toHaveBeenCalledWith({ from: "partner" });
     expect(conn.send).toHaveBeenCalledWith("SYNC_ACK", { ok: true });
     expect(result).toMatchObject({ success: true, recordsSent: 3, recordsReceived: 5 });
+    // The persisted watermark is the diff's pre-read syncTimestamp, NOT a
+    // post-sync "now" - otherwise records edited mid-sync would sort older
+    // than lastSyncTimestamp and never propagate.
     expect(pairingStorage.updateSyncMetadata).toHaveBeenCalledTimes(1);
+    expect(pairingStorage.updateSyncMetadata).toHaveBeenCalledWith(OUT_DIFF.syncTimestamp);
     expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledTimes(1);
     expect(statuses).toEqual(["discovering", "connecting", "syncing", "complete"]);
 
@@ -216,6 +220,8 @@ describe("server role (partner not discovered)", () => {
 
     expect(result).toMatchObject({ success: true, recordsSent: 3, recordsReceived: 5 });
     expect(pairingStorage.updateSyncMetadata).toHaveBeenCalledTimes(1);
+    // Same early-watermark contract as the client path.
+    expect(pairingStorage.updateSyncMetadata).toHaveBeenCalledWith(OUT_DIFF.syncTimestamp);
     expect(conn.close).toHaveBeenCalled();
     expect(Discovery.stop).toHaveBeenCalled();
     expect(statuses).toContain("complete");

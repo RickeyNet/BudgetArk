@@ -20,6 +20,7 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
+import { repairCollectionInPlace } from "./collectionRepair";
 import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
 
@@ -150,7 +151,11 @@ export const getDebtsIncludingDeleted = async (): Promise<Debt[]> => {
     });
     const purged = purgeExpiredTombstones(normalized);
     if (normalizeChanged || purged !== normalized) {
-      await writeDebts(purged);
+      // Repair via atomic recompute, NOT by writing `purged`: our snapshot
+      // may already be stale (a mutation or sync write can land between the
+      // read above and this write), and persisting it would revert that
+      // writer's change.
+      await repairCollectionInPlace(STORAGE_KEYS.DEBTS, normalizeDebt);
     }
     return purged;
   } catch {
@@ -306,10 +311,9 @@ export const getPaymentsIncludingDeleted = async (): Promise<Payment[]> => {
     });
     const purged = purgeExpiredTombstones(normalized);
     if (normalizeChanged || purged !== normalized) {
-      await EncryptedStorage.setItem(
-        STORAGE_KEYS.PAYMENTS,
-        JSON.stringify(purged)
-      );
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot - see the debts getter above.
+      await repairCollectionInPlace(STORAGE_KEYS.PAYMENTS, normalizePayment);
     }
     return purged;
   } catch {

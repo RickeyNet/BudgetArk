@@ -85,6 +85,16 @@ const ENCRYPTED_V1_PREFIX = "__ENC__:";
 let cachedKey: string | null = null;
 
 /**
+ * In-flight key load, memoized so concurrent callers share one lookup.
+ * Without this, two storage ops racing on a cold cache (first launch, or the
+ * first op after backgrounding clears cachedKey) can BOTH see an empty vault,
+ * generate different keys, and write both - whichever loses has every value
+ * it encrypted become permanently unreadable (HMAC failure) on next launch.
+ * The promise, not just the resolved value, is the dedup point.
+ */
+let keyPromise: Promise<string | null> | null = null;
+
+/**
  * Timeout duration for AsyncStorage operations (milliseconds).
  * 5 seconds is generous enough for slow/low-end devices while still
  * preventing indefinite hangs from degraded flash storage or backed-up I/O.
@@ -121,6 +131,9 @@ const withTimeout = <T>(
 const _appStateSubscription = AppState.addEventListener("change", (state) => {
   if (state !== "active") {
     cachedKey = null;
+    // Clear the memoized promise too - it closes over the same key, so
+    // leaving it live would defeat the background-clearing above.
+    keyPromise = null;
   }
 });
 // Prevent unused variable warning while keeping the reference alive
@@ -135,9 +148,7 @@ void _appStateSubscription;
  * Every time after: loads the existing key from the vault and caches it in
  * memory so subsequent calls are instant.
  */
-const getEncryptionKey = async (): Promise<string | null> => {
-  if (cachedKey) return cachedKey;
-
+const loadOrCreateKey = async (): Promise<string | null> => {
   try {
     let key = await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS);
     if (!key) {
@@ -155,6 +166,20 @@ const getEncryptionKey = async (): Promise<string | null> => {
     if (__DEV__) console.error("SecureStore access failed:", error);
     return null;
   }
+};
+
+const getEncryptionKey = (): Promise<string | null> => {
+  if (cachedKey) return Promise.resolve(cachedKey);
+  if (!keyPromise) {
+    keyPromise = loadOrCreateKey().then((key) => {
+      // A null result means the vault was unavailable, possibly transiently;
+      // drop the memo so the next storage op retries instead of pinning
+      // "encryption unavailable" for the rest of the session.
+      if (key === null) keyPromise = null;
+      return key;
+    });
+  }
+  return keyPromise;
 };
 
 /**
@@ -356,7 +381,28 @@ export const getItem = async (key: string): Promise<string | null> => {
   if (raw === null) return null;
 
   const encKey = await getEncryptionKey();
+  const value = decryptStoredRaw(key, raw, encKey);
 
+  // V2/V1/plaintext raw: upgrade to V3 in place for future reads.
+  if (encKey !== null && !isEncryptedV3(raw)) {
+    await migrateStoredValue(key, raw, encrypt(value, encKey));
+  }
+
+  return value;
+};
+
+/**
+ * Decrypts a raw stored blob (any of the four formats getItem documents)
+ * WITHOUT the upgrade-in-place side effect - safe to call from inside the
+ * per-key write queue, where enqueuing the migration write would deadlock.
+ * Throws DecryptionError on tamper/corruption or on encrypted data with no
+ * vault key, mirroring getItem.
+ */
+const decryptStoredRaw = (
+  key: string,
+  raw: string,
+  encKey: string | null
+): string => {
   // If SecureStore is unavailable, fall back to plaintext read-only mode.
   // Don't encrypt data we can't decrypt later.
   if (encKey === null) {
@@ -377,28 +423,25 @@ export const getItem = async (key: string): Promise<string | null> => {
     return result;
   }
 
-  // Case 2: V2 crypto-js format - verify, decrypt, upgrade to V3
+  // Case 2: V2 crypto-js format - verify then decrypt
   if (isEncryptedV2(raw)) {
     const result = decryptV2(raw, encKey);
     if (result === null) {
       throw new DecryptionError(key);
     }
-    await migrateStoredValue(key, raw, encrypt(result, encKey));
     return result;
   }
 
-  // Case 3: Old V1 format (no HMAC) - decrypt and upgrade to V3
+  // Case 3: Old V1 format (no HMAC)
   if (isEncryptedV1(raw)) {
     const plaintext = decryptV1(raw, encKey);
     if (plaintext === null) {
       throw new DecryptionError(key);
     }
-    await migrateStoredValue(key, raw, encrypt(plaintext, encKey));
     return plaintext;
   }
 
-  // Case 4: Legacy plaintext - encrypt as V3 for future reads
-  await migrateStoredValue(key, raw, encrypt(raw, encKey));
+  // Case 4: Legacy plaintext
   return raw;
 };
 
@@ -480,6 +523,47 @@ export const setItem = async (
       return;
     }
     await withTimeout(AsyncStorage.setItem(key, encrypt(value, encKey)), `setItem(${key})`);
+  });
+};
+
+/**
+ * Atomic read-modify-write for a single key. The read happens INSIDE the
+ * per-key write queue, so no setItem/removeItem/updateItem on the same key
+ * can land between the read and the write - unlike the caller-side
+ * getX -> mutate -> saveX pattern, whose load-to-save window the writeQueues
+ * comment calls out as unsolved.
+ *
+ * `updater` receives the current decrypted value (null when the key is
+ * empty) and returns the next value, or null to leave storage untouched.
+ * Returning the SAME string it received also skips the write.
+ *
+ * Built for write-on-read "repair" paths (normalization, tombstone/TTL
+ * purges): a repair computed from a stale snapshot must not overwrite a
+ * user mutation that landed after the snapshot was read. Recompute the
+ * repair from `current` inside the updater and it can't go stale.
+ */
+export const updateItem = async (
+  key: string,
+  updater: (current: string | null) => string | null
+): Promise<void> => {
+  return enqueueWrite(key, async () => {
+    const raw = await withTimeout(AsyncStorage.getItem(key), `getItem(${key})`);
+    const encKey = await getEncryptionKey();
+    const current = raw === null ? null : decryptStoredRaw(key, raw, encKey);
+
+    const next = updater(current);
+    if (next === null || next === current) return;
+
+    if (encKey === null) {
+      // Same plaintext fallback as setItem: ordinary app data survives a
+      // broken keystore. Secret-bearing modules must not use updateItem.
+      await withTimeout(AsyncStorage.setItem(key, next), `setItem(${key})`);
+      return;
+    }
+    await withTimeout(
+      AsyncStorage.setItem(key, encrypt(next, encKey)),
+      `setItem(${key})`
+    );
   });
 };
 

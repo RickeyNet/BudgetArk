@@ -1,0 +1,68 @@
+// BudgetArk - Entry Date Helpers tests
+//
+// Pins the UTC-noon contract for stored entry dates. The regression these
+// guard: buildEntryDateISO built from local noon shifts day-1 entries into
+// the previous month for UTC+13/+14 users (the Add/Edit modal drift bug).
+
+import {
+  DEFAULT_RECURRENCE_DAY,
+  buildEntryDateISO,
+  dayOfMonthFromIso,
+  lastDayOfYearMonth,
+} from "../entryDate";
+
+describe("buildEntryDateISO", () => {
+  it("produces noon UTC with the exact yearMonth prefix the user picked", () => {
+    expect(buildEntryDateISO("2026-07", 1)).toBe("2026-07-01T12:00:00.000Z");
+    expect(buildEntryDateISO("2026-07", 15)).toBe("2026-07-15T12:00:00.000Z");
+  });
+
+  it("is timezone-independent: the string is built, not round-tripped through Date", () => {
+    // The old Edit-modal version did new Date(`${ym}-${dd}T12:00:00`) which
+    // parses as LOCAL noon; in UTC+13 that serializes as the previous UTC
+    // day, moving a day-1 entry into the prior month. The fixed builder
+    // must keep the picked month in the YYYY-MM prefix regardless of the
+    // device timezone this test runs in.
+    expect(buildEntryDateISO("2026-01", 1).slice(0, 7)).toBe("2026-01");
+  });
+
+  it("clamps the day into the month", () => {
+    expect(buildEntryDateISO("2026-02", 31)).toBe("2026-02-28T12:00:00.000Z");
+    expect(buildEntryDateISO("2024-02", 31)).toBe("2024-02-29T12:00:00.000Z");
+    expect(buildEntryDateISO("2026-04", 0)).toBe("2026-04-01T12:00:00.000Z");
+  });
+});
+
+describe("dayOfMonthFromIso", () => {
+  it("reads the day from the canonical UTC-noon format", () => {
+    expect(dayOfMonthFromIso("2026-07-01T12:00:00.000Z")).toBe(1);
+    expect(dayOfMonthFromIso("2026-07-31T12:00:00.000Z")).toBe(31);
+  });
+
+  it("round-trips with buildEntryDateISO", () => {
+    for (const day of [1, 15, 28]) {
+      expect(dayOfMonthFromIso(buildEntryDateISO("2026-03", day))).toBe(day);
+    }
+  });
+
+  it("uses the string prefix, not local calendar parts", () => {
+    // Local getDate() on this value returns the wrong day in offsets beyond
+    // +/-12h and flips the recurrence day on every edit. The prefix is what
+    // the user picked.
+    expect(dayOfMonthFromIso("2026-07-01T00:30:00.000Z")).toBe(1);
+  });
+
+  it("falls back to the default for garbage", () => {
+    expect(dayOfMonthFromIso("not a date")).toBe(DEFAULT_RECURRENCE_DAY);
+    expect(dayOfMonthFromIso("")).toBe(DEFAULT_RECURRENCE_DAY);
+  });
+});
+
+describe("lastDayOfYearMonth", () => {
+  it("handles month lengths and leap years", () => {
+    expect(lastDayOfYearMonth("2026-01")).toBe(31);
+    expect(lastDayOfYearMonth("2026-02")).toBe(28);
+    expect(lastDayOfYearMonth("2024-02")).toBe(29);
+    expect(lastDayOfYearMonth("2026-04")).toBe(30);
+  });
+});

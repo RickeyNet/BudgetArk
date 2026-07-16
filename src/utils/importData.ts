@@ -793,6 +793,18 @@ export const importFromString = async (
         ? (parsed as Record<string, Record<string, unknown>[]>)
         : {};
 
+    // Same LWW-on-updatedAt rule as computeMergedById: merge is documented
+    // as non-destructive, so a stale backup must not roll back a limit the
+    // user edited since the export. Ties go to the incoming record since
+    // the user explicitly chose to import.
+    const tsOf = (record: Record<string, unknown> | undefined): number => {
+      if (!record) return -Infinity;
+      const raw = record.updatedAt;
+      if (typeof raw !== "string") return 0;
+      const t = Date.parse(raw);
+      return Number.isFinite(t) ? t : 0;
+    };
+
     let totalItems = 0;
     for (const [monthKey, incomingArr] of Object.entries(incomingMap)) {
       const existingForMonth = Array.isArray(existing[monthKey])
@@ -807,7 +819,9 @@ export const importFromString = async (
           const idx = existingForMonth.findIndex(
             (e: any) => e.category === cat
           );
-          if (idx >= 0) existingForMonth[idx] = item;
+          if (idx >= 0 && tsOf(item) >= tsOf(existingForMonth[idx])) {
+            existingForMonth[idx] = item;
+          }
         } else {
           existingForMonth.push(item);
         }

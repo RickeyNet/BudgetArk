@@ -39,19 +39,47 @@ export type BusinessMutationResult =
   | { ok: true; businesses: Business[] }
   | { ok: false; error: string };
 
+const cleanBusinesses = (businesses: unknown[]): Business[] =>
+  businesses.filter(
+    (b): b is Business =>
+      !!b &&
+      typeof (b as Business).id === "string" &&
+      typeof (b as Business).name === "string"
+  );
+
 const readStore = async (): Promise<Business[]> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as Partial<BusinessStore>;
     if (!parsed || !Array.isArray(parsed.businesses)) return [];
-    const cleaned = parsed.businesses.filter(
-      (b): b is Business =>
-        !!b && typeof b.id === "string" && typeof b.name === "string"
-    );
+    const cleaned = cleanBusinesses(parsed.businesses);
     const purged = purgeExpiredTombstones(cleaned);
     if (purged !== cleaned) {
-      await writeStore(purged);
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot: a mutation or sync write landing between the read above
+      // and this write must not be reverted by the purge. Bespoke updater
+      // (not repairCollectionInPlace) because businesses persist inside a
+      // versioned envelope, not a bare array.
+      await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+        if (!current) return null;
+        try {
+          const cur = JSON.parse(current) as Partial<BusinessStore>;
+          if (!cur || !Array.isArray(cur.businesses)) return null;
+          const curCleaned = cleanBusinesses(cur.businesses);
+          const curPurged = purgeExpiredTombstones(curCleaned);
+          // Same trigger as the read path: rewrite only when the purge
+          // actually dropped a tombstone.
+          if (curPurged === curCleaned) return null;
+          const store: BusinessStore = {
+            businesses: curPurged,
+            version: BUSINESS_STORAGE_VERSION,
+          };
+          return JSON.stringify(store);
+        } catch {
+          return null;
+        }
+      });
     }
     return purged;
   } catch {

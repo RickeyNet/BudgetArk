@@ -35,6 +35,11 @@ import AttachmentSection from "./AttachmentSection";
 import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 import { clampTaxSetAsideRate } from "../utils/paycheckMath";
+import {
+  DEFAULT_RECURRENCE_DAY,
+  buildEntryDateISO,
+  dayOfMonthFromIso,
+} from "../utils/entryDate";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useValueChanged } from "../hooks/useValueChanged";
 
@@ -79,25 +84,6 @@ const MONTH_LABELS = [
 ] as const;
 
 const toYearMonth = (iso: string) => new Date(iso).toISOString().slice(0, 7);
-
-const DEFAULT_RECURRENCE_DAY = 15;
-
-const dayOfMonthFromIso = (iso: string): number => {
-  const d = new Date(iso);
-  const day = d.getDate();
-  return Number.isFinite(day) && day >= 1 && day <= 31 ? day : DEFAULT_RECURRENCE_DAY;
-};
-
-const lastDayOfYearMonth = (yearMonth: string): number => {
-  const [yStr, mStr] = yearMonth.split("-");
-  return new Date(Number(yStr), Number(mStr), 0).getDate();
-};
-
-const buildEntryDateISO = (yearMonth: string, day: number): string => {
-  const clamped = Math.max(1, Math.min(day, lastDayOfYearMonth(yearMonth)));
-  const dd = String(clamped).padStart(2, "0");
-  return new Date(`${yearMonth}-${dd}T12:00:00`).toISOString();
-};
 
 const formatYearMonthLabel = (yearMonth: string): string => {
   const [yearStr, monthStr] = yearMonth.split("-");

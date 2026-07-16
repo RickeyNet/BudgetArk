@@ -44,6 +44,7 @@ import CryptoJS from "crypto-js";
 import {
   getItem,
   setItem,
+  updateItem,
   isEncryptionAvailable,
   DecryptionError,
   EncryptionUnavailableError,
@@ -211,5 +212,121 @@ describe("encryptedStorage: V3 format + V1/V2/plaintext migration", () => {
       mockSecureStore.setItemAsync.mockRejectedValue(new Error("keystore down"));
       await expect(encryptStringWithMasterKey("receipt")).resolves.toBeNull();
     });
+  });
+});
+
+/**
+ * First-run key-creation race (2026-07 fix).
+ *
+ * Concurrent storage ops on a cold key cache (first launch, or first op
+ * after backgrounding) must share ONE vault lookup. Before the in-flight
+ * promise was memoized, two racing callers could each see an empty vault
+ * and generate DIFFERENT keys; values encrypted with the losing key fail
+ * HMAC verification forever - silent, permanent data loss.
+ */
+describe("encryptedStorage: concurrent first-run key creation", () => {
+  beforeAll(() => jest.useFakeTimers());
+  afterAll(() => jest.useRealTimers());
+
+  it("generates exactly one master key when concurrent writes race on a cold cache", async () => {
+    jest.clearAllMocks();
+    (global as { __DEV__?: boolean }).__DEV__ = false;
+    // Simulate backgrounding to drop the module's cached key + memoized promise.
+    mockAppStateCallback?.("background");
+
+    const vault = new Map<string, string>();
+    mockSecureStore.getItemAsync.mockImplementation(async (k: string) =>
+      vault.has(k) ? vault.get(k)! : null
+    );
+    mockSecureStore.setItemAsync.mockImplementation(async (k: string, v: string) => {
+      vault.set(k, v);
+    });
+    const store = new Map<string, string>();
+    mockAsyncStorage.getItem.mockImplementation(async (k: string) =>
+      store.has(k) ? store.get(k)! : null
+    );
+    mockAsyncStorage.setItem.mockImplementation(async (k: string, v: string) => {
+      store.set(k, v);
+    });
+
+    // Two different keys written in parallel - the onboarding shape.
+    await Promise.all([setItem("@race_a", "one"), setItem("@race_b", "two")]);
+
+    // Exactly one key generation reached the vault.
+    expect(mockSecureStore.setItemAsync).toHaveBeenCalledTimes(1);
+
+    // Both values decrypt with the surviving key even after the cache drops.
+    mockAppStateCallback?.("background");
+    await expect(getItem("@race_a")).resolves.toBe("one");
+    await expect(getItem("@race_b")).resolves.toBe("two");
+  });
+});
+
+/**
+ * updateItem: atomic read-modify-write inside the per-key queue (2026-07).
+ * The property that matters: the updater's `current` is read AFTER queued
+ * writes on the same key settle, so a repair computed inside it can never
+ * be based on a stale snapshot.
+ */
+describe("encryptedStorage: updateItem", () => {
+  const MASTER_KEY = "cd".repeat(32);
+  const store = new Map<string, string>();
+
+  beforeAll(() => jest.useFakeTimers());
+  afterAll(() => jest.useRealTimers());
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    store.clear();
+    mockAppStateCallback?.("background"); // cold key cache per test
+    mockSecureStore.getItemAsync.mockResolvedValue(MASTER_KEY);
+    mockSecureStore.setItemAsync.mockResolvedValue(undefined);
+    mockAsyncStorage.getItem.mockImplementation(async (k: string) =>
+      store.has(k) ? store.get(k)! : null
+    );
+    mockAsyncStorage.setItem.mockImplementation(async (k: string, v: string) => {
+      store.set(k, v);
+    });
+  });
+
+  it("applies the updater to the decrypted value and re-encrypts the result", async () => {
+    await setItem("@k", "v1");
+    await updateItem("@k", (current) => {
+      expect(current).toBe("v1");
+      return "v2";
+    });
+    expect(store.get("@k")!.startsWith("__ENCV3__:")).toBe(true);
+    await expect(getItem("@k")).resolves.toBe("v2");
+  });
+
+  it("leaves storage untouched when the updater returns null or the same value", async () => {
+    await setItem("@k", "v1");
+    const before = store.get("@k");
+    await updateItem("@k", () => null);
+    expect(store.get("@k")).toBe(before);
+    await updateItem("@k", (current) => current);
+    expect(store.get("@k")).toBe(before);
+  });
+
+  it("passes null for a missing key and can create the value", async () => {
+    await updateItem("@missing", (current) => {
+      expect(current).toBeNull();
+      return null;
+    });
+    expect(store.has("@missing")).toBe(false);
+  });
+
+  it("serializes against setItem on the same key: the updater sees the latest write", async () => {
+    const seen: (string | null)[] = [];
+    // Enqueue a write and, WITHOUT awaiting it, an update on the same key.
+    const write = setItem("@k", "fresh");
+    const update = updateItem("@k", (current) => {
+      seen.push(current);
+      return `${current}+repaired`;
+    });
+    await Promise.all([write, update]);
+    // The updater ran after the queued write - not against a stale snapshot.
+    expect(seen).toEqual(["fresh"]);
+    await expect(getItem("@k")).resolves.toBe("fresh+repaired");
   });
 });

@@ -7,6 +7,7 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
+import { repairCollectionInPlace } from "./collectionRepair";
 
 export const BUDGET_STORAGE_KEYS = {
   ENTRIES: "@budgetark_budget_entries",
@@ -118,7 +119,13 @@ export const getBudgetEntriesIncludingDeleted = async (): Promise<BudgetEntry[]>
     // O(1) here instead of the previous O(n × entry-size) JSON.stringify
     // diff against itself.
     if (normalizeChanged || purged !== normalized) {
-      await writeBudgetEntries(purged);
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot: a mutation or sync write landing between the read above
+      // and this write must not be reverted by the repair.
+      await repairCollectionInPlace(
+        BUDGET_STORAGE_KEYS.ENTRIES,
+        normalizeBudgetEntry
+      );
     }
     return purged;
   } catch {

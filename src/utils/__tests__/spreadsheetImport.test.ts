@@ -151,6 +151,54 @@ describe("importSpreadsheet - CSV", () => {
     expect(entries.find((e: any) => e.id === "e1").amount).toBeCloseTo(1234.56, 2);
     expect(entries.find((e: any) => e.id === "e2").amount).toBeCloseTo(-50, 2);
   });
+
+  it("anchors date-only cells at noon UTC so the month never shifts", async () => {
+    // Regression: date-only strings used to parse at local midnight, so any
+    // user east of UTC importing "2026-06-01" got an ISO date on May 31 -
+    // month attribution slices YYYY-MM, silently moving the entry (and its
+    // budget totals) into the previous month.
+    useCsv([
+      entryRow({ ID: "e1", Date: "2026-06-01" }),
+      entryRow({ ID: "e2", Date: "6/1/2026" }),
+    ]);
+    await importSpreadsheet();
+    const entries = lastPayload().budgetEntries;
+    expect(entries.find((e: any) => e.id === "e1").date).toBe(
+      "2026-06-01T12:00:00.000Z"
+    );
+    expect(entries.find((e: any) => e.id === "e2").date).toBe(
+      "2026-06-01T12:00:00.000Z"
+    );
+  });
+
+  it("rejects rollover dates instead of guessing a month", async () => {
+    useCsv([entryRow({ ID: "e1" }), entryRow({ ID: "e2", Date: "2/30/2026" })]);
+    const result = await importSpreadsheet();
+    const entries = lastPayload().budgetEntries;
+    expect(entries.map((e: any) => e.id)).toEqual(["e1"]);
+    expect(result?.skippedRows).toBe(1);
+  });
+
+  it("parses decimal-comma amounts instead of mangling them", async () => {
+    // Regression: commas used to be stripped blindly, importing "1.234,56"
+    // as 1.23456 and "1,50" as 150 - silently wrong by 100-1000x.
+    useCsv([
+      entryRow({ ID: "e1", Amount: "1.234,56" }),
+      entryRow({ ID: "e2", Amount: "1,50" }),
+      entryRow({ ID: "e3", Amount: "1.234.567,89" }),
+      entryRow({ ID: "e4", Amount: "€1.234,56" }),
+      // US grouping still parses as before
+      entryRow({ ID: "e5", Amount: "1,234" }),
+    ]);
+    await importSpreadsheet();
+    const entries = lastPayload().budgetEntries;
+    const amountOf = (id: string) => entries.find((e: any) => e.id === id).amount;
+    expect(amountOf("e1")).toBeCloseTo(1234.56, 2);
+    expect(amountOf("e2")).toBeCloseTo(1.5, 2);
+    expect(amountOf("e3")).toBeCloseTo(1234567.89, 2);
+    expect(amountOf("e4")).toBeCloseTo(1234.56, 2);
+    expect(amountOf("e5")).toBeCloseTo(1234, 2);
+  });
 });
 
 describe("importSpreadsheet - XLSX multi-sheet", () => {

@@ -20,6 +20,7 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
+import { repairCollectionInPlace } from "./collectionRepair";
 
 const STORAGE_KEY = "@budgetark_holdings";
 
@@ -41,7 +42,10 @@ export const getHoldingsIncludingDeleted = async (): Promise<Holding[]> => {
     // Ref equality: `purgeExpiredTombstones` returns the original array when
     // nothing was dropped, so the steady-state read avoids a needless write.
     if (purged !== parsed) {
-      await writeHoldings(purged);
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot: a mutation or sync write landing between the read above
+      // and this write must not be reverted by the purge.
+      await repairCollectionInPlace<Holding>(STORAGE_KEY, (h) => h);
     }
     return purged;
   } catch {

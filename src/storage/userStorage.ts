@@ -60,7 +60,13 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
     };
 
     if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      await EncryptedStorage.setItem(USER_KEY, JSON.stringify(normalized));
+      // Compare-and-set: only persist the repair if the stored value is
+      // still the one we read. A concurrent update (display name, currency)
+      // landing between the read above and this write is itself already
+      // normalized - overwriting it here would silently revert the edit.
+      await EncryptedStorage.updateItem(USER_KEY, (current) =>
+        current === raw ? JSON.stringify(normalized) : null
+      );
     }
 
     return normalized;
