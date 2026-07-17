@@ -28,7 +28,8 @@ export type ProfileSpotlightSection =
 export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
   | { label: string; kind: "budget-add-entry" }
-  | { label: string; kind: "bridge" };
+  | { label: string; kind: "bridge" }
+  | { label: string; kind: "charts" };
 
 export type FeatureSpotlight = {
   /** Stable id - persisted in seen/acked storage, never rename after release. */
@@ -123,6 +124,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     blurb:
       "Every account and category on the Bridge now shows how much it's up or down over the window you pick - a day, a week, a month, or a quarter. Tracked privately on this phone from your own balances and prices; nothing leaves the device.",
     cta: { label: "See your Bridge", kind: "bridge" },
+  },
+  {
+    id: "what-if-spending",
+    sinceVersion: "1.9.0",
+    icon: "🔮",
+    title: "What if you stopped spending on…?",
+    blurb:
+      "Pick a spending category and see what redirecting that money could do: how much sooner you'd be debt-free, the interest you'd skip, or what it grows into over 1, 5, and 10 years. Find it under Tools on the Charts tab.",
+    cta: { label: "Run a what-if", kind: "charts" },
   },
   {
     id: "deep-sea-theme",

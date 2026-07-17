@@ -374,6 +374,9 @@ const AppContent: React.FC = () => {
           navigationRef.navigate("Budget", { quickAdd: {} });
         } else if (cta.kind === "bridge") {
           navigationRef.navigate("Bridge");
+        } else if (cta.kind === "charts") {
+          // Route key stays "Utilities"; the tab displays as "Charts".
+          navigationRef.navigate("Utilities");
         } else {
           navigationRef.navigate("Profile", { openSection: cta.section });
         }
