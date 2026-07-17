@@ -18,7 +18,6 @@ import {
   StyleSheet,
   Platform,
   Linking,
-  KeyboardAvoidingView,
   ScrollView,
 } from "react-native";
 import { openComposer } from "react-native-email-link";
@@ -27,6 +26,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { useValueChanged } from "../hooks/useValueChanged";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 interface FeedbackModalProps {
   visible: boolean;
@@ -155,15 +155,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets, so KAV
-        // stays off. The RN Modal's Android window isn't auto-resized for the
-        // keyboard, so Android needs the KAV to lift the sheet - padding slides
-        // it up smoothly, while "height" re-lays-out the subtree each frame and
-        // glitches on dismiss.
-        behavior={Platform.OS === "android" ? "padding" : undefined}
-        style={styles.overlay}
-      >
+      <SheetKeyboardAvoider style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
             <ScrollView
@@ -267,7 +259,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoider>
     </Modal>
   );
 };

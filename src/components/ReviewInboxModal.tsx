@@ -17,7 +17,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   SectionList,
@@ -38,6 +37,7 @@ import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useConnections } from "../connections/ConnectionsProvider";
 import CategoryPillPicker from "./CategoryPillPicker";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import {
   approvePendingTransaction,
   dismissAndIgnoreMerchant,
@@ -330,10 +330,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "android" ? "padding" : undefined}
-        style={styles.overlay}
-      >
+      <SheetKeyboardAvoider style={styles.overlay}>
         <View style={styles.modalSheet}>
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
@@ -425,7 +422,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoider>
     </Modal>
   );
 };

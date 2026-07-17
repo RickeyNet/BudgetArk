@@ -38,16 +38,29 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import {
   calcInvestmentTimeline,
-  calcMonthsUntilDate,
   calcPaymentForGoalDate,
   generatePayoffSchedule,
 } from "../utils/calculations";
+import {
+  buildLoanScheduleCsv,
+  buildLoanScheduleFilename,
+  buildLoanYearlySummary,
+  calcAutoFillYearsRemaining,
+  calcAvgMonthlyExpenses,
+  calcBalanceWeightedRate,
+  calcEmergencyFundPlan,
+  calcRefiComparison,
+  calcRuleOf72Years,
+  resolveEmergencyFundExpenses,
+  sumRefinanceBalance,
+  summarizeLoanCosts,
+} from "../utils/chartCalculators";
+import type { LoanScheduleRow } from "../utils/chartCalculators";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getDebts } from "../storage/debtStorage";
 import type {
-  BudgetEntry,
   ChapterId,
   Debt,
   LearningProgress,
@@ -56,7 +69,6 @@ import type {
   RootTabParamList,
 } from "../types";
 import { LESSON_TOPICS } from "../types";
-import { isEntryActiveInMonth } from "../utils/recurrence";
 import SmoothSlider from "../components/SmoothSlider";
 import { CHAPTERS } from "../data/lessonChapters";
 import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
@@ -71,6 +83,7 @@ import LessonScreen from "../lessons/LessonScreen";
 
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useValueChanged } from "../hooks/useValueChanged";
+import { useSliderValueEditor } from "../hooks/useSliderValueEditor";
 
 /* Enable LayoutAnimation on Android */
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -147,85 +160,6 @@ const REFI_SLIDERS: Record<RefiKey, SliderConfig> = {
   refiNewRate: { label: "New Rate (APR)", min: 0.5, max: 30, step: 0.125 },
   refiNewTerm: { label: "New Term (years)", min: 1, max: 30, step: 1 },
   refiClosingCosts: { label: "Closing Costs", min: 0, max: 30_000, step: 100 },
-};
-
-type LoanScheduleRow = {
-  month: number;
-  balance: number;
-  interestPaid: number;
-  principalPaid: number;
-};
-
-const csvEscape = (value: string | number): string => {
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-};
-
-const buildLoanScheduleCsv = (
-  schedule: readonly LoanScheduleRow[]
-): string => {
-  const lines = [
-    ["Year", "Month", "Payment", "Principal", "Interest", "RemainingBalance"].join(","),
-    ...schedule.map((row) =>
-      [
-        Math.ceil(row.month / 12),
-        row.month,
-        (row.principalPaid + row.interestPaid).toFixed(2),
-        row.principalPaid.toFixed(2),
-        row.interestPaid.toFixed(2),
-        row.balance.toFixed(2),
-      ]
-        .map(csvEscape)
-        .join(",")
-    ),
-  ];
-
-  return lines.join("\n");
-};
-
-const buildLoanScheduleFilename = (): string => {
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  return `budgetark-amortization-${stamp}.csv`;
-};
-
-/* ── Emergency Fund Helpers ── */
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
-
-const calcAvgMonthlyExpenses = (entries: BudgetEntry[]): number => {
-  const now = new Date();
-  const monthTotals: Record<string, number> = {};
-  const monthsTracked = new Set<string>();
-
-  // Look at the last 6 months (excluding current since it may be incomplete)
-  for (let i = 1; i <= 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthTotals[getMonthKey(d)] = 0;
-  }
-
-  // A month with *any* entry (expense or income, recurring or not) is a
-  // month the user was actively tracking. We previously only counted
-  // months with expense > 0, which biased the average upward - a month
-  // where the user paid $0 in expenses but logged income still says "I
-  // was tracking, my expenses really were zero," and dropping it from
-  // the denominator made historical EF targets larger than necessary.
-  for (const entry of entries) {
-    for (const mk of Object.keys(monthTotals)) {
-      if (!isEntryActiveInMonth(entry, mk)) continue;
-      monthsTracked.add(mk);
-      if (entry.type === "expense") monthTotals[mk] += entry.amount;
-    }
-  }
-
-  if (monthsTracked.size === 0) return 0;
-  const sum = Array.from(monthsTracked).reduce(
-    (acc, mk) => acc + (monthTotals[mk] ?? 0),
-    0
-  );
-  return Math.round(sum / monthsTracked.size);
 };
 
 /* ── Return Rate Presets ── */
@@ -367,17 +301,33 @@ const ChartsScreen: React.FC = () => {
   const [contribution, setContribution] = useState(500);
   const [returnRate, setReturnRate] = useState(7);
   const [years, setYears] = useState(20);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState("");
   const [showWhyCard, setShowWhyCard] = useState(false);
+  const calcEditor = useSliderValueEditor({
+    contribution: { ...SLIDERS.contribution, set: setContribution, commitMode: "raw-min" },
+    returnRate: {
+      ...SLIDERS.returnRate,
+      set: setReturnRate,
+      decimal: true,
+      commitMode: "snap-step-2dp",
+    },
+    years: { ...SLIDERS.years, set: setYears, commitMode: "round-int" },
+  });
 
   /* Loan calculator state */
   const [loanOpen, setLoanOpen] = useState(false);
   const [loanAmount, setLoanAmount] = useState(300000);
   const [loanRate, setLoanRate] = useState(6.5);
   const [loanTerm, setLoanTerm] = useState(30);
-  const [loanEditingKey, setLoanEditingKey] = useState<string | null>(null);
-  const [loanEditingText, setLoanEditingText] = useState("");
+  const loanEditor = useSliderValueEditor({
+    loanAmount: { ...LOAN_SLIDERS.loanAmount, set: setLoanAmount, commitMode: "round-int" },
+    loanRate: {
+      ...LOAN_SLIDERS.loanRate,
+      set: setLoanRate,
+      decimal: true,
+      commitMode: "snap-step-2dp",
+    },
+    loanTerm: { ...LOAN_SLIDERS.loanTerm, set: setLoanTerm, commitMode: "round-int" },
+  });
   const [loanYearlySummaryOpen, setLoanYearlySummaryOpen] = useState(true);
   const [loanScheduleVisibleRows, setLoanScheduleVisibleRows] = useState(LOAN_SCHEDULE_PAGE_SIZE);
   const [isLoanExporting, setIsLoanExporting] = useState(false);
@@ -392,8 +342,33 @@ const ChartsScreen: React.FC = () => {
   const [refiNewRate, setRefiNewRate] = useState(5.5);
   const [refiNewTerm, setRefiNewTerm] = useState(30);
   const [refiClosingCosts, setRefiClosingCosts] = useState(4000);
-  const [refiEditingKey, setRefiEditingKey] = useState<RefiKey | null>(null);
-  const [refiEditingText, setRefiEditingText] = useState("");
+  const refiEditor = useSliderValueEditor<RefiKey>({
+    refiCurrentTerm: {
+      ...REFI_SLIDERS.refiCurrentTerm,
+      set: setRefiCurrentTerm,
+      commitMode: "clamp-snap-3dp",
+      adjustDecimals: 3,
+    },
+    refiNewRate: {
+      ...REFI_SLIDERS.refiNewRate,
+      set: setRefiNewRate,
+      decimal: true,
+      commitMode: "clamp-snap-3dp",
+      adjustDecimals: 3,
+    },
+    refiNewTerm: {
+      ...REFI_SLIDERS.refiNewTerm,
+      set: setRefiNewTerm,
+      commitMode: "clamp-snap-3dp",
+      adjustDecimals: 3,
+    },
+    refiClosingCosts: {
+      ...REFI_SLIDERS.refiClosingCosts,
+      set: setRefiClosingCosts,
+      commitMode: "clamp-snap-3dp",
+      adjustDecimals: 3,
+    },
+  });
   const [refiDebts, setRefiDebts] = useState<Debt[]>([]);
   const [refiSelectedDebtIds, setRefiSelectedDebtIds] = useState<Set<string>>(
     () => new Set()
@@ -539,7 +514,7 @@ const ChartsScreen: React.FC = () => {
   const totalInterest = finalData?.interest ?? 0;
 
   /* Rule of 72 */
-  const doublingYears = returnRate > 0 ? Math.round(72 / returnRate) : 0;
+  const doublingYears = calcRuleOf72Years(returnRate);
 
   const toggleCalc = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -570,55 +545,16 @@ const ChartsScreen: React.FC = () => {
     [loanAmount, loanMonthlyPayment, loanRate]
   );
   const loanYearlySummary = useMemo(
-    () =>
-      Array.from({ length: Math.ceil(loanSchedule.length / 12) }, (_, index) => {
-        const start = index * 12;
-        const chunk = loanSchedule.slice(start, start + 12);
-        const payment = chunk.reduce(
-          (sum, row) => sum + row.principalPaid + row.interestPaid,
-          0
-        );
-        const principal = chunk.reduce((sum, row) => sum + row.principalPaid, 0);
-        const interest = chunk.reduce((sum, row) => sum + row.interestPaid, 0);
-        return {
-          year: index + 1,
-          payment,
-          principal,
-          interest,
-          endingBalance: chunk[chunk.length - 1]?.balance ?? 0,
-        };
-      }),
+    () => buildLoanYearlySummary(loanSchedule),
     [loanSchedule]
   );
-  const loanTotalPaid = useMemo(
-    () =>
-      loanSchedule.reduce(
-        (sum, row) => sum + row.principalPaid + row.interestPaid,
-        0
-      ),
-    [loanSchedule]
-  );
-  const loanTotalInterest = useMemo(
-    () => loanSchedule.reduce((sum, row) => sum + row.interestPaid, 0),
-    [loanSchedule]
-  );
-  const loanFirstFiveYearsMonths = Math.min(60, loanSchedule.length);
-  const loanInterestFirstFiveYears = useMemo(
-    () =>
-      loanSchedule
-        .slice(0, loanFirstFiveYearsMonths)
-        .reduce((sum, row) => sum + row.interestPaid, 0),
-    [loanFirstFiveYearsMonths, loanSchedule]
-  );
-  const loanPrincipalFirstFiveYears = useMemo(
-    () =>
-      loanSchedule
-        .slice(0, loanFirstFiveYearsMonths)
-        .reduce((sum, row) => sum + row.principalPaid, 0),
-    [loanFirstFiveYearsMonths, loanSchedule]
-  );
-  const loanInterestFirstFiveYearsShare =
-    loanTotalInterest > 0 ? loanInterestFirstFiveYears / loanTotalInterest : 0;
+  const {
+    totalPaid: loanTotalPaid,
+    totalInterest: loanTotalInterest,
+    interestFirstFiveYears: loanInterestFirstFiveYears,
+    principalFirstFiveYears: loanPrincipalFirstFiveYears,
+    interestFirstFiveYearsShare: loanInterestFirstFiveYearsShare,
+  } = useMemo(() => summarizeLoanCosts(loanSchedule), [loanSchedule]);
   const visibleLoanSchedule = useMemo(
     () => loanSchedule.slice(0, loanScheduleVisibleRows),
     [loanSchedule, loanScheduleVisibleRows]
@@ -635,66 +571,6 @@ const ChartsScreen: React.FC = () => {
     setLoanExportMessage(null);
   }
 
-  const adjustLoan = useCallback(
-    (key: "loanAmount" | "loanRate" | "loanTerm", delta: number) => {
-      const cfg = LOAN_SLIDERS[key];
-      const setter =
-        key === "loanAmount" ? setLoanAmount : key === "loanRate" ? setLoanRate : setLoanTerm;
-      setter((prev) => {
-        const next = Math.round((prev + delta * cfg.step) * 100) / 100;
-        return Math.max(cfg.min, Math.min(cfg.max, next));
-      });
-    },
-    []
-  );
-
-  const handleLoanValueFocus = useCallback(
-    (key: "loanAmount" | "loanRate" | "loanTerm", value: number) => {
-      setLoanEditingKey(key);
-      setLoanEditingText(String(value));
-    },
-    []
-  );
-
-  const handleLoanValueChange = useCallback(
-    (key: "loanAmount" | "loanRate" | "loanTerm", text: string) => {
-      if (key === "loanRate") {
-        setLoanEditingText(text.replace(/[^0-9.]/g, ""));
-      } else {
-        setLoanEditingText(text.replace(/[^0-9]/g, ""));
-      }
-    },
-    []
-  );
-
-  const handleLoanValueSubmit = useCallback(
-    (key: "loanAmount" | "loanRate" | "loanTerm") => {
-      const cfg = LOAN_SLIDERS[key];
-      const parsed = parseFloat(loanEditingText);
-      if (!isNaN(parsed) && parsed >= cfg.min) {
-        const setter =
-          key === "loanAmount" ? setLoanAmount : key === "loanRate" ? setLoanRate : setLoanTerm;
-        if (key === "loanRate") {
-          const snapped = Math.round(parsed / cfg.step) * cfg.step;
-          setter(Math.max(cfg.min, Math.round(snapped * 100) / 100));
-        } else {
-          setter(Math.max(cfg.min, Math.round(parsed)));
-        }
-      }
-      setLoanEditingKey(null);
-    },
-    [loanEditingText]
-  );
-
-  const handleLoanSliderChange = useCallback(
-    (key: "loanAmount" | "loanRate" | "loanTerm", val: number) => {
-      const setter =
-        key === "loanAmount" ? setLoanAmount : key === "loanRate" ? setLoanRate : setLoanTerm;
-      setter(val);
-    },
-    []
-  );
-
   const renderLoanSlider = (key: "loanAmount" | "loanRate" | "loanTerm", value: number) => {
     const cfg = LOAN_SLIDERS[key];
     const displayValue =
@@ -708,13 +584,13 @@ const ChartsScreen: React.FC = () => {
       <View key={key} style={styles.sliderGroup}>
         <View style={styles.sliderHeader}>
           <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          {loanEditingKey === key ? (
+          {loanEditor.editingKey === key ? (
             <TextInput
               style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
-              value={loanEditingText}
-              onChangeText={(text) => handleLoanValueChange(key, text)}
-              onBlur={() => handleLoanValueSubmit(key)}
-              onSubmitEditing={() => handleLoanValueSubmit(key)}
+              value={loanEditor.editingText}
+              onChangeText={(text) => loanEditor.changeEditingText(key, text)}
+              onBlur={() => loanEditor.commitEditing(key)}
+              onSubmitEditing={() => loanEditor.commitEditing(key)}
               keyboardType={key === "loanRate" ? "decimal-pad" : "numeric"}
               returnKeyType="done"
               selectTextOnFocus
@@ -724,7 +600,7 @@ const ChartsScreen: React.FC = () => {
           ) : (
             <TouchableOpacity
               style={styles.sliderValueDisplay}
-              onPress={() => handleLoanValueFocus(key, value)}
+              onPress={() => loanEditor.beginEditing(key, value)}
             >
               <Text style={styles.sliderValue}>{displayValue}</Text>
             </TouchableOpacity>
@@ -733,7 +609,7 @@ const ChartsScreen: React.FC = () => {
         <View style={styles.sliderRow}>
           <TouchableOpacity
             style={styles.sliderBtn}
-            onPress={() => adjustLoan(key, -1)}
+            onPress={() => loanEditor.adjustBy(key, -1)}
             disabled={value <= cfg.min}
           >
             <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
@@ -743,7 +619,7 @@ const ChartsScreen: React.FC = () => {
             min={cfg.min}
             max={cfg.max}
             step={cfg.step}
-            onValueChange={(val) => handleLoanSliderChange(key, val)}
+            onValueChange={(val) => loanEditor.setValue(key, val)}
             trackColor={colors.bg}
             fillColor={colors.accent}
             thumbColor={colors.accent}
@@ -751,7 +627,7 @@ const ChartsScreen: React.FC = () => {
           />
           <TouchableOpacity
             style={styles.sliderBtn}
-            onPress={() => adjustLoan(key, 1)}
+            onPress={() => loanEditor.adjustBy(key, 1)}
             disabled={value >= cfg.max}
           >
             <Text style={[styles.sliderBtnText, value >= cfg.max && styles.sliderBtnDisabled]}>+</Text>
@@ -813,54 +689,6 @@ const ChartsScreen: React.FC = () => {
     setRefiOpen((prev) => !prev);
   }, []);
 
-  const refiSetters: Record<RefiKey, React.Dispatch<React.SetStateAction<number>>> = {
-    refiCurrentTerm: setRefiCurrentTerm,
-    refiNewRate: setRefiNewRate,
-    refiNewTerm: setRefiNewTerm,
-    refiClosingCosts: setRefiClosingCosts,
-  };
-
-  const adjustRefi = useCallback((key: RefiKey, delta: number) => {
-    const cfg = REFI_SLIDERS[key];
-    refiSetters[key]((prev) => {
-      const next = Math.round((prev + delta * cfg.step) * 1000) / 1000;
-      return Math.max(cfg.min, Math.min(cfg.max, next));
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleRefiSliderChange = useCallback((key: RefiKey, val: number) => {
-    refiSetters[key](val);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleRefiValueFocus = useCallback((key: RefiKey, value: number) => {
-    setRefiEditingKey(key);
-    setRefiEditingText(String(value));
-  }, []);
-
-  const handleRefiValueChange = useCallback((key: RefiKey, text: string) => {
-    const isDecimal = key === "refiNewRate";
-    setRefiEditingText(
-      isDecimal ? text.replace(/[^0-9.]/g, "") : text.replace(/[^0-9]/g, "")
-    );
-  }, []);
-
-  const handleRefiValueSubmit = useCallback(
-    (key: RefiKey) => {
-      const cfg = REFI_SLIDERS[key];
-      const parsed = parseFloat(refiEditingText);
-      if (!isNaN(parsed) && parsed >= cfg.min) {
-        const clamped = Math.max(cfg.min, Math.min(cfg.max, parsed));
-        const snapped =
-          cfg.step >= 1
-            ? Math.round(clamped)
-            : Math.round(clamped / cfg.step) * cfg.step;
-        refiSetters[key](Math.round(snapped * 1000) / 1000);
-      }
-      setRefiEditingKey(null);
-    },
-    [refiEditingText] // eslint-disable-line react-hooks/exhaustive-deps
-  );
-
   const toggleRefiDebt = useCallback((id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setRefiSelectedDebtIds((prev) => {
@@ -878,19 +706,14 @@ const ChartsScreen: React.FC = () => {
   );
 
   const refiBalance = useMemo(
-    () =>
-      selectedRefiDebts.reduce((s, d) => s + Math.max(0, d.balance), 0),
+    () => sumRefinanceBalance(selectedRefiDebts),
     [selectedRefiDebts]
   );
 
-  const refiCurrentRate = useMemo(() => {
-    if (refiBalance <= 0) return 0;
-    const weighted = selectedRefiDebts.reduce(
-      (s, d) => s + Math.max(0, d.balance) * d.rate,
-      0
-    );
-    return weighted / refiBalance;
-  }, [selectedRefiDebts, refiBalance]);
+  const refiCurrentRate = useMemo(
+    () => calcBalanceWeightedRate(selectedRefiDebts, refiBalance),
+    [selectedRefiDebts, refiBalance]
+  );
 
   // Auto-fill years remaining when every selected debt has a goal date
   // (weighted by balance). Leaves the user's manual value alone otherwise.
@@ -901,69 +724,42 @@ const ChartsScreen: React.FC = () => {
   const refiDebtsChanged = useValueChanged(selectedRefiDebts, true);
   const refiBalanceChanged = useValueChanged(refiBalance, true);
   if (refiDebtsChanged || refiBalanceChanged) {
-    if (
-      selectedRefiDebts.length > 0 &&
-      selectedRefiDebts.every((d) => Boolean(d.goalDate)) &&
-      refiBalance > 0
-    ) {
-      const weightedMonths =
-        selectedRefiDebts.reduce(
-          (s, d) =>
-            s + Math.max(0, d.balance) * calcMonthsUntilDate(d.goalDate as string),
-          0
-        ) / refiBalance;
-      const years = Math.max(1, Math.min(30, Math.round(weightedMonths / 12)));
-      setRefiCurrentTerm(years);
-    }
+    const autoFillYears = calcAutoFillYearsRemaining(selectedRefiDebts, refiBalance);
+    if (autoFillYears !== null) setRefiCurrentTerm(autoFillYears);
   }
 
   /* Refi math */
-  const refiCurrentMonths = refiCurrentTerm * 12;
-  const refiNewMonths = refiNewTerm * 12;
   const hasRefiSelection = selectedRefiDebts.length > 0 && refiBalance > 0;
 
-  const refiCurrentMonthlyPayment = useMemo(
+  const {
+    currentMonthlyPayment: refiCurrentMonthlyPayment,
+    newMonthlyPayment: refiNewMonthlyPayment,
+    currentTotalInterest: refiCurrentTotalInterest,
+    newTotalInterest: refiNewTotalInterest,
+    monthlyDelta: refiMonthlyDelta,
+    interestDelta: refiInterestDelta,
+    breakEvenMonths: refiBreakEvenMonths,
+    netSavingsOverNewTerm: refiNetSavingsOverNewTerm,
+    extendsTerm: refiExtendsTerm,
+  } = useMemo(
     () =>
-      hasRefiSelection
-        ? calcPaymentForGoalDate(refiBalance, refiCurrentRate, refiCurrentMonths)
-        : 0,
-    [hasRefiSelection, refiBalance, refiCurrentRate, refiCurrentMonths]
-  );
-  const refiNewMonthlyPayment = useMemo(
-    () =>
-      hasRefiSelection
-        ? calcPaymentForGoalDate(refiBalance, refiNewRate, refiNewMonths)
-        : 0,
-    [hasRefiSelection, refiBalance, refiNewRate, refiNewMonths]
-  );
-
-  const refiCurrentTotalInterest = useMemo(() => {
-    if (!hasRefiSelection || !isFinite(refiCurrentMonthlyPayment)) return 0;
-    return generatePayoffSchedule(
+      calcRefiComparison({
+        balance: refiBalance,
+        currentRate: refiCurrentRate,
+        currentTermYears: refiCurrentTerm,
+        newRate: refiNewRate,
+        newTermYears: refiNewTerm,
+        closingCosts: refiClosingCosts,
+      }),
+    [
       refiBalance,
       refiCurrentRate,
-      refiCurrentMonthlyPayment
-    ).reduce((sum, row) => sum + row.interestPaid, 0);
-  }, [hasRefiSelection, refiBalance, refiCurrentRate, refiCurrentMonthlyPayment]);
-
-  const refiNewTotalInterest = useMemo(() => {
-    if (!hasRefiSelection || !isFinite(refiNewMonthlyPayment)) return 0;
-    return generatePayoffSchedule(
-      refiBalance,
+      refiCurrentTerm,
       refiNewRate,
-      refiNewMonthlyPayment
-    ).reduce((sum, row) => sum + row.interestPaid, 0);
-  }, [hasRefiSelection, refiBalance, refiNewRate, refiNewMonthlyPayment]);
-
-  const refiMonthlyDelta = refiCurrentMonthlyPayment - refiNewMonthlyPayment;
-  const refiInterestDelta = refiCurrentTotalInterest - refiNewTotalInterest;
-  const refiBreakEvenMonths =
-    hasRefiSelection && refiMonthlyDelta > 0
-      ? refiClosingCosts / refiMonthlyDelta
-      : null;
-  const refiNetSavingsOverNewTerm =
-    refiMonthlyDelta * refiNewMonths - refiClosingCosts;
-  const refiExtendsTerm = refiNewMonths > refiCurrentMonths;
+      refiNewTerm,
+      refiClosingCosts,
+    ]
+  );
   const refiAllSelectedHaveGoalDate =
     selectedRefiDebts.length > 0 &&
     selectedRefiDebts.every((d) => Boolean(d.goalDate));
@@ -1002,83 +798,18 @@ const ChartsScreen: React.FC = () => {
     }, [])
   );
 
-  const efMonthlyExpenses = efExpenseOverride
-    ? parseFloat(efExpenseOverride) || 0
-    : avgExpenses;
-  const efThreeMonth = efMonthlyExpenses * 3;
-  const efSixMonth = efMonthlyExpenses * 6;
-  const efThreeProgress = efThreeMonth > 0 ? Math.min(1, currentEfAmount / efThreeMonth) : 0;
-  const efSixProgress = efSixMonth > 0 ? Math.min(1, currentEfAmount / efSixMonth) : 0;
-  const efThreeRemaining = Math.max(0, efThreeMonth - currentEfAmount);
-  const efSixRemaining = Math.max(0, efSixMonth - currentEfAmount);
-  const efMonthsToThree = efMonthlySavings > 0 && efThreeRemaining > 0
-    ? Math.ceil(efThreeRemaining / efMonthlySavings)
-    : 0;
-  const efMonthsToSix = efMonthlySavings > 0 && efSixRemaining > 0
-    ? Math.ceil(efSixRemaining / efMonthlySavings)
-    : 0;
-
-  const adjust = useCallback(
-    (key: "contribution" | "returnRate" | "years", delta: number) => {
-      const cfg = SLIDERS[key];
-      const setter =
-        key === "contribution" ? setContribution : key === "returnRate" ? setReturnRate : setYears;
-      setter((prev) => {
-        const next = Math.round((prev + delta * cfg.step) * 100) / 100;
-        return Math.max(cfg.min, Math.min(cfg.max, next));
-      });
-    },
-    []
+  const efMonthlyExpenses = resolveEmergencyFundExpenses(
+    efExpenseOverride,
+    avgExpenses
   );
-
-  const handleValueFocus = useCallback(
-    (key: "contribution" | "returnRate" | "years", value: number) => {
-      setEditingKey(key);
-      setEditingText(String(value));
-    },
-    []
-  );
-
-  const handleValueChange = useCallback(
-    (key: "contribution" | "returnRate" | "years", text: string) => {
-      if (key === "returnRate") {
-        setEditingText(text.replace(/[^0-9.]/g, ""));
-      } else {
-        setEditingText(text.replace(/[^0-9]/g, ""));
-      }
-    },
-    []
-  );
-
-  const handleValueSubmit = useCallback(
-    (key: "contribution" | "returnRate" | "years") => {
-      const cfg = SLIDERS[key];
-      const parsed = parseFloat(editingText);
-      if (!isNaN(parsed) && parsed >= cfg.min) {
-        const setter =
-          key === "contribution" ? setContribution : key === "returnRate" ? setReturnRate : setYears;
-        if (key === "years") {
-          setter(Math.max(cfg.min, Math.round(parsed)));
-        } else if (key === "returnRate") {
-          const snapped = Math.round(parsed / cfg.step) * cfg.step;
-          setter(Math.max(cfg.min, Math.round(snapped * 100) / 100));
-        } else {
-          setter(Math.max(cfg.min, parsed));
-        }
-      }
-      setEditingKey(null);
-    },
-    [editingText]
-  );
-
-  const handleSliderChange = useCallback(
-    (key: "contribution" | "returnRate" | "years", val: number) => {
-      const setter =
-        key === "contribution" ? setContribution : key === "returnRate" ? setReturnRate : setYears;
-      setter(val);
-    },
-    []
-  );
+  const {
+    threeMonthTarget: efThreeMonth,
+    sixMonthTarget: efSixMonth,
+    threeMonthProgress: efThreeProgress,
+    sixMonthProgress: efSixProgress,
+    monthsToThree: efMonthsToThree,
+    monthsToSix: efMonthsToSix,
+  } = calcEmergencyFundPlan(efMonthlyExpenses, currentEfAmount, efMonthlySavings);
 
   const renderRefiSlider = (key: RefiKey, value: number) => {
     const cfg = REFI_SLIDERS[key];
@@ -1094,13 +825,13 @@ const ChartsScreen: React.FC = () => {
       <View key={key} style={styles.sliderGroup}>
         <View style={styles.sliderHeader}>
           <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          {refiEditingKey === key ? (
+          {refiEditor.editingKey === key ? (
             <TextInput
               style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
-              value={refiEditingText}
-              onChangeText={(text) => handleRefiValueChange(key, text)}
-              onBlur={() => handleRefiValueSubmit(key)}
-              onSubmitEditing={() => handleRefiValueSubmit(key)}
+              value={refiEditor.editingText}
+              onChangeText={(text) => refiEditor.changeEditingText(key, text)}
+              onBlur={() => refiEditor.commitEditing(key)}
+              onSubmitEditing={() => refiEditor.commitEditing(key)}
               keyboardType={isRate ? "decimal-pad" : "numeric"}
               returnKeyType="done"
               selectTextOnFocus
@@ -1110,7 +841,7 @@ const ChartsScreen: React.FC = () => {
           ) : (
             <TouchableOpacity
               style={styles.sliderValueDisplay}
-              onPress={() => handleRefiValueFocus(key, value)}
+              onPress={() => refiEditor.beginEditing(key, value)}
             >
               <Text style={styles.sliderValue}>{displayValue}</Text>
             </TouchableOpacity>
@@ -1119,7 +850,7 @@ const ChartsScreen: React.FC = () => {
         <View style={styles.sliderRow}>
           <TouchableOpacity
             style={styles.sliderBtn}
-            onPress={() => adjustRefi(key, -1)}
+            onPress={() => refiEditor.adjustBy(key, -1)}
             disabled={value <= cfg.min}
           >
             <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
@@ -1129,7 +860,7 @@ const ChartsScreen: React.FC = () => {
             min={cfg.min}
             max={cfg.max}
             step={cfg.step}
-            onValueChange={(val) => handleRefiSliderChange(key, val)}
+            onValueChange={(val) => refiEditor.setValue(key, val)}
             trackColor={colors.bg}
             fillColor={colors.accent}
             thumbColor={colors.accent}
@@ -1137,7 +868,7 @@ const ChartsScreen: React.FC = () => {
           />
           <TouchableOpacity
             style={styles.sliderBtn}
-            onPress={() => adjustRefi(key, 1)}
+            onPress={() => refiEditor.adjustBy(key, 1)}
             disabled={value >= cfg.max}
           >
             <Text style={[styles.sliderBtnText, value >= cfg.max && styles.sliderBtnDisabled]}>+</Text>
@@ -1160,13 +891,13 @@ const ChartsScreen: React.FC = () => {
       <View key={key} style={styles.sliderGroup}>
         <View style={styles.sliderHeader}>
           <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          {editingKey === key ? (
+          {calcEditor.editingKey === key ? (
             <TextInput
               style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
-              value={editingText}
-              onChangeText={(text) => handleValueChange(key, text)}
-              onBlur={() => handleValueSubmit(key)}
-              onSubmitEditing={() => handleValueSubmit(key)}
+              value={calcEditor.editingText}
+              onChangeText={(text) => calcEditor.changeEditingText(key, text)}
+              onBlur={() => calcEditor.commitEditing(key)}
+              onSubmitEditing={() => calcEditor.commitEditing(key)}
               keyboardType={key === "returnRate" ? "decimal-pad" : "numeric"}
               returnKeyType="done"
               selectTextOnFocus
@@ -1176,7 +907,7 @@ const ChartsScreen: React.FC = () => {
           ) : (
             <TouchableOpacity
               style={styles.sliderValueDisplay}
-              onPress={() => handleValueFocus(key, value)}
+              onPress={() => calcEditor.beginEditing(key, value)}
             >
               <Text style={styles.sliderValue}>{displayValue}</Text>
             </TouchableOpacity>
@@ -1185,7 +916,7 @@ const ChartsScreen: React.FC = () => {
         <View style={styles.sliderRow}>
           <TouchableOpacity
             style={styles.sliderBtn}
-            onPress={() => adjust(key, -1)}
+            onPress={() => calcEditor.adjustBy(key, -1)}
             disabled={value <= cfg.min}
           >
             <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
@@ -1195,7 +926,7 @@ const ChartsScreen: React.FC = () => {
             min={cfg.min}
             max={cfg.max}
             step={cfg.step}
-            onValueChange={(val) => handleSliderChange(key, val)}
+            onValueChange={(val) => calcEditor.setValue(key, val)}
             trackColor={colors.bg}
             fillColor={colors.accent}
             thumbColor={colors.accent}
@@ -1203,7 +934,7 @@ const ChartsScreen: React.FC = () => {
           />
           <TouchableOpacity
             style={styles.sliderBtn}
-            onPress={() => adjust(key, 1)}
+            onPress={() => calcEditor.adjustBy(key, 1)}
             disabled={value >= cfg.max}
           >
             <Text style={[styles.sliderBtnText, value >= cfg.max && styles.sliderBtnDisabled]}>+</Text>

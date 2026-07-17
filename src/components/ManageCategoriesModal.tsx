@@ -10,7 +10,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -31,6 +30,7 @@ import {
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { EMOJI_CHOICES, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
 import { MAX_CATEGORY_NAME_LENGTH } from "../storage/customCategoriesStorage";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import type { BudgetBucket } from "../types";
 
 interface ManageCategoriesModalProps {
@@ -108,15 +108,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
       transparent
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets, so KAV
-        // stays off. The RN Modal's Android window isn't auto-resized for the
-        // keyboard, so Android needs the KAV to lift the sheet - padding slides
-        // it up smoothly, while "height" re-lays-out the subtree each frame and
-        // glitches on dismiss.
-        behavior={Platform.OS === "android" ? "padding" : undefined}
-        style={styles.overlay}
-      >
+      <SheetKeyboardAvoider style={styles.overlay}>
         <View style={styles.modalSheet}>
           <ScrollView
             style={styles.scrollArea}
@@ -253,7 +245,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoider>
     </Modal>
   );
 };

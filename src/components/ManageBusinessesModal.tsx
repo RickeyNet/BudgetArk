@@ -16,7 +16,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -38,6 +37,7 @@ import {
   updateBusiness,
 } from "../storage/businessStorage";
 import { getBudgetEntries } from "../storage/budgetStorage";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 interface ManageBusinessesModalProps {
   visible: boolean;
@@ -159,13 +159,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
       transparent
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        // Same KAV rationale as ManageCategoriesModal: iOS relies on the
-        // ScrollView's automaticallyAdjustKeyboardInsets; Android's Modal
-        // window needs the padding lift.
-        behavior={Platform.OS === "android" ? "padding" : undefined}
-        style={styles.overlay}
-      >
+      <SheetKeyboardAvoider style={styles.overlay}>
         <View style={styles.modalSheet}>
           <ScrollView
             style={styles.scrollArea}
@@ -283,7 +277,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoider>
     </Modal>
   );
 };

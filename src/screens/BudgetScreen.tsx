@@ -18,8 +18,7 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import BudgetBucketCard from "../components/BudgetBucketCard";
-import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
-import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
+import BudgetEntryModal from "../components/BudgetEntryModal";
 import ReviewInboxModal from "../components/ReviewInboxModal";
 import { useConnections } from "../connections/ConnectionsProvider";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
@@ -227,6 +226,12 @@ const CATEGORY_CHART_PALETTE = [
   "#7B6D8D",
 ] as const;
 
+// How many entries an expanded category renders before the "Show all"
+// button. The screen's content is one giant ListHeaderComponent (nothing is
+// virtualized), so a bank-synced category with hundreds of entries would
+// otherwise mount them all in a single frame.
+const EXPANDED_ENTRY_CAP = 30;
+
 const BudgetScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const route = useRoute<RouteProp<RootTabParamList, "Budget">>();
@@ -278,6 +283,14 @@ const BudgetScreen: React.FC = () => {
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Everything on this screen lives in one ListHeaderComponent (the outer
+  // FlatList has no real rows), so nothing is virtualized. Expanding a
+  // bank-synced category with hundreds of entries would render them all at
+  // once - instead the first EXPANDED_ENTRY_CAP render and a "Show all"
+  // button opts into the rest per category.
+  const [fullyRevealedCategories, setFullyRevealedCategories] = useState<Set<string>>(
+    new Set()
+  );
   // Multi-select for bulk delete / recategorize. `selectionMode` flips row
   // taps from "edit" to "toggle select"; auto-debt-payment rows are never
   // selectable (they're derived from debts, not real budget entries).
@@ -327,7 +340,6 @@ const BudgetScreen: React.FC = () => {
       const loadBudgetData = async () => {
         const [
           storedEntries,
-          storedLimits,
           storedDebts,
           storedPayments,
           storedGoals,
@@ -339,7 +351,6 @@ const BudgetScreen: React.FC = () => {
           storedBusinesses,
         ] = await Promise.all([
           getBudgetEntries(),
-          getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
           getPayments(),
           getSavingsGoals(),
@@ -366,7 +377,6 @@ const BudgetScreen: React.FC = () => {
         const nextReviewData = buildMonthlyReview(processed.entries, allLimitsByMonth);
 
         setEntries(processed.entries);
-        setLimits(storedLimits);
         setDebts(storedDebts);
         setPayments(storedPayments);
         setDueDismissals(storedDueDismissals);
@@ -384,7 +394,23 @@ const BudgetScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [refreshNetWorthSnapshots, selectedMonthKey])
+    }, [refreshNetWorthSnapshots])
+  );
+
+  // Category limits are the ONLY month-scoped collection, so they reload on
+  // their own when the user pages months - the wide load above deliberately
+  // does not depend on selectedMonthKey, which used to re-read all eleven
+  // collections (and re-run the recurring-contribution sweep) per page.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getCategoryBudgetLimits(selectedMonthKey).then((storedLimits) => {
+        if (!cancelled) setLimits(storedLimits);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [selectedMonthKey])
   );
 
   const selectedMonthDate = useMemo(
@@ -1130,6 +1156,14 @@ const BudgetScreen: React.FC = () => {
       }
       return next;
     });
+    // Collapsing (or re-expanding) resets the entry cap so the next expand
+    // starts cheap again.
+    setFullyRevealedCategories((prev) => {
+      if (!prev.has(category)) return prev;
+      const next = new Set(prev);
+      next.delete(category);
+      return next;
+    });
   }, []);
 
   const openLimitModal = useCallback(
@@ -1469,6 +1503,11 @@ const BudgetScreen: React.FC = () => {
           const isOver = ratio != null && ratio >= 1;
           const dotColor = colorForCategory(item.category);
           const isExpanded = expandedCategories.has(item.category);
+          const isFullyRevealed = fullyRevealedCategories.has(item.category);
+          const visibleEntries = isFullyRevealed
+            ? item.entries
+            : item.entries.slice(0, EXPANDED_ENTRY_CAP);
+          const hiddenEntryCount = item.entries.length - visibleEntries.length;
           // With a limit, the track represents the limit (100% = at limit).
           // Without one, it scales against the biggest category this month so
           // the bars stay comparable.
@@ -1522,7 +1561,7 @@ const BudgetScreen: React.FC = () => {
                   <Text style={styles.expandedHeader}>
                     Expanded - {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
                   </Text>
-                  {item.entries.map((entry) => {
+                  {visibleEntries.map((entry) => {
                     const isLoggedPayment = entry.id.startsWith("payment-");
                     const isAutoDebtRow = isAutoEntry(entry.id);
                     const isSelected = selectedEntryIds.has(entry.id);
@@ -1606,6 +1645,23 @@ const BudgetScreen: React.FC = () => {
                       </TouchableOpacity>
                     );
                   })}
+                  {hiddenEntryCount > 0 && (
+                    <TouchableOpacity
+                      style={styles.showAllEntriesBtn}
+                      onPress={() =>
+                        setFullyRevealedCategories((prev) =>
+                          new Set(prev).add(item.category)
+                        )
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`Show ${hiddenEntryCount} more entries`}
+                    >
+                      <Text style={styles.showAllEntriesText}>
+                        Show {hiddenEntryCount} more{" "}
+                        {hiddenEntryCount === 1 ? "entry" : "entries"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -1851,7 +1907,8 @@ const BudgetScreen: React.FC = () => {
         </View>
       </Modal>
 
-      <AddBudgetEntryModal
+      <BudgetEntryModal
+        mode="add"
         visible={showAddModal}
         onClose={() => {
           setShowAddModal(false);
@@ -1864,7 +1921,8 @@ const BudgetScreen: React.FC = () => {
         businesses={businesses}
       />
 
-      <EditBudgetEntryModal
+      <BudgetEntryModal
+        mode="edit"
         entry={editingEntry}
         onClose={() => setEditingEntry(null)}
         onSave={handleSaveEntry}
@@ -2563,6 +2621,18 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: 11,
       color: colors.textMuted,
       marginBottom: 2,
+    },
+    showAllEntriesBtn: {
+      paddingVertical: 8,
+      alignItems: "center",
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    showAllEntriesText: {
+      color: colors.accent,
+      fontSize: 12,
+      fontWeight: "600",
     },
     expandedEntryRow: {
       flexDirection: "row",

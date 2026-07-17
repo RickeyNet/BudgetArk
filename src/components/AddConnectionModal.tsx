@@ -12,7 +12,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -33,6 +32,7 @@ import {
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import ProviderSetupGuideModal from "./ProviderSetupGuideModal";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import {
   addTellerEnrollment,
   createSimplefinConnection,
@@ -820,10 +820,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "android" ? "padding" : undefined}
-        style={styles.overlay}
-      >
+      <SheetKeyboardAvoider style={styles.overlay}>
         <View style={styles.modalSheet}>
           <ScrollView
             style={styles.scrollArea}
@@ -866,7 +863,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
             ) : null}
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoider>
 
       <TellerConnectModal
         visible={showTellerConnect}
