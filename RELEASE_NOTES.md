@@ -87,6 +87,17 @@ Pure JS - rides the same 1.9.0 runtime, OTA-eligible.
 - **Debut slide** in the feature-spotlight carousel (`account-change-tracker`), backed by a new `bridge` spotlight CTA kind that navigates straight to the Bridge tab.
 - **Tests:** day-key/window math, upsert/retention/pruning, baseline selection + fallbacks, category roll-up, fail-closed sanitizer, currency-migration rescale. Full suite as of 2026-07-17: 910 passing across 64 suites.
 
+### "What If I Stopped Spending on X" projections (2026-07-17)
+
+Pure JS - rides the same 1.9.0 runtime, OTA-eligible. No storage, no network - everything derives from data already on the device.
+
+- **New Charts-tab tool** ("What If I Stopped Spending on…", after the Emergency Fund calculator): pick a spending category, dial in a monthly amount to redirect, and see the debt-payoff and savings-growth outcomes side by side.
+- **Pure math** in `src/utils/whatIfSpending.ts`: per-category monthly averages over the last 6 full tracked months (tracked-month denominator matches `calcAvgMonthlyExpenses`; recurring-aware via `isEntryActiveInMonth`; "Debt Payments" excluded - redirecting it to debt is circular), debt impact via the existing `simulatePayoffPlan`, savings marks via `calcInvestmentGrowth`.
+- **Debt side:** current-plan vs redirected payoff timelines with a snowball/avalanche toggle - months sooner + lifetime interest saved. Edge cases surface honestly: an unsolvable plan turning solvable gets its own callout (interest delta suppressed - the truncated baseline total would mislead), and a still-unsolvable plan prompts for a larger amount. Hidden when there are no active debts.
+- **Savings side:** value at 1/5/10 years at an assumed 7% annual return (compounded monthly), growth split out from contributions, assumption stated on-card.
+- **Debut slide** in the feature-spotlight carousel (`what-if-spending`), backed by a new `charts` spotlight CTA kind that navigates to the Utilities route (displayed as "Charts").
+- **Tests:** category averaging/filtering matrix, debt-impact edge cases (unsolvable→solvable flip, both-unsolvable, zero redirect), savings marks vs the shared growth math, duration formatting, slider ceiling. Full suite as of 2026-07-17: 924 passing across 65 suites.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.
