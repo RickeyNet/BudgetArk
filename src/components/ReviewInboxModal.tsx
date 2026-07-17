@@ -45,6 +45,7 @@ import {
 } from "../services/connections/reviewInboxService";
 import { getLinks } from "../storage/externalAccountLinksStorage";
 import { triggerHaptic } from "../utils/haptics";
+import { formatDayLabel } from "../utils/dateFormat";
 
 interface ReviewInboxModalProps {
   visible: boolean;
@@ -63,15 +64,6 @@ interface InboxSection {
 
 const DEFAULT_CATEGORY: CategoryName = "Other";
 
-const formatDayLabel = (iso: string): string => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-};
 
 const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   visible,
@@ -130,7 +122,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     }
     const result: InboxSection[] = Array.from(byDay.entries())
       .sort(([a], [b]) => b.localeCompare(a))
-      .map(([day, data]) => ({ title: formatDayLabel(`${day}T12:00:00Z`), data }));
+      .map(([day, data]) => ({
+        title: formatDayLabel(`${day}T12:00:00Z`, { weekday: true }),
+        data,
+      }));
     if (duplicates.length > 0) {
       result.push({
         title: "Possibly already in your budget",

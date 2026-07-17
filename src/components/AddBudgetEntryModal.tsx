@@ -36,6 +36,7 @@ import {
   DEFAULT_RECURRENCE_DAY,
   buildEntryDateISO,
 } from "../utils/entryDate";
+import { MONTH_LABELS, formatYearMonthLabel } from "../utils/dateFormat";
 import { useCurrency } from "../currency/CurrencyProvider";
 
 const INCOME_TYPE_OPTIONS: readonly {
@@ -87,28 +88,6 @@ const createEmptyLine = (): EntryLineDraft => ({
 const todayYearMonth = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
-
-const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
-const formatYearMonthLabel = (yearMonth: string): string => {
-  const [yearStr, monthStr] = yearMonth.split("-");
-  const monthIndex = Number(monthStr) - 1;
-  const monthLabel = MONTH_LABELS[monthIndex] || "Jan";
-  return `${monthLabel} ${yearStr}`;
 };
 
 const AddBudgetEntryModal: React.FC<AddBudgetEntryModalProps> = ({

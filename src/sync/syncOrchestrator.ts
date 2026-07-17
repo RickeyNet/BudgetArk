@@ -314,6 +314,7 @@ const countDiffEntries = (diff: SyncDiff): number => {
     diff.budgetLimits.length +
     // Optional-chained like assetAccounts: these fields were added after
     // launch, so a diff built by an older peer may omit them entirely.
+    (diff.businesses?.length ?? 0) +
     (diff.customCategories?.length ?? 0) +
     Object.keys(diff.categoryBucketOverrides ?? {}).length +
     (diff.netWorthSnapshots?.length ?? 0) +

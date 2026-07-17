@@ -108,7 +108,8 @@ import {
   getRecurrenceTag,
   isEntryActiveInMonth,
 } from "../utils/recurrence";
-import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
+import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
+import { applyEmergencyFundContribution } from "../utils/savingsGoals";
 import { totalsByBucket } from "../utils/budgetBucketMath";
 import { summarizePaychecks } from "../utils/paycheckMath";
 
@@ -352,24 +353,14 @@ const BudgetScreen: React.FC = () => {
         if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
         setKeelTarget(keelStep?.targetAmount ?? 1000);
-        // Apply missed recurring linked-account contributions through the
-        // shared util - it carries the orphan-account skip and UTC month-key
-        // handling that this screen's old inline copy was missing.
-        const processed = applyMissedRecurringLinkedAccountContributions(
+        // Apply + persist missed recurring linked-account contributions via
+        // the shared shell - it owns the save-order invariant that prevents
+        // double-crediting (see linkedAccountRecurringApply.ts). BridgeScreen
+        // goes through the same shell.
+        const processed = await applyAndPersistMissedContributions(
           storedEntries,
           storedAssets
         );
-
-        if (processed.changed) {
-          // Save entries first (commits the lastAppliedMonth marker), then
-          // assets (commits the new balance). Doing the asset save first or
-          // running them concurrently allows a reader on another tab to see
-          // (newBalance, oldLastApplied) and re-apply the same contribution,
-          // silently double-crediting the asset. Same protection sits in
-          // BridgeScreen's auto-apply path.
-          await saveBudgetEntries(processed.entries);
-          await saveAssetAccounts(processed.assetAccounts);
-        }
 
         if (cancelled) return;
         const nextReviewData = buildMonthlyReview(processed.entries, allLimitsByMonth);
@@ -1213,36 +1204,14 @@ const BudgetScreen: React.FC = () => {
   }, [entries, refreshMonthlyReview, reviewPreviewData, notifyAchievementCheck]);
 
   const handleEfContribution = useCallback(async () => {
-    const parsed = parseFloat(efContribAmount);
-    if (Number.isNaN(parsed) || parsed === 0) return;
-
-    const now = new Date().toISOString();
-    const existing = savingsGoals.find((g) => g.category === "emergency_fund");
-
-    let updatedGoals: SavingsGoal[];
-
-    if (existing) {
-      const updatedGoal = {
-        ...existing,
-        currentAmount: Math.max(0, existing.currentAmount + parsed),
-        updatedAt: now,
-      };
-      updatedGoals = savingsGoals.map((g) =>
-        g.id === existing.id ? updatedGoal : g
-      );
-    } else {
-      // Create a real savings goal so the contribution persists
-      const newGoal: SavingsGoal = {
-        id: generateUUID(),
-        name: "Emergency Fund",
-        category: "emergency_fund",
-        targetAmount: keelTarget,
-        currentAmount: Math.max(0, parsed),
-        createdAt: now,
-        updatedAt: now,
-      };
-      updatedGoals = [...savingsGoals, newGoal];
-    }
+    // Shared pure update (utils/savingsGoals) - BridgeScreen runs the same
+    // logic; only the refresh side effects below differ per screen.
+    const updatedGoals = applyEmergencyFundContribution(
+      savingsGoals,
+      parseFloat(efContribAmount),
+      keelTarget
+    );
+    if (!updatedGoals) return;
 
     setSavingsGoals(updatedGoals);
     await saveSavingsGoals(updatedGoals);

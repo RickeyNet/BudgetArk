@@ -12,6 +12,7 @@ import type { NetWorthSnapshot } from "../types";
 import type { ThemeColors } from "../theme/themes";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
+import { formatDayLabel } from "../utils/dateFormat";
 
 type NetWorthHistoryCardProps = {
   snapshots: NetWorthSnapshot[];
@@ -44,11 +45,6 @@ const PAD_T = 12;
 const PAD_B = 28;
 const CHART_H = H - PAD_T - PAD_B;
 
-const formatDayLabel = (value: string): string =>
-  new Date(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 
 const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
   snapshots,

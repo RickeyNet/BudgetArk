@@ -160,6 +160,7 @@ import {
 } from "../storage/connectionsSettingsStorage";
 import { useConnections } from "../connections/ConnectionsProvider";
 import ConnectionsModal from "../components/ConnectionsModal";
+import OptionPickerModal from "../components/OptionPickerModal";
 import AddConnectionModal from "../components/AddConnectionModal";
 import { startConnectionsMonitoring } from "../services/connections/connectionsSyncService";
 import { getTellerAddBankInfo } from "../services/connections/connectionsService";
@@ -2921,473 +2922,190 @@ const ProfileScreen: React.FC = () => {
       </ScrollView>
 
       {/* ── Theme Selection Modal ── */}
-      <Modal
+      <OptionPickerModal
         visible={showThemeModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowThemeModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Choose Theme
-            </Text>
-
-            <ScrollView style={styles.themeList}>
-              {presets.map((preset) => (
-                <TouchableOpacity
-                  key={preset.id}
-                  style={[
-                    styles.themeOption,
-                    {
-                      borderColor:
-                        themeId === preset.id
-                          ? preset.colors.accent
-                          : colors.cardBorder,
-                      backgroundColor: preset.colors.card,
-                    },
-                  ]}
-                  onPress={() => handleThemeSelect(preset.id)}
-                >
-                  {/* Color swatches */}
-                  <View style={styles.themeColorRow}>
-                    <View
-                      style={[
-                        styles.themeSwatch,
-                        { backgroundColor: preset.colors.accent },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.themeSwatch,
-                        { backgroundColor: preset.colors.success },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.themeSwatch,
-                        { backgroundColor: preset.colors.text },
-                      ]}
-                    />
-                  </View>
-
-                  {/* Theme name */}
-                  <Text
-                    style={[
-                      styles.themeOptionText,
-                      { color: preset.colors.text },
-                    ]}
-                  >
-                    {preset.name}
-                  </Text>
-
-                  {/* Selection check */}
-                  {themeId === preset.id && (
-                    <View
-                      style={[
-                        styles.checkMark,
-                        { backgroundColor: preset.colors.accent },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.checkMarkText,
-                          { color: preset.colors.white },
-                        ]}
-                      >
-                        ✓
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
-              onPress={() => setShowThemeModal(false)}
+        title="Choose Theme"
+        options={presets}
+        keyOf={(preset) => preset.id}
+        isSelected={(preset) => themeId === preset.id}
+        onSelect={(preset) => handleThemeSelect(preset.id)}
+        onClose={() => setShowThemeModal(false)}
+        accessibilityLabelOf={(preset) => preset.name}
+        rowStyle={(preset, selected) => ({
+          borderColor: selected ? preset.colors.accent : colors.cardBorder,
+          backgroundColor: preset.colors.card,
+        })}
+        checkColors={(preset) => ({
+          background: preset.colors.accent,
+          text: preset.colors.white,
+        })}
+        renderOption={(preset) => (
+          <>
+            <View style={styles.themeColorRow}>
+              <View
+                style={[
+                  styles.themeSwatch,
+                  { backgroundColor: preset.colors.accent },
+                ]}
+              />
+              <View
+                style={[
+                  styles.themeSwatch,
+                  { backgroundColor: preset.colors.success },
+                ]}
+              />
+              <View
+                style={[
+                  styles.themeSwatch,
+                  { backgroundColor: preset.colors.text },
+                ]}
+              />
+            </View>
+            <Text
+              style={[styles.themeOptionText, { color: preset.colors.text }]}
             >
-              <Text style={[styles.closeBtnText, { color: colors.white }]}>
-                Done
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+              {preset.name}
+            </Text>
+          </>
+        )}
+      />
 
       {/* ── Design Style Selection Modal ── */}
-      <Modal
+      <OptionPickerModal
         visible={showSurfaceStyleModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowSurfaceStyleModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Design Style
-            </Text>
-            {storedSurfaceStyleId == null &&
-            (themeId === "deep_space" || themeId === "deep_sea") ? (
-              <Text
-                style={[
-                  styles.settingsRowSubtext,
-                  { color: colors.textDim, marginBottom: 12 },
-                ]}
-              >
-                {themeId === "deep_sea" ? "Deep Sea" : "Deep Space"} currently
-                defaults to Glass. Pick a style here to keep it across all
-                themes.
-              </Text>
-            ) : null}
-
-            <ScrollView style={styles.themeList}>
-              {surfaceStylePresets.map((preset) => {
-                const selected = surfaceStyleId === preset.id;
-                return (
-                  <TouchableOpacity
-                    key={preset.id}
-                    style={[
-                      styles.themeOption,
-                      {
-                        borderColor: selected
-                          ? colors.accent
-                          : colors.cardBorder,
-                        backgroundColor: colors.bg,
-                      },
-                    ]}
-                    onPress={() => handleSurfaceStyleSelect(preset.id)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.themeOptionText, { color: colors.text }]}
-                      >
-                        {preset.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.settingsRowSubtext,
-                          { color: colors.textDim, marginTop: 4 },
-                        ]}
-                      >
-                        {preset.description}
-                      </Text>
-                    </View>
-
-                    {selected && (
-                      <View
-                        style={[
-                          styles.checkMark,
-                          { backgroundColor: colors.accent },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.checkMarkText,
-                            { color: colors.white },
-                          ]}
-                        >
-                          ✓
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
-              onPress={() => setShowSurfaceStyleModal(false)}
+        title="Design Style"
+        options={surfaceStylePresets}
+        keyOf={(preset) => preset.id}
+        isSelected={(preset) => surfaceStyleId === preset.id}
+        onSelect={(preset) => handleSurfaceStyleSelect(preset.id)}
+        onClose={() => setShowSurfaceStyleModal(false)}
+        accessibilityLabelOf={(preset) => `${preset.name}. ${preset.description}`}
+        header={
+          storedSurfaceStyleId == null &&
+          (themeId === "deep_space" || themeId === "deep_sea") ? (
+            <Text
+              style={[
+                styles.settingsRowSubtext,
+                { color: colors.textDim, marginBottom: 12 },
+              ]}
             >
-              <Text style={[styles.closeBtnText, { color: colors.white }]}>
-                Done
-              </Text>
-            </TouchableOpacity>
+              {themeId === "deep_sea" ? "Deep Sea" : "Deep Space"} currently
+              defaults to Glass. Pick a style here to keep it across all
+              themes.
+            </Text>
+          ) : null
+        }
+        renderOption={(preset) => (
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.themeOptionText, { color: colors.text }]}>
+              {preset.name}
+            </Text>
+            <Text
+              style={[
+                styles.settingsRowSubtext,
+                { color: colors.textDim, marginTop: 4 },
+              ]}
+            >
+              {preset.description}
+            </Text>
           </View>
-        </View>
-      </Modal>
+        )}
+      />
 
       {/* ── Density Selection Modal ── */}
-      <Modal
+      <OptionPickerModal
         visible={showDensityModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowDensityModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Layout Density
+        title="Layout Density"
+        options={densityPresets}
+        keyOf={(preset) => preset.id}
+        isSelected={(preset) => densityId === preset.id}
+        onSelect={(preset) => handleDensitySelect(preset.id)}
+        onClose={() => setShowDensityModal(false)}
+        accessibilityLabelOf={(preset) => `${preset.name}. ${preset.description}`}
+        renderOption={(preset) => (
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.themeOptionText, { color: colors.text }]}>
+              {preset.name}
             </Text>
-
-            <ScrollView style={styles.themeList}>
-              {densityPresets.map((preset) => {
-                const selected = densityId === preset.id;
-                return (
-                  <TouchableOpacity
-                    key={preset.id}
-                    style={[
-                      styles.themeOption,
-                      {
-                        borderColor: selected
-                          ? colors.accent
-                          : colors.cardBorder,
-                        backgroundColor: colors.bg,
-                      },
-                    ]}
-                    onPress={() => handleDensitySelect(preset.id)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.themeOptionText, { color: colors.text }]}
-                      >
-                        {preset.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.settingsRowSubtext,
-                          { color: colors.textDim, marginTop: 4 },
-                        ]}
-                      >
-                        {preset.description}
-                      </Text>
-                    </View>
-
-                    {selected && (
-                      <View
-                        style={[
-                          styles.checkMark,
-                          { backgroundColor: colors.accent },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.checkMarkText,
-                            { color: colors.white },
-                          ]}
-                        >
-                          ✓
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
-              onPress={() => setShowDensityModal(false)}
+            <Text
+              style={[
+                styles.settingsRowSubtext,
+                { color: colors.textDim, marginTop: 4 },
+              ]}
             >
-              <Text style={[styles.closeBtnText, { color: colors.white }]}>
-                Done
-              </Text>
-            </TouchableOpacity>
+              {preset.description}
+            </Text>
           </View>
-        </View>
-      </Modal>
+        )}
+      />
 
       {/* ── Text Size Selection Modal ── */}
-      <Modal
+      <OptionPickerModal
         visible={showTextSizeModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowTextSizeModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Text Size
-            </Text>
-
-            <ScrollView style={styles.themeList}>
-              {textSizePresets.map((preset) => {
-                const selected = textSizeId === preset.id;
-                return (
-                  <TouchableOpacity
-                    key={preset.id}
-                    style={[
-                      styles.themeOption,
-                      {
-                        borderColor: selected
-                          ? colors.accent
-                          : colors.cardBorder,
-                        backgroundColor: colors.bg,
-                      },
-                    ]}
-                    onPress={() => handleTextSizeSelect(preset.id)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={`${preset.name}. ${preset.description}`}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.themeOptionText,
-                          {
-                            color: colors.text,
-                            // Preview the size right in its own row.
-                            fontSize: Math.round(16 * preset.multiplier),
-                          },
-                        ]}
-                      >
-                        {preset.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.settingsRowSubtext,
-                          { color: colors.textDim, marginTop: 4 },
-                        ]}
-                      >
-                        {preset.description}
-                      </Text>
-                    </View>
-
-                    {selected && (
-                      <View
-                        style={[
-                          styles.checkMark,
-                          { backgroundColor: colors.accent },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.checkMarkText,
-                            { color: colors.white },
-                          ]}
-                        >
-                          ✓
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
-              onPress={() => setShowTextSizeModal(false)}
+        title="Text Size"
+        options={textSizePresets}
+        keyOf={(preset) => preset.id}
+        isSelected={(preset) => textSizeId === preset.id}
+        onSelect={(preset) => handleTextSizeSelect(preset.id)}
+        onClose={() => setShowTextSizeModal(false)}
+        accessibilityLabelOf={(preset) => `${preset.name}. ${preset.description}`}
+        renderOption={(preset) => (
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                styles.themeOptionText,
+                {
+                  color: colors.text,
+                  // Preview the size right in its own row.
+                  fontSize: Math.round(16 * preset.multiplier),
+                },
+              ]}
             >
-              <Text style={[styles.closeBtnText, { color: colors.white }]}>
-                Done
-              </Text>
-            </TouchableOpacity>
+              {preset.name}
+            </Text>
+            <Text
+              style={[
+                styles.settingsRowSubtext,
+                { color: colors.textDim, marginTop: 4 },
+              ]}
+            >
+              {preset.description}
+            </Text>
           </View>
-        </View>
-      </Modal>
+        )}
+      />
 
-      <Modal
+      {/* ── Currency Selection Modal ── */}
+      <OptionPickerModal
         visible={showCurrencyModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowCurrencyModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: colors.card, borderColor: colors.cardBorder },
-            ]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Currency & Locale
+        title="Currency & Locale"
+        options={currencyOptions}
+        keyOf={(option) => option.id}
+        isSelected={(option) => option.id === preference.id}
+        onSelect={(option) =>
+          handleCurrencySelect(option.id as CurrencyPreferenceId)
+        }
+        onClose={() => setShowCurrencyModal(false)}
+        accessibilityLabelOf={(option) => option.label}
+        rowStyle={(option, selected) => ({
+          backgroundColor: selected ? `${colors.accent}10` : "transparent",
+        })}
+        renderOption={(option) => (
+          <View style={styles.currencyOptionTextWrap}>
+            <Text style={[styles.themeOptionText, { color: colors.text }]}>
+              {option.label}
             </Text>
-
-            <ScrollView style={styles.themeList}>
-              {currencyOptions.map((option) => {
-                const isSelected = option.id === preference.id;
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[
-                      styles.themeOption,
-                      {
-                        borderColor: isSelected
-                          ? colors.accent
-                          : colors.cardBorder,
-                        backgroundColor: isSelected
-                          ? `${colors.accent}10`
-                          : "transparent",
-                      },
-                    ]}
-                    onPress={() =>
-                      handleCurrencySelect(option.id as CurrencyPreferenceId)
-                    }
-                  >
-                    <View style={styles.currencyOptionTextWrap}>
-                      <Text
-                        style={[styles.themeOptionText, { color: colors.text }]}
-                      >
-                        {option.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.settingsRowSubtext,
-                          { color: colors.textDim },
-                        ]}
-                      >
-                        {new Intl.NumberFormat(option.locale, {
-                          style: "currency",
-                          currency: option.currencyCode,
-                        }).format(1234.56)}
-                      </Text>
-                    </View>
-
-                    {isSelected && (
-                      <View
-                        style={[
-                          styles.checkMark,
-                          { backgroundColor: colors.accent },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.checkMarkText,
-                            { color: colors.white },
-                          ]}
-                        >
-                          ✓
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.accent }]}
-              onPress={() => setShowCurrencyModal(false)}
+            <Text
+              style={[styles.settingsRowSubtext, { color: colors.textDim }]}
             >
-              <Text style={[styles.closeBtnText, { color: colors.white }]}>
-                Done
-              </Text>
-            </TouchableOpacity>
+              {new Intl.NumberFormat(option.locale, {
+                style: "currency",
+                currency: option.currencyCode,
+              }).format(1234.56)}
+            </Text>
           </View>
-        </View>
-      </Modal>
+        )}
+      />
 
       {/* ── Currency change: convert amounts or just relabel ── */}
       <Modal
@@ -5033,33 +4751,15 @@ const makeStyles = (tokens: DensityTokens) => {
       backgroundColor: "rgba(0, 0, 0, 0.85)",
       justifyContent: "flex-end",
     },
-    modalContent: {
-      borderTopLeftRadius: tokens.radius + 8,
-      borderTopRightRadius: tokens.radius + 8,
-      borderWidth: 1,
-      paddingTop: tokens.padLg,
-      paddingBottom: 40,
-      paddingHorizontal: tokens.padLg,
-      maxHeight: "70%",
-    },
     modalTitle: {
       fontSize: scale(22),
       fontWeight: "700",
       marginBottom: tokens.gap,
       textAlign: "center",
     },
-    themeList: {
-      marginBottom: 20,
-    },
-    themeOption: {
-      borderWidth: 2,
-      borderRadius: tokens.radiusSm,
-      padding: tokens.pad,
-      marginBottom: tokens.gapSm,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-    },
+    // The picker-modal scaffold styles (overlay list rows, checkmark, sheet)
+    // moved into components/OptionPickerModal.tsx; only the row-body styles
+    // its renderOption callbacks use remain here.
     themeColorRow: {
       flexDirection: "row",
       gap: 6,
@@ -5077,17 +4777,6 @@ const makeStyles = (tokens: DensityTokens) => {
     currencyOptionTextWrap: {
       flex: 1,
       gap: 4,
-    },
-    checkMark: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    checkMarkText: {
-      fontSize: 14,
-      fontWeight: "700",
     },
     closeBtn: {
       borderRadius: 12,

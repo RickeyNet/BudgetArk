@@ -9,14 +9,13 @@
  */
 
 import { BudgetEntry } from "../types";
+import { roundToCents } from "./money";
 
 /** The subset of BudgetEntry the paycheck math reads. */
 type PaycheckFields = Pick<
   BudgetEntry,
   "type" | "amount" | "incomeType" | "retirementContribution" | "taxSetAsideRate"
 >;
-
-const roundToCents = (value: number): number => Math.round(value * 100) / 100;
 
 /**
  * Clamps a user/imported set-aside rate to the meaningful 0-100 range.

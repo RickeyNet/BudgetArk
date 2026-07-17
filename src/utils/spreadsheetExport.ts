@@ -17,6 +17,7 @@ import * as XLSX from "xlsx";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { Platform } from "react-native";
 import { shareLocalFile, waitForIosModalTeardown } from "./iosNativeShare";
+import { roundToCents } from "./money";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import {
   getBudgetEntries,
@@ -572,7 +573,10 @@ const buildBudgetEntriesSheet = (
       t: "s",
       v: label,
     };
-    const cell: XLSX.CellObject = { t: "n", v: value };
+    // Round the CACHED value: it's what the CSV serializes and what Excel
+    // shows before recalculating, and the float accumulation upstream can
+    // carry binary artifacts (6180.049999999999) into the user's export.
+    const cell: XLSX.CellObject = { t: "n", v: roundToCents(value) };
     if (formula) cell.f = formula;
     sheet[XLSX.utils.encode_cell({ r: rowIdx, c: amountColIdx })] = cell;
   };

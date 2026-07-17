@@ -40,6 +40,7 @@ import {
   buildEntryDateISO,
   dayOfMonthFromIso,
 } from "../utils/entryDate";
+import { MONTH_LABELS, formatYearMonthLabel } from "../utils/dateFormat";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useValueChanged } from "../hooks/useValueChanged";
 
@@ -68,29 +69,7 @@ interface EditBudgetEntryModalProps {
   businesses?: Business[];
 }
 
-const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
 const toYearMonth = (iso: string) => new Date(iso).toISOString().slice(0, 7);
-
-const formatYearMonthLabel = (yearMonth: string): string => {
-  const [yearStr, monthStr] = yearMonth.split("-");
-  const monthIndex = Number(monthStr) - 1;
-  const monthLabel = MONTH_LABELS[monthIndex] || "Jan";
-  return `${monthLabel} ${yearStr}`;
-};
 
 /**
  * Single source of truth for mapping an entry (or none) to the form fields.

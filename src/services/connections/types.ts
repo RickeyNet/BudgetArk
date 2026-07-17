@@ -53,9 +53,12 @@ export type ProviderFetchResult =
 
 export const REQUEST_TIMEOUT_MS = 15_000;
 
-/** Round to cents; provider amounts arrive as floats or decimal strings. */
-export const roundToCents = (value: number): number =>
-  Math.round(value * 100) / 100;
+/**
+ * Round to cents; provider amounts arrive as floats or decimal strings.
+ * Re-exported from the shared money helper so parser call sites keep their
+ * import path.
+ */
+export { roundToCents } from "../../utils/money";
 
 /** Map an HTTP failure status to the shared error taxonomy. */
 export const errorCodeForStatus = (status: number): ConnectionErrorCode => {

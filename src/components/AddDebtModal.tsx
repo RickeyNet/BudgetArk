@@ -46,28 +46,7 @@ import type { ThemeColors } from "../theme/themes";
 
 import { sanitizeTextInput } from "../utils/sanitize";
 import { useValueChanged } from "../hooks/useValueChanged";
-
-const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
-const formatYearMonthLabel = (yearMonth: string): string => {
-  const [yearStr, monthStr] = yearMonth.split("-");
-  const monthIndex = Number(monthStr) - 1;
-  const monthLabel = MONTH_LABELS[monthIndex] || "Jan";
-  return `${monthLabel} ${yearStr}`;
-};
+import { MONTH_LABELS, formatYearMonthLabel } from "../utils/dateFormat";
 
 /* ─── Props Interface ─── */
 interface AddDebtModalProps {
