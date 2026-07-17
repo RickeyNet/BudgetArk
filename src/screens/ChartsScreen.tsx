@@ -56,12 +56,26 @@ import {
   summarizeLoanCosts,
 } from "../utils/chartCalculators";
 import type { LoanScheduleRow } from "../utils/chartCalculators";
+import {
+  buildCategorySpendOptions,
+  buildSavingsGrowthMarks,
+  calcDebtRedirectImpact,
+  calcRedirectSliderMax,
+  formatWhatIfMonths,
+  WHAT_IF_DEFAULT_RETURN_RATE,
+  WHAT_IF_LOOKBACK_MONTHS,
+} from "../utils/whatIfSpending";
+import type { CategorySpendOption } from "../utils/whatIfSpending";
+import type { PayoffMethod } from "../utils/calculations";
+import { getCategoryIcon } from "../data/categoryIcons";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getDebts } from "../storage/debtStorage";
+import { getCustomCategories } from "../storage/customCategoriesStorage";
 import type {
   ChapterId,
+  CustomCategory,
   Debt,
   LearningProgress,
   LessonStub,
@@ -381,6 +395,14 @@ const ChartsScreen: React.FC = () => {
   const [efMonthlySavings, setEfMonthlySavings] = useState(500);
   const [currentEfAmount, setCurrentEfAmount] = useState(0);
   const [efDataLoaded, setEfDataLoaded] = useState(false);
+
+  /* "What If I Stopped Spending on X" state */
+  const [whatIfOpen, setWhatIfOpen] = useState(false);
+  const [whatIfOptions, setWhatIfOptions] = useState<CategorySpendOption[]>([]);
+  const [whatIfCategory, setWhatIfCategory] = useState<string | null>(null);
+  const [whatIfAmount, setWhatIfAmount] = useState(0);
+  const [whatIfMethod, setWhatIfMethod] = useState<PayoffMethod>("avalanche");
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
 
   /* Learning progress (Captain's Course card). Refreshes on focus so
    * completion progress and the Resume pointer update after a user finishes
@@ -775,10 +797,11 @@ const ChartsScreen: React.FC = () => {
     useCallback(() => {
       let cancelled = false;
       const loadEfData = async () => {
-        const [entries, goals, debts] = await Promise.all([
+        const [entries, goals, debts, customCats] = await Promise.all([
           getBudgetEntries(),
           getSavingsGoals(),
           getDebts(),
+          getCustomCategories(),
         ]);
         if (cancelled) return;
 
@@ -790,6 +813,8 @@ const ChartsScreen: React.FC = () => {
         setEfDataLoaded(true);
 
         setRefiDebts(debts);
+        setWhatIfOptions(buildCategorySpendOptions(entries));
+        setCustomCategories(customCats);
       };
       loadEfData();
       return () => {
@@ -810,6 +835,63 @@ const ChartsScreen: React.FC = () => {
     monthsToThree: efMonthsToThree,
     monthsToSix: efMonthsToSix,
   } = calcEmergencyFundPlan(efMonthlyExpenses, currentEfAmount, efMonthlySavings);
+
+  /* ── What-if spending logic ── */
+
+  const toggleWhatIf = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setWhatIfOpen((prev) => !prev);
+  }, []);
+
+  const handleSelectWhatIfCategory = useCallback(
+    (option: CategorySpendOption) => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setWhatIfCategory(option.category);
+      setWhatIfAmount(option.monthlyAverage);
+    },
+    []
+  );
+
+  // A category can vanish from the options after a focus reload (entries
+  // deleted / aged out of the lookback window); treat that as no selection.
+  const selectedWhatIfOption = useMemo(
+    () => whatIfOptions.find((o) => o.category === whatIfCategory) ?? null,
+    [whatIfOptions, whatIfCategory]
+  );
+
+  const whatIfSliderMax = calcRedirectSliderMax(
+    selectedWhatIfOption?.monthlyAverage ?? 0
+  );
+
+  const whatIfActiveDebts = useMemo(
+    () =>
+      refiDebts
+        .filter((d) => d.balance > 0)
+        .map((d) => ({
+          id: d.id,
+          balance: d.balance,
+          rate: d.rate,
+          minPayment: d.minPayment,
+          debtClass: d.debtClass,
+        })),
+    [refiDebts]
+  );
+
+  const whatIfDebtImpact = useMemo(
+    () =>
+      selectedWhatIfOption && whatIfActiveDebts.length > 0 && whatIfAmount > 0
+        ? calcDebtRedirectImpact(whatIfActiveDebts, whatIfMethod, whatIfAmount)
+        : null,
+    [selectedWhatIfOption, whatIfActiveDebts, whatIfMethod, whatIfAmount]
+  );
+
+  const whatIfSavingsMarks = useMemo(
+    () =>
+      selectedWhatIfOption && whatIfAmount > 0
+        ? buildSavingsGrowthMarks(whatIfAmount)
+        : [],
+    [selectedWhatIfOption, whatIfAmount]
+  );
 
   const renderRefiSlider = (key: RefiKey, value: number) => {
     const cfg = REFI_SLIDERS[key];
@@ -1992,6 +2074,208 @@ const ChartsScreen: React.FC = () => {
             )}
           </View>
         )}
+
+        {/* ── "What If I Stopped Spending on X" Tool ── */}
+        <TouchableOpacity style={styles.toolHeader} onPress={toggleWhatIf} activeOpacity={0.7}>
+          <View>
+            <Text style={styles.toolTitle}>What If I Stopped Spending on…</Text>
+            <Text style={styles.toolHint}>Redirect a category toward debt or savings</Text>
+          </View>
+          <Text style={styles.toolChevron}>{whatIfOpen ? "▾" : "›"}</Text>
+        </TouchableOpacity>
+
+        {whatIfOpen && (
+          <View style={styles.toolBody}>
+            {whatIfOptions.length === 0 ? (
+              <View style={styles.efCard}>
+                <Text style={styles.refiEmptyText}>
+                  Log a few months of expenses in the Budget tab, then come back to see what redirecting a category could do.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {/* Category picker */}
+                <View style={styles.efCard}>
+                  <Text style={styles.efSectionTitle}>Pick a category</Text>
+                  <Text style={styles.efAutoHint}>
+                    Monthly averages from your last {WHAT_IF_LOOKBACK_MONTHS} months of entries
+                  </Text>
+                  <View style={styles.whatIfChipWrap}>
+                    {whatIfOptions.map((option) => {
+                      const isSelected = option.category === whatIfCategory;
+                      return (
+                        <TouchableOpacity
+                          key={option.category}
+                          style={[styles.whatIfChip, isSelected && styles.whatIfChipActive]}
+                          onPress={() => handleSelectWhatIfCategory(option)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.whatIfChipText,
+                              isSelected && styles.whatIfChipTextActive,
+                            ]}
+                          >
+                            {getCategoryIcon(option.category, customCategories)} {option.category}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.whatIfChipAmount,
+                              isSelected && styles.whatIfChipTextActive,
+                            ]}
+                          >
+                            {formatCurrency(option.monthlyAverage)}/mo
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {selectedWhatIfOption && (
+                  <>
+                    {/* Redirect amount */}
+                    <View style={styles.slidersCard}>
+                      <View style={styles.sliderGroup}>
+                        <View style={styles.sliderHeader}>
+                          <Text style={styles.sliderLabel}>Monthly Amount to Redirect</Text>
+                          <Text style={styles.sliderValue}>{formatCurrency(whatIfAmount)}</Text>
+                        </View>
+                        <View style={styles.sliderRow}>
+                          <TouchableOpacity
+                            style={styles.sliderBtn}
+                            onPress={() => setWhatIfAmount((p) => Math.max(0, p - 25))}
+                            disabled={whatIfAmount <= 0}
+                          >
+                            <Text style={[styles.sliderBtnText, whatIfAmount <= 0 && styles.sliderBtnDisabled]}>-</Text>
+                          </TouchableOpacity>
+                          <SmoothSlider
+                            value={whatIfAmount}
+                            min={0}
+                            max={whatIfSliderMax}
+                            step={5}
+                            onValueChange={setWhatIfAmount}
+                            trackColor={colors.bg}
+                            fillColor={colors.accent}
+                            thumbColor={colors.accent}
+                            thumbBorderColor={colors.card}
+                          />
+                          <TouchableOpacity
+                            style={styles.sliderBtn}
+                            onPress={() => setWhatIfAmount((p) => Math.min(whatIfSliderMax, p + 25))}
+                            disabled={whatIfAmount >= whatIfSliderMax}
+                          >
+                            <Text style={[styles.sliderBtnText, whatIfAmount >= whatIfSliderMax && styles.sliderBtnDisabled]}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.efAutoHint}>
+                          You average {formatCurrency(selectedWhatIfOption.monthlyAverage)}/mo on {selectedWhatIfOption.category}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Debt payoff impact */}
+                    {whatIfDebtImpact && (
+                      <View style={styles.efCard}>
+                        <Text style={styles.efSectionTitle}>Put it toward debt</Text>
+                        <View style={styles.whatIfMethodRow}>
+                          {(["avalanche", "snowball"] as const).map((method) => (
+                            <TouchableOpacity
+                              key={method}
+                              style={[
+                                styles.whatIfMethodBtn,
+                                whatIfMethod === method && styles.whatIfMethodBtnActive,
+                              ]}
+                              onPress={() => setWhatIfMethod(method)}
+                            >
+                              <Text
+                                style={[
+                                  styles.whatIfMethodBtnText,
+                                  whatIfMethod === method && styles.whatIfMethodBtnTextActive,
+                                ]}
+                              >
+                                {method === "avalanche" ? "Avalanche" : "Snowball"}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <View style={styles.refiSummaryRow}>
+                          <View style={styles.refiSummaryItem}>
+                            <Text style={styles.refiSummaryLabel}>Current plan</Text>
+                            <Text style={styles.refiSummaryValue}>
+                              {formatWhatIfMonths(whatIfDebtImpact.baseline.monthsToPayoff)}
+                            </Text>
+                          </View>
+                          <View style={styles.refiSummaryItem}>
+                            <Text style={styles.refiSummaryLabel}>Redirecting</Text>
+                            <Text style={[styles.refiSummaryValue, { color: colors.accent }]}>
+                              {formatWhatIfMonths(whatIfDebtImpact.redirect.monthsToPayoff)}
+                            </Text>
+                          </View>
+                        </View>
+                        {whatIfDebtImpact.monthsSaved === Infinity ? (
+                          <Text style={[styles.efTimeEstimate, { color: colors.success }]}>
+                            This extra payment turns an unpayable plan into a real payoff date.
+                          </Text>
+                        ) : !whatIfDebtImpact.redirect.isPayoffPossible ? (
+                          <Text style={styles.efTimeEstimate}>
+                            Minimums plus this extra still don&apos;t cover the interest - try a larger amount.
+                          </Text>
+                        ) : whatIfDebtImpact.monthsSaved > 0 ? (
+                          <Text style={[styles.efTimeEstimate, { color: colors.success }]}>
+                            Debt-free {formatWhatIfMonths(whatIfDebtImpact.monthsSaved)} sooner
+                            {whatIfDebtImpact.interestSaved >= 1
+                              ? ` · saves ${formatCurrency(Math.round(whatIfDebtImpact.interestSaved))} in interest`
+                              : ""}
+                          </Text>
+                        ) : null}
+                      </View>
+                    )}
+
+                    {/* Savings growth */}
+                    <View style={styles.efCard}>
+                      <Text style={styles.efSectionTitle}>
+                        {whatIfDebtImpact ? "…or grow it in savings" : "Grow it in savings"}
+                      </Text>
+                      {whatIfActiveDebts.length === 0 && (
+                        <Text style={styles.efAutoHint}>
+                          No active debts to pay down - showing savings growth only.
+                        </Text>
+                      )}
+                      {whatIfSavingsMarks.map((mark) => (
+                        <View key={mark.years} style={styles.whatIfGrowthRow}>
+                          <Text style={styles.whatIfGrowthLabel}>
+                            In {mark.years} {mark.years === 1 ? "year" : "years"}
+                          </Text>
+                          <View style={styles.whatIfGrowthValueWrap}>
+                            <Text style={styles.whatIfGrowthValue}>
+                              {formatCurrency(mark.futureValue)}
+                            </Text>
+                            {mark.growth > 0 && (
+                              <Text style={styles.whatIfGrowthSub}>
+                                +{formatCurrency(mark.growth)} from returns
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      ))}
+                      <Text style={styles.efAutoHint}>
+                        Assumes a {WHAT_IF_DEFAULT_RETURN_RATE}% average annual return, compounded monthly.
+                      </Text>
+                    </View>
+
+                    {/* Educational note */}
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightText}>
+                        These are estimates, not guarantees - spending rarely drops to zero, and market returns vary. Even redirecting half a category can move your timeline meaningfully.
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </>
+            )}
+          </View>
+        )}
       </ScrollView>
       {coachmark}
       <LessonScreen
@@ -2717,6 +3001,90 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(12),
       color: colors.textMuted,
       textAlign: "center",
+    },
+
+    /* "What If I Stopped Spending on X" */
+    whatIfChipWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 4,
+    },
+    whatIfChip: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      alignItems: "center",
+    },
+    whatIfChipActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}15`,
+    },
+    whatIfChipText: {
+      fontSize: scale(13),
+      color: colors.text,
+      fontWeight: "600",
+    },
+    whatIfChipTextActive: {
+      color: colors.accent,
+    },
+    whatIfChipAmount: {
+      fontSize: scale(11),
+      color: colors.textMuted,
+      fontVariant: ["tabular-nums"],
+      marginTop: 2,
+    },
+    whatIfMethodRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    whatIfMethodBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      borderRadius: 10,
+      paddingVertical: 8,
+      alignItems: "center",
+    },
+    whatIfMethodBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}15`,
+    },
+    whatIfMethodBtnText: {
+      fontSize: scale(12),
+      color: colors.textDim,
+      fontWeight: "600",
+    },
+    whatIfMethodBtnTextActive: {
+      color: colors.accent,
+    },
+    whatIfGrowthRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 4,
+    },
+    whatIfGrowthLabel: {
+      fontSize: scale(13),
+      color: colors.textDim,
+    },
+    whatIfGrowthValueWrap: {
+      alignItems: "flex-end",
+    },
+    whatIfGrowthValue: {
+      fontSize: scale(15),
+      fontWeight: "700",
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
+    },
+    whatIfGrowthSub: {
+      fontSize: scale(11),
+      color: colors.success,
+      fontVariant: ["tabular-nums"],
     },
 
     /* Captain's Course card */

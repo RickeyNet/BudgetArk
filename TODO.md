@@ -325,7 +325,9 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 - [ ] Spending Velocity Alerts - passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
 - [ ] Partner Budget Visibility Controls - mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
-- [ ] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
+- [x] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
+
+  Shipped as a Charts-tab tool (2026-07): `src/utils/whatIfSpending.ts` (pure math + tests) and a "What If I Stopped Spending on…" card in ChartsScreen. Category chips show per-category averages from the last 6 tracked months (Debt Payments excluded); a slider sets the redirect amount; the debt side compares payoff timelines via `simulatePayoffPlan` (avalanche/snowball toggle, months sooner + interest saved, handles unsolvable→solvable), and the savings side shows 1/5/10-year growth at an assumed 7% via `calcInvestmentGrowth`. Device testing pending on next build.
 - [ ] Big Purchase Cost/Benefit Comparison Calculator - compare long-term total cost of ownership for expensive vs cheaper options (e.g. gas car vs hybrid vs EV) using purchase price, financing, fuel/energy cost, insurance, maintenance, depreciation/resale, annual miles, and ownership length. Show break-even point, 5/10-year totals, cost per mile, and whether the higher upfront option pays off over time.
 - [ ] Net Worth Timeline Graph - plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
 - [x] Live Stock Holdings & Quote Feed - let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
