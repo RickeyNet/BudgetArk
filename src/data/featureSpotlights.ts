@@ -27,7 +27,8 @@ export type ProfileSpotlightSection =
 
 export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
-  | { label: string; kind: "budget-add-entry" };
+  | { label: string; kind: "budget-add-entry" }
+  | { label: string; kind: "bridge" };
 
 export type FeatureSpotlight = {
   /** Stable id - persisted in seen/acked storage, never rename after release. */
@@ -113,6 +114,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
       kind: "profile-section",
       section: "trackingReminders",
     },
+  },
+  {
+    id: "account-change-tracker",
+    sinceVersion: "1.9.0",
+    icon: "📈",
+    title: "Watch your accounts rise and fall",
+    blurb:
+      "Every account and category on the Bridge now shows how much it's up or down over the window you pick - a day, a week, a month, or a quarter. Tracked privately on this phone from your own balances and prices; nothing leaves the device.",
+    cta: { label: "See your Bridge", kind: "bridge" },
   },
   {
     id: "deep-sea-theme",
