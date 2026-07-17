@@ -1,10 +1,12 @@
 /**
  * Jest configuration for BudgetArk unit tests.
  *
- * Scope: pure logic only (src/utils, src/data, src/types). These modules have
- * no React Native dependencies, so we use the lightweight ts-jest transform on
- * a Node environment instead of the heavy `jest-expo` preset. If/when component
- * or hook tests are added, introduce a separate `jest-expo`-based project.
+ * Scope: pure logic only (src/utils, src/data, src/sync, src/storage,
+ * src/crypto, src/services). These modules have no React Native dependencies
+ * (native edges are mocked per-test), so we use the lightweight ts-jest
+ * transform on a Node environment instead of the heavy `jest-expo` preset.
+ * If/when component or hook tests are added, introduce a separate
+ * `jest-expo`-based project.
  */
 module.exports = {
   preset: "ts-jest",
@@ -26,18 +28,27 @@ module.exports = {
     "src/utils/**/*.ts",
     "src/data/**/*.ts",
     "src/sync/**/*.ts",
+    // Security-critical layers whose tests existed but whose coverage was
+    // invisible to the ratchet: bank-response parsers, storage crypto,
+    // attachments. A regression here must move the needle.
+    "src/storage/**/*.ts",
+    "src/crypto/**/*.ts",
+    "src/services/**/*.ts",
     "!src/**/*.d.ts",
   ],
-  // Ratchet gate: set just below measured coverage (2026-07, with src/sync
-  // included: L81.8/S80.3/B68.9/F77.0) so it blocks regressions without
-  // demanding new tests up front. Raise these as coverage grows; never lower
-  // them to get a red build green.
+  // Ratchet gate: set just below measured coverage so it blocks regressions
+  // without demanding new tests up front. Raise these as coverage grows;
+  // never lower them to get a red build green. Re-based 2026-07 when the
+  // measured scope grew to include storage/crypto/services (measured
+  // L61.8/S60.5/B59.7/F53.7) - the % dropped because the denominator got
+  // honest, not because coverage regressed (utils/data/sync alone measured
+  // L81.8 at the old scope).
   coverageThreshold: {
     global: {
-      lines: 79,
-      statements: 78,
-      branches: 66,
-      functions: 74,
+      lines: 61,
+      statements: 60,
+      branches: 59,
+      functions: 53,
     },
   },
   // Note: `isolatedModules: true` lives in tsconfig.json so ts-jest transpiles

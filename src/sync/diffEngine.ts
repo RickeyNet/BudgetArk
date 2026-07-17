@@ -304,9 +304,22 @@ const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string
 const validateDiffEntries = <T,>(
   entries: DiffEntry<T>[] | undefined,
   label: string,
-  validator: (item: unknown) => boolean
+  validator: (item: unknown) => boolean,
+  required = false
 ): void => {
-  if (!entries) return;
+  if (entries === undefined || entries === null) {
+    // Optional collections may be absent (older peers predate them);
+    // required ones have been in the wire contract since v1, so a missing
+    // one means a malformed diff, not an old app version.
+    if (required) throw new Error(`Sync rejected: missing ${label} collection`);
+    return;
+  }
+  // Must be a real array: `applyIncomingDiff` iterates and indexes these,
+  // so a non-array (e.g. `{}`) would surface as a raw TypeError mid-apply
+  // instead of the labeled rejection this gate exists to produce.
+  if (!Array.isArray(entries)) {
+    throw new Error(`Sync rejected: malformed ${label} collection`);
+  }
   for (const entry of entries) {
     if (!isObject(entry) || (entry.action !== "upsert" && entry.action !== "delete")) {
       throw new Error(`Sync rejected: malformed ${label} entry`);
@@ -322,10 +335,13 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     throw new Error("Sync rejected: diff is not an object");
   }
 
-  validateDiffEntries(diff.debts, "debt", isDebtItem);
-  validateDiffEntries(diff.payments, "payment", isPaymentItem);
-  validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem);
-  validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem);
+  validateDiffEntries(diff.debts, "debt", isDebtItem, true);
+  validateDiffEntries(diff.payments, "payment", isPaymentItem, true);
+  validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem, true);
+  validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem, true);
+  // Declared required in SyncDiff but added post-launch (countDiffEntries
+  // optional-chains it for the same reason) - tolerate absence, reject
+  // non-arrays.
   validateDiffEntries(diff.assetAccounts, "asset account", isAssetAccountItem);
   validateDiffEntries(diff.holdings, "holding", isHoldingItem);
   validateDiffEntries(diff.customCategories, "custom category", isCustomCategoryItem);
@@ -360,15 +376,19 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     }
   }
 
-  if (Array.isArray(diff.budgetLimits)) {
-    for (const bucket of diff.budgetLimits) {
-      if (!isObject(bucket) || !isMonthKey(bucket.monthKey) || !Array.isArray(bucket.limits)) {
-        throw new Error("Sync rejected: malformed budget limit bucket");
-      }
-      for (const limit of bucket.limits) {
-        if (!isBudgetLimitItem(limit)) {
-          throw new Error("Sync rejected: invalid budget limit record");
-        }
+  // In the wire contract since v1, so absence means malformed, not old peer.
+  // The old `if (Array.isArray(...))` guard silently skipped validation for
+  // non-arrays and let applyIncomingDiff crash on them instead.
+  if (!Array.isArray(diff.budgetLimits)) {
+    throw new Error("Sync rejected: missing budget limits collection");
+  }
+  for (const bucket of diff.budgetLimits) {
+    if (!isObject(bucket) || !isMonthKey(bucket.monthKey) || !Array.isArray(bucket.limits)) {
+      throw new Error("Sync rejected: malformed budget limit bucket");
+    }
+    for (const limit of bucket.limits) {
+      if (!isBudgetLimitItem(limit)) {
+        throw new Error("Sync rejected: invalid budget limit record");
       }
     }
   }

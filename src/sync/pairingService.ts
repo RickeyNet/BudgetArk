@@ -12,6 +12,7 @@ import CryptoJS from "crypto-js";
 import NetInfo from "@react-native-community/netinfo";
 import { getOrCreateUser } from "../storage/userStorage";
 import { savePairingState } from "./pairingStorage";
+import { sanitizeTextInput } from "../utils/sanitize";
 import * as Discovery from "./discoveryService";
 import * as Transport from "./transportService";
 import type { PairingState, PairOfferPayload, PairAcceptPayload } from "./types";
@@ -149,6 +150,81 @@ const generateSharedSecret = (): string => {
 
 const PAIRING_TIMEOUT_MS = 60_000;
 
+/* ─── Handshake payload validation ─── */
+
+/**
+ * The pairing handshake is the one place a semi-trusted peer hands us data
+ * that gets persisted for the lifetime of the pairing - most critically
+ * `sharedSecret`, which keys every future sync HMAC. Parse fail-closed
+ * (rule 15): a payload that doesn't match the expected shape is dropped,
+ * never guessed at. Without this, a buggy or hostile peer that knows the
+ * pairing code could deliver `sharedSecret: ""` (or a number) and the
+ * garbage would be committed as the permanent PairingState.
+ */
+
+/** 256-bit hex string - exactly what generateSharedSecret produces. */
+const SHARED_SECRET_RE = /^[0-9a-f]{64}$/;
+
+const MAX_PARTNER_NAME_LENGTH = 60;
+
+/** Sanitized, non-empty, length-capped peer display name - or null. */
+const cleanPeerName = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const cleaned = sanitizeTextInput(value).trim().slice(0, MAX_PARTNER_NAME_LENGTH);
+  return cleaned.length > 0 ? cleaned : null;
+};
+
+const parsePairOffer = (payload: string): PairOfferPayload | null => {
+  let parsed: Partial<PairOfferPayload>;
+  try {
+    parsed = JSON.parse(payload) as Partial<PairOfferPayload>;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const displayName = cleanPeerName(parsed.displayName);
+  if (
+    typeof parsed.userId !== "string" ||
+    parsed.userId.trim().length === 0 ||
+    displayName === null ||
+    typeof parsed.sharedSecret !== "string" ||
+    !SHARED_SECRET_RE.test(parsed.sharedSecret)
+  ) {
+    return null;
+  }
+  return {
+    userId: parsed.userId,
+    displayName,
+    sharedSecret: parsed.sharedSecret,
+  };
+};
+
+const parsePairAccept = (payload: string): PairAcceptPayload | null => {
+  let parsed: Partial<PairAcceptPayload>;
+  try {
+    parsed = JSON.parse(payload) as Partial<PairAcceptPayload>;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const displayName = cleanPeerName(parsed.displayName);
+  if (
+    typeof parsed.userId !== "string" ||
+    parsed.userId.trim().length === 0 ||
+    displayName === null ||
+    // The payload type pins `confirmed: true` - an "accept" that doesn't
+    // confirm is malformed, not a softer kind of acceptance.
+    parsed.confirmed !== true
+  ) {
+    return null;
+  }
+  return {
+    userId: parsed.userId,
+    displayName,
+    confirmed: true,
+  };
+};
+
 /**
  * Result of a successful key exchange. The pairing is *not* yet persisted -
  * the UI must show the fingerprint to the user, ask them to confirm it
@@ -169,15 +245,19 @@ export interface PendingPairing {
  * Resolves with a PendingPairing once the key exchange completes; the
  * caller must call `commit()` after the user confirms the fingerprint.
  */
-export const startPairingAsInitiator = (
+export const startPairingAsInitiator = async (
   code: string,
   onTimeout?: () => void,
   onServerReady?: (ip: string | null, port: number, closeServer: (() => void) | null) => void
 ): Promise<PendingPairing> => {
-  return new Promise(async (resolve, reject) => {
-    const user = await getOrCreateUser();
-    const tempKey = deriveKeyFromCode(code);
+  // Awaited OUTSIDE the Promise executor below. Inside a
+  // `new Promise(async ...)` executor a throw here would be swallowed by
+  // the async wrapper BEFORE the timeout timer was armed - the returned
+  // promise would never settle and the pairing UI would spin forever.
+  const user = await getOrCreateUser();
+  const tempKey = deriveKeyFromCode(code);
 
+  return new Promise((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (!settled) {
@@ -188,7 +268,7 @@ export const startPairingAsInitiator = (
       }
     }, PAIRING_TIMEOUT_MS);
 
-    try {
+    const run = async (): Promise<void> => {
       // Start TCP server - onListening fires as soon as the port is assigned,
       // BEFORE any client connects, so we can advertise and show the address.
       const { connection } = await Transport.startServer(
@@ -205,56 +285,58 @@ export const startPairingAsInitiator = (
       );
 
       // Wait for PAIR_OFFER from joiner
-      connection.onMessage(async (msg, decryptedPayload) => {
+      connection.onMessage((msg, decryptedPayload) => {
         if (settled) return;
+        if (msg.type !== "PAIR_OFFER") return;
 
-        if (msg.type === "PAIR_OFFER") {
-          try {
-            const offer: PairOfferPayload = JSON.parse(decryptedPayload);
+        // Fail closed on a malformed offer: drop it and keep waiting for a
+        // valid one (or the timeout). Never persist unvalidated peer data.
+        const offer = parsePairOffer(decryptedPayload);
+        if (!offer) return;
 
-            // Send PAIR_ACCEPT
-            const accept: PairAcceptPayload = {
-              userId: user.id,
-              displayName: user.displayName,
-              confirmed: true,
-            };
-            connection.send("PAIR_ACCEPT", accept);
+        // Send PAIR_ACCEPT
+        const accept: PairAcceptPayload = {
+          userId: user.id,
+          displayName: user.displayName,
+          confirmed: true,
+        };
+        connection.send("PAIR_ACCEPT", accept);
 
-            // Build the pending pairing - caller must call commit()
-            // after the user confirms the fingerprint matches.
-            const pairingState: PairingState = {
-              partnerId: offer.userId,
-              partnerName: offer.displayName,
-              sharedSecret: offer.sharedSecret,
-              pairedAt: new Date().toISOString(),
-              autoSyncEnabled: false,
-            };
+        // Build the pending pairing - caller must call commit()
+        // after the user confirms the fingerprint matches.
+        const pairingState: PairingState = {
+          partnerId: offer.userId,
+          partnerName: offer.displayName,
+          sharedSecret: offer.sharedSecret,
+          pairedAt: new Date().toISOString(),
+          autoSyncEnabled: false,
+        };
 
-            clearTimeout(timer);
-            settled = true;
+        clearTimeout(timer);
+        settled = true;
 
-            // Cleanup after a short delay to let the ACK send
-            setTimeout(() => {
-              connection.close();
-              Discovery.stop();
-            }, 500);
+        // Cleanup after a short delay to let the ACK send
+        setTimeout(() => {
+          connection.close();
+          Discovery.stop();
+        }, 500);
 
-            resolve({
-              pairingState,
-              fingerprint: computeFingerprint(offer.sharedSecret),
-              commit: () => savePairingState(pairingState),
-            });
-          } catch {
-            // Invalid offer payload
-          }
-        }
+        resolve({
+          pairingState,
+          fingerprint: computeFingerprint(offer.sharedSecret),
+          commit: () => savePairingState(pairingState),
+        });
       });
-    } catch (err) {
-      clearTimeout(timer);
-      settled = true;
-      Discovery.stop();
-      reject(err);
-    }
+    };
+
+    run().catch((err) => {
+      if (!settled) {
+        clearTimeout(timer);
+        settled = true;
+        Discovery.stop();
+        reject(err);
+      }
+    });
   });
 };
 
@@ -313,31 +395,34 @@ export const joinPairing = async (
       reject(new Error("Pairing response timed out"));
     }, 15_000);
 
-    connection.onMessage(async (msg, decryptedPayload) => {
+    connection.onMessage((msg, decryptedPayload) => {
       if (msg.type === "PAIR_ACCEPT") {
         clearTimeout(timer);
 
-        try {
-          const accept: PairAcceptPayload = JSON.parse(decryptedPayload);
-
-          const pairingState: PairingState = {
-            partnerId: accept.userId,
-            partnerName: accept.displayName,
-            sharedSecret,
-            pairedAt: new Date().toISOString(),
-            autoSyncEnabled: false,
-          };
-
-          setTimeout(() => connection.close(), 500);
-          resolve({
-            pairingState,
-            fingerprint: computeFingerprint(sharedSecret),
-            commit: () => savePairingState(pairingState),
-          });
-        } catch {
+        // Fail closed: a response that isn't the expected shape is an error,
+        // not something to guess at. (We generated sharedSecret ourselves,
+        // so only the partner's identity fields need validating here.)
+        const accept = parsePairAccept(decryptedPayload);
+        if (!accept) {
           connection.close();
           reject(new Error("Invalid pairing response"));
+          return;
         }
+
+        const pairingState: PairingState = {
+          partnerId: accept.userId,
+          partnerName: accept.displayName,
+          sharedSecret,
+          pairedAt: new Date().toISOString(),
+          autoSyncEnabled: false,
+        };
+
+        setTimeout(() => connection.close(), 500);
+        resolve({
+          pairingState,
+          fingerprint: computeFingerprint(sharedSecret),
+          commit: () => savePairingState(pairingState),
+        });
       }
     });
   });

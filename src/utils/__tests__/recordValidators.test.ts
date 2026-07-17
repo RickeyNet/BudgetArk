@@ -40,6 +40,24 @@ describe("primitive guards", () => {
     expect(isSafeText("ab", 1)).toBe(false);
   });
 
+  it("isSafeText rejects control characters and null bytes", () => {
+    // Import and LAN-sync free text must equal its sanitized form; the
+    // spreadsheet path already stripped these, the JSON/sync gate did not.
+    expect(isSafeText("evil\x00name")).toBe(false);
+    expect(isSafeText("bell\x07")).toBe(false);
+    expect(isSafeText("del\x7F")).toBe(false);
+  });
+
+  it("isSafeText keeps accepting real-world text (golden)", () => {
+    // Normal whitespace survives sanitizeTextInput - multi-line and tabbed
+    // text written by older app versions must keep validating.
+    expect(isSafeText("line one\nline two")).toBe(true);
+    expect(isSafeText("col1\tcol2")).toBe(true);
+    expect(isSafeText("Grocery run 🛒 café")).toBe(true);
+    // RTL text carries bidi characters; they are deliberately allowed.
+    expect(isSafeText("دفعة الإيجار")).toBe(true);
+  });
+
   it("isSafeNumber enforces finite range bounds", () => {
     expect(isSafeNumber(100)).toBe(true);
     expect(isSafeNumber(-1)).toBe(false); // default min 0
@@ -166,6 +184,16 @@ describe("isBudgetEntryItem", () => {
 
   it("rejects a string amount", () => {
     expect(isBudgetEntryItem({ ...valid, amount: "12.5" })).toBe(false);
+  });
+
+  it("rejects a description containing control characters, keeps multi-line", () => {
+    expect(
+      isBudgetEntryItem({ ...valid, description: "sneaky\x00bytes" })
+    ).toBe(false);
+    expect(
+      isBudgetEntryItem({ ...valid, description: "first line\nsecond line" })
+    ).toBe(true);
+    expect(isBudgetEntryItem({ ...valid, description: "" })).toBe(true);
   });
 
   it("rejects a too-long description", () => {

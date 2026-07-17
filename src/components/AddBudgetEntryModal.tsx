@@ -35,7 +35,6 @@ import { clampTaxSetAsideRate } from "../utils/paycheckMath";
 import {
   DEFAULT_RECURRENCE_DAY,
   buildEntryDateISO,
-  lastDayOfYearMonth,
 } from "../utils/entryDate";
 import { useCurrency } from "../currency/CurrencyProvider";
 

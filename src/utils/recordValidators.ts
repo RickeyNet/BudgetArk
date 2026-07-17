@@ -31,7 +31,25 @@ export const isSafeText = (
 ): value is string =>
   typeof value === "string" &&
   value.trim().length > 0 &&
-  value.length <= maxLength;
+  value.length <= maxLength &&
+  // Same control-char gate the category check below applies (and the
+  // spreadsheet path's strip regex): imported/synced free text must equal
+  // its sanitized form, so null bytes and control characters are rejected
+  // at the trust boundary instead of landing in storage. Normal whitespace
+  // (space/tab/newline) survives sanitizeTextInput, so multi-line
+  // descriptions keep passing. Deliberately does NOT reject Unicode
+  // bidi/format characters - genuine RTL text carries them.
+  value === sanitizeTextInput(value);
+
+/**
+ * Free-text field that MAY be empty (descriptions): same control-char and
+ * length gate as isSafeText minus the non-empty requirement.
+ */
+export const isSafeOptionalDescription = (value: unknown): boolean =>
+  value === undefined ||
+  (typeof value === "string" &&
+    value.length <= VALIDATOR_LIMITS.MAX_DESCRIPTION_LENGTH &&
+    value === sanitizeTextInput(value));
 
 export const isSafeNumber = (
   value: unknown,
@@ -171,10 +189,7 @@ export const isBudgetEntryItem = (
   if (!isObject(item)) return false;
   const typeValid = item.type === "income" || item.type === "expense";
   const categoryValid = isValidImportCategory(item.category);
-  const descriptionValid =
-    item.description === undefined ||
-    (typeof item.description === "string" &&
-      item.description.length <= VALIDATOR_LIMITS.MAX_DESCRIPTION_LENGTH);
+  const descriptionValid = isSafeOptionalDescription(item.description);
 
   const allowsNegative =
     typeof item.category === "string" &&
@@ -271,12 +286,8 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
       ? '"amount" must be a JSON number, not a quoted string (use 12.5, not "12.5")'
       : '"amount" must be a positive number of at least 0.01';
   }
-  if (
-    item.description !== undefined &&
-    (typeof item.description !== "string" ||
-      item.description.length > VALIDATOR_LIMITS.MAX_DESCRIPTION_LENGTH)
-  ) {
-    return `"description" must be a string of at most ${VALIDATOR_LIMITS.MAX_DESCRIPTION_LENGTH} characters`;
+  if (!isSafeOptionalDescription(item.description)) {
+    return `"description" must be a string of at most ${VALIDATOR_LIMITS.MAX_DESCRIPTION_LENGTH} characters with no control characters`;
   }
   if (!isAcceptablePaymentUrl(item.paymentUrl)) {
     return '"paymentUrl" must be a valid https URL';

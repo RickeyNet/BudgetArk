@@ -250,6 +250,36 @@ describe("applyIncomingDiff - validation gate", () => {
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/malformed debt/);
   });
 
+  it("rejects a diff missing a required collection with a labeled error", async () => {
+    // Regression: a missing/non-array collection used to sail past
+    // validation (`if (!entries) return`) and crash applyIncomingDiff with
+    // a raw TypeError instead of the "Sync rejected" message.
+    const missing = emptyDiff();
+    delete (missing as any).debts;
+    await expect(applyIncomingDiff(missing)).rejects.toThrow(/missing debt collection/);
+    expect(debtStorage.saveDebts).not.toHaveBeenCalled();
+
+    const noLimits = emptyDiff();
+    delete (noLimits as any).budgetLimits;
+    await expect(applyIncomingDiff(noLimits)).rejects.toThrow(/budget limits/);
+  });
+
+  it("rejects a non-array collection (required or optional)", async () => {
+    await expect(
+      applyIncomingDiff(emptyDiff({ payments: {} as any }))
+    ).rejects.toThrow(/malformed payment collection/);
+    await expect(
+      applyIncomingDiff(emptyDiff({ businesses: "nope" as any }))
+    ).rejects.toThrow(/malformed business collection/);
+  });
+
+  it("tolerates absent optional collections (older peers)", async () => {
+    const oldPeer = emptyDiff();
+    delete (oldPeer as any).holdings;
+    delete (oldPeer as any).assetAccounts; // post-launch addition
+    await expect(applyIncomingDiff(oldPeer)).resolves.toBe(0);
+  });
+
   it("rejects an invalid category bucket override", async () => {
     const bad = emptyDiff({ categoryBucketOverrides: { Food: "lavish" as any } });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/bucket override/);
