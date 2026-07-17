@@ -36,6 +36,10 @@ import {
   getDebtMilestonePlan,
   saveDebtMilestonePlan,
 } from "../../storage/debtMilestoneStorage";
+import {
+  getAccountValueHistory,
+  saveAccountValueHistory,
+} from "../../storage/accountValueSnapshotStorage";
 
 jest.mock("../../storage/debtStorage", () => ({
   getDebtsIncludingDeleted: jest.fn(),
@@ -65,6 +69,10 @@ jest.mock("../../storage/debtMilestoneStorage", () => ({
   getDebtMilestonePlan: jest.fn(),
   saveDebtMilestonePlan: jest.fn(),
 }));
+jest.mock("../../storage/accountValueSnapshotStorage", () => ({
+  getAccountValueHistory: jest.fn(),
+  saveAccountValueHistory: jest.fn(),
+}));
 
 const m = (fn: unknown) => fn as jest.Mock;
 
@@ -85,6 +93,7 @@ beforeEach(() => {
   m(getAssetAccountsIncludingDeleted).mockResolvedValue([]);
   m(getNetWorthSnapshots).mockResolvedValue([]);
   m(getDebtMilestonePlan).mockResolvedValue({ steps: [] });
+  m(getAccountValueHistory).mockResolvedValue({});
 });
 
 describe("no-op cases", () => {
@@ -98,6 +107,7 @@ describe("no-op cases", () => {
       savingsGoals: 0,
       assetAccounts: 0,
       netWorthSnapshots: 0,
+      accountValueHistories: 0,
       milestoneSteps: 0,
     });
     expect(getDebtsIncludingDeleted).not.toHaveBeenCalled();
@@ -114,7 +124,31 @@ describe("no-op cases", () => {
     expect(saveSavingsGoals).not.toHaveBeenCalled();
     expect(saveAssetAccounts).not.toHaveBeenCalled();
     expect(saveNetWorthSnapshots).not.toHaveBeenCalled();
+    expect(saveAccountValueHistory).not.toHaveBeenCalled();
     expect(saveDebtMilestonePlan).not.toHaveBeenCalled();
+  });
+});
+
+describe("account value history", () => {
+  it("scales every day's value and keeps dayKeys untouched", async () => {
+    m(getAccountValueHistory).mockResolvedValue({
+      acc1: [
+        { dayKey: "2026-07-15", value: 100 },
+        { dayKey: "2026-07-16", value: 150.25 },
+      ],
+      acc2: [{ dayKey: "2026-07-16", value: 0 }],
+    });
+
+    const result = await convert();
+
+    expect(result.accountValueHistories).toBe(2);
+    expect(firstArg(saveAccountValueHistory)).toEqual({
+      acc1: [
+        { dayKey: "2026-07-15", value: 200 },
+        { dayKey: "2026-07-16", value: 300.5 },
+      ],
+      acc2: [{ dayKey: "2026-07-16", value: 0 }],
+    });
   });
 });
 

@@ -549,6 +549,9 @@ const RESET_KEYS = [
   "@budgetark_savings_goals",
   "@budgetark_net_worth_snapshots",
   "@budgetark_asset_accounts",
+  // Per-account daily values behind the Bridge rise/drop tracker - derived
+  // from the accounts wiped above, so it resets with them.
+  "@budgetark_account_value_history",
   "@budgetark_debt_milestones",
   "@budgetark_open_ark_setup_once",
   // Walkthrough state - without this, a fresh reset wouldn't re-show the

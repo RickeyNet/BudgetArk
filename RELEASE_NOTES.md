@@ -77,6 +77,15 @@ Three-tier pass over the whole codebase. Pure JS/TS - rides the same 1.9.0 build
 - **Refactor (Tier 3).** Shared helpers: `utils/money.ts` (one `roundToCents`; export subtotals rounded at write), `utils/dateFormat.ts`, `utils/savingsGoals.ts` (EF contribution), `utils/linkedAccountRecurringApply.ts` (owns the entries-before-assets save order that prevents double-crediting; test-pinned). `OptionPickerModal` replaces ProfileScreen's five copy-pasted pickers (restores lost a11y props). `BudgetEntryModal` merges the Add/Edit entry modals behind one `entryFormState` field mapping; `MonthYearPicker` (immediate + confirm variants) replaces three private copies; `SheetKeyboardAvoider` consolidates the seven-modal bottom-sheet keyboard strategy. BudgetScreen: month paging reloads only the month-scoped limits, and expanded categories render 30 entries + Show-more instead of unbounded. ChartsScreen: loan/refi/EF math extracted to `utils/chartCalculators.ts` and the slider tap-to-type pattern to `hooks/useSliderValueEditor` (legacy rounding/commit quirks pinned in tests). ProfileScreen decomposed 4927 → 651 lines across `src/screens/profile/` sections, with modal field state moved into the owning sections.
 - **Tests:** full suite as of 2026-07-16: 889 passing across 63 suites.
 
+### Per-account rise/drop tracker (2026-07-17)
+
+Pure JS - rides the same 1.9.0 runtime, OTA-eligible.
+
+- **Daily per-account value snapshots.** `syncNetWorthSnapshot` now also records each live account's value (cash balance + priced holdings, display currency, holdings gated by the opt-in - exactly what the Bridge rows show) into `@budgetark_account_value_history` (`storage/accountValueSnapshotStorage.ts`; all math pure in `utils/accountValueHistory.ts`). One row per account per day via atomic `updateItem`, ~400-day cap per account, deleted accounts pruned on the next capture.
+- **Device-local by design.** Values derive from the per-device quote cache, so the history is excluded from partner sync and backups - same policy as `quoteCacheStorage`; each device builds its own baselines. Wiped by Reset All Data, rescaled by the "convert my amounts" currency migration.
+- **Bridge UI.** A 1D/7D/30D/90D chip selector (NetWorthHistoryCard's chip styling); rise/drop lines (`▲ +$X (y%)` green / `▼ -$X (y%)` red / muted `±$0.00`) under every cash account row, broker/HSA row, and category header. Category deltas sum member accounts, excluding accounts with no baseline from BOTH sides so a just-created account can't read as a giant gain. Baseline = nearest recorded day at/before the window cutoff, falling back to the earliest recorded day for young histories; a one-line hint shows until a prior-day capture exists.
+- **Tests:** day-key/window math, upsert/retention/pruning, baseline selection + fallbacks, category roll-up, fail-closed sanitizer, currency-migration rescale. Full suite as of 2026-07-17: 910 passing across 64 suites.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

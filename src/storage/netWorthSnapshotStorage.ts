@@ -9,6 +9,8 @@ import { getCachedQuotes } from "./quoteCacheStorage";
 import { getHoldingsSettings } from "./holdingsSettingsStorage";
 import { getOrCreateUser } from "./userStorage";
 import { calculateNetWorthTotals } from "../utils/netWorth";
+import { computeAccountValues } from "../utils/accountValueHistory";
+import { recordAccountValues } from "./accountValueSnapshotStorage";
 import { getCurrencyPreferenceOption } from "../utils/currencyPreferences";
 import { getStoredRates } from "../utils/exchangeRates";
 
@@ -169,6 +171,18 @@ export const syncNetWorthSnapshot = async (
     displayCurrency,
     rates: ratesSnapshot.rates,
   });
+
+  // Piggyback the per-account rise/drop history on the same capture: the
+  // inputs above are exactly what the Bridge rows display (holdings gated by
+  // the opt-in, values in display currency), so the recorded baselines always
+  // match what the user saw on screen that day.
+  await recordAccountValues(
+    computeAccountValues(assetAccounts, holdings, quotes, {
+      displayCurrency,
+      rates: ratesSnapshot.rates,
+    }),
+    capturedAt,
+  );
 
   return upsertNetWorthSnapshot({
     capturedAt,

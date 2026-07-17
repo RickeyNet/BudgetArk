@@ -24,6 +24,7 @@ Tests live next to the code under `__tests__/` folders (`src/utils/`,
 | `currencyConversion.test.ts` | `currencyConversion.ts` | USD conversion table, milestone target localization, "convert my amounts" math |
 | `currencyMigration.test.ts` | `currencyMigration.ts` | "Convert my amounts" migration: scales every stored money field across all collections, bumps `updatedAt`, counts converted records |
 | `netWorth.test.ts` | `netWorth.ts` | Net worth totals, reserve-category counting, linked-account double-count guard |
+| `accountValueHistory.test.ts` | `accountValueHistory.ts` | Per-account rise/drop tracker: daily value upsert/retention/pruning, baseline selection per window, category roll-up, fail-closed sanitizer |
 | `recurrence.test.ts` | `recurrence.ts` | Recurring-entry cadence, occurrence counting, spreadsheet month projection |
 | `budgetBucketMath.test.ts` | `budgetBucketMath.ts` | 50/30/20 bucket totals, targets, variance, percentages |
 | `recordValidators.test.ts` | `recordValidators.ts` | Import / LAN-sync trust-boundary validation of every record type |

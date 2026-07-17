@@ -70,6 +70,19 @@ import {
   QUOTE_REFRESH_INTERVAL_MS,
 } from "../utils/holdingsMath";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
+import { getAccountValueHistory } from "../storage/accountValueSnapshotStorage";
+import {
+  ACCOUNT_CHANGE_PERIODS,
+  changeSince,
+  combineChanges,
+  computeAccountValues,
+  getDayKey,
+  shiftDayKey,
+  type AccountChange,
+  type AccountChangePeriodKey,
+  type AccountValueHistory,
+  type CombinedChange,
+} from "../utils/accountValueHistory";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
@@ -151,6 +164,10 @@ const BridgeScreen: React.FC = () => {
     disclosureAcknowledged: false,
   });
   const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
+  const [accountValueHistory, setAccountValueHistory] = useState<AccountValueHistory>({});
+  // Window the rise/drop deltas compare against. 30D matches the net-worth
+  // history card's default range.
+  const [changePeriod, setChangePeriod] = useState<AccountChangePeriodKey>("30D");
   const [keelTarget, setKeelTarget] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -196,6 +213,9 @@ const BridgeScreen: React.FC = () => {
   const refreshNetWorthSnapshots = useCallback(async () => {
     const nextSnapshots = await syncNetWorthSnapshot();
     setNetWorthSnapshots(nextSnapshots);
+    // The sync above also just recorded today's per-account values; reload
+    // the history so the rise/drop deltas include this capture.
+    setAccountValueHistory(await getAccountValueHistory());
     return nextSnapshots;
   }, []);
 
@@ -340,6 +360,7 @@ const BridgeScreen: React.FC = () => {
           setHoldings([]);
           setQuotes({});
           setNetWorthSnapshots([]);
+          setAccountValueHistory({});
           setKeelTarget(0);
         }
         if (!cancelled) setIsLoaded(true);
@@ -390,6 +411,60 @@ const BridgeScreen: React.FC = () => {
     () => ({ displayCurrency: preference.currencyCode, rates }),
     [preference.currencyCode, rates]
   );
+
+  /**
+   * Rise/drop per account over the selected window, keyed by account id:
+   * today's live value (cash + priced holdings, same math the rows display)
+   * against the recorded daily history. Null = nothing recorded before today
+   * yet. Category headers sum these via combineChanges.
+   */
+  const accountChanges = useMemo(() => {
+    const period =
+      ACCOUNT_CHANGE_PERIODS.find((p) => p.key === changePeriod) ??
+      ACCOUNT_CHANGE_PERIODS[2];
+    const today = getDayKey(new Date());
+    const cutoff = shiftDayKey(today, -period.days);
+    const values = computeAccountValues(assetAccounts, holdings, quotes, holdingValueOpts);
+    const changes = new Map<string, AccountChange | null>();
+    for (const account of assetAccounts) {
+      changes.set(
+        account.id,
+        changeSince(accountValueHistory[account.id], values[account.id], cutoff, today)
+      );
+    }
+    return changes;
+  }, [assetAccounts, holdings, quotes, holdingValueOpts, accountValueHistory, changePeriod]);
+
+  const hasAnyChangeData = useMemo(() => {
+    for (const change of accountChanges.values()) {
+      if (change !== null) return true;
+    }
+    return false;
+  }, [accountChanges]);
+
+  /**
+   * One rise/drop line: "▲ +$120.50 (2.1%)" in success green, "▼ -$45.00
+   * (0.8%)" in danger red, a muted "±$0.00" when flat, nothing when there's
+   * no baseline yet.
+   */
+  const renderChange = (change: CombinedChange | null) => {
+    if (!change) return null;
+    const rising = change.amount >= 0.005;
+    const dropping = change.amount <= -0.005;
+    const color = rising ? colors.success : dropping ? colors.danger : colors.textMuted;
+    const arrow = rising ? "▲ +" : dropping ? "▼ -" : "±";
+    const pct =
+      change.percent != null && (rising || dropping)
+        ? ` (${Math.abs(change.percent).toFixed(1)}%)`
+        : "";
+    return (
+      <Text style={[styles.accountChangeText, { color }]}>
+        {arrow}
+        {formatCurrency(Math.abs(change.amount))}
+        {pct}
+      </Text>
+    );
+  };
 
   const netWorthTotals = useMemo(
     () =>
@@ -1076,6 +1151,49 @@ const BridgeScreen: React.FC = () => {
               </View>
             ) : null}
 
+            {assetAccounts.length > 0 ? (
+              <View style={styles.changePeriodRow}>
+                <Text style={[styles.changePeriodLabel, { color: colors.textMuted }]}>
+                  Change
+                </Text>
+                <View style={styles.changePeriodChips}>
+                  {ACCOUNT_CHANGE_PERIODS.map((option) => {
+                    const isSelected = changePeriod === option.key;
+                    return (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[
+                          styles.changePeriodChip,
+                          {
+                            borderColor: isSelected ? colors.accent : colors.cardBorder,
+                            backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
+                          },
+                        ]}
+                        onPress={() => setChangePeriod(option.key)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show ${option.label} change`}
+                      >
+                        <Text
+                          style={[
+                            styles.changePeriodChipText,
+                            { color: isSelected ? colors.accent : colors.textDim },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+            {assetAccounts.length > 0 && !hasAnyChangeData ? (
+              <Text style={[styles.changeTrackingHint, { color: colors.textMuted }]}>
+                Tracking starts today - rise/drop appears after the next visit.
+              </Text>
+            ) : null}
+
             {emergencyFundGoal ? (
               <TouchableOpacity
                 style={styles.accountRow}
@@ -1119,9 +1237,16 @@ const BridgeScreen: React.FC = () => {
                     <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
                       {iconForCategory(group.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[group.category]}
                     </Text>
-                    <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
-                      {formatCurrency(group.total)}
-                    </Text>
+                    <View style={styles.accountRowRight}>
+                      <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
+                        {formatCurrency(group.total)}
+                      </Text>
+                      {renderChange(
+                        combineChanges(
+                          group.accounts.map((a) => accountChanges.get(a.id) ?? null)
+                        )
+                      )}
+                    </View>
                   </TouchableOpacity>
 
                   {!isCollapsed
@@ -1135,9 +1260,12 @@ const BridgeScreen: React.FC = () => {
                           <View style={styles.accountRowLeft}>
                             <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
                           </View>
-                          <Text style={[styles.accountBalance, { color: colors.success }]}>
-                            {formatCurrency(account.balance)}
-                          </Text>
+                          <View style={styles.accountRowRight}>
+                            <Text style={[styles.accountBalance, { color: colors.success }]}>
+                              {formatCurrency(account.balance)}
+                            </Text>
+                            {renderChange(accountChanges.get(account.id) ?? null)}
+                          </View>
                         </TouchableOpacity>
                       ))
                     : null}
@@ -1185,9 +1313,16 @@ const BridgeScreen: React.FC = () => {
                     <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
                       {iconForCategory(section.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[section.category]}
                     </Text>
-                    <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
-                      {formatCurrency(section.total)}
-                    </Text>
+                    <View style={styles.accountRowRight}>
+                      <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
+                        {formatCurrency(section.total)}
+                      </Text>
+                      {renderChange(
+                        combineChanges(
+                          section.accounts.map((a) => accountChanges.get(a.id) ?? null)
+                        )
+                      )}
+                    </View>
                   </TouchableOpacity>
 
                   {!isCollapsed ? (
@@ -1214,9 +1349,12 @@ const BridgeScreen: React.FC = () => {
                                 </Text>
                                 <Text style={styles.accountName} numberOfLines={1}>{broker.name}</Text>
                               </TouchableOpacity>
-                              <Text style={[styles.accountBalance, { color: colors.success }]}>
-                                {formatCurrency(brokerTotal)}
-                              </Text>
+                              <View style={styles.accountRowRight}>
+                                <Text style={[styles.accountBalance, { color: colors.success }]}>
+                                  {formatCurrency(brokerTotal)}
+                                </Text>
+                                {renderChange(accountChanges.get(broker.id) ?? null)}
+                              </View>
                               <TouchableOpacity
                                 onPress={() => openEditAssetModal(broker)}
                                 accessibilityRole="button"
@@ -1869,6 +2007,46 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       paddingVertical: tokens.padSm,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
+    },
+    // Right-aligned value + rise/drop stack used by category headers,
+    // account rows, and broker rows.
+    accountRowRight: {
+      alignItems: "flex-end",
+    },
+    accountChangeText: {
+      fontSize: scale(10),
+      fontWeight: "600",
+      fontVariant: ["tabular-nums"] as any,
+      marginTop: 1,
+    },
+    changePeriodRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+      marginBottom: tokens.gapSm,
+    },
+    changePeriodLabel: {
+      fontSize: scale(11),
+      fontWeight: "600",
+    },
+    changePeriodChips: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    changePeriodChip: {
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    changePeriodChipText: {
+      fontSize: scale(11),
+      fontWeight: "700",
+    },
+    changeTrackingHint: {
+      fontSize: scale(11),
+      marginBottom: tokens.gapSm,
     },
     categoryDot: {
       width: 8,
