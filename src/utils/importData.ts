@@ -598,8 +598,8 @@ export const importFromString = async (
 
   /* 2b. Check export age for stale-import warning */
   let staleDays: number | undefined;
-  if (isObject(data) && typeof (data as any).exportedAt === "string") {
-    const exportedMs = Date.parse((data as any).exportedAt);
+  if (isObject(data) && typeof data.exportedAt === "string") {
+    const exportedMs = Date.parse(data.exportedAt);
     if (!Number.isNaN(exportedMs)) {
       staleDays = Math.floor((Date.now() - exportedMs) / (1000 * 60 * 60 * 24));
       if (staleDays < 0) staleDays = 0;
@@ -657,7 +657,8 @@ export const importFromString = async (
     let existing: Record<string, unknown>[] = [];
     if (existingRaw) {
       try {
-        existing = JSON.parse(existingRaw);
+        const parsed: unknown = JSON.parse(existingRaw);
+        if (Array.isArray(parsed)) existing = parsed;
       } catch {
         existing = []; // corrupted storage - treat as empty
       }
@@ -673,14 +674,18 @@ export const importFromString = async (
 
     const indexById = new Map<string, number>();
     existing.forEach((item, idx) => {
-      const id = (item as any).id;
-      if (typeof id === "string") indexById.set(id, idx);
+      if (isObject(item) && typeof item.id === "string") {
+        indexById.set(item.id, idx);
+      }
     });
 
     let touched = 0;
     for (const rawItem of incoming) {
-      const item = rawItem as Record<string, unknown>;
-      const id = item.id as string | undefined;
+      // Narrow, don't assert: sanitizePayload validated these, but this
+      // merge is the last stop before storage - rule 15 says check anyway.
+      if (!isObject(rawItem)) continue;
+      const item = rawItem;
+      const id = typeof item.id === "string" && item.id ? item.id : undefined;
       if (!id) continue;
 
       const existingIdx = indexById.get(id);
@@ -761,8 +766,8 @@ export const importFromString = async (
     const importStampIso = new Date().toISOString();
     for (const limits of Object.values(incomingMap)) {
       for (const limit of limits) {
-        if (typeof (limit as any).updatedAt !== "string" || !(limit as any).updatedAt) {
-          (limit as any).updatedAt = importStampIso;
+        if (typeof limit.updatedAt !== "string" || !limit.updatedAt) {
+          limit.updatedAt = importStampIso;
         }
       }
     }
@@ -810,14 +815,20 @@ export const importFromString = async (
       const existingForMonth = Array.isArray(existing[monthKey])
         ? existing[monthKey]
         : [];
-      const existingCategories = new Set(
-        existingForMonth.map((it: any) => it.category as string).filter(Boolean)
-      );
+      const existingCategories = new Set<string>();
+      for (const it of existingForMonth) {
+        if (isObject(it) && typeof it.category === "string" && it.category) {
+          existingCategories.add(it.category);
+        }
+      }
       for (const item of incomingArr) {
-        const cat = (item as any)?.category;
+        const cat =
+          isObject(item) && typeof item.category === "string"
+            ? item.category
+            : undefined;
         if (cat && existingCategories.has(cat)) {
           const idx = existingForMonth.findIndex(
-            (e: any) => e.category === cat
+            (e) => isObject(e) && e.category === cat
           );
           if (idx >= 0 && tsOf(item) >= tsOf(existingForMonth[idx])) {
             existingForMonth[idx] = item;
@@ -867,7 +878,7 @@ export const importFromString = async (
     // Names referenced by imported entries / limits.
     const referenced = new Set<string>();
     for (const e of sanitized.budgetEntries) {
-      const c = (e as any).category;
+      const c = e.category;
       if (typeof c === "string" && !isBuiltInCategory(c)) referenced.add(c);
     }
     const allLimitArrays: Record<string, unknown>[][] = [
@@ -878,7 +889,7 @@ export const importFromString = async (
     ];
     for (const arr of allLimitArrays) {
       for (const l of arr) {
-        const c = (l as any).category;
+        const c = l.category;
         if (typeof c === "string" && !isBuiltInCategory(c)) referenced.add(c);
       }
     }
@@ -903,17 +914,19 @@ export const importFromString = async (
 
     const byId = new Map<string, Record<string, unknown>>();
     for (const c of base) {
-      const id = (c as any).id;
-      if (typeof id === "string") byId.set(id, c);
+      if (isObject(c) && typeof c.id === "string") byId.set(c.id, c);
     }
 
     let touched = 0;
 
     // 1. Explicit imported definitions - LWW by id.
     for (const incoming of sanitized.customCategories) {
-      const id = (incoming as any).id as string;
+      // The validator guarantees a string id; skipping anything else is the
+      // fail-closed reading, not a behavior change.
+      const id = typeof incoming.id === "string" ? incoming.id : undefined;
+      if (!id) continue;
       const existing = byId.get(id);
-      if (!existing || tsOf((incoming as any).updatedAt) >= tsOf((existing as any).updatedAt)) {
+      if (!existing || tsOf(incoming.updatedAt) >= tsOf(existing.updatedAt)) {
         byId.set(id, incoming);
         touched++;
       }
@@ -923,7 +936,7 @@ export const importFromString = async (
     // shadow a built-in category.
     const nameWinner = new Map<string, string>(); // lowerName -> id
     for (const [id, rec] of byId) {
-      const name = (rec as any).name;
+      const name = rec.name;
       if (typeof name !== "string" || isBuiltInCategory(name)) {
         byId.delete(id);
         continue;
@@ -934,7 +947,7 @@ export const importFromString = async (
         nameWinner.set(key, id);
       } else {
         const prev = byId.get(prevId)!;
-        if (tsOf((rec as any).updatedAt) >= tsOf((prev as any).updatedAt)) {
+        if (tsOf(rec.updatedAt) >= tsOf(prev.updatedAt)) {
           byId.delete(prevId);
           nameWinner.set(key, id);
         } else {
@@ -1009,13 +1022,15 @@ export const importFromString = async (
 
     const indexById = new Map<string, number>();
     existing.forEach((item, idx) => {
-      const id = (item as any).id;
-      if (typeof id === "string") indexById.set(id, idx);
+      if (isObject(item) && typeof item.id === "string") {
+        indexById.set(item.id, idx);
+      }
     });
 
     let touched = 0;
     for (const item of sanitized.businesses) {
-      const id = item.id as string;
+      const id = typeof item.id === "string" ? item.id : undefined;
+      if (!id) continue;
       const existingIdx = indexById.get(id);
       if (existingIdx === undefined) {
         existing.push(item);
@@ -1065,22 +1080,23 @@ export const importFromString = async (
     }
     const byDay = new Map<string, Record<string, unknown>>();
     for (const snap of existing) {
-      const day = (snap as any)?.dayKey;
-      if (typeof day === "string") byDay.set(day, snap);
+      if (isObject(snap) && typeof snap.dayKey === "string") {
+        byDay.set(snap.dayKey, snap);
+      }
     }
     for (const snap of sanitized.netWorthSnapshots) {
-      const day = (snap as any).dayKey as string;
+      const day = typeof snap.dayKey === "string" ? snap.dayKey : undefined;
+      if (!day) continue;
       const prev = byDay.get(day);
       if (
         !prev ||
-        parseTimestamp((snap as any).capturedAt) >=
-          parseTimestamp((prev as any).capturedAt)
+        parseTimestamp(snap.capturedAt) >= parseTimestamp(prev.capturedAt)
       ) {
         byDay.set(day, snap);
       }
     }
     const merged = Array.from(byDay.values()).sort((a, b) =>
-      String((a as any).dayKey).localeCompare(String((b as any).dayKey))
+      String(a.dayKey).localeCompare(String(b.dayKey))
     );
     return { json: JSON.stringify(merged), count: sanitized.netWorthSnapshots.length };
   };

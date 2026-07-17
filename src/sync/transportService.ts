@@ -92,6 +92,70 @@ const frameMessage = (json: string): Buffer => {
   return Buffer.concat([header, body]);
 };
 
+/**
+ * Hard ceiling on a single frame's declared length. The 4-byte prefix is
+ * read BEFORE any authentication (HMAC verification needs the whole frame),
+ * so without a cap any unauthenticated device on the LAN could declare a
+ * 4 GB frame and stream data until the app OOMs. 16 MB is far above any
+ * legitimate sync (a full first-sync diff with the 730-snapshot backlog is
+ * hundreds of KB) while keeping the pre-auth buffer bounded.
+ */
+const MAX_FRAME_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Incremental frame decoder shared by the server and client data handlers.
+ *
+ * Chunks accumulate in an array and are concatenated once per COMPLETE
+ * frame - the previous `buffer = Buffer.concat([buffer, chunk])` per data
+ * event re-copied the entire accumulated buffer per ~64 KB TCP chunk,
+ * O(n²) on the JS thread during a large first sync.
+ *
+ * `onOversize` fires when a length prefix exceeds MAX_FRAME_BYTES; the
+ * caller must treat the peer as hostile/broken and destroy the socket.
+ * The reader drops its state and ignores all further data either way.
+ */
+const createFrameReader = (
+  onFrame: (json: string) => void,
+  onOversize: () => void
+): ((data: string | Buffer) => void) => {
+  let chunks: Buffer[] = [];
+  let total = 0;
+  let dead = false;
+
+  return (data: string | Buffer): void => {
+    if (dead) return;
+    const chunk = typeof data === "string" ? Buffer.from(data, "utf-8") : data;
+    chunks.push(chunk);
+    total += chunk.length;
+
+    while (total >= 4) {
+      // The 4-byte header can straddle chunks; consolidate only then.
+      if (chunks[0].length < 4) {
+        chunks = [Buffer.concat(chunks)];
+      }
+      const messageLength = chunks[0].readUInt32BE(0);
+
+      if (messageLength > MAX_FRAME_BYTES) {
+        dead = true;
+        chunks = [];
+        total = 0;
+        onOversize();
+        return;
+      }
+      if (total < 4 + messageLength) return; // wait for more data - no copying
+
+      const buf = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
+      const json = buf.slice(4, 4 + messageLength).toString("utf-8");
+      const rest = buf.slice(4 + messageLength);
+      chunks = rest.length > 0 ? [rest] : [];
+      total = rest.length;
+
+      onFrame(json);
+      if (dead) return; // onFrame tore the connection down
+    }
+  };
+};
+
 /* ─── Public API ─── */
 
 export interface TransportConnection {
@@ -196,8 +260,19 @@ const validateAndDecrypt = (
 };
 
 /**
- * Start a TCP server and wait for one connection.
- * Returns a promise that resolves with the connection and the allocated port.
+ * Start a TCP server and wait for the partner to connect AND authenticate.
+ *
+ * The partner slot is claimed by the first socket that delivers an
+ * HMAC-valid frame, not by the first socket that merely connects. The old
+ * connect-wins design let any device on the LAN occupy the slot during the
+ * (user-visible, up to 60s) pairing/sync window - the real partner's frames
+ * then went nowhere and the sync timed out. Unauthenticated connections now
+ * just sit as candidates until the real partner proves itself; the losers
+ * are destroyed at that moment.
+ *
+ * Because the promise resolves ON the first valid frame, that frame arrives
+ * before the caller can register onMessage - it's buffered and replayed on
+ * registration, so no SYNC_REQUEST / PAIR_OFFER is ever dropped.
  */
 export const startServer = (
   senderId: string,
@@ -207,56 +282,106 @@ export const startServer = (
 ): Promise<{ connection: TransportConnection; port: number }> => {
   return new Promise((resolve, reject) => {
     let messageCallback: ((msg: SyncMessage, payload: string) => void) | null = null;
-    let connected = false;
+    let partnerSocket: any = null;
+    let settled = false;
+    const candidates: any[] = [];
+    const pendingFrames: { msg: SyncMessage; payload: string }[] = [];
+
+    const connection: TransportConnection = {
+      send: (type, payload) => {
+        if (partnerSocket) {
+          buildAndSend(partnerSocket, senderId, key, type, payload);
+        }
+      },
+      onMessage: (cb) => {
+        messageCallback = cb;
+        // Replay frames that arrived before registration (at minimum the
+        // authenticating frame itself).
+        while (pendingFrames.length > 0) {
+          const frame = pendingFrames.shift()!;
+          cb(frame.msg, frame.payload);
+        }
+      },
+      close: () => {
+        partnerSocket?.destroy();
+        for (const candidate of candidates.splice(0)) candidate.destroy();
+        server.close();
+      },
+    };
 
     const server = TcpSocket.createServer((socket: any) => {
-      let buffer = Buffer.alloc(0);
+      if (partnerSocket) {
+        // Slot already claimed by an authenticated partner.
+        socket.destroy();
+        return;
+      }
+      candidates.push(socket);
 
-      const connection: TransportConnection = {
-        send: (type, payload) => buildAndSend(socket, senderId, key, type, payload),
-        onMessage: (cb) => { messageCallback = cb; },
-        close: () => {
-          socket.destroy();
-          server.close();
-        },
+      const dropCandidate = () => {
+        const idx = candidates.indexOf(socket);
+        if (idx >= 0) candidates.splice(idx, 1);
       };
 
-      socket.on("data", (data: string | Buffer) => {
-        const chunk = typeof data === "string" ? Buffer.from(data, "utf-8") : data;
-        buffer = Buffer.concat([buffer, chunk]);
+      socket.on(
+        "data",
+        createFrameReader(
+          (json) => {
+            const result = validateAndDecrypt(json, expectedPartnerId, key);
+            // Unauthenticated noise never claims the slot; the socket stays
+            // a candidate and the real partner can still get through.
+            if (!result) return;
 
-        // Process complete frames
-        while (buffer.length >= 4) {
-          const messageLength = buffer.readUInt32BE(0);
-          if (buffer.length < 4 + messageLength) break;
+            if (!partnerSocket) {
+              partnerSocket = socket;
+              dropCandidate();
+              for (const other of candidates.splice(0)) other.destroy();
+              if (!settled) {
+                settled = true;
+                resolve({ connection, port: (server.address() as any)?.port ?? 0 });
+              }
+            }
+            if (socket !== partnerSocket) return; // losing candidate mid-teardown
 
-          const json = buffer.slice(4, 4 + messageLength).toString("utf-8");
-          buffer = buffer.slice(4 + messageLength);
-
-          const result = validateAndDecrypt(json, expectedPartnerId, key);
-          if (result && messageCallback) {
-            messageCallback(result.msg, result.payload);
+            if (messageCallback) {
+              messageCallback(result.msg, result.payload);
+            } else {
+              pendingFrames.push(result);
+            }
+          },
+          () => {
+            // Oversize length prefix from an unauthenticated peer - fail
+            // closed at the framing layer (rule 15) before buffering
+            // anything the HMAC hasn't vouched for.
+            dropCandidate();
+            socket.destroy();
           }
-        }
-      });
+        )
+      );
 
       socket.on("error", (_err: any) => {
-        server.close();
+        if (socket === partnerSocket) {
+          // The authenticated session died - tear the server down (matches
+          // the pre-candidate behavior for a live connection).
+          server.close();
+        } else {
+          // A candidate failing must not kill the server while we're still
+          // waiting for the real partner.
+          dropCandidate();
+          socket.destroy();
+        }
       });
-
-      connected = true;
-      resolve({ connection, port: (server.address() as any)?.port ?? 0 });
     });
 
     server.on("error", (err: any) => {
-      if (!connected) reject(err);
+      if (!settled) reject(err);
     });
 
-    // Reject the promise if the server is closed before any client connects.
-    // Lets callers cancel a pending server-mode sync (e.g. when fallback path
-    // discovers the partner mid-wait and switches to client mode).
+    // Reject the promise if the server is closed before a partner has
+    // AUTHENTICATED (not merely connected). Lets callers cancel a pending
+    // server-mode sync (e.g. when the fallback path discovers the partner
+    // mid-wait and switches to client mode).
     server.on("close", () => {
-      if (!connected) reject(new Error("Sync server closed before partner connected"));
+      if (!settled) reject(new Error("Sync server closed before partner connected"));
     });
 
     // Listen on port 0 to let the OS assign an available port.
@@ -281,7 +406,6 @@ export const connectToHost = (
 ): Promise<TransportConnection> => {
   return new Promise((resolve, reject) => {
     let messageCallback: ((msg: SyncMessage, payload: string) => void) | null = null;
-    let buffer = Buffer.alloc(0);
 
     const socket = TcpSocket.createConnection(
       { host, port },
@@ -295,23 +419,21 @@ export const connectToHost = (
       }
     );
 
-    socket.on("data", (data: string | Buffer) => {
-      const chunk = typeof data === "string" ? Buffer.from(data, "utf-8") : data;
-      buffer = Buffer.concat([buffer, chunk]);
-
-      while (buffer.length >= 4) {
-        const messageLength = buffer.readUInt32BE(0);
-        if (buffer.length < 4 + messageLength) break;
-
-        const json = buffer.slice(4, 4 + messageLength).toString("utf-8");
-        buffer = buffer.slice(4 + messageLength);
-
-        const result = validateAndDecrypt(json, expectedPartnerId, key);
-        if (result && messageCallback) {
-          messageCallback(result.msg, result.payload);
+    socket.on(
+      "data",
+      createFrameReader(
+        (json) => {
+          const result = validateAndDecrypt(json, expectedPartnerId, key);
+          if (result && messageCallback) {
+            messageCallback(result.msg, result.payload);
+          }
+        },
+        () => {
+          // Same fail-closed framing rule as the server path.
+          socket.destroy();
         }
-      }
-    });
+      )
+    );
 
     socket.on("error", (err: any) => {
       // After the connect callback has resolved the promise, this reject is
