@@ -242,7 +242,16 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   - Optional polish: dedicated monochrome Android notification icon via the `expo-notifications` plugin options (currently default).
   - Release-notes entry: DONE (in-app 1.9.0 notes + RELEASE_NOTES.md). Version bump still due when the EAS build that carries this is cut.
   - v2 ideas: streak-aware copy ("day 12 of your streak - keep it alive"), a "weekly recap" variant, snooze action button on the notification, month-start tap deep-linking straight to the Monthly Review sheet instead of the Budget tab.
-- [ ] Search and advanced filters across debts, payments, and budget entries
+- [x] Search and advanced filters across debts, payments, and budget entries - SHIPPED app-side (2026-07-20). OTA-eligible (pure JS, no storage, no network). Device testing pending.
+
+  What shipped:
+  - `src/utils/searchFilter.ts` (pure, 24 tests): tokenized AND matching over debts (name/owner/class labels), payments (parent debt name; orphaned payments label "(deleted debt)" and stay findable), entries (description/category/merchant); amounts + YYYY-MM-DD dates in every haystack. Filters: scope, date presets (30d/90d/this-year vs injected `now`), entry type, category multi-select, amount range. Deliberate + test-pinned: entry-only filters narrow to entries; a date range hides standing debts (their payments still surface); date-sorted not relevance-ranked; 50-per-group cap with pre-cap totals; tombstones excluded; unparseable dates fail closed under a date filter.
+  - `src/components/GlobalSearchModal.tsx`: slide-up sheet (OnboardingGuideModal skeleton), sanitized auto-focus query, collapsible filter panel (active-count badge, Reset, scope switches clear filters the new scope can't use), grouped results with icons + locale-formatted amounts/dates, honest "debts hidden by filters"/truncation notes. Host stamps `now` at open (render purity) and owns result-tap behavior.
+  - Hosts: 🔍 in both title sections (DebtTracker right corner; Budget left, sliding beside the Review Inbox icon when present). Same-tab result taps use the dismiss-then-present-after-250ms rule (debt → AddDebtModal edit, payment → PaymentHistoryModal, entry → BudgetEntryModal). Cross-tab via two new app-internal route params consumed with the deferred InteractionManager pattern: `Budget.searchEntryId` (waits for `isLoaded`) and `DebtTracker.openHistory`. Neither reachable from external deep links.
+
+  Still TODO:
+  - Device-test both entry points: keyboard behavior with the sheet, chip wrapping at large text sizes, cross-tab hops (search on Debts → entry edit on Budget and vice versa), dismiss-then-present timing on iOS.
+  - Optional fast-follows: a FEATURE_SPOTLIGHTS debut slide (skipped for now - carousel already long, and the 🔍 icon is always visible on two tabs), an onboarding-guide step ("search" keyword), owner filter for debts inside the sheet, and a Bridge entry point.
 - [x] Currency exchange calculator (Utilities tab) - SHIPPED (2026-07-20) as a collapsible "Currency Exchange" tool on the Charts tab, after the Emergency Fund calculator. OTA-eligible (pure JS).
 
   Decisions that were open:

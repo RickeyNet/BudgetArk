@@ -1174,10 +1174,24 @@ export type RootTabParamList = {
      * links deliberately carry no card ids or financial data.
      */
     openKeepAlive?: boolean;
+    /**
+     * Set by a payment result tap in the global search sheet (see
+     * GlobalSearchModal hosts): opens the Payment History sheet on focus.
+     * App-internal navigation only - never reachable from an external deep
+     * link (parseQuickAddUri stays the only external entry point).
+     */
+    openHistory?: boolean;
   } | undefined;
   Budget: {
     /** When true, the Budget screen opens the connections Review Inbox on focus. */
     openInbox?: boolean;
+    /**
+     * Set by a budget-entry result tap in the global search sheet on
+     * another tab: opens that entry's edit sheet on focus. An opaque
+     * record id, app-internal navigation only - never reachable from an
+     * external deep link.
+     */
+    searchEntryId?: string;
     /**
      * Set by the Quick Entry widget's deep link (see QuickAddLinkHost):
      * opens the Add Entry modal, preselecting `category` when present.

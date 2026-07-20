@@ -87,6 +87,7 @@ import {
 import { consumeArkSetupPromptRequest } from "../storage/arkSetupStorage";
 import DebtCard from "../components/DebtCard";
 import DebtFreeCountdownCard from "../components/DebtFreeCountdownCard";
+import GlobalSearchModal from "../components/GlobalSearchModal";
 import AddDebtModal, { type DebtKeepAliveExtras } from "../components/AddDebtModal";
 import { getLinks, updateLink } from "../storage/externalAccountLinksStorage";
 import ProgressRing from "../components/ProgressRing";
@@ -260,6 +261,13 @@ const DebtTrackerScreen: React.FC = () => {
    * lands (render must stay pure, so no new Date() during render); each
    * focus re-stamps it, which is all the freshness day-granularity needs. */
   const [countdownNow, setCountdownNow] = useState<Date | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  /** Reference time for search date presets - stamped when the sheet opens,
+   * never in render (react-hooks/purity). */
+  const [searchNow, setSearchNow] = useState<Date | null>(null);
+  /** Budget entries are loaded for milestone math anyway; kept in state so
+   * the global search sheet can search them from this tab too. */
+  const [entriesForSearch, setEntriesForSearch] = useState<BudgetEntry[]>([]);
   const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [duePromptDebt, setDuePromptDebt] = useState<Debt | null>(null);
   const [keepAliveDismissals, setKeepAliveDismissals] =
@@ -357,6 +365,7 @@ const DebtTrackerScreen: React.FC = () => {
           if (cancelled) return;
           setDebts(valid);
           setPayments(storedPayments);
+          setEntriesForSearch(budgetEntries);
           setCountdownNow(new Date());
           setDueDismissals(storedDismissals);
           setKeepAliveDismissals(storedKeepAliveDismissals);
@@ -452,6 +461,19 @@ const DebtTrackerScreen: React.FC = () => {
     });
     return () => task.cancel();
   }, [navigation, route.params?.openKeepAlive]);
+
+  // A payment result tap in the Budget tab's search sheet navigates here
+  // with openHistory set. Deferred past the tab-switch transition -
+  // presenting a Modal mid-navigation is the iOS silent-present failure
+  // this codebase keeps hitting.
+  React.useEffect(() => {
+    if (!route.params?.openHistory) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setShowHistory(true);
+      navigation.setParams({ openHistory: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.openHistory]);
 
   /** "I used it" on a card's keep-alive tracker: stamp now, replan nudges. */
   const handleKeepAliveUse = useCallback(async (debtId: string) => {
@@ -854,6 +876,13 @@ const DebtTrackerScreen: React.FC = () => {
     setShowModal(true);
   }, []);
 
+  /** Open the global search sheet, stamping its date-preset reference. */
+  const openSearch = useCallback(() => {
+    triggerHaptic("selection");
+    setSearchNow(new Date());
+    setShowSearch(true);
+  }, []);
+
   /** Save edits to an existing debt */
   const handleSaveEdit = useCallback(async (
     debtId: string,
@@ -1124,6 +1153,14 @@ const DebtTrackerScreen: React.FC = () => {
         <Text style={styles.screenSubtitle}>
           Track your progress. Crush your debt.
         </Text>
+        <TouchableOpacity
+          style={styles.searchIconBtn}
+          onPress={openSearch}
+          activeOpacity={0.7}
+          accessibilityLabel="Search debts, payments, and budget entries"
+        >
+          <Text style={styles.searchIconGlyph}>🔍</Text>
+        </TouchableOpacity>
       </View>
 
       <View ref={anchorSummary} collapsable={false} style={styles.summaryCard}>
@@ -1367,6 +1404,36 @@ const DebtTrackerScreen: React.FC = () => {
         debts={debts}
         onPaymentsChanged={handlePaymentsChanged}
       />
+
+      {showSearch && searchNow !== null && (
+        <GlobalSearchModal
+          onClose={() => setShowSearch(false)}
+          debts={debts}
+          payments={payments}
+          entries={entriesForSearch}
+          now={searchNow}
+          onSelectDebt={(debt) => {
+            // Wait for the search sheet's dismiss animation before
+            // presenting the edit Modal - iOS doesn't reliably handle
+            // dismiss-then-present in the same frame.
+            setShowSearch(false);
+            setTimeout(() => handleEdit(debt), 250);
+          }}
+          onSelectPayment={() => {
+            setShowSearch(false);
+            setTimeout(() => setShowHistory(true), 250);
+          }}
+          onSelectEntry={(entry) => {
+            // Cross-tab hop: BudgetScreen consumes searchEntryId on focus
+            // (deferred there past the tab transition).
+            setShowSearch(false);
+            setTimeout(
+              () => navigation.navigate("Budget", { searchEntryId: entry.id }),
+              250
+            );
+          }}
+        />
+      )}
 
       <DebtPayoffCelebrationModal
         visible={celebrationDebt !== null}
@@ -1758,7 +1825,21 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     screen: { flex: 1, backgroundColor: colors.bg },
     listContent: { paddingHorizontal: tokens.pad },
 
-    titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const },
+    titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const, position: "relative" as const },
+    searchIconBtn: {
+      position: "absolute" as const,
+      top: 56,
+      right: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+    },
+    searchIconGlyph: { fontSize: 20 },
     appLabel: { fontSize: scale(12), color: colors.textDim, letterSpacing: 2, marginBottom: 4, textAlign: "center" as const },
     screenTitle: { fontSize: scale(28), fontWeight: "700" as const, color: colors.text, marginBottom: 4, textAlign: "center" as const },
     screenSubtitle: { fontSize: scale(14), color: colors.textMuted, textAlign: "center" as const },

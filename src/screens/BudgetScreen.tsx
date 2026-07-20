@@ -23,6 +23,7 @@ import ReviewInboxModal from "../components/ReviewInboxModal";
 import { useConnections } from "../connections/ConnectionsProvider";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import BillCalendarModal from "../components/BillCalendarModal";
+import GlobalSearchModal from "../components/GlobalSearchModal";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
 import {
@@ -277,6 +278,10 @@ const BudgetScreen: React.FC = () => {
   const [quickAddCategory, setQuickAddCategory] = useState<CategoryName | undefined>(undefined);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
   const [showBillCalendar, setShowBillCalendar] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  /** Reference time for search date presets - stamped when the sheet opens,
+   * never in render (react-hooks/purity). */
+  const [searchNow, setSearchNow] = useState<Date | null>(null);
   const [showReviewInbox, setShowReviewInbox] = useState(false);
   const [limitModalCategory, setLimitModalCategory] = useState<CategoryName | null>(null);
   const [limitInput, setLimitInput] = useState("");
@@ -866,6 +871,29 @@ const BudgetScreen: React.FC = () => {
     return () => task.cancel();
   }, [navigation, route.params?.quickAdd]);
 
+  // A budget-entry result tap in another tab's search sheet navigates here
+  // with searchEntryId set - open that entry's edit sheet. Same deferral
+  // rationale as openInbox above. Waits for isLoaded so a first-ever visit
+  // to this tab doesn't drop the param before entries exist; a genuinely
+  // missing id (entry deleted meanwhile) just clears the param.
+  useEffect(() => {
+    const searchEntryId = route.params?.searchEntryId;
+    if (!searchEntryId || !isLoaded) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      const found = entries.find((entry) => entry.id === searchEntryId) ?? null;
+      if (found) setEditingEntry(found);
+      navigation.setParams({ searchEntryId: undefined });
+    });
+    return () => task.cancel();
+  }, [entries, isLoaded, navigation, route.params?.searchEntryId]);
+
+  /** Open the global search sheet, stamping its date-preset reference. */
+  const openSearch = useCallback(() => {
+    triggerHaptic("selection");
+    setSearchNow(new Date());
+    setShowSearch(true);
+  }, []);
+
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
     setEditingEntry(found);
@@ -1276,6 +1304,19 @@ const BudgetScreen: React.FC = () => {
           accessibilityLabel="Bill calendar"
         >
           <Text style={styles.calendarIconGlyph}>📅</Text>
+        </TouchableOpacity>
+        {/* Search sits at the left edge, or beside the inbox icon when
+            bank connections put that in the corner. */}
+        <TouchableOpacity
+          style={[
+            styles.searchIconBtn,
+            (connections.length > 0 || pendingCount > 0) && styles.searchIconBtnShifted,
+          ]}
+          onPress={openSearch}
+          activeOpacity={0.7}
+          accessibilityLabel="Search debts, payments, and budget entries"
+        >
+          <Text style={styles.calendarIconGlyph}>🔍</Text>
         </TouchableOpacity>
         {connections.length > 0 || pendingCount > 0 ? (
           <TouchableOpacity
@@ -1945,6 +1986,37 @@ const BudgetScreen: React.FC = () => {
         data={reviewData}
       />
 
+      {showSearch && searchNow !== null && (
+        <GlobalSearchModal
+          onClose={() => setShowSearch(false)}
+          debts={debts}
+          payments={payments}
+          entries={entries}
+          now={searchNow}
+          onSelectEntry={(entry) => {
+            // Wait for the search sheet's dismiss animation before
+            // presenting the edit sheet - iOS doesn't reliably handle
+            // dismiss-then-present in the same frame.
+            setShowSearch(false);
+            setTimeout(() => setEditingEntry(entry), 250);
+          }}
+          onSelectDebt={() => {
+            // Debts live on the Debt Tracker tab; hop over after dismiss.
+            setShowSearch(false);
+            setTimeout(() => navigation.navigate("DebtTracker"), 250);
+          }}
+          onSelectPayment={() => {
+            // DebtTrackerScreen consumes openHistory on focus (deferred
+            // there past the tab transition).
+            setShowSearch(false);
+            setTimeout(
+              () => navigation.navigate("DebtTracker", { openHistory: true }),
+              250
+            );
+          }}
+        />
+      )}
+
       <BillCalendarModal
         visible={showBillCalendar}
         onClose={() => setShowBillCalendar(false)}
@@ -2161,6 +2233,23 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       backgroundColor: colors.card,
       alignItems: "center",
       justifyContent: "center",
+    },
+    searchIconBtn: {
+      position: "absolute",
+      top: 50,
+      left: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    /** When the Review Inbox icon occupies the left corner. */
+    searchIconBtnShifted: {
+      left: 48,
     },
     inboxBadge: {
       position: "absolute",
