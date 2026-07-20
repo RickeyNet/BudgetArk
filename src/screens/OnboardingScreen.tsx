@@ -365,6 +365,10 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       <TouchableOpacity style={styles.backBtnFull} onPress={handleBack}>
         <Text style={styles.skipBtnText}>← Back</Text>
       </TouchableOpacity>
+
+      <Text style={styles.tourHint}>
+        Next: a quick guided tour of each tab. You can skip it at any point.
+      </Text>
     </View>
   );
 
@@ -594,6 +598,12 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
       borderColor: colors.cardBorder,
       alignItems: "center",
       marginTop: 10,
+    },
+    tourHint: {
+      fontSize: 13,
+      color: colors.textMuted,
+      textAlign: "center",
+      marginTop: 14,
     },
     nextBtn: {
       flex: 1,

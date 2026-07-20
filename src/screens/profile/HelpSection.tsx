@@ -135,6 +135,10 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
                 // Persist first so killing the app mid-onboarding still
                 // relaunches into the flow rather than half-done.
                 await resetOnboardingStatus();
+                // Onboarding flows into the guided walkthrough, so redoing it
+                // resets the tour too - finishing setup replays the spotlight
+                // tips across every tab.
+                await replayCoachmarks();
               } catch (error) {
                 if (__DEV__)
                   console.error("Failed to reset onboarding flag:", error);
@@ -149,7 +153,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Run first-launch setup again. Your data is kept.
+                Run first-launch setup and the tour again. Your data is kept.
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

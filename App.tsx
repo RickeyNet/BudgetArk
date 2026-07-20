@@ -35,7 +35,7 @@ import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
-import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
+import { CoachmarksProvider, useCoachmarks } from "./src/onboarding/CoachmarksProvider";
 import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
 import { OnboardingGateProvider } from "./src/onboarding/OnboardingGateContext";
 import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
@@ -98,6 +98,7 @@ type UpdatePrompt = {
  */
 const AppContent: React.FC = () => {
   const { colors, themeId, backgroundEffectsEnabled } = useTheme();
+  const { startGuidedTour } = useCoachmarks();
   const navigationRef = useMemo(() => createNavigationContainerRef<RootTabParamList>(), []);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
@@ -172,8 +173,17 @@ const AppContent: React.FC = () => {
     } catch (error) {
       if (__DEV__) console.error("Failed to seed feature debuts:", error);
     }
+    // Onboarding flows straight into the guided walkthrough: the initial tab
+    // (Bridge) fires its own tour on focus, and this queue chains the rest so
+    // each tab auto-navigates after its last "Got it". Skipped when the user
+    // chose Build Your Ark - the milestones modal owns the Debts tab's first
+    // visit, and a spotlight presented over it would stack (the iOS
+    // silent-present failure). Per-tab tips still fire as they explore.
+    if (!options?.openArkSetup) {
+      startGuidedTour(["DebtTracker", "Budget", "Utilities", "Profile"]);
+    }
     setIsOnboardingComplete(true);
-  }, []);
+  }, [startGuidedTour]);
 
   const extractUpdatePrompt = useCallback(
     (manifest: unknown): UpdatePrompt => resolveUpdateInfo(manifest, CURRENT_APP_VERSION),
