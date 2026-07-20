@@ -11,10 +11,10 @@ import { useValueChanged } from "../hooks/useValueChanged";
  * step in COACHMARKS[tabId].steps via the spotlight overlay. Marks the tab as
  * seen after the last step.
  *
- * If a guided tour is active (Profile's "Replay walkthrough" or the How-To
- * "Replay tour" button kicks one off), completing the last step pops the next
- * tab off the queue and navigates there - so the user gets a chained tour
- * across every tab without having to switch them by hand.
+ * If a guided tour is active (finishing onboarding starts one - including
+ * via "Redo onboarding" in Profile > Help), completing the last step pops
+ * the next tab off the queue and navigates there - so the user gets a
+ * chained tour across every tab without having to switch them by hand.
  *
  * Returns a React node the screen renders near its root.
  */
@@ -93,6 +93,14 @@ export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
     setStepIndex((i) => i + 1);
   }, [stepIndex, totalSteps, markSeen, tabId, advanceGuidedTour, navigation]);
 
+  // Back stays within this tab's steps: the previous tab is already marked
+  // seen (and its screen unmounted its anchors), so crossing back over the
+  // tab boundary would re-run a whole tour, not a step. Spotlight hides the
+  // button on step 0.
+  const handleBack = useCallback(() => {
+    setStepIndex((i) => Math.max(0, i - 1));
+  }, []);
+
   const handleSkipAll = useCallback(() => {
     setActive(false);
     void skipAll();
@@ -107,6 +115,7 @@ export const useTabCoachmark = (tabId: CoachmarkTabId): React.ReactNode => {
       stepIndex={stepIndex}
       totalSteps={totalSteps}
       onNext={handleNext}
+      onBack={handleBack}
       onSkipAll={handleSkipAll}
     />
   );

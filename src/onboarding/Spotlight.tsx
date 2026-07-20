@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Animated,
   Dimensions,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -21,6 +24,8 @@ type SpotlightProps = {
   stepIndex: number;
   totalSteps: number;
   onNext: () => void;
+  /** Step back within this tab's steps; button hidden on the first step. */
+  onBack?: () => void;
   onSkipAll: () => void;
 };
 
@@ -30,8 +35,10 @@ type SpotlightProps = {
  * of looking like the button extends below the highlight.
  */
 const CUTOUT_PADDING = 14;
-/** Min height the tooltip card needs - used to choose above/below placement. */
-const TOOLTIP_MIN_HEIGHT = 180;
+/** Min height the tooltip card needs - used to choose above/below placement.
+ * Sized for the spotlight-style hero emoji + centered title the card now
+ * carries (see the feature-debut carousel it mirrors). */
+const TOOLTIP_MIN_HEIGHT = 240;
 /** Margin between the cutout and the tooltip card. */
 const TOOLTIP_GAP = 16;
 /**
@@ -47,6 +54,7 @@ const Spotlight: React.FC<SpotlightProps> = ({
   stepIndex,
   totalSteps,
   onNext,
+  onBack,
   onSkipAll,
 }) => {
   const { colors } = useTheme();
@@ -56,6 +64,30 @@ const Spotlight: React.FC<SpotlightProps> = ({
   const measure = useMeasureAnchor();
   const [rect, setRect] = useState<AnchorRect | null>(null);
   const [measureToken, setMeasureToken] = useState(0);
+  // "Learn more" expander for the step's long-form detail. Collapses on
+  // every step change (see the useValueChanged below) so a reader's choice
+  // on one card never leaves the next card pre-expanded.
+  const [detailExpanded, setDetailExpanded] = useState(false);
+
+  // Springs the hero emoji in on every step change - same flair as the
+  // feature-debut carousel this card's look mirrors.
+  const heroPop = useAnimatedValue(0);
+  useEffect(() => {
+    if (!visible) return;
+    heroPop.setValue(0);
+    const spring = Animated.spring(heroPop, {
+      toValue: 1,
+      friction: 6,
+      tension: 80,
+      useNativeDriver: true,
+    });
+    spring.start();
+    return () => spring.stop();
+  }, [visible, stepIndex, heroPop]);
+  const heroScale = heroPop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 1],
+  });
 
   // Clear the previous rect the moment the measurement target changes, so
   // the old highlight doesn't linger over the new step's text while we wait
@@ -65,6 +97,13 @@ const Spotlight: React.FC<SpotlightProps> = ({
   const measureKey = `${visible ? 1 : 0}|${stepIndex}|${step?.anchorId ?? ""}|${measureToken}`;
   if (useValueChanged(measureKey)) {
     setRect(null);
+  }
+
+  // Separate key from measureKey on purpose: measureToken changes (a Next
+  // tap re-measuring the SAME step after a failed anchor read) must not
+  // collapse an open detail, but an actual step change must.
+  if (useValueChanged(`${visible ? 1 : 0}|${step?.id ?? ""}`) && detailExpanded) {
+    setDetailExpanded(false);
   }
 
   // Re-measure whenever the step changes or visibility flips on.
@@ -101,6 +140,12 @@ const Spotlight: React.FC<SpotlightProps> = ({
     // Force re-measure on the next step's anchor.
     setMeasureToken((n) => n + 1);
   }, [onNext]);
+
+  const handleBack = useCallback(() => {
+    onBack?.();
+    // Same re-measure as forward: the previous step's anchor may have moved.
+    setMeasureToken((n) => n + 1);
+  }, [onBack]);
 
   const handleSkip = useCallback(() => {
     onSkipAll();
@@ -218,15 +263,47 @@ const Spotlight: React.FC<SpotlightProps> = ({
         >
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <Text style={styles.eyebrow}>WALKTHROUGH</Text>
+              <Text style={styles.eyebrow}>ONBOARDING</Text>
               <Text style={styles.counter}>{counterText}</Text>
             </View>
+            {step.emoji ? (
+              <Animated.Text
+                style={[styles.heroEmoji, { transform: [{ scale: heroScale }] }]}
+              >
+                {step.emoji}
+              </Animated.Text>
+            ) : null}
             <Text style={styles.title}>{step.title}</Text>
             <Text style={styles.body}>{step.body}</Text>
+            {step.detail ? (
+              detailExpanded ? (
+                <ScrollView
+                  style={styles.detailScroll}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                >
+                  <Text style={styles.detailText}>{step.detail}</Text>
+                </ScrollView>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setDetailExpanded(true)}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text style={[styles.learnMore, { color: colors.accent }]}>
+                    Learn more
+                  </Text>
+                </TouchableOpacity>
+              )
+            ) : null}
             <View style={styles.buttonRow}>
               <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
                 <Text style={styles.skipBtnText}>Skip all</Text>
               </TouchableOpacity>
+              {onBack && stepIndex > 0 && (
+                <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+                  <Text style={styles.backBtnText}>Back</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
                 <Text style={styles.nextBtnText}>{nextLabel}</Text>
               </TouchableOpacity>
@@ -278,14 +355,38 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.textMuted,
       letterSpacing: 1,
     },
+    heroEmoji: {
+      fontSize: scale(48),
+      lineHeight: scale(58),
+      textAlign: "center",
+      marginTop: 2,
+    },
     title: {
-      fontSize: scale(20),
-      fontWeight: "700",
+      fontSize: scale(21),
+      lineHeight: scale(27),
+      fontWeight: "800",
       color: colors.text,
+      textAlign: "center",
     },
     body: {
       fontSize: scale(14),
       lineHeight: scale(20),
+      color: colors.textDim,
+      textAlign: "center",
+    },
+    learnMore: {
+      fontSize: scale(13),
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    detailScroll: {
+      // Cap the expanded detail so a long entry can never push the
+      // Next/Back buttons off-screen; the text scrolls inside instead.
+      maxHeight: 180,
+    },
+    detailText: {
+      fontSize: scale(13),
+      lineHeight: scale(19),
       color: colors.textDim,
     },
     buttonRow: {
@@ -306,6 +407,20 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(14),
       fontWeight: "600",
       color: colors.textDim,
+    },
+    backBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: `${colors.accent}40`,
+      borderRadius: tokens.radiusSm,
+      paddingVertical: 12,
+      alignItems: "center",
+      backgroundColor: colors.bg,
+    },
+    backBtnText: {
+      fontSize: scale(14),
+      fontWeight: "600",
+      color: colors.accent,
     },
     nextBtn: {
       flex: 2,

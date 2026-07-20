@@ -191,6 +191,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const renderThemeStep = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepNumber}>STEP 1 OF 3</Text>
+      <Text style={styles.heroEmoji}>🎨</Text>
       <Text style={styles.stepTitle}>Choose Your Theme</Text>
       <Text style={styles.stepSubtitle}>
         Select a color scheme that matches your style. You can change this
@@ -240,13 +241,20 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         building wealth.
       </Text>
 
-      <View style={styles.featureList}>
+      {/* Scrollable so the five-tab overview + privacy note never push the
+          buttons off a small screen. */}
+      <ScrollView
+        style={styles.featureScroll}
+        contentContainerStyle={styles.featureList}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>⛓️</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Debt Tracking</Text>
+            <Text style={styles.featureTitle}>Debts</Text>
             <Text style={styles.featureDesc}>
-              Monitor your debts and celebrate progress as you pay them down
+              Track every debt, pick a payoff strategy, follow the Build Your
+              Ark milestones - and keep idle credit cards from being closed
             </Text>
           </View>
         </View>
@@ -254,23 +262,58 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>💰</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Budget Management</Text>
+            <Text style={styles.featureTitle}>Budget</Text>
             <Text style={styles.featureDesc}>
-              Set spending limits and track expenses by category
+              Log income and spending by category, set limits, automate
+              recurring bills, and approve bank imports from the Review Inbox
             </Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
-          <Text style={styles.featureIcon}>🧰</Text>
+          <Text style={styles.featureIcon}>🧭</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Financial Utilities</Text>
+            <Text style={styles.featureTitle}>Bridge</Text>
             <Text style={styles.featureDesc}>
-              Project your wealth growth with interactive calculators
+              Your home tab: net worth over time, every account you own,
+              purchase plans, and optional live stock tracking
             </Text>
           </View>
         </View>
-      </View>
+
+        <View style={styles.featureItem}>
+          <Text style={styles.featureIcon}>📈</Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>Charts</Text>
+            <Text style={styles.featureDesc}>
+              A free 24-lesson finance course, calculators, and what-if
+              projections built from your own numbers
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.featureItem}>
+          <Text style={styles.featureIcon}>⚙️</Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>Profile</Text>
+            <Text style={styles.featureDesc}>
+              Themes, bank connections, partner sync, backups - and the
+              searchable onboarding guide whenever you need it
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.featureItem}>
+          <Text style={styles.featureIcon}>🔒</Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>Private by design</Text>
+            <Text style={styles.featureDesc}>
+              Everything is encrypted on this phone. BudgetArk has no server -
+              your financial data never leaves your device
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
 
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
@@ -295,6 +338,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const renderNameStep = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepNumber}>STEP 3 OF 3</Text>
+      <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.stepTitle}>What should we call you?</Text>
       <Text style={styles.stepSubtitle}>
         Choose a display name (optional). This is only stored on your device.
@@ -367,7 +411,10 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       </TouchableOpacity>
 
       <Text style={styles.tourHint}>
-        Next: a quick guided tour of each tab. You can skip it at any point.
+        Next, onboarding continues with a guided look at each tab - each tip
+        has a Learn more with the full detail, and you can go back a step or
+        skip at any point. Reread and search all of it later in Profile →
+        Help → Onboarding.
       </Text>
     </View>
   );
@@ -486,10 +533,15 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
     },
 
     /* Feature list */
+    featureScroll: {
+      flex: 1,
+      width: "100%",
+      marginBottom: 16,
+    },
     featureList: {
       width: "100%",
-      gap: 20,
-      marginBottom: 32,
+      gap: 16,
+      paddingBottom: 8,
     },
     featureItem: {
       flexDirection: "row",
