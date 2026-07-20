@@ -120,6 +120,12 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
           "Every account row and category header shows how much it's up or down - use the 1D / 7D / 30D / 90D switch to change the window. The history behind it is recorded privately on this phone as you use the app, so the numbers appear from your second day on.",
       },
       {
+        id: "bridge-plans",
+        title: "Purchase Plans",
+        body:
+          "Sinking funds you start with the Charts tab's Plan a Purchase tool are tracked here: a progress bar per plan, the monthly pace a target date needs, and tap-to-add funds. Saved money counts toward your net worth, and a funded plan tells you it's ready to buy.",
+      },
+      {
         id: "bridge-holdings",
         title: "Track stocks and ETFs by broker (Live Holdings)",
         body:
@@ -149,6 +155,12 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         title: "What if I stopped spending on…",
         body:
           "Pick one of your spending categories and see two futures side by side: how much sooner you'd be debt-free (and the interest you'd skip), or what that money would grow into after 1, 5, and 10 years. Computed from your own budget history, entirely on this phone.",
+      },
+      {
+        id: "charts-purchase",
+        title: "Plan a purchase",
+        body:
+          "Saving up for something? Name it, set the price, and pick a monthly set-aside - the tool shows when it's ready, whether the pace fits your real cash flow, and advice tuned to your Build Your Ark step so the purchase never derails your bigger goals. Started plans live in the Purchase Plans card on your Bridge, where they're tracked and count toward net worth.",
       },
     ],
   },

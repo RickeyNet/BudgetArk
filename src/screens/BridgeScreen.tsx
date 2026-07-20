@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { generateUUID } from "../utils/uuid";
@@ -34,9 +35,13 @@ import {
   Holding,
   HoldingsSettings,
   NetWorthSnapshot,
+  RootTabParamList,
   SavingsGoal,
   BudgetEntry,
 } from "../types";
+import PurchasePlanList, {
+  filterPurchasePlans,
+} from "../components/PurchasePlanList";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getDebts } from "../storage/debtStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
@@ -147,6 +152,7 @@ const BridgeScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency, preference, rates } = useCurrency();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const coachmark = useTabCoachmark("Bridge");
   const listRef = useRef<FlatList>(null);
   const anchorBridgeAccounts = useCoachmarkAnchor("bridge-accounts-card", { scrollRef: listRef });
@@ -1071,6 +1077,20 @@ const BridgeScreen: React.FC = () => {
     }
   }, [enableHoldings, holdingsSettings.disclosureAcknowledged]);
 
+  /**
+   * Purchase-plan mutations (contribute/delete) land in savings-goal
+   * storage inside PurchasePlanList; mirror the fresh array into state and
+   * refresh the same derived surfaces the EF contribution touches.
+   */
+  const handlePlanGoalsChanged = useCallback(
+    (goals: SavingsGoal[]) => {
+      setSavingsGoals(goals);
+      void refreshNetWorthSnapshots();
+      void refreshAchievements();
+    },
+    [refreshAchievements, refreshNetWorthSnapshots]
+  );
+
   const handleEfContribution = useCallback(async () => {
     // Shared pure update (utils/savingsGoals) - BudgetScreen runs the same
     // logic; only the refresh side effects below differ per screen.
@@ -1481,6 +1501,36 @@ const BridgeScreen: React.FC = () => {
             ) : null}
           </>
         )}
+      </View>
+
+      {/* ── Purchase Plans (sinking funds) ──
+          Always rendered so plans have a constant tracking home on the
+          initial tab; the Charts tool is the planning wizard, this card is
+          where progress lives day to day. */}
+      <View style={styles.accountsCard}>
+        <View style={styles.topHairline} />
+        <View style={styles.accountsHeaderRow}>
+          <Text style={styles.accountsTitle}>Purchase Plans</Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Utilities")}
+            accessibilityRole="button"
+            accessibilityLabel="Plan a new purchase on the Charts tab"
+          >
+            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Plan</Text>
+          </TouchableOpacity>
+        </View>
+        {filterPurchasePlans(savingsGoals).length > 0 ? (
+          <Text style={styles.accountsEmpty}>
+            Tap a plan to add the money you&apos;ve set aside.
+          </Text>
+        ) : null}
+        <PurchasePlanList
+          savingsGoals={savingsGoals}
+          onGoalsChanged={handlePlanGoalsChanged}
+          emptyText={
+            "Saving up for something? Tap + Plan to build a sinking fund on the Charts tab - it'll be tracked here and count toward your net worth."
+          }
+        />
       </View>
 
       <TouchableOpacity

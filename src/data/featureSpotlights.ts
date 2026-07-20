@@ -135,6 +135,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Run a what-if", kind: "charts" },
   },
   {
+    id: "purchase-planner",
+    sinceVersion: "1.9.0",
+    icon: "🛒",
+    title: "Plan a purchase, keep your goals",
+    blurb:
+      "Name the thing you're saving for and BudgetArk builds the sinking fund around it: a monthly amount that fits your real cash flow, the month it's ready, and advice tuned to your Build Your Ark step so the purchase never derails the plan.",
+    cta: { label: "Plan a purchase", kind: "charts" },
+  },
+  {
     id: "deep-sea-theme",
     sinceVersion: "1.9.0",
     icon: "🌊",

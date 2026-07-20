@@ -73,14 +73,20 @@ import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getDebts } from "../storage/debtStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
+import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
+import { calcMonthlyCashFlow } from "../utils/purchasePlanner";
+import type { MonthlyCashFlow } from "../utils/purchasePlanner";
+import PurchasePlannerCard from "../components/PurchasePlannerCard";
 import type {
   ChapterId,
   CustomCategory,
   Debt,
+  DebtMilestonePlan,
   LearningProgress,
   LessonStub,
   LessonTopic,
   RootTabParamList,
+  SavingsGoal,
 } from "../types";
 import { LESSON_TOPICS } from "../types";
 import SmoothSlider from "../components/SmoothSlider";
@@ -403,6 +409,17 @@ const ChartsScreen: React.FC = () => {
   const [whatIfAmount, setWhatIfAmount] = useState(0);
   const [whatIfMethod, setWhatIfMethod] = useState<PayoffMethod>("avalanche");
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+
+  /* "Plan a Purchase" state (the card owns its UI; this is the shared data
+   * loaded alongside the other tools so the storage reads happen once) */
+  const [purchaseCashFlow, setPurchaseCashFlow] = useState<MonthlyCashFlow>({
+    avgIncome: 0,
+    avgExpenses: 0,
+    freeCashFlow: 0,
+    monthsTracked: 0,
+  });
+  const [savingsGoalsAll, setSavingsGoalsAll] = useState<SavingsGoal[]>([]);
+  const [milestonePlan, setMilestonePlan] = useState<DebtMilestonePlan | null>(null);
 
   /* Learning progress (Captain's Course card). Refreshes on focus so
    * completion progress and the Resume pointer update after a user finishes
@@ -797,12 +814,14 @@ const ChartsScreen: React.FC = () => {
     useCallback(() => {
       let cancelled = false;
       const loadEfData = async () => {
-        const [entries, goals, debts, customCats] = await Promise.all([
-          getBudgetEntries(),
-          getSavingsGoals(),
-          getDebts(),
-          getCustomCategories(),
-        ]);
+        const [entries, goals, debts, customCats, storedMilestones] =
+          await Promise.all([
+            getBudgetEntries(),
+            getSavingsGoals(),
+            getDebts(),
+            getCustomCategories(),
+            getDebtMilestonePlan(),
+          ]);
         if (cancelled) return;
 
         const avg = calcAvgMonthlyExpenses(entries);
@@ -815,6 +834,9 @@ const ChartsScreen: React.FC = () => {
         setRefiDebts(debts);
         setWhatIfOptions(buildCategorySpendOptions(entries));
         setCustomCategories(customCats);
+        setPurchaseCashFlow(calcMonthlyCashFlow(entries));
+        setSavingsGoalsAll(goals);
+        setMilestonePlan(storedMilestones);
       };
       loadEfData();
       return () => {
@@ -892,6 +914,17 @@ const ChartsScreen: React.FC = () => {
         : [],
     [selectedWhatIfOption, whatIfAmount]
   );
+
+  /* ── Plan a Purchase logic ── */
+
+  // The purchase card mutates savings goals (create/contribute/delete);
+  // mirror the fresh array into every local consumer so the EF calculator
+  // never shows a stale balance next to the plan list.
+  const handlePurchaseGoalsChanged = useCallback((goals: SavingsGoal[]) => {
+    setSavingsGoalsAll(goals);
+    const efGoal = goals.find((g) => g.category === "emergency_fund");
+    setCurrentEfAmount(efGoal?.currentAmount ?? 0);
+  }, []);
 
   const renderRefiSlider = (key: RefiKey, value: number) => {
     const cfg = REFI_SLIDERS[key];
@@ -2276,6 +2309,15 @@ const ChartsScreen: React.FC = () => {
             )}
           </View>
         )}
+
+        {/* ── Plan a Purchase (sinking funds) ── */}
+        <PurchasePlannerCard
+          cashFlow={purchaseCashFlow}
+          debts={refiDebts}
+          savingsGoals={savingsGoalsAll}
+          milestonePlan={milestonePlan}
+          onGoalsChanged={handlePurchaseGoalsChanged}
+        />
       </ScrollView>
       {coachmark}
       <LessonScreen
