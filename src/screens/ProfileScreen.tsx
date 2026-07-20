@@ -74,6 +74,7 @@ import type { PairingState, SyncStatus } from "../sync/types";
 import { triggerHaptic } from "../utils/haptics";
 import { getTrackingReminderSettings } from "../storage/trackingReminderSettingsStorage";
 import { cancelAllTrackingReminders } from "../notifications/trackingReminders";
+import { cancelAllCardKeepAliveReminders } from "../notifications/cardKeepAliveReminders";
 import type { TrackingReminderSettings } from "../utils/trackingReminderPlanner";
 import {
   FEATURE_SPOTLIGHTS,
@@ -436,8 +437,10 @@ const ProfileScreen: React.FC = () => {
     // inherits the previous user's encrypted receipts on disk.
     await clearAllAttachments();
     // The reminder settings key was just wiped (disabled by default), so any
-    // pending check-in notifications are orphaned - cancel them now.
+    // pending check-in notifications are orphaned - cancel them now. Same
+    // for keep-alive nudges: the debts they were planned from are gone.
     await cancelAllTrackingReminders();
+    await cancelAllCardKeepAliveReminders();
     setReminderSettings(null);
     await deleteAccount();
     // The fresh account starts with onboardingComplete=false, so the gate

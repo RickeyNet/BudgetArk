@@ -60,6 +60,28 @@ export interface Debt {
   paymentDueDay?: number;
 
   /**
+   * Card keep-alive tracking: opt-in inactivity watch so an idle credit
+   * card isn't silently closed by the issuer. All fields are optional so
+   * records round-trip through older peers/imports untouched. The UI only
+   * offers these for `debtClass === "personal_credit"`, but validation
+   * stays class-agnostic on purpose.
+   */
+  keepAliveEnabled?: boolean;
+
+  /** Issuer inactivity window in whole months (UI default 6). */
+  keepAliveWindowMonths?: number;
+
+  /** Days before the deadline that reminders begin (UI default 30). */
+  keepAliveLeadDays?: number;
+
+  /**
+   * When the card was last used. Full ISO from manual "I used it" stamps;
+   * may be a date-only string (`YYYY-MM-DD`) when stamped from a synced
+   * bank transaction's postedAt.
+   */
+  keepAliveLastUsedAt?: string;
+
+  /**
    * Tombstone marker. When set, the record is soft-deleted: hidden from
    * the UI but kept in storage so the next paired sync can propagate the
    * deletion. Tombstones older than `TOMBSTONE_TTL_MS` are purged on read.
@@ -627,6 +649,13 @@ export interface ExternalAccountLink {
    */
   lastExternalBalance?: number;
   lastExternalBalanceAt?: string;
+  /**
+   * Card keep-alive activity source: when set, each sync stamps this debt's
+   * `keepAliveLastUsedAt` from the account's newest outflow. Per-device like
+   * the rest of the link - never synced or exported. Lazily nulled when the
+   * debt no longer exists.
+   */
+  debtId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1137,7 +1166,15 @@ export const LEARNING_STORAGE_VERSION = 1;
  * Each key maps to a screen component; `undefined` means no params.
  */
 export type RootTabParamList = {
-  DebtTracker: undefined;
+  DebtTracker: {
+    /**
+     * Set by a card keep-alive notification tap (see
+     * CardKeepAliveReminderHost): lands the user on the tab where the
+     * keep-alive banner sits. Boolean only - notification content and deep
+     * links deliberately carry no card ids or financial data.
+     */
+    openKeepAlive?: boolean;
+  } | undefined;
   Budget: {
     /** When true, the Budget screen opens the connections Review Inbox on focus. */
     openInbox?: boolean;

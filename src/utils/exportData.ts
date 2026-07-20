@@ -36,6 +36,7 @@ import { getCategoryBucketOverrides } from "../storage/categoryBucketOverridesSt
 import { getUnlockedAchievements } from "../storage/achievementsStorage";
 import { getAchievementStats } from "../storage/achievementStatsStorage";
 import { getDebtDueDismissals } from "../storage/debtDueReminderStorage";
+import { getCardKeepAliveDismissals } from "../storage/cardKeepAliveDismissalStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
@@ -95,6 +96,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     achievements,
     achievementStats,
     debtDueDismissals,
+    cardKeepAliveDismissals,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
     // restore on this device, or another paired device, doesn't accidentally
@@ -135,6 +137,8 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     // debt with a payment due day re-prompts for the current month right
     // after a restore.
     getDebtDueDismissals(),
+    // Same shape/rationale for card keep-alive banner dismissals.
+    getCardKeepAliveDismissals(),
   ]);
 
   // Bank-connection data (connections, credentials/secrets, account links,
@@ -175,6 +179,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     achievements,
     achievementStats,
     debtDueDismissals,
+    cardKeepAliveDismissals,
   };
 
   // Compact, not pretty-printed: indentation tripled the file size, and

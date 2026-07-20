@@ -11,6 +11,10 @@
 import { ASSET_ACCOUNT_CATEGORIES, BUDGET_CATEGORIES } from "../types";
 import { sanitizeTextInput } from "./sanitize";
 import { isAcceptablePaymentUrl } from "./paymentUrl";
+import {
+  KEEP_ALIVE_MAX_LEAD_DAYS,
+  KEEP_ALIVE_MAX_WINDOW_MONTHS,
+} from "./cardKeepAlive";
 
 export const VALIDATOR_LIMITS = {
   MAX_TEXT_LENGTH: 120,
@@ -137,7 +141,23 @@ export const isDebtItem = (item: unknown): item is Record<string, unknown> => {
       (typeof item.paymentDueDay === "number" &&
         Number.isInteger(item.paymentDueDay) &&
         item.paymentDueDay >= 1 &&
-        item.paymentDueDay <= 31))
+        item.paymentDueDay <= 31)) &&
+    // Card keep-alive fields: all optional (older peers omit them), bounds
+    // deliberately wider than the UI chips so a future UI option never
+    // produces records this gate rejects mid-sync.
+    (item.keepAliveEnabled === undefined ||
+      typeof item.keepAliveEnabled === "boolean") &&
+    (item.keepAliveWindowMonths === undefined ||
+      (typeof item.keepAliveWindowMonths === "number" &&
+        Number.isInteger(item.keepAliveWindowMonths) &&
+        item.keepAliveWindowMonths >= 1 &&
+        item.keepAliveWindowMonths <= KEEP_ALIVE_MAX_WINDOW_MONTHS)) &&
+    (item.keepAliveLeadDays === undefined ||
+      (typeof item.keepAliveLeadDays === "number" &&
+        Number.isInteger(item.keepAliveLeadDays) &&
+        item.keepAliveLeadDays >= 1 &&
+        item.keepAliveLeadDays <= KEEP_ALIVE_MAX_LEAD_DAYS)) &&
+    isOptionalIso(item.keepAliveLastUsedAt)
   );
 };
 

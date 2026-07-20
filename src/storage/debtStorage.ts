@@ -22,6 +22,11 @@ import {
 } from "./tombstones";
 import { repairCollectionInPlace } from "./collectionRepair";
 import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
+import {
+  KEEP_ALIVE_MAX_LEAD_DAYS,
+  KEEP_ALIVE_MAX_WINDOW_MONTHS,
+  parseKeepAliveDate,
+} from "../utils/cardKeepAlive";
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
 
 /**
@@ -92,6 +97,23 @@ const isPaymentDueDay = (value: unknown): boolean =>
   value >= 1 &&
   value <= 31;
 
+const isKeepAliveInt = (value: unknown, max: number): boolean =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= 1 &&
+  value <= max;
+
+/** Keep-alive fields are optional; out-of-range values are dropped on read. */
+const keepAliveFieldsOk = (debt: Debt): boolean =>
+  (debt.keepAliveEnabled === undefined ||
+    typeof debt.keepAliveEnabled === "boolean") &&
+  (debt.keepAliveWindowMonths === undefined ||
+    isKeepAliveInt(debt.keepAliveWindowMonths, KEEP_ALIVE_MAX_WINDOW_MONTHS)) &&
+  (debt.keepAliveLeadDays === undefined ||
+    isKeepAliveInt(debt.keepAliveLeadDays, KEEP_ALIVE_MAX_LEAD_DAYS)) &&
+  (debt.keepAliveLastUsedAt === undefined ||
+    parseKeepAliveDate(debt.keepAliveLastUsedAt) !== null);
+
 const normalizeDebt = (debt: Debt): Debt => {
   const rawClass = (debt as { debtClass?: unknown }).debtClass;
   const ownerOk = isDebtOwner(debt.owner);
@@ -100,7 +122,10 @@ const normalizeDebt = (debt: Debt): Debt => {
   const stampOk = !!debt.updatedAt;
   const dueDayOk =
     debt.paymentDueDay === undefined || isPaymentDueDay(debt.paymentDueDay);
-  if (ownerOk && classOk && sourceOk && stampOk && dueDayOk) return debt;
+  const keepAliveOk = keepAliveFieldsOk(debt);
+  if (ownerOk && classOk && sourceOk && stampOk && dueDayOk && keepAliveOk) {
+    return debt;
+  }
 
   let nextClass: DebtClass;
   if (classOk) {
@@ -118,6 +143,27 @@ const normalizeDebt = (debt: Debt): Debt => {
     paymentDueDay: isPaymentDueDay(debt.paymentDueDay)
       ? Math.floor(debt.paymentDueDay!)
       : undefined,
+    keepAliveEnabled:
+      typeof debt.keepAliveEnabled === "boolean"
+        ? debt.keepAliveEnabled
+        : undefined,
+    keepAliveWindowMonths: isKeepAliveInt(
+      debt.keepAliveWindowMonths,
+      KEEP_ALIVE_MAX_WINDOW_MONTHS
+    )
+      ? debt.keepAliveWindowMonths
+      : undefined,
+    keepAliveLeadDays: isKeepAliveInt(
+      debt.keepAliveLeadDays,
+      KEEP_ALIVE_MAX_LEAD_DAYS
+    )
+      ? debt.keepAliveLeadDays
+      : undefined,
+    keepAliveLastUsedAt:
+      debt.keepAliveLastUsedAt !== undefined &&
+      parseKeepAliveDate(debt.keepAliveLastUsedAt) !== null
+        ? debt.keepAliveLastUsedAt
+        : undefined,
     updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
   };
 };
@@ -577,6 +623,7 @@ const RESET_KEYS = [
   "@budgetark_businesses",
   "@budgetark_category_bucket_overrides",
   "@budgetark_debt_due_dismissals",
+  "@budgetark_card_keepalive_dismissals",
   // Unlocked badges + the stats that drive them (streaks, export count,
   // review opens). Without these a fresh anonymous account inherits the
   // previous user's achievements after "Reset All Data."

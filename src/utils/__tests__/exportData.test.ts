@@ -166,6 +166,11 @@ jest.mock("../../storage/achievementStatsStorage", () => ({
 jest.mock("../../storage/debtDueReminderStorage", () => ({
   getDebtDueDismissals: jest.fn(async () => ({})),
 }));
+jest.mock("../../storage/cardKeepAliveDismissalStorage", () => ({
+  getCardKeepAliveDismissals: jest.fn(async () => ({
+    "debt-1:2026-07": "2026-07-19T00:00:00.000Z",
+  })),
+}));
 jest.mock("../../storage/backupReminderStorage", () => ({
   recordBackup: jest.fn(async () => {}),
 }));
@@ -308,6 +313,14 @@ describe("buildExportMessage - plain JSON", () => {
       storageMock.__store.get("@budgetark_budget_entries") ?? "[]",
     );
     expect(stored.find((e: any) => e.id === "e3").attachments).toHaveLength(1);
+  });
+
+  it("includes card keep-alive dismissals in the export payload", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    expect(payload.cardKeepAliveDismissals).toEqual({
+      "debt-1:2026-07": "2026-07-19T00:00:00.000Z",
+    });
   });
 
   it("never exports connection collections, credentials, or inbox data", async () => {

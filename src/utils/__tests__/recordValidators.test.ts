@@ -152,6 +152,35 @@ describe("isDebtItem", () => {
   it("rejects a garbage deletedAt tombstone", () => {
     expect(isDebtItem({ ...valid, deletedAt: "garbage" })).toBe(false);
   });
+
+  it("accepts records with valid keep-alive fields", () => {
+    expect(
+      isDebtItem({
+        ...valid,
+        keepAliveEnabled: true,
+        keepAliveWindowMonths: 6,
+        keepAliveLeadDays: 30,
+        keepAliveLastUsedAt: "2026-07-10",
+      })
+    ).toBe(true);
+    expect(isDebtItem({ ...valid, keepAliveEnabled: false })).toBe(true);
+  });
+
+  it("keeps accepting records without keep-alive fields (older peers)", () => {
+    expect(isDebtItem(valid)).toBe(true);
+  });
+
+  it("rejects out-of-range or malformed keep-alive fields", () => {
+    expect(isDebtItem({ ...valid, keepAliveEnabled: "yes" })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveWindowMonths: 0 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveWindowMonths: 61 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveWindowMonths: 6.5 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveLeadDays: 0 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveLeadDays: 181 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveLastUsedAt: "garbage" })).toBe(
+      false
+    );
+  });
 });
 
 describe("isBudgetEntryItem", () => {

@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   StatusBar,
   StyleSheet,
+  InteractionManager,
   Modal,
   ScrollView,
   TextInput,
@@ -29,7 +30,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { useUndo } from "../undo/UndoProvider";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import {
   Debt,
@@ -39,6 +42,7 @@ import {
   BudgetEntry,
   NewDebtInput,
   Payment,
+  RootTabParamList,
   SavingsGoal,
 } from "../types";
 import {
@@ -65,6 +69,13 @@ import {
 import { minimumDuePaymentId } from "../utils/debtPaymentDedupe";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
 import DebtDuePaymentPromptModal from "../components/DebtDuePaymentPromptModal";
+import CardKeepAliveBanner from "../components/CardKeepAliveBanner";
+import {
+  dismissCardKeepAliveForMonth,
+  getCardKeepAliveDismissals,
+  type CardKeepAliveDismissals,
+} from "../storage/cardKeepAliveDismissalStorage";
+import { rescheduleCardKeepAliveReminders } from "../notifications/cardKeepAliveReminders";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
@@ -75,7 +86,8 @@ import {
 } from "../storage/debtMilestoneStorage";
 import { consumeArkSetupPromptRequest } from "../storage/arkSetupStorage";
 import DebtCard from "../components/DebtCard";
-import AddDebtModal from "../components/AddDebtModal";
+import AddDebtModal, { type DebtKeepAliveExtras } from "../components/AddDebtModal";
+import { getLinks, updateLink } from "../storage/externalAccountLinksStorage";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
 import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal";
@@ -245,6 +257,12 @@ const DebtTrackerScreen: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [duePromptDebt, setDuePromptDebt] = useState<Debt | null>(null);
+  const [keepAliveDismissals, setKeepAliveDismissals] =
+    useState<CardKeepAliveDismissals>({});
+
+  const navigation =
+    useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+  const route = useRoute<RouteProp<RootTabParamList, "DebtTracker">>();
 
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
@@ -305,6 +323,7 @@ const DebtTrackerScreen: React.FC = () => {
             savedStrategy,
             storedGoals,
             shouldOpenArkSetup,
+            storedKeepAliveDismissals,
           ] = await Promise.all([
             getDebts(),
             getPayments(),
@@ -314,6 +333,7 @@ const DebtTrackerScreen: React.FC = () => {
             getPayoffStrategyPreference(),
             getSavingsGoals(),
             consumeArkSetupPromptRequest(),
+            getCardKeepAliveDismissals(),
           ]);
           if (cancelled) return;
           // Filter out any corrupted entries from earlier sessions
@@ -333,6 +353,7 @@ const DebtTrackerScreen: React.FC = () => {
           setDebts(valid);
           setPayments(storedPayments);
           setDueDismissals(storedDismissals);
+          setKeepAliveDismissals(storedKeepAliveDismissals);
           // The "minimum due today" prompt is now opened on app launch by the
           // app-root DebtDueReminderHost (so it fires regardless of the active
           // tab). Auto-opening it here too would stack a second copy when the
@@ -412,6 +433,35 @@ const DebtTrackerScreen: React.FC = () => {
       };
     }, [primeMilestonesModal])
   );
+
+  // A keep-alive notification tap (or the Bridge banner) navigates here with
+  // openKeepAlive set. The banner sits at the top of the list, so the only
+  // action is scrolling it into view. Deferred past the tab-switch
+  // transition, matching the openInbox pattern on BudgetScreen.
+  React.useEffect(() => {
+    if (!route.params?.openKeepAlive) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      navigation.setParams({ openKeepAlive: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.openKeepAlive]);
+
+  /** "I used it" on a card's keep-alive tracker: stamp now, replan nudges. */
+  const handleKeepAliveUse = useCallback(async (debtId: string) => {
+    const updated = await updateDebt(debtId, {
+      keepAliveLastUsedAt: new Date().toISOString(),
+    });
+    setDebts(updated);
+    void rescheduleCardKeepAliveReminders();
+    triggerHaptic("success");
+  }, []);
+
+  /** "Later" on the keep-alive banner: mute that card for this month. */
+  const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
+    await dismissCardKeepAliveForMonth(debt.id);
+    setKeepAliveDismissals(await getCardKeepAliveDismissals());
+  }, []);
 
   const filteredDebts = React.useMemo(() => {
     return ownerFilter === "all"
@@ -642,7 +692,35 @@ const DebtTrackerScreen: React.FC = () => {
   }, [avalancheWhatIf, snowballWhatIf]);
 
   /** Add a new debt */
-  const handleAddDebt = useCallback(async (input: NewDebtInput) => {
+  /**
+   * Points the chosen connected-account link at this debt (keep-alive
+   * auto-stamping source) and clears any other link that fed it - one
+   * account per card. Best-effort: the debt save must not fail on a link
+   * hiccup. No-op when extras are undefined (not a credit card).
+   */
+  const applyKeepAliveLink = useCallback(
+    async (debtId: string, extras?: DebtKeepAliveExtras) => {
+      if (!extras) return;
+      try {
+        const links = await getLinks();
+        for (const link of links) {
+          if (link.id === extras.linkId) {
+            if (link.debtId !== debtId) await updateLink(link.id, { debtId });
+          } else if (link.debtId === debtId) {
+            await updateLink(link.id, { debtId: null });
+          }
+        }
+      } catch (error) {
+        if (__DEV__) console.error("Keep-alive link update failed:", error);
+      }
+    },
+    []
+  );
+
+  const handleAddDebt = useCallback(async (
+    input: NewDebtInput,
+    keepAlive?: DebtKeepAliveExtras
+  ) => {
     const now = new Date().toISOString();
     const newDebt: Debt = {
       ...input,
@@ -653,10 +731,12 @@ const DebtTrackerScreen: React.FC = () => {
     const updated = [...debts, newDebt];
     setDebts(updated);
     await saveDebts(updated);
+    await applyKeepAliveLink(newDebt.id, keepAlive);
+    void rescheduleCardKeepAliveReminders();
     await syncNetWorthSnapshot();
     setShowModal(false);
     void notifyAchievementCheck();
-  }, [debts, notifyAchievementCheck]);
+  }, [applyKeepAliveLink, debts, notifyAchievementCheck]);
 
   const advanceDuePrompt = useCallback(
     (
@@ -769,13 +849,19 @@ const DebtTrackerScreen: React.FC = () => {
   }, []);
 
   /** Save edits to an existing debt */
-  const handleSaveEdit = useCallback(async (debtId: string, updates: Partial<Debt>) => {
+  const handleSaveEdit = useCallback(async (
+    debtId: string,
+    updates: Partial<Debt>,
+    keepAlive?: DebtKeepAliveExtras
+  ) => {
     // Snapshot the full prior record so undo can write every field back,
     // not just the keys this edit touched.
     const prior = debts.find((d) => d.id === debtId) ?? null;
     const updated = await updateDebt(debtId, updates);
     const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
     setDebts(updated);
+    await applyKeepAliveLink(debtId, keepAlive);
+    void rescheduleCardKeepAliveReminders();
     await syncNetWorthSnapshot();
     setShowModal(false);
     setEditingDebt(null);
@@ -799,7 +885,7 @@ const DebtTrackerScreen: React.FC = () => {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
-  }, [debts, notifyAchievementCheck, pushUndo]);
+  }, [applyKeepAliveLink, debts, notifyAchievementCheck, pushUndo]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -1016,10 +1102,11 @@ const DebtTrackerScreen: React.FC = () => {
         onPayment={handlePayment}
         onDelete={handleDelete}
         onEdit={handleEdit}
+        onKeepAliveUse={handleKeepAliveUse}
         isFocusDebt={item.id === focusDebtId}
       />
     ),
-    [handlePayment, handleDelete, handleEdit, focusDebtId]
+    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, focusDebtId]
   );
 
   /** Summary + section header rendered above the debt list */
@@ -1151,6 +1238,18 @@ const DebtTrackerScreen: React.FC = () => {
             }
           }}
           daysAhead={7}
+        />
+      </View>
+
+      <View style={{ marginBottom: tokens.gap }}>
+        <CardKeepAliveBanner
+          debts={debts}
+          dismissals={keepAliveDismissals}
+          onOpen={(debt) => {
+            setEditingDebt(debt);
+            setShowModal(true);
+          }}
+          onDismiss={handleKeepAliveDismiss}
         />
       </View>
 

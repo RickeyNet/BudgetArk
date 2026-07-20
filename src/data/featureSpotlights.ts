@@ -29,7 +29,8 @@ export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
   | { label: string; kind: "budget-add-entry" }
   | { label: string; kind: "bridge" }
-  | { label: string; kind: "charts" };
+  | { label: string; kind: "charts" }
+  | { label: string; kind: "debt-tracker" };
 
 export type FeatureSpotlight = {
   /** Stable id - persisted in seen/acked storage, never rename after release. */
@@ -57,6 +58,18 @@ export type FeatureSpotlight = {
 };
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
+  {
+    id: "card-keep-alive",
+    sinceVersion: "1.9.0",
+    // The in-app banner works via OTA, but the reminder notifications need
+    // the expo-notifications runtime - same gate as tracking-reminders.
+    requiresRuntimeVersion: "1.9.0",
+    icon: "💳",
+    title: "Don't let a quiet card get closed",
+    blurb:
+      "Issuers can close a credit card that sits unused - and your credit score takes the hit. Turn on the keep-alive watch for any card and BudgetArk warns you before its inactivity window runs out, right on your Bridge.",
+    cta: { label: "Set up a card watch", kind: "debt-tracker" },
+  },
   {
     id: "income-types",
     sinceVersion: "1.9.0",

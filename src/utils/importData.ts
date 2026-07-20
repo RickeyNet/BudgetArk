@@ -77,6 +77,7 @@ const KEYS = {
   ACHIEVEMENTS: "@budgetark_achievements",
   ACHIEVEMENT_STATS: "@budgetark_achievement_stats",
   DEBT_DUE_DISMISSALS: "@budgetark_debt_due_dismissals",
+  CARD_KEEP_ALIVE_DISMISSALS: "@budgetark_card_keepalive_dismissals",
 } as const;
 
 const getCurrentMonthKey = (): string => {
@@ -115,7 +116,8 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     isObject(data.categoryBucketOverrides) ||
     isObject(data.achievements) ||
     isObject(data.achievementStats) ||
-    isObject(data.debtDueDismissals);
+    isObject(data.debtDueDismissals) ||
+    isObject(data.cardKeepAliveDismissals);
 
   return hasAny;
 };
@@ -139,6 +141,7 @@ interface ImportPayload {
   achievements?: Record<string, unknown>;
   achievementStats?: Record<string, unknown>;
   debtDueDismissals?: Record<string, unknown>;
+  cardKeepAliveDismissals?: Record<string, unknown>;
   user?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -169,6 +172,7 @@ interface SanitizedImportPayload {
   achievements?: SanitizedAchievements;
   achievementStats?: AchievementStats;
   debtDueDismissals?: Record<string, string>;
+  cardKeepAliveDismissals?: Record<string, string>;
   user?: Record<string, unknown>;
 }
 
@@ -368,7 +372,8 @@ const sanitizeAchievementStats = (raw: unknown): AchievementStats | undefined =>
  * Debt due-day dismissals: `"<debtId>:<YYYY-MM>" → ISO dismissed-at`. Only
  * the key matters to the reminder engine (the value is bookkeeping), so
  * validation gates on key shape and a sane value string; bad pairs are
- * dropped, not fatal.
+ * dropped, not fatal. Card keep-alive dismissals share the exact key shape
+ * and reuse this sanitizer.
  */
 const sanitizeDebtDueDismissals = (
   raw: unknown
@@ -435,6 +440,9 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const achievements = sanitizeAchievements(data.achievements);
   const achievementStats = sanitizeAchievementStats(data.achievementStats);
   const debtDueDismissals = sanitizeDebtDueDismissals(data.debtDueDismissals);
+  const cardKeepAliveDismissals = sanitizeDebtDueDismissals(
+    data.cardKeepAliveDismissals
+  );
   const user = sanitizeUser(data.user);
 
   const limitsByMonthCount = budgetLimitsByMonth
@@ -475,6 +483,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     achievements,
     achievementStats,
     debtDueDismissals,
+    cardKeepAliveDismissals,
     debtMilestones,
     payoffStrategy,
     payoffStrategyUpdatedAt,
@@ -1232,19 +1241,22 @@ export const importFromString = async (
   };
 
   /**
-   * Due-day dismissals are idempotent facts ("user said 'not yet' for this
-   * debt+month on some device"), so merge is a key-wise union. The value is
-   * only a dismissed-at bookkeeping stamp - either side's is fine; imported
-   * wins on conflict for consistency with the bucket-override merge.
-   * Replace mode takes the import verbatim.
+   * Dismissals (debt due-day + card keep-alive) are idempotent facts ("user
+   * said 'not yet' for this debt+month on some device"), so merge is a
+   * key-wise union. The value is only a dismissed-at bookkeeping stamp -
+   * either side's is fine; imported wins on conflict for consistency with
+   * the bucket-override merge. Replace mode takes the import verbatim.
    */
-  const computeMergedDueDismissals = async (): Promise<{ json: string } | null> => {
-    if (!sanitized.debtDueDismissals) return null;
+  const computeMergedDismissalMap = async (
+    imported: Record<string, string> | undefined,
+    storageKey: string
+  ): Promise<{ json: string } | null> => {
+    if (!imported) return null;
     if (mode === "replace") {
-      return { json: JSON.stringify(sanitized.debtDueDismissals) };
+      return { json: JSON.stringify(imported) };
     }
     let existing: Record<string, unknown> = {};
-    const existingRaw = await EncryptedStorage.getItem(KEYS.DEBT_DUE_DISMISSALS);
+    const existingRaw = await EncryptedStorage.getItem(storageKey);
     if (existingRaw) {
       try {
         const parsed = JSON.parse(existingRaw);
@@ -1256,9 +1268,21 @@ export const importFromString = async (
       }
     }
     return {
-      json: JSON.stringify({ ...existing, ...sanitized.debtDueDismissals }),
+      json: JSON.stringify({ ...existing, ...imported }),
     };
   };
+
+  const computeMergedDueDismissals = () =>
+    computeMergedDismissalMap(
+      sanitized.debtDueDismissals,
+      KEYS.DEBT_DUE_DISMISSALS
+    );
+
+  const computeMergedKeepAliveDismissals = () =>
+    computeMergedDismissalMap(
+      sanitized.cardKeepAliveDismissals,
+      KEYS.CARD_KEEP_ALIVE_DISMISSALS
+    );
 
   /**
    * Singleton LWW gate for merge mode: write the imported value only when
@@ -1312,6 +1336,7 @@ export const importFromString = async (
   const mergedAchievements = await computeMergedAchievements();
   const mergedAchievementStats = await computeMergedAchievementStats();
   const mergedDueDismissals = await computeMergedDueDismissals();
+  const mergedKeepAliveDismissals = await computeMergedKeepAliveDismissals();
 
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
@@ -1370,6 +1395,12 @@ export const importFromString = async (
     tempWrites.push([
       KEYS.DEBT_DUE_DISMISSALS + TEMP_SUFFIX,
       mergedDueDismissals.json,
+    ]);
+  }
+  if (mergedKeepAliveDismissals) {
+    tempWrites.push([
+      KEYS.CARD_KEEP_ALIVE_DISMISSALS + TEMP_SUFFIX,
+      mergedKeepAliveDismissals.json,
     ]);
   }
   if (
@@ -1467,6 +1498,9 @@ export const importFromString = async (
       if (sanitized.achievementStats) keysToRemove.push(KEYS.ACHIEVEMENT_STATS);
       if (sanitized.debtDueDismissals) {
         keysToRemove.push(KEYS.DEBT_DUE_DISMISSALS);
+      }
+      if (sanitized.cardKeepAliveDismissals) {
+        keysToRemove.push(KEYS.CARD_KEEP_ALIVE_DISMISSALS);
       }
       for (const key of keysToRemove) {
         const original = await EncryptedStorage.getItem(key);

@@ -41,11 +41,21 @@ import {
   getAssetAccounts,
   updateAssetAccount,
 } from "../../storage/assetAccountStorage";
+import { getDebts, updateDebt } from "../../storage/debtStorage";
+import {
+  latestOutflowByAccount,
+  planKeepAliveStamps,
+} from "../../utils/cardKeepAlive";
+import { rescheduleCardKeepAliveReminders } from "../../notifications/cardKeepAliveReminders";
 import { fetchSimplefinAccounts } from "./simplefinClient";
 import { fetchTellerData } from "./tellerClient";
 import { planIngest } from "./ingest";
 import { computeFetchWindow, isSyncDue } from "./syncGate";
-import type { NormalizedAccount, ProviderFetchResult } from "./types";
+import type {
+  NormalizedAccount,
+  NormalizedTransaction,
+  ProviderFetchResult,
+} from "./types";
 
 export type ConnectionSyncOutcome =
   | "updated" // fetch succeeded; inbox/balances may have changed
@@ -85,6 +95,45 @@ const fetchForConnection = async (
   }
 
   return fetchTellerData(secrets, { startDate: window.startDate });
+};
+
+/**
+ * Card keep-alive auto-stamping: a fetched outflow on a debt-linked account
+ * proves the card was used, so advance that debt's `keepAliveLastUsedAt`.
+ * Runs off the RAW fetched transactions (not the Review Inbox plan) on
+ * purpose - activity counts whether or not the user imports transactions
+ * from that account. The which-debts-to-stamp decision is pure
+ * (planKeepAliveStamps: enabled + live debts only, strictly-newer only,
+ * future dates clamped), keeping updatedAt churn on P2P diffs to at most
+ * one write per new-activity day. Stale links (debt deleted) are lazily
+ * nulled here. Best-effort: must never fail the sync pass.
+ */
+const applyKeepAliveStamps = async (
+  links: ExternalAccountLink[],
+  transactions: readonly NormalizedTransaction[],
+  nowMs: number,
+): Promise<void> => {
+  if (!links.some((l) => l.debtId)) return;
+  try {
+    const debts = await getDebts();
+    const stamps = planKeepAliveStamps({
+      links,
+      debts,
+      latestByAccount: latestOutflowByAccount(transactions),
+      nowISO: new Date(nowMs).toISOString(),
+    });
+    for (const stamp of stamps) {
+      await updateDebt(stamp.debtId, { keepAliveLastUsedAt: stamp.lastUsedAt });
+    }
+    for (const link of links) {
+      if (link.debtId && !debts.some((d) => d.id === link.debtId)) {
+        await updateLink(link.id, { debtId: null });
+      }
+    }
+    if (stamps.length > 0) void rescheduleCardKeepAliveReminders();
+  } catch (error) {
+    if (__DEV__) console.error("Keep-alive stamping failed:", error);
+  }
 };
 
 const applyBalances = async (
@@ -225,6 +274,7 @@ const syncOneConnection = async (
   }
 
   const balancesUpdated = await applyBalances(links, result.accounts);
+  await applyKeepAliveStamps(links, result.transactions, opts.nowMs);
 
   await updateConnection(connection.id, {
     lastSyncedAt: new Date(opts.nowMs).toISOString(),

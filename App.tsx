@@ -28,6 +28,7 @@ import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import DebtDueReminderHost from "./src/components/DebtDueReminderHost";
 import TrackingReminderHost from "./src/components/TrackingReminderHost";
+import CardKeepAliveReminderHost from "./src/components/CardKeepAliveReminderHost";
 import QuickAddLinkHost from "./src/components/QuickAddLinkHost";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
@@ -402,6 +403,8 @@ const AppContent: React.FC = () => {
         } else if (cta.kind === "charts") {
           // Route key stays "Utilities"; the tab displays as "Charts".
           navigationRef.navigate("Utilities");
+        } else if (cta.kind === "debt-tracker") {
+          navigationRef.navigate("DebtTracker", { openKeepAlive: true });
         } else {
           navigationRef.navigate("Profile", { openSection: cta.section });
         }
@@ -467,6 +470,10 @@ const AppContent: React.FC = () => {
       {/* Keeps scheduled expense-tracking check-in notifications anchored to
           the user's latest entry, and routes taps to the Budget tab. */}
       <TrackingReminderHost navigationRef={navigationRef} />
+
+      {/* Keeps card keep-alive "use it or lose it" nudges in sync with the
+          debts' keep-alive state, and routes taps to the DebtTracker tab. */}
+      <CardKeepAliveReminderHost navigationRef={navigationRef} />
 
       {/* Routes the home-screen Quick Entry widget's deep links
           (budgetark://quick-add) to the Budget tab's Add Entry modal. */}

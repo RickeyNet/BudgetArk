@@ -32,6 +32,7 @@ import {
   calcPaymentForGoalDate,
   parseGoalDateLocal,
 } from "../utils/calculations";
+import { keepAliveStatus } from "../utils/cardKeepAlive";
 import ProgressRing from "./ProgressRing";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -52,12 +53,15 @@ interface DebtCardProps {
   /** Callback when user wants to edit this debt */
   onEdit: (debt: Debt) => void;
 
+  /** "I used it" on the keep-alive tracker - stamps the card's last use */
+  onKeepAliveUse?: (debtId: string) => void;
+
   /** Whether this is the priority debt to pay off first (expanded by default) */
   isFocusDebt?: boolean;
 }
 
 /* ─── Component ─── */
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, isFocusDebt = false }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, isFocusDebt = false }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -89,6 +93,43 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
     debt.rate,
     debt.minPayment
   );
+
+  /**
+   * Keep-alive standing. Only rendered for personal-credit cards with the
+   * watch enabled; null otherwise (keepAliveStatus already checks the
+   * toggle + anchor, the class check mirrors the banner/planner gate).
+   */
+  const keepAlive = React.useMemo(
+    () =>
+      debt.debtClass === "personal_credit" ? keepAliveStatus(debt) : null,
+    [debt]
+  );
+
+  const keepAliveColor =
+    keepAlive?.status === "ok"
+      ? colors.success
+      : keepAlive?.status === "upcoming"
+        ? colors.accent
+        : colors.warning || colors.accent;
+
+  const keepAliveLine = React.useMemo(() => {
+    if (!keepAlive) return "";
+    const when = keepAlive.deadline.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    if (keepAlive.status === "ok") return `Card active · next use by ${when}`;
+    if (keepAlive.status === "overdue") {
+      return `Inactivity deadline passed (${when}) · use it soon`;
+    }
+    const days =
+      keepAlive.daysUntil === 0
+        ? "today"
+        : keepAlive.daysUntil === 1
+          ? "tomorrow"
+          : `${keepAlive.daysUntil} days`;
+    return `Use by ${when} (${days})`;
+  }, [keepAlive]);
 
   /** Goal date calculations */
   const goalInfo = React.useMemo(() => {
@@ -160,6 +201,11 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
           </Text>
         </View>
         <View style={styles.collapsedRight}>
+          {keepAlive && keepAlive.status !== "ok" && (
+            <View
+              style={[styles.keepAliveDot, { backgroundColor: keepAliveColor }]}
+            />
+          )}
           <Text style={[styles.collapsedPercent, { color: ringColor }]}>
             {Math.round(percentPaid)}%
           </Text>
@@ -256,6 +302,26 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
               )}
             </>
           )}
+        </View>
+      )}
+
+      {/* ── Keep-Alive Row ── */}
+      {keepAlive && (
+        <View style={[styles.keepAliveRow, { backgroundColor: `${keepAliveColor}15` }]}>
+          <Text
+            style={[styles.keepAliveText, { color: keepAliveColor }]}
+            numberOfLines={2}
+          >
+            {keepAliveLine}
+          </Text>
+          <TouchableOpacity
+            style={[styles.keepAliveButton, { backgroundColor: `${keepAliveColor}25` }]}
+            onPress={() => onKeepAliveUse?.(debt.id)}
+          >
+            <Text style={[styles.keepAliveButtonText, { color: keepAliveColor }]}>
+              I used it
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -488,6 +554,36 @@ const makeStyles = (colors: ThemeColors) =>
     progressFill: {
       height: "100%",
       borderRadius: 3,
+    },
+
+    /* Keep-alive */
+    keepAliveDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    keepAliveRow: {
+      borderRadius: 10,
+      padding: 10,
+      marginTop: 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 10,
+    },
+    keepAliveText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    keepAliveButton: {
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    keepAliveButtonText: {
+      fontSize: 12,
+      fontWeight: "700",
     },
 
     /* Goal */

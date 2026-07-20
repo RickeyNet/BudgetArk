@@ -44,6 +44,12 @@ import PurchasePlanList, {
 } from "../components/PurchasePlanList";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getDebts } from "../storage/debtStorage";
+import CardKeepAliveBanner from "../components/CardKeepAliveBanner";
+import {
+  dismissCardKeepAliveForMonth,
+  getCardKeepAliveDismissals,
+  type CardKeepAliveDismissals,
+} from "../storage/cardKeepAliveDismissalStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
@@ -171,6 +177,8 @@ const BridgeScreen: React.FC = () => {
   });
   const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
   const [accountValueHistory, setAccountValueHistory] = useState<AccountValueHistory>({});
+  const [keepAliveDismissals, setKeepAliveDismissals] =
+    useState<CardKeepAliveDismissals>({});
   // Window the rise/drop deltas compare against. 30D matches the net-worth
   // history card's default range.
   const [changePeriod, setChangePeriod] = useState<AccountChangePeriodKey>("30D");
@@ -324,14 +332,21 @@ const BridgeScreen: React.FC = () => {
           // the freshly-created default broker + reassigned holdings are picked
           // up by this same pass. No-op after the first run.
           await migrateOrphanHoldings();
-          const [storedEntries, storedDebts, storedGoals, storedAssets, milestonePlan] =
-            await Promise.all([
-              getBudgetEntries(),
-              getDebts(),
-              getSavingsGoals(),
-              getAssetAccounts(),
-              getDebtMilestonePlan(),
-            ]);
+          const [
+            storedEntries,
+            storedDebts,
+            storedGoals,
+            storedAssets,
+            milestonePlan,
+            storedKeepAliveDismissals,
+          ] = await Promise.all([
+            getBudgetEntries(),
+            getDebts(),
+            getSavingsGoals(),
+            getAssetAccounts(),
+            getDebtMilestonePlan(),
+            getCardKeepAliveDismissals(),
+          ]);
           if (cancelled) return;
 
           const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
@@ -347,6 +362,7 @@ const BridgeScreen: React.FC = () => {
 
           setEntries(processed.entries);
           setDebts(storedDebts);
+          setKeepAliveDismissals(storedKeepAliveDismissals);
           setSavingsGoals(storedGoals);
           setAssetAccounts(processed.assetAccounts);
           setKeelTarget(keelStep?.targetAmount ?? 1000);
@@ -1109,6 +1125,12 @@ const BridgeScreen: React.FC = () => {
     void refreshAchievements();
   }, [efContribAmount, keelTarget, refreshAchievements, refreshNetWorthSnapshots, savingsGoals]);
 
+  /** "Later" on the keep-alive banner: mute that card for this month. */
+  const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
+    await dismissCardKeepAliveForMonth(debt.id);
+    setKeepAliveDismissals(await getCardKeepAliveDismissals());
+  }, []);
+
   const listHeader = (
     <View>
       <View style={styles.titleSection}>
@@ -1116,6 +1138,17 @@ const BridgeScreen: React.FC = () => {
         <Text style={styles.screenTitle}>The Bridge</Text>
         <Text style={styles.screenSubtitle}>Net worth, accounts, and progress.</Text>
       </View>
+
+      {/* Card keep-alive warning also surfaces here (the initial tab) so an
+          approaching inactivity deadline can't hide behind an unvisited
+          Debts tab. Tapping it lands on DebtTracker, where the card lives. */}
+      <CardKeepAliveBanner
+        debts={debts}
+        dismissals={keepAliveDismissals}
+        onOpen={() => navigation.navigate("DebtTracker", { openKeepAlive: true })}
+        onDismiss={handleKeepAliveDismiss}
+        style={{ marginBottom: tokens.gap }}
+      />
 
       <View ref={anchorBridgeHistory} collapsable={false}>
         <NetWorthHistoryCard
