@@ -92,69 +92,9 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ==============================================================================================================================================================================================
 
-
 ## Security Hardening
 
-### Critical
-- [x] Fix encryption implementation - add HMAC integrity verification to `encryptedStorage.ts` so tampered ciphertexts are detected
-- [x] Wrap all unsafe `JSON.parse` calls in try-catch with fallback defaults (`userStorage.ts:83`, `debtStorage.ts:70`, `savingsGoalStorage.ts:8`, `budgetStorage.ts:45`)
-
-### High
-- [x] Encrypt exported data or add confirmation dialog warning about sensitive plaintext in `exportData.ts`
-- [x] Add try-catch around `JSON.parse(existingRaw)` in `importData.ts` merge logic to prevent silent data loss
-- [x] Clear encryption key from memory (`cachedKey`) when app is backgrounded (`encryptedStorage.ts:22`)
-
-### Medium
-- [x] Gate `console.error` / `console.warn` calls behind `__DEV__` checks in production (`App.tsx`, screens)
-- [x] Add input validation against control characters and null bytes on display name and debt name fields
-- [x] Audit Android permissions - consider removing `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` from `AndroidManifest.xml`
-- [x] Add `FLAG_SECURE` screenshot/screen recording protection on screens showing financial data
-- [x] Add transactional safety (write-to-temp-key, then rename) for import merge operations in `importData.ts`
-
-### Low
-- [x] Replace custom `Math.random()` UUID in `src/utils/uuid.ts` with the `uuid` package (already in `package.json`)
-- [x] Add deep link validation if deep link routing is implemented in the future - DONE (2026-07-12) alongside the Quick Entry widget: `src/utils/quickAddLink.ts` validates fail-closed (anchored scheme/host, length cap, no extra path/fragment, category must exactly match a built-in, control chars + bad percent-encoding rejected); unit-tested. Any future deep link route should go through the same build-and-validate-in-one-module pattern.
-- [x] Reduce import size limits (`MAX_RAW_CHARS` from 2MB to 500KB) to prevent OOM on low-end devices
-
-### Info / Optional
-
-- [x] Implement AsyncStorage timeout wrapper
-#### 1. Add timeouts to AsyncStorage operations to prevent app hangs on slow I/O
-File: `src/storage/encryptedStorage.ts`
-Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash storage or backed-up I/O queues could hang indefinitely, freezing the app.
-- **Option A - Promise.race timeout wrapper:** Create a `withTimeout()` utility wrapping each AsyncStorage call with `Promise.race([operation, rejectAfter5s])`. Apply inside `encryptedStorage.ts` so all callers get it automatically.
-- **Option B - Timeout only on raw I/O:** Same concept but wrap only the `AsyncStorage.*` calls, not the crypto operations (which can be slow on low-end devices). More surgical.
-- **Option C - Timeout + retry once:** On timeout, retry the operation once before throwing. Handles transient I/O hiccups without surfacing errors on brief blips.
-- Recommended: **Option A** - simple, comprehensive, 5-second timeout is generous enough for slow devices.
-
-
-- [x] Implement fail-closed downgrade guard 
-#### 2. Fail-closed policy for version downgrade guard
-File: `src/utils/versionGuard.ts`
-Currently `isUpdateSafe()` returns `true` (fail-open) when either version is missing. An attacker could strip version metadata from a malicious OTA update to bypass the downgrade guard.
-- **Option A - Fail-closed on missing incoming version:** Return `false` if incoming version is undefined (block the update). Keep fail-open if the *current* version is missing (avoids locking out users whose app was installed without version metadata).
-- **Option B - Full fail-closed:** Return `false` if either version is missing. Strictest, but risks blocking legitimate updates if Expo metadata has a hiccup.
-- **Option C - Fail-closed with user override:** Return `false` by default, but show a modal letting the user choose to install anyway.
-- Recommended: **Option A** - blocks the actual attack vector without risking lockout from legitimate updates.
-
-
-- [x] Implement stale import warning
-#### 3. Data expiration warnings for stale imports
-Files: `src/utils/importData.ts`, `src/utils/exportData.ts`
-Exports already include an `exportedAt` timestamp, but imports don't check it. A user could import a 6-month-old backup and silently overwrite fresher data in merge mode.
-- **Option A - Warning in import result:** After successful import, check `exportedAt`; if >30 days old, include a warning message in the result for the UI to display.
-- **Option B - Pre-import warning with confirmation:** Before writing data, check `exportedAt` and throw a special error if stale, prompting user confirmation. Blocks stale imports by default.
-- **Option C - Non-blocking info banner:** Parse `exportedAt`, return a `staleDays` field alongside import counts. UI shows an info banner but doesn't block the import.
-- Recommended: **Option C** - stale imports aren't dangerous (merge deduplicates by ID), so blocking would be frustrating. A simple banner is the right awareness level.
-
-- [x] Implement explicit bounds checks
-#### 4. Explicit bounds checks before financial calculations
-File: `src/utils/calculations.ts`
-Calculation functions accept raw `number` inputs with no upper bounds. JS `Number` loses precision above ~2^53, and `Math.pow()` with extreme inputs returns `Infinity`/`NaN`, which cascades into the UI.
-- **Option A - Input clamping at function boundaries:** Add bounds checks at the top of each exported function - clamp `balance` to max $1B, `annualRate` to max 200%, `monthlyPayment` to max $1M, `years` to max 100, `monthlyContribution` to max $1M. Return early with safe defaults (0 or Infinity) if out of range. Matches limits already in `importData.ts`.
-- **Option B - Shared validation utility:** Create `validateFinancialInput()` that all functions call; throws descriptive errors for out-of-bounds inputs.
-- **Option C - Output validation:** Don't restrict inputs, but check outputs. If any result is `NaN`, `Infinity`, or unexpectedly negative, return a safe fallback.
-- Recommended: **Option A** - prevents the issue at the source. Bounds match `importData.ts` limits (`MAX_MONEY: 1_000_000_000`, `MAX_RATE: 200`). Clamping is silent and non-disruptive.
+(The initial hardening pass - Critical / High / Medium / Low / Info items - is complete and moved to the Done section at the bottom of this file.)
 
 ### v1.4.16 Audit Follow-ups
 
@@ -221,44 +161,6 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 ## Nice-to-Have (Post-Launch)
 
-- [x] Push notifications: expense-tracking check-ins (requires `expo-notifications`) - SHIPPED app-side (2026-07-12). Decision: payment-due push notifications were explicitly REJECTED - banks already remind users about bills, and the in-app due banners cover it. Instead, notifications are habit nudges: "you haven't logged your spending in a while - check in." Local notifications only, planned on-device from the user's own entry history. No push token, no server, nothing leaves the device.
-
-  How it behaves - two reminder kinds, each behind its own toggle:
-  - **Quiet-spell check-ins**: anchored `cadenceDays` after the user's most recent budget entry (newest `createdAt`; `updatedAt` ignored so sync merges don't count as tracking). The schedule is recomputed on every app open and background transition, so logging an entry silently pushes every pending nudge out a full cadence - active trackers never hear from it, lapsed users get nudged at their cadence until they log again. Already-overdue users (last entry older than the cadence) get nudged at the next occurrence of their chosen hour, not a full cadence later.
-  - **Month-start planning**: on the 1st of each month at the chosen hour - "Set this month's budget goals and review how last month went." Points users at the budget-limit setup + Monthly Review that already exist on the Budget tab. Copy rotates by month. A check-in landing on the same day as a month-start nudge is dropped so the user never gets two notifications in one day.
-  - Rotating, deliberately content-free copy (no amounts, no account names - lock-screen safe), lightly Ark-themed ("Keep your Ark on course - jot down any expenses from the last few days."). Rotation is deterministic by calendar day/month so replans don't reshuffle messages.
-  - Tap (warm or cold-start) opens the Budget tab.
-
-  What shipped:
-  - `expo-notifications@~57.0.3` (config plugin in `app.json`). NOT OTA-eligible - rides the same pending EAS build as Teller/expo-iap on this branch.
-  - `src/utils/trackingReminderPlanner.ts` - pure, unit-tested planner (20 tests): anchor math, overdue roll-forward, month-start scheduling + same-day dedupe, 30-day window, 32-notification cap (iOS keeps 64 pending), deterministic identifiers (`budgetark-checkin-YYYY-MM-DD`, `budgetark-monthstart-YYYY-MM`) so replans are idempotent.
-  - `src/notifications/trackingReminders.ts` - scheduler: Android channel ("Expense check-ins"), permission flow, idempotent cancel-ours-then-reschedule (`data.type === "tracking-reminder"` marks ours). Foreground handler suppresses banners while the app is open.
-  - `src/components/TrackingReminderHost.tsx` - app-root host: reschedules on launch (deferred past first paint) + on background; routes taps to Budget.
-  - Settings: Profile → Tracking Reminders row → bottom sheet (`TrackingRemindersModal.tsx`). Master toggle (OFF by default - strictly opt-in; enabling runs the permission request, denial deep-links to OS Settings), per-kind toggles (logging check-ins / month-start planning, both default ON under the master), cadence (daily / every 3 days / weekly), time of day (morning / afternoon / evening, shared by both kinds). Stored in `trackingReminderSettingsStorage.ts` (EncryptedStorage, per-device, deliberately NOT synced to partner).
-  - Reset All Data wipes the settings key (in `RESET_KEYS`) and cancels all pending scheduled check-ins immediately.
-
-  Still TODO before release:
-  - Device-test on iOS + Android 13+ (permission prompt, channel, lock-screen presentation, tap routing, reschedule-on-background actually pushing nudges out after logging an entry) once the new EAS build exists.
-  - Optional polish: dedicated monochrome Android notification icon via the `expo-notifications` plugin options (currently default).
-  - Release-notes entry: DONE (in-app 1.9.0 notes + RELEASE_NOTES.md). Version bump still due when the EAS build that carries this is cut.
-  - v2 ideas: streak-aware copy ("day 12 of your streak - keep it alive"), a "weekly recap" variant, snooze action button on the notification, month-start tap deep-linking straight to the Monthly Review sheet instead of the Budget tab.
-- [x] Search and advanced filters across debts, payments, and budget entries - SHIPPED app-side (2026-07-20). OTA-eligible (pure JS, no storage, no network). Device testing pending.
-
-  What shipped:
-  - `src/utils/searchFilter.ts` (pure, 24 tests): tokenized AND matching over debts (name/owner/class labels), payments (parent debt name; orphaned payments label "(deleted debt)" and stay findable), entries (description/category/merchant); amounts + YYYY-MM-DD dates in every haystack. Filters: scope, date presets (30d/90d/this-year vs injected `now`), entry type, category multi-select, amount range. Deliberate + test-pinned: entry-only filters narrow to entries; a date range hides standing debts (their payments still surface); date-sorted not relevance-ranked; 50-per-group cap with pre-cap totals; tombstones excluded; unparseable dates fail closed under a date filter.
-  - `src/components/GlobalSearchModal.tsx`: slide-up sheet (OnboardingGuideModal skeleton), sanitized auto-focus query, collapsible filter panel (active-count badge, Reset, scope switches clear filters the new scope can't use), grouped results with icons + locale-formatted amounts/dates, honest "debts hidden by filters"/truncation notes. Host stamps `now` at open (render purity) and owns result-tap behavior.
-  - Hosts: 🔍 in both title sections (DebtTracker right corner; Budget left, sliding beside the Review Inbox icon when present). Same-tab result taps use the dismiss-then-present-after-250ms rule (debt → AddDebtModal edit, payment → PaymentHistoryModal, entry → BudgetEntryModal). Cross-tab via two new app-internal route params consumed with the deferred InteractionManager pattern: `Budget.searchEntryId` (waits for `isLoaded`) and `DebtTracker.openHistory`. Neither reachable from external deep links.
-
-  Still TODO:
-  - Device-test both entry points: keyboard behavior with the sheet, chip wrapping at large text sizes, cross-tab hops (search on Debts → entry edit on Budget and vice versa), dismiss-then-present timing on iOS.
-  - Optional fast-follows: a FEATURE_SPOTLIGHTS debut slide (skipped for now - carousel already long, and the 🔍 icon is always visible on two tabs), an onboarding-guide step ("search" keyword), owner filter for debts inside the sheet, and a Bridge entry point.
-- [x] Currency exchange calculator (Utilities tab) - SHIPPED (2026-07-20) as a collapsible "Currency Exchange" tool on the Charts tab, after the Emergency Fund calculator. OTA-eligible (pure JS).
-
-  Decisions that were open:
-  - **Rate source: on-demand API** via the already-allowlisted open.er-api.com provider (same one the currency switch uses), NOT a build-time snapshot - but through a new `getConverterRates()` in `exchangeRates.ts` with its OWN cache key (`@budgetark_fx_converter_rates`). The existing cache is the deliberately PINNED display snapshot that must only move when the user changes currency; sharing it would let a converter refresh silently re-pin converted balances. Fallback ladder: fresh converter cache (12h TTL) → live → stale converter cache → pinned snapshot → static table, so it always answers offline.
-  - **"Rates last updated": yes** - a freshness line ("Rates updated 3 hours ago", or honest "built-in approximate rates" wording on the static fallback) plus a manual "Refresh rates" action. Stamped when the snapshot lands, not in render (react-hooks/purity).
-  - Currencies offered = the app's supported set (derived from `CURRENCY_PREFERENCE_OPTIONS`, currently USD/EUR/GBP/CAD/JPY/SEK); From defaults to the user's display currency. Picking the opposite side's currency swaps the pair instead of allowing a same-to-same conversion. Result is formatted in the target currency's own locale (`formatAmountInCurrency` - `useCurrency()` can only format the preference currency); conversion math reuses `convertAmount`.
-  - Pure helpers + tests in `src/utils/exchangeCalculator.ts` (amount parsing incl. comma-decimal input, cross-rate, freshness label); converter-cache isolation pinned by tests in `exchangeRates.test.ts`. On-card privacy note: only the request for the public rate table leaves the phone, never amounts. No feature-spotlight slide (minor tool; carousel already at 9 slides) - covered by release notes + the onboarding guide's calculators step.
 - [ ] Data confidence tools (last backup badge + backup reminders)
 - [~] Accessibility improvements (larger text mode + better screen reader labels) - Larger text mode SHIPPED: app-wide "Text Size" axis (Small / Default / Large / Extra Large) in Profile → Appearance, persisted in EncryptedStorage, multiplies the active Density's `fontScale` so every screen using `tokens.fontScale` scales for free without ballooning spacing (`src/theme/textSize.ts` + extended `DensityProvider`). Budget Spending donut + bars now also scale with it so the section zooms, not just text.
 
@@ -302,9 +204,6 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
   - Data Safety / privacy forms: purchases are handled by the stores, no new data collected by the app - but Google's Data Safety form and Apple's privacy label both have a "Purchases" category handled by the platform; review whether the store forms need the purchases-handled-by-store disclosure on next submission.
   - Build note: expo-iap needs iOS 15+ (SDK 57 default OK) and Kotlin 2.2 on Android - if the EAS Android build fails on Kotlin version, add `expo-build-properties` with `{"android": {"kotlinVersion": "2.2.0"}}`.
   - Sandbox-test on device (sandbox Apple ID / Play license tester) before release; products can take a few hours to propagate after creation.
-- [x] Debt-Free Countdown Timer - SHIPPED (2026-07-20). Card on the Debt Tracker between the summary and the due-reminder banner: years/months/days boxes to the projected debt-free date, projected month, and the pace used. OTA-eligible (pure JS, no storage, no network).
-
-  How "current payment velocity" was defined: average monthly payment total over the last 6 COMPLETE calendar months, denominator anchored at the first-ever payment month (mirrors `calcAvgMonthlyExpenses`'s tracked-month rule); the current partial month joins the sample only once it has payments, so logging a payment moves the countdown immediately. No history → sum of minimums, labeled. Projection reuses `simulatePayoffPlan` with extra = max(0, velocity − Σ minimums); a below-minimums pace simulates at minimums with an explicit caveat (the engine can't model shorting minimums). ALL debt classes count including mortgage (it's a debt-free date - deliberately unlike the Hull milestone); custom sort order projects as avalanche. Honest states: celebration at all-zero balances, "no payoff date at the current pace" when interest outruns payments. Pure math + 21 tests in `src/utils/debtFreeCountdown.ts`; `now` stamped at data load (render purity), so "live" = refreshed on every focus and every recorded payment - no ticking timer (day granularity doesn't need one).
 - [ ] Budget Rollover Mode - unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
 
 - [ ] Month-start checking balance + cash-flow budget - at the beginning of each calendar month, prompt the user to update their checking balance, snapshot it as the month's starting cash, and factor it into the Budget screen as a real cash-flow projection. Chosen over Budget Rollover Mode (above) because it's anchored to ground truth and self-correcting (no stateful carry-over chain that re-derives every prior month).
@@ -342,50 +241,8 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 - [ ] Spending Velocity Alerts - passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
 - [ ] Partner Budget Visibility Controls - mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
-- [x] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
-
-  Shipped as a Charts-tab tool (2026-07): `src/utils/whatIfSpending.ts` (pure math + tests) and a "What If I Stopped Spending on…" card in ChartsScreen. Category chips show per-category averages from the last 6 tracked months (Debt Payments excluded); a slider sets the redirect amount; the debt side compares payoff timelines via `simulatePayoffPlan` (avalanche/snowball toggle, months sooner + interest saved, handles unsolvable→solvable), and the savings side shows 1/5/10-year growth at an assumed 7% via `calcInvestmentGrowth`. Device testing pending on next build.
 - [ ] Big Purchase Cost/Benefit Comparison Calculator - compare long-term total cost of ownership for expensive vs cheaper options (e.g. gas car vs hybrid vs EV) using purchase price, financing, fuel/energy cost, insurance, maintenance, depreciation/resale, annual miles, and ownership length. Show break-even point, 5/10-year totals, cost per mile, and whether the higher upfront option pays off over time.
 - [ ] Net Worth Timeline Graph - plot net worth (assets minus debt) over time as a line chart. Data already exists across months.
-- [x] Live Stock Holdings & Quote Feed - let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
-
-  Data model:
-  - New `Holding` record: `{ id, symbol, shares, costBasis?, accountId? }`. Either nest under existing `AssetAccount` or add a new top-level collection that aggregates into Net Worth the same way Asset Accounts do.
-  - Cache last-fetched quote in AsyncStorage: `{ symbol, price, asOf, source }`. Net Worth math reads from cache, never blocks on network.
-
-  Refresh strategy (privacy-friendly default):
-  - Auto-refresh once per day on first app open of the calendar day.
-  - Manual "Refresh prices" button with 1-hour cooldown. Disabled outside US market hours (9:30am–4:00pm ET, weekdays) with copy "Markets closed - prices update at next open."
-  - Manual override on cooldown shows "Last updated 12 min ago" rather than firing the call.
-  - Per-day cap means free API tiers are viable. Per-user fetch volume stays under 25 calls/day worst case.
-
-  Provider options (free tiers, no backend needed):
-  - Finnhub free: 60 calls/min, single-symbol endpoint. Fine for <10 tickers/user.
-  - Twelve Data free: 800 calls/day, batched up to 120 symbols/call. Best fit for this app.
-  - Alpha Vantage free: 25/day. Too tight unless one user.
-  - Avoid yfinance scraping - breaks unpredictably.
-
-  Cloudflare Worker proxy (optional, only if app scales):
-  - Free tier covers ~330 daily-active users at 300 req/user/day. Paid $5/mo covers 33k DAU.
-  - Real reason to add it: hide API key, add device-ID-hashed throttle so a tampered client can't burn shared quota.
-  - Skip until user count warrants it. Embed key in app to start; daily call cap makes scraping the key low-impact.
-
-  Privacy / UX implications:
-  - First feature in the app that sends data off-device. Add a one-time disclosure on Holdings screen: "Symbols you hold are sent to <provider> to fetch prices. Share counts and cost basis stay on your device."
-  - Make the whole feature opt-in via a toggle in Profile so users who want pure offline can skip it.
-  - Label it "Daily portfolio value" in copy - never claim "live" or "real-time" with delayed-quote providers.
-  - Apple/Google may require provider attribution in store listing per data ToS - check before submission.
-
-  Files (proposed):
-  - `src/types/index.ts` - add `Holding`, `Quote` types.
-  - `src/storage/holdingsStorage.ts` - CRUD via EncryptedStorage, follows existing pattern.
-  - `src/services/quotesService.ts` - provider abstraction, throttle, cache TTL, market-hours gate.
-  - `src/screens/HoldingsScreen.tsx` or new tab in Asset Accounts - list + add/edit holdings, refresh button.
-  - Net Worth aggregator - pull `holdings.reduce((s, h) => s + h.shares * cachedPrice(h.symbol), 0)`.
-
-  OTA-eligible: yes if no new native modules. `fetch` is already available; no SDK changes needed.
-
-  Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
 - [ ] Savings Streak Tracker - track consecutive months with savings contributions. "12-month savings streak" gamification without being gimmicky.
 - [~] Quick-Entry Home Screen Widget - minimal widget to log an expense without opening the full app. Android SHIPPED app-side (2026-07-12); iOS deferred.
 
@@ -529,7 +386,6 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - [ ] Spending Heatmap - calendar-style grid showing daily spending intensity (like GitHub contribution graph). Green = under average, red = over.
 - [ ] Financial Health Score - single 0-100 score based on debt-to-income ratio, emergency fund coverage, savings rate, and budget adherence. Updates monthly. No external data needed.
 - [ ] Ark Journey Timeline - visual timeline of all completed milestones with dates, like a ship-building progress illustration. Shareable.
-- [x] Layout density selector - Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental - screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
 - [~] Receipt photo attachments on budget entries (no OCR) - SHIPPED app-side (2026-07-12). Photo plumbing only; the OCR pipeline below stays future work and can layer on top of this storage/UI.
 
   What shipped:
@@ -574,8 +430,6 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
 - [ ] Year-over-year comparison - pick a category (or all), see same-month-last-year vs this-year deltas in a small bar chart. Lives in Budget or Annual Report.
 
-- [x] Photo attachments on entries (no OCR) - manual photo per budget entry, stored locally in app sandbox via `expo-file-system`. Browsable "Receipts" gallery filterable by month/category. Ships ahead of full OCR (which stays as separate TODO). New native dep: `expo-image-picker` (already common in Expo apps) - NOT OTA-eligible.
-
 - [ ] Runway simulator - "how long does my current savings last with income = $0?" Uses existing recurring expenses + emergency fund + asset accounts. Shows months of runway + month it goes negative. Lives on Bridge or Utilities.
 
 - [ ] Emergency mode dashboard - when emergency fund balance drops below a user-defined threshold (or is "tapped" via a withdrawal), Bridge surfaces a refill plan card (recommended monthly contribution to restore in N months) and a soft 30-day freeze on adding new debt entries (with override). Behavioral guardrail.
@@ -612,116 +466,35 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 
   OTA-eligible: yes. Pure JS, bundled data, no new native deps. Bracket refresh each tax year = OTA bundle update.
 
-- [ ] Charts tab - rename Utilities → Charts and turn it into a personal finance learning hub alongside the existing calculators. (Avoids "Compass" since Bridge already uses 🧭. "Charts" reads as both star/nautical charts and the reference-material framing for a learning hub, and stays short like the other tab labels.)
+- [ ] Charts tab - Amazon affiliate book links (the remaining half of the learning-hub item; the hub itself SHIPPED - see Done). The code side is already plumbed and gated OFF: book resource cards render the Amazon CTA only when `showAffiliateLinks` (default false) AND a populated `amazonUrl` are present (`src/lessons/ResourceCard.tsx`), and `learningProgressStorage` carries `affiliateDisclosureSeenAt`. What's left is console/compliance/content work to light the gate up:
 
-  Concept: bite-sized lessons on budgeting, debt, saving, investing, taxes, insurance, real estate, retirement. Each lesson ends with contextual CTAs that open existing in-app flows (set up a savings goal, switch debt strategy, open a calculator) so learning ties directly to user action. External resources per lesson: curated YouTube videos for deeper discussion + Amazon book recommendations (affiliate links, with full compliance flow).
-
-  Naming / IA:
-  - Bottom tab label: "Charts" with 📜 icon (scroll/chart). Alternates worth a quick A/B in design: 🗺️ or 🌌. Route key stays "Utilities" for backward compat with existing sync/state - only the display label and icon change.
-  - Charts landing has 3 sections: Captain's Course (linear path), Topics (free-form browse), Tools (existing calculators - Refinance, Sinking Fund, Tax, etc., folded in instead of a separate tab).
-  - Personalized "Recommended for you" card at top, picked from user state (high-interest debt → avalanche lesson; no emergency fund → starter cushion lesson; net worth crossed $10k → investing basics).
-
-  Lesson model:
-  - Bundled in JS, no network. `src/data/lessons/*.ts` exports `Lesson` objects.
-  - `Lesson` shape:
-    ```ts
-    {
-      id, title, chapter, topics, readMin,
-      body: Section[],          // typed sections, NOT free-form markdown
-      action?: { label, route }, // jump into existing flow (savings goal, calculator, etc.)
-      resources?: Resource[],    // YouTube + Amazon + articles + internal tool links
-    }
-    ```
-  - `Section` types: `paragraph`, `bullet-list`, `callout`, `calculator-embed`, `glossary-link`, `image-ref`. Renderer in `src/lessons/LessonRenderer.tsx` walks the array. Explicit types avoid markdown XSS/parse surprises.
-  - `Resource` discriminated union:
-    ```ts
-    | { type: "youtube"; title; channel; duration?; url }
-    | { type: "book"; title; author; coverAsset; amazonUrl; affiliate: boolean }
-    | { type: "article"; title; source; url }
-    | { type: "tool"; title; route }
-    ```
-
-  External link handling:
-  - YouTube: `Linking.openURL("youtube://watch?v=...")` with fallback to `https://www.youtube.com/watch?v=...`. Opens the user's YouTube app - no in-app webview, no autoplay-on-cellular issue, no new native deps.
-  - Amazon: `Linking.openURL(amazonUrl)`. Use OneLink-formatted URLs so international users land on their local Amazon storefront with the regional affiliate tag applied. Requires linking Associates accounts per country in Amazon's dashboard.
-  - Books: bundled cover images at `assets/books/<isbn>.png` (~30-50 books across all lessons ≈ 2MB total). Avoids any runtime call to Amazon's image CDN - preserves offline-first promise and avoids the tracking surface of an image fetch. New books ship cover in OTA bundle.
+  - Amazon Associates account + OneLink setup (one-time dashboard config, not code work; link Associates accounts per country so international users land on their local storefront with the regional affiliate tag applied).
+  - Populate `amazonUrl` + `affiliate: true` on the book resources (currently info-only cards, e.g. "Unshakeable" in ch4-l2/ch4-l3).
+  - Optional bundled cover images at `assets/books/<isbn>.png` (~2MB; assets ship in a NEW binary, not OTA - plan the version bump accordingly). Avoids any runtime call to Amazon's image CDN - preserves offline-first promise and avoids the tracking surface of an image fetch.
 
   Amazon affiliate compliance (CRITICAL - read before shipping):
   - **Amazon Associates Operating Agreement** requires the verbatim disclosure: "As an Amazon Associate I earn from qualifying purchases." Must be visible near affiliate links AND in a persistent location.
   - **First-tap one-time disclosure modal** on any affiliate link:
     > "Books on Charts link to Amazon. If you buy after tapping, BudgetArk earns a small commission at no extra cost to you. This helps fund the app's development."
     > [Continue] [Cancel]
-    Persist in `@budgetark_affiliate_disclosure_seen`, never shows again.
+    Persist via the existing `affiliateDisclosureSeenAt`, never shows again.
   - **Always-visible small footer** on lesson resource sections: "Some links earn commission. As an Amazon Associate, BudgetArk earns from qualifying purchases."
   - **Profile → About** gets a full "Affiliate Disclosure" section with the verbatim Amazon-required text.
-  - **Profile toggle**: "Show affiliate links" (default ON). When OFF, book cards still render with metadata but hide the Amazon CTA - honors privacy-purist users.
+  - **Profile toggle**: "Show affiliate links" (the `showAffiliateLinks` gate; decide default ON vs OFF at enable time). When OFF, book cards still render with metadata but hide the Amazon CTA - honors privacy-purist users.
   - **Apple App Store**: affiliate links allowed under Guideline 3.1.3 (physical/digital goods sold elsewhere). Reviewers occasionally flag undisclosed affiliate use - the disclosure modal + Profile section + footer mitigate. CTAs must clearly route to a browser ("View on Amazon"), never "Buy in app."
   - **Google Play**: allowed with disclosure - covered by the above.
   - **F-Droid**: affiliate links count as Advertising under their anti-features taxonomy. Two options:
     - **Option A (recommended)**: build flag `process.env.BUILD_VARIANT === "fdroid"` strips `amazonUrl` from resource cards at render time. Books still show metadata + cover, just no Amazon button. Clean ship, no anti-feature tag.
     - **Option B**: ship with the `Advertising` anti-feature tag and accept the user-filter penalty.
 
-  UI:
-  - Charts landing: scrollable, three section headers.
-    - "Continue your course" - resumes Captain's Course where the user left off; progress bar showing chapter X of Y.
-    - "Recommended for you" - 1-3 personalized lesson cards.
-    - "Topics" - chip row (Budgeting / Debt / Saving / Investing / Taxes / Insurance / Real Estate / Retirement). Tap → filtered lesson grid.
-    - "Tools" - existing calculators (Refinance, Sinking Fund, Tax, Loan Amortization, Investment Growth, Big Purchase Comparison).
-  - Lesson screen: scroll-through; hero icon, sections, "Key takeaway" callout, action button, "Go deeper" resource list at bottom.
-  - Resource cards: YouTube cards show channel + duration + ▶ icon; book cards show cover + title + author + "View on Amazon" pill (or hidden under affiliate-off toggle).
-
-  Progression / gamification (ties into existing Ship's Log):
-  - 📖 First Voyage - finished first lesson
-  - ⭐ Course Plotter - completed Captain's Course Ch 1 (was 🧭 - reusing Bridge's glyph, swapped to a star to match the Charts theme)
-  - ⚓ Anchored in Knowledge - completed full Captain's Course
-  - 🦉 Wise Steward - read 25 lessons
-  - Lesson completion timestamps in `learningProgressStorage.ts`. Counts toward existing app-open streak.
-
-  Storage:
-  - `src/storage/learningProgressStorage.ts` - `{ completedLessons: Record<string, number>, currentChapter?: string, glossaryViews: number, affiliateDisclosureSeenAt?: number, showAffiliateLinks: boolean }`. EncryptedStorage.
-  - Do NOT sync to partner - per-device learning state. Partner reading different lessons shouldn't mark each other's complete.
-  - Include in `clearAllData` `RESET_KEYS`.
-
-  Files (proposed):
-  - `src/screens/ChartsScreen.tsx` (landing - replaces UtilitiesScreen or wraps it)
-  - `src/screens/LessonScreen.tsx`
-  - `src/lessons/LessonRenderer.tsx` (typed section walker)
-  - `src/lessons/AffiliateLinkGuard.tsx` (first-tap disclosure modal + F-Droid build-flag strip)
-  - `src/data/lessons/` directory (one file per lesson, indexed via `lessonIndex.ts`)
-  - `src/data/lessonChapters.ts` (Captain's Course ordering)
-  - `src/storage/learningProgressStorage.ts`
-  - `assets/books/<isbn>.png` (bundled covers for the curated v1 book list)
-  - `src/navigation/AppNavigator.tsx` - rename tab label, swap icon, keep route key
-
-  MVP scope (single OTA + cover assets in next EAS build for the bundled images):
-  1. Rename tab to Charts, fold existing calculators into "Tools" section.
-  2. Ship Captain's Course chapters 1-2 (~8 lessons: budgeting basics, needs/wants/savings, emergency fund why, $1k starter, snowball vs avalanche, interest math, good vs bad debt, recap).
-  3. Topics chips with 4 active (Budgeting, Debt, Saving, Tools); remaining grayed "Coming soon."
-  4. Resource cards for YouTube + book affiliates.
-  5. Affiliate disclosure flow (modal + Profile section + footer).
-  6. 2 new Ship's Log badges (📖 First Voyage, ⭐ Course Plotter).
-  7. Personalized recommendation rules (3-5 triggers).
-
-  Out of scope (v1):
-  - Glossary screen (defer to v1.1).
-  - Captain's Course Ch 3-4 (Saving & Investing, Wealth Building).
-  - Quizzes / interactive checkpoints.
-  - User notes on lessons.
-  - In-app YouTube embed (stays external).
-  - Audio narration / podcast embed.
-
-  Tech notes:
-  - Cover-image bundle bumps EAS build size by ~2MB - acceptable, but the assets ship in a NEW binary (not OTA), so plan the version bump accordingly. Lesson text + new lessons stay OTA after that.
-  - OneLink setup is a one-time Amazon Associates dashboard config, not code work.
-  - Existing `react-native-svg` and emoji icons cover all new visuals - no new native deps for v1.
+- [ ] Charts "Recommended for you" card - the one landing-screen piece dropped from the shipped hub: 1-3 personalized lesson cards picked from user state (high-interest debt → avalanche lesson; no emergency fund → starter cushion lesson; net worth crossed $10k → investing basics). Pure derivation over data already loaded by ChartsScreen; OTA-eligible. Could also add the 🦉 Wise Steward badge (read 25 lessons) skipped when the badge set shipped - the course currently has 24 lessons, so the condition needs retuning first.
 
 ---
 
 ## Themes
 
-Ideas for new color themes (all pure JS - a `ThemePreset` in `src/theme/themes.ts` plus an optional ambient background component - so every one of these is OTA-safe). Existing lineup for reference: The Ark, Forest Gold, Neon Purple, Easy, Rose, Synthwave, Deep Forest, Coral, Deep Space; ambient backgrounds currently on the "Deep" themes only.
+Ideas for new color themes (all pure JS - a `ThemePreset` in `src/theme/themes.ts` plus an optional ambient background component - so every one of these is OTA-safe). Existing lineup for reference: The Ark, Forest Gold, Neon Purple, Easy, Rose, Synthwave, Deep Forest, Coral, Deep Space, Deep Sea; ambient backgrounds currently on the "Deep" themes only.
 
-- [x] **Deep Sea** - SHIPPED (2026-07-12). Completes the "Deep trilogy" (Space / Forest / Sea) and is the strongest brand fit for Budget*Ark*: abyssal navy-teal background (`deep_sea` in `themes.ts`), dark teal cards, bioluminescent cyan-green accent. Ambient background `DeepSeaBackground.tsx`: light shafts from the surface, seeded plankton motes in cyan/teal/green, abyss vignette - same static-SVG approach as `ForestBackground`/`SpaceBackground`. Defaults to Glass like Deep Space (Profile "theme default" labels cover both). Pure JS/OTA-safe; release-notes entries written. Visual check on device/simulator recommended (palette + background are untestable in Jest).
 - [ ] **Lighthouse** - deliberately high-contrast accessibility theme: near-black background, warm beam-yellow accent, thick borders, AAA contrast ratios throughout. Positions accessibility as on-brand ("when the fog rolls in, follow the light") rather than clinical; pairs with the shipped Text Size axis. Consider auditing every `ThemeColors` slot against WCAG AAA before shipping this one - it's the theme's whole promise.
 - [ ] **Chart Room** - vintage nautical map: aged-paper light background, dark teal ink text (chart contour lines), brass/sepia accent, optional faint compass-rose ambient watermark. The Ark's parchment sensibility but cartographic; rhymes with the Captain's Course branding.
 - [ ] **Harbor Dawn** - light theme (lineup is dark-heavy: only Rose + The Ark are light). Soft horizon gradient - pale peach into seafoam - cool gray cards, muted gold accent. "New month, fresh start" energy for users who find dark finance apps gloomy.
@@ -731,21 +504,9 @@ Ideas for new color themes (all pure JS - a `ThemePreset` in `src/theme/themes.t
 
 ## Engineering Health - Post-1.7.2 Assessment (2026-06-09)
 
-Prioritized gaps identified after the Round 4 audit. Items 1, 3, and 4 are JS-only (OTA-eligible); 2 and 5 need a new EAS build and should ride the next runtimeVersion bump together.
-
-- [ ] **Unit tests (highest leverage item).** Zero test files, no test runner in `package.json`. Four audit rounds each found ~30 bugs, and most live in pure functions that are trivially unit-testable: `tombstones.ts` (mergePreservingTombstones, LWW merge), `recurrence.ts` (isEntryActiveInMonth, month-key math), `calculations.ts` (payoff schedules, interest), the importData merge helpers (snapshots, achievements, dismissals), `recordValidators.ts`, and `cashFlow`-style date bucketing. Plan: wire `jest` + `jest-expo` preset, start with the storage/util pure functions (no component testing needed for v1), run in a pre-commit hook or CI. One afternoon of setup converts every future audit finding into a permanent regression test. OTA-irrelevant (dev-only dep).
+Prioritized gaps identified after the Round 4 audit. Completed items have moved to the Done section at the bottom of this file. Remaining: crash reporting (needs a new EAS build), scheduled local auto-backup, and the Potentialbugs.md split.
 
 - [ ] **Crash reporting.** No Sentry/crash telemetry - bugs only surface when a user emails. `@sentry/react-native` (Expo config plugin) captures JS crashes, native crashes, and handled errors with breadcrumbs. Native module → requires new EAS build; pair with whatever next forces a runtimeVersion bump. Privacy note for the store listing/privacy policy: crash payloads leave the device, so scrub PII (no balances, no debt names in breadcrumbs) and add an opt-out toggle in Profile to keep the "data stays on device" promise honest.
-
-- [ ] **ESLint.** No lint config. `eslint-config-expo` + `eslint-plugin-react-hooks` would have mechanically flagged several audit findings (stale closures, missing/incorrect deps arrays). Add `npm run lint` next to the tsc check. Dev-only, OTA-irrelevant.
-
-- [x] **Sync v2 mismatch UX.** A 1.7.2 device syncing with a pre-1.7.2 partner currently sees a generic timeout. Frames carry `v`, so the receiver can detect a `v: 1` frame (and the v1 sender can be detected by its rejected-frame behavior) and surface "Your partner's app needs the update to 1.7.2" instead. Small JS-only change in `transportService.ts`/sync UI; saves confused support emails in the window where one partner has updated and the other hasn't. SHIPPED 1.7.2: `transportService` flags frames that look like sync messages but carry a missing/wrong `v` (a v1 peer's frames have no `v`); `syncOrchestrator`'s error path checks the flag and replaces the generic timeout with "Your partner's device is on an incompatible app version...". Limitation: only detects when the outdated peer sends first - a v1 *server* silently drops our v2 frames (its ciphertext-only HMAC never matches), so that direction still times out generically.
-
-- [ ] **Replace crypto-js (deprecated).** Maintainer archived crypto-js in 2023; PBKDF2 at 250k iterations runs in pure JS and is slow on low-end Androids (export/import + pairing). `react-native-quick-crypto` is a pure-RN native module (fits the no-Expo-equivalent preference) and ~50x faster. New native dep → EAS build; bundle with the Sentry build. Migration constraints: legacy v1 (`__BUDGETARK_ENC__`) and v2 (`__BUDGETARK_ENC2__`) backups must still decrypt, encryptedStorage V1/V2 formats must still read, and sync HMAC/AES output must stay byte-compatible with the protocol-v2 envelope (or bump to v3 at the same time).
-
-- [x] **Decide: net-worth snapshot sync.** The one Round 4 finding left open (see Potentialbugs.md). Snapshots don't sync between paired devices - each phone builds its own history. If per-device history is intentional, document it in `netWorthSnapshotStorage.ts` and check the box; if not, it's the same optional-DiffEntry pattern just added for customCategories (union by dayKey, keep newest capturedAt - the merge helper already exists in importData). SHIPPED 1.7.2: decided to sync. `SyncDiff.netWorthSnapshots?` merged by dayKey (strictly-newer capturedAt wins), validated with `isNetWorthSnapshotItem`, counted in sync results. One-time backlog send (`@budgetark_sync_backfill_done_v1`, stamped after first successful sync, in RESET_KEYS) transfers pre-feature history for already-paired couples and also re-sends the full custom-category list (same backlog gap).
-
-- [ ] **Captain's Course chapters 3-5.** Listed as "Coming soon" in-app since 1.7.0. Content-only, OTA-eligible. (Tracked here as a release-pressure reminder; authoring details live in the Charts tab section above.)
 
 - [ ] **Scheduled local auto-backup.** Backup story is fully manual; the reminder banner only nudges after upgrades. Add a periodic (weekly/monthly) automatic encrypted export written to the app's own sandbox via `expo-file-system` (already a dep - OTA-eligible), keeping the last N files, surfaced under Profile → Data ("Last auto-backup: ...") with a restore picker. Protects users who never tap export. Note: sandbox files die with an uninstall - this supplements, not replaces, the share-sheet export.
 
@@ -1030,3 +791,164 @@ Possible feature design (v1):
 
   OTA-eligible: yes. No new native deps. Theme + density aware via existing tokens.
 - [x] Refinance break-even calculator - on Utilities. Inputs: current loan balance/rate/term based on what is listed in the debt tracker, new rate/term/closing costs. Outputs: monthly payment delta, total interest delta, months to break even. Pure math, no new deps. Shipped as a collapsible card on `UtilitiesScreen` between Loan/Mortgage and Emergency Fund. The current-loan side is a multi-select list of debts from the tracker - combined balance and balance-weighted average APR derive automatically (read-only); years-remaining auto-fills from a balance-weighted average of each selected debt's `goalDate` when every selected debt has one, and stays user-editable. New loan side: rate, term, closing costs. Math reuses `calcPaymentForGoalDate` + `generatePayoffSchedule` from `utils/calculations.ts`. Shows break-even in months (or "no break-even" when the new payment isn't lower), monthly payment delta, lifetime interest delta, net savings over the new term, and a warning when the new term extends past the current loan's remaining term. Supports the consolidation-refi case (pick multiple debts; rate is weighted by balance). Empty state when no debts exist.
+- [x] Push notifications: expense-tracking check-ins (requires `expo-notifications`) - SHIPPED app-side (2026-07-12). Decision: payment-due push notifications were explicitly REJECTED - banks already remind users about bills, and the in-app due banners cover it. Instead, notifications are habit nudges: "you haven't logged your spending in a while - check in." Local notifications only, planned on-device from the user's own entry history. No push token, no server, nothing leaves the device.
+
+  How it behaves - two reminder kinds, each behind its own toggle:
+  - **Quiet-spell check-ins**: anchored `cadenceDays` after the user's most recent budget entry (newest `createdAt`; `updatedAt` ignored so sync merges don't count as tracking). The schedule is recomputed on every app open and background transition, so logging an entry silently pushes every pending nudge out a full cadence - active trackers never hear from it, lapsed users get nudged at their cadence until they log again. Already-overdue users (last entry older than the cadence) get nudged at the next occurrence of their chosen hour, not a full cadence later.
+  - **Month-start planning**: on the 1st of each month at the chosen hour - "Set this month's budget goals and review how last month went." Points users at the budget-limit setup + Monthly Review that already exist on the Budget tab. Copy rotates by month. A check-in landing on the same day as a month-start nudge is dropped so the user never gets two notifications in one day.
+  - Rotating, deliberately content-free copy (no amounts, no account names - lock-screen safe), lightly Ark-themed ("Keep your Ark on course - jot down any expenses from the last few days."). Rotation is deterministic by calendar day/month so replans don't reshuffle messages.
+  - Tap (warm or cold-start) opens the Budget tab.
+
+  What shipped:
+  - `expo-notifications@~57.0.3` (config plugin in `app.json`). NOT OTA-eligible - rides the same pending EAS build as Teller/expo-iap on this branch.
+  - `src/utils/trackingReminderPlanner.ts` - pure, unit-tested planner (20 tests): anchor math, overdue roll-forward, month-start scheduling + same-day dedupe, 30-day window, 32-notification cap (iOS keeps 64 pending), deterministic identifiers (`budgetark-checkin-YYYY-MM-DD`, `budgetark-monthstart-YYYY-MM`) so replans are idempotent.
+  - `src/notifications/trackingReminders.ts` - scheduler: Android channel ("Expense check-ins"), permission flow, idempotent cancel-ours-then-reschedule (`data.type === "tracking-reminder"` marks ours). Foreground handler suppresses banners while the app is open.
+  - `src/components/TrackingReminderHost.tsx` - app-root host: reschedules on launch (deferred past first paint) + on background; routes taps to Budget.
+  - Settings: Profile → Tracking Reminders row → bottom sheet (`TrackingRemindersModal.tsx`). Master toggle (OFF by default - strictly opt-in; enabling runs the permission request, denial deep-links to OS Settings), per-kind toggles (logging check-ins / month-start planning, both default ON under the master), cadence (daily / every 3 days / weekly), time of day (morning / afternoon / evening, shared by both kinds). Stored in `trackingReminderSettingsStorage.ts` (EncryptedStorage, per-device, deliberately NOT synced to partner).
+  - Reset All Data wipes the settings key (in `RESET_KEYS`) and cancels all pending scheduled check-ins immediately.
+
+  Still TODO before release:
+  - Device-test on iOS + Android 13+ (permission prompt, channel, lock-screen presentation, tap routing, reschedule-on-background actually pushing nudges out after logging an entry) once the new EAS build exists.
+  - Optional polish: dedicated monochrome Android notification icon via the `expo-notifications` plugin options (currently default).
+  - Release-notes entry: DONE (in-app 1.9.0 notes + RELEASE_NOTES.md). Version bump still due when the EAS build that carries this is cut.
+  - v2 ideas: streak-aware copy ("day 12 of your streak - keep it alive"), a "weekly recap" variant, snooze action button on the notification, month-start tap deep-linking straight to the Monthly Review sheet instead of the Budget tab.
+- [x] Search and advanced filters across debts, payments, and budget entries - SHIPPED app-side (2026-07-20). OTA-eligible (pure JS, no storage, no network). Device testing pending.
+
+  What shipped:
+  - `src/utils/searchFilter.ts` (pure, 24 tests): tokenized AND matching over debts (name/owner/class labels), payments (parent debt name; orphaned payments label "(deleted debt)" and stay findable), entries (description/category/merchant); amounts + YYYY-MM-DD dates in every haystack. Filters: scope, date presets (30d/90d/this-year vs injected `now`), entry type, category multi-select, amount range. Deliberate + test-pinned: entry-only filters narrow to entries; a date range hides standing debts (their payments still surface); date-sorted not relevance-ranked; 50-per-group cap with pre-cap totals; tombstones excluded; unparseable dates fail closed under a date filter.
+  - `src/components/GlobalSearchModal.tsx`: slide-up sheet (OnboardingGuideModal skeleton), sanitized auto-focus query, collapsible filter panel (active-count badge, Reset, scope switches clear filters the new scope can't use), grouped results with icons + locale-formatted amounts/dates, honest "debts hidden by filters"/truncation notes. Host stamps `now` at open (render purity) and owns result-tap behavior.
+  - Hosts: 🔍 in both title sections (DebtTracker right corner; Budget left, sliding beside the Review Inbox icon when present). Same-tab result taps use the dismiss-then-present-after-250ms rule (debt → AddDebtModal edit, payment → PaymentHistoryModal, entry → BudgetEntryModal). Cross-tab via two new app-internal route params consumed with the deferred InteractionManager pattern: `Budget.searchEntryId` (waits for `isLoaded`) and `DebtTracker.openHistory`. Neither reachable from external deep links.
+
+  Still TODO:
+  - Device-test both entry points: keyboard behavior with the sheet, chip wrapping at large text sizes, cross-tab hops (search on Debts → entry edit on Budget and vice versa), dismiss-then-present timing on iOS.
+  - Optional fast-follows: a FEATURE_SPOTLIGHTS debut slide (skipped for now - carousel already long, and the 🔍 icon is always visible on two tabs), an onboarding-guide step ("search" keyword), owner filter for debts inside the sheet, and a Bridge entry point.
+- [x] Currency exchange calculator (Utilities tab) - SHIPPED (2026-07-20) as a collapsible "Currency Exchange" tool on the Charts tab, after the Emergency Fund calculator. OTA-eligible (pure JS).
+
+  Decisions that were open:
+  - **Rate source: on-demand API** via the already-allowlisted open.er-api.com provider (same one the currency switch uses), NOT a build-time snapshot - but through a new `getConverterRates()` in `exchangeRates.ts` with its OWN cache key (`@budgetark_fx_converter_rates`). The existing cache is the deliberately PINNED display snapshot that must only move when the user changes currency; sharing it would let a converter refresh silently re-pin converted balances. Fallback ladder: fresh converter cache (12h TTL) → live → stale converter cache → pinned snapshot → static table, so it always answers offline.
+  - **"Rates last updated": yes** - a freshness line ("Rates updated 3 hours ago", or honest "built-in approximate rates" wording on the static fallback) plus a manual "Refresh rates" action. Stamped when the snapshot lands, not in render (react-hooks/purity).
+  - Currencies offered = the app's supported set (derived from `CURRENCY_PREFERENCE_OPTIONS`, currently USD/EUR/GBP/CAD/JPY/SEK); From defaults to the user's display currency. Picking the opposite side's currency swaps the pair instead of allowing a same-to-same conversion. Result is formatted in the target currency's own locale (`formatAmountInCurrency` - `useCurrency()` can only format the preference currency); conversion math reuses `convertAmount`.
+  - Pure helpers + tests in `src/utils/exchangeCalculator.ts` (amount parsing incl. comma-decimal input, cross-rate, freshness label); converter-cache isolation pinned by tests in `exchangeRates.test.ts`. On-card privacy note: only the request for the public rate table leaves the phone, never amounts. No feature-spotlight slide (minor tool; carousel already at 9 slides) - covered by release notes + the onboarding guide's calculators step.
+- [x] Debt-Free Countdown Timer - SHIPPED (2026-07-20). Card on the Debt Tracker between the summary and the due-reminder banner: years/months/days boxes to the projected debt-free date, projected month, and the pace used. OTA-eligible (pure JS, no storage, no network).
+
+  How "current payment velocity" was defined: average monthly payment total over the last 6 COMPLETE calendar months, denominator anchored at the first-ever payment month (mirrors `calcAvgMonthlyExpenses`'s tracked-month rule); the current partial month joins the sample only once it has payments, so logging a payment moves the countdown immediately. No history → sum of minimums, labeled. Projection reuses `simulatePayoffPlan` with extra = max(0, velocity − Σ minimums); a below-minimums pace simulates at minimums with an explicit caveat (the engine can't model shorting minimums). ALL debt classes count including mortgage (it's a debt-free date - deliberately unlike the Hull milestone); custom sort order projects as avalanche. Honest states: celebration at all-zero balances, "no payoff date at the current pace" when interest outruns payments. Pure math + 21 tests in `src/utils/debtFreeCountdown.ts`; `now` stamped at data load (render purity), so "live" = refreshed on every focus and every recorded payment - no ticking timer (day granularity doesn't need one).
+- [x] "What If I Stopped Spending on X" Projections - pick a discretionary category and see how redirecting that money to debt or savings changes your timeline.
+
+  Shipped as a Charts-tab tool (2026-07): `src/utils/whatIfSpending.ts` (pure math + tests) and a "What If I Stopped Spending on…" card in ChartsScreen. Category chips show per-category averages from the last 6 tracked months (Debt Payments excluded); a slider sets the redirect amount; the debt side compares payoff timelines via `simulatePayoffPlan` (avalanche/snowball toggle, months sooner + interest saved, handles unsolvable→solvable), and the savings side shows 1/5/10-year growth at an assumed 7% via `calcInvestmentGrowth`. Device testing pending on next build.
+- [x] Live Stock Holdings & Quote Feed - let users record share counts per ticker and pull market prices so portfolio value flows into Net Worth.
+
+  Data model:
+  - New `Holding` record: `{ id, symbol, shares, costBasis?, accountId? }`. Either nest under existing `AssetAccount` or add a new top-level collection that aggregates into Net Worth the same way Asset Accounts do.
+  - Cache last-fetched quote in AsyncStorage: `{ symbol, price, asOf, source }`. Net Worth math reads from cache, never blocks on network.
+
+  Refresh strategy (privacy-friendly default):
+  - Auto-refresh once per day on first app open of the calendar day.
+  - Manual "Refresh prices" button with 1-hour cooldown. Disabled outside US market hours (9:30am–4:00pm ET, weekdays) with copy "Markets closed - prices update at next open."
+  - Manual override on cooldown shows "Last updated 12 min ago" rather than firing the call.
+  - Per-day cap means free API tiers are viable. Per-user fetch volume stays under 25 calls/day worst case.
+
+  Provider options (free tiers, no backend needed):
+  - Finnhub free: 60 calls/min, single-symbol endpoint. Fine for <10 tickers/user.
+  - Twelve Data free: 800 calls/day, batched up to 120 symbols/call. Best fit for this app.
+  - Alpha Vantage free: 25/day. Too tight unless one user.
+  - Avoid yfinance scraping - breaks unpredictably.
+
+  Cloudflare Worker proxy (optional, only if app scales):
+  - Free tier covers ~330 daily-active users at 300 req/user/day. Paid $5/mo covers 33k DAU.
+  - Real reason to add it: hide API key, add device-ID-hashed throttle so a tampered client can't burn shared quota.
+  - Skip until user count warrants it. Embed key in app to start; daily call cap makes scraping the key low-impact.
+
+  Privacy / UX implications:
+  - First feature in the app that sends data off-device. Add a one-time disclosure on Holdings screen: "Symbols you hold are sent to <provider> to fetch prices. Share counts and cost basis stay on your device."
+  - Make the whole feature opt-in via a toggle in Profile so users who want pure offline can skip it.
+  - Label it "Daily portfolio value" in copy - never claim "live" or "real-time" with delayed-quote providers.
+  - Apple/Google may require provider attribution in store listing per data ToS - check before submission.
+
+  Files (proposed):
+  - `src/types/index.ts` - add `Holding`, `Quote` types.
+  - `src/storage/holdingsStorage.ts` - CRUD via EncryptedStorage, follows existing pattern.
+  - `src/services/quotesService.ts` - provider abstraction, throttle, cache TTL, market-hours gate.
+  - `src/screens/HoldingsScreen.tsx` or new tab in Asset Accounts - list + add/edit holdings, refresh button.
+  - Net Worth aggregator - pull `holdings.reduce((s, h) => s + h.shares * cachedPrice(h.symbol), 0)`.
+
+  OTA-eligible: yes if no new native modules. `fetch` is already available; no SDK changes needed.
+
+  Cost estimate: $0 to launch and likely forever for solo/couple userbase. Realistic ceiling is $35/mo (Cloudflare $5 + Polygon Starter $30) only if the app hits >10k DAU.
+- [x] Layout density selector - Compact / Comfortable / Spacious presets that scale spacing, card padding, and font size globally. Plumbing mirrors the existing theme system: `LayoutContext` + `useLayout()` hook returning `{ pad, gap, radius, fontScale }` tokens. Storage key in `userStorage`, selector card in Profile next to the theme picker. Migration is incremental - screens still using hardcoded `padding: 16` keep rendering at the default value, swap to `tokens.pad` over time. OTA-eligible.
+- [x] Photo attachments on entries (no OCR) - manual photo per budget entry, stored locally in app sandbox via `expo-file-system`. Browsable "Receipts" gallery filterable by month/category. Ships ahead of full OCR (which stays as separate TODO). New native dep: `expo-image-picker` (already common in Expo apps) - NOT OTA-eligible.
+
+- [x] Charts tab - learning hub - SHIPPED (lessons complete as of v1.8.3, 2026-07-07; affiliate links split out as a remaining Nice-to-Have item above). Utilities tab renamed to "Charts" with the route key deliberately kept as "Utilities" (persisted state + sync depend on it). Landing screen `src/screens/ChartsScreen.tsx`: Captain's Course chapter list with progress, Topics browse chip strip, and every calculator folded into the same tab (Loan/Refi, Emergency Fund, What-If, Purchase Planner, Currency Exchange, ...). Lesson stack shipped as designed: typed-section `Lesson` model bundled in `src/data/lessons/` (indexed via `lessonIndex.ts`, course order in `lessonChapters.ts`), `LessonScreen` + `LessonRenderer` + `LessonCelebrationModal`, per-device `learningProgressStorage.ts` (EncryptedStorage, deliberately NOT synced to partner, in RESET_KEYS, and already carrying the `showAffiliateLinks` + `affiliateDisclosureSeenAt` plumbing for the affiliate follow-up). All 24 lessons across all 5 chapters are written, including named-institution callouts (SoFi, Robinhood, Fidelity, Schwab, Vanguard, local banks/credit unions) as plain not-sponsored editorial mentions and info-only book cards ("Unshakeable"). Resource cards (`src/lessons/ResourceCard.tsx`) render youtube/book/article/tool types; the Amazon CTA stays hidden until the affiliate item lands. Ship's Log lesson badges shipped: 📖 First Voyage, ⭐ Course Plotter, ⚓ Anchored in Knowledge. Not built from the original spec (tracked as remaining items above): Amazon affiliate links + compliance flow, bundled book cover images, the "Recommended for you" personalization card, and the 🦉 Wise Steward badge.
+
+### Themes
+
+- [x] **Deep Sea** - SHIPPED (2026-07-12). Completes the "Deep trilogy" (Space / Forest / Sea) and is the strongest brand fit for Budget*Ark*: abyssal navy-teal background (`deep_sea` in `themes.ts`), dark teal cards, bioluminescent cyan-green accent. Ambient background `DeepSeaBackground.tsx`: light shafts from the surface, seeded plankton motes in cyan/teal/green, abyss vignette - same static-SVG approach as `ForestBackground`/`SpaceBackground`. Defaults to Glass like Deep Space (Profile "theme default" labels cover both). Pure JS/OTA-safe; release-notes entries written. Visual check on device/simulator recommended (palette + background are untestable in Jest).
+
+### Security Hardening - initial pass (moved here 2026-07-20)
+
+#### Critical
+- [x] Fix encryption implementation - add HMAC integrity verification to `encryptedStorage.ts` so tampered ciphertexts are detected
+- [x] Wrap all unsafe `JSON.parse` calls in try-catch with fallback defaults (`userStorage.ts:83`, `debtStorage.ts:70`, `savingsGoalStorage.ts:8`, `budgetStorage.ts:45`)
+
+#### High
+- [x] Encrypt exported data or add confirmation dialog warning about sensitive plaintext in `exportData.ts`
+- [x] Add try-catch around `JSON.parse(existingRaw)` in `importData.ts` merge logic to prevent silent data loss
+- [x] Clear encryption key from memory (`cachedKey`) when app is backgrounded (`encryptedStorage.ts:22`)
+
+#### Medium
+- [x] Gate `console.error` / `console.warn` calls behind `__DEV__` checks in production (`App.tsx`, screens)
+- [x] Add input validation against control characters and null bytes on display name and debt name fields
+- [x] Audit Android permissions - consider removing `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` from `AndroidManifest.xml`
+- [x] Add `FLAG_SECURE` screenshot/screen recording protection on screens showing financial data
+- [x] Add transactional safety (write-to-temp-key, then rename) for import merge operations in `importData.ts`
+
+#### Low
+- [x] Replace custom `Math.random()` UUID in `src/utils/uuid.ts` with the `uuid` package (already in `package.json`)
+- [x] Add deep link validation if deep link routing is implemented in the future - DONE (2026-07-12) alongside the Quick Entry widget: `src/utils/quickAddLink.ts` validates fail-closed (anchored scheme/host, length cap, no extra path/fragment, category must exactly match a built-in, control chars + bad percent-encoding rejected); unit-tested. Any future deep link route should go through the same build-and-validate-in-one-module pattern.
+- [x] Reduce import size limits (`MAX_RAW_CHARS` from 2MB to 500KB) to prevent OOM on low-end devices
+
+#### Info / Optional
+
+- [x] Implement AsyncStorage timeout wrapper
+##### 1. Add timeouts to AsyncStorage operations to prevent app hangs on slow I/O
+File: `src/storage/encryptedStorage.ts`
+Every `getItem`/`setItem` awaits AsyncStorage with no timeout. Degraded flash storage or backed-up I/O queues could hang indefinitely, freezing the app.
+- **Option A - Promise.race timeout wrapper:** Create a `withTimeout()` utility wrapping each AsyncStorage call with `Promise.race([operation, rejectAfter5s])`. Apply inside `encryptedStorage.ts` so all callers get it automatically.
+- **Option B - Timeout only on raw I/O:** Same concept but wrap only the `AsyncStorage.*` calls, not the crypto operations (which can be slow on low-end devices). More surgical.
+- **Option C - Timeout + retry once:** On timeout, retry the operation once before throwing. Handles transient I/O hiccups without surfacing errors on brief blips.
+- Recommended: **Option A** - simple, comprehensive, 5-second timeout is generous enough for slow devices.
+
+- [x] Implement fail-closed downgrade guard 
+##### 2. Fail-closed policy for version downgrade guard
+File: `src/utils/versionGuard.ts`
+Currently `isUpdateSafe()` returns `true` (fail-open) when either version is missing. An attacker could strip version metadata from a malicious OTA update to bypass the downgrade guard.
+- **Option A - Fail-closed on missing incoming version:** Return `false` if incoming version is undefined (block the update). Keep fail-open if the *current* version is missing (avoids locking out users whose app was installed without version metadata).
+- **Option B - Full fail-closed:** Return `false` if either version is missing. Strictest, but risks blocking legitimate updates if Expo metadata has a hiccup.
+- **Option C - Fail-closed with user override:** Return `false` by default, but show a modal letting the user choose to install anyway.
+- Recommended: **Option A** - blocks the actual attack vector without risking lockout from legitimate updates.
+
+- [x] Implement stale import warning
+##### 3. Data expiration warnings for stale imports
+Files: `src/utils/importData.ts`, `src/utils/exportData.ts`
+Exports already include an `exportedAt` timestamp, but imports don't check it. A user could import a 6-month-old backup and silently overwrite fresher data in merge mode.
+- **Option A - Warning in import result:** After successful import, check `exportedAt`; if >30 days old, include a warning message in the result for the UI to display.
+- **Option B - Pre-import warning with confirmation:** Before writing data, check `exportedAt` and throw a special error if stale, prompting user confirmation. Blocks stale imports by default.
+- **Option C - Non-blocking info banner:** Parse `exportedAt`, return a `staleDays` field alongside import counts. UI shows an info banner but doesn't block the import.
+- Recommended: **Option C** - stale imports aren't dangerous (merge deduplicates by ID), so blocking would be frustrating. A simple banner is the right awareness level.
+
+- [x] Implement explicit bounds checks
+##### 4. Explicit bounds checks before financial calculations
+File: `src/utils/calculations.ts`
+Calculation functions accept raw `number` inputs with no upper bounds. JS `Number` loses precision above ~2^53, and `Math.pow()` with extreme inputs returns `Infinity`/`NaN`, which cascades into the UI.
+- **Option A - Input clamping at function boundaries:** Add bounds checks at the top of each exported function - clamp `balance` to max $1B, `annualRate` to max 200%, `monthlyPayment` to max $1M, `years` to max 100, `monthlyContribution` to max $1M. Return early with safe defaults (0 or Infinity) if out of range. Matches limits already in `importData.ts`.
+- **Option B - Shared validation utility:** Create `validateFinancialInput()` that all functions call; throws descriptive errors for out-of-bounds inputs.
+- **Option C - Output validation:** Don't restrict inputs, but check outputs. If any result is `NaN`, `Infinity`, or unexpectedly negative, return a safe fallback.
+- Recommended: **Option A** - prevents the issue at the source. Bounds match `importData.ts` limits (`MAX_MONEY: 1_000_000_000`, `MAX_RATE: 200`). Clamping is silent and non-disruptive.
+
+### Engineering Health (moved here 2026-07-20)
+
+- [x] **Unit tests (highest leverage item).** Zero test files, no test runner in `package.json`. Four audit rounds each found ~30 bugs, and most live in pure functions that are trivially unit-testable: `tombstones.ts` (mergePreservingTombstones, LWW merge), `recurrence.ts` (isEntryActiveInMonth, month-key math), `calculations.ts` (payoff schedules, interest), the importData merge helpers (snapshots, achievements, dismissals), `recordValidators.ts`, and `cashFlow`-style date bucketing. Plan: wire `jest` + `jest-expo` preset, start with the storage/util pure functions (no component testing needed for v1), run in a pre-commit hook or CI. One afternoon of setup converts every future audit finding into a permanent regression test. OTA-irrelevant (dev-only dep). **DONE (2026-07):** jest + ts-jest wired as `npm test` (pure-logic suites next to the code; see `docs/testing.md`); 1083 tests across 73 suites as of 2026-07-20.
+- [x] **ESLint.** No lint config. `eslint-config-expo` + `eslint-plugin-react-hooks` would have mechanically flagged several audit findings (stale closures, missing/incorrect deps arrays). Add `npm run lint` next to the tsc check. Dev-only, OTA-irrelevant. **DONE (2026-07):** eslint + eslint-config-expo wired as `npm run lint`, ratcheted to `--max-warnings 1`.
+- [x] **Sync v2 mismatch UX.** A 1.7.2 device syncing with a pre-1.7.2 partner currently sees a generic timeout. Frames carry `v`, so the receiver can detect a `v: 1` frame (and the v1 sender can be detected by its rejected-frame behavior) and surface "Your partner's app needs the update to 1.7.2" instead. Small JS-only change in `transportService.ts`/sync UI; saves confused support emails in the window where one partner has updated and the other hasn't. SHIPPED 1.7.2: `transportService` flags frames that look like sync messages but carry a missing/wrong `v` (a v1 peer's frames have no `v`); `syncOrchestrator`'s error path checks the flag and replaces the generic timeout with "Your partner's device is on an incompatible app version...". Limitation: only detects when the outdated peer sends first - a v1 *server* silently drops our v2 frames (its ciphertext-only HMAC never matches), so that direction still times out generically.
+- [x] **Replace crypto-js (deprecated).** Maintainer archived crypto-js in 2023; PBKDF2 at 250k iterations runs in pure JS and is slow on low-end Androids (export/import + pairing). `react-native-quick-crypto` is a pure-RN native module (fits the no-Expo-equivalent preference) and ~50x faster. New native dep → EAS build; bundle with the Sentry build. Migration constraints: legacy v1 (`__BUDGETARK_ENC__`) and v2 (`__BUDGETARK_ENC2__`) backups must still decrypt, encryptedStorage V1/V2 formats must still read, and sync HMAC/AES output must stay byte-compatible with the protocol-v2 envelope (or bump to v3 at the same time). **DONE (2026-07):** `react-native-quick-crypto` replaces crypto-js on the hot paths (V3 storage format; golden fixtures pin V1/V2 byte-compat). Partner sync deliberately stays on crypto-js for cross-device compat.
+- [x] **Decide: net-worth snapshot sync.** The one Round 4 finding left open (see Potentialbugs.md). Snapshots don't sync between paired devices - each phone builds its own history. If per-device history is intentional, document it in `netWorthSnapshotStorage.ts` and check the box; if not, it's the same optional-DiffEntry pattern just added for customCategories (union by dayKey, keep newest capturedAt - the merge helper already exists in importData). SHIPPED 1.7.2: decided to sync. `SyncDiff.netWorthSnapshots?` merged by dayKey (strictly-newer capturedAt wins), validated with `isNetWorthSnapshotItem`, counted in sync results. One-time backlog send (`@budgetark_sync_backfill_done_v1`, stamped after first successful sync, in RESET_KEYS) transfers pre-feature history for already-paired couples and also re-sends the full custom-category list (same backlog gap).
+- [x] **Captain's Course chapters 3-5.** Listed as "Coming soon" in-app since 1.7.0. Content-only, OTA-eligible. (Tracked here as a release-pressure reminder; authoring details live in the Charts tab section above.) **DONE (v1.8.3, 2026-07-07):** all 24 lessons across all 5 chapters shipped.
