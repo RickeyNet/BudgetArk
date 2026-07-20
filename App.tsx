@@ -37,6 +37,7 @@ import { DensityProvider } from "./src/theme/DensityProvider";
 import { CurrencyProvider } from "./src/currency/CurrencyProvider";
 import { CoachmarksProvider } from "./src/onboarding/CoachmarksProvider";
 import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext";
+import { OnboardingGateProvider } from "./src/onboarding/OnboardingGateContext";
 import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
 import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvider";
 import { ConnectionsProvider } from "./src/connections/ConnectionsProvider";
@@ -139,6 +140,20 @@ const AppContent: React.FC = () => {
     });
     return () => task.cancel();
   }, [isOnboardingComplete]);
+
+  /**
+   * Re-shows the onboarding flow (used by Reset All Data and the Profile
+   * screen's "Redo onboarding" row via OnboardingGateContext). Callers
+   * persist the onboardingComplete=false flag themselves before invoking.
+   */
+  const restartOnboarding = useCallback(() => {
+    setIsOnboardingComplete(false);
+  }, []);
+
+  const onboardingGate = useMemo(
+    () => ({ restartOnboarding }),
+    [restartOnboarding]
+  );
 
   /** Handle onboarding completion */
   const handleOnboardingComplete = useCallback(async (options?: { openArkSetup?: boolean }) => {
@@ -421,6 +436,7 @@ const AppContent: React.FC = () => {
 
   /** Show main app navigation */
   return (
+    <OnboardingGateProvider value={onboardingGate}>
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <NavigationContainer ref={navigationRef}>
         <AppNavigator />
@@ -579,6 +595,7 @@ const AppContent: React.FC = () => {
         onOpenReleaseNotes={handleSpotlightOpenNotes}
       />
     </View>
+    </OnboardingGateProvider>
   );
 };
 

@@ -156,6 +156,18 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   }, [step]);
 
   /**
+   * Return to the previous step (no-op on the first step, which shows no
+   * back button)
+   */
+  const handleBack = useCallback(() => {
+    if (step === "welcome") {
+      setStep("theme");
+    } else if (step === "name") {
+      setStep("welcome");
+    }
+  }, [step]);
+
+  /**
    * Complete onboarding and mark as done
    */
   const handleComplete = useCallback(async (openArkSetup?: boolean) => {
@@ -261,8 +273,11 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       </View>
 
       <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
+          <Text style={styles.skipBtnText}>← Back</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-          <Text style={styles.skipBtnText}>Skip Setup</Text>
+          <Text style={styles.skipBtnText}>Skip</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
@@ -342,9 +357,13 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         ]}
         onPress={() => handleComplete(false)}
       >
-        <Text style={[styles.completeBtnText, { color: colors.bg }]}> 
+        <Text style={[styles.completeBtnText, { color: colors.bg }]}>
           Skip for Now
         </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.backBtnFull} onPress={handleBack}>
+        <Text style={styles.skipBtnText}>← Back</Text>
       </TouchableOpacity>
     </View>
   );
@@ -566,6 +585,15 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
       fontSize: 15,
       fontWeight: "600",
       color: colors.textDim,
+    },
+    backBtnFull: {
+      width: "100%",
+      paddingVertical: 16,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      alignItems: "center",
+      marginTop: 10,
     },
     nextBtn: {
       flex: 1,

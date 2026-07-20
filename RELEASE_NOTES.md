@@ -98,6 +98,14 @@ Pure JS - rides the same 1.9.0 runtime, OTA-eligible. No storage, no network - e
 - **Debut slide** in the feature-spotlight carousel (`what-if-spending`), backed by a new `charts` spotlight CTA kind that navigates to the Utilities route (displayed as "Charts").
 - **Tests:** category averaging/filtering matrix, debt-impact edge cases (unsolvable→solvable flip, both-unsolvable, zero redirect), savings marks vs the shared growth math, duration formatting, slider ceiling. Full suite as of 2026-07-17: 924 passing across 65 suites.
 
+### Onboarding polish - back buttons, redo, reset restart (2026-07-19)
+
+Pure JS - rides the same 1.9.0 runtime, OTA-eligible.
+
+- **Back buttons:** the onboarding welcome and name steps now have Back buttons so a user can revisit an earlier choice without abandoning setup.
+- **Reset restarts onboarding:** Reset All Data now leaves the fresh account's `onboardingComplete` flag false and flips the app gate (new `OnboardingGateContext` provided by `App.tsx`), dropping straight back into first-launch onboarding - and it resets the coachmark tour's in-memory state so the wiped account replays the tab tour like a true first launch.
+- **Redo from Profile:** a "Redo onboarding" row in Profile → Help persists `onboardingComplete: false` (new `resetOnboardingStatus` in `userStorage`) then restarts the flow, without touching any data - a blank name keeps the current display name, and finishing simply re-marks onboarding complete.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

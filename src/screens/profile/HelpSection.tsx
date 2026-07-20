@@ -17,6 +17,8 @@ import {
 } from "react-native";
 import { useCoachmarks } from "../../onboarding/CoachmarksProvider";
 import { useCoachmarkAnchor } from "../../onboarding/CoachmarkAnchorContext";
+import { useOnboardingGate } from "../../onboarding/OnboardingGateContext";
+import { resetOnboardingStatus } from "../../storage/userStorage";
 import { COACHMARK_TAB_IDS, COACHMARKS } from "../../data/coachmarkContent";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -32,6 +34,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens);
   const { replay: replayCoachmarks, startGuidedTour } = useCoachmarks();
+  const { restartOnboarding } = useOnboardingGate();
   const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
 
   /** How-To reference modal */
@@ -110,6 +113,43 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 Show the first-launch tour again
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              ↺
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={async () => {
+              triggerHaptic("selection");
+              try {
+                // Persist first so killing the app mid-onboarding still
+                // relaunches into the flow rather than half-done.
+                await resetOnboardingStatus();
+              } catch (error) {
+                if (__DEV__)
+                  console.error("Failed to reset onboarding flag:", error);
+              }
+              restartOnboarding();
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                Redo onboarding
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                Run first-launch setup again. Your data is kept.
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

@@ -43,11 +43,7 @@ import {
   UserAccount,
 } from "../types";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
-import {
-  getOrCreateUser,
-  deleteAccount,
-  completeOnboarding,
-} from "../storage/userStorage";
+import { getOrCreateUser, deleteAccount } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { clearAllAttachments } from "../services/attachments/attachmentStore";
 import {
@@ -57,6 +53,8 @@ import {
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
+import { useCoachmarks } from "../onboarding/CoachmarksProvider";
+import { useOnboardingGate } from "../onboarding/OnboardingGateContext";
 import { useCurrency } from "../currency/CurrencyProvider";
 import {
   getPairingState,
@@ -125,6 +123,8 @@ const ProfileScreen: React.FC = () => {
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const coachmark = useTabCoachmark("Profile");
+  const { replay: replayCoachmarks } = useCoachmarks();
+  const { restartOnboarding } = useOnboardingGate();
   const scrollRef = useRef<ScrollView>(null);
   const styles = useProfileStyles(tokens);
   const { setPreferenceId } = useCurrency();
@@ -406,8 +406,8 @@ const ProfileScreen: React.FC = () => {
 
   /**
    * Resets all app data after user confirmation (DataSection's confirm
-   * modal calls this). Clears debts, payments, and user account.
-   * Creates a fresh anonymous account immediately after.
+   * modal calls this). Clears debts, payments, and user account, creates a
+   * fresh anonymous account, and drops back into first-launch onboarding.
    */
   const confirmReset = useCallback(async () => {
     triggerHaptic("warning");
@@ -440,17 +440,20 @@ const ProfileScreen: React.FC = () => {
     await cancelAllTrackingReminders();
     setReminderSettings(null);
     await deleteAccount();
-    await getOrCreateUser();
-    const freshUser = await completeOnboarding();
+    // The fresh account starts with onboardingComplete=false, so the gate
+    // below relaunches straight into the first-launch flow.
+    const freshUser = await getOrCreateUser();
     await setPreferenceId(DEFAULT_CURRENCY_PREFERENCE_ID);
+    // Storage was wiped but the coachmarks provider still holds "seen" state
+    // in memory - reset it so the fresh account gets the first-launch tour.
+    await replayCoachmarks();
     setUser(freshUser);
     setPairing(null);
     setLastSyncTime(null);
-    setInfoModal({
-      title: "Done",
-      message: "All data has been reset successfully.",
-    });
-  }, [setPreferenceId]);
+    // No "Done" modal here: restarting onboarding unmounts this screen (and
+    // any modal it would present) immediately.
+    restartOnboarding();
+  }, [replayCoachmarks, restartOnboarding, setPreferenceId]);
 
   const closeTrackingReminders = useCallback(() => {
     setShowTrackingReminders(false);
