@@ -86,6 +86,7 @@ import {
 } from "../storage/debtMilestoneStorage";
 import { consumeArkSetupPromptRequest } from "../storage/arkSetupStorage";
 import DebtCard from "../components/DebtCard";
+import DebtFreeCountdownCard from "../components/DebtFreeCountdownCard";
 import AddDebtModal, { type DebtKeepAliveExtras } from "../components/AddDebtModal";
 import { getLinks, updateLink } from "../storage/externalAccountLinksStorage";
 import ProgressRing from "../components/ProgressRing";
@@ -255,6 +256,10 @@ const DebtTrackerScreen: React.FC = () => {
     amount: number;
   } | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  /* "Now" for the Debt-Free Countdown. Stamped when the focus-effect load
+   * lands (render must stay pure, so no new Date() during render); each
+   * focus re-stamps it, which is all the freshness day-granularity needs. */
+  const [countdownNow, setCountdownNow] = useState<Date | null>(null);
   const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [duePromptDebt, setDuePromptDebt] = useState<Debt | null>(null);
   const [keepAliveDismissals, setKeepAliveDismissals] =
@@ -352,6 +357,7 @@ const DebtTrackerScreen: React.FC = () => {
           if (cancelled) return;
           setDebts(valid);
           setPayments(storedPayments);
+          setCountdownNow(new Date());
           setDueDismissals(storedDismissals);
           setKeepAliveDismissals(storedKeepAliveDismissals);
           // The "minimum due today" prompt is now opened on app launch by the
@@ -1210,6 +1216,17 @@ const DebtTrackerScreen: React.FC = () => {
           <Text style={styles.milestoneArkLabel}>Build Your Ark →</Text>
         </TouchableOpacity>
       </View>
+
+      {countdownNow !== null && debts.length > 0 && (
+        <View style={{ marginBottom: tokens.gap }}>
+          <DebtFreeCountdownCard
+            debts={debts}
+            payments={payments}
+            strategy={strategy}
+            now={countdownNow}
+          />
+        </View>
+      )}
 
       <View style={{ marginBottom: tokens.gap }}>
         <DebtDueReminderBanner

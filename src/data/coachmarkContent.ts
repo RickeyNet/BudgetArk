@@ -58,11 +58,11 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         emoji: "📊",
         title: "Your debt at a glance",
         body:
-          "Total balance, total paid, and overall progress live here. The ring on the right tracks your % paid off across every debt.",
+          "Total balance, total paid, and overall progress live here. The ring on the right tracks your % paid off across every debt, and the countdown below projects your debt-free date from your actual payment pace.",
         detail:
-          "The summary card totals every debt you track: what you still owe, what you've already paid off, and the progress ring showing the percentage cleared. Below it, the Mine / Partner / Joint filter narrows the list to one owner - totals follow the filter, so a couple can check either side's picture in one tap. Paid-off debts stay in the list at $0 (with their history intact) so your progress never loses what you already accomplished.",
+          "The summary card totals every debt you track: what you still owe, what you've already paid off, and the progress ring showing the percentage cleared. Below it, the Mine / Partner / Joint filter narrows the list to one owner - totals follow the filter, so a couple can check either side's picture in one tap. Paid-off debts stay in the list at $0 (with their history intact) so your progress never loses what you already accomplished. Right under the summary, the Debt-Free Countdown shows the years, months, and days until you're projected to owe nothing - computed from your real payment pace over the last six months of logged payments (or your minimums until there's history), so logging a bigger payment visibly pulls the date closer.",
         location: "Debts tab (top card)",
-        keywords: ["total", "summary", "progress", "paid off", "owner", "partner", "joint", "ring"],
+        keywords: ["total", "summary", "progress", "paid off", "owner", "partner", "joint", "ring", "countdown", "debt-free", "debt free date", "payoff date"],
       },
       {
         id: "debts-fab",
@@ -285,11 +285,11 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         emoji: "🧮",
         title: "Financial calculators",
         body:
-          "Tap a tool header to expand it: compound interest (the S&P 500 preset gives a realistic 7% baseline), a loan calculator with a full payment schedule you can export, a refinance break-even check, and an emergency fund planner. Use the sliders to explore 'what if' scenarios - these tools never write to your data.",
+          "Tap a tool header to expand it: compound interest (the S&P 500 preset gives a realistic 7% baseline), a loan calculator with a full payment schedule you can export, a refinance break-even check, an emergency fund planner, and a currency exchange converter with up-to-date rates. Use the sliders to explore 'what if' scenarios - these tools never write to your data.",
         detail:
-          "Four sandbox calculators, each behind a tap-to-expand header: compound interest with an S&P 500 preset for a realistic long-term baseline; a loan calculator producing the full amortization schedule (exportable); a refinance tool that finds the break-even month between closing costs and the lower rate; and an emergency fund planner sized from your real monthly essentials. Sliders can also be tapped to type an exact number. These are pure sandboxes - they read nothing private and write nothing to your data.",
+          "Five sandbox calculators, each behind a tap-to-expand header: compound interest with an S&P 500 preset for a realistic long-term baseline; a loan calculator producing the full amortization schedule (exportable); a refinance tool that finds the break-even month between closing costs and the lower rate; an emergency fund planner sized from your real monthly essentials; and a currency exchange converter (USD, EUR, GBP, CAD, JPY, SEK) that shows exactly how fresh its rates are and still answers offline. Sliders can also be tapped to type an exact number. These are pure sandboxes - they read nothing private and write nothing to your data; the currency converter fetches only a public rate table, never your amounts.",
         location: "Charts tab → tool headers",
-        keywords: ["calculator", "compound interest", "loan", "amortization", "refinance", "emergency fund", "tools", "slider"],
+        keywords: ["calculator", "compound interest", "loan", "amortization", "refinance", "emergency fund", "tools", "slider", "currency", "exchange rate", "convert", "fx"],
       },
       {
         id: "charts-what-if",
