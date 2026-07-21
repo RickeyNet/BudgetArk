@@ -185,6 +185,31 @@ export const getChapterProgress = (
   });
 
 /**
+ * Chapter progress restricted to lessons tagged with `topic` (powers the
+ * Topics chip filter on the Charts screen). Chapters with no matching
+ * lessons are dropped, and each surviving row carries a shallow chapter
+ * copy whose `lessons` — and completed/total counts — cover only the
+ * matching subset. CHAPTERS itself is never mutated.
+ */
+export const getTopicChapterProgress = (
+  completedLessons: Record<string, string>,
+  topic: LessonTopic
+): readonly ChapterProgress[] =>
+  CHAPTERS.flatMap((chapter) => {
+    const lessons = chapter.lessons.filter((stub) =>
+      stub.topics.includes(topic)
+    );
+    if (lessons.length === 0) return [];
+    const completed =
+      chapter.status === "coming-soon"
+        ? 0
+        : lessons.filter((stub) => completedLessons[stub.id]).length;
+    return [
+      { chapter: { ...chapter, lessons }, completed, total: lessons.length },
+    ];
+  });
+
+/**
  * Overall Captain's Course progress fraction (across every authored lesson).
  * "Coming soon" lessons are excluded from the denominator so the bar reflects
  * what the user can actually finish today.

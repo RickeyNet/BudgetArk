@@ -106,6 +106,7 @@ import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
 import {
   getChapterProgress,
   getOverallProgress,
+  getTopicChapterProgress,
   hasLessonBody,
   pickResumeLesson,
 } from "../data/lessonIndex";
@@ -454,6 +455,9 @@ const ChartsScreen: React.FC = () => {
   const [expandedChapters, setExpandedChapters] = useState<Set<ChapterId>>(
     () => new Set()
   );
+  /* Topics chip filter. Non-null = the Captain's Course list shows only
+   * chapters/lessons tagged with this topic. */
+  const [topicFilter, setTopicFilter] = useState<LessonTopic | null>(null);
   const navigation =
     useNavigation<BottomTabNavigationProp<RootTabParamList>>();
 
@@ -501,6 +505,33 @@ const ChartsScreen: React.FC = () => {
       else next.add(chapterId);
       return next;
     });
+  }, []);
+
+  /* Tapping a Topics chip toggles the course filter. Selecting a topic also
+   * expands every matching chapter so the filtered lessons are immediately
+   * visible without a second tap; chapter rows still collapse/expand
+   * normally while the filter is active. */
+  const handleToggleTopic = useCallback(
+    (topic: LessonTopic) => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      const next = topicFilter === topic ? null : topic;
+      setTopicFilter(next);
+      if (next) {
+        setExpandedChapters(
+          new Set(
+            CHAPTERS.filter((chapter) =>
+              chapter.lessons.some((stub) => stub.topics.includes(next))
+            ).map((chapter) => chapter.id)
+          )
+        );
+      }
+    },
+    [topicFilter]
+  );
+
+  const handleClearTopicFilter = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTopicFilter(null);
   }, []);
 
   /**
@@ -552,6 +583,13 @@ const ChartsScreen: React.FC = () => {
   const chapterProgressRows = useMemo(
     () => getChapterProgress(completedLessonsMap),
     [completedLessonsMap]
+  );
+  const visibleChapterRows = useMemo(
+    () =>
+      topicFilter
+        ? getTopicChapterProgress(completedLessonsMap, topicFilter)
+        : chapterProgressRows,
+    [topicFilter, completedLessonsMap, chapterProgressRows]
   );
   const resumeStub = useMemo(
     () =>
@@ -1211,9 +1249,8 @@ const ChartsScreen: React.FC = () => {
         </View>
 
         {/* ── Captain's Course ──
-         * Visual-only in this step. Chapter rows + Resume strip render but
-         * taps are inert; LessonScreen + navigation wire up in the next
-         * build pass.
+         * Chapter rows expand to lesson lists, Resume strip + lesson taps
+         * open LessonScreen, and the Topics chips below filter this list.
          */}
         <View style={styles.courseCard}>
           <View style={styles.courseHeaderRow}>
@@ -1254,8 +1291,22 @@ const ChartsScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
+          {topicFilter && (
+            <TouchableOpacity
+              style={styles.topicFilterStrip}
+              onPress={handleClearTopicFilter}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.topicFilterStripText} numberOfLines={1}>
+                {TOPIC_GLYPHS[topicFilter]} {TOPIC_LABELS[topicFilter]} lessons
+                only
+              </Text>
+              <Text style={styles.topicFilterStripClear}>Show all ✕</Text>
+            </TouchableOpacity>
+          )}
+
           <View style={styles.chapterList}>
-            {chapterProgressRows.map(({ chapter, completed, total }) => {
+            {visibleChapterRows.map(({ chapter, completed, total }) => {
               const isComingSoon = chapter.status === "coming-soon";
               const isExpanded = expandedChapters.has(chapter.id);
               return (
@@ -1329,24 +1380,42 @@ const ChartsScreen: React.FC = () => {
         </View>
 
         {/* ── Topics ──
-         * Horizontal-scrolling chip row. Inert in this step - taps will
-         * filter the lesson grid in a follow-up pass.
+         * Horizontal-scrolling chip row. Tapping a chip filters the
+         * Captain's Course list above to lessons tagged with that topic;
+         * tapping the active chip (or the "Show all" strip) clears it.
          */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionHeaderTitle}>TOPICS</Text>
-          <Text style={styles.sectionHeaderHint}>Browse by subject</Text>
+          <Text style={styles.sectionHeaderHint}>
+            Tap to filter the course by subject
+          </Text>
         </View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.topicChipRow}
         >
-          {LESSON_TOPICS.map((topic) => (
-            <View key={topic} style={styles.topicChip}>
-              <Text style={styles.topicChipGlyph}>{TOPIC_GLYPHS[topic]}</Text>
-              <Text style={styles.topicChipLabel}>{TOPIC_LABELS[topic]}</Text>
-            </View>
-          ))}
+          {LESSON_TOPICS.map((topic) => {
+            const isActive = topicFilter === topic;
+            return (
+              <TouchableOpacity
+                key={topic}
+                style={[styles.topicChip, isActive && styles.topicChipActive]}
+                onPress={() => handleToggleTopic(topic)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.topicChipGlyph}>{TOPIC_GLYPHS[topic]}</Text>
+                <Text
+                  style={[
+                    styles.topicChipLabel,
+                    isActive && styles.topicChipLabelActive,
+                  ]}
+                >
+                  {TOPIC_LABELS[topic]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* ── Tools ── existing calculators */}
@@ -3589,6 +3658,40 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(13),
       color: colors.text,
       fontWeight: "600",
+    },
+    topicChipActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    topicChipLabelActive: {
+      color: colors.accent,
+      fontWeight: "700",
+    },
+
+    /* Active-topic strip inside the Captain's Course card */
+    topicFilterStrip: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: `${colors.accent}12`,
+      borderWidth: 1,
+      borderColor: `${colors.accent}40`,
+      borderRadius: tokens.radius,
+      paddingVertical: tokens.padSm,
+      paddingHorizontal: tokens.padSm,
+      marginTop: tokens.gapSm,
+      gap: 8,
+    },
+    topicFilterStripText: {
+      flex: 1,
+      fontSize: scale(13),
+      color: colors.text,
+      fontWeight: "600",
+    },
+    topicFilterStripClear: {
+      fontSize: scale(12),
+      color: colors.accent,
+      fontWeight: "700",
     },
   });
 };
