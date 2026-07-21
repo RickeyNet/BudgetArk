@@ -1348,6 +1348,7 @@ const BudgetScreen: React.FC = () => {
           }}
           disabled={selectedMonthIndex >= monthKeys.length - 1}
           accessibilityLabel="Previous month"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
         >
           <Text
             style={[
@@ -1370,6 +1371,7 @@ const BudgetScreen: React.FC = () => {
           }}
           disabled={selectedMonthIndex <= 0}
           accessibilityLabel="Next month"
+          hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
         >
           <Text
             style={[
@@ -2302,22 +2304,24 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      paddingVertical: 7,
-      paddingHorizontal: 12,
+      paddingVertical: 2,
+      paddingHorizontal: 6,
       borderRadius: 20,
       borderWidth: 1,
       borderColor: `${colors.accent}26`,
       backgroundColor: colors.card,
     },
+    /* Padding lives on the arrow buttons (not the pill) so the tap targets
+     * reach ~44pt with hitSlop while the pill stays visually the same size. */
     monthPillArrowBtn: {
-      paddingHorizontal: 4,
-      paddingVertical: 2,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
     },
     monthPillArrow: {
       color: colors.accent,
-      fontSize: scale(18),
+      fontSize: scale(20),
       fontWeight: "800",
-      lineHeight: scale(20),
+      lineHeight: scale(22),
     },
     monthPillArrowDisabled: {
       color: colors.textMuted,
