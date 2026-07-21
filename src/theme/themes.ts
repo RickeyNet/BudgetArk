@@ -227,6 +227,36 @@ const OCEAN_CORAL: ThemePreset = {
 };
 
 /**
+ * Slate - graphite greys with a mustard-yellow accent, in the spirit of
+ * monkeytype's serika dark. Neutral warm-grey text keeps numbers calm;
+ * the yellow is reserved for accents so it reads as highlight, not alert
+ * (warning shifts orange so the two stay distinguishable).
+ */
+const SLATE: ThemePreset = {
+  id: "slate",
+  name: "Slate",
+  colors: {
+    bg: "#232527",
+    card: "#2c2e31",
+    cardBorder: "#3d4043",
+    accent: "#e2b714",
+    success: "#7cbf6b",
+    successDim: "rgba(124, 191, 107, 0.15)",
+    warning: "#e59435",
+    warningDim: "rgba(229, 148, 53, 0.15)",
+    danger: "#ca4754",
+    dangerDim: "rgba(202, 71, 84, 0.15)",
+    text: "#d1d0c5",
+    textDim: "#8f9193",
+    textMuted: "#5c5e62",
+    white: "#f0efe8",
+    teal: "#63b0a0",
+    tealDim: "rgba(99, 176, 160, 0.15)",
+    accentButtonText: "#000000",
+  },
+};
+
+/**
  * Deep Space - the "trading terminal" concept palette.
  *
  * Cards are defined as opaque base colors here; the separate surface-style
@@ -288,7 +318,7 @@ const DEEP_SEA: ThemePreset = {
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, DEEP_SPACE, DEEP_SEA] as const;
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, SLATE, DEEP_SPACE, DEEP_SEA] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";
