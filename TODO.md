@@ -145,17 +145,6 @@ Work through phases in order: finish the features first, then handle store prep 
   - **Option A - Length-checked XOR-accumulate compare:** `if (a.length !== b.length) return false; let d=0; for (i) d |= a.charCodeAt(i)^b.charCodeAt(i); return d===0`.
   - Recommended: **Option A** - five lines, removes the audit nit.
 
-- [ ] Document the no-forward-secrecy model for sync
-  Files: `src/sync/transportService.ts`, `docs/`
-  Sync is pre-shared-key with no per-session ephemeral exchange. If `sharedSecret` ever leaks (compromised device, leaked backup), every captured past sync frame is decryptable. Acceptable for the threat model, but not currently called out.
-  - **Option A - Comment in `transportService.ts` + paragraph in security docs:** Explains the choice and the ratchet-style upgrade path if it ever matters.
-  - **Option B - Add an ephemeral key exchange (X25519 ECDH per session):** Real forward secrecy. Big lift; CryptoJS doesn't ship curve25519. Probably overkill for a LAN sync between two paired devices.
-  - Recommended: **Option A** - match the reality of the threat model rather than over-engineer.
-
-#### Info
-- [ ] Pairing listens on `0.0.0.0` - note in security docs
-  File: `src/sync/pairingService.ts:203`
-  During the 60s pairing window the TCP server accepts from any LAN host. Mitigated by the 40-bit Crockford code + 100k-iter PBKDF2 + user-confirmed fingerprint, so a successful attack requires both code guess and fingerprint trick. Worth a doc line so future contributors don't tighten the bind without understanding the discovery flow needs it.
 
 ---
 
@@ -943,6 +932,11 @@ Calculation functions accept raw `number` inputs with no upper bounds. JS `Numbe
 - **Option B - Shared validation utility:** Create `validateFinancialInput()` that all functions call; throws descriptive errors for out-of-bounds inputs.
 - **Option C - Output validation:** Don't restrict inputs, but check outputs. If any result is `NaN`, `Infinity`, or unexpectedly negative, return a safe fallback.
 - Recommended: **Option A** - prevents the issue at the source. Bounds match `importData.ts` limits (`MAX_MONEY: 1_000_000_000`, `MAX_RATE: 200`). Clamping is silent and non-disruptive.
+
+#### v1.4.16 Audit Follow-ups - completed
+
+- [x] Document the no-forward-secrecy model for sync - DONE (2026-07-20, Option A as recommended): trust-model block in the `transportService.ts` file header + new `docs/security.md` ("No forward secrecy - deliberate") covering the PSK model, why retroactive decryption of captured LAN traffic is accepted (compromising the secret means compromising a paired device, which already yields the live data), and the revisit trigger - any off-LAN sync path (relay/cloud) adds forward secrecy in that same protocol rev.
+- [x] Pairing listens on `0.0.0.0` - note in security docs - DONE (2026-07-20): documented in `docs/security.md` ("Pairing listens on 0.0.0.0 - deliberate"). The 60s window must accept unknown LAN hosts because mDNS/manual-IP discovery can't pre-bind to a peer; mitigations listed (40-bit code vs 100k-iter PBKDF2, ~30-bit user-confirmed fingerprint, single post-HMAC partner slot, 16 MB pre-auth frame cap) plus an explicit don't-tighten-the-bind warning for future contributors.
 
 ### Engineering Health (moved here 2026-07-20)
 

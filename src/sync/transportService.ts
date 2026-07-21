@@ -5,6 +5,17 @@
  * Manages encrypted TCP connections between paired devices.
  * Messages are framed with a 4-byte length prefix, encrypted with AES-256,
  * and signed with HMAC-SHA256 for integrity.
+ *
+ * Trust model - deliberately pre-shared-key, NO forward secrecy: every
+ * session encrypts with the single long-lived `sharedSecret` established at
+ * pairing; there is no per-session ephemeral key exchange. If that secret
+ * ever leaks (i.e. a paired device's storage is compromised), previously
+ * captured LAN traffic becomes decryptable retroactively - accepted because
+ * an attacker in that position already holds the live data outright, which
+ * is strictly more than any recorded sync diff. Revisit only if sync ever
+ * leaves the LAN. Full reasoning + upgrade path: docs/security.md. The
+ * pairing server's 0.0.0.0 bind below is likewise deliberate (discovery
+ * needs it) and documented there.
  */
 
 import { Buffer } from "buffer";
