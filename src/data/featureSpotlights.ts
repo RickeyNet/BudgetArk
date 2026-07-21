@@ -212,6 +212,22 @@ export const selectUnseenSpotlights = (
   );
 };
 
+/**
+ * The full tour for the Profile "Feature tour" replay row: every
+ * carousel-worthy spotlight that works on this install, seen or not.
+ * Mirrors selectUnseenSpotlights minus the seen filter so a user can
+ * rewatch debuts they skipped or want to revisit.
+ */
+export const selectReplaySpotlights = (
+  spotlights: readonly FeatureSpotlight[],
+  currentRuntimeVersion: string | undefined
+): FeatureSpotlight[] =>
+  spotlights.filter(
+    (spotlight) =>
+      !spotlight.badgeOnly &&
+      isSpotlightAvailable(spotlight, currentRuntimeVersion)
+  );
+
 /** Ids whose Profile rows should show a NEW badge (until first tapped). */
 export const selectNewBadgeIds = (
   spotlights: readonly FeatureSpotlight[],

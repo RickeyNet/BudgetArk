@@ -59,10 +59,12 @@ import {
 } from "./src/storage/featureSpotlightStorage";
 import {
   FEATURE_SPOTLIGHTS,
+  selectReplaySpotlights,
   selectUnseenSpotlights,
   type FeatureSpotlight,
 } from "./src/data/featureSpotlights";
 import FeatureSpotlightModal from "./src/components/FeatureSpotlightModal";
+import { FeatureTourProvider } from "./src/components/FeatureTourContext";
 import { CURRENT_APP_VERSION, RELEASE_NOTES, type ReleaseNote } from "./src/data/releaseNotes";
 import type { RootTabParamList } from "./src/types";
 import {
@@ -431,6 +433,26 @@ const AppContent: React.FC = () => {
     }
   }, [closeSpotlights, navigationRef]);
 
+  /**
+   * Re-open the debut carousel on demand (Profile → Help → Feature tour).
+   * Replays every carousel-worthy spotlight that works on this install,
+   * seen or not; closing re-marks everything seen, a no-op for a replay.
+   * An empty selection (older store build enables nothing) leaves the
+   * queue null so the modal never mounts with zero slides.
+   */
+  const replayFeatureTour = useCallback(() => {
+    const tour = selectReplaySpotlights(
+      FEATURE_SPOTLIGHTS,
+      Updates.runtimeVersion ?? undefined
+    );
+    if (tour.length > 0) setSpotlightQueue(tour);
+  }, []);
+
+  const featureTour = useMemo(
+    () => ({ replayFeatureTour }),
+    [replayFeatureTour]
+  );
+
   /** Show loading indicator while checking onboarding status */
   if (isOnboardingComplete === null) {
     return (
@@ -450,6 +472,7 @@ const AppContent: React.FC = () => {
   /** Show main app navigation */
   return (
     <OnboardingGateProvider value={onboardingGate}>
+    <FeatureTourProvider value={featureTour}>
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <NavigationContainer ref={navigationRef}>
         <AppNavigator />
@@ -612,6 +635,7 @@ const AppContent: React.FC = () => {
         onOpenReleaseNotes={handleSpotlightOpenNotes}
       />
     </View>
+    </FeatureTourProvider>
     </OnboardingGateProvider>
   );
 };

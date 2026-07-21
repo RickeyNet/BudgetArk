@@ -8,6 +8,7 @@ import {
   FEATURE_SPOTLIGHTS,
   isSpotlightAvailable,
   selectNewBadgeIds,
+  selectReplaySpotlights,
   selectUnseenSpotlights,
   type FeatureSpotlight,
 } from "../featureSpotlights";
@@ -77,6 +78,26 @@ describe("selectUnseenSpotlights", () => {
   it("returns nothing when everything is seen", () => {
     const allIds = ALL.map((s) => s.id);
     expect(selectUnseenSpotlights(ALL, allIds, "1.9.0")).toEqual([]);
+  });
+});
+
+describe("selectReplaySpotlights", () => {
+  it("includes already-seen features, unlike the debut queue", () => {
+    // Everything seen: debut queue is empty, but the replay tour is full.
+    const allIds = ALL.map((s) => s.id);
+    expect(selectUnseenSpotlights(ALL, allIds, "1.9.0")).toEqual([]);
+    const replay = selectReplaySpotlights(ALL, "1.9.0");
+    expect(replay.map((s) => s.id)).toEqual(["ota-feature", "native-feature"]);
+  });
+
+  it("still excludes badgeOnly features from the carousel", () => {
+    const replay = selectReplaySpotlights(ALL, "1.9.0");
+    expect(replay.map((s) => s.id)).not.toContain("badge-only");
+  });
+
+  it("still holds back native-gated features on an older store build", () => {
+    const replay = selectReplaySpotlights(ALL, "1.8.0");
+    expect(replay.map((s) => s.id)).toEqual(["ota-feature"]);
   });
 });
 
