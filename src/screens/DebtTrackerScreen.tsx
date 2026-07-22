@@ -1860,7 +1860,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   summaryRingWrap: { alignItems: "center", justifyContent: "center" },
   summaryRingInner: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
   summaryRingLabel: { position: "absolute", fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  summaryRingHint: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  summaryRingHint: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: tokens.radiusPill },
   summaryRingHintText: { fontSize: scale(10), fontWeight: "700", letterSpacing: 0.2 },
 
    badgeRow: { flexDirection: "row", gap: 8, marginTop: 14 },
@@ -2000,7 +2000,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   strategyPlannerBtn: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 10,
     paddingVertical: 5,
     backgroundColor: colors.card,
@@ -2085,7 +2085,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   targetQuickBtn: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 10,
     paddingVertical: 5,
     backgroundColor: colors.bg,
@@ -2098,12 +2098,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   progressTrack: {
     height: 8,
     backgroundColor: colors.cardBorder,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     minWidth: 2,
   },
 
@@ -2171,7 +2171,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     flexShrink: 1,
   },
   msStepBadge: {
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
@@ -2231,7 +2231,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   msTargetQuickBtn: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 14,
     paddingVertical: 7,
     backgroundColor: colors.bg,
@@ -2244,12 +2244,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   msProgressTrack: {
     height: 10,
     backgroundColor: colors.cardBorder,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     overflow: "hidden",
   },
   msProgressFill: {
     height: "100%",
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     minWidth: 2,
   },
   msNextAction: {
@@ -2363,7 +2363,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   msPayoffChip: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: colors.bg,

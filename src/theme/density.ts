@@ -18,6 +18,7 @@ export type DensityTokens = Readonly<{
   gapLg: number;      // large gap (e.g. between sections)
   radius: number;     // standard card / button corner radius
   radiusSm: number;   // small radius (chips, inline pills)
+  radiusPill: number; // fully-rounded pill/chip radius (999 everywhere except square-corner themes)
   fontScale: number;  // multiplier applied to font sizes
   rowHeight: number;  // standard tap-target row height
 }>;
@@ -42,6 +43,7 @@ const COMPACT: DensityPreset = {
     gapLg: 16,
     radius: 12,
     radiusSm: 6,
+    radiusPill: 999,
     fontScale: 0.92,
     rowHeight: 44,
   },
@@ -60,6 +62,7 @@ const COMFORTABLE: DensityPreset = {
     gapLg: 24,
     radius: 16,
     radiusSm: 8,
+    radiusPill: 999,
     fontScale: 1.0,
     rowHeight: 52,
   },
@@ -78,6 +81,7 @@ const SPACIOUS: DensityPreset = {
     gapLg: 32,
     radius: 18,
     radiusSm: 10,
+    radiusPill: 999,
     fontScale: 1.08,
     rowHeight: 60,
   },

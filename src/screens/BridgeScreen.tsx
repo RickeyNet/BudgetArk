@@ -2119,7 +2119,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     changePeriodChip: {
       borderWidth: 1,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingHorizontal: 10,
       paddingVertical: 6,
     },

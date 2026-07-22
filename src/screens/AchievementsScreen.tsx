@@ -378,7 +378,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     closeButton: {
       paddingVertical: 8,
       paddingHorizontal: 14,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -397,7 +397,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     filterChip: {
       paddingHorizontal: 14,
       paddingVertical: 8,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,

@@ -30,6 +30,13 @@ export type ThemePreset = Readonly<{
   id: string;
   name: string;
   colors: ThemeColors;
+  /**
+   * Zeroes the density radius tokens (radius/radiusSm/radiusPill) so cards,
+   * buttons, and chips render square while this theme is active. Surfaces
+   * with hardcoded borderRadius values are unaffected until they migrate to
+   * the tokens (the incremental path density.ts already prescribes).
+   */
+  squareCorners?: boolean;
 }>;
 
 const ARK_PARCHMENT: ThemePreset = {
@@ -259,12 +266,17 @@ const SLATE: ThemePreset = {
 /**
  * Classic - the Windows 98 desktop, verbatim: teal desktop background,
  * silver window-chrome cards, navy title-bar accent (white text on it,
- * like a title bar), maroon danger. Palette-only nostalgia - fonts and
- * beveled borders are outside what a ThemePreset can express.
+ * like a title bar), maroon danger, square corners via squareCorners.
+ * Fonts and beveled borders are outside what a ThemePreset can express.
+ *
+ * The dim/muted greys run darker than other themes on purpose: they have
+ * to stay legible on BOTH the teal desktop bg and the silver cards, and
+ * on #008080 even pure black only reaches ~4.7:1 - mid greys vanish.
  */
 const CLASSIC: ThemePreset = {
   id: "classic",
   name: "Classic",
+  squareCorners: true,
   colors: {
     bg: "#008080",
     card: "#c0c0c0",
@@ -277,8 +289,8 @@ const CLASSIC: ThemePreset = {
     danger: "#a00000",
     dangerDim: "rgba(160, 0, 0, 0.15)",
     text: "#000000",
-    textDim: "#404040",
-    textMuted: "#6b6b6b",
+    textDim: "#222222",
+    textMuted: "#383838",
     white: "#ffffff",
     teal: "#006666",
     tealDim: "rgba(0, 102, 102, 0.15)",

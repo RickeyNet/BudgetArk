@@ -2699,7 +2699,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     categoryProgressTrack: {
       height: 4,
       backgroundColor: colors.bg,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
       marginBottom: 4,
     },
@@ -2783,12 +2783,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     progressTrack: {
       height: 8,
       backgroundColor: colors.bg,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
     },
     progressFill: {
       height: "100%",
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       minWidth: 2,
     },
     emptyWrap: {
@@ -2899,7 +2899,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     bucketAssignChip: {
       flex: 1,
       borderWidth: 1,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingVertical: 10,
       alignItems: "center",
     },

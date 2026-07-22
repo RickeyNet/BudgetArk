@@ -244,7 +244,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       borderWidth: 1,
       borderColor: `${colors.accent}55`,
       backgroundColor: `${colors.accent}1f`,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingHorizontal: 8,
       paddingVertical: 2,
     },
@@ -277,13 +277,13 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     },
     progressTrack: {
       height: 8,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
       backgroundColor: `${colors.textMuted}33`,
     },
     progressFill: {
       height: "100%",
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       minWidth: 2,
     },
     variance: {

@@ -2983,7 +2983,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     ratioBar: {
       flexDirection: "row",
       height: 8,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
       marginTop: 16,
     },
@@ -3135,7 +3135,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderWidth: 1,
       borderColor: `${colors.accent}40`,
       backgroundColor: `${colors.accent}12`,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingHorizontal: 12,
       paddingVertical: 8,
     },
@@ -3304,12 +3304,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     efProgressTrack: {
       height: 10,
       backgroundColor: colors.bg,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
     },
     efProgressFill: {
       height: "100%",
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       minWidth: 2,
     },
     efProgressRow: {
@@ -3471,13 +3471,13 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     courseProgressTrack: {
       height: 6,
       backgroundColor: `${colors.accent}20`,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
     },
     courseProgressFill: {
       height: "100%",
       backgroundColor: colors.accent,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       minWidth: 2,
     },
     courseDisclaimer: {
@@ -3646,7 +3646,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingVertical: 6,
       paddingHorizontal: 12,
       gap: 6,

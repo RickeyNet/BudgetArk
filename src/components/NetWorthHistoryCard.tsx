@@ -374,7 +374,7 @@ const makeStyles = (tokens: DensityTokens) => {
     },
     rangeChip: {
       borderWidth: 1,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingHorizontal: 10,
       paddingVertical: 6,
     },
