@@ -257,6 +257,36 @@ const SLATE: ThemePreset = {
 };
 
 /**
+ * Classic - the Windows 98 desktop, verbatim: teal desktop background,
+ * silver window-chrome cards, navy title-bar accent (white text on it,
+ * like a title bar), maroon danger. Palette-only nostalgia - fonts and
+ * beveled borders are outside what a ThemePreset can express.
+ */
+const CLASSIC: ThemePreset = {
+  id: "classic",
+  name: "Classic",
+  colors: {
+    bg: "#008080",
+    card: "#c0c0c0",
+    cardBorder: "#808080",
+    accent: "#000080",
+    success: "#008000",
+    successDim: "rgba(0, 128, 0, 0.15)",
+    warning: "#b8860b",
+    warningDim: "rgba(184, 134, 11, 0.15)",
+    danger: "#a00000",
+    dangerDim: "rgba(160, 0, 0, 0.15)",
+    text: "#000000",
+    textDim: "#404040",
+    textMuted: "#6b6b6b",
+    white: "#ffffff",
+    teal: "#006666",
+    tealDim: "rgba(0, 102, 102, 0.15)",
+    accentButtonText: "#ffffff",
+  },
+};
+
+/**
  * Deep Space - the "trading terminal" concept palette.
  *
  * Cards are defined as opaque base colors here; the separate surface-style
@@ -318,7 +348,7 @@ const DEEP_SEA: ThemePreset = {
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, SLATE, DEEP_SPACE, DEEP_SEA] as const;
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, SLATE, CLASSIC, DEEP_SPACE, DEEP_SEA] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";

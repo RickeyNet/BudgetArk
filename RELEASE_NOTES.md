@@ -24,6 +24,7 @@
 - **Expo SDK 57 / RN 0.86 / TypeScript 6.0 upgrade.** `npx expo install --check` clean; eslint stays on 9.x (plugin ceiling). Golden-fixture tests lock v1/v2 encrypted-backup decryption so future dependency changes can't strand old backups.
 - **React Compiler compliance.** All 43 `react-hooks` lint warnings refactored away across 23 files so the compiler optimizes those components; also fixes a latent coachmark reset bug. Repo lint: 0 warnings.
 - **New theme: Deep Sea** (`deep_sea`, 2026-07-12) - third "Deep" ambient theme: abyssal navy-teal palette with a bioluminescent cyan-green accent; static seeded-SVG underwater background (`DeepSeaBackground.tsx` - surface light shafts, plankton motes, abyss vignette, same approach as Space/Forest). Defaults to the Glass surface style like Deep Space (explicit user choice wins). Pure JS - OTA-safe. Theme idea backlog added to TODO.md (Lighthouse, Chart Room, Harbor Dawn, Ledger).
+- **New themes: Slate & Classic** (`slate` 2026-07-20, `classic` 2026-07-21) - Slate: graphite greys + mustard-yellow accent in the spirit of monkeytype's serika dark; warning shifted orange so it never blurs with the yellow accent. Classic: the Windows 98 palette verbatim (teal desktop bg, silver cards, navy accent with white button text, maroon danger). Both are colors-only presets (no ambient background, no per-theme fonts - the theme system is palette-only) - OTA-safe. Shared debut slide `slate-classic-themes` in FEATURE_SPOTLIGHTS.
 
 ### Tracking Reminders - opt-in check-in notifications (2026-07-12)
 

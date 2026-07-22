@@ -166,6 +166,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Try Deep Sea", kind: "profile-section", section: "theme" },
   },
   {
+    id: "slate-classic-themes",
+    sinceVersion: "1.9.0",
+    icon: "🎨",
+    title: "Two new themes: Slate & Classic",
+    blurb:
+      "Slate pairs graphite greys with a mustard-yellow accent for a calm, focused look. Classic is a straight-faced throwback to the silver-and-teal desktops of 1998, navy accents and all. Both are waiting under Appearance.",
+    cta: { label: "Try them on", kind: "profile-section", section: "theme" },
+  },
+  {
     id: "tip-jar",
     sinceVersion: "1.9.0",
     requiresRuntimeVersion: "1.9.0",
