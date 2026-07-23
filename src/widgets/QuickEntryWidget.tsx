@@ -11,6 +11,10 @@
  * rather than the user's theme, and the category set is the static built-in
  * list. Everything category-related derives from CATEGORY_ICONS /
  * buildQuickAddUri so the widget can't drift from the app.
+ *
+ * IMPORTANT: the iOS WidgetKit counterpart (targets/quickentry/index.swift)
+ * hardcodes a copy of WIDGET_CATEGORIES, the emoji, and the palette - Swift
+ * can't import from TS. Update BOTH files when any of those change.
  */
 
 import React from "react";

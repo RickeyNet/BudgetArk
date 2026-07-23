@@ -81,6 +81,7 @@
           "cameraPermission": "BudgetArk uses the camera so you can photograph receipts for your expenses. Photos stay encrypted on your device."
         }
       ],
+      "@bacons/apple-targets",
       [
         "react-native-android-widget",
         {

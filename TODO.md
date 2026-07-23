@@ -252,7 +252,18 @@ Work through phases in order: finish the features first, then handle store prep 
   - User-configurable category set (read from storage in the headless render; needs the same headless-storage verification).
   - iOS WidgetKit port - full spec in the dedicated entry below. Deferred until Android v1 proves usage.
 
-- [ ] iOS Quick Entry widget (WidgetKit) - iOS counterpart to the shipped Android widget: static, data-free category grid whose buttons deep-link into the prefilled Add Entry modal. All app-side plumbing already exists (`budgetark://` scheme, `quickAddLink.ts` validation, `QuickAddLinkHost`, `initialCategory` on the modal) - this item is purely the native extension.
+- [~] iOS Quick Entry widget (WidgetKit) - BUILT 2026-07-22; device verification + signing setup pending on the next EAS iOS build. iOS counterpart to the shipped Android widget: static, data-free category grid whose buttons deep-link into the prefilled Add Entry modal. All app-side plumbing already exists (`budgetark://` scheme, `quickAddLink.ts` validation, `QuickAddLinkHost`, `initialCategory` on the modal) - this item is purely the native extension.
+
+  What shipped (2026-07-22):
+  - `@bacons/apple-targets@^5.0.0` installed + added to `app.json` plugins. Target lives in `targets/quickentry/`: `expo-target.config.js` (type widget, name QuickEntry, bundle id `.quickentry` → `com.budgetark.app.quickentry`, deploymentTarget 15.1) + `index.swift` (~200 lines SwiftUI, verified the plugin registers the target via `npx expo config --type prebuild`).
+  - `systemMedium`: "⚓ Quick Entry · log an expense" header (bare `budgetark://quick-add` Link) + 2x3 grid of category `Link`s, exactly the Android six (Grocery 🛒 / Restaurant 🍴 / Transportation 🚗 / Shopping 🛍️ / Entertainment 🎬 / Other 🏷️), fixed dark palette matching the Android widget. `systemSmall`: single `widgetURL` tap, no grid (small widgets get one tap target).
+  - Static timeline (`policy: .never`), NO App Groups, no financial data - pure launcher, same posture as Android. `containerBackground` availability-guarded for iOS 17+, plain background on 15/16; `.contentMarginsDisabled()` since the layout draws its own padding.
+  - Cross-reference comments added in BOTH `targets/quickentry/index.swift` and `src/widgets/QuickEntryWidget.tsx` (categories/emoji/palette are a hardcoded copy - drift degrades safely via the fail-closed validator).
+
+  Still TODO before release:
+  - **Add `expo.ios.appleTeamId` to app.json** - the plugin warns at prebuild without it (find it at developer.apple.com/account → Membership, or in Xcode Signing & Capabilities). Builds may fail until set.
+  - One-time `eas credentials` pass so the extension gets its own provisioning profile under the app's credentials; then the next EAS iOS build (NOT OTA - new native target).
+  - Device verification checklist below (widget gallery both sizes, cold/warm/already-on-Budget deep-link matrix, light/dark home screen, lock-screen tap-to-unlock flow).
 
   Why it can't be JS: an iOS home-screen widget is a separate app extension running WidgetKit - SwiftUI only, own process, tiny memory budget, no JS runtime. No library avoids the Swift; the constraint is architectural (unlike Android, where `react-native-android-widget` renders JSX from a headless task in the app process).
 
