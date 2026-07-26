@@ -285,6 +285,16 @@ export const finalizeAccountLinks = async (
     };
     await upsertLink(link);
   }
+  // Newly mapped accounts deserve history: clearing lastSyncedAt makes the
+  // next pass fetch the full INITIAL_BACKFILL_DAYS window instead of the
+  // short overlap after the last sync (the ingest ledger dedupes re-fetched
+  // transactions on already-linked accounts), and clearing lastAttemptAt
+  // lets that pass run immediately instead of waiting out the sync cooldown.
+  // No-op on a brand-new connection - both fields are still unset there.
+  await updateConnection(connectionId, {
+    lastSyncedAt: undefined,
+    lastAttemptAt: undefined,
+  });
 };
 
 /** Remove a connection (cascades to secrets/links/inbox; ledger stays). */

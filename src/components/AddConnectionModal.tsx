@@ -101,6 +101,13 @@ interface AddConnectionModalProps {
    * re-list accounts from the stored access URL (no new token needed).
    */
   resumeSimplefin?: { connectionId: string };
+  /**
+   * "Check for new accounts" mode for a working SimpleFIN connection:
+   * re-list accounts from the stored access URL and offer only the ones
+   * without a link yet, so accounts added to the bridge after setup can
+   * start importing. Existing mappings are untouched.
+   */
+  rediscoverSimplefin?: { connectionId: string };
 }
 
 const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
@@ -110,6 +117,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   assetAccounts,
   addBank,
   resumeSimplefin,
+  rediscoverSimplefin,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -146,6 +154,8 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   );
 
   const reset = useCallback(() => {
+    // Both modes reuse the SimpleFIN step against a saved connection.
+    const savedSimplefin = resumeSimplefin ?? rediscoverSimplefin;
     setBusy(false);
     setError(null);
     setGuideProvider(null);
@@ -162,10 +172,10 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
       setTellerAppId(addBank.applicationId);
       setTellerEnvironment(addBank.environment);
       setStep("tellerEnroll");
-    } else if (resumeSimplefin) {
+    } else if (savedSimplefin) {
       // A set connectionId on the SimpleFIN step means "already claimed" -
-      // the step renders its resume variant (Load Accounts, no token input).
-      setConnectionId(resumeSimplefin.connectionId);
+      // the step renders its resume/rediscover variant (no token input).
+      setConnectionId(savedSimplefin.connectionId);
       setTellerAppId("");
       setTellerEnvironment("development");
       setStep("simplefinToken");
@@ -175,7 +185,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
       setTellerEnvironment("development");
       setStep("provider");
     }
-  }, [addBank, assetAccounts, resumeSimplefin]);
+  }, [addBank, assetAccounts, resumeSimplefin, rediscoverSimplefin]);
 
   // No reset() when closing: the wizard re-initializes on the next open (see
   // the visibility effect below), and resetting while the close animation
@@ -222,19 +232,33 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     enterMapStep(result.connectionId, result.accounts);
   }, [enterMapStep, setupToken]);
 
-  /** Resume path: the token is already claimed; list accounts from stored secrets. */
+  /** Resume/rediscover path: the token is already claimed; list accounts from stored secrets. */
   const loadSavedSimplefinAccounts = useCallback(async () => {
     if (!connectionId) return;
     setBusy(true);
     setError(null);
     const result = await discoverSimplefinAccounts(connectionId);
-    setBusy(false);
     if (!result.ok) {
+      setBusy(false);
       setError(result.message);
       return;
     }
-    enterMapStep(result.connectionId, result.accounts);
-  }, [connectionId, enterMapStep]);
+    let accounts = result.accounts;
+    if (rediscoverSimplefin) {
+      // Checking for new accounts: only offer ones without a link yet, so
+      // existing mappings are never reset (mirrors the Teller add-bank path).
+      const existing = await getLinksForConnection(connectionId);
+      const linkedIds = new Set(existing.map((l) => l.externalAccountId));
+      accounts = accounts.filter((a) => !linkedIds.has(a.externalAccountId));
+      if (accounts.length === 0) {
+        setBusy(false);
+        setStep("done");
+        return;
+      }
+    }
+    setBusy(false);
+    enterMapStep(result.connectionId, accounts);
+  }, [connectionId, enterMapStep, rediscoverSimplefin]);
 
   /* ── Teller ── */
 
@@ -557,6 +581,21 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   );
 
   const renderSimplefinStep = () => {
+    // Rediscover variant: a working connection; re-list accounts and offer
+    // only the unmapped ones. No token input - uses the stored access URL.
+    if (rediscoverSimplefin && connectionId) {
+      return (
+        <>
+          <Text style={styles.title}>Check for New Accounts</Text>
+          <Text style={styles.subtitle}>
+            Added a bank or account on your SimpleFIN Bridge after setup?
+            This re-lists your bridge's accounts and offers any that aren't
+            mapped yet. Accounts you've already mapped stay as they are.
+          </Text>
+          {renderError()}
+        </>
+      );
+    }
     // Resume variant: the token was already claimed and the connection saved;
     // only the account listing remains. No token input - retrying uses the
     // stored access URL.
@@ -759,15 +798,27 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
 
   const renderDoneStep = () => {
     const importing = selections.filter((s) => s.importTransactions).length;
+    // Rediscover/add-bank runs that found nothing new end here with zero
+    // selections - say so instead of claiming a connection happened.
+    if ((addBank || rediscoverSimplefin) && selections.length === 0) {
+      return (
+        <>
+          <Text style={styles.title}>✅ All Set</Text>
+          <Text style={styles.subtitle}>
+            {rediscoverSimplefin
+              ? "No new accounts found - everything on your bridge is already mapped. If you just added a bank on your SimpleFIN Bridge, give it a few minutes to finish linking and check again."
+              : "That bank's accounts were already connected, so nothing changed."}
+          </Text>
+        </>
+      );
+    }
     return (
       <>
         <Text style={styles.title}>✅ Connected</Text>
         <Text style={styles.subtitle}>
-          {addBank && selections.length === 0
-            ? "That bank's accounts were already connected, so nothing changed."
-            : `${importing} account${
-                importing === 1 ? "" : "s"
-              } will import transactions to your Review Inbox. New items appear after each sync.`}
+          {`${importing} account${
+            importing === 1 ? "" : "s"
+          } will import transactions to your Review Inbox. New items appear after each sync.`}
         </Text>
       </>
     );
@@ -785,7 +836,13 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
       case "simplefinToken":
         return connectionId
           ? {
-              label: busy ? "Loading accounts..." : "Load Accounts",
+              label: rediscoverSimplefin
+                ? busy
+                  ? "Checking..."
+                  : "Check for New Accounts"
+                : busy
+                  ? "Loading accounts..."
+                  : "Load Accounts",
               onPress: () => void loadSavedSimplefinAccounts(),
               disabled: busy,
             }

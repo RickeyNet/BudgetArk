@@ -93,6 +93,10 @@ const ConnectionsSection = forwardRef<
   const [resumeSimplefinId, setResumeSimplefinId] = useState<string | null>(
     null,
   );
+  /** Set when the wizard is opened to check a SimpleFIN connection for new accounts. */
+  const [rediscoverSimplefinId, setRediscoverSimplefinId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     void getConnectionsSettings().then((settings) =>
@@ -124,6 +128,7 @@ const ConnectionsSection = forwardRef<
   const openAddConnection = useCallback(async () => {
     setAddBankInfo(null);
     setResumeSimplefinId(null);
+    setRediscoverSimplefinId(null);
     setWizardAssetAccounts(await getAssetAccounts());
     setShowAddConnection(true);
   }, []);
@@ -134,12 +139,22 @@ const ConnectionsSection = forwardRef<
     setWizardAssetAccounts(await getAssetAccounts());
     setAddBankInfo({ connectionId, ...info });
     setResumeSimplefinId(null);
+    setRediscoverSimplefinId(null);
     setShowAddConnection(true);
   }, []);
 
   const openFinishSetup = useCallback(async (connectionId: string) => {
     setAddBankInfo(null);
     setResumeSimplefinId(connectionId);
+    setRediscoverSimplefinId(null);
+    setWizardAssetAccounts(await getAssetAccounts());
+    setShowAddConnection(true);
+  }, []);
+
+  const openRediscover = useCallback(async (connectionId: string) => {
+    setAddBankInfo(null);
+    setResumeSimplefinId(null);
+    setRediscoverSimplefinId(connectionId);
     setWizardAssetAccounts(await getAssetAccounts());
     setShowAddConnection(true);
   }, []);
@@ -149,6 +164,7 @@ const ConnectionsSection = forwardRef<
       setShowAddConnection(false);
       setAddBankInfo(null);
       setResumeSimplefinId(null);
+      setRediscoverSimplefinId(null);
       // Populate the Review Inbox right away; failures surface as the
       // connection's status in the manage list. Deferred so the first sync's
       // fetch/ingest/re-render storm doesn't stall the wizard's close
@@ -305,6 +321,7 @@ const ConnectionsSection = forwardRef<
         onAddConnection={() => void openAddConnection()}
         onAddBank={(connectionId) => void openAddBank(connectionId)}
         onFinishSetup={(connectionId) => void openFinishSetup(connectionId)}
+        onRediscover={(connectionId) => void openRediscover(connectionId)}
       />
       <AddConnectionModal
         visible={showAddConnection}
@@ -312,6 +329,7 @@ const ConnectionsSection = forwardRef<
           setShowAddConnection(false);
           setAddBankInfo(null);
           setResumeSimplefinId(null);
+          setRediscoverSimplefinId(null);
           void refreshConnections();
         }}
         onComplete={handleConnectionComplete}
@@ -319,6 +337,11 @@ const ConnectionsSection = forwardRef<
         addBank={addBankInfo ?? undefined}
         resumeSimplefin={
           resumeSimplefinId ? { connectionId: resumeSimplefinId } : undefined
+        }
+        rediscoverSimplefin={
+          rediscoverSimplefinId
+            ? { connectionId: rediscoverSimplefinId }
+            : undefined
         }
       />
     </>

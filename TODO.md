@@ -261,7 +261,7 @@ Work through phases in order: finish the features first, then handle store prep 
   - Cross-reference comments added in BOTH `targets/quickentry/index.swift` and `src/widgets/QuickEntryWidget.tsx` (categories/emoji/palette are a hardcoded copy - drift degrades safely via the fail-closed validator).
 
   Still TODO before release:
-  - **Add `expo.ios.appleTeamId` to app.json** - the plugin warns at prebuild without it (find it at developer.apple.com/account → Membership, or in Xcode Signing & Capabilities). Builds may fail until set.
+  - ~~Add `expo.ios.appleTeamId` to app.json~~ DONE 2026-07-24 - prebuild config verified warning-free.
   - One-time `eas credentials` pass so the extension gets its own provisioning profile under the app's credentials; then the next EAS iOS build (NOT OTA - new native target).
   - Device verification checklist below (widget gallery both sizes, cold/warm/already-on-Budget deep-link matrix, light/dark home screen, lock-screen tap-to-unlock flow).
 

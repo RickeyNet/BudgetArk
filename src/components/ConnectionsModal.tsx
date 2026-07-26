@@ -37,6 +37,11 @@ interface ConnectionsModalProps {
    * never ran). Re-opens the wizard at the account listing step.
    */
   onFinishSetup: (connectionId: string) => void;
+  /**
+   * Check a working SimpleFIN connection for accounts added on the bridge
+   * after setup. Opens the wizard's rediscover step to map only the new ones.
+   */
+  onRediscover: (connectionId: string) => void;
 }
 
 const PROVIDER_GLYPHS: Record<string, string> = {
@@ -63,6 +68,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   onAddConnection,
   onAddBank,
   onFinishSetup,
+  onRediscover,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -275,6 +281,17 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             onPress={() => onAddBank(connection.id)}
           >
             <Text style={styles.secondaryButtonText}>+ Add another bank</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {/* SimpleFIN with zero links is covered by the Finish Setup banner
+            above; this is for picking up accounts added AFTER setup. */}
+        {connection.provider === "simplefin" && linksLoaded && links.length > 0 ? (
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => onRediscover(connection.id)}
+          >
+            <Text style={styles.secondaryButtonText}>+ Check for New Accounts</Text>
           </TouchableOpacity>
         ) : null}
 
