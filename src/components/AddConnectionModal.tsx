@@ -84,6 +84,14 @@ interface AddConnectionModalProps {
   onClose: () => void;
   /** Called after a connection is fully set up (links saved). */
   onComplete: (connectionId: string) => void;
+  /**
+   * iOS only: fires after the sheet's dismissal animation fully completes
+   * (RN Modal onDismiss). The post-setup sync is kicked from here so its
+   * state churn can't race the native dismissal - re-rendering the modal
+   * stack mid-dismissal freezes it (the same family as the silent-present
+   * failure this codebase keeps hitting).
+   */
+  onDismissed?: () => void;
   assetAccounts: AssetAccount[];
   /**
    * "Add another bank" mode: skip provider choice and Teller setup, and open
@@ -114,6 +122,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   visible,
   onClose,
   onComplete,
+  onDismissed,
   assetAccounts,
   addBank,
   resumeSimplefin,
@@ -876,7 +885,13 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   })();
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={handleClose}
+      onDismiss={onDismissed}
+    >
       <SheetKeyboardAvoider style={styles.overlay}>
         <View style={styles.modalSheet}>
           <ScrollView

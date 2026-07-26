@@ -14,6 +14,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useRef,
   useState,
 } from "react";
 import {
@@ -22,6 +23,7 @@ import {
   TouchableOpacity,
   Modal,
   InteractionManager,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -159,6 +161,9 @@ const ConnectionsSection = forwardRef<
     setShowAddConnection(true);
   }, []);
 
+  /** Connection awaiting its first sync once the wizard sheet is fully gone. */
+  const pendingSyncConnectionId = useRef<string | null>(null);
+
   const handleConnectionComplete = useCallback(
     (connectionId: string) => {
       setShowAddConnection(false);
@@ -166,15 +171,30 @@ const ConnectionsSection = forwardRef<
       setResumeSimplefinId(null);
       setRediscoverSimplefinId(null);
       // Populate the Review Inbox right away; failures surface as the
-      // connection's status in the manage list. Deferred so the first sync's
-      // fetch/ingest/re-render storm doesn't stall the wizard's close
-      // animation (it made the Done button feel dead on-device).
-      InteractionManager.runAfterInteractions(() => {
-        void syncConnectionsNow(connectionId);
-      });
+      // connection's status in the manage list. The sync's fetch/ingest/
+      // re-render storm must not land while the wizard Modal is still
+      // dismissing: re-rendering the modal stack mid-dismissal freezes it
+      // on iOS (Done screen hangs). InteractionManager doesn't cover the
+      // native dismissal animation, so on iOS the sync is kicked from the
+      // Modal's onDismiss instead (fires after dismissal completes; the
+      // callback is iOS-only). Android keeps the deferred kick.
+      if (Platform.OS === "ios") {
+        pendingSyncConnectionId.current = connectionId;
+      } else {
+        InteractionManager.runAfterInteractions(() => {
+          void syncConnectionsNow(connectionId);
+        });
+      }
     },
     [syncConnectionsNow],
   );
+
+  /** iOS: the wizard sheet finished dismissing - safe to start the sync. */
+  const handleWizardDismissed = useCallback(() => {
+    const connectionId = pendingSyncConnectionId.current;
+    pendingSyncConnectionId.current = null;
+    if (connectionId) void syncConnectionsNow(connectionId);
+  }, [syncConnectionsNow]);
 
   return (
     <>
@@ -333,6 +353,7 @@ const ConnectionsSection = forwardRef<
           void refreshConnections();
         }}
         onComplete={handleConnectionComplete}
+        onDismissed={handleWizardDismissed}
         assetAccounts={wizardAssetAccounts}
         addBank={addBankInfo ?? undefined}
         resumeSimplefin={
