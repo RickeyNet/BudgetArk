@@ -637,6 +637,10 @@ const RESET_KEYS = [
   // anchored to the user's entry history, so it resets with the data (the
   // reset flow also cancels any already-scheduled notifications).
   "@budgetark_tracking_reminder_settings",
+  // App-lock PIN record. A fresh account must not inherit the previous
+  // user's PIN - after a reset there is no data left to protect, and the
+  // reset drops back into first-launch onboarding.
+  "@budgetark_app_lock",
 ] as const;
 
 export class ResetIncompleteError extends Error {

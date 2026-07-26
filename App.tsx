@@ -26,6 +26,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
+import AppLockGate from "./src/components/AppLockGate";
 import DebtDueReminderHost from "./src/components/DebtDueReminderHost";
 import TrackingReminderHost from "./src/components/TrackingReminderHost";
 import CardKeepAliveReminderHost from "./src/components/CardKeepAliveReminderHost";
@@ -473,6 +474,9 @@ const AppContent: React.FC = () => {
   return (
     <OnboardingGateProvider value={onboardingGate}>
     <FeatureTourProvider value={featureTour}>
+    {/* Everything financial mounts behind the optional PIN gate. While
+        locked the tree below is NOT rendered (see AppLockGate header). */}
+    <AppLockGate>
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <NavigationContainer ref={navigationRef}>
         <AppNavigator />
@@ -635,6 +639,7 @@ const AppContent: React.FC = () => {
         onOpenReleaseNotes={handleSpotlightOpenNotes}
       />
     </View>
+    </AppLockGate>
     </FeatureTourProvider>
     </OnboardingGateProvider>
   );

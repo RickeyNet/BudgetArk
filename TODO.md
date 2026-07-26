@@ -99,13 +99,18 @@ Work through phases in order: finish the features first, then handle store prep 
 ### v1.4.16 Audit Follow-ups
 
 #### High
-- [ ] Add app-launch biometric / PIN gate
-  Files: new screen + `App.tsx`, `package.json` (add `expo-local-authentication`)
-  No auth between device unlock and full financial data. Anyone past the lockscreen sees balances, debts, payments. Biggest user-facing gap for a finance app.
-  - **Option A - Biometric required, PIN fallback:** Gate first render on `LocalAuthentication.authenticateAsync({ disableDeviceFallback: false })`. Falls back to device passcode if Face/Touch ID enrollment is missing.
-  - **Option B - Optional, off by default:** Setting in ProfileScreen; default off so existing users aren't surprised on update. Lower friction, lower protection.
-  - **Option C - Optional, prompt on first launch after update:** One-shot opt-in modal explaining the trade-off, default to enabled if the user dismisses.
-  - Recommended: **Option C** - best mix of security and not breaking expectations for existing installs.
+- [~] Add app-launch biometric / PIN gate - PIN gate SHIPPED app-side (2026-07-26); biometric layer deliberately NOT built (decision: app-specific PIN, no `expo-local-authentication`, keeps it pure JS / OTA-eligible - no new native dep after all). Off by default, opt-in from Profile → Settings → App Lock (Option B posture; no first-launch prompt).
+
+  What shipped:
+  - `src/utils/appLock.ts` (pure, unit-tested): 4-8 digit PIN, PBKDF2-SHA256 (250k, native quick-crypto) + random salt, constant-time verify, versioned record parsing (fail-closed on malformed, ACCEPTS future versions/unknown fields - forward compat is the contract so an app update can never lock a user out), escalating lockout math (4 free misses → 30s doubling, 5min cap).
+  - `src/storage/appLockStorage.ts` - `@budgetark_app_lock` in EncryptedStorage. Per-device by contract: not exported (exportData regression test extended), not in SyncDiff, in RESET_KEYS. Fail-open on unreadable record (privacy gate, not an encryption factor - documented in code).
+  - `components/AppLockGate.tsx` (mounted in App.tsx): locks on cold start + return from >15s background ('inactive' never locks); locked = app tree UNMOUNTED (no overlay-under-Modal risk); record re-read each foreground so Profile changes apply live. `components/PinPad.tsx` custom keypad (no system keyboard). "Forgot PIN?" = reinstall + restore explainer (no self-service reset in v1).
+  - `components/AppLockSetupModal.tsx` + row in Profile → Settings: set / change / turn off, current-PIN verify first (feeds the same persisted lockout counter), no-recovery trade-off stated at enable time.
+  - Release notes: in-app 1.9.0 highlight + RELEASE_NOTES.md section added 2026-07-26.
+
+  Still TODO:
+  - Device-test: cold-start lock, 15s grace matrix (quick switch vs long background), lockout countdown + persistence across force-quit, set/change/disable flows, Reset All Data clears the PIN, theme/density/large-text rendering of the pad.
+  - Possible fast-follows: biometric unlock ON TOP of the PIN (`expo-local-authentication`, native dep - bundle with the next store build), a FEATURE_SPOTLIGHTS debut slide (skipped for now - carousel is long), onboarding-guide entry ("lock", "PIN" keywords).
 
 #### Medium
 - [ ] Add MAC to encrypted exports (or switch to AES-GCM)

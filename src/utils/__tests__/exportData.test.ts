@@ -333,6 +333,19 @@ describe("buildExportMessage - plain JSON", () => {
       expect(key).not.toMatch(forbidden);
     }
   });
+
+  it("never exports the app-lock PIN record", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    // The @budgetark_app_lock record is per-device by contract (see
+    // appLockStorage.ts): a backup restored onto another phone must not
+    // carry a PIN gate, and its hash/salt must never leave the device.
+    for (const key of Object.keys(payload)) {
+      expect(key).not.toMatch(/applock|app_lock|pin/i);
+    }
+    expect(message).not.toContain("saltHex");
+    expect(message).not.toContain("hashHex");
+  });
 });
 
 describe("buildExportMessage - encrypted", () => {

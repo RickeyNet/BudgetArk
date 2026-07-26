@@ -182,6 +182,17 @@ Pure JS - rides the same 1.9.0 runtime, OTA-eligible. No new storage, no network
 - **Entry points:** 🔍 icon in both title sections (DebtTracker right corner; Budget left corner, sliding beside the Review Inbox icon when connections exist). DebtTracker already loaded budget entries for milestone math - they're now kept in state so its sheet searches all three collections too.
 - **Tests:** full suite as of 2026-07-20: 1083 passing across 73 suites.
 
+### App Lock - PIN gate on launch (2026-07-26)
+
+Pure JS - rides the same 1.9.0 runtime, OTA-eligible. Closes the v1.4.16 audit's "no auth between device unlock and full financial data" finding with an app-specific PIN (deliberately NOT `expo-local-authentication` biometrics - no new native dep; a biometric option can layer on later).
+
+- **Gate** (`components/AppLockGate.tsx`, mounted in `App.tsx` around the post-onboarding tree): locks on cold start and on returning from >15s in the background (iOS `inactive` - control center, app-switcher peek - never locks). While locked the app tree is **unmounted**, not overlaid - an overlay could sit under an open RN Modal (the iOS stacked-modal failure). The record is re-read on every foreground so Profile changes apply without a restart. Custom on-screen keypad (`components/PinPad.tsx`) - the system keyboard never handles the PIN.
+- **Storage** (`storage/appLockStorage.ts`, `@budgetark_app_lock` in EncryptedStorage): versioned record `{version: 1, pinLength, saltHex, hashHex, iterations, failedAttempts, lockoutUntil, ...}` - PBKDF2-SHA256 (250k iterations, native quick-crypto) with a random 16-byte salt, constant-time verify. **Forward compatibility is the contract** (`utils/appLock.ts` header): future versions must keep these fields unlockable - the parser already accepts newer `version`s + unknown fields so an update can never lock a user out. Fail-open on unreadable record (documented: the PIN is a privacy gate, not an encryption factor - unreadable storage means the data can't decrypt either).
+- **Lockout:** 4 free misses, then 30s doubling per miss, capped at 5 minutes - persisted in the record so force-quitting doesn't reset the clock. The Profile verify flow feeds the same counter (otherwise it'd be an unthrottled oracle for an unlocked phone).
+- **Settings** (Profile → Settings → App Lock, `components/AppLockSetupModal.tsx`): set / change / turn off, always verifying the current PIN first; enable flow states the no-recovery trade-off up front. Lock screen has a "Forgot your PIN?" explainer (reinstall + restore from backup - the data itself is never PIN-locked).
+- **Never leaves the device:** not in `exportData` (regression test extended), not in `SyncDiff`, wiped by Reset All Data (`RESET_KEYS`).
+- **Tests** (`utils/__tests__/appLock.test.ts`): validation matrix, hash round-trip + salting, fail-closed parse matrix + future-version acceptance, iteration bounds (tamper can't freeze unlocks), lockout escalation/clear/format.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

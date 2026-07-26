@@ -43,6 +43,8 @@ import {
   findReleaseNoteForVersion,
 } from "../../utils/updateReleaseNotes";
 import { getPrivacyMode, setPrivacyMode } from "../../storage/privacyStorage";
+import { getAppLockRecord } from "../../storage/appLockStorage";
+import AppLockSetupModal from "../../components/AppLockSetupModal";
 import type { PairingState } from "../../sync/types";
 import OptionPickerModal from "../../components/OptionPickerModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
@@ -171,6 +173,10 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
   /** Privacy mode - blocks screenshots/screen recording when enabled */
   const [privacyMode, setPrivacyModeState] = useState(false);
 
+  /** App Lock (PIN on open) - row state + the set/change/disable modal. */
+  const [appLockEnabled, setAppLockEnabled] = useState(false);
+  const [showAppLockSetup, setShowAppLockSetup] = useState(false);
+
   /** Haptic feedback toggle */
   const [hapticsEnabled, setHapticsState] = useState(true);
 
@@ -186,18 +192,21 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
     let cancelled = false;
     const load = async () => {
       try {
-        const [prefs, privacy, haptics, holdingsSet] = await Promise.all([
-          getUpdatePreferences(),
-          getPrivacyMode(),
-          getHapticsEnabled(),
-          getHoldingsSettings(),
-        ]);
+        const [prefs, privacy, haptics, holdingsSet, appLock] =
+          await Promise.all([
+            getUpdatePreferences(),
+            getPrivacyMode(),
+            getHapticsEnabled(),
+            getHoldingsSettings(),
+            getAppLockRecord(),
+          ]);
         if (cancelled) return;
         setUpdatePrefs(prefs);
         setPrivacyModeState(privacy);
         setHapticsState(haptics);
         setHapticsCache(haptics);
         setHoldingsSettings(holdingsSet);
+        setAppLockEnabled(appLock !== null);
       } catch (error) {
         if (__DEV__) console.error("Failed to load profile settings:", error);
       }
@@ -456,6 +465,14 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
     });
   }, [showInfo]);
 
+  const closeAppLockSetup = useCallback(() => {
+    setShowAppLockSetup(false);
+    // Refresh the row with whatever the modal saved (on/off/changed).
+    void getAppLockRecord().then((record) =>
+      setAppLockEnabled(record !== null),
+    );
+  }, []);
+
   const togglePrivacyMode = useCallback(async () => {
     const next = !privacyMode;
     await setPrivacyMode(next);
@@ -552,6 +569,34 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
               {privacyMode ? "On" : "Off"}
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => setShowAppLockSetup(true)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                App Lock
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                {appLockEnabled
+                  ? "PIN required when the app opens"
+                  : "Ask for a PIN when the app opens"}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {appLockEnabled ? "On" : "Off"}
             </Text>
           </TouchableOpacity>
 
@@ -1001,6 +1046,11 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           </View>
         </View>
       </Modal>
+
+      {/* ── App Lock (PIN) set/change/disable Modal ── */}
+      {showAppLockSetup ? (
+        <AppLockSetupModal onClose={closeAppLockSetup} showInfo={showInfo} />
+      ) : null}
 
       {/* ── Tracking Reminders Modal ── */}
       {showTrackingReminders ? (
