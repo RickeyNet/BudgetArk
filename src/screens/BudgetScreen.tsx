@@ -309,6 +309,9 @@ const BudgetScreen: React.FC = () => {
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
   // Reloaded on every focus, so edits in Profile -> Businesses show up here.
   const [businesses, setBusinesses] = useState<Business[]>([]);
+  /** Spending-card "💼 Business only" filter chip. Session-only by design -
+   *  a sticky filter would silently misrepresent spending next launch. */
+  const [businessOnly, setBusinessOnly] = useState(false);
   const [keelTarget, setKeelTarget] = useState(0);
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
@@ -556,6 +559,35 @@ const BudgetScreen: React.FC = () => {
     return map;
   }, [debtPaymentsTotal, monthlyEntries]);
 
+  /** Whether the selected month has any business-tagged expense - gates the
+   *  Spending card's "Business only" chip. */
+  const hasBusinessSpending = useMemo(
+    () =>
+      monthlyEntries.some(
+        (entry) => entry.type === "expense" && entry.businessId
+      ),
+    [monthlyEntries]
+  );
+
+  /**
+   * Category totals feeding the Spending card. With the "Business only"
+   * chip active, only business-tagged expenses count and the synthetic
+   * Debt Payments rollup is left out (debt minimums aren't business
+   * spending). The unfiltered `expensesByCategory` still drives the bucket
+   * card and monthly totals - the chip deliberately scopes to the Spending
+   * card so personal budget math never silently changes underneath it.
+   */
+  const spendingByCategory = useMemo(() => {
+    if (!businessOnly) return expensesByCategory;
+    const map: Record<string, number> = {};
+    monthlyEntries
+      .filter((entry) => entry.type === "expense" && entry.businessId)
+      .forEach((entry) => {
+        map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
+      });
+    return map;
+  }, [businessOnly, expensesByCategory, monthlyEntries]);
+
   const bucketByCategory = useMemo(() => {
     const map: Record<string, BudgetBucket> = {};
     for (const [category, amount] of Object.entries(expensesByCategory)) {
@@ -620,18 +652,31 @@ const BudgetScreen: React.FC = () => {
       ...customCategoryNames,
     ];
     allCategories.forEach((category) => {
-      if ((expensesByCategory[category] ?? 0) > 0 || limitByCategory[category] != null) {
+      // Filtered view: only categories with business spend - a limit alone
+      // shouldn't surface an empty row there.
+      if (
+        (spendingByCategory[category] ?? 0) > 0 ||
+        (!businessOnly && limitByCategory[category] != null)
+      ) {
         categoriesInPlay.add(category);
       }
     });
 
     return Array.from(categoriesInPlay)
       .map((category) => {
-        const spent = expensesByCategory[category] ?? 0;
-        const limit = limitByCategory[category] ?? null;
+        const spent = spendingByCategory[category] ?? 0;
+        // Limits compare the WHOLE category against its budget; a business-
+        // only slice against the full limit would understate usage, so the
+        // filtered view drops limits and bars scale relatively instead.
+        const limit = businessOnly ? null : (limitByCategory[category] ?? null);
         const ratio = limit ? spent / limit : null;
         const entries: ExpenseCategoryEntry[] = monthlyEntries
-          .filter((e) => e.type === "expense" && e.category === category)
+          .filter(
+            (e) =>
+              e.type === "expense" &&
+              e.category === category &&
+              (!businessOnly || e.businessId)
+          )
           .map((e) => ({
             id: e.id,
             amount: e.amount,
@@ -644,7 +689,7 @@ const BudgetScreen: React.FC = () => {
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-        if (category === "Debt Payments") {
+        if (category === "Debt Payments" && !businessOnly) {
           const paymentsByDebt = new Map<string, Payment[]>();
           for (const payment of recordedDebtPaymentsForMonth) {
             const list = paymentsByDebt.get(payment.debtId);
@@ -690,13 +735,14 @@ const BudgetScreen: React.FC = () => {
       })
       .sort((a, b) => b.spent - a.spent);
   }, [
+    businessOnly,
     customCategoryNames,
     debtPaymentPlanForMonth,
-    expensesByCategory,
     limitByCategory,
     monthlyEntries,
     recordedDebtPaymentsForMonth,
     selectedMonthDate,
+    spendingByCategory,
   ]);
 
   const chartData = useMemo(
@@ -1502,6 +1548,33 @@ const BudgetScreen: React.FC = () => {
           )}
         </View>
 
+        {/* Chip stays visible while active even if paging lands on a month
+            with no business spend - otherwise there'd be no way to toggle
+            the filter back off. */}
+        {(hasBusinessSpending || businessOnly) && (
+          <View style={styles.spendingFilterRow}>
+            <TouchableOpacity
+              style={[styles.filterChip, businessOnly && styles.filterChipActive]}
+              onPress={() => setBusinessOnly((prev) => !prev)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: businessOnly }}
+              accessibilityLabel="Show business expenses only"
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  businessOnly && styles.filterChipTextActive,
+                ]}
+              >
+                💼 Business only
+              </Text>
+            </TouchableOpacity>
+            {businessOnly && (
+              <Text style={styles.spendingHint}>Limits hidden while filtered</Text>
+            )}
+          </View>
+        )}
+
         {chartData.length > 0 ? (
           <View style={styles.donutSection}>
             <View style={[styles.donutWrap, { width: donutSize, height: donutSize }]}>
@@ -1509,7 +1582,9 @@ const BudgetScreen: React.FC = () => {
               <View style={styles.donutCenter}>
                 <Text style={styles.donutLabel}>Total</Text>
                 <Text style={styles.donutTotal}>
-                  {formatCompactCurrency(monthlyExpenses)}
+                  {formatCompactCurrency(
+                    businessOnly ? spendingTotal : monthlyExpenses
+                  )}
                 </Text>
               </View>
             </View>
@@ -1535,8 +1610,16 @@ const BudgetScreen: React.FC = () => {
           </View>
         ) : (
           <View style={styles.spendingEmptyWrap}>
-            <Text style={styles.emptyCardTitle}>No expenses this month</Text>
-            <Text style={styles.emptyCardSubtext}>Add entries to see your spending chart.</Text>
+            <Text style={styles.emptyCardTitle}>
+              {businessOnly
+                ? "No business expenses this month"
+                : "No expenses this month"}
+            </Text>
+            <Text style={styles.emptyCardSubtext}>
+              {businessOnly
+                ? "Tag an expense with a business to see it here."
+                : "Add entries to see your spending chart."}
+            </Text>
           </View>
         )}
 
@@ -2547,6 +2630,33 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(18),
       fontWeight: "800",
       color: colors.text,
+    },
+    spendingFilterRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.gapSm,
+      marginBottom: 10,
+    },
+    filterChip: {
+      borderRadius: tokens.radius,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    filterChipActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    filterChipText: {
+      fontSize: scale(12),
+      fontWeight: "600",
+      color: colors.textDim,
+    },
+    filterChipTextActive: {
+      color: colors.accent,
+      fontWeight: "700",
     },
     donutSection: {
       flexDirection: "row",
