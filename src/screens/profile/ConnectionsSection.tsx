@@ -41,7 +41,10 @@ import { useConnections } from "../../connections/ConnectionsProvider";
 import ConnectionsModal from "../../components/ConnectionsModal";
 import AddConnectionModal from "../../components/AddConnectionModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
-import { startConnectionsMonitoring } from "../../services/connections/connectionsSyncService";
+import {
+  startConnectionsMonitoring,
+  syncConnections,
+} from "../../services/connections/connectionsSyncService";
 import { getTellerAddBankInfo } from "../../services/connections/connectionsService";
 import { getAssetAccounts } from "../../storage/assetAccountStorage";
 import { triggerHaptic } from "../../utils/haptics";
@@ -74,7 +77,6 @@ const ConnectionsSection = forwardRef<
     pendingCount,
     needsAttention,
     refresh: refreshConnections,
-    syncNow: syncConnectionsNow,
   } = useConnections();
   const [connectionsDisclosureAcked, setConnectionsDisclosureAcked] =
     useState(false);
@@ -164,6 +166,26 @@ const ConnectionsSection = forwardRef<
   /** Connection awaiting its first sync once the wizard sheet is fully gone. */
   const pendingSyncConnectionId = useRef<string | null>(null);
 
+  /**
+   * Post-wizard sync kick. Deliberately calls the sync SERVICE directly
+   * instead of the provider's syncNow: syncNow flips isSyncing
+   * synchronously, and that context-wide re-render landing in the same
+   * frame as the wizard Modal's teardown froze the whole app on Android
+   * (UI-thread wedge in the dialog dismissal - same failure family as the
+   * iOS silent-present bug). This path touches no React state until the
+   * pass finishes; the provider refreshes once at the end, long after the
+   * modal stack has settled. The service dedupes concurrent passes, so a
+   * user-tapped Sync Now during the pass just joins it.
+   */
+  const kickPostSetupSync = useCallback(
+    (connectionId: string) => {
+      void syncConnections({ manual: true, connectionId }).then(() =>
+        refreshConnections(),
+      );
+    },
+    [refreshConnections],
+  );
+
   const handleConnectionComplete = useCallback(
     (connectionId: string) => {
       setShowAddConnection(false);
@@ -171,30 +193,28 @@ const ConnectionsSection = forwardRef<
       setResumeSimplefinId(null);
       setRediscoverSimplefinId(null);
       // Populate the Review Inbox right away; failures surface as the
-      // connection's status in the manage list. The sync's fetch/ingest/
-      // re-render storm must not land while the wizard Modal is still
-      // dismissing: re-rendering the modal stack mid-dismissal freezes it
-      // on iOS (Done screen hangs). InteractionManager doesn't cover the
-      // native dismissal animation, so on iOS the sync is kicked from the
-      // Modal's onDismiss instead (fires after dismissal completes; the
-      // callback is iOS-only). Android keeps the deferred kick.
+      // connection's status in the manage list. iOS gets an extra guard:
+      // the kick fires from the Modal's onDismiss (after the dismissal
+      // animation completes; the callback is iOS-only). Android tears the
+      // dialog down synchronously with this commit, so deferring past the
+      // commit is enough once the kick itself is state-silent.
       if (Platform.OS === "ios") {
         pendingSyncConnectionId.current = connectionId;
       } else {
         InteractionManager.runAfterInteractions(() => {
-          void syncConnectionsNow(connectionId);
+          kickPostSetupSync(connectionId);
         });
       }
     },
-    [syncConnectionsNow],
+    [kickPostSetupSync],
   );
 
   /** iOS: the wizard sheet finished dismissing - safe to start the sync. */
   const handleWizardDismissed = useCallback(() => {
     const connectionId = pendingSyncConnectionId.current;
     pendingSyncConnectionId.current = null;
-    if (connectionId) void syncConnectionsNow(connectionId);
-  }, [syncConnectionsNow]);
+    if (connectionId) kickPostSetupSync(connectionId);
+  }, [kickPostSetupSync]);
 
   return (
     <>
