@@ -21,6 +21,7 @@
 import { Buffer } from "buffer";
 import TcpSocket from "react-native-tcp-socket";
 import CryptoJS from "crypto-js";
+import { constantTimeEquals } from "../crypto/nativeCrypto";
 import { generateUUID } from "../utils/uuid";
 import type { SyncMessage, SyncMessageType } from "./types";
 
@@ -247,7 +248,9 @@ const validateAndDecrypt = (
     envelopeMacInput(msg.type, msg.senderId, msg.timestamp, msg.nonce, msg.payload),
     key
   ).toString(CryptoJS.enc.Hex);
-  if (calculatedHmac !== msg.hmac) return null;
+  // Constant-time compare: a LAN peer measuring reply timing on forged
+  // frames must not learn how many leading MAC characters were right.
+  if (!constantTimeEquals(calculatedHmac, msg.hmac)) return null;
 
   // Verify sender (skip check during pairing when partner ID is unknown)
   if (expectedSenderId && msg.senderId !== expectedSenderId) return null;

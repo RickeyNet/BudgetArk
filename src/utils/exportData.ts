@@ -8,12 +8,7 @@
  */
 
 import { Share } from "react-native";
-import {
-  aesCbcEncryptToBase64,
-  hexToBytes,
-  pbkdf2Sha256,
-  randomHex,
-} from "../crypto/nativeCrypto";
+import { encryptExportEnvelopeV3 } from "./exportEncryption";
 import {
   getDebtsIncludingDeleted,
   getPaymentsIncludingDeleted,
@@ -49,23 +44,13 @@ import { recordBackup } from "../storage/backupReminderStorage";
 export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
 
 /**
- * Current v2 prefix. Format after the prefix:
- *   <salt-hex (32 chars)> "." <iv-hex (32 chars)> "." <ciphertext-base64>
- *
- * Salt: 16 random bytes per export (so the KDF produces a different key
- * even for the same password). IV: 16 random bytes (AES-256-CBC needs a
- * fresh IV per ciphertext or two exports with the same password leak the
- * XOR of their first plaintext blocks). KDF: PBKDF2-SHA256 with 250k
- * iterations - slow enough that a 4-char password takes hours instead of
- * seconds to brute-force, while still keeping a single export decrypt
- * under ~200ms on a low-end device.
+ * Legacy v2 prefix - PBKDF2-SHA256 (250k) + AES-256-CBC with explicit
+ * salt/iv, but NO integrity tag: a bit-flipped ciphertext decrypted to
+ * silently corrupted data, and a wrong password was indistinguishable from
+ * a damaged file. Still readable on import; the export path now produces
+ * v3 (encrypt-then-MAC, see utils/exportEncryption.ts) only.
  */
 export const ENCRYPTED_EXPORT_PREFIX_V2 = "__BUDGETARK_ENC2__:";
-
-const PBKDF2_ITERATIONS = 250_000;
-const PBKDF2_KEY_BYTES = 32; // 256-bit key
-const SALT_BYTES = 16;
-const IV_BYTES = 16;
 
 /**
  * Builds the export message string (plain JSON or v2-encrypted envelope).
@@ -188,34 +173,11 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
   // migration) the user needed them.
   const json = JSON.stringify(exportPayload);
 
-  let message: string;
-  if (password) {
-    // v2 envelope: salt | iv | ciphertext, all base16/base64. PBKDF2 derives
-    // the AES key so a short password isn't a few seconds of offline brute
-    // force. v1 path (insecure default KDF) is still decryptable on import
-    // for legacy backups but no longer produced here.
-    //
-    // Native crypto (quick-crypto/OpenSSL) with the exact parameters the old
-    // crypto-js code used - the envelope stays byte-compatible in both
-    // directions (old app reads new export, new app reads old export); the
-    // golden fixtures in importData.test.ts enforce it. PBKDF2 runs async on
-    // a native thread, so building an encrypted export no longer freezes the
-    // UI for seconds.
-    const saltHex = randomHex(SALT_BYTES);
-    const ivHex = randomHex(IV_BYTES);
-    const key = await pbkdf2Sha256(
-      password,
-      hexToBytes(saltHex),
-      PBKDF2_ITERATIONS,
-      PBKDF2_KEY_BYTES
-    );
-    const ctB64 = aesCbcEncryptToBase64(json, key, hexToBytes(ivHex));
-    message = `${ENCRYPTED_EXPORT_PREFIX_V2}${saltHex}.${ivHex}.${ctB64}`;
-  } else {
-    message = json;
-  }
-
-  return message;
+  // v3 envelope: PBKDF2-derived AES + MAC keys, encrypt-then-MAC so an
+  // import can verify the file is intact and untampered before parsing.
+  // v1/v2 remain decryptable on import for older backups but are no longer
+  // produced. See utils/exportEncryption.ts for the format contract.
+  return password ? encryptExportEnvelopeV3(json, password) : json;
 };
 
 /**

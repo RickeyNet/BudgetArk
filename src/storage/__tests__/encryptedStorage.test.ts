@@ -19,6 +19,9 @@ jest.mock("react-native", () => ({
       return { remove: () => {} };
     },
   },
+  // iOS so the keychain-accessibility migration paths run (Android is a
+  // deliberate no-op for that attribute).
+  Platform: { OS: "ios" },
 }));
 
 const mockAsyncStorage = {
@@ -35,6 +38,10 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 const mockSecureStore = {
   getItemAsync: jest.fn(),
   setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
+  // Sentinel standing in for expo-secure-store's numeric constant; the tests
+  // only assert the module passes it through, not its platform value.
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: "WHEN_UNLOCKED_THIS_DEVICE_ONLY",
 };
 jest.mock("expo-secure-store", () => mockSecureStore);
 
@@ -87,6 +94,145 @@ describe("encryptedStorage: no plaintext for secret-bearing writes", () => {
   it("still falls back to plaintext for ordinary app data (no flag)", async () => {
     await setItem("@ordinary_key", "value");
     expect(mockAsyncStorage.setItem).toHaveBeenCalledWith("@ordinary_key", "value");
+  });
+});
+
+/**
+ * Master-key keychain accessibility (2026-07 hardening).
+ *
+ * The key must be written WHEN_UNLOCKED_THIS_DEVICE_ONLY so it never rides
+ * iCloud Keychain sync or device backups off the phone - and existing
+ * installs (whose key predates the option) must get a one-time rewrite.
+ *
+ * ORDERING MATTERS: this suite must run BEFORE any suite that loads an
+ * existing key, because the migration is guarded by a module-level
+ * once-per-session flag - the first existing-key load in this file is the
+ * only chance to observe it.
+ */
+describe("encryptedStorage: master key is pinned device-only", () => {
+  beforeAll(() => jest.useFakeTimers());
+  afterAll(() => {
+    jest.useRealTimers();
+    // Drop this suite's cached key so the next suite starts cold - its
+    // fixtures are encrypted under a different master key.
+    mockAppStateCallback?.("background");
+  });
+
+  // The migration is deliberately fire-and-forget off the key-load path;
+  // every mocked promise resolves immediately, so a handful of microtask
+  // turns lets it settle without real timers.
+  const flushMicrotasks = async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (global as { __DEV__?: boolean }).__DEV__ = false;
+    mockAppStateCallback?.("background"); // cold key cache per test
+  });
+
+  // Shared in-memory keychain + AsyncStorage for this suite.
+  const vault = new Map<string, string>();
+  const store = new Map<string, string>();
+  const wireMocks = () => {
+    mockSecureStore.getItemAsync.mockImplementation(async (k: string) =>
+      vault.has(k) ? vault.get(k)! : null
+    );
+    mockSecureStore.setItemAsync.mockImplementation(async (k: string, v: string) => {
+      vault.set(k, v);
+    });
+    mockSecureStore.deleteItemAsync.mockImplementation(async (k: string) => {
+      vault.delete(k);
+    });
+    mockAsyncStorage.getItem.mockImplementation(async (k: string) =>
+      store.has(k) ? store.get(k)! : null
+    );
+    mockAsyncStorage.setItem.mockImplementation(async (k: string, v: string) => {
+      store.set(k, v);
+    });
+  };
+
+  it("migrates an EXISTING key via recovery-copy -> delete -> re-add, once", async () => {
+    const MASTER_KEY = "ef".repeat(32);
+    vault.clear();
+    store.clear();
+    vault.set("budgetark_encryption_key", MASTER_KEY);
+    wireMocks();
+
+    await setItem("@k", "value");
+    await flushMicrotasks();
+
+    // The primary alias was deleted and re-added with the device-only
+    // attribute (an in-place set can't change kSecAttrAccessible - see
+    // migrateKeyAccessibility), bracketed by the recovery copy.
+    expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
+      "budgetark_encryption_key_migration_backup",
+      MASTER_KEY,
+      expect.objectContaining({
+        keychainAccessible: mockSecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      })
+    );
+    expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      "budgetark_encryption_key"
+    );
+    expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
+      "budgetark_encryption_key",
+      MASTER_KEY,
+      expect.objectContaining({
+        keychainAccessible: mockSecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      })
+    );
+    // Key survived, recovery copy cleaned up, marker stamped.
+    expect(vault.get("budgetark_encryption_key")).toBe(MASTER_KEY);
+    expect(vault.has("budgetark_encryption_key_migration_backup")).toBe(false);
+    expect(store.get("@budgetark_master_key_device_only")).toBe("1");
+    // And the data written mid-migration still reads back.
+    await expect(getItem("@k")).resolves.toBe("value");
+
+    // Same session, cold cache again: the once-per-session guard means no
+    // second keychain rewrite.
+    mockSecureStore.setItemAsync.mockClear();
+    mockSecureStore.deleteItemAsync.mockClear();
+    mockAppStateCallback?.("background");
+    await setItem("@k2", "value2");
+    await flushMicrotasks();
+    expect(mockSecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it("restores the key from the recovery alias instead of minting a new one", async () => {
+    // Simulate death between the migration's delete and re-add: the key
+    // exists ONLY under the recovery alias.
+    const MASTER_KEY = "ab".repeat(32);
+    vault.clear();
+    store.clear();
+    vault.set("budgetark_encryption_key_migration_backup", MASTER_KEY);
+    wireMocks();
+
+    await setItem("@k", "survived");
+    await flushMicrotasks();
+
+    // The ORIGINAL key was restored to the primary alias (device-only) -
+    // a freshly generated key here would strand every existing ciphertext.
+    expect(vault.get("budgetark_encryption_key")).toBe(MASTER_KEY);
+    mockAppStateCallback?.("background"); // prove it decrypts after a cold load
+    await expect(getItem("@k")).resolves.toBe("survived");
+  });
+
+  it("creates a NEW key with the device-only option from the start", async () => {
+    vault.clear();
+    store.clear();
+    wireMocks();
+
+    await setItem("@k", "value");
+    await flushMicrotasks();
+
+    expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
+      "budgetark_encryption_key",
+      expect.stringMatching(/^[0-9a-f]{64}$/),
+      expect.objectContaining({
+        keychainAccessible: mockSecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      })
+    );
   });
 });
 

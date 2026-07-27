@@ -26,10 +26,16 @@
 
 import {
   bytesToHex,
+  constantTimeEquals,
   hexToBytes,
   pbkdf2Sha256,
   randomHex,
 } from "../crypto/nativeCrypto";
+
+// Re-exported so PIN-verification callers keep one import site; the shared
+// implementation lives in nativeCrypto so storage/sync HMAC checks use the
+// exact same compare.
+export { constantTimeEquals };
 
 export const PIN_MIN_LENGTH = 4;
 export const PIN_MAX_LENGTH = 8;
@@ -178,16 +184,6 @@ export const createAppLockRecord = async (
     createdAt: nowIso,
     updatedAt: nowIso,
   };
-};
-
-/** Length-checked XOR-accumulate compare - no early exit on mismatch. */
-export const constantTimeEquals = (a: string, b: string): boolean => {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
 };
 
 export const verifyPinAgainstRecord = async (

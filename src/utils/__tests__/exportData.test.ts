@@ -7,7 +7,8 @@
  * mock receives whatever the round-trip import writes.
  */
 
-import { buildExportMessage, ENCRYPTED_EXPORT_PREFIX_V2 } from "../exportData";
+import { buildExportMessage } from "../exportData";
+import { ENCRYPTED_EXPORT_PREFIX_V3 } from "../exportEncryption";
 import { importFromString, isEncryptedExport } from "../importData";
 
 jest.mock("react-native", () => ({
@@ -356,11 +357,11 @@ describe("buildExportMessage - encrypted", () => {
     encrypted = await buildExportMessage("hunter2");
   });
 
-  it("emits a v2-prefixed envelope recognized as encrypted", () => {
-    expect(encrypted.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)).toBe(true);
+  it("emits a v3-prefixed (encrypt-then-MAC) envelope recognized as encrypted", () => {
+    expect(encrypted.startsWith(ENCRYPTED_EXPORT_PREFIX_V3)).toBe(true);
     expect(isEncryptedExport(encrypted)).toBe(true);
-    // salt.iv.ciphertext envelope after the prefix
-    expect(encrypted.slice(ENCRYPTED_EXPORT_PREFIX_V2.length).split(".")).toHaveLength(3);
+    // salt.iv.ciphertext.mac envelope after the prefix
+    expect(encrypted.slice(ENCRYPTED_EXPORT_PREFIX_V3.length).split(".")).toHaveLength(4);
   });
 
   it("decrypts and imports with the correct password", async () => {

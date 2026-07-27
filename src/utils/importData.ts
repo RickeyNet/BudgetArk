@@ -38,6 +38,10 @@ import {
   ENCRYPTED_EXPORT_PREFIX_V2,
 } from "./exportData";
 import {
+  ENCRYPTED_EXPORT_PREFIX_V3,
+  decryptExportEnvelopeV3,
+} from "./exportEncryption";
+import {
   isObject,
   isValidDateValue,
   isSafeText,
@@ -502,11 +506,12 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
  */
 /**
  * Returns true if the raw string is a password-encrypted BudgetArk export
- * (either format - v1 legacy or v2 PBKDF2).
+ * (any format - v1 legacy, v2 PBKDF2, or v3 encrypt-then-MAC).
  */
 export const isEncryptedExport = (raw: string): boolean => {
   const head = raw.trimStart();
   return (
+    head.startsWith(ENCRYPTED_EXPORT_PREFIX_V3) ||
     head.startsWith(ENCRYPTED_EXPORT_PREFIX_V2) ||
     head.startsWith(ENCRYPTED_EXPORT_PREFIX)
   );
@@ -543,12 +548,26 @@ export const importFromString = async (
     );
   }
 
-  /* 0. Decrypt if this is a password-encrypted export. v2 uses PBKDF2 +
-   * explicit salt/iv; v1 uses CryptoJS's weak default EVP_BytesToKey KDF
-   * and is still readable here for backward-compat with older backups. */
+  /* 0. Decrypt if this is a password-encrypted export. v3 (current write
+   * format) is encrypt-then-MAC and verifies integrity before decrypting;
+   * v2 uses PBKDF2 + explicit salt/iv with no MAC; v1 uses CryptoJS's weak
+   * default EVP_BytesToKey KDF. All three stay readable forever so old
+   * backups never become unrestorable. */
   let jsonString = raw;
   const trimmed = raw.trimStart();
-  if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)) {
+  if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V3)) {
+    if (!password) {
+      throw new Error(
+        "This export is password-encrypted. Please enter the password to decrypt it."
+      );
+    }
+    // Throws its own precise message (wrong password / altered file) - the
+    // MAC check makes those the only failure modes, so don't re-wrap it.
+    jsonString = await decryptExportEnvelopeV3(
+      trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V3.length),
+      password
+    );
+  } else if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)) {
     if (!password) {
       throw new Error(
         "This export is password-encrypted. Please enter the password to decrypt it."

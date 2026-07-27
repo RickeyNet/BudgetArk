@@ -47,12 +47,13 @@
  * encryptedStorage.test.ts) and upgrade to V3 on first read.
  */
 
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import {
   aesCbcDecryptFromBase64,
   aesCbcEncryptToBase64,
+  constantTimeEquals,
   decryptLegacyCryptoJsBlob,
   hexToBytes,
   hmacSha256Hex,
@@ -62,6 +63,94 @@ import {
 
 /** Key name used to store/retrieve the encryption key from the secure vault */
 const ENCRYPTION_KEY_ALIAS = "budgetark_encryption_key";
+
+/**
+ * Keychain accessibility for the master key. WHEN_UNLOCKED_THIS_DEVICE_ONLY
+ * keeps the key out of iCloud Keychain sync and encrypted device backups -
+ * "encrypted on this device only" must hold at the keychain level too, not
+ * just for the data the key protects. The deliberate trade-off: restoring a
+ * phone backup onto a NEW device does not carry the key (all encrypted data
+ * is unreadable there), so the supported migration path is an export file.
+ * iOS-only attribute; Android's Keystore is hardware-bound and never leaves
+ * the device anyway, so the option is a no-op there.
+ */
+const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+};
+
+/**
+ * Second keychain alias holding a copy of the master key ONLY while the
+ * accessibility migration below is mid-flight. Written device-only itself
+ * (a fresh alias always takes SECURE_STORE_OPTIONS), read back by
+ * loadOrCreateKey's crash-recovery check, and deleted once the migration
+ * completes. The key never exists outside the keychain at any point.
+ */
+const ENCRYPTION_KEY_RECOVERY_ALIAS = "budgetark_encryption_key_migration_backup";
+
+/**
+ * Plaintext AsyncStorage marker recording that an existing master key has
+ * been rewritten with SECURE_STORE_OPTIONS. Deliberately raw AsyncStorage
+ * (this module is the one permitted importer): it carries no secret, and it
+ * must be readable during key loading without recursing into getItem.
+ */
+const KEY_ACCESSIBILITY_MARKER = "@budgetark_master_key_device_only";
+
+/** Once-per-session guard so the marker isn't re-read on every key load. */
+let accessibilityMigrationStarted = false;
+
+/**
+ * One-time migration: keys created before 2026-07 carry the default
+ * WHEN_UNLOCKED accessibility, which lets them migrate to a different phone
+ * inside an iCloud/Finder device backup. iOS-only - Android's Keystore is
+ * device-bound already, so non-iOS platforms return before any I/O.
+ *
+ * The rewrite must DELETE and RE-ADD the item: expo-secure-store's
+ * duplicate-item path (SecureStoreModule.swift `update`) passes only
+ * kSecValueData to SecItemUpdate, so an in-place setItemAsync silently
+ * keeps the old kSecAttrAccessible forever.
+ *
+ * Crash safety - losing this key means losing every encrypted byte on the
+ * device, so the delete window is bracketed by a recovery copy:
+ *   1. write the key under ENCRYPTION_KEY_RECOVERY_ALIAS (new alias -> the
+ *      device-only attribute genuinely applies)
+ *   2. delete + re-add the primary alias with SECURE_STORE_OPTIONS
+ *   3. verify the read-back, delete the recovery copy, stamp the marker
+ * Death at any point leaves the key under at least one alias, and
+ * loadOrCreateKey checks the recovery alias before it would ever mint a
+ * fresh key. Fire-and-forget off the key-load path; any failure leaves the
+ * marker unset so a later session retries.
+ */
+const migrateKeyAccessibility = (key: string): void => {
+  if (accessibilityMigrationStarted) return;
+  accessibilityMigrationStarted = true;
+  if (Platform.OS !== "ios") return; // keychainAccessible is an iOS attribute
+  void (async () => {
+    try {
+      const done = await AsyncStorage.getItem(KEY_ACCESSIBILITY_MARKER);
+      if (done === "1") return;
+      await SecureStore.setItemAsync(ENCRYPTION_KEY_RECOVERY_ALIAS, key, SECURE_STORE_OPTIONS);
+      await SecureStore.deleteItemAsync(ENCRYPTION_KEY_ALIAS);
+      await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key, SECURE_STORE_OPTIONS);
+      if ((await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS)) !== key) {
+        throw new Error("master key read-back mismatch after rewrite");
+      }
+      await SecureStore.deleteItemAsync(ENCRYPTION_KEY_RECOVERY_ALIAS);
+      await AsyncStorage.setItem(KEY_ACCESSIBILITY_MARKER, "1");
+    } catch (error) {
+      // Best effort: make sure the primary alias still serves the key. If
+      // this fails too, the recovery alias + loadOrCreateKey's restore path
+      // still cover the next launch.
+      try {
+        if ((await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS)) !== key) {
+          await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key, SECURE_STORE_OPTIONS);
+        }
+      } catch {
+        // Swallowed deliberately - see above.
+      }
+      if (__DEV__) console.error("Key accessibility migration failed:", error);
+    }
+  })();
+};
 
 /**
  * Prefix markers to identify encrypted data in storage.
@@ -151,10 +240,31 @@ void _appStateSubscription;
 const loadOrCreateKey = async (): Promise<string | null> => {
   try {
     let key = await SecureStore.getItemAsync(ENCRYPTION_KEY_ALIAS);
+
     if (!key) {
-      // Generate 32 random bytes = 256-bit key, converted to a hex string
+      // Crash recovery: an accessibility migration killed between its
+      // delete and re-add leaves the key ONLY under the recovery alias.
+      // This check must come before new-key generation - minting a fresh
+      // key over existing ciphertexts would strand all of them forever.
+      const recovered = await SecureStore.getItemAsync(
+        ENCRYPTION_KEY_RECOVERY_ALIAS
+      ).catch(() => null);
+      if (recovered) {
+        await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, recovered, SECURE_STORE_OPTIONS);
+        key = recovered;
+        // Recovery alias is left in place; the (marker-gated) migration
+        // finishes the dance and cleans it up on a later pass.
+      }
+    }
+
+    if (!key) {
+      // Generate 32 random bytes = 256-bit key, converted to a hex string.
+      // Created device-only from day one - no migration needed later.
       key = randomHex(32);
-      await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key);
+      await SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key, SECURE_STORE_OPTIONS);
+      AsyncStorage.setItem(KEY_ACCESSIBILITY_MARKER, "1").catch(() => {});
+    } else {
+      migrateKeyAccessibility(key);
     }
 
     cachedKey = key;
@@ -231,7 +341,7 @@ const decryptV3 = (stored: string, key: string): string | null => {
 
   const storedHmac = body.slice(0, dotIndex);
   const payload = body.slice(dotIndex + 1); // "ivHex.ctBase64"
-  if (storedHmac !== hmacSha256Hex(payload, key)) {
+  if (!constantTimeEquals(storedHmac, hmacSha256Hex(payload, key))) {
     return null; // integrity check failed - data has been tampered with
   }
 
@@ -264,7 +374,7 @@ const decryptV2 = (stored: string, key: string): string | null => {
   const ciphertext = payload.slice(dotIndex + 1);
 
   // Recalculate the HMAC and compare (same string-keyed HMAC crypto-js used)
-  if (storedHmac !== hmacSha256Hex(ciphertext, key)) {
+  if (!constantTimeEquals(storedHmac, hmacSha256Hex(ciphertext, key))) {
     return null; // integrity check failed - data has been tampered with
   }
 

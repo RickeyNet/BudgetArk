@@ -113,21 +113,9 @@ Work through phases in order: finish the features first, then handle store prep 
   - Possible fast-follows: biometric unlock ON TOP of the PIN (`expo-local-authentication`, native dep - bundle with the next store build), a FEATURE_SPOTLIGHTS debut slide (skipped for now - carousel is long), onboarding-guide entry ("lock", "PIN" keywords).
 
 #### Medium
-- [ ] Add MAC to encrypted exports (or switch to AES-GCM)
-  File: `src/utils/exportData.ts`, `src/utils/importData.ts`
-  v2 encrypted export uses AES-CBC with no integrity tag. JSON-parse failure is the only "tamper" signal. No realistic padding-oracle exposure today (user decrypts locally), but a missing MAC is an audit flag every time.
-  - **Option A - AES-GCM:** Replace CBC with GCM; auth tag is built in. Cleanest. CryptoJS doesn't ship GCM though - would need `expo-crypto`/native or a vetted JS GCM lib.
-  - **Option B - Encrypt-then-MAC envelope:** Keep CBC, append `HMAC-SHA256(salt | iv | ciphertext)` to the v2 prefix as a new `__BUDGETARK_ENC3__:` format. Stays inside CryptoJS. Mirrors the storage-layer pattern.
-  - **Option C - Leave as-is, document the threat model:** Note in code that integrity is JSON-parse only and any tampering corrupts decrypt → user re-imports.
-  - Recommended: **Option B** - matches what `encryptedStorage.ts` already does, no new dep, bumps prefix so legacy v2 stays decryptable.
+- [x] Add MAC to encrypted exports (or switch to AES-GCM) - DONE (2026-07-26): Option B shipped as `src/utils/exportEncryption.ts` - new `__BUDGETARK_ENC3__:` encrypt-then-MAC format (`salt.iv.ct.mac`; ONE PBKDF2-SHA256 250k call derives 64 bytes, split into AES-256-CBC key + HMAC-SHA256 key; MAC verified constant-time BEFORE decrypting). Write path is v3-only; import reads v1/v2/v3 forever. Golden v3 fixture pins the format (`exportEncryption.test.ts` + `importData.test.ts`). Known cost: an app older than v3-support can't read a NEW password-protected export.
 
-- [ ] Pin `expo-secure-store` to device-only accessibility
-  File: `src/storage/encryptedStorage.ts:124`
-  `SecureStore.setItemAsync(ENCRYPTION_KEY_ALIAS, key)` uses no options, so iOS default is `WHEN_UNLOCKED` - included in iCloud Keychain sync. The master encryption key for all on-device data could end up in iCloud.
-  - **Option A - `WHEN_UNLOCKED_THIS_DEVICE_ONLY`:** Pass `{ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }`. Key never leaves the device, but a device restore to a new phone loses access - user has to re-import.
-  - **Option B - `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`:** Same iCloud-blocked guarantee, but readable after first unlock post-boot (lets a future background sync work). Slightly weaker at-rest posture.
-  - **Option C - Leave default + document trade-off:** Easier device migration via iCloud Keychain restore, at the cost of the key existing off-device.
-  - Recommended: **Option A** - finance data shouldn't quietly ride iCloud. Pair with a clear "back up your encrypted JSON before switching phones" note in the restore flow.
+- [x] Pin `expo-secure-store` to device-only accessibility - DONE (2026-07-26): Option A shipped. New keys are created with `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; existing installs get a one-time DELETE + RE-ADD (expo-secure-store's duplicate-item path never updates `kSecAttrAccessible`, so an in-place set is a silent no-op - verified in `SecureStoreModule.swift`), crash-bracketed by a recovery copy under `budgetark_encryption_key_migration_backup` plus a restore check in `loadOrCreateKey` so an interrupted migration can never mint a fresh key over existing data. iOS-gated (`Platform.OS`); `@budgetark_master_key_device_only` marker prevents re-runs. Trade-off accepted: a device-backup restore to a new phone won't carry the key - the export file is the migration path (auto-backup + export UI already say so). MUST device-test the upgrade path on iOS: install old build, add data, upgrade, confirm data reads + no re-migration on relaunch.
 
 #### Low
 - [ ] Pass crypto keys as `WordArray`, not hex string passphrases
@@ -144,11 +132,7 @@ Work through phases in order: finish the features first, then handle store prep 
   - **Option B - Generate two independent keys at SecureStore-init time:** Simpler, no derivation. Adds a second SecureStore entry; migration on first launch.
   - Recommended: **Option A** - single root key keeps SecureStore footprint small and pairing/export envelopes don't need to plumb a second secret.
 
-- [ ] Constant-time HMAC comparison
-  Files: `src/storage/encryptedStorage.ts:188`, `src/sync/transportService.ts:47`
-  `storedHmac !== calculatedHmac` is short-circuiting string compare. No realistic remote-timing exposure (storage is local, sync is LAN TCP through the JS bridge), but trivial to fix.
-  - **Option A - Length-checked XOR-accumulate compare:** `if (a.length !== b.length) return false; let d=0; for (i) d |= a.charCodeAt(i)^b.charCodeAt(i); return d===0`.
-  - Recommended: **Option A** - five lines, removes the audit nit.
+- [x] Constant-time HMAC comparison - DONE (2026-07-26): `constantTimeEquals` now lives in `src/crypto/nativeCrypto.ts` (moved from appLock, which re-exports it) and guards every MAC check: storage V3/V2 HMACs, the sync envelope HMAC in `transportService.ts`, the v3 export MAC, and PIN verification.
 
 
 ---

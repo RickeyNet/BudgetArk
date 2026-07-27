@@ -176,6 +176,35 @@ export const hmacSha256Hex = (data: string, key: string): string =>
     .update(data, "utf8")
     .digest("hex") as string;
 
+/**
+ * HMAC-SHA256 over a utf8 string with a RAW BYTE key (e.g. one half of a
+ * PBKDF2-derived key split), hex output. Used by the v3 export envelope,
+ * where the MAC key is derived bytes rather than a passphrase string.
+ */
+export const hmacSha256HexWithKeyBytes = (
+  data: string,
+  key: Uint8Array
+): string =>
+  QuickCrypto.createHmac("sha256", key)
+    .update(data, "utf8")
+    .digest("hex") as string;
+
+/**
+ * Length-checked XOR-accumulate string compare - no early exit on mismatch,
+ * so comparison time doesn't leak how many leading characters matched.
+ * Use for every MAC/hash verification (storage HMACs, sync envelope HMACs,
+ * PIN hashes): an ordinary `!==` bails at the first differing character,
+ * which is a classic timing side channel.
+ */
+export const constantTimeEquals = (a: string, b: string): boolean => {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+};
+
 /** SHA-256 of a utf8 string, as raw bytes. */
 export const sha256Bytes = (text: string): Uint8Array => {
   // Not chained: quick-crypto types update() as returning the written bytes

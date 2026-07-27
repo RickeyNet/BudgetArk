@@ -15,6 +15,7 @@ import { importFromString, isEncryptedExport } from "../importData";
 
 const ENC_V1 = "__BUDGETARK_ENC__:";
 const ENC_V2 = "__BUDGETARK_ENC2__:";
+const ENC_V3 = "__BUDGETARK_ENC3__:";
 
 jest.mock("../../storage/encryptedStorage", () => {
   const store = new Map<string, string>();
@@ -97,9 +98,10 @@ beforeEach(() => {
 });
 
 describe("isEncryptedExport", () => {
-  it("detects v1 and v2 encrypted exports", () => {
+  it("detects v1, v2, and v3 encrypted exports", () => {
     expect(isEncryptedExport(ENC_V1 + "abc")).toBe(true);
     expect(isEncryptedExport(ENC_V2 + "a.b.c")).toBe(true);
+    expect(isEncryptedExport(ENC_V3 + "a.b.c.d")).toBe(true);
     expect(isEncryptedExport("  " + ENC_V2 + "a.b.c")).toBe(true); // leading ws
   });
 
@@ -505,6 +507,50 @@ describe("importFromString - golden encrypted fixtures (cross-version compat)", 
     },
     30_000
   );
+
+  // v3 (encrypt-then-MAC, current write format). Same golden payload; the
+  // fixture pins the on-disk format so future versions keep reading today's
+  // backups. Full-envelope crypto tests live in exportEncryption.test.ts.
+  const GOLDEN_V3 =
+    "__BUDGETARK_ENC3__:e4ce337ab5f32dca2275e146bf1383c8.edba4dc9b36d04890d92ca94b7991b9a.1wFvm+thlCi7xYwCJ1B6OQqLeqjJczErMhaxqrvVr2a7yuKaciPgZ19F7Q2aFcxl+c/Jcfj8lVEPgUXUgCIL2mTEujxFA1vq5mf4Hmg4PbarLiQ0zp+QTTffIL7NbjdAIUpRHfk5lKjK8/iwsAAm5W8qS4ZaHTObkMjc9GBsj2epB2NinmjAExMzcYgEpasPizeNKpL+nPIz5sna9GI+eZmbIR75h1zrdCZt6fJuWzLDVQB/hoVt8Czi8lrzLajK9Qs8L9QTIHL3v/EY4nkBAnGf+RPH/X8P+Y7brXGf7z/IZldL5XHWVZgA2LY5hxV32HIzvpKuz+UNw0VQVRFyroidaG//8v/UIrlc1AmcZRENY26fMWplBz7uJjHEPmYkes+1OKul5ULadVeN4pcZDrKXnEDCes1mV4u+v+dLJY0pZcwN1IJOHacjntFQG6hzTaoRBrLrIzoa6DrHqPWrxdvQMMenapeBs3dgBD/Gcq9TEvbmtZ0B61mrWsWxJHNGC/vmD9c6RNqL8kbYwmxr33sTBdxAvmx8Fk1buhZKqZ5CcNm70MSnkDHWTTLVtYzfnEBr/+lx1nz3YwgbewOM3GOik+6BP+nbKm1rFdepCg8=.de54b3aedf30c9221c3962593574ecba5b7752b60d964815792e90783df30951";
+
+  it(
+    "decrypts and imports a v3 (encrypt-then-MAC) encrypted backup",
+    async () => {
+      const result = await importFromString(GOLDEN_V3, "merge", PASSWORD);
+      expect(result.debts).toBe(1);
+      expect(result.budgetEntries).toBe(1);
+      expectGoldenPayloadStored();
+    },
+    30_000
+  );
+
+  it(
+    "rejects a v3 backup with a wrong password or a tampered ciphertext",
+    async () => {
+      await expect(
+        importFromString(GOLDEN_V3, "merge", "wrong-password")
+      ).rejects.toThrow(/password may be incorrect/i);
+
+      // Flip one ciphertext character: the MAC must catch it before parsing.
+      const dot = GOLDEN_V3.indexOf(".", GOLDEN_V3.indexOf(".") + 1) + 1;
+      const tampered =
+        GOLDEN_V3.slice(0, dot) +
+        (GOLDEN_V3[dot] === "1" ? "2" : "1") +
+        GOLDEN_V3.slice(dot + 1);
+      await expect(
+        importFromString(tampered, "merge", PASSWORD)
+      ).rejects.toThrow(/altered/i);
+      expect(storageMock.__store.size).toBe(0);
+    },
+    60_000
+  );
+
+  it("rejects a v3 backup when no password is given", async () => {
+    await expect(importFromString(ENC_V3 + "a.b.c.d")).rejects.toThrow(
+      /password-encrypted/i
+    );
+  });
 });
 
 describe("importFromString - replace mode", () => {
