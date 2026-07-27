@@ -165,6 +165,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Plan a purchase", kind: "charts" },
   },
   {
+    id: "take-home-pay",
+    sinceVersion: "1.9.0",
+    icon: "🧮",
+    title: "What actually hits your account",
+    blurb:
+      "Enter a salary, filing status, and state and see your real per-paycheck take-home - federal, state, Social Security, and Medicare, all from bundled tax tables that never phone home. Tap another state to see what the same salary keeps there.",
+    cta: { label: "Estimate your take-home", kind: "charts" },
+  },
+  {
     id: "deep-sea-theme",
     sinceVersion: "1.9.0",
     icon: "🌊",

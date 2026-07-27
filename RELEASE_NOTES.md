@@ -241,6 +241,7 @@ Pure JS - OTA-eligible. Charts-tab "Take-Home Pay" tool: US federal + state + FI
 - **Documented v1 approximations** (in the data file header + on-card disclaimer): MFJ doubles single-filer state brackets; MFS/HoH reuse the single table; exemption-system states (IL/IN/MI/PA/NJ/CT/OH/MA/WV) modeled with $0 deduction; Utah's credit applied flat with a 0 floor; no local/city taxes (noted per-state for NYC/MD/OH/PA/IN/MI), no credits, no itemizing, no SE tax.
 - **Math** (`utils/taxCalc.ts`, pure, 24 tests): marginal bracket walk, FICA with SS cap + Additional Medicare by status, state calc (deduction → brackets/flat → credit floor), take-home orchestrator. Withholding model: traditional 401(k) reduces income-tax bases but NOT FICA wages; HSA + health premiums (Section 125) reduce both. Inputs clamp (MAX_MONEY, 0-100%, NaN-safe) - never throw.
 - **UI:** `TaxCalculatorCard.tsx` (collapsible tool card after Plan a Purchase): salary / filing-status / pay-frequency / 51-state chip grid / optional pre-tax inputs → per-paycheck take-home, segmented where-each-dollar bar, yearly breakdown with effective + marginal rates, per-state caveat notes, and a "What if you moved?" state comparison. Deliberately formats USD regardless of display currency (US-only tool; labeled).
+- **Debut:** `take-home-pay` FEATURE_SPOTLIGHTS slide (Charts CTA).
 
 ### Private budget entries - partner visibility control (2026-07-27)
 
