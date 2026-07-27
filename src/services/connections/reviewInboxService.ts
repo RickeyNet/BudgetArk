@@ -2,7 +2,9 @@
  * BudgetArk - Bank Connections: Review Inbox Service
  * File: src/services/connections/reviewInboxService.ts
  *
- * Approve/dismiss operations for Review Inbox items. Approval write order is
+ * Approve/dismiss operations for Review Inbox items, plus merchant-rule
+ * management (change a rule's category, flip categorize<->ignore, delete)
+ * with inbox re-application. Approval write order is
  * deliberate: BudgetEntry FIRST, ledger second, inbox removal last - a crash
  * mid-way leaves at worst a stale inbox row that the ingest planner will not
  * recreate (the entry's externalTxId now blocks it) and the user can dismiss.
@@ -22,11 +24,17 @@ import {
   recordLedgerEntries,
   removePendingTransaction,
   removePendingTransactions,
+  upsertPendingTransactions,
 } from "../../storage/reviewInboxStorage";
-import { upsertMerchantRule } from "../../storage/merchantRulesStorage";
+import {
+  deleteMerchantRule,
+  getMerchantRules,
+  updateMerchantRule,
+  upsertMerchantRule,
+} from "../../storage/merchantRulesStorage";
 import { generateUUID } from "../../utils/uuid";
 import { pendingFingerprintFor } from "./ingest";
-import { matchMerchantRule } from "./merchant";
+import { matchMerchantRule, replanInboxForRules } from "./merchant";
 
 const MAX_DESCRIPTION_LENGTH = 220;
 
@@ -169,4 +177,69 @@ export const dismissAndIgnoreMerchant = async (
     .map((p) => p.id);
   await dismissPendingTransactions(ids);
   return ids.length;
+};
+
+/* ─── Rule management (the "change your selection" surface) ─── */
+
+/**
+ * Re-match every inbox item against the current rule set and apply the
+ * outcome: items newly covered by an "ignore" rule are dismissed (ledger
+ * recorded, so they never resurface), and stale suggested categories are
+ * rewritten. Rule changes can't resurrect transactions that were already
+ * skipped - the ingest ledger remembers those decisions.
+ */
+const reapplyRulesToInbox = async (): Promise<{
+  dismissedCount: number;
+  recategorizedCount: number;
+}> => {
+  const [inbox, rules] = await Promise.all([
+    getPendingTransactions(),
+    getMerchantRules(),
+  ]);
+  const plan = replanInboxForRules(inbox, rules, new Date().toISOString());
+  await dismissPendingTransactions(plan.dismissIds);
+  if (plan.updatedItems.length > 0) {
+    await upsertPendingTransactions(plan.updatedItems);
+  }
+  return {
+    dismissedCount: plan.dismissIds.length,
+    recategorizedCount: plan.updatedItems.length,
+  };
+};
+
+export interface ChangeRuleOptions {
+  ruleId: string;
+  action: "categorize" | "ignore";
+  /** Required when action is "categorize"; ignored otherwise. */
+  category?: CategoryName;
+}
+
+/**
+ * Change what an existing rule does - switch between "always categorize as X"
+ * and "always skip", or pick a different category - then bring the inbox in
+ * line with the new behavior.
+ */
+export const changeMerchantRule = async (
+  opts: ChangeRuleOptions,
+): Promise<{ dismissedCount: number; recategorizedCount: number }> => {
+  const rules = await getMerchantRules();
+  const rule = rules.find((r) => r.id === opts.ruleId);
+  if (!rule) return { dismissedCount: 0, recategorizedCount: 0 };
+  await updateMerchantRule(opts.ruleId, {
+    action: opts.action,
+    category:
+      opts.action === "categorize" && opts.category
+        ? opts.category
+        : rule.category,
+    type: rule.type,
+  });
+  return reapplyRulesToInbox();
+};
+
+/** Delete a rule and clear/re-derive the suggestions it produced. */
+export const removeMerchantRule = async (
+  ruleId: string,
+): Promise<{ dismissedCount: number; recategorizedCount: number }> => {
+  await deleteMerchantRule(ruleId);
+  return reapplyRulesToInbox();
 };

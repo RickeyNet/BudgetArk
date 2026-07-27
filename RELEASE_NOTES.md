@@ -223,6 +223,16 @@ Pure JS - OTA-eligible. Chosen over Rollover Mode: anchored to ground truth (a r
 - **Debut:** `cash-flow-budget` FEATURE_SPOTLIGHTS slide.
 - **Tests:** cashFlow math/parse matrix, diffEngine build/validate/apply (reject bad months, LWW, tie-skip write), import merge/drop-invalid/replace, export round-trip fixture.
 
+### Merchant rules manager - change "Always do this" decisions (2026-07-27)
+
+Pure JS - OTA-eligible. Closes the Review Inbox's one-way door: "always use this category" / "always skip" rules were previously invisible and permanent once created.
+
+- **UI:** new `MerchantRulesModal` (ConnectionsModal sub-screen pattern, nested delete-confirm dialog), opened from a Rules button in the Review Inbox header. Each rule row expands into the same category pill picker the inbox uses, with a leading "🚫 Always skip" pill - flip a rule between skip and categorize, retarget its category, or delete it.
+- **Service:** `changeMerchantRule` / `removeMerchantRule` in `reviewInboxService` mutate the rule then re-apply the FULL rule set to items still in the inbox: newly-ignored merchants are dismissed (ledger-recorded), stale suggestions are rewritten, and a deleted rule's items re-match against remaining rules exactly as a fresh ingest would (`replanInboxForRules`, pure in `merchant.ts`).
+- **Deliberate limit:** rule changes never resurrect transactions already skipped - the ingest ledger's decisions stand (the modal says so). Removing an ignore rule only affects future fetches.
+- **Storage:** `updateMerchantRule(id, patch)` added to `merchantRulesStorage` (identity fields preserved). Rules stay per-device, unsynced, unexported - unchanged.
+- **Tests:** `replanInboxForRules` matrix (category change, ignore takeover, deletion clear, fallback re-match, no-merchant skip).
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

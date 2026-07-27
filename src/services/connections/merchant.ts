@@ -8,7 +8,7 @@
  * every visit to the same merchant. Pure - node-testable.
  */
 
-import type { MerchantRule } from "../../types";
+import type { MerchantRule, PendingTransaction } from "../../types";
 import { sanitizeTextInput } from "../../utils/sanitize";
 
 export const MERCHANT_KEY_MAX_LENGTH = 40;
@@ -64,4 +64,44 @@ export const matchMerchantRule = (
     }
   }
   return best;
+};
+
+export interface InboxReplan {
+  /** Items whose suggestedCategory changed under the current rule set. */
+  updatedItems: PendingTransaction[];
+  /** Items now covered by an "ignore" rule - to be dismissed. */
+  dismissIds: string[];
+}
+
+/**
+ * Re-derive inbox items' rule outcomes after the rule set changed (a rule was
+ * edited, retargeted, or deleted). Each item is re-matched against the FULL
+ * current rule set - so deleting one rule can hand an item to another rule
+ * that also prefix-matches it, exactly as a fresh ingest would.
+ */
+export const replanInboxForRules = (
+  items: PendingTransaction[],
+  rules: MerchantRule[],
+  now: string,
+): InboxReplan => {
+  const updatedItems: PendingTransaction[] = [];
+  const dismissIds: string[] = [];
+  for (const item of items) {
+    const rule = item.merchant
+      ? matchMerchantRule(item.merchant, rules)
+      : undefined;
+    if (rule?.action === "ignore") {
+      dismissIds.push(item.id);
+      continue;
+    }
+    const suggestion = rule?.category;
+    if (suggestion !== item.suggestedCategory) {
+      updatedItems.push({
+        ...item,
+        suggestedCategory: suggestion,
+        updatedAt: now,
+      });
+    }
+  }
+  return { updatedItems, dismissIds };
 };

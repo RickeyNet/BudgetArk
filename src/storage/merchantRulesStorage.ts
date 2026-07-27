@@ -55,6 +55,25 @@ export const upsertMerchantRule = async (
   return updated;
 };
 
+/**
+ * Patch an existing rule's behavior (action/category/type) by id, preserving
+ * its identity fields (merchantKey, createdAt, useCount). Returns the updated
+ * list; no-op when the id is unknown.
+ */
+export const updateMerchantRule = async (
+  ruleId: string,
+  patch: Pick<MerchantRule, "action" | "category" | "type">,
+): Promise<MerchantRule[]> => {
+  const rules = await getMerchantRules();
+  const updated = rules.map((r) =>
+    r.id === ruleId
+      ? { ...r, ...patch, updatedAt: new Date().toISOString() }
+      : r,
+  );
+  await writeMerchantRules(updated);
+  return updated;
+};
+
 export const deleteMerchantRule = async (
   ruleId: string,
 ): Promise<MerchantRule[]> => {

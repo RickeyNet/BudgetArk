@@ -8,7 +8,9 @@
  * category picker with an "always do this" rule checkbox - on Approve it
  * remembers the category; on Skip it creates an ignore rule so the merchant
  * (credit-card payments, debt payments) never imports again. A bulk bar
- * approves everything that already has a rule-suggested category.
+ * approves everything that already has a rule-suggested category. The Rules
+ * header button opens MerchantRulesModal, where saved rules can be changed
+ * or deleted later.
  *
  * Approvals run through reviewInboxService (entry -> ledger -> inbox write
  * order); the host screen refreshes its entry list via `onChanged`.
@@ -37,6 +39,7 @@ import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useConnections } from "../connections/ConnectionsProvider";
 import CategoryPillPicker from "./CategoryPillPicker";
+import MerchantRulesModal from "./MerchantRulesModal";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import {
   approvePendingTransaction,
@@ -89,6 +92,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [rememberRule, setRememberRule] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -344,6 +348,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               </Text>
             </View>
             <TouchableOpacity
+              style={styles.syncButton}
+              onPress={() => setShowRules(true)}
+            >
+              <Text style={styles.syncButtonText}>Rules</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.syncButton, isSyncing && styles.buttonDisabled]}
               onPress={() => void syncNow()}
               disabled={isSyncing || connections.length === 0}
@@ -423,6 +433,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           </View>
         </View>
       </SheetKeyboardAvoider>
+
+      <MerchantRulesModal
+        visible={showRules}
+        onClose={() => setShowRules(false)}
+        customCategories={customCategories}
+      />
     </Modal>
   );
 };
