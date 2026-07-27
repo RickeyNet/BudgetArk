@@ -45,6 +45,10 @@ import {
 } from "../../utils/spreadsheetExport";
 import { waitForIosModalTeardown } from "../../utils/iosNativeShare";
 import { importSpreadsheet } from "../../utils/spreadsheetImport";
+import { listAutoBackups } from "../../services/autoBackup/autoBackupStore";
+import { cadenceLabel } from "../../services/autoBackup/autoBackupPlan";
+import { getAutoBackupSettings } from "../../storage/autoBackupSettingsStorage";
+import AutoBackupModal from "../../components/AutoBackupModal";
 import { KeyboardAwareModalOverlay } from "../../components/KeyboardAwareModalOverlay";
 import SpreadsheetSchemaModal from "../../components/SpreadsheetSchemaModal";
 import { triggerHaptic } from "../../utils/haptics";
@@ -124,6 +128,44 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
 
     /** Whether the import merge/replace modal is visible (file path) */
     const [showImportModeModal, setShowImportModeModal] = useState(false);
+
+    /** Automatic Backups row subtext + management modal visibility. */
+    const [autoBackupSummary, setAutoBackupSummary] = useState("Loading...");
+    const [showAutoBackupModal, setShowAutoBackupModal] = useState(false);
+
+    const refreshAutoBackupSummary = useCallback(async () => {
+      try {
+        const [settings, files] = await Promise.all([
+          getAutoBackupSettings(),
+          listAutoBackups(),
+        ]);
+        const newest = files[0] ?? null;
+        const lastLabel = newest
+          ? `last ${new Date(newest.timestampMs).toLocaleDateString()}`
+          : "none yet";
+        setAutoBackupSummary(
+          settings.enabled
+            ? `${cadenceLabel(settings.cadence)} · ${lastLabel}`
+            : `Off · ${lastLabel}`,
+        );
+      } catch {
+        setAutoBackupSummary("Unavailable");
+      }
+    }, []);
+
+    useFocusEffect(
+      useCallback(() => {
+        // The launch-time runner may have just written a backup; keep the
+        // row honest every time the tab regains focus.
+        void refreshAutoBackupSummary();
+        return undefined;
+      }, [refreshAutoBackupSummary]),
+    );
+
+    const closeAutoBackupModal = useCallback(() => {
+      setShowAutoBackupModal(false);
+      void refreshAutoBackupSummary();
+    }, [refreshAutoBackupSummary]);
 
     /** Spreadsheet export format-picker modal */
     const [showSpreadsheetExportModal, setShowSpreadsheetExportModal] =
@@ -591,6 +633,34 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
                   From file or clipboard
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={() => setShowAutoBackupModal(true)}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Automatic Backups
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  {autoBackupSummary}
                 </Text>
               </View>
               <Text
@@ -1217,6 +1287,11 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           visible={showSpreadsheetSchemaModal}
           onClose={() => setShowSpreadsheetSchemaModal(false)}
         />
+
+        {/* ── Automatic Backups Modal ── */}
+        {showAutoBackupModal ? (
+          <AutoBackupModal onClose={closeAutoBackupModal} showInfo={showInfo} />
+        ) : null}
 
         {/* ── Paste Import Modal ── */}
         <Modal

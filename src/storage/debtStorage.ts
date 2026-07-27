@@ -641,6 +641,10 @@ const RESET_KEYS = [
   // user's PIN - after a reset there is no data left to protect, and the
   // reset drops back into first-launch onboarding.
   "@budgetark_app_lock",
+  // Auto-backup preferences (the backup FILES are wiped separately by
+  // clearAllAutoBackups in ProfileScreen's reset flow - RESET_KEYS only
+  // clears AsyncStorage).
+  "@budgetark_auto_backup_settings",
 ] as const;
 
 export class ResetIncompleteError extends Error {

@@ -193,6 +193,16 @@ Pure JS - rides the same 1.9.0 runtime, OTA-eligible. Closes the v1.4.16 audit's
 - **Never leaves the device:** not in `exportData` (regression test extended), not in `SyncDiff`, wiped by Reset All Data (`RESET_KEYS`).
 - **Tests** (`utils/__tests__/appLock.test.ts`): validation matrix, hash round-trip + salting, fail-closed parse matrix + future-version acceptance, iteration bounds (tamper can't freeze unlocks), lockout escalation/clear/format.
 
+### Scheduled local auto-backup (2026-07-26)
+
+Pure JS - rides the same 1.9.0 runtime, OTA-eligible. Closes the Engineering Health "backup story is fully manual" gap: an on-device safety net for users who never tap Export. Deliberately NOT a cloud/off-device backup - sandbox files die with an uninstall, and the docs/UI say so; the share-sheet Export remains the device-migration path.
+
+- **What a backup is:** the standard export JSON (same `buildExportMessage()` as manual export - identical collections, identical size discipline) encrypted with the MASTER KEY via the fixture-tested V3 envelope (`encryptStringWithMasterKey`, same posture as receipt photos - never plaintext on disk, vault-unavailable throws instead of degrading). Files live at `<document>/autobackups/auto-backup-<epochMs>.enc`, newest 3 kept, pruned only AFTER a new write succeeds.
+- **Scheduling without background tasks** (`services/autoBackup/autoBackupRunner.ts`, kicked from App.tsx's deferred launch block after the payment-repair pass): due-ness derives from the newest file's name-embedded timestamp - no separate "last run" marker to drift. Weekly (default) or monthly; ON by default (the point is protecting users who never export; the file is sandbox-local + same-key encrypted, so no new exposure surface). Enabling or tightening the cadence in the modal runs the due-check immediately.
+- **UI** (Profile → Data → "Automatic Backups" row + `components/AutoBackupModal.tsx`): toggle, cadence chips, Back Up Now, and the backup list (date · size) with an INLINE merge/replace restore confirm (no stacked modals). Restores go through the same `importFromString` path as manual imports - same validation, bounds, and merge semantics; result surfaces via the shared info dialog after modal teardown, achievements re-check deferred 500ms (the Cartographer lesson).
+- **Housekeeping:** settings under `@budgetark_auto_backup_settings` (fail-closed parse to defaults, in RESET_KEYS); Reset All Data also wipes the backup directory (`clearAllAutoBackups` beside `clearAllAttachments` - RESET_KEYS only clears AsyncStorage). Nothing syncs, nothing is exported.
+- **Tests** (`services/autoBackup/__tests__/autoBackupPlan.test.ts`): file-name round-trip + fail-closed parse, due-check matrix (newest-wins, clock rollback, monthly), prune plan, settings parse defaults, size labels.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

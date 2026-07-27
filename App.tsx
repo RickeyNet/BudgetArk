@@ -47,6 +47,7 @@ import { UndoProvider } from "./src/undo/UndoProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import { repairDuplicateMinimumDuePayments } from "./src/storage/debtStorage";
 import { runAttachmentSweepIfDue } from "./src/services/attachments/attachmentSweepRunner";
+import { runAutoBackupIfDue } from "./src/services/autoBackup/autoBackupRunner";
 import {
   getLastSeenReleaseNotesVersion,
   setLastSeenReleaseNotesVersion,
@@ -142,6 +143,10 @@ const AppContent: React.FC = () => {
       // Receipt-photo orphan sweep (throttled to once/24h internally) - the
       // ONLY garbage collector for attachment files; see attachmentSweep.ts.
       void runAttachmentSweepIfDue();
+      // Scheduled local auto-backup (weekly/monthly, due-ness derived from
+      // the files themselves). After the repair above so a backup written
+      // this launch captures repaired data.
+      void runAutoBackupIfDue();
     });
     return () => task.cancel();
   }, [isOnboardingComplete]);

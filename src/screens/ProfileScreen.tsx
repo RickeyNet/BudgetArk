@@ -46,6 +46,7 @@ import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { getOrCreateUser, deleteAccount } from "../storage/userStorage";
 import { clearAllData } from "../storage/debtStorage";
 import { clearAllAttachments } from "../services/attachments/attachmentStore";
+import { clearAllAutoBackups } from "../services/autoBackup/autoBackupStore";
 import {
   getBackupReminderState,
   type BackupReminderState,
@@ -436,6 +437,9 @@ const ProfileScreen: React.FC = () => {
     // document directory and must be wiped separately or a fresh account
     // inherits the previous user's encrypted receipts on disk.
     await clearAllAttachments();
+    // Same for auto-backup files: a reset means "erase my data", and a
+    // fresh account must not be able to restore the previous user's world.
+    await clearAllAutoBackups();
     // The reminder settings key was just wiped (disabled by default), so any
     // pending check-in notifications are orphaned - cancel them now. Same
     // for keep-alive nudges: the debts they were planned from are gone.
