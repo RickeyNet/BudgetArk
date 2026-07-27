@@ -51,9 +51,13 @@ export type SpreadsheetFormat = "csv" | "xlsx";
  * (readable name, export-only); new Businesses sheet in xlsx workbooks.
  * v3: Budget Entries gained IncomeType / Retirement401k / TaxSetAsideRate
  * (all round-trip; blank for expenses and plain income).
+ * v4: Budget Entries gained Private ("yes"/blank, round-trip) - the
+ * partner-sync privacy flag. Stripping it on a backup/restore cycle would
+ * silently start syncing an entry the user marked private, so
+ * round-tripping it is a privacy requirement, not convenience.
  * Older files still import - the new columns are simply absent.
  */
-export const SPREADSHEET_SCHEMA_VERSION = 3;
+export const SPREADSHEET_SCHEMA_VERSION = 4;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -127,6 +131,10 @@ const BUDGET_ENTRY_COLUMNS = [
   "IncomeType",
   "Retirement401k",
   "TaxSetAsideRate",
+  // Partner-sync privacy flag: "yes" = never sent to the paired partner.
+  // Round-tripped as a privacy requirement - if a backup/restore cycle
+  // stripped it, the entry would silently start syncing again.
+  "Private",
   // ISO timestamp the entry was created. Round-tripped so re-importing an
   // exported file doesn't reset history.
   "CreatedAt",
@@ -287,6 +295,7 @@ const budgetEntryToRow = (
   IncomeType: entry.incomeType ?? "",
   Retirement401k: entry.retirementContribution ?? "",
   TaxSetAsideRate: entry.taxSetAsideRate ?? "",
+  Private: entry.isPrivate ? "yes" : "",
   CreatedAt: entry.createdAt ?? "",
   UpdatedAt: entry.updatedAt ?? "",
 });

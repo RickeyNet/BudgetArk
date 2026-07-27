@@ -325,6 +325,23 @@ describe("isBudgetEntryItem", () => {
     });
   });
 
+  describe("isPrivate partner-sync flag", () => {
+    it("accepts absent, true, and false", () => {
+      expect(isBudgetEntryItem(valid)).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: true })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: false })).toBe(true);
+    });
+
+    it("rejects non-boolean values and explains them", () => {
+      expect(isBudgetEntryItem({ ...valid, isPrivate: "yes" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: 1 })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: null })).toBe(false);
+      expect(explainBudgetEntryProblem({ ...valid, isPrivate: "yes" })).toContain(
+        '"isPrivate"'
+      );
+    });
+  });
+
   describe("attachments (receipt-photo metadata)", () => {
     const attachment = (over: Record<string, unknown> = {}) => ({
       id: "a1",

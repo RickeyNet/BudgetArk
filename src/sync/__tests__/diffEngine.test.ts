@@ -163,6 +163,17 @@ const monthBalance = (over: Record<string, unknown> = {}): any => ({
   ...over,
 });
 
+const budgetEntry = (over: Record<string, unknown> = {}): any => ({
+  id: "e1",
+  type: "expense",
+  category: "Grocery",
+  amount: 42.5,
+  date: OLD,
+  createdAt: OLD,
+  updatedAt: NEW,
+  ...over,
+});
+
 const emptyDiff = (over: Partial<SyncDiff> = {}): SyncDiff =>
   ({
     debts: [],
@@ -243,6 +254,32 @@ describe("computeOutgoingDiff", () => {
     await markBackfillSyncDone();
     expect(mockState.encStore.get("@budgetark_sync_backfill_done_v1")).toBe("true");
   });
+
+  it("never sends private budget entries - live or tombstoned", async () => {
+    mockState.budgetEntries = [
+      budgetEntry({ id: "public", updatedAt: NEW }),
+      budgetEntry({ id: "secret", isPrivate: true, updatedAt: NEW }),
+      budgetEntry({
+        id: "secret-deleted",
+        isPrivate: true,
+        deletedAt: NEW,
+        updatedAt: NEW,
+      }),
+    ];
+    // Both first sync (send-everything) and incremental must exclude them.
+    const first = await computeOutgoingDiff(null);
+    expect(first.budgetEntries.map((e) => e.record.id)).toEqual(["public"]);
+    const incremental = await computeOutgoingDiff(MID);
+    expect(incremental.budgetEntries.map((e) => e.record.id)).toEqual(["public"]);
+  });
+
+  it("sends an entry again after the private flag is cleared", async () => {
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", isPrivate: undefined, updatedAt: NEW }),
+    ];
+    const diff = await computeOutgoingDiff(MID);
+    expect(diff.budgetEntries.map((e) => e.record.id)).toEqual(["e1"]);
+  });
 });
 
 describe("applyIncomingDiff - validation gate", () => {
@@ -297,6 +334,22 @@ describe("applyIncomingDiff - validation gate", () => {
   it("rejects an invalid category bucket override", async () => {
     const bad = emptyDiff({ categoryBucketOverrides: { Food: "lavish" as any } });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/bucket override/);
+  });
+
+  it("rejects a budget entry whose isPrivate is not a boolean", async () => {
+    const bad = emptyDiff({
+      budgetEntries: [
+        { action: "upsert", record: budgetEntry({ isPrivate: "yes" }) },
+      ],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/budget entry/);
+    // A boolean (however unexpected from a well-behaved peer) is accepted.
+    const ok = emptyDiff({
+      budgetEntries: [
+        { action: "upsert", record: budgetEntry({ isPrivate: true }) },
+      ],
+    });
+    await expect(applyIncomingDiff(ok)).resolves.toBeGreaterThan(0);
   });
 
   it("rejects an out-of-range net-worth snapshot", async () => {

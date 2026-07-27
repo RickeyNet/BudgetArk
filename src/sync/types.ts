@@ -108,6 +108,11 @@ export interface BudgetLimitDiff {
 export interface SyncDiff {
   debts: DiffEntry<Debt>[];
   payments: DiffEntry<Payment>[];
+  /**
+   * Entries with `isPrivate` are excluded at diff-build time (live and
+   * tombstoned) - see computeOutgoingDiff. No wire change: receivers treat
+   * a private entry's absence like any other unchanged record.
+   */
   budgetEntries: DiffEntry<BudgetEntry>[];
   budgetLimits: BudgetLimitDiff[];
   savingsGoals: DiffEntry<SavingsGoal>[];

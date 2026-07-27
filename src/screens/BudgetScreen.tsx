@@ -144,6 +144,7 @@ type ExpenseCategoryEntry = {
   recurrenceInterval?: RecurrenceInterval;
   businessId?: string;
   attachmentCount?: number;
+  isPrivate?: boolean;
 };
 
 type ExpenseCategoryRow = {
@@ -745,6 +746,7 @@ const BudgetScreen: React.FC = () => {
             recurrenceInterval: e.recurrenceInterval,
             businessId: e.businessId,
             attachmentCount: e.attachments?.length,
+            isPrivate: e.isPrivate,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -1860,6 +1862,9 @@ const BudgetScreen: React.FC = () => {
                           ) : null}
                         </View>
                         <View style={styles.expandedEntryRight}>
+                          {entry.isPrivate && (
+                            <Text style={styles.entryEditHint}>🔒</Text>
+                          )}
                           {(entry.attachmentCount ?? 0) > 0 && (
                             <Text style={styles.entryEditHint}>
                               📷{(entry.attachmentCount ?? 0) > 1 ? ` ${entry.attachmentCount}` : ""}

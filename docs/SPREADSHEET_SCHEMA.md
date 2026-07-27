@@ -9,6 +9,8 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 
 **v3 changes:** Budget Entries gained `IncomeType`, `Retirement401k`, and `TaxSetAsideRate` (all round-trip; blank for expenses and plain income). Older files still import - the new columns are simply absent.
 
+**v4 changes:** Budget Entries gained `Private` (`yes`/blank, round-trips) - the partner-sync privacy flag. Older files still import - the column is simply absent.
+
 > **Receipt photos do not round-trip.** Photo attachments on entries live as encrypted files on the device and are not part of the spreadsheet schema (or the JSON export). A **merge**-mode import never removes an entry's local photos - an entry updated from a spreadsheet row keeps the photos already on the device. A **replace**-mode spreadsheet restore keeps the entry but not its photos; the in-app JSON backup preserves the entry's photo *references* (files stay on the original device).
 
 ## Sheet: Budget Entries
@@ -34,6 +36,7 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 | `IncomeType`      | No       | `w2` or `1099` for income rows (`W-2` / `W2` are accepted). Blank for expenses and plain income. Round-tripped. |
 | `Retirement401k`  | No       | 401(k) dollars withheld from a W-2 paycheck. Only kept when `IncomeType` is `w2`. Not part of `Amount` (which is the net deposit). Round-tripped. |
 | `TaxSetAsideRate` | No       | Percent (0-100) of a 1099 payment to set aside for taxes. Only kept when `IncomeType` is `1099`. Round-tripped. |
+| `Private`         | No       | `yes` marks a private entry that never syncs to a paired partner's device. Round-tripped - stripping it would silently start syncing the entry again. |
 | `CreatedAt`       | No       | ISO timestamp the entry was created. Round-tripped so re-importing doesn't reset history. |
 | `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
 

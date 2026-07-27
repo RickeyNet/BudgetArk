@@ -158,6 +158,7 @@ interface EntryFormState {
   retirementContribution: string;
   taxSetAsideRate: string;
   attachments: EntryAttachment[];
+  isPrivate: boolean;
 }
 
 const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
@@ -191,6 +192,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
       ? String(entry.taxSetAsideRate)
       : String(DEFAULT_TAX_SET_ASIDE_RATE),
   attachments: entry?.attachments ?? [],
+  isPrivate: !!entry?.isPrivate,
 });
 
 const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
@@ -244,6 +246,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const [taxSetAsideRate, setTaxSetAsideRate] = useState(
     initialForm.taxSetAsideRate
   );
+  const [isPrivate, setIsPrivate] = useState(initialForm.isPrivate);
   // See the header comment for the attachment lifecycle. Files are written
   // at pick time; newlyStagedIds tracks which ones a cancel may delete.
   const [attachments, setAttachments] = useState<EntryAttachment[]>(
@@ -282,6 +285,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setRetirementContribution(next.retirementContribution);
       setTaxSetAsideRate(next.taxSetAsideRate);
       setAttachments(next.attachments);
+      setIsPrivate(next.isPrivate);
     }
     setNewlyStagedIds(new Set());
     setStagingSession((s) => s + 1);
@@ -370,6 +374,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setIncomeType(next.incomeType);
     setRetirementContribution(next.retirementContribution);
     setTaxSetAsideRate(next.taxSetAsideRate);
+    setIsPrivate(next.isPrivate);
     // Deliberately does NOT delete staged photo files - submit commits them
     // to the saved entry, so only the cancel path (handleCancel) deletes.
     setAttachments([]);
@@ -415,6 +420,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         businessId: showBusinessPicker ? businessId : undefined,
         incomeType: entryIncomeType,
         taxSetAsideRate: entryTaxSetAsideRate,
+        isPrivate: isPrivate || undefined,
         // Photos land on the FIRST valid line (the UI hints at this when
         // multiple lines are open).
         attachments: undefined,
@@ -439,6 +445,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     businessId,
     category,
     incomeType,
+    isPrivate,
     lines,
     linkedAccountId,
     onAdd,
@@ -495,6 +502,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           ? clampTaxSetAsideRate(parseFloat(taxSetAsideRate))
           : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
+      isPrivate: isPrivate || undefined,
       updatedAt: new Date().toISOString(),
     });
 
@@ -511,6 +519,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     category,
     entry,
     incomeType,
+    isPrivate,
     isValid,
     lines,
     linkedAccountId,
@@ -835,6 +844,34 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           <Text style={styles.recurringHint}>
             This entry will repeat from the start month onward at the frequency
             you choose below.
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.recurringRow}
+        onPress={() => setIsPrivate((prev) => !prev)}
+        activeOpacity={0.7}
+      >
+        <View
+          style={[
+            styles.recurringToggle,
+            isPrivate && {
+              backgroundColor: colors.accent,
+              borderColor: colors.accent,
+            },
+          ]}
+        >
+          {isPrivate && <Text style={styles.recurringCheck}>✓</Text>}
+        </View>
+        <View style={styles.recurringTextWrap}>
+          <Text style={styles.recurringLabel}>🔒 Private</Text>
+          <Text style={styles.recurringHint}>
+            Never syncs to your partner's device. Still counts in your budget
+            and rides your own backups and exports.
+            {isEdit && !entry?.isPrivate && isPrivate
+              ? " If this entry synced before, your partner keeps the copy they already have."
+              : ""}
           </Text>
         </View>
       </TouchableOpacity>

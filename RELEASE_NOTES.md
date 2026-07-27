@@ -233,6 +233,16 @@ Pure JS - OTA-eligible. Closes the Review Inbox's one-way door: "always use this
 - **Storage:** `updateMerchantRule(id, patch)` added to `merchantRulesStorage` (identity fields preserved). Rules stay per-device, unsynced, unexported - unchanged.
 - **Tests:** `replanInboxForRules` matrix (category change, ignore takeover, deletion clear, fallback re-match, no-merchant skip).
 
+### Private budget entries - partner visibility control (2026-07-27)
+
+Pure JS - OTA-eligible. Mark any budget entry 🔒 Private and it never syncs to the paired partner; it stays in all local budget math, JSON backups, and spreadsheets.
+
+- **Data:** `BudgetEntry.isPrivate?: boolean`. Enforcement is a single filter in `computeOutgoingDiff` - private entries (live AND tombstoned) are dropped from the outgoing `budgetEntries` collection. No wire change; older peers are unaffected. Marking private bumps `updatedAt`, so a partner re-broadcasting the old public copy (backlog/re-pair) loses LWW to the local private version.
+- **Deliberate limits:** no retraction tombstone is sent when an already-synced entry is flipped private (an echoed tombstone could LWW-delete the live local entry) - the partner keeps the copy they already have, and the edit-modal hint says so. Un-marking private re-sends the entry on the next sync.
+- **Round-trip:** JSON export/import carries the flag wholesale; spreadsheet schema bumped v3→v4 with a `Private` ("yes"/blank) column on Budget Entries - stripping it on a backup/restore cycle would silently re-enable syncing, so it round-trips as a privacy requirement (docs + in-app schema modal updated). Validator gates `isPrivate` to boolean-or-absent at the sync/import trust boundary.
+- **UI:** 🔒 Private toggle in the Add/Edit entry modal (below Recurring), 🔒 badge on expanded Budget entry rows.
+- **Tests:** diffEngine exclusion (live/tombstoned/first-sync/unmark), validator matrix + explain, spreadsheet round-trip (xlsx + CSV).
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

@@ -248,6 +248,11 @@ export const isBudgetEntryItem = (
     item.taxSetAsideRate === undefined ||
     isSafeNumber(item.taxSetAsideRate, { min: 0, max: 100 });
   const attachmentsValid = isEntryAttachmentsValue(item.attachments);
+  // Partner-sync privacy flag. Boolean-or-absent only: a peer or import
+  // smuggling a truthy non-boolean here would still behave like `true`
+  // everywhere the flag is read, so shape-gate it like every other field.
+  const isPrivateValid =
+    item.isPrivate === undefined || typeof item.isPrivate === "boolean";
 
   return (
     isSafeText(item.id) &&
@@ -264,6 +269,7 @@ export const isBudgetEntryItem = (
     retirementContributionValid &&
     taxSetAsideRateValid &&
     attachmentsValid &&
+    isPrivateValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
@@ -345,6 +351,9 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   }
   if (!isEntryAttachmentsValue(item.attachments)) {
     return `"attachments" must be an array of at most ${MAX_IMPORTED_ATTACHMENTS} items, each with a string "id", a parseable "createdAt", and optional numeric "width"/"height"`;
+  }
+  if (item.isPrivate !== undefined && typeof item.isPrivate !== "boolean") {
+    return '"isPrivate" must be true or false when present';
   }
   if (!isValidDateValue(item.date)) {
     return '"date" must be a parseable date string (e.g. "2026-06-12")';

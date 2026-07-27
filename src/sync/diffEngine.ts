@@ -200,7 +200,18 @@ export const computeOutgoingDiff = async (
   return {
     debts: filterChanged(debts),
     payments: filterChanged(payments),
-    budgetEntries: filterChanged(budgetEntries),
+    // Private entries never leave the device - live or tombstoned. Filtered
+    // here (the single place outgoing diffs are built) rather than in
+    // storage so local reads are unaffected. Marking an entry private bumps
+    // its updatedAt, so if the partner ever re-broadcasts an old public
+    // copy (backlog/re-pair), LWW keeps the newer private version local.
+    // Known limitation: a copy the partner received BEFORE the entry was
+    // marked private stays on their device - we deliberately don't send a
+    // retraction tombstone, because it could echo back and LWW-delete the
+    // live local entry.
+    budgetEntries: filterChanged(
+      budgetEntries.filter((entry) => !entry.isPrivate)
+    ),
     savingsGoals: filterChanged(savingsGoals),
     assetAccounts: filterChanged(assetAccounts),
     // Holdings are tombstone-aware like assetAccounts. No backlog handling

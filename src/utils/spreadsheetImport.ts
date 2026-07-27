@@ -488,6 +488,11 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
       ? setAsideRaw
       : undefined;
 
+  // Partner-sync privacy flag. Must round-trip: a backup/restore cycle
+  // that stripped it would silently start syncing an entry the user marked
+  // private. Same truthy-cell parsing as Recurring.
+  const isPrivate = parseBoolean(get(row, "Private")) || undefined;
+
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
   // they're missing or unparseable, fall back to `now` - but prefer carrying
@@ -524,6 +529,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     incomeType,
     retirementContribution,
     taxSetAsideRate,
+    isPrivate,
   });
 };
 

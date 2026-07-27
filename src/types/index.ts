@@ -370,6 +370,15 @@ export interface BudgetEntry {
    * so a merged record can't brick a whole diff.
    */
   attachments?: EntryAttachment[];
+  /**
+   * Private entry: excluded from the outgoing partner-sync diff (live AND
+   * tombstoned - see diffEngine). Stays in all local budget math, JSON
+   * export/import, and spreadsheets (the flag must round-trip or a
+   * backup/restore cycle would silently un-private the entry). Known
+   * limitation: marking an ALREADY-SYNCED entry private stops future
+   * updates from syncing but can't retract the copy the partner received.
+   */
+  isPrivate?: boolean;
   /** Tombstone marker - see Debt.deletedAt. */
   deletedAt?: string;
 }
