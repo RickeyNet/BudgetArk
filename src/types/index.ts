@@ -483,6 +483,22 @@ export interface NetWorthSnapshot {
   netWorth: number;
 }
 
+/**
+ * A month's starting checking balance - the ground-truth anchor for the
+ * Budget tab's cash-flow projection ("safe to spend"). Stored and synced as
+ * a map keyed by month (`YYYY-MM`). No tombstones: a balance is only ever
+ * overwritten, never deleted, so LWW on `updatedAt` fully resolves
+ * conflicts between paired devices and backup imports.
+ */
+export interface MonthStartBalance {
+  /** Checking balance at the start of the month (negative = overdrawn). */
+  balance: number;
+  /** When the user entered/confirmed the number - display only. */
+  capturedAt: string;
+  /** LWW timestamp for sync/import merges. */
+  updatedAt: string;
+}
+
 /* ─── Stock Holdings Types ─── */
 
 /**

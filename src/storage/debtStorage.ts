@@ -645,6 +645,10 @@ const RESET_KEYS = [
   // clearAllAutoBackups in ProfileScreen's reset flow - RESET_KEYS only
   // clears AsyncStorage).
   "@budgetark_auto_backup_settings",
+  // Month-start checking balances (cash-flow projection) + the per-device
+  // once-per-month prompt marker.
+  "@budgetark_month_start_balances",
+  "@budgetark_month_balance_prompt",
 ] as const;
 
 export class ResetIncompleteError extends Error {

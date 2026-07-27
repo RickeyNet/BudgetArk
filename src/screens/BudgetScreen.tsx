@@ -112,6 +112,18 @@ import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurr
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
 import { totalsByBucket } from "../utils/budgetBucketMath";
 import { summarizePaychecks } from "../utils/paycheckMath";
+import CashFlowCard from "../components/CashFlowCard";
+import MonthBalancePromptModal from "../components/MonthBalancePromptModal";
+import {
+  getLastBalancePromptMonth,
+  getMonthStartBalances,
+  setLastBalancePromptMonth,
+} from "../storage/monthlyBalanceStorage";
+import {
+  computeReconciliation,
+  previousMonthKey,
+  type MonthStartBalanceMap,
+} from "../utils/cashFlow";
 
 /**
  * FAB layout constants - kept here so the coachmark can compute a
@@ -272,6 +284,10 @@ const BudgetScreen: React.FC = () => {
   const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
+  const [monthBalances, setMonthBalances] = useState<MonthStartBalanceMap>({});
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  /** True when the open balance modal came from the once-per-month nudge. */
+  const [balanceModalIsPrompt, setBalanceModalIsPrompt] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   /** Category preselected by the Quick Entry widget's deep link, if any. */
@@ -357,6 +373,7 @@ const BudgetScreen: React.FC = () => {
           storedBucketOverrides,
           storedDueDismissals,
           storedBusinesses,
+          storedMonthBalances,
         ] = await Promise.all([
           getBudgetEntries(),
           getDebts(),
@@ -368,6 +385,7 @@ const BudgetScreen: React.FC = () => {
           getCategoryBucketOverrides(),
           getDebtDueDismissals(),
           getBusinesses(),
+          getMonthStartBalances(),
         ]);
         if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
@@ -391,6 +409,7 @@ const BudgetScreen: React.FC = () => {
         setSavingsGoals(storedGoals);
         setAssetAccounts(processed.assetAccounts);
         setBusinesses(storedBusinesses);
+        setMonthBalances(storedMonthBalances);
         setReviewPreviewData(nextReviewData);
         setBucketOverrides(storedBucketOverrides);
         await refreshNetWorthSnapshots();
@@ -502,6 +521,46 @@ const BudgetScreen: React.FC = () => {
   );
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
+
+  /**
+   * Reconciliation for the Cash Flow card: how the selected month's entered
+   * starting balance compares against last month's projected end. Needs
+   * both months' records plus last month's net, computed with the exact
+   * same building blocks as the on-screen totals (recurring entries via
+   * isEntryActiveInMonth + the debt payment plan) so plan and projection
+   * can never disagree.
+   */
+  const cashFlowReconciliationDelta = useMemo(() => {
+    const current = monthBalances[selectedMonthKey];
+    const prevKey = previousMonthKey(selectedMonthKey);
+    const previous = monthBalances[prevKey];
+    if (!current || !previous) return null;
+
+    const prevEntries = entries.filter((e) => isEntryActiveInMonth(e, prevKey));
+    const prevIncome = prevEntries
+      .filter((e) => e.type === "income")
+      .reduce((sum, e) => sum + e.amount, 0);
+    const liveDebtIds = new Set(debts.map((d) => d.id));
+    const prevPayments = payments.filter(
+      (p) => liveDebtIds.has(p.debtId) && paymentMonthKey(p.date) === prevKey
+    );
+    const prevDebtTotal = buildDebtPaymentPlanForMonth(
+      debts,
+      prevPayments,
+      prevKey,
+      getMonthKey(new Date())
+    ).reduce((sum, line) => sum + line.amount, 0);
+    const prevExpenses =
+      prevEntries
+        .filter((e) => e.type === "expense")
+        .reduce((sum, e) => sum + e.amount, 0) + prevDebtTotal;
+
+    return computeReconciliation({
+      previousBalance: previous.balance,
+      previousNet: prevIncome - prevExpenses,
+      actualBalance: current.balance,
+    }).delta;
+  }, [monthBalances, selectedMonthKey, entries, debts, payments]);
 
   // Emergency-fund derived current amount. Only the "Savings" category
   // counts toward the EF; Retirement and Investing aren't liquid emergency
@@ -916,6 +975,51 @@ const BudgetScreen: React.FC = () => {
     });
     return () => task.cancel();
   }, [navigation, route.params?.quickAdd]);
+
+  // Once-per-calendar-month starting-balance nudge. Fires only when the tab
+  // is settled on the current month, the month has no recorded balance yet,
+  // and the prompt hasn't already fired this month (marker stamped when
+  // shown, so "Not now" never re-nags until next month). Deferred past
+  // interactions like every other modal here, and skipped entirely when a
+  // deep-link param is about to present a different modal - stacking two
+  // Modal presents in one transition is the iOS silent-present failure.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isLoaded) return;
+      if (
+        route.params?.quickAdd ||
+        route.params?.openInbox ||
+        route.params?.searchEntryId
+      ) {
+        return;
+      }
+      const currentKey = getMonthKey(new Date());
+      if (selectedMonthKey !== currentKey) return;
+      if (monthBalances[currentKey]) return;
+      let cancelled = false;
+      let task: ReturnType<typeof InteractionManager.runAfterInteractions> | null =
+        null;
+      getLastBalancePromptMonth().then((lastPrompted) => {
+        if (cancelled || lastPrompted === currentKey) return;
+        task = InteractionManager.runAfterInteractions(() => {
+          void setLastBalancePromptMonth(currentKey);
+          setBalanceModalIsPrompt(true);
+          setShowBalanceModal(true);
+        });
+      });
+      return () => {
+        cancelled = true;
+        task?.cancel();
+      };
+    }, [
+      isLoaded,
+      monthBalances,
+      selectedMonthKey,
+      route.params?.quickAdd,
+      route.params?.openInbox,
+      route.params?.searchEntryId,
+    ])
+  );
 
   // A budget-entry result tap in another tab's search sheet navigates here
   // with searchEntryId set - open that entry's edit sheet. Same deferral
@@ -1519,6 +1623,18 @@ const BudgetScreen: React.FC = () => {
         )}
       </View>
 
+      <CashFlowCard
+        record={monthBalances[selectedMonthKey] ?? null}
+        monthlyIncome={monthlyIncome}
+        monthlyExpenses={monthlyExpenses}
+        reconciliationDelta={cashFlowReconciliationDelta}
+        isCurrentMonth={selectedMonthKey === getMonthKey(new Date())}
+        onSetBalance={() => {
+          setBalanceModalIsPrompt(false);
+          setShowBalanceModal(true);
+        }}
+      />
+
       <DueDateReminderBanner
         entries={entries}
         onOpen={() => setShowBillCalendar(true)}
@@ -2064,6 +2180,26 @@ const BudgetScreen: React.FC = () => {
         customCategories={customCategories}
         onChanged={reloadAfterInboxChange}
       />
+
+      {showBalanceModal && (
+        <MonthBalancePromptModal
+          monthKey={selectedMonthKey}
+          isPrompt={balanceModalIsPrompt}
+          existingBalance={monthBalances[selectedMonthKey]?.balance ?? null}
+          onSaved={(balances, accounts) => {
+            setMonthBalances(balances);
+            if (accounts) {
+              setAssetAccounts(accounts);
+              // The checking balance moved - recapture today's net-worth
+              // snapshot so the Bridge/history reflect it without waiting
+              // for the next focus.
+              void refreshNetWorthSnapshots();
+            }
+            setShowBalanceModal(false);
+          }}
+          onClose={() => setShowBalanceModal(false)}
+        />
+      )}
 
       <MonthlyReviewModal
         visible={showReviewModal}

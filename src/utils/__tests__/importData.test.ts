@@ -553,6 +553,65 @@ describe("importFromString - golden encrypted fixtures (cross-version compat)", 
   });
 });
 
+describe("importFromString - month-start balances", () => {
+  const BAL_KEY = "@budgetark_month_start_balances";
+  const record = (over: Record<string, unknown> = {}) => ({
+    balance: 3200,
+    capturedAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+    ...over,
+  });
+
+  it("merges per month with LWW: an older imported record loses to a newer local one", async () => {
+    storageMock.__store.set(
+      BAL_KEY,
+      JSON.stringify({
+        "2026-07": record({ balance: 100, updatedAt: "2026-07-02T00:00:00.000Z" }),
+      })
+    );
+    await importFromString(
+      JSON.stringify({
+        monthStartBalances: {
+          "2026-07": record({ balance: 999, updatedAt: "2026-07-01T00:00:00.000Z" }),
+          "2026-06": record({ balance: 500 }),
+        },
+      }),
+      "merge"
+    );
+    const stored = readStore(BAL_KEY);
+    expect(stored["2026-07"].balance).toBe(100); // newer local kept
+    expect(stored["2026-06"].balance).toBe(500); // new month imported
+  });
+
+  it("drops invalid months/records individually instead of failing the import", async () => {
+    await importFromString(
+      JSON.stringify({
+        monthStartBalances: {
+          "2026-07": record(),
+          "2026-13": record(), // impossible month
+          "2026-06": record({ balance: "corrupt" }),
+        },
+      }),
+      "merge"
+    );
+    const stored = readStore(BAL_KEY);
+    expect(Object.keys(stored)).toEqual(["2026-07"]);
+  });
+
+  it("replace mode takes the imported map verbatim", async () => {
+    storageMock.__store.set(
+      BAL_KEY,
+      JSON.stringify({ "2026-05": record({ balance: 42 }) })
+    );
+    await importFromString(
+      JSON.stringify({ monthStartBalances: { "2026-07": record() } }),
+      "replace"
+    );
+    const stored = readStore(BAL_KEY);
+    expect(Object.keys(stored)).toEqual(["2026-07"]);
+  });
+});
+
 describe("importFromString - replace mode", () => {
   it("replaces existing records wholesale", async () => {
     storageMock.__store.set(

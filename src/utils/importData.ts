@@ -34,6 +34,10 @@ import {
 import { generateUUID } from "./uuid";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
 import {
+  parseMonthStartBalances,
+  type MonthStartBalanceMap,
+} from "./cashFlow";
+import {
   ENCRYPTED_EXPORT_PREFIX,
   ENCRYPTED_EXPORT_PREFIX_V2,
 } from "./exportData";
@@ -80,6 +84,7 @@ const KEYS = {
   CATEGORY_BUCKET_OVERRIDES: "@budgetark_category_bucket_overrides",
   ACHIEVEMENTS: "@budgetark_achievements",
   ACHIEVEMENT_STATS: "@budgetark_achievement_stats",
+  MONTH_START_BALANCES: "@budgetark_month_start_balances",
   DEBT_DUE_DISMISSALS: "@budgetark_debt_due_dismissals",
   CARD_KEEP_ALIVE_DISMISSALS: "@budgetark_card_keepalive_dismissals",
 } as const;
@@ -120,6 +125,7 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     isObject(data.categoryBucketOverrides) ||
     isObject(data.achievements) ||
     isObject(data.achievementStats) ||
+    isObject(data.monthStartBalances) ||
     isObject(data.debtDueDismissals) ||
     isObject(data.cardKeepAliveDismissals);
 
@@ -144,6 +150,7 @@ interface ImportPayload {
   categoryBucketOverrides?: Record<string, unknown>;
   achievements?: Record<string, unknown>;
   achievementStats?: Record<string, unknown>;
+  monthStartBalances?: Record<string, unknown>;
   debtDueDismissals?: Record<string, unknown>;
   cardKeepAliveDismissals?: Record<string, unknown>;
   user?: Record<string, unknown>;
@@ -175,6 +182,7 @@ interface SanitizedImportPayload {
   categoryBucketOverrides?: Record<string, "needs" | "wants" | "savings">;
   achievements?: SanitizedAchievements;
   achievementStats?: AchievementStats;
+  monthStartBalances?: MonthStartBalanceMap;
   debtDueDismissals?: Record<string, string>;
   cardKeepAliveDismissals?: Record<string, string>;
   user?: Record<string, unknown>;
@@ -443,6 +451,16 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   );
   const achievements = sanitizeAchievements(data.achievements);
   const achievementStats = sanitizeAchievementStats(data.achievementStats);
+  // Month-start balances: drop invalid entries individually (parse is
+  // fail-closed per record) - one corrupt month must not block restoring
+  // the user's financial data. Older exports without the field skip it.
+  const monthStartBalancesParsed = parseMonthStartBalances(
+    data.monthStartBalances
+  );
+  const monthStartBalances =
+    Object.keys(monthStartBalancesParsed).length > 0
+      ? monthStartBalancesParsed
+      : undefined;
   const debtDueDismissals = sanitizeDebtDueDismissals(data.debtDueDismissals);
   const cardKeepAliveDismissals = sanitizeDebtDueDismissals(
     data.cardKeepAliveDismissals
@@ -486,6 +504,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     categoryBucketOverrides,
     achievements,
     achievementStats,
+    monthStartBalances,
     debtDueDismissals,
     cardKeepAliveDismissals,
     debtMilestones,
@@ -1260,6 +1279,42 @@ export const importFromString = async (
   };
 
   /**
+   * Month-start balances: merge is per-month LWW on updatedAt, mirroring
+   * the sync merge in diffEngine - with ties going to the incoming record
+   * since the user explicitly chose to import (same tie rule as every
+   * other collection here). Local-only months always survive a merge.
+   * Replace mode takes the import verbatim.
+   */
+  const computeMergedMonthStartBalances = async (): Promise<{
+    json: string;
+  } | null> => {
+    const incoming = sanitized.monthStartBalances;
+    if (!incoming) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(incoming) };
+    }
+    let existing: MonthStartBalanceMap = {};
+    const existingRaw = await EncryptedStorage.getItem(
+      KEYS.MONTH_START_BALANCES
+    );
+    if (existingRaw) {
+      try {
+        existing = parseMonthStartBalances(JSON.parse(existingRaw));
+      } catch {
+        existing = {};
+      }
+    }
+    const merged: MonthStartBalanceMap = { ...existing };
+    for (const [monthKey, record] of Object.entries(incoming)) {
+      const local = merged[monthKey];
+      if (!local || parseTimestamp(record.updatedAt) >= parseTimestamp(local.updatedAt)) {
+        merged[monthKey] = record;
+      }
+    }
+    return { json: JSON.stringify(merged) };
+  };
+
+  /**
    * Dismissals (debt due-day + card keep-alive) are idempotent facts ("user
    * said 'not yet' for this debt+month on some device"), so merge is a
    * key-wise union. The value is only a dismissed-at bookkeeping stamp -
@@ -1354,6 +1409,7 @@ export const importFromString = async (
   const mergedCategoryBucketOverrides = await computeMergedBucketOverrides();
   const mergedAchievements = await computeMergedAchievements();
   const mergedAchievementStats = await computeMergedAchievementStats();
+  const mergedMonthStartBalances = await computeMergedMonthStartBalances();
   const mergedDueDismissals = await computeMergedDueDismissals();
   const mergedKeepAliveDismissals = await computeMergedKeepAliveDismissals();
 
@@ -1408,6 +1464,12 @@ export const importFromString = async (
     tempWrites.push([
       KEYS.ACHIEVEMENT_STATS + TEMP_SUFFIX,
       mergedAchievementStats.json,
+    ]);
+  }
+  if (mergedMonthStartBalances) {
+    tempWrites.push([
+      KEYS.MONTH_START_BALANCES + TEMP_SUFFIX,
+      mergedMonthStartBalances.json,
     ]);
   }
   if (mergedDueDismissals) {
@@ -1515,6 +1577,9 @@ export const importFromString = async (
       }
       if (sanitized.achievements) keysToRemove.push(KEYS.ACHIEVEMENTS);
       if (sanitized.achievementStats) keysToRemove.push(KEYS.ACHIEVEMENT_STATS);
+      if (sanitized.monthStartBalances) {
+        keysToRemove.push(KEYS.MONTH_START_BALANCES);
+      }
       if (sanitized.debtDueDismissals) {
         keysToRemove.push(KEYS.DEBT_DUE_DISMISSALS);
       }

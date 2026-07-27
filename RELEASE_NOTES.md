@@ -212,6 +212,17 @@ Pure JS - OTA-eligible. Clears three standing items from the security-audit back
 - **Constant-time MAC compares everywhere.** `constantTimeEquals` moved to `src/crypto/nativeCrypto.ts` (appLock re-exports it) and now guards the storage V3/V2 HMAC checks, the LAN-sync envelope HMAC in `transportService.ts`, and the new export MAC - no comparison short-circuits on the first wrong character anymore.
 - **Tests:** new `exportEncryption.test.ts` (round-trip, single-character tamper on ciphertext AND mac, wrong password, malformed-envelope matrix, fresh salt/iv per export, golden v3 fixture); importData golden-fixture suite extended with v3 import/tamper/wrong-password; encryptedStorage suite pins the keychain option on creation AND the one-time migration + marker.
 
+### Month-start cash-flow budget (2026-07-27)
+
+Pure JS - OTA-eligible. Chosen over Rollover Mode: anchored to ground truth (a real balance the user re-enters monthly) and self-correcting, no stateful carry-over chain re-deriving prior months.
+
+- **Data:** `MonthStartBalance {balance, capturedAt, updatedAt}` keyed by `YYYY-MM` in `storage/monthlyBalanceStorage.ts` (`@budgetark_month_start_balances`, atomic `updateItem` writes, in RESET_KEYS). Fail-closed per-record parsing (`parseMonthStartBalances` + `isMonthStartBalanceRecord`, magnitude-capped, negative = overdrawn allowed) shared by storage, import, and sync. No tombstones - records are only ever overwritten; LWW on `updatedAt`.
+- **Sync + backup:** new optional `SyncDiff.monthStartBalances` (older peers unaffected); whole-map send when non-empty (tiny), per-month LWW merge with ties-keep-local so the re-broadcast is idempotent - no backfill flag needed. JSON export/import round-trips the map (merge = per-month LWW, ties to incoming like every collection; replace = verbatim).
+- **Math** (`utils/cashFlow.ts`, pure + unit-tested): projection (`start + income − expenses`), safe-to-spend (month net), reconciliation (actual start vs last month's projected end), `previousMonthKey` year-rollover, cent rounding.
+- **UI:** `CashFlowCard` on Budget between the summary card and the reminder banners - starting cash → projected end → safe-to-spend (uses the SAME `monthlyIncome`/`monthlyExpenses` the summary card shows, recurring + debt plan included, so the two can never disagree), reconciliation line ("started $X above/below last month's plan"), CTA state for an unset current month, hidden for unset past months. `MonthBalancePromptModal`: once-per-calendar-month nudge on the Budget tab (marker stamped when SHOWN - "Not now" never re-nags until next month; deferred via InteractionManager and skipped when a deep-link param is mid-present), plus manual Set/Update from the card. Prefill chip offers the Bridge checking total; when exactly ONE live checking account exists and the month is current, saving also updates that account's balance (multi-account totals can't be distributed, so those save history only) and recaptures the day's net-worth snapshot.
+- **Debut:** `cash-flow-budget` FEATURE_SPOTLIGHTS slide.
+- **Tests:** cashFlow math/parse matrix, diffEngine build/validate/apply (reject bad months, LWW, tie-skip write), import merge/drop-invalid/replace, export round-trip fixture.
+
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
 
 Pure JS - ships OTA against the existing native runtime. No Worker changes.

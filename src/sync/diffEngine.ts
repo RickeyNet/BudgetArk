@@ -51,6 +51,10 @@ import {
   getNetWorthSnapshots,
   saveNetWorthSnapshots,
 } from "../storage/netWorthSnapshotStorage";
+import {
+  getMonthStartBalances,
+  saveMonthStartBalancesFromSync,
+} from "../storage/monthlyBalanceStorage";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import { isBuiltInCategory } from "../data/categoryIcons";
 import { isBudgetBucket } from "../data/categoryBuckets";
@@ -58,6 +62,7 @@ import type {
   CategoryBudgetLimit,
   CustomCategory,
   BudgetBucket,
+  MonthStartBalance,
   NetWorthSnapshot,
 } from "../types";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
@@ -73,6 +78,7 @@ import {
   isHoldingItem,
   isCustomCategoryItem,
   isBusinessItem,
+  isMonthStartBalanceRecord,
   isNetWorthSnapshotItem,
   isValidImportCategory,
   isMonthKey,
@@ -133,6 +139,7 @@ export const computeOutgoingDiff = async (
     businesses,
     bucketOverrides,
     netWorthSnapshots,
+    monthStartBalances,
     backfillDone,
   ] = await Promise.all([
     getDebtsIncludingDeleted(),
@@ -147,6 +154,7 @@ export const computeOutgoingDiff = async (
     getBusinessesIncludingDeleted(),
     getCategoryBucketOverrides(),
     getNetWorthSnapshots(),
+    getMonthStartBalances(),
     isBackfillSyncDone(),
   ]);
 
@@ -237,6 +245,12 @@ export const computeOutgoingDiff = async (
     // re-broadcasting it each sync is acceptable.
     categoryBucketOverrides:
       Object.keys(bucketOverrides).length > 0 ? bucketOverrides : undefined,
+    // Month-start balances: whole map whenever non-empty (one tiny record
+    // per month - even years of history is a few KB). The receiver's
+    // per-month LWW makes the re-broadcast idempotent, and skipping the
+    // incremental filter means no backfill flag is ever needed.
+    monthStartBalances:
+      Object.keys(monthStartBalances).length > 0 ? monthStartBalances : undefined,
     debtMilestonePlan:
       !lastSyncTimestamp ||
       new Date(milestonePlan.updatedAt).getTime() > since
@@ -358,6 +372,21 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     for (const [category, bucket] of Object.entries(diff.categoryBucketOverrides)) {
       if (!isValidImportCategory(category) || !isBudgetBucket(bucket)) {
         throw new Error("Sync rejected: invalid category bucket override");
+      }
+    }
+  }
+
+  // Month-start balances: a bare `monthKey → record` map like bucket
+  // overrides. Keys gate on the month-key shape, values on the shared
+  // trust-boundary validator (finite bounded balance + parseable dates).
+  // Absent field = older peer, fine.
+  if (diff.monthStartBalances !== undefined) {
+    if (!isObject(diff.monthStartBalances)) {
+      throw new Error("Sync rejected: malformed month-start balances");
+    }
+    for (const [monthKey, record] of Object.entries(diff.monthStartBalances)) {
+      if (!isMonthKey(monthKey) || !isMonthStartBalanceRecord(record)) {
+        throw new Error("Sync rejected: invalid month-start balance");
       }
     }
   }
@@ -611,6 +640,34 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     };
     await saveCategoryBucketOverridesFromSync(merged);
     changedCount += Object.keys(diff.categoryBucketOverrides).length;
+  }
+
+  // Merge month-start balances - union by monthKey, strictly-newer
+  // updatedAt wins (ties keep local, so the whole-map re-broadcast every
+  // sync is a no-op once devices converge). Only actually-applied months
+  // count toward changedCount, and a no-op diff skips the write.
+  if (
+    diff.monthStartBalances &&
+    Object.keys(diff.monthStartBalances).length > 0
+  ) {
+    const localBalances = await getMonthStartBalances();
+    const merged: Record<string, MonthStartBalance> = { ...localBalances };
+    let applied = 0;
+    for (const [monthKey, incoming] of Object.entries(diff.monthStartBalances)) {
+      const existing = merged[monthKey];
+      if (
+        !existing ||
+        new Date(incoming.updatedAt).getTime() >
+          new Date(existing.updatedAt).getTime()
+      ) {
+        merged[monthKey] = incoming;
+        applied++;
+      }
+    }
+    if (applied > 0) {
+      await saveMonthStartBalancesFromSync(merged);
+    }
+    changedCount += applied;
   }
 
   // Merge net-worth snapshots - union by dayKey, strictly-newer capturedAt

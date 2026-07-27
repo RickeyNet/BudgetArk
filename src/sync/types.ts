@@ -15,6 +15,7 @@ import type {
   AssetAccount,
   CustomCategory,
   BudgetBucket,
+  MonthStartBalance,
   NetWorthSnapshot,
   Holding,
   Business,
@@ -152,6 +153,15 @@ export interface SyncDiff {
    * Optional for older-peer tolerance like the fields above.
    */
   netWorthSnapshots?: NetWorthSnapshot[];
+  /**
+   * Month-start checking balances behind the cash-flow projection
+   * (`monthKey → record`). The whole map is sent whenever non-empty (tiny -
+   * one record per month) and merged per-month by LWW on `updatedAt`, so
+   * re-broadcasting each sync is idempotent. No tombstones: balances are
+   * only ever overwritten, never deleted. Optional so a diff from an older
+   * peer that predates this field still applies cleanly.
+   */
+  monthStartBalances?: Record<string, MonthStartBalance>;
   debtMilestonePlan?: DebtMilestonePlan;
   payoffStrategy?: PayoffStrategyPreference;
   /**

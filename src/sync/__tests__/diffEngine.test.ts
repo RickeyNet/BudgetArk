@@ -80,6 +80,12 @@ jest.mock("../../storage/netWorthSnapshotStorage", () => ({
     mockState.snapshots = v;
   }),
 }));
+jest.mock("../../storage/monthlyBalanceStorage", () => ({
+  getMonthStartBalances: jest.fn(async () => mockState.monthBalances),
+  saveMonthStartBalancesFromSync: jest.fn(async (v: any) => {
+    mockState.monthBalances = v;
+  }),
+}));
 jest.mock("../../storage/encryptedStorage", () => ({
   getItem: jest.fn(async (k: string) =>
     mockState.encStore.has(k) ? mockState.encStore.get(k) : null
@@ -150,6 +156,13 @@ const business = (over: Record<string, unknown> = {}): any => ({
   ...over,
 });
 
+const monthBalance = (over: Record<string, unknown> = {}): any => ({
+  balance: 3200,
+  capturedAt: NEW,
+  updatedAt: NEW,
+  ...over,
+});
+
 const emptyDiff = (over: Partial<SyncDiff> = {}): SyncDiff =>
   ({
     debts: [],
@@ -176,6 +189,7 @@ const freshState = () => ({
   businesses: [],
   bucketOverrides: {},
   snapshots: [],
+  monthBalances: {},
   limitsByMonth: {},
   encStore: new Map<string, string>(),
 });
@@ -607,6 +621,71 @@ describe("applyIncomingDiff - net-worth snapshots", () => {
       emptyDiff({ netWorthSnapshots: [snapshot({ dayKey: "2026-06-01", capturedAt: OLD })] })
     );
     expect(snapshotStorage.saveNetWorthSnapshots).not.toHaveBeenCalled();
+  });
+});
+
+describe("month-start balances sync", () => {
+  const balanceStorage = require("../../storage/monthlyBalanceStorage");
+
+  it("sends the whole map when non-empty, omits the field when empty", async () => {
+    mockState.monthBalances = { "2026-07": monthBalance() };
+    const diff = await computeOutgoingDiff(MID);
+    expect(diff.monthStartBalances).toEqual({ "2026-07": monthBalance() });
+
+    mockState.monthBalances = {};
+    const diff2 = await computeOutgoingDiff(MID);
+    expect(diff2.monthStartBalances).toBeUndefined();
+  });
+
+  it("rejects invalid month keys and malformed records outright", async () => {
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({ monthStartBalances: { "2026-13": monthBalance() } })
+      )
+    ).rejects.toThrow(/invalid month-start balance/i);
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({
+          monthStartBalances: { "2026-07": monthBalance({ balance: "3200" }) },
+        })
+      )
+    ).rejects.toThrow(/invalid month-start balance/i);
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({ monthStartBalances: "corrupt" as any })
+      )
+    ).rejects.toThrow(/malformed month-start balances/i);
+    expect(mockState.monthBalances).toEqual({}); // nothing was written
+  });
+
+  it("merges per month: strictly-newer updatedAt wins, local-only months survive", async () => {
+    mockState.monthBalances = {
+      "2026-06": monthBalance({ balance: 100, updatedAt: NEW }),
+      "2026-05": monthBalance({ balance: 50, updatedAt: OLD }),
+    };
+    const changed = await applyIncomingDiff(
+      emptyDiff({
+        monthStartBalances: {
+          "2026-06": monthBalance({ balance: 999, updatedAt: OLD }), // older - ignored
+          "2026-07": monthBalance({ balance: 700, updatedAt: NEW }), // new month - applied
+        },
+      })
+    );
+    expect(changed).toBe(1);
+    expect(mockState.monthBalances["2026-06"].balance).toBe(100);
+    expect(mockState.monthBalances["2026-05"].balance).toBe(50);
+    expect(mockState.monthBalances["2026-07"].balance).toBe(700);
+  });
+
+  it("ties keep local and skip the write (idempotent re-broadcast)", async () => {
+    mockState.monthBalances = { "2026-07": monthBalance({ balance: 100 }) };
+    await applyIncomingDiff(
+      emptyDiff({
+        monthStartBalances: { "2026-07": monthBalance({ balance: 999 }) }, // same updatedAt
+      })
+    );
+    expect(mockState.monthBalances["2026-07"].balance).toBe(100);
+    expect(balanceStorage.saveMonthStartBalancesFromSync).not.toHaveBeenCalled();
   });
 });
 

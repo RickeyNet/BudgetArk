@@ -184,38 +184,7 @@ Work through phases in order: finish the features first, then handle store prep 
   - Sandbox-test on device (sandbox Apple ID / Play license tester) before release; products can take a few hours to propagate after creation.
 - [ ] Budget Rollover Mode - unspent budget in a category rolls into next month (envelope budgeting style). Toggle per category.
 
-- [ ] Month-start checking balance + cash-flow budget - at the beginning of each calendar month, prompt the user to update their checking balance, snapshot it as the month's starting cash, and factor it into the Budget screen as a real cash-flow projection. Chosen over Budget Rollover Mode (above) because it's anchored to ground truth and self-correcting (no stateful carry-over chain that re-derives every prior month).
-
-  Builds on existing plumbing: `AssetAccount` already has a `"checking"` category + `balance` field (`src/types/index.ts:297`, `src/storage/assetAccountStorage.ts`), net-worth snapshots already exist (`netWorthSnapshotStorage.ts`), and the budget already keys income/expense entries per month. The only genuinely new data is a per-month starting-balance history.
-
-  Three parts:
-  1. **Month-start prompt** - on first app open of a new calendar month, ask "What's your checking balance today?" Idempotent-per-month via a stored `lastPromptedMonthKey` (same pattern as the app-open streak in `evaluateAchievements` and `backupReminderStorage.ts`). Skippable; also expose a manual "Update balance" entry point anytime.
-  2. **Beginning-of-month balance history** - new `src/storage/monthlyBalanceStorage.ts`: `Record<monthKey, { balance: number, capturedAt: string }>`. The prompt writes here AND updates the checking `AssetAccount.balance` in one step so net worth stays correct.
-  3. **Factor into budget** - with a real starting number, BudgetScreen shows a true cash-flow projection instead of just planned limits:
-     ```
-     Starting cash (Jun)             $3,200   ← entered at month start
-     + income this month             $4,100
-     − expenses (actual + recurring) $3,650
-     = projected end-of-month        $3,650
-       safe to spend                 $450
-     ```
-     Reuse `isEntryActiveInMonth` so recurring entries match the Spending donut math.
-
-  Free bonus: **reconciliation line** - compare last month's projected end-of-month vs. the freshly-entered actual ("ended $150 below plan"). Near-zero extra cost once the history exists.
-
-  Decisions to settle before building:
-  - **Single number vs. per-account**: sum all `category === "checking"` accounts automatically (recommended, one prompt) vs. a single manual "spendable cash" figure.
-  - **Reuse `AssetAccount.balance`** as the live value + snapshot to monthly history (recommended) vs. a fully separate balance field.
-  - **Sync**: this is real financial data and partner-relevant, so DO sync the monthly balance history (unlike per-device UX state like coachmarks/feature-discovery).
-
-  Files (proposed):
-  - `src/storage/monthlyBalanceStorage.ts` - CRUD for the `monthKey → { balance, capturedAt }` map (EncryptedStorage, sync-eligible).
-  - `src/components/MonthBalancePromptModal.tsx` - the once-per-month prompt (reuse existing modal + theme/density tokens).
-  - `src/components/CashFlowCard.tsx` - Budget-tab card showing starting cash → projected end-of-month → safe-to-spend + reconciliation line.
-  - `src/utils/cashFlow.ts` - pure helpers (startingCashForMonth, projectedEndOfMonth, safeToSpend, reconcileVsActual).
-  - `src/screens/BudgetScreen.tsx` - mount the card; wire the prompt + manual update button.
-
-  Effort: medium-small (smaller than Rollover Mode). Mostly additive - one storage module, one prompt modal, one card + math helper. No cross-month recomputation chain. OTA-eligible: yes, no new native deps.
+- [x] Month-start checking balance + cash-flow budget - SHIPPED app-side 2026-07-27 (OTA-eligible, pure JS). Built exactly to the spec that lived here, with the flagged decisions resolved as recommended: monthly prompt prefills the summed checking accounts but stores ONE number; `AssetAccount.balance` is reused as the live value (auto-updated on save only when exactly one live checking account exists and the month is current - a multi-account total can't be distributed); the balance history DOES sync (new optional `SyncDiff.monthStartBalances`, whole-map send + per-month LWW on `updatedAt`, ties-keep-local) and rides JSON export/import. Files as proposed: `storage/monthlyBalanceStorage.ts` (`@budgetark_month_start_balances` + once-per-month prompt marker, both in RESET_KEYS), `utils/cashFlow.ts` (pure, unit-tested: projection, safe-to-spend, reconciliation, `previousMonthKey`), `components/CashFlowCard.tsx` (starting cash → projected end → safe-to-spend + "started $X above/below plan" reconciliation; consumes the SAME monthlyIncome/monthlyExpenses the summary card shows so they can never disagree), `components/MonthBalancePromptModal.tsx` (once-per-month nudge - marker stamped when shown so "Not now" never re-nags; InteractionManager-deferred, skipped while a deep-link param is presenting), BudgetScreen wiring. `cash-flow-budget` spotlight added. Device-test pending: first-of-month prompt timing, prompt-vs-deep-link collision, single-account balance write-through + net-worth recapture, reconciliation line after a second month's entry, card rendering across themes/density.
 
 - [ ] Spending Velocity Alerts - passive banner when opening the app: "You've spent 60% of your Grocery budget and it's only the 12th." No push notifications required.
 - [ ] Partner Budget Visibility Controls - mark specific budget entries as "private" so they don't sync to partner. Useful for gifts or personal spending.
@@ -493,9 +462,7 @@ Ideas for new color themes (all pure JS - a `ThemePreset` in `src/theme/themes.t
 
 ## Engineering Health - Post-1.7.2 Assessment (2026-06-09)
 
-Prioritized gaps identified after the Round 4 audit. Completed items have moved to the Done section at the bottom of this file. Remaining: crash reporting (needs a new EAS build) and the Potentialbugs.md split.
-
-- [ ] **Crash reporting.** No Sentry/crash telemetry - bugs only surface when a user emails. `@sentry/react-native` (Expo config plugin) captures JS crashes, native crashes, and handled errors with breadcrumbs. Native module → requires new EAS build; pair with whatever next forces a runtimeVersion bump. Privacy note for the store listing/privacy policy: crash payloads leave the device, so scrub PII (no balances, no debt names in breadcrumbs) and add an opt-out toggle in Profile to keep the "data stays on device" promise honest.
+Prioritized gaps identified after the Round 4 audit. Completed items have moved to the Done section at the bottom of this file. Remaining: the Potentialbugs.md split.
 
 - [x] **Scheduled local auto-backup.** SHIPPED app-side 2026-07-26 (OTA-eligible, pure JS). Weekly (default, ON) or monthly export JSON encrypted with the MASTER KEY (V3 envelope, receipt-photo posture - never plaintext, vault-down throws) into `<document>/autobackups/`, newest 3 kept, pruned only after a successful write. No background task: due-check on cold start (`autoBackupRunner.ts` in App.tsx's deferred launch block), due-ness derived from the newest file's name-embedded timestamp (no drift-prone marker). UI: Profile → Data → Automatic Backups (`AutoBackupModal.tsx`) - toggle/cadence/Back Up Now + restore list with inline merge/replace confirm through the standard `importFromString` path. Settings `@budgetark_auto_backup_settings` in RESET_KEYS; reset also wipes the directory (`clearAllAutoBackups`). Planner pure + unit-tested (`autoBackupPlan.ts`). Deliberately device-local only (uninstall deletes it; Export remains the migration path - stated in the modal). Device-test pending: first-launch auto-write, cadence respected across launches, Back Up Now, merge + replace restores, reset wipes files, row subtext freshness.
 

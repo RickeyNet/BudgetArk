@@ -548,6 +548,27 @@ export const isNetWorthSnapshotItem = (
   );
 };
 
+/**
+ * One month-start balance record (the VALUES of the `monthKey → record`
+ * map; keys are gated separately with `isMonthKey`). Trust-boundary
+ * validator shared by JSON import and P2P sync. The magnitude cap exists so
+ * a hostile peer or hand-edited backup can't inject a figure that renders
+ * an absurd projection - generous enough that no real checking account
+ * ever hits it. Negative balances are legitimate (overdrawn account).
+ */
+export const isMonthStartBalanceRecord = (
+  item: unknown
+): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    typeof item.balance === "number" &&
+    Number.isFinite(item.balance) &&
+    Math.abs(item.balance) <= 1_000_000_000 &&
+    isValidDateValue(item.capturedAt) &&
+    isValidDateValue(item.updatedAt)
+  );
+};
+
 export const VALID_PAYOFF_STRATEGIES = new Set([
   "custom",
   "avalanche",

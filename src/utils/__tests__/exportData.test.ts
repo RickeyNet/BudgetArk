@@ -116,6 +116,13 @@ const fixtures = {
     onboardingComplete: true,
     currencyPreferenceId: "usd",
   },
+  monthStartBalances: {
+    "2026-03": {
+      balance: 3200.5,
+      capturedAt: "2026-03-01T09:00:00.000Z",
+      updatedAt: "2026-03-01T09:00:00.000Z",
+    },
+  },
 };
 
 jest.mock("../../storage/debtStorage", () => ({
@@ -163,6 +170,9 @@ jest.mock("../../storage/achievementsStorage", () => ({
 }));
 jest.mock("../../storage/achievementStatsStorage", () => ({
   getAchievementStats: jest.fn(async () => null),
+}));
+jest.mock("../../storage/monthlyBalanceStorage", () => ({
+  getMonthStartBalances: jest.fn(async () => fixturesRef.monthStartBalances),
 }));
 jest.mock("../../storage/debtDueReminderStorage", () => ({
   getDebtDueDismissals: jest.fn(async () => ({})),
@@ -258,6 +268,30 @@ describe("buildExportMessage - plain JSON", () => {
       storageMock.__store.get("@budgetark_budget_entries") ?? "[]",
     );
     expect(storedEntries.find((e: any) => e.id === "e3").businessId).toBe("b1");
+  });
+
+  it("carries month-start balances through the round-trip with LWW merge", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    expect(payload.monthStartBalances["2026-03"].balance).toBe(3200.5);
+
+    // Merge: a newer local month survives, the imported month lands.
+    storageMock.__store.set(
+      "@budgetark_month_start_balances",
+      JSON.stringify({
+        "2026-04": {
+          balance: 999,
+          capturedAt: "2026-04-01T00:00:00.000Z",
+          updatedAt: "2026-04-01T00:00:00.000Z",
+        },
+      })
+    );
+    await importFromString(message, "merge");
+    const stored = JSON.parse(
+      storageMock.__store.get("@budgetark_month_start_balances") ?? "{}",
+    );
+    expect(stored["2026-03"].balance).toBe(3200.5);
+    expect(stored["2026-04"].balance).toBe(999);
   });
 
   it("carries bank-entry provenance fields through the round-trip", async () => {

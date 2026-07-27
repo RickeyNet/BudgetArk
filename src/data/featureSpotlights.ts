@@ -59,6 +59,14 @@ export type FeatureSpotlight = {
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   {
+    id: "cash-flow-budget",
+    sinceVersion: "1.9.0",
+    icon: "💵",
+    title: "Know what's safe to spend",
+    blurb:
+      "Tell BudgetArk what's in checking at the start of the month, and the Budget tab projects where the month ends - income in, bills and debt minimums out - with a real safe-to-spend number instead of a guess.",
+  },
+  {
     id: "card-keep-alive",
     sinceVersion: "1.9.0",
     // The in-app banner works via OTA, but the reminder notifications need

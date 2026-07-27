@@ -30,6 +30,7 @@ import { getBusinessesIncludingDeleted } from "../storage/businessStorage";
 import { getCategoryBucketOverrides } from "../storage/categoryBucketOverridesStorage";
 import { getUnlockedAchievements } from "../storage/achievementsStorage";
 import { getAchievementStats } from "../storage/achievementStatsStorage";
+import { getMonthStartBalances } from "../storage/monthlyBalanceStorage";
 import { getDebtDueDismissals } from "../storage/debtDueReminderStorage";
 import { getCardKeepAliveDismissals } from "../storage/cardKeepAliveDismissalStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
@@ -80,6 +81,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     categoryBucketOverrides,
     achievements,
     achievementStats,
+    monthStartBalances,
     debtDueDismissals,
     cardKeepAliveDismissals,
   ] = await Promise.all([
@@ -118,6 +120,9 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     // stat-based badges to zero.
     getUnlockedAchievements(),
     getAchievementStats(),
+    // Month-start checking balances: real financial history (the cash-flow
+    // projection's anchor), so it must survive a device migration.
+    getMonthStartBalances(),
     // Due-day dismissals are "<debtId>:<YYYY-MM>" facts; without them every
     // debt with a payment due day re-prompts for the current month right
     // after a restore.
@@ -163,6 +168,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     categoryBucketOverrides,
     achievements,
     achievementStats,
+    monthStartBalances,
     debtDueDismissals,
     cardKeepAliveDismissals,
   };

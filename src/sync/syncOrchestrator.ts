@@ -317,6 +317,7 @@ const countDiffEntries = (diff: SyncDiff): number => {
     (diff.businesses?.length ?? 0) +
     (diff.customCategories?.length ?? 0) +
     Object.keys(diff.categoryBucketOverrides ?? {}).length +
+    Object.keys(diff.monthStartBalances ?? {}).length +
     (diff.netWorthSnapshots?.length ?? 0) +
     (diff.debtMilestonePlan ? 1 : 0) +
     (diff.payoffStrategy ? 1 : 0)
