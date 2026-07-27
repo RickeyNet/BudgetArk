@@ -88,6 +88,7 @@ import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { calcMonthlyCashFlow } from "../utils/purchasePlanner";
 import type { MonthlyCashFlow } from "../utils/purchasePlanner";
 import PurchasePlannerCard from "../components/PurchasePlannerCard";
+import TaxCalculatorCard from "../components/TaxCalculatorCard";
 import type {
   ChapterId,
   CustomCategory,
@@ -2600,6 +2601,9 @@ const ChartsScreen: React.FC = () => {
           milestonePlan={milestonePlan}
           onGoalsChanged={handlePurchaseGoalsChanged}
         />
+
+        {/* ── Take-Home Pay (US income tax estimator) ── */}
+        <TaxCalculatorCard />
       </ScrollView>
       {coachmark}
       <LessonScreen

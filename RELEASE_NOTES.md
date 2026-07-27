@@ -233,6 +233,15 @@ Pure JS - OTA-eligible. Closes the Review Inbox's one-way door: "always use this
 - **Storage:** `updateMerchantRule(id, patch)` added to `merchantRulesStorage` (identity fields preserved). Rules stay per-device, unsynced, unexported - unchanged.
 - **Tests:** `replanInboxForRules` matrix (category change, ignore takeover, deletion clear, fallback re-match, no-merchant skip).
 
+### Take-home pay calculator (2026-07-27)
+
+Pure JS - OTA-eligible. Charts-tab "Take-Home Pay" tool: US federal + state + FICA estimate from bundled tax-year-2026 tables; no network call, ever.
+
+- **Data:** `src/data/taxData2026.ts` (federal brackets all 4 filing statuses incl. the MFS $384,350 37% start and the HoH $256,200 quirk; standard deductions; FICA rates, $184,500 SS wage base, Additional Medicare thresholds - IRS Rev. Proc. 2025-32 / SSA) + `src/data/stateTaxData2026.ts` (all 50 states + DC: 9 no-tax, flat, and progressive with full single-filer brackets; Tax Foundation 2026 with hand-verified corrections for MO/AZ, which the bulk source garbled). Annual refresh = OTA bundle update; `TAX_DATA_YEAR` + the in-card source line move together.
+- **Documented v1 approximations** (in the data file header + on-card disclaimer): MFJ doubles single-filer state brackets; MFS/HoH reuse the single table; exemption-system states (IL/IN/MI/PA/NJ/CT/OH/MA/WV) modeled with $0 deduction; Utah's credit applied flat with a 0 floor; no local/city taxes (noted per-state for NYC/MD/OH/PA/IN/MI), no credits, no itemizing, no SE tax.
+- **Math** (`utils/taxCalc.ts`, pure, 24 tests): marginal bracket walk, FICA with SS cap + Additional Medicare by status, state calc (deduction → brackets/flat → credit floor), take-home orchestrator. Withholding model: traditional 401(k) reduces income-tax bases but NOT FICA wages; HSA + health premiums (Section 125) reduce both. Inputs clamp (MAX_MONEY, 0-100%, NaN-safe) - never throw.
+- **UI:** `TaxCalculatorCard.tsx` (collapsible tool card after Plan a Purchase): salary / filing-status / pay-frequency / 51-state chip grid / optional pre-tax inputs → per-paycheck take-home, segmented where-each-dollar bar, yearly breakdown with effective + marginal rates, per-state caveat notes, and a "What if you moved?" state comparison. Deliberately formats USD regardless of display currency (US-only tool; labeled).
+
 ### Private budget entries - partner visibility control (2026-07-27)
 
 Pure JS - OTA-eligible. Mark any budget entry 🔒 Private and it never syncs to the paired partner; it stays in all local budget math, JSON backups, and spreadsheets.
