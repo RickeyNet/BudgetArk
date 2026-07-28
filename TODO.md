@@ -110,7 +110,7 @@ Work through phases in order: finish the features first, then handle store prep 
 
   Still TODO:
   - Device-test: cold-start lock, 15s grace matrix (quick switch vs long background), lockout countdown + persistence across force-quit, set/change/disable flows, Reset All Data clears the PIN, theme/density/large-text rendering of the pad.
-  - Possible fast-follows: biometric unlock ON TOP of the PIN (`expo-local-authentication`, native dep - bundle with the next store build), ~~a FEATURE_SPOTLIGHTS debut slide~~ DONE 2026-07-27 (`app-lock` slide + `appLock` openSection deep link via SettingsSection ref), onboarding-guide entry ("lock", "PIN" keywords).
+  - Possible fast-follows: biometric unlock ON TOP of the PIN (`expo-local-authentication`, native dep - bundle with the next store build), ~~a FEATURE_SPOTLIGHTS debut slide~~ DONE 2026-07-27 (`app-lock` slide + `appLock` openSection deep link via SettingsSection ref), ~~onboarding-guide entry~~ DONE 2026-07-27 (profile-extras topic: App Lock sentence + "app lock"/"pin"/"passcode" keywords).
 
 #### Medium
 - [x] Add MAC to encrypted exports (or switch to AES-GCM) - DONE (2026-07-26): Option B shipped as `src/utils/exportEncryption.ts` - new `__BUDGETARK_ENC3__:` encrypt-then-MAC format (`salt.iv.ct.mac`; ONE PBKDF2-SHA256 250k call derives 64 bytes, split into AES-256-CBC key + HMAC-SHA256 key; MAC verified constant-time BEFORE decrypting). Write path is v3-only; import reads v1/v2/v3 forever. Golden v3 fixture pins the format (`exportEncryption.test.ts` + `importData.test.ts`). Known cost: an app older than v3-support can't read a NEW password-protected export.

@@ -141,6 +141,17 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         keywords: ["income", "expense", "net", "month", "history", "summary", "monthly review", "arrows"],
       },
       {
+        id: "budget-cashflow",
+        emoji: "💵",
+        title: "Cash Flow - what's safe to spend",
+        body:
+          "At the start of each month, tell BudgetArk what's in your checking account. The Cash Flow card projects where the month ends - income in, planned bills and debt minimums out - and shows a live safe-to-spend number that updates as you log entries.",
+        detail:
+          "The Cash Flow card anchors your budget to ground truth: one real number, your checking balance, entered once a month (a prompt asks; skip it and a Set button stays on the card). From there it projects the month's end - income in, spending out, planned bills and debt minimums included - and shows safe-to-spend, which moves live as you log entries. Entering a new month's balance also reconciles reality against last month's plan ('started $150 below plan'), so drift shows up immediately. If you keep exactly one checking account on your Bridge, saving the monthly balance updates it too. Balance history syncs with your partner and rides your backups.",
+        location: "Budget tab → Cash Flow card",
+        keywords: ["cash flow", "safe to spend", "checking", "balance", "projection", "month start", "reconcile", "left to spend"],
+      },
+      {
         id: "budget-spending",
         anchorId: "budget-spending-card",
         emoji: "🍩",
@@ -158,11 +169,11 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         emoji: "✏️",
         title: "Add an entry with +",
         body:
-          "Income, expense, or savings entry. Mark anything that repeats as Recurring and it auto-fills every month. Income entries can be tagged as W-2 or 1099 paychecks to track 401(k) contributions and how much to set aside for taxes.",
+          "Income, expense, or savings entry. Mark anything that repeats as Recurring and it auto-fills every month. Income entries can be tagged as W-2 or 1099 paychecks, and any entry can be marked 🔒 Private so it never syncs to your partner's device.",
         detail:
-          "Entries are the heart of the budget: type (income / expense), category, amount, date, and an optional description. Recurring entries fill themselves in every month until you stop them - perfect for rent, subscriptions, and paychecks. Income can be tagged W-2 (enter your take-home amount, optionally recording the 401(k) dollars withheld so retirement savings still get credit) or 1099 / contractor (nothing is withheld, so BudgetArk shows how much to set aside for taxes at a percentage you pick). Expenses can carry up to three encrypted receipt photos and a business tag. Multi-line quick-add lets you enter several purchases in one visit.",
+          "Entries are the heart of the budget: type (income / expense), category, amount, date, and an optional description. Recurring entries fill themselves in every month until you stop them - perfect for rent, subscriptions, and paychecks. Income can be tagged W-2 (enter your take-home amount, optionally recording the 401(k) dollars withheld so retirement savings still get credit) or 1099 / contractor (nothing is withheld, so BudgetArk shows how much to set aside for taxes at a percentage you pick). Expenses can carry up to three encrypted receipt photos and a business tag. The 🔒 Private toggle keeps an entry off your paired partner's device entirely - for gifts, surprises, or spending that's simply yours - while it still counts in your own budget, backups, and exports (mark it private when you create it; a copy that already synced stays with your partner). Multi-line quick-add lets you enter several purchases in one visit.",
         location: "Budget tab → + button",
-        keywords: ["add entry", "income", "expense", "recurring", "subscription", "w-2", "w2", "1099", "paycheck", "401k", "retirement", "taxes", "set aside"],
+        keywords: ["add entry", "income", "expense", "recurring", "subscription", "w-2", "w2", "1099", "paycheck", "401k", "retirement", "taxes", "set aside", "private", "gift", "hide", "secret"],
       },
       {
         id: "budget-widget",
@@ -180,11 +191,11 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         emoji: "📥",
         title: "Review Inbox for bank imports",
         body:
-          "Connected a bank in Profile? New transactions wait in the tray icon at the top of this screen - nothing enters your budget until you approve it. Confirm or change each category, edit, or skip; approve a merchant with 'always use this category' and its future charges arrive pre-suggested. Transfers between your own accounts are set aside automatically.",
+          "Connected a bank in Profile? New transactions wait in the tray icon at the top of this screen - nothing enters your budget until you approve it. Check 'Always do this' while approving or skipping to teach BudgetArk a merchant rule, and change any saved rule later via the Rules button.",
         detail:
-          "The Review Inbox is the gate between your bank and your budget: every imported transaction waits there until you approve, edit, or skip it - nothing is ever added silently. Each item arrives with a suggested category; tick 'always use this category' while approving and that merchant's future charges come pre-filled, ready for one-tap bulk approval. Likely transfers between your own accounts and likely duplicates of entries you typed by hand are flagged and set aside so they don't double-count. Decisions are remembered permanently - re-syncing, restoring a backup, or partner sync will never re-ask about a transaction you've already handled.",
+          "The Review Inbox is the gate between your bank and your budget: every imported transaction waits there until you approve, edit, or skip it - nothing is ever added silently. Check 'Always do this' while approving and that merchant's future charges arrive pre-categorized, ready for one-tap bulk approval; check it while skipping and the merchant (a credit-card payment, a transfer) never imports again. The Rules button in the inbox header lists every rule you've saved so you can switch a merchant between skip and categorize, pick a different category, or delete the rule - changes apply to future imports and anything still waiting in the inbox. Likely transfers and likely duplicates of hand-typed entries are flagged and set aside so they don't double-count, and decisions are remembered permanently - re-syncing or restoring a backup never re-asks.",
         location: "Budget tab → tray icon (top of screen)",
-        keywords: ["review inbox", "bank", "import", "transactions", "approve", "skip", "merchant", "transfer", "duplicate", "sync"],
+        keywords: ["review inbox", "bank", "import", "transactions", "approve", "skip", "merchant", "rules", "always", "ignore", "transfer", "duplicate", "sync"],
       },
       {
         id: "budget-receipts",
@@ -285,11 +296,11 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         emoji: "🧮",
         title: "Financial calculators",
         body:
-          "Tap a tool header to expand it: compound interest (the S&P 500 preset gives a realistic 7% baseline), a loan calculator with a full payment schedule you can export, a refinance break-even check, an emergency fund planner, and a currency exchange converter with up-to-date rates. Use the sliders to explore 'what if' scenarios - these tools never write to your data.",
+          "Tap a tool header to expand it: compound interest, a loan calculator with an exportable payment schedule, a refinance break-even check, an emergency fund planner, a currency exchange converter, and a US Take-Home Pay estimator that shows what a salary actually leaves in your account each paycheck. These tools never write to your data.",
         detail:
-          "Five sandbox calculators, each behind a tap-to-expand header: compound interest with an S&P 500 preset for a realistic long-term baseline; a loan calculator producing the full amortization schedule (exportable); a refinance tool that finds the break-even month between closing costs and the lower rate; an emergency fund planner sized from your real monthly essentials; and a currency exchange converter (USD, EUR, GBP, CAD, JPY, SEK) that shows exactly how fresh its rates are and still answers offline. Sliders can also be tapped to type an exact number. These are pure sandboxes - they read nothing private and write nothing to your data; the currency converter fetches only a public rate table, never your amounts.",
+          "Six sandbox calculators, each behind a tap-to-expand header: compound interest with an S&P 500 preset for a realistic long-term baseline; a loan calculator producing the full amortization schedule (exportable); a refinance tool that finds the break-even month between closing costs and the lower rate; an emergency fund planner sized from your real monthly essentials; a currency exchange converter (USD, EUR, GBP, CAD, JPY, SEK) that shows exactly how fresh its rates are and still answers offline; and a Take-Home Pay estimator - enter a US salary, filing status, and state to see federal, state, Social Security, and Medicare tax, your effective and marginal rates, optional 401(k)/HSA/premium deductions, and what the same salary keeps in another state. The tax tool computes entirely from bundled IRS and state tables - nothing you type leaves the phone. These are pure sandboxes - they read nothing private and write nothing to your data.",
         location: "Charts tab → tool headers",
-        keywords: ["calculator", "compound interest", "loan", "amortization", "refinance", "emergency fund", "tools", "slider", "currency", "exchange rate", "convert", "fx"],
+        keywords: ["calculator", "compound interest", "loan", "amortization", "refinance", "emergency fund", "tools", "slider", "currency", "exchange rate", "convert", "fx", "take-home", "take home pay", "salary", "tax", "paycheck", "state", "withholding"],
       },
       {
         id: "charts-what-if",
@@ -328,9 +339,9 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         body:
           "Pick a theme palette, a design style, and a density preset (Compact, Comfortable, Spacious) - density resizes padding and font sizes app-wide, and ambient themes bring a living background. Your display currency is set here too.",
         detail:
-          "Appearance controls the whole look: theme palettes (including ambient themes like Deep Space, Deep Forest, and Deep Sea with living animated backgrounds), a design style (solid cards or glass), a density preset that resizes padding and text app-wide, and text size. Your display currency lives here too - switching it can convert your existing amounts or just change the symbol, your choice. Ambient backgrounds can be switched off any time if you prefer calm.",
+          "Appearance controls the whole look: theme palettes (including ambient themes like Deep Space, Deep Forest, and Deep Sea with living animated backgrounds, light themes like Harbor Dawn and Rose, and Lighthouse - a maximum-contrast theme with every color tuned for readability), a design style (solid cards or glass), a density preset that resizes padding and text app-wide, and text size. Your display currency lives here too - switching it can convert your existing amounts or just change the symbol, your choice. Ambient backgrounds can be switched off any time if you prefer calm.",
         location: "Profile tab → Appearance",
-        keywords: ["theme", "dark mode", "appearance", "colors", "glass", "density", "text size", "currency", "ambient", "background"],
+        keywords: ["theme", "dark mode", "light mode", "appearance", "colors", "glass", "density", "text size", "currency", "ambient", "background", "high contrast", "accessibility", "lighthouse"],
       },
       {
         id: "profile-connections",
@@ -359,11 +370,11 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         emoji: "🏆",
         title: "Achievements, categories, and more",
         body:
-          "The Ship's Log tracks achievements as you use the app. You can also add custom budget categories, manage businesses for expense reports, turn on gentle tracking reminders, flip on privacy mode to block screenshots, and leave an optional tip if BudgetArk has helped you.",
+          "The Ship's Log tracks achievements as you use the app. You can also add custom budget categories, manage businesses for expense reports, turn on gentle tracking reminders, flip on privacy mode to block screenshots, lock the app behind a PIN, and leave an optional tip if BudgetArk has helped you.",
         detail:
-          "The Ship's Log collects achievements as you hit real milestones. Categories lets you add custom budget categories and re-bucket any category between Needs, Wants, and Savings. Business Expenses manages the businesses you tag expenses to and hosts the tax-time report. Tracking Reminders are opt-in nudges - a check-in when you haven't logged spending in a while and a fresh-month planning reminder - scheduled entirely on your phone with nothing sensitive on the lock screen. Privacy mode blocks screenshots and screen recording of your financial data. And the Tip Jar takes a small optional tip that unlocks nothing, because everything is already free.",
+          "The Ship's Log collects achievements as you hit real milestones. Categories lets you add custom budget categories and re-bucket any category between Needs, Wants, and Savings. Business Expenses manages the businesses you tag expenses to and hosts the tax-time report. Tracking Reminders are opt-in nudges - a check-in when you haven't logged spending in a while and a fresh-month planning reminder - scheduled entirely on your phone with nothing sensitive on the lock screen. Privacy mode blocks screenshots and screen recording of your financial data. App Lock (Settings) asks for a 4-8 digit PIN whenever the app opens, so someone borrowing your phone can't browse your finances - the PIN stays on this device, never backed up or synced, so pick one you'll remember. And the Tip Jar takes a small optional tip that unlocks nothing, because everything is already free.",
         location: "Profile tab → Ship's Log · Categories · Settings",
-        keywords: ["achievements", "ship's log", "custom categories", "tracking reminders", "notifications", "privacy mode", "screenshot", "tip jar"],
+        keywords: ["achievements", "ship's log", "custom categories", "tracking reminders", "notifications", "privacy mode", "screenshot", "tip jar", "app lock", "pin", "lock", "passcode", "security"],
       },
       {
         id: "profile-help",
