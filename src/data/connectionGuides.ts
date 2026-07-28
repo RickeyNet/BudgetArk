@@ -12,6 +12,12 @@
  * (linked via `policyUrl`) - kept short and honest, not legal advice. If a
  * provider changes its policy, update the summary here and re-check the link.
  * Verified against the live policies 2026-07.
+ *
+ * Signup availability is also checked against the live sites: as of 2026-07
+ * teller.io shows no public signup (sign-in only; /signup 404s) - new Teller
+ * accounts are request-only via support@teller.io. The Teller guide below
+ * reflects that and steers first-time users to SimpleFIN; re-check and relax
+ * the wording if Teller reopens self-serve signup.
  */
 
 import type { BankProvider } from "../types";
@@ -57,7 +63,7 @@ const SIMPLEFIN_GUIDE: ConnectionGuide = {
   glyph: "🏦",
   name: "SimpleFIN Bridge",
   tagline:
-    "One pasted token connects Chase and thousands of US banks and cards. Read-only.",
+    "Recommended: one pasted token connects Chase and thousands of US banks and cards. Read-only, open signup.",
   cost: "About $1.50/month or $15/year, billed by SimpleFIN - not BudgetArk.",
   siteUrl: "https://beta-bridge.simplefin.org/",
   siteLabel: "beta-bridge.simplefin.org",
@@ -110,16 +116,21 @@ const TELLER_GUIDE: ConnectionGuide = {
   glyph: "🔗",
   name: "Teller",
   tagline:
-    "100 free bank connections through your own free Teller developer account.",
-  cost: "Free for up to 100 connections (Teller's Development tier). No card required.",
+    "100 free bank connections - but only if you already have (or can request) a Teller developer account.",
+  cost: "Free for up to 100 connections (Teller's Development tier). New accounts are currently request-only.",
   siteUrl: "https://teller.io/",
   siteLabel: "teller.io",
   officialGuideUrl: "https://teller.io/docs/guides/quickstart",
   steps: [
     {
-      title: "Create a free Teller account",
+      title: "Get a Teller developer account",
       detail:
-        "Sign up at teller.io. When your account is created, Teller gives you a certificate and a private key (two .pem files) that prove requests come from your app. Download them, and unzip if they arrive zipped.",
+        "Teller has no public signup right now - teller.io only offers Sign In. If you don't already have an account, email support@teller.io and ask for a developer account for a personal budgeting app, or use SimpleFIN instead (open signup, works today).",
+    },
+    {
+      title: "Download your certificate and key",
+      detail:
+        "When your account is created, Teller gives you a certificate and a private key (two .pem files) that prove requests come from your app. Download them from the dashboard, and unzip if they arrive zipped.",
     },
     {
       title: "Copy your Application ID",
@@ -143,6 +154,7 @@ const TELLER_GUIDE: ConnectionGuide = {
     },
   ],
   tips: [
+    "No Teller account and no reply from support? SimpleFIN is the easier path - open signup, about $1.50/month, and it covers thousands of US banks.",
     "Keep the environment on Development unless Teller specifically told you otherwise - that's the free tier for real banks.",
     "Your certificate and key are stored encrypted on this device only and never leave it.",
     "Teller is read-only here - it reads balances and transactions, it can't move money.",

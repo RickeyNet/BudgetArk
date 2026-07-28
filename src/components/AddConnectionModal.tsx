@@ -448,10 +448,11 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         style={styles.providerCard}
         onPress={() => startProviderSetup("simplefin")}
       >
-        <Text style={styles.providerTitle}>🏦 SimpleFIN Bridge</Text>
+        <Text style={styles.providerTitle}>🏦 SimpleFIN Bridge (recommended)</Text>
         <Text style={styles.providerDescription}>
           One setup token covers Chase and thousands of US banks and credit
-          cards. Paid service (~$1.50/month) you sign up for yourself.
+          cards. Paid service (~$1.50/month) with open signup - anyone can
+          join today.
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -467,8 +468,8 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         <Text style={styles.providerTitle}>🔗 Teller</Text>
         <Text style={styles.providerDescription}>
           Bring your own Teller developer account (100 free bank connections).
-          Uses the certificate from your teller.zip; banks connect through
-          Teller's own login flow.
+          Best if you already have one: Teller has no public signup right now -
+          new accounts are by request via support@teller.io.
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -487,7 +488,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         Uses your own free developer account from teller.io.
       </Text>
       <View style={styles.instructionsCard}>
-        <Text style={styles.instructionLine}>1. Create an account at teller.io - it comes with 100 free live bank connections</Text>
+        <Text style={styles.instructionLine}>1. Sign in at teller.io - no account? Signups are currently by request only (email support@teller.io), or use SimpleFIN instead</Text>
         <Text style={styles.instructionLine}>2. Download and unzip the teller.zip from your dashboard (it holds certificate.pem and private_key.pem)</Text>
         <Text style={styles.instructionLine}>3. Copy your Application ID from the dashboard and import both .pem files below</Text>
       </View>
