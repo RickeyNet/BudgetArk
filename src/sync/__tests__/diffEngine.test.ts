@@ -336,6 +336,56 @@ describe("applyIncomingDiff - validation gate", () => {
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/bucket override/);
   });
 
+  it("re-stamps isPrivate when a partner's newer edit wins LWW (no clawback)", async () => {
+    // The partner still holds the pre-privacy public copy; their later edit
+    // wins on updatedAt. Content must merge, but the flag must survive -
+    // otherwise the entry silently resumes syncing out.
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", amount: 42.5, isPrivate: true, updatedAt: MID }),
+    ];
+    const incoming = emptyDiff({
+      budgetEntries: [
+        { action: "upsert", record: budgetEntry({ id: "e1", amount: 99, updatedAt: NEW }) },
+      ],
+    });
+    await applyIncomingDiff(incoming);
+    const stored = mockState.budgetEntries.find((e: any) => e.id === "e1");
+    expect(stored.amount).toBe(99); // partner's content won...
+    expect(stored.isPrivate).toBe(true); // ...but privacy sticks
+    // And the re-privatized entry still never leaves the device.
+    const outgoing = await computeOutgoingDiff(null);
+    expect(outgoing.budgetEntries.map((e) => e.record.id)).toEqual([]);
+  });
+
+  it("keeps a tombstone private when a stale partner delete wins", async () => {
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", isPrivate: true, updatedAt: MID }),
+    ];
+    const incoming = emptyDiff({
+      budgetEntries: [
+        {
+          action: "delete",
+          record: budgetEntry({ id: "e1", deletedAt: NEW, updatedAt: NEW }),
+        },
+      ],
+    });
+    await applyIncomingDiff(incoming);
+    const stored = mockState.budgetEntries.find((e: any) => e.id === "e1");
+    expect(stored.deletedAt).toBe(NEW);
+    expect(stored.isPrivate).toBe(true);
+  });
+
+  it("does not invent privacy for entries that were never private", async () => {
+    mockState.budgetEntries = [budgetEntry({ id: "e1", updatedAt: MID })];
+    const incoming = emptyDiff({
+      budgetEntries: [
+        { action: "upsert", record: budgetEntry({ id: "e1", amount: 7, updatedAt: NEW }) },
+      ],
+    });
+    await applyIncomingDiff(incoming);
+    expect(mockState.budgetEntries[0].isPrivate).toBeUndefined();
+  });
+
   it("rejects a budget entry whose isPrivate is not a boolean", async () => {
     const bad = emptyDiff({
       budgetEntries: [

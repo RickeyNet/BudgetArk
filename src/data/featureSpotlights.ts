@@ -216,7 +216,7 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     icon: "🗺️",
     title: "Four new looks for your Ark",
     blurb:
-      "Lighthouse is a true high-contrast theme - every color audited for maximum readability. Chart Room is a vintage nautical map, Harbor Dawn a soft sunrise light theme, and Ledger a nod to classic accounting paper. All under Appearance.",
+      "Lighthouse is a true high-contrast theme - every color audited for maximum readability. Chart Room is a nautical chart with land-tone cards on sea blue, Harbor Dawn a peach sunrise over seafoam cards, and Ledger the classic green accounting paper. All under Appearance.",
     cta: { label: "Browse themes", kind: "profile-section", section: "theme" },
   },
   {

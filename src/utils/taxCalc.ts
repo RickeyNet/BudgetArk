@@ -46,9 +46,16 @@ export const calcBracketTax = (taxable: number, brackets: TaxBracket[]): number 
   return round2(tax);
 };
 
-/** The rate the NEXT dollar of taxable income is taxed at. */
+/**
+ * The rate the NEXT dollar of taxable income is taxed at. Zero taxable
+ * income returns 0, not the bottom bracket: a salary under the standard
+ * deduction has taxable income clamped to 0, and the earner's next dollar
+ * is still swallowed by the deduction - showing "10% marginal" would be
+ * wrong.
+ */
 export const marginalRateFor = (taxable: number, brackets: TaxBracket[]): number => {
   const base = clampMoney(taxable);
+  if (base <= 0) return 0;
   let rate = 0;
   for (const bracket of brackets) {
     if (base >= bracket.over) rate = bracket.rate;

@@ -395,92 +395,101 @@ const LIGHTHOUSE: ThemePreset = {
 };
 
 /**
- * Chart Room - a vintage nautical map: aged-paper background, dark teal
- * "contour ink" text, brass accent. The Ark's parchment sensibility gone
- * cartographic, rhyming with the Captain's Course branding.
+ * Chart Room - a real nautical chart: pale SEA-BLUE background (the water)
+ * with buff land-tone cards floating on it, dark teal contour-ink text,
+ * brass accent. The sea/land two-tone is the theme's identity and what
+ * keeps it out of The Ark's cream-parchment territory - don't warm the
+ * background back toward paper. Rhymes with the Captain's Course branding.
  */
 const CHART_ROOM: ThemePreset = {
   id: "chart_room",
   name: "Chart Room",
   colors: {
-    bg: "#e8dcc0",
-    card: "#f4ecd8",
-    cardBorder: "#b8a47e",
-    accent: "#8a6b33",
-    success: "#4e7a44",
-    successDim: "rgba(78, 122, 68, 0.15)",
-    warning: "#a5701f",
-    warningDim: "rgba(165, 112, 31, 0.15)",
-    danger: "#a03b2e",
-    dangerDim: "rgba(160, 59, 46, 0.15)",
-    text: "#16414a",
-    textDim: "#4e6e72",
-    textMuted: "#8a9c98",
-    white: "#f4ecd8",
-    teal: "#2e6e78",
-    tealDim: "rgba(46, 110, 120, 0.15)",
-    accentButtonText: "#f4ecd8",
+    bg: "#c5d6d3",
+    card: "#eee2c0",
+    cardBorder: "#a08a5e",
+    accent: "#75561f",
+    success: "#3d6634",
+    successDim: "rgba(61, 102, 52, 0.15)",
+    warning: "#8a5a10",
+    warningDim: "rgba(138, 90, 16, 0.15)",
+    danger: "#963527",
+    dangerDim: "rgba(150, 53, 39, 0.15)",
+    text: "#123a44",
+    textDim: "#3f6167",
+    textMuted: "#7e8f83",
+    white: "#f2e4c4",
+    teal: "#275f6b",
+    tealDim: "rgba(39, 95, 107, 0.15)",
+    accentButtonText: "#f2e4c4",
   },
 };
 
 /**
- * Harbor Dawn - a light theme for the dark-heavy lineup: pale peach horizon
- * over cool-grey cards with a muted gold accent. "New month, fresh start"
- * energy for people who find dark finance apps gloomy.
+ * Harbor Dawn - the pastel coastal light theme: a clearly PEACH morning-sky
+ * background over seafoam-tinted cards (that warm/cool duo is the theme's
+ * identity - keep the two tints distinct), with a muted gold accent.
+ * "New month, fresh start" energy for people who find dark finance apps
+ * gloomy.
  */
 const HARBOR_DAWN: ThemePreset = {
   id: "harbor_dawn",
   name: "Harbor Dawn",
   colors: {
-    bg: "#faf1e8",
-    card: "#f7f8f9",
-    cardBorder: "#d5dade",
+    bg: "#fadfc9",
+    card: "#eef6f2",
+    cardBorder: "#c3d8d0",
     // Deeper than a typical "muted gold" so the accent (and text on it)
-    // clears ~4:1 on the pale cards - verified alongside Lighthouse.
-    accent: "#96731a",
-    success: "#2e8560",
-    successDim: "rgba(46, 133, 96, 0.15)",
-    warning: "#a56d15",
-    warningDim: "rgba(165, 109, 21, 0.15)",
-    danger: "#b6473c",
-    dangerDim: "rgba(182, 71, 60, 0.15)",
+    // clears ~4:1 on the peach bg too - verified alongside Lighthouse.
+    accent: "#8a6a14",
+    success: "#297a58",
+    successDim: "rgba(41, 122, 88, 0.15)",
+    warning: "#96620f",
+    warningDim: "rgba(150, 98, 15, 0.15)",
+    danger: "#ad4237",
+    dangerDim: "rgba(173, 66, 55, 0.15)",
     text: "#3a4550",
-    textDim: "#687784",
-    textMuted: "#a5b0ba",
-    white: "#3a4550",
-    teal: "#2f7f75",
-    tealDim: "rgba(47, 127, 117, 0.15)",
+    textDim: "#61707d",
+    textMuted: "#a0aeb2",
+    // Light: white is used as text on accent/status-colored buttons, and
+    // the accent here is dark gold (unlike Rose, whose light accent needs
+    // a dark "white").
+    white: "#ffffff",
+    teal: "#2b756c",
+    tealDim: "rgba(43, 117, 108, 0.15)",
     accentButtonText: "#ffffff",
   },
 };
 
 /**
- * Ledger - the nostalgic banker's theme: cream paper, near-black ink, and
- * the classic accounting green as the accent. Ruled lines and tabular
- * typography are outside what a ThemePreset can express; the palette does
- * the talking.
+ * Ledger - the nostalgic banker's theme, keyed to classic "green bar"
+ * accounting paper: a pale ledger-green background (NOT cream - that's
+ * what separates it from Chart Room's sepia), white paper cards with
+ * ruled-line green borders, accounting-green accent, red-ink danger.
+ * Ruled lines and tabular typography are outside what a ThemePreset can
+ * express; the palette does the talking.
  */
 const LEDGER: ThemePreset = {
   id: "ledger",
   name: "Ledger",
   colors: {
-    bg: "#f4eedc",
-    card: "#fbf7ea",
-    cardBorder: "#c9bd98",
-    accent: "#1f7a4d",
-    success: "#2e8b57",
-    successDim: "rgba(46, 139, 87, 0.15)",
-    warning: "#a1741c",
-    warningDim: "rgba(161, 116, 28, 0.15)",
+    bg: "#dde9d8",
+    card: "#f8faf2",
+    cardBorder: "#a9c19f",
+    accent: "#1e6f47",
+    success: "#277a4c",
+    successDim: "rgba(39, 122, 76, 0.15)",
+    warning: "#97701c",
+    warningDim: "rgba(151, 112, 28, 0.15)",
     danger: "#a82e2e",
     dangerDim: "rgba(168, 46, 46, 0.15)",
-    text: "#26261e",
-    textDim: "#6b6a55",
-    textMuted: "#a09e86",
-    white: "#fbf7ea",
-    teal: "#37766e",
-    tealDim: "rgba(55, 118, 110, 0.15)",
-    accentButtonText: "#f4eedc",
+    text: "#232a20",
+    textDim: "#5c6b54",
+    textMuted: "#96a68e",
+    white: "#eaf4ea",
+    teal: "#34756d",
+    tealDim: "rgba(52, 117, 109, 0.15)",
+    accentButtonText: "#eaf4ea",
   },
 };
 

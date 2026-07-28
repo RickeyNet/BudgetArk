@@ -374,7 +374,11 @@ export interface BudgetEntry {
    * Private entry: excluded from the outgoing partner-sync diff (live AND
    * tombstoned - see diffEngine). Stays in all local budget math, JSON
    * export/import, and spreadsheets (the flag must round-trip or a
-   * backup/restore cycle would silently un-private the entry). Known
+   * backup/restore cycle would silently un-private the entry). Once set,
+   * incoming sync/import records can never CLEAR it - a partner editing
+   * their pre-privacy public copy wins content by LWW but the flag is
+   * re-stamped (diffEngine.applyIncomingDiff, importData's
+   * reconcileBudgetEntry); un-privating is a local UI action only. Known
    * limitation: marking an ALREADY-SYNCED entry private stops future
    * updates from syncing but can't retract the copy the partner received.
    */

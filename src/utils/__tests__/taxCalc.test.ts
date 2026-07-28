@@ -35,6 +35,23 @@ describe("calcFederalTax (2026 tables)", () => {
     expect(marginalRateFor(256_210, FEDERAL_BRACKETS_2026.single)).toBe(0.32);
   });
 
+  it("reports a 0% marginal rate at zero taxable income (below the deduction)", () => {
+    expect(marginalRateFor(0, FEDERAL_BRACKETS_2026.single)).toBe(0);
+    // A $10k salary sits under the standard deduction: no tax, and the next
+    // dollar earned is still deduction-covered - marginal must read 0%.
+    const r = calcTakeHome({
+      grossAnnual: 10_000,
+      status: "single",
+      stateCode: "TX",
+      retirement401kPercent: 0,
+      hsaAnnual: 0,
+      healthPremiumMonthly: 0,
+      payPeriodsPerYear: 26,
+    });
+    expect(r.federalTax).toBe(0);
+    expect(r.marginalFederalRate).toBe(0);
+  });
+
   it("clamps absurd and non-finite inputs instead of throwing", () => {
     // Non-finite fails safe to 0; huge finite values clamp to the $1B cap.
     expect(calcBracketTax(NaN, FEDERAL_BRACKETS_2026.single)).toBe(0);

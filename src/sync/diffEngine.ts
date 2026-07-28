@@ -506,10 +506,24 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     changedCount += diff.payments.length;
   }
 
-  // Merge budget entries
+  // Merge budget entries. After the LWW merge, re-stamp isPrivate on any
+  // entry that was private locally: a partner still holding the pre-privacy
+  // public copy can win LWW by editing it, and letting their record land
+  // verbatim would silently clear the flag - the entry would resume syncing
+  // out on the next diff. Privacy is device-side intent, so an incoming
+  // record (upsert OR tombstone) can never un-private an entry; content
+  // still merges normally, and un-privating stays a local UI action.
+  // importData's reconcileBudgetEntry applies the same rule on imports.
   if (diff.budgetEntries.length > 0) {
     const localEntries = await getBudgetEntriesIncludingDeleted();
-    const merged = mergeById(localEntries, diff.budgetEntries);
+    const locallyPrivateIds = new Set(
+      localEntries.filter((entry) => entry.isPrivate).map((entry) => entry.id)
+    );
+    const merged = mergeById(localEntries, diff.budgetEntries).map((entry) =>
+      locallyPrivateIds.has(entry.id) && !entry.isPrivate
+        ? { ...entry, isPrivate: true }
+        : entry
+    );
     await saveBudgetEntries(merged);
     changedCount += diff.budgetEntries.length;
   }

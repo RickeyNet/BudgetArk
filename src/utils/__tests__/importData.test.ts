@@ -315,6 +315,49 @@ describe("importFromString - merge preserves device-local attachments", () => {
   });
 });
 
+describe("importFromString - merge cannot un-private a local private entry", () => {
+  // The isPrivate flag is device-side intent: a partner's export (or a
+  // backup taken before the entry was marked private) carries the public
+  // copy, and letting a newer incoming record land verbatim would clear
+  // the flag and silently resume syncing the entry. Content merges by LWW
+  // as usual - only the flag sticks. Mirrors diffEngine's sync-side rule.
+  it("keeps isPrivate when a newer incoming copy lacks it, while content wins", async () => {
+    storageMock.__store.set(
+      KEYS.BUDGET_ENTRIES,
+      JSON.stringify([
+        validEntry({ updatedAt: "2026-06-01T00:00:00.000Z", isPrivate: true }),
+      ])
+    );
+    await importFromString(
+      JSON.stringify({
+        budgetEntries: [
+          validEntry({ updatedAt: "2026-06-10T00:00:00.000Z", amount: 77 }),
+        ],
+      }),
+      "merge"
+    );
+    const stored = readStore(KEYS.BUDGET_ENTRIES)[0];
+    expect(stored.amount).toBe(77);
+    expect(stored.isPrivate).toBe(true);
+  });
+
+  it("does not invent privacy for entries that were never private", async () => {
+    storageMock.__store.set(
+      KEYS.BUDGET_ENTRIES,
+      JSON.stringify([validEntry({ updatedAt: "2026-06-01T00:00:00.000Z" })])
+    );
+    await importFromString(
+      JSON.stringify({
+        budgetEntries: [
+          validEntry({ updatedAt: "2026-06-10T00:00:00.000Z", amount: 77 }),
+        ],
+      }),
+      "merge"
+    );
+    expect(readStore(KEYS.BUDGET_ENTRIES)[0].isPrivate).toBeUndefined();
+  });
+});
+
 describe("importFromString - businesses", () => {
   const BUSINESSES_KEY = "@budgetark_businesses";
   const validBusiness = (over: Record<string, unknown> = {}) => ({

@@ -688,7 +688,8 @@ export const importFromString = async (
     incoming: unknown[] | undefined,
     // Optional hook to reconcile an incoming record with the local one it
     // replaces (merge mode only). Used for budget entries to preserve
-    // device-local attachment metadata - see preserveLocalAttachments.
+    // device-local attachment metadata and the isPrivate partner-sync flag
+    // - see reconcileBudgetEntry.
     reconcile?: (
       incoming: Record<string, unknown>,
       existing: Record<string, unknown>
@@ -757,19 +758,30 @@ export const importFromString = async (
   };
 
   /**
-   * Budget-entry reconcile hook: attachment metadata points at encrypted
-   * photo files that exist only on THIS device, and spreadsheet rows carry
-   * no attachments at all (there is no column). Without this, a merge-mode
-   * re-import of an unchanged entry (updatedAt tie goes to incoming) would
-   * replace it with an attachment-less copy - and the orphan sweep would
-   * then permanently delete the photo files. An import may therefore never
-   * REMOVE local attachment references; when the incoming record carries
-   * its own list (JSON exports do), the incoming list wins as usual.
+   * Budget-entry reconcile hook, applied when the incoming record wins LWW:
+   *
+   *  - Attachments: metadata points at encrypted photo files that exist only
+   *    on THIS device, and spreadsheet rows carry no attachments at all
+   *    (there is no column). Without this, a merge-mode re-import of an
+   *    unchanged entry (updatedAt tie goes to incoming) would replace it
+   *    with an attachment-less copy - and the orphan sweep would then
+   *    permanently delete the photo files. An import may therefore never
+   *    REMOVE local attachment references; when the incoming record carries
+   *    its own list (JSON exports do), the incoming list wins as usual.
+   *
+   *  - isPrivate: privacy is device-side intent, so an import may never
+   *    silently CLEAR a locally-set flag - a partner's export (or a backup
+   *    taken before the entry was marked private) carries the public copy,
+   *    and letting it win verbatim would un-private the entry and resume
+   *    syncing it. Content still merges by LWW as usual; only the flag
+   *    sticks. Un-privating is a local UI action only. Mirrors the same
+   *    rule in sync's applyIncomingDiff.
    */
-  const preserveLocalAttachments = (
+  const reconcileBudgetEntry = (
     incoming: Record<string, unknown>,
     existing: Record<string, unknown>
   ): Record<string, unknown> => {
+    let result = incoming;
     const incomingHasAttachments =
       Array.isArray(incoming.attachments) && incoming.attachments.length > 0;
     const existingAttachments = existing.attachments;
@@ -778,9 +790,12 @@ export const importFromString = async (
       Array.isArray(existingAttachments) &&
       existingAttachments.length > 0
     ) {
-      return { ...incoming, attachments: existingAttachments };
+      result = { ...result, attachments: existingAttachments };
     }
-    return incoming;
+    if (existing.isPrivate === true && result.isPrivate !== true) {
+      result = { ...result, isPrivate: true };
+    }
+    return result;
   };
 
   /**
@@ -1388,7 +1403,7 @@ export const importFromString = async (
   const mergedBudgetEntries = await computeMergedById(
     KEYS.BUDGET_ENTRIES,
     sanitized.budgetEntries,
-    preserveLocalAttachments
+    reconcileBudgetEntry
   );
   const mergedLimits = await computeMergedLimitsHistory();
   const mergedSavingsGoals = await computeMergedById(
