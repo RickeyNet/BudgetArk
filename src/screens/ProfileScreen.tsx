@@ -103,7 +103,9 @@ import DataSection, { type DataSectionHandle } from "./profile/DataSection";
 import ConnectionsSection, {
   type ConnectionsSectionHandle,
 } from "./profile/ConnectionsSection";
-import SettingsSection from "./profile/SettingsSection";
+import SettingsSection, {
+  type SettingsSectionHandle,
+} from "./profile/SettingsSection";
 import HelpSection from "./profile/HelpSection";
 import AboutSection from "./profile/AboutSection";
 
@@ -114,6 +116,7 @@ const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
   tipJar: "tip-jar",
   trackingReminders: "tracking-reminders",
   theme: "deep-sea-theme",
+  appLock: "app-lock",
 };
 
 const ProfileScreen: React.FC = () => {
@@ -134,6 +137,7 @@ const ProfileScreen: React.FC = () => {
   /** Imperative handles into sections for the banner + deep links. */
   const dataSectionRef = useRef<DataSectionHandle>(null);
   const connectionsSectionRef = useRef<ConnectionsSectionHandle>(null);
+  const settingsSectionRef = useRef<SettingsSectionHandle>(null);
 
   /** Feature ids whose settings rows currently show a NEW badge. */
   const [newFeatureIds, setNewFeatureIds] = useState<ReadonlySet<string>>(
@@ -294,6 +298,9 @@ const ProfileScreen: React.FC = () => {
           break;
         case "theme":
           setShowThemeModal(true);
+          break;
+        case "appLock":
+          settingsSectionRef.current?.openAppLock();
           break;
       }
       dismissNewBadge(SECTION_FEATURE_IDS[section]);
@@ -590,6 +597,7 @@ const ProfileScreen: React.FC = () => {
 
         {/* ── Settings (privacy, updates) ── */}
         <SettingsSection
+          ref={settingsSectionRef}
           pairing={pairing}
           showInfo={setInfoModal}
           onCurrencyApplied={handleCurrencyApplied}

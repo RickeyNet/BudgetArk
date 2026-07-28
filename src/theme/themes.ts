@@ -360,7 +360,131 @@ const DEEP_SEA: ThemePreset = {
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, SLATE, CLASSIC, DEEP_SPACE, DEEP_SEA] as const;
+/**
+ * Lighthouse - the high-contrast accessibility theme: near-black base, warm
+ * beam-yellow accent. "When the fog rolls in, follow the light."
+ *
+ * EVERY text-carrying slot (text/textDim/textMuted, accent, success,
+ * warning, danger, teal) is verified >= 7:1 (WCAG AAA) against BOTH bg and
+ * card; the lowest is textMuted at 7.75:1 on card. cardBorder clears the
+ * 3:1 non-text bar at 4.5:1. That audit is this theme's whole promise -
+ * re-verify contrast ratios before changing ANY value here.
+ */
+const LIGHTHOUSE: ThemePreset = {
+  id: "lighthouse",
+  name: "Lighthouse",
+  colors: {
+    bg: "#050505",
+    card: "#141414",
+    cardBorder: "#767676",
+    accent: "#ffd75e",
+    success: "#7ee787",
+    successDim: "rgba(126, 231, 135, 0.18)",
+    warning: "#ffbe4d",
+    warningDim: "rgba(255, 190, 77, 0.18)",
+    danger: "#ff9191",
+    dangerDim: "rgba(255, 145, 145, 0.18)",
+    text: "#ffffff",
+    textDim: "#d6d6d6",
+    textMuted: "#a8a8a8",
+    white: "#ffffff",
+    teal: "#79e0e8",
+    tealDim: "rgba(121, 224, 232, 0.18)",
+    accentButtonText: "#000000",
+  },
+};
+
+/**
+ * Chart Room - a vintage nautical map: aged-paper background, dark teal
+ * "contour ink" text, brass accent. The Ark's parchment sensibility gone
+ * cartographic, rhyming with the Captain's Course branding.
+ */
+const CHART_ROOM: ThemePreset = {
+  id: "chart_room",
+  name: "Chart Room",
+  colors: {
+    bg: "#e8dcc0",
+    card: "#f4ecd8",
+    cardBorder: "#b8a47e",
+    accent: "#8a6b33",
+    success: "#4e7a44",
+    successDim: "rgba(78, 122, 68, 0.15)",
+    warning: "#a5701f",
+    warningDim: "rgba(165, 112, 31, 0.15)",
+    danger: "#a03b2e",
+    dangerDim: "rgba(160, 59, 46, 0.15)",
+    text: "#16414a",
+    textDim: "#4e6e72",
+    textMuted: "#8a9c98",
+    white: "#f4ecd8",
+    teal: "#2e6e78",
+    tealDim: "rgba(46, 110, 120, 0.15)",
+    accentButtonText: "#f4ecd8",
+  },
+};
+
+/**
+ * Harbor Dawn - a light theme for the dark-heavy lineup: pale peach horizon
+ * over cool-grey cards with a muted gold accent. "New month, fresh start"
+ * energy for people who find dark finance apps gloomy.
+ */
+const HARBOR_DAWN: ThemePreset = {
+  id: "harbor_dawn",
+  name: "Harbor Dawn",
+  colors: {
+    bg: "#faf1e8",
+    card: "#f7f8f9",
+    cardBorder: "#d5dade",
+    // Deeper than a typical "muted gold" so the accent (and text on it)
+    // clears ~4:1 on the pale cards - verified alongside Lighthouse.
+    accent: "#96731a",
+    success: "#2e8560",
+    successDim: "rgba(46, 133, 96, 0.15)",
+    warning: "#a56d15",
+    warningDim: "rgba(165, 109, 21, 0.15)",
+    danger: "#b6473c",
+    dangerDim: "rgba(182, 71, 60, 0.15)",
+    text: "#3a4550",
+    textDim: "#687784",
+    textMuted: "#a5b0ba",
+    white: "#3a4550",
+    teal: "#2f7f75",
+    tealDim: "rgba(47, 127, 117, 0.15)",
+    accentButtonText: "#ffffff",
+  },
+};
+
+/**
+ * Ledger - the nostalgic banker's theme: cream paper, near-black ink, and
+ * the classic accounting green as the accent. Ruled lines and tabular
+ * typography are outside what a ThemePreset can express; the palette does
+ * the talking.
+ */
+const LEDGER: ThemePreset = {
+  id: "ledger",
+  name: "Ledger",
+  colors: {
+    bg: "#f4eedc",
+    card: "#fbf7ea",
+    cardBorder: "#c9bd98",
+    accent: "#1f7a4d",
+    success: "#2e8b57",
+    successDim: "rgba(46, 139, 87, 0.15)",
+    warning: "#a1741c",
+    warningDim: "rgba(161, 116, 28, 0.15)",
+    danger: "#a82e2e",
+    dangerDim: "rgba(168, 46, 46, 0.15)",
+    text: "#26261e",
+    textDim: "#6b6a55",
+    textMuted: "#a09e86",
+    white: "#fbf7ea",
+    teal: "#37766e",
+    tealDim: "rgba(55, 118, 110, 0.15)",
+    accentButtonText: "#f4eedc",
+  },
+};
+
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, SLATE, CLASSIC, DEEP_SPACE, DEEP_SEA, LIGHTHOUSE, CHART_ROOM, HARBOR_DAWN, LEDGER] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";

@@ -128,6 +128,7 @@ describe("FEATURE_SPOTLIGHTS data", () => {
           "tipJar",
           "trackingReminders",
           "theme",
+          "appLock",
         ]).toContain(s.cta.section);
       }
     }

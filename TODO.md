@@ -110,7 +110,7 @@ Work through phases in order: finish the features first, then handle store prep 
 
   Still TODO:
   - Device-test: cold-start lock, 15s grace matrix (quick switch vs long background), lockout countdown + persistence across force-quit, set/change/disable flows, Reset All Data clears the PIN, theme/density/large-text rendering of the pad.
-  - Possible fast-follows: biometric unlock ON TOP of the PIN (`expo-local-authentication`, native dep - bundle with the next store build), a FEATURE_SPOTLIGHTS debut slide (skipped for now - carousel is long), onboarding-guide entry ("lock", "PIN" keywords).
+  - Possible fast-follows: biometric unlock ON TOP of the PIN (`expo-local-authentication`, native dep - bundle with the next store build), ~~a FEATURE_SPOTLIGHTS debut slide~~ DONE 2026-07-27 (`app-lock` slide + `appLock` openSection deep link via SettingsSection ref), onboarding-guide entry ("lock", "PIN" keywords).
 
 #### Medium
 - [x] Add MAC to encrypted exports (or switch to AES-GCM) - DONE (2026-07-26): Option B shipped as `src/utils/exportEncryption.ts` - new `__BUDGETARK_ENC3__:` encrypt-then-MAC format (`salt.iv.ct.mac`; ONE PBKDF2-SHA256 250k call derives 64 bytes, split into AES-256-CBC key + HMAC-SHA256 key; MAC verified constant-time BEFORE decrypting). Write path is v3-only; import reads v1/v2/v3 forever. Golden v3 fixture pins the format (`exportEncryption.test.ts` + `importData.test.ts`). Known cost: an app older than v3-support can't read a NEW password-protected export.
@@ -454,10 +454,11 @@ Work through phases in order: finish the features first, then handle store prep 
 
 Ideas for new color themes (all pure JS - a `ThemePreset` in `src/theme/themes.ts` plus an optional ambient background component - so every one of these is OTA-safe). Existing lineup for reference: The Ark, Forest Gold, Neon Purple, Easy, Rose, Synthwave, Deep Forest, Coral, Deep Space, Deep Sea; ambient backgrounds currently on the "Deep" themes only.
 
-- [ ] **Lighthouse** - deliberately high-contrast accessibility theme: near-black background, warm beam-yellow accent, thick borders, AAA contrast ratios throughout. Positions accessibility as on-brand ("when the fog rolls in, follow the light") rather than clinical; pairs with the shipped Text Size axis. Consider auditing every `ThemeColors` slot against WCAG AAA before shipping this one - it's the theme's whole promise.
-- [ ] **Chart Room** - vintage nautical map: aged-paper light background, dark teal ink text (chart contour lines), brass/sepia accent, optional faint compass-rose ambient watermark. The Ark's parchment sensibility but cartographic; rhymes with the Captain's Course branding.
-- [ ] **Harbor Dawn** - light theme (lineup is dark-heavy: only Rose + The Ark are light). Soft horizon gradient - pale peach into seafoam - cool gray cards, muted gold accent. "New month, fresh start" energy for users who find dark finance apps gloomy.
-- [ ] **Ledger** - nostalgic banker's theme: cream paper, ruled-line dividers, classic accounting green accent, leaning into tabular numbers. Novelty pick for budget nerds.
+- [x] **Lighthouse** - SHIPPED 2026-07-27. Near-black + beam-yellow; the AAA audit WAS done numerically (WCAG luminance script): every text-carrying slot >= 7:1 against both bg and card (lowest: textMuted 7.75:1), border >= 3:1. Audit note pinned in the preset comment - re-verify before changing any value. ("Thick borders" not expressible in a ThemePreset - border COLOR is high-visibility instead.)
+- [x] **Chart Room** - SHIPPED 2026-07-27. Aged paper / teal contour ink / brass. Compass-rose ambient watermark deliberately skipped (non-Deep themes carry no ambient backgrounds); revisit only if it earns Deep-tier treatment.
+- [x] **Harbor Dawn** - SHIPPED 2026-07-27. Pale peach bg + cool grey cards + muted gold, tuned so accent/status colors clear ~4:1 on the pale cards (first-draft gold was 2.6:1). Solid bg - the horizon gradient would need an ambient background component.
+- [x] **Ledger** - SHIPPED 2026-07-27. Cream paper + accounting green + red-ink danger. Ruled lines/tabular type not expressible in a ThemePreset.
+  All four: one combined `four-themes` spotlight slide; visual device check pending across Solid/Glass styles and densities.
 
 ---
 

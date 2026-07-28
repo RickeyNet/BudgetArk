@@ -8,10 +8,18 @@
  * dialog). Owns all of that state and loads its own persisted prefs.
  * Pairing state and the reminder settings stay in ProfileScreen - the
  * currency prompt behaves differently while paired, and the reset flow
- * clears reminders - so those arrive as props.
+ * clears reminders - so those arrive as props. Exposes openAppLock()
+ * through a ref (ConnectionsSection pattern) so ProfileScreen's
+ * openSection deep link can open the App Lock setup modal.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -108,6 +116,11 @@ const reminderRowSubtext = (
   return `${what} · ${when}`;
 };
 
+export type SettingsSectionHandle = {
+  /** Opens the App Lock set/change/disable modal (spotlight deep link). */
+  openAppLock: () => void;
+};
+
 type SettingsSectionProps = {
   pairing: PairingState | null;
   showInfo: (info: { title: string; message: string }) => void;
@@ -121,7 +134,7 @@ type SettingsSectionProps = {
   onCloseTrackingReminders: () => void;
 };
 
-const SettingsSection: React.FC<SettingsSectionProps> = ({
+const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(({
   pairing,
   showInfo,
   onCurrencyApplied,
@@ -131,7 +144,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
   showTrackingReminders,
   onOpenTrackingReminders,
   onCloseTrackingReminders,
-}) => {
+}, ref) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens);
@@ -176,6 +189,10 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
   /** App Lock (PIN on open) - row state + the set/change/disable modal. */
   const [appLockEnabled, setAppLockEnabled] = useState(false);
   const [showAppLockSetup, setShowAppLockSetup] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    openAppLock: () => setShowAppLockSetup(true),
+  }), []);
 
   /** Haptic feedback toggle */
   const [hapticsEnabled, setHapticsState] = useState(true);
@@ -1058,6 +1075,8 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
       ) : null}
     </>
   );
-};
+});
+
+SettingsSection.displayName = "SettingsSection";
 
 export default SettingsSection;

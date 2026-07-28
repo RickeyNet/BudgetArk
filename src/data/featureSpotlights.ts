@@ -23,7 +23,8 @@ export type ProfileSpotlightSection =
   | "businesses"
   | "tipJar"
   | "trackingReminders"
-  | "theme";
+  | "theme"
+  | "appLock";
 
 export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
@@ -65,6 +66,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     title: "Know what's safe to spend",
     blurb:
       "Tell BudgetArk what's in checking at the start of the month, and the Budget tab projects where the month ends - income in, bills and debt minimums out - with a real safe-to-spend number instead of a guess.",
+  },
+  {
+    id: "private-entries",
+    sinceVersion: "1.9.0",
+    icon: "🔒",
+    title: "Some spending is just yours",
+    blurb:
+      "Mark any budget entry Private and it never syncs to your partner's device - perfect for gifts and surprises. It still counts in your own budget and rides your backups; only the sharing changes.",
+    cta: { label: "Add a private entry", kind: "budget-add-entry" },
   },
   {
     id: "card-keep-alive",
@@ -174,6 +184,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Estimate your take-home", kind: "charts" },
   },
   {
+    id: "app-lock",
+    sinceVersion: "1.9.0",
+    icon: "🔐",
+    title: "Lock the app behind a PIN",
+    blurb:
+      "Turn on App Lock and BudgetArk asks for a 4-8 digit PIN whenever it opens, so someone borrowing your phone can't browse your finances. The PIN stays on this device - never synced, exported, or backed up.",
+    cta: { label: "Set up App Lock", kind: "profile-section", section: "appLock" },
+  },
+  {
     id: "deep-sea-theme",
     sinceVersion: "1.9.0",
     icon: "🌊",
@@ -190,6 +209,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     blurb:
       "Slate pairs graphite greys with a mustard-yellow accent for a calm, focused look. Classic is a straight-faced throwback to the silver-and-teal desktops of 1998, navy accents and all. Both are waiting under Appearance.",
     cta: { label: "Try them on", kind: "profile-section", section: "theme" },
+  },
+  {
+    id: "four-themes",
+    sinceVersion: "1.9.0",
+    icon: "🗺️",
+    title: "Four new looks for your Ark",
+    blurb:
+      "Lighthouse is a true high-contrast theme - every color audited for maximum readability. Chart Room is a vintage nautical map, Harbor Dawn a soft sunrise light theme, and Ledger a nod to classic accounting paper. All under Appearance.",
+    cta: { label: "Browse themes", kind: "profile-section", section: "theme" },
   },
   {
     id: "tip-jar",

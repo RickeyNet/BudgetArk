@@ -243,6 +243,17 @@ Pure JS - OTA-eligible. Charts-tab "Take-Home Pay" tool: US federal + state + FI
 - **UI:** `TaxCalculatorCard.tsx` (collapsible tool card after Plan a Purchase): salary / filing-status / pay-frequency / 51-state chip grid / optional pre-tax inputs → per-paycheck take-home, segmented where-each-dollar bar, yearly breakdown with effective + marginal rates, per-state caveat notes, and a "What if you moved?" state comparison. Deliberately formats USD regardless of display currency (US-only tool; labeled).
 - **Debut:** `take-home-pay` FEATURE_SPOTLIGHTS slide (Charts CTA).
 
+### Four new themes - Lighthouse, Chart Room, Harbor Dawn, Ledger (2026-07-27)
+
+Pure JS - OTA-eligible. Four `ThemePreset`s in `src/theme/themes.ts`; none are ambient (no background components, no AppNavigator wiring - only the Deep themes carry those).
+
+- **Lighthouse** - the high-contrast accessibility theme. Every text-carrying slot (text/textDim/textMuted, accent, success, warning, danger, teal) numerically verified >= 7:1 (WCAG AAA) against BOTH bg and card via a WCAG relative-luminance script; lowest slot is textMuted at 7.75:1; cardBorder clears the 3:1 non-text bar. The audit note lives in the preset comment - re-verify before touching any value.
+- **Chart Room** - aged-paper nautical map: parchment bg, dark-teal contour-ink text, brass accent. The optional compass-rose ambient watermark from the spec was deliberately skipped (non-Deep themes don't carry ambient backgrounds).
+- **Harbor Dawn** - light theme (lineup was dark-heavy): pale peach bg, cool-grey cards, muted gold accent. Accent/status colors run deeper than typical "muted gold" so everything clears ~4:1 on the pale cards - tuned with the same contrast script (the first-draft gold sat at 2.6:1).
+- **Ledger** - banker's cream paper with the classic accounting-green accent, red-ink danger.
+- **Debut:** one combined `four-themes` FEATURE_SPOTLIGHTS slide (theme CTA).
+- Visual check on device/simulator recommended (palettes are untestable in Jest); glass derivation and density tokens apply automatically.
+
 ### Private budget entries - partner visibility control (2026-07-27)
 
 Pure JS - OTA-eligible. Mark any budget entry 🔒 Private and it never syncs to the paired partner; it stays in all local budget math, JSON backups, and spreadsheets.
@@ -251,6 +262,7 @@ Pure JS - OTA-eligible. Mark any budget entry 🔒 Private and it never syncs to
 - **Deliberate limits:** no retraction tombstone is sent when an already-synced entry is flipped private (an echoed tombstone could LWW-delete the live local entry) - the partner keeps the copy they already have, and the edit-modal hint says so. Un-marking private re-sends the entry on the next sync.
 - **Round-trip:** JSON export/import carries the flag wholesale; spreadsheet schema bumped v3→v4 with a `Private` ("yes"/blank) column on Budget Entries - stripping it on a backup/restore cycle would silently re-enable syncing, so it round-trips as a privacy requirement (docs + in-app schema modal updated). Validator gates `isPrivate` to boolean-or-absent at the sync/import trust boundary.
 - **UI:** 🔒 Private toggle in the Add/Edit entry modal (below Recurring), 🔒 badge on expanded Budget entry rows.
+- **Debut:** `private-entries` FEATURE_SPOTLIGHTS slide (Add Entry CTA). An `app-lock` slide was also added for the earlier App Lock feature (new `appLock` openSection deep link → SettingsSection `openAppLock()` ref, ConnectionsSection pattern).
 - **Tests:** diffEngine exclusion (live/tombstoned/first-sync/unmark), validator matrix + explain, spreadsheet round-trip (xlsx + CSV).
 
 ## v1.8.3 - Captain's Course Complete + Debt Payment Fixes (2026-07-07)
