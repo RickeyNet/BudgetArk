@@ -56,12 +56,20 @@ interface DebtCardProps {
   /** "I used it" on the keep-alive tracker - stamps the card's last use */
   onKeepAliveUse?: (debtId: string) => void;
 
+  /**
+   * Fired when the inline pay input gains focus so the parent list can
+   * scroll this card above the keyboard. Needed on Android, where nothing
+   * auto-scrolls a FlatList to a focused input (iOS is covered by the
+   * list's automaticallyAdjustKeyboardInsets).
+   */
+  onPayInputFocus?: (debtId: string) => void;
+
   /** Whether this is the priority debt to pay off first (expanded by default) */
   isFocusDebt?: boolean;
 }
 
 /* ─── Component ─── */
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, isFocusDebt = false }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, onPayInputFocus, isFocusDebt = false }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -380,6 +388,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             keyboardType="decimal-pad"
             value={payAmount}
             onChangeText={setPayAmount}
+            onFocus={() => onPayInputFocus?.(debt.id)}
           />
           <TouchableOpacity
             style={[styles.confirmPayButton, { backgroundColor: colors.success }]}

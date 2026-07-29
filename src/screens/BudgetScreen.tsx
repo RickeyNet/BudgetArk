@@ -24,6 +24,7 @@ import { useConnections } from "../connections/ConnectionsProvider";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import BillCalendarModal from "../components/BillCalendarModal";
 import GlobalSearchModal from "../components/GlobalSearchModal";
+import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
 import {
@@ -2338,7 +2339,7 @@ const BudgetScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={closeLimitModal}
       >
-        <View style={styles.limitOverlay}>
+        <KeyboardAwareModalOverlay style={styles.limitOverlay}>
           <View style={styles.limitModalCard}>
             <Text style={styles.limitModalTitle}>Set Monthly Limit</Text>
             <Text style={styles.limitModalSub}>{limitModalCategory}</Text>
@@ -2363,7 +2364,7 @@ const BudgetScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       {/* Emergency Fund Contribution Modal */}
@@ -2373,7 +2374,7 @@ const BudgetScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowEfContribModal(false)}
       >
-        <View style={styles.limitOverlay}>
+        <KeyboardAwareModalOverlay style={styles.limitOverlay}>
           <View style={styles.limitModalCard}>
             <Text style={styles.limitModalTitle}>Emergency Fund</Text>
             <Text style={styles.limitModalSub}>
@@ -2408,7 +2409,7 @@ const BudgetScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
       {coachmark}
     </View>

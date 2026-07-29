@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
   LayoutAnimation,
   Platform,
   ScrollView,
@@ -116,6 +117,7 @@ import LessonScreen from "../lessons/LessonScreen";
 
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useValueChanged } from "../hooks/useValueChanged";
+import { useAndroidKeyboardInputScroll } from "../hooks/useAndroidKeyboardInputScroll";
 import { useSliderValueEditor } from "../hooks/useSliderValueEditor";
 
 /* Enable LayoutAnimation on Android */
@@ -327,6 +329,10 @@ const ChartsScreen: React.FC = () => {
   const coachmark = useTabCoachmark("Utilities");
   const scrollRef = useRef<ScrollView>(null);
   const anchorUtilitiesTool = useCoachmarkAnchor("utilities-tool-header", { scrollRef });
+  // Keeps the tool inputs (slider editors, EF, converter, embedded cards)
+  // visible above the keyboard on Android; iOS uses the ScrollView's
+  // automaticallyAdjustKeyboardInsets. See the hook's header for the split.
+  const onKeyboardInputScroll = useAndroidKeyboardInputScroll(scrollRef);
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   /* Compound interest calculator state */
@@ -1232,6 +1238,10 @@ const ChartsScreen: React.FC = () => {
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "android" ? "padding" : undefined}
+        style={styles.keyboardAvoider}
+      >
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
@@ -1239,6 +1249,9 @@ const ChartsScreen: React.FC = () => {
           { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets
+        onScroll={onKeyboardInputScroll}
+        scrollEventThrottle={16}
       >
         {/* Header */}
         <View style={styles.titleSection}>
@@ -2605,6 +2618,7 @@ const ChartsScreen: React.FC = () => {
         {/* ── Take-Home Pay (US income tax estimator) ── */}
         <TaxCalculatorCard />
       </ScrollView>
+      </KeyboardAvoidingView>
       {coachmark}
       <LessonScreen
         visible={openLessonStub !== null}
@@ -2624,6 +2638,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     screen: {
       flex: 1,
       backgroundColor: colors.bg,
+    },
+    keyboardAvoider: {
+      flex: 1,
     },
     content: {
       paddingHorizontal: tokens.pad,

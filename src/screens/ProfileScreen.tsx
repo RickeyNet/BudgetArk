@@ -27,6 +27,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  KeyboardAvoidingView,
   ScrollView,
   Modal,
   InteractionManager,
@@ -54,6 +55,7 @@ import {
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
+import { useAndroidKeyboardInputScroll } from "../hooks/useAndroidKeyboardInputScroll";
 import { useCoachmarks } from "../onboarding/CoachmarksProvider";
 import { useOnboardingGate } from "../onboarding/OnboardingGateContext";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -131,6 +133,9 @@ const ProfileScreen: React.FC = () => {
   const { replay: replayCoachmarks } = useCoachmarks();
   const { restartOnboarding } = useOnboardingGate();
   const scrollRef = useRef<ScrollView>(null);
+  // Keeps inline inputs (display-name editor) visible above the keyboard on
+  // Android; iOS uses the ScrollView's automaticallyAdjustKeyboardInsets.
+  const onKeyboardInputScroll = useAndroidKeyboardInputScroll(scrollRef);
   const styles = useProfileStyles(tokens);
   const { setPreferenceId } = useCurrency();
 
@@ -494,6 +499,10 @@ const ProfileScreen: React.FC = () => {
 
   return (
     <>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "android" ? "padding" : undefined}
+        style={styles.screen}
+      >
       <ScrollView
         ref={scrollRef}
         style={[
@@ -506,6 +515,9 @@ const ProfileScreen: React.FC = () => {
           styles.content,
           { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
         ]}
+        automaticallyAdjustKeyboardInsets
+        onScroll={onKeyboardInputScroll}
+        scrollEventThrottle={16}
       >
         {/* ── Backup reminder banner ── */}
         <BackupReminderBanner
@@ -626,6 +638,7 @@ const ProfileScreen: React.FC = () => {
           </Text>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* ── Generic Info/Alert Modal ── */}
       <Modal

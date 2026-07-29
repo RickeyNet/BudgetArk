@@ -19,6 +19,9 @@ import {
   View,
   Text,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   TouchableOpacity,
   StatusBar,
   StyleSheet,
@@ -86,6 +89,7 @@ import {
 } from "../storage/debtMilestoneStorage";
 import { consumeArkSetupPromptRequest } from "../storage/arkSetupStorage";
 import DebtCard from "../components/DebtCard";
+import SheetKeyboardAvoider from "../components/SheetKeyboardAvoider";
 import DebtFreeCountdownCard from "../components/DebtFreeCountdownCard";
 import GlobalSearchModal from "../components/GlobalSearchModal";
 import AddDebtModal, { type DebtKeepAliveExtras } from "../components/AddDebtModal";
@@ -1130,6 +1134,66 @@ const DebtTrackerScreen: React.FC = () => {
   /** The first active debt in sortedDebts is the priority payoff target */
   const focusDebtId = sortedDebts.find((d) => d.balance > 0)?.id ?? null;
 
+  /**
+   * Android keyboard handling for the inline pay input. iOS is covered by
+   * automaticallyAdjustKeyboardInsets on the FlatList (the app-wide iOS
+   * strategy - it also scrolls the focused field into view), so this stays
+   * Android-only; running both would double-scroll. Android never
+   * auto-scrolls a list to a focused input, so on focus we scroll the card
+   * to the bottom of the keyboard-shrunken viewport ourselves - once the
+   * keyboard has actually opened, since the viewport height is wrong
+   * before that.
+   */
+  const pendingPayScrollId = useRef<string | null>(null);
+  // Mirror of sortedDebts for the scroll handlers, updated post-commit so
+  // handlePayInputFocus stays referentially stable (it feeds every
+  // memoized DebtCard via renderDebtCard).
+  const sortedDebtsRef = useRef(sortedDebts);
+  React.useEffect(() => {
+    sortedDebtsRef.current = sortedDebts;
+  }, [sortedDebts]);
+
+  const scrollPayInputIntoView = useCallback((debtId: string) => {
+    const index = sortedDebtsRef.current.findIndex((d) => d.id === debtId);
+    if (index < 0) return;
+    // viewPosition 1 puts the card's bottom edge (the pay input row) at the
+    // viewport bottom; the negative viewOffset lifts it a further 12px so
+    // the input isn't flush against the keyboard.
+    listRef.current?.scrollToIndex({
+      index,
+      viewPosition: 1,
+      viewOffset: -12,
+      animated: true,
+    });
+  }, []);
+
+  const handlePayInputFocus = useCallback(
+    (debtId: string) => {
+      if (Platform.OS !== "android") return;
+      if (Keyboard.isVisible()) {
+        // Keyboard already open (focus hopped from another input) - the
+        // viewport is already its final size, scroll immediately.
+        scrollPayInputIntoView(debtId);
+      } else {
+        pendingPayScrollId.current = debtId;
+      }
+    },
+    [scrollPayInputIntoView]
+  );
+
+  React.useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = Keyboard.addListener("keyboardDidShow", () => {
+      const debtId = pendingPayScrollId.current;
+      pendingPayScrollId.current = null;
+      if (!debtId) return;
+      // One frame so the KeyboardAvoidingView's shrunken layout lands
+      // before the scroll target is computed.
+      requestAnimationFrame(() => scrollPayInputIntoView(debtId));
+    });
+    return () => sub.remove();
+  }, [scrollPayInputIntoView]);
+
   const renderDebtCard = useCallback(
     ({ item }: { item: Debt }) => (
       <DebtCard
@@ -1138,10 +1202,11 @@ const DebtTrackerScreen: React.FC = () => {
         onDelete={handleDelete}
         onEdit={handleEdit}
         onKeepAliveUse={handleKeepAliveUse}
+        onPayInputFocus={handlePayInputFocus}
         isFocusDebt={item.id === focusDebtId}
       />
     ),
-    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, focusDebtId]
+    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, focusDebtId]
   );
 
   /** Summary + section header rendered above the debt list */
@@ -1346,19 +1411,39 @@ const DebtTrackerScreen: React.FC = () => {
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
-      <FlatList
-        ref={listRef}
-        data={sortedDebts}
-        keyExtractor={keyExtractor}
-        renderItem={renderDebtCard}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={emptyState}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      />
+      {/* Keyboard strategy for the inline pay input (see handlePayInputFocus):
+          iOS scrolls via automaticallyAdjustKeyboardInsets; Android needs the
+          KAV to shrink the list above the keyboard, then an explicit
+          scrollToIndex. keyboardShouldPersistTaps lets the ✓ confirm button
+          work in one tap while the keyboard is up. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "android" ? "padding" : undefined}
+        style={styles.keyboardAvoider}
+      >
+        <FlatList
+          ref={listRef}
+          data={sortedDebts}
+          keyExtractor={keyExtractor}
+          renderItem={renderDebtCard}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={emptyState}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          onScrollToIndexFailed={(info) => {
+            // Only reachable if the target card was virtualized out between
+            // focus and scroll; land near it instead of crashing.
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }}
+        />
+      </KeyboardAvoidingView>
       {/* Phantom anchor for the coachmark spotlight. Rendered at the FAB's
           exact layout position (same styles, invisible and non-interactive)
           so measureInWindow returns the real on-screen rect regardless of
@@ -1477,13 +1562,22 @@ const DebtTrackerScreen: React.FC = () => {
         transparent={false}
         onRequestClose={() => setShowMilestonesModal(false)}
       >
-        <View style={styles.msFullOverlay}>
+        {/* Keyboard strategy per SheetKeyboardAvoider: Android KAV lifts the
+            sheet, iOS relies on automaticallyAdjustKeyboardInsets below —
+            without it the last step's ("Sail") target input hides behind the
+            keyboard. */}
+        <SheetKeyboardAvoider style={styles.msFullOverlay}>
           <View style={[styles.msFullBox, { paddingTop: Math.max(insets.top, 20) + 12, paddingBottom: Math.max(insets.bottom, 12) }]}>
             <Text style={styles.msFullTitle}>Build Your Ark Milestones</Text>
             <Text style={styles.msFullMessage}>
               Keel to Hull to Deck to Supplies to Sail. Follow each stage at your pace.
             </Text>
-            <ScrollView style={styles.msFullList} contentContainerStyle={styles.msFullListContent}>
+            <ScrollView
+              style={styles.msFullList}
+              contentContainerStyle={styles.msFullListContent}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+            >
               {orderedMilestones.map((step) => {
                 const isCurrent = milestonePlan?.currentStepKey === step.key;
                 const isExpanded = step.isCompleted
@@ -1782,7 +1876,7 @@ const DebtTrackerScreen: React.FC = () => {
               <Text style={styles.msFullDoneText}>Done</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </SheetKeyboardAvoider>
       </Modal>
 
       <Modal
@@ -1823,6 +1917,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bg },
+    keyboardAvoider: { flex: 1 },
     listContent: { paddingHorizontal: tokens.pad },
 
     titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const, position: "relative" as const },

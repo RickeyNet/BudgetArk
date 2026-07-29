@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -192,7 +193,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
         transparent
         onRequestClose={() => setContributeGoal(null)}
       >
-        <View style={styles.dialogOverlay}>
+        <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
             <Text style={styles.dialogTitle}>
               {contributeGoal
@@ -246,7 +247,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
       {/* Delete confirm */}
