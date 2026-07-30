@@ -2,6 +2,7 @@ import {
   normalizeMerchant,
   matchMerchantRule,
   replanInboxForRules,
+  selectAutoApprovable,
 } from "../merchant";
 import type { MerchantRule, PendingTransaction } from "../../../types";
 
@@ -189,5 +190,55 @@ describe("replanInboxForRules", () => {
     const plan = replanInboxForRules(items, [rule("COSTCO WHSE", "Grocery")], NOW);
     expect(plan.updatedItems).toEqual([]);
     expect(plan.dismissIds).toEqual([]);
+  });
+
+  it("treats an approve rule like categorize (suggests, never dismisses)", () => {
+    const approve: MerchantRule = {
+      ...rule("COSTCO WHSE", "Grocery"),
+      action: "approve",
+    };
+    const plan = replanInboxForRules([item("a", "COSTCO WHSE")], [approve], NOW);
+    expect(plan.dismissIds).toEqual([]);
+    expect(plan.updatedItems[0].suggestedCategory).toBe("Grocery");
+  });
+});
+
+describe("selectAutoApprovable", () => {
+  const approveRule: MerchantRule = {
+    ...rule("COSTCO WHSE", "Grocery"),
+    action: "approve",
+  };
+
+  it("selects posted items matched by an approve rule (prefix match included)", () => {
+    const items = [
+      item("a", "COSTCO WHSE"),
+      item("b", "COSTCO WHSE GAS STATION"),
+      item("c", "SHELL"),
+    ];
+    const result = selectAutoApprovable(items, [approveRule]);
+    expect(result.map((r) => r.item.id)).toEqual(["a", "b"]);
+    expect(result[0].rule.id).toBe(approveRule.id);
+  });
+
+  it("never selects pending, transfer-likely, duplicate-likely, or merchantless items", () => {
+    const items = [
+      { ...item("pending", "COSTCO WHSE"), pending: true },
+      { ...item("transfer", "COSTCO WHSE"), transferLikely: true },
+      { ...item("dup", "COSTCO WHSE"), duplicateLikely: true },
+      item("blank", ""),
+      item("ok", "COSTCO WHSE"),
+    ];
+    const result = selectAutoApprovable(items, [approveRule]);
+    expect(result.map((r) => r.item.id)).toEqual(["ok"]);
+  });
+
+  it("ignores categorize and ignore rules", () => {
+    const items = [item("a", "COSTCO WHSE")];
+    expect(selectAutoApprovable(items, [rule("COSTCO WHSE", "Grocery")])).toEqual([]);
+    expect(
+      selectAutoApprovable(items, [
+        { ...rule("COSTCO WHSE", "Grocery"), action: "ignore" },
+      ]),
+    ).toEqual([]);
   });
 });

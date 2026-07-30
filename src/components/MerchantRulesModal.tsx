@@ -4,9 +4,10 @@
  *
  * Where "Always do this" decisions from the Review Inbox can be changed
  * later. Lists every remembered merchant rule; each row expands so the user
- * can flip it between "always skip" and "always categorize as X", pick a
- * different category, edit the remembered rename/business tag, or delete
- * it. Changes are re-applied to items still in
+ * can flip it between "always skip", auto-approve, and suggest-only
+ * ("always categorize as X"), pick a different category, edit the
+ * remembered rename/business/person, or delete it. Changes are re-applied
+ * to items still in
  * the inbox via reviewInboxService; already-skipped transactions stay
  * skipped (the ingest ledger remembers them), which the header explains.
  *
@@ -71,6 +72,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const [rules, setRules] = useState<MerchantRule[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftIgnore, setDraftIgnore] = useState(false);
+  const [draftAutoApprove, setDraftAutoApprove] = useState(false);
   const [draftCategory, setDraftCategory] = useState<CategoryName>("Other");
   const [draftRename, setDraftRename] = useState("");
   const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
@@ -108,6 +110,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     setExpandedId((prev) => {
       if (prev === rule.id) return null;
       setDraftIgnore(rule.action === "ignore");
+      setDraftAutoApprove(rule.action === "approve");
       setDraftCategory(rule.category);
       setDraftRename(rule.renameTo ?? "");
       setDraftBusinessId(rule.businessId);
@@ -122,7 +125,11 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       try {
         await changeMerchantRule({
           ruleId: rule.id,
-          action: draftIgnore ? "ignore" : "categorize",
+          action: draftIgnore
+            ? "ignore"
+            : draftAutoApprove
+              ? "approve"
+              : "categorize",
           category: draftIgnore ? undefined : draftCategory,
           // Ignore rules never read rename/business - keep whatever was
           // stored so flipping back to categorize restores it.
@@ -139,6 +146,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       }
     },
     [
+      draftAutoApprove,
       draftBusinessId,
       draftCategory,
       draftIgnore,
@@ -169,7 +177,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const behaviorLabel = (rule: MerchantRule): string => {
     if (rule.action === "ignore") return "Always skip - never imports";
     const parts = [
-      `Always ${getCategoryIcon(rule.category, customCategories)} ${rule.category}`,
+      `${rule.action === "approve" ? "Auto-approves" : "Suggests"} ${getCategoryIcon(rule.category, customCategories)} ${rule.category}`,
     ];
     if (rule.renameTo) parts.push(`as "${rule.renameTo}"`);
     if (rule.businessId) {
@@ -228,6 +236,29 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               }}
               pinCurrentValue
             />
+            {!draftIgnore ? (
+              <TouchableOpacity
+                style={styles.autoApproveRow}
+                onPress={() => setDraftAutoApprove((prev) => !prev)}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    draftAutoApprove && styles.checkboxActive,
+                  ]}
+                >
+                  {draftAutoApprove ? (
+                    <Text style={styles.checkboxCheck}>✓</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.autoApproveLabel}>
+                  Auto-approve without review - matching imports go straight
+                  into your budget with this rule's choices. Unchecked, they
+                  wait in the inbox with the category suggested.
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             {!draftIgnore ? (
               <>
                 <Text style={styles.label}>RENAME TO (OPTIONAL)</Text>
@@ -429,6 +460,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             extraData={[
               expandedId,
               draftIgnore,
+              draftAutoApprove,
               draftCategory,
               draftRename,
               draftBusinessId,
@@ -465,7 +497,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             <Text style={styles.dialogBody}>
               {confirmingRule?.action === "ignore"
                 ? `Future "${confirmingRule?.merchantKey ?? ""}" transactions will import into your Review Inbox again. Ones already skipped won't come back.`
-                : `Future "${confirmingRule?.merchantKey ?? ""}" transactions will arrive without a suggested category. Approved entries are not changed.`}
+                : confirmingRule?.action === "approve"
+                  ? `Future "${confirmingRule?.merchantKey ?? ""}" transactions will wait in your Review Inbox for manual approval. Entries already created are not changed.`
+                  : `Future "${confirmingRule?.merchantKey ?? ""}" transactions will arrive without a suggested category. Approved entries are not changed.`}
             </Text>
             <View style={styles.dialogActions}>
               <TouchableOpacity
@@ -581,6 +615,36 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 14,
       paddingHorizontal: 12,
       paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    },
+    autoApproveRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    autoApproveLabel: {
+      color: colors.textDim,
+      fontSize: 12,
+      flex: 1,
+    },
+    checkbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      borderWidth: 2,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    checkboxActive: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
+    checkboxCheck: {
+      color: colors.white,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 14,
     },
     businessWrap: {
       flexDirection: "row",

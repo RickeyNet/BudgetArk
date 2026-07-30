@@ -381,6 +381,25 @@ describe("planIngest - ignore rules", () => {
     expect(plan.autoDismissed[KEY]).toBeUndefined();
   });
 
+  it("does not auto-dismiss on an approve rule - the item lands in the inbox with suggestions for the post-ingest sweep", () => {
+    const approveRule: MerchantRule = {
+      id: "r-approve",
+      merchantKey: "COSTCO WHSE",
+      action: "approve",
+      category: "Grocery",
+      type: "expense",
+      renameTo: "Costco",
+      useCount: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const plan = planIngest(baseInputs({ rules: [approveRule] }));
+    expect(plan.autoDismissed).toEqual({});
+    expect(plan.newInboxItems).toHaveLength(1);
+    expect(plan.newInboxItems[0].suggestedCategory).toBe("Grocery");
+    expect(plan.newInboxItems[0].suggestedName).toBe("Costco");
+  });
+
   it("does not auto-dismiss when the rule is categorize (absent action)", () => {
     const categorize: MerchantRule = { ...ignoreRule, action: undefined, category: "Grocery" };
     const plan = planIngest(baseInputs({ rules: [categorize] }));

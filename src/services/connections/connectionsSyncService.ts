@@ -50,6 +50,7 @@ import { rescheduleCardKeepAliveReminders } from "../../notifications/cardKeepAl
 import { fetchSimplefinAccounts } from "./simplefinClient";
 import { fetchTellerData } from "./tellerClient";
 import { planIngest } from "./ingest";
+import { autoApproveInboxByRules } from "./reviewInboxService";
 import { computeFetchWindow, isSyncDue } from "./syncGate";
 import type {
   NormalizedAccount,
@@ -271,6 +272,17 @@ const syncOneConnection = async (
     if (staleIds.length > 0) {
       await removePendingTransactions(staleIds);
     }
+  }
+
+  // Auto-approve sweep: items covered by an "approve" merchant rule become
+  // entries right away (pending/transfer/duplicate items always stay - see
+  // selectAutoApprovable). Best-effort like keep-alive: an inbox-side
+  // failure must not mark the connection as broken - the items just wait
+  // in the inbox for manual approval.
+  try {
+    await autoApproveInboxByRules();
+  } catch (error) {
+    if (__DEV__) console.error("Auto-approve sweep failed:", error);
   }
 
   const balancesUpdated = await applyBalances(links, result.accounts);

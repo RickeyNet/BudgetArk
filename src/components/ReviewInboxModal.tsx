@@ -7,9 +7,11 @@
  * in your budget") that offer a Skip-all shortcut. Each row expands into a
  * name field (rename the noisy bank text), a category picker, a business
  * picker (expenses, when businesses exist) and an "always do this" rule
- * checkbox - on Approve it remembers the category plus any rename/business;
- * on Skip it creates an ignore rule so the merchant
- * (credit-card payments, debt payments) never imports again. A bulk bar
+ * checkbox - on Approve it creates an auto-approve rule (future imports
+ * become entries without stopping here, and matching items still in the
+ * inbox are approved on the spot); on Skip it creates an ignore rule so
+ * the merchant (credit-card payments, debt payments) never imports again.
+ * A bulk bar
  * approves everything that already has a rule-suggested category. The Rules
  * header button opens MerchantRulesModal, where saved rules can be changed
  * or deleted later.
@@ -47,6 +49,7 @@ import CategoryPillPicker from "./CategoryPillPicker";
 import MerchantRulesModal from "./MerchantRulesModal";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import {
+  applyRulesToInbox,
   approvePendingTransaction,
   dismissAndIgnoreMerchant,
   dismissPendingTransactions,
@@ -221,6 +224,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           personId: personId ?? null,
           rememberRule: remember,
         });
+        // "Always" just created an auto-approve rule - sweep the rest of
+        // the inbox so matching items are approved now, not next sync.
+        if (remember && item.merchant) {
+          await applyRulesToInbox();
+        }
         await refresh();
         await onChanged();
         triggerHaptic("success");
@@ -497,9 +505,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   {rememberRule ? <Text style={styles.checkboxCheck}>✓</Text> : null}
                 </View>
                 <Text style={styles.rememberLabel}>
-                  Always do this for "{item.merchant}" - remember these
-                  choices for future imports on Approve, or never import it
-                  again on Skip
+                  Always do this for "{item.merchant}" - on Approve, matching
+                  transactions here and in future imports are approved
+                  automatically with these choices; on Skip, it never imports
+                  again
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -528,7 +537,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 disabled={busy}
               >
                 <Text style={styles.approveButtonText}>
-                  {busy ? "Saving..." : "Approve"}
+                  {busy
+                    ? "Saving..."
+                    : rememberRule && item.merchant
+                      ? "Always Approve"
+                      : "Approve"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -561,7 +574,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.syncButton, isSyncing && styles.buttonDisabled]}
-              onPress={() => void syncNow()}
+              onPress={() =>
+                // A sync can now auto-approve items into real entries, so
+                // the host screen must reload its entry list afterwards.
+                void (async () => {
+                  await syncNow();
+                  await onChanged();
+                })()
+              }
               disabled={isSyncing || connections.length === 0}
             >
               {isSyncing ? (

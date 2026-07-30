@@ -3,8 +3,10 @@
  * File: src/services/connections/reviewInboxService.ts
  *
  * Approve/dismiss operations for Review Inbox items, plus merchant-rule
- * management (change a rule's category, flip categorize<->ignore, delete)
- * with inbox re-application. Approval write order is
+ * management (change a rule's category, flip approve/categorize/ignore,
+ * delete) with inbox re-application - including the auto-approve sweep
+ * that turns items covered by an "approve" rule straight into entries.
+ * Approval write order is
  * deliberate: BudgetEntry FIRST, ledger second, inbox removal last - a crash
  * mid-way leaves at worst a stale inbox row that the ingest planner will not
  * recreate (the entry's externalTxId now blocks it) and the user can dismiss.
@@ -29,13 +31,18 @@ import {
 import {
   deleteMerchantRule,
   getMerchantRules,
+  touchRuleUsage,
   updateMerchantRule,
   upsertMerchantRule,
 } from "../../storage/merchantRulesStorage";
 import { generateUUID } from "../../utils/uuid";
 import { sanitizeTextInput } from "../../utils/sanitize";
 import { pendingFingerprintFor } from "./ingest";
-import { matchMerchantRule, replanInboxForRules } from "./merchant";
+import {
+  matchMerchantRule,
+  replanInboxForRules,
+  selectAutoApprovable,
+} from "./merchant";
 
 const MAX_DESCRIPTION_LENGTH = 220;
 
@@ -60,8 +67,11 @@ export interface ApproveOptions {
    */
   personId?: string | null;
   /**
-   * Save a merchant rule so future fetches suggest this category - plus the
-   * entered name (when it differs from the bank's text) and business.
+   * Save an auto-approve merchant rule: future fetches turn matching
+   * transactions straight into entries with this category - plus the
+   * entered name (when it differs from the bank's text), business, and
+   * person. Callers should follow up with applyRulesToInbox() so items
+   * already waiting get swept too.
    */
   rememberRule?: boolean;
 }
@@ -144,6 +154,9 @@ export const approvePendingTransaction = async (
     await upsertMerchantRule({
       id: generateUUID(),
       merchantKey: item.merchant,
+      // Full auto-approve, not just a suggestion - "always do this" on
+      // Approve means future imports skip the inbox entirely.
+      action: "approve",
       category: opts.category,
       type,
       renameTo,
@@ -221,6 +234,54 @@ export const dismissAndIgnoreMerchant = async (
   return ids.length;
 };
 
+/**
+ * Approve every inbox item covered by an "approve" rule, deriving the
+ * entry's fields from the RULE (not the item's possibly-stale suggestions).
+ * Pending, transfer-likely, and duplicate-likely items are never touched -
+ * see selectAutoApprovable. Returns how many entries were created. Runs
+ * after every connections sync pass and after any rule change.
+ */
+export const autoApproveInboxByRules = async (): Promise<number> => {
+  const [inbox, rules] = await Promise.all([
+    getPendingTransactions(),
+    getMerchantRules(),
+  ]);
+  const targets = selectAutoApprovable(inbox, rules);
+  let approved = 0;
+  for (const { item, rule } of targets) {
+    const entry = await approvePendingTransaction({
+      pendingId: item.id,
+      category: rule.category,
+      description: rule.renameTo ?? item.description,
+      // null = explicitly what the rule says (or nothing), never a stale
+      // per-item suggestion from an older rule version.
+      businessId: rule.businessId ?? null,
+      personId: rule.personId ?? null,
+    });
+    if (entry) {
+      await touchRuleUsage(rule.id);
+      approved += 1;
+    }
+  }
+  return approved;
+};
+
+/**
+ * Bring the inbox fully in line with the current rule set: refresh
+ * suggestions, dismiss items covered by ignore rules, then auto-approve
+ * items covered by approve rules. Call sites run this after saving an
+ * "always do this" rule so the items still waiting get handled too.
+ */
+export const applyRulesToInbox = async (): Promise<{
+  dismissedCount: number;
+  recategorizedCount: number;
+  autoApprovedCount: number;
+}> => {
+  const replan = await reapplyRulesToInbox();
+  const autoApprovedCount = await autoApproveInboxByRules();
+  return { ...replan, autoApprovedCount };
+};
+
 /* ─── Rule management (the "change your selection" surface) ─── */
 
 /**
@@ -251,8 +312,8 @@ const reapplyRulesToInbox = async (): Promise<{
 
 export interface ChangeRuleOptions {
   ruleId: string;
-  action: "categorize" | "ignore";
-  /** Required when action is "categorize"; ignored otherwise. */
+  action: "categorize" | "ignore" | "approve";
+  /** Required when action is "categorize"/"approve"; ignored otherwise. */
   category?: CategoryName;
   /**
    * Display name for future imports. Empty/whitespace clears the rename.
@@ -272,16 +333,23 @@ export interface ChangeRuleOptions {
 }
 
 /**
- * Change what an existing rule does - switch between "always categorize as X"
- * and "always skip", pick a different category, or adjust the remembered
- * rename/business - then bring the inbox in line with the new behavior.
+ * Change what an existing rule does - switch between auto-approve, suggest
+ * ("always categorize as X"), and "always skip", pick a different category,
+ * or adjust the remembered rename/business/person - then bring the inbox in
+ * line with the new behavior (including auto-approving newly covered items).
  */
 export const changeMerchantRule = async (
   opts: ChangeRuleOptions,
-): Promise<{ dismissedCount: number; recategorizedCount: number }> => {
+): Promise<{
+  dismissedCount: number;
+  recategorizedCount: number;
+  autoApprovedCount: number;
+}> => {
   const rules = await getMerchantRules();
   const rule = rules.find((r) => r.id === opts.ruleId);
-  if (!rule) return { dismissedCount: 0, recategorizedCount: 0 };
+  if (!rule) {
+    return { dismissedCount: 0, recategorizedCount: 0, autoApprovedCount: 0 };
+  }
   const renameTo =
     opts.renameTo === undefined
       ? rule.renameTo
@@ -296,7 +364,7 @@ export const changeMerchantRule = async (
   await updateMerchantRule(opts.ruleId, {
     action: opts.action,
     category:
-      opts.action === "categorize" && opts.category
+      opts.action !== "ignore" && opts.category
         ? opts.category
         : rule.category,
     type: rule.type,
@@ -304,13 +372,19 @@ export const changeMerchantRule = async (
     businessId,
     personId,
   });
-  return reapplyRulesToInbox();
+  return applyRulesToInbox();
 };
 
 /** Delete a rule and clear/re-derive the suggestions it produced. */
 export const removeMerchantRule = async (
   ruleId: string,
-): Promise<{ dismissedCount: number; recategorizedCount: number }> => {
+): Promise<{
+  dismissedCount: number;
+  recategorizedCount: number;
+  autoApprovedCount: number;
+}> => {
   await deleteMerchantRule(ruleId);
-  return reapplyRulesToInbox();
+  // The full sweep, not just the replan: deleting one rule can hand items
+  // to another prefix-matching rule that auto-approves.
+  return applyRulesToInbox();
 };

@@ -778,11 +778,15 @@ export interface MerchantRule {
   merchantKey: string;
   /**
    * What to do with future imports from this merchant. Absent or
-   * "categorize": suggest `category`. "ignore": auto-skip the transaction
-   * entirely (credit-card payments, transfers) - `category`/`type` are
-   * placeholders on such rules.
+   * "categorize": suggest `category` (the user still approves). "approve":
+   * auto-approve into a BudgetEntry with this rule's category/rename/
+   * business/person - but never pending, transfer-likely, or
+   * duplicate-likely items, which always wait for the user (see
+   * selectAutoApprovable). "ignore": auto-skip the transaction entirely
+   * (credit-card payments, transfers) - `category`/`type` are placeholders
+   * on such rules.
    */
-  action?: "categorize" | "ignore";
+  action?: "categorize" | "ignore" | "approve";
   category: CategoryName;
   type: BudgetEntryType;
   /**

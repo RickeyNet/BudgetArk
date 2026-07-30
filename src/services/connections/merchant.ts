@@ -66,6 +66,35 @@ export const matchMerchantRule = (
   return best;
 };
 
+export interface AutoApprovable {
+  item: PendingTransaction;
+  rule: MerchantRule;
+}
+
+/**
+ * Inbox items an "approve" rule may turn into entries without review.
+ * Deliberately conservative - these always stay for the user:
+ *  - pending transactions (the posted amount can still change, e.g. tips);
+ *  - transferLikely / duplicateLikely items (same exclusions as the bulk
+ *    "Approve N with suggested categories" bar);
+ *  - items with no usable merchant key.
+ * Pure - the service loops the selection through approvePendingTransaction.
+ */
+export const selectAutoApprovable = (
+  items: readonly PendingTransaction[],
+  rules: MerchantRule[],
+): AutoApprovable[] => {
+  const result: AutoApprovable[] = [];
+  for (const item of items) {
+    if (item.pending || item.transferLikely || item.duplicateLikely) continue;
+    if (!item.merchant) continue;
+    const rule = matchMerchantRule(item.merchant, rules);
+    if (rule?.action !== "approve") continue;
+    result.push({ item, rule });
+  }
+  return result;
+};
+
 export interface InboxReplan {
   /** Items whose suggestedCategory changed under the current rule set. */
   updatedItems: PendingTransaction[];
