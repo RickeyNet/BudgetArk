@@ -440,6 +440,67 @@ describe("importFromString - businesses", () => {
   });
 });
 
+describe("importFromString - people", () => {
+  const PEOPLE_KEY = "@budgetark_people";
+  const validPerson = (over: Record<string, unknown> = {}) => ({
+    id: "per1",
+    name: "Sam",
+    createdAt: "2026-02-01T00:00:00.000Z",
+    updatedAt: "2026-02-01T00:00:00.000Z",
+    ...over,
+  });
+
+  it("imports people into empty storage in the {people, version} store shape", async () => {
+    const result = await importFromString(
+      JSON.stringify({ people: [validPerson()] }),
+      "merge"
+    );
+    expect(result.people).toBe(1);
+    const stored = readStore(PEOPLE_KEY);
+    expect(stored.people).toHaveLength(1);
+    expect(stored.people[0].name).toBe("Sam");
+    expect(stored.version).toBe(1);
+  });
+
+  it("applies last-write-wins and keeps a newer local tombstone", async () => {
+    storageMock.__store.set(
+      PEOPLE_KEY,
+      JSON.stringify({
+        people: [
+          validPerson({
+            deletedAt: "2026-06-10T00:00:00.000Z",
+            updatedAt: "2026-06-10T00:00:00.000Z",
+          }),
+        ],
+        version: 1,
+      })
+    );
+    await importFromString(
+      JSON.stringify({
+        people: [validPerson({ updatedAt: "2026-01-01T00:00:00.000Z" })],
+      }),
+      "merge"
+    );
+    expect(readStore(PEOPLE_KEY).people[0].deletedAt).toBeTruthy();
+  });
+
+  it("rejects a person with an oversized name", async () => {
+    await expect(
+      importFromString(
+        JSON.stringify({ people: [validPerson({ name: "a".repeat(41) })] })
+      )
+    ).rejects.toThrow(/people contains/i);
+  });
+
+  it("imports entries carrying a personId", async () => {
+    await importFromString(
+      JSON.stringify({ budgetEntries: [validEntry({ personId: "per1" })] }),
+      "merge"
+    );
+    expect(readStore(KEYS.BUDGET_ENTRIES)[0].personId).toBe("per1");
+  });
+});
+
 describe("importFromString - holdings", () => {
   it("imports holdings into empty storage", async () => {
     const result = await importFromString(

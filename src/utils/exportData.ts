@@ -27,6 +27,7 @@ import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
 import { getBusinessesIncludingDeleted } from "../storage/businessStorage";
+import { getPeopleIncludingDeleted } from "../storage/personStorage";
 import { getCategoryBucketOverrides } from "../storage/categoryBucketOverridesStorage";
 import { getUnlockedAchievements } from "../storage/achievementsStorage";
 import { getAchievementStats } from "../storage/achievementStatsStorage";
@@ -78,6 +79,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     netWorthSnapshots,
     customCategories,
     businesses,
+    people,
     categoryBucketOverrides,
     achievements,
     achievementStats,
@@ -113,6 +115,8 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     // Tombstones included so a restore doesn't resurrect a deleted business
     // whose id entries may still reference (see note above).
     getBusinessesIncludingDeleted(),
+    // Same tombstone rationale for people (BudgetEntry.personId).
+    getPeopleIncludingDeleted(),
     getCategoryBucketOverrides(),
     // Achievements + their backing stats are NOT derivable from financial
     // data (export taps, Monthly Review opens, app-open streak), so leaving
@@ -165,6 +169,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     netWorthSnapshots,
     customCategories,
     businesses,
+    people,
     categoryBucketOverrides,
     achievements,
     achievementStats,

@@ -299,6 +299,8 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       suggestedName: rule?.renameTo,
       suggestedBusinessId:
         suggestedType === "expense" ? rule?.businessId : undefined,
+      suggestedPersonId:
+        suggestedType === "expense" ? rule?.personId : undefined,
       transferLikely: looksLikeTransfer(tx) || undefined,
       duplicateLikely: looksLikeManualDuplicate(tx) || undefined,
       fetchedAt: input.now,

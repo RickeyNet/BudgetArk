@@ -69,6 +69,7 @@ const summarizeRestore = (result: ImportResult): string => {
   if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
   if (result.customCategories > 0) parts.push(`${result.customCategories} custom categories`);
   if (result.businesses > 0) parts.push(`${result.businesses} businesses`);
+  if (result.people > 0) parts.push(`${result.people} people`);
   return `Restored ${parts.join(", ")}.`;
 };
 

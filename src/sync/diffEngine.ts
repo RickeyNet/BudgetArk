@@ -44,6 +44,10 @@ import {
   saveBusinessesFromSync,
 } from "../storage/businessStorage";
 import {
+  getPeopleIncludingDeleted,
+  savePeopleFromSync,
+} from "../storage/personStorage";
+import {
   getCategoryBucketOverrides,
   saveCategoryBucketOverridesFromSync,
 } from "../storage/categoryBucketOverridesStorage";
@@ -78,6 +82,7 @@ import {
   isHoldingItem,
   isCustomCategoryItem,
   isBusinessItem,
+  isPersonItem,
   isMonthStartBalanceRecord,
   isNetWorthSnapshotItem,
   isValidImportCategory,
@@ -137,6 +142,7 @@ export const computeOutgoingDiff = async (
     strategyEnvelope,
     customCategories,
     businesses,
+    people,
     bucketOverrides,
     netWorthSnapshots,
     monthStartBalances,
@@ -152,6 +158,7 @@ export const computeOutgoingDiff = async (
     getPayoffStrategyEnvelope(),
     getCustomCategories(),
     getBusinessesIncludingDeleted(),
+    getPeopleIncludingDeleted(),
     getCategoryBucketOverrides(),
     getNetWorthSnapshots(),
     getMonthStartBalances(),
@@ -237,6 +244,8 @@ export const computeOutgoingDiff = async (
     // needed: the feature is new, so no businesses predate this field for
     // an already-paired couple to miss.
     businesses: filterChanged(businesses),
+    // People mirror businesses exactly (same new-feature, no-backfill case).
+    people: filterChanged(people),
     // Snapshots have no updatedAt - capturedAt plays that role (a re-capture
     // during the day restamps it). Incremental syncs send only days captured
     // since the last sync; backlog mode sends the whole history (capped at
@@ -371,6 +380,7 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
   validateDiffEntries(diff.holdings, "holding", isHoldingItem);
   validateDiffEntries(diff.customCategories, "custom category", isCustomCategoryItem);
   validateDiffEntries(diff.businesses, "business", isBusinessItem);
+  validateDiffEntries(diff.people, "person", isPersonItem);
 
   // Bucket overrides are a bare map, not DiffEntry records, so they get
   // their own gate: keys must pass the same bounded category-name check the
@@ -564,6 +574,15 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     const merged = mergeById(localBusinesses, diff.businesses);
     await saveBusinessesFromSync(merged);
     changedCount += diff.businesses.length;
+  }
+
+  // Merge people - same tombstone-aware LWW and raw-setter rationale as
+  // businesses above.
+  if (diff.people && diff.people.length > 0) {
+    const localPeople = await getPeopleIncludingDeleted();
+    const merged = mergeById(localPeople, diff.people);
+    await savePeopleFromSync(merged);
+    changedCount += diff.people.length;
   }
 
   // Merge budget limits (union of months, per-category last-write-wins).

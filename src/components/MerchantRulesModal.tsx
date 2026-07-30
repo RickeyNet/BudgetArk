@@ -31,6 +31,7 @@ import type {
   CategoryName,
   CustomCategory,
   MerchantRule,
+  Person,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -51,6 +52,8 @@ interface MerchantRulesModalProps {
   customCategories: CustomCategory[];
   /** Live businesses, for the expense business tag. Empty = pills hidden. */
   businesses: Business[];
+  /** Live people, for the expense person assignment. Empty = pills hidden. */
+  people: Person[];
 }
 
 const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
@@ -58,6 +61,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   onClose,
   customCategories,
   businesses,
+  people,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -70,6 +74,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const [draftCategory, setDraftCategory] = useState<CategoryName>("Other");
   const [draftRename, setDraftRename] = useState("");
   const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
+    undefined,
+  );
+  const [draftPersonId, setDraftPersonId] = useState<string | undefined>(
     undefined,
   );
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -104,6 +111,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       setDraftCategory(rule.category);
       setDraftRename(rule.renameTo ?? "");
       setDraftBusinessId(rule.businessId);
+      setDraftPersonId(rule.personId);
       return rule.id;
     });
   }, []);
@@ -120,6 +128,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
           // stored so flipping back to categorize restores it.
           renameTo: draftIgnore ? undefined : draftRename,
           businessId: draftIgnore ? undefined : draftBusinessId ?? null,
+          personId: draftIgnore ? undefined : draftPersonId ?? null,
         });
         await loadRules();
         await refresh();
@@ -129,7 +138,15 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         setBusyId(null);
       }
     },
-    [draftBusinessId, draftCategory, draftIgnore, draftRename, loadRules, refresh],
+    [
+      draftBusinessId,
+      draftCategory,
+      draftIgnore,
+      draftPersonId,
+      draftRename,
+      loadRules,
+      refresh,
+    ],
   );
 
   const handleDelete = useCallback(
@@ -158,6 +175,11 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     if (rule.businessId) {
       parts.push(
         `💼 ${businesses.find((b) => b.id === rule.businessId)?.name ?? "(deleted business)"}`,
+      );
+    }
+    if (rule.personId) {
+      parts.push(
+        `👤 ${people.find((p) => p.id === rule.personId)?.name ?? "(deleted person)"}`,
       );
     }
     return parts.join(" ");
@@ -282,6 +304,68 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                 </View>
               </>
             ) : null}
+            {!draftIgnore &&
+            rule.type === "expense" &&
+            (people.length > 0 || draftPersonId) ? (
+              <>
+                <Text style={styles.label}>PERSON</Text>
+                <View style={styles.businessWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.businessPill,
+                      !draftPersonId && styles.businessPillActive,
+                    ]}
+                    onPress={() => setDraftPersonId(undefined)}
+                  >
+                    <Text
+                      style={[
+                        styles.businessPillText,
+                        !draftPersonId && styles.businessPillTextActive,
+                      ]}
+                    >
+                      Unassigned
+                    </Text>
+                  </TouchableOpacity>
+                  {people.map((person) => (
+                    <TouchableOpacity
+                      key={person.id}
+                      style={[
+                        styles.businessPill,
+                        draftPersonId === person.id &&
+                          styles.businessPillActive,
+                      ]}
+                      onPress={() => setDraftPersonId(person.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          draftPersonId === person.id &&
+                            styles.businessPillTextActive,
+                        ]}
+                      >
+                        👤 {person.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {draftPersonId &&
+                  !people.some((p) => p.id === draftPersonId) ? (
+                    <TouchableOpacity
+                      style={[styles.businessPill, styles.businessPillActive]}
+                      onPress={() => setDraftPersonId(undefined)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          styles.businessPillTextActive,
+                        ]}
+                      >
+                        👤 (deleted person)
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.deleteButton, busy && styles.buttonDisabled]}
@@ -346,6 +430,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               draftCategory,
               draftRename,
               draftBusinessId,
+              draftPersonId,
               busyId,
             ]}
           />

@@ -55,6 +55,11 @@ export interface ApproveOptions {
    */
   businessId?: string | null;
   /**
+   * Person to assign the entry to (expenses only). Same null/undefined
+   * contract as businessId.
+   */
+  personId?: string | null;
+  /**
    * Save a merchant rule so future fetches suggest this category - plus the
    * entered name (when it differs from the bank's text) and business.
    */
@@ -100,6 +105,12 @@ export const approvePendingTransaction = async (
           ? undefined
           : opts.businessId ?? item.suggestedBusinessId)
       : undefined;
+  const personId =
+    type === "expense"
+      ? (opts.personId === null
+          ? undefined
+          : opts.personId ?? item.suggestedPersonId)
+      : undefined;
   const entry: BudgetEntry = {
     id: generateUUID(),
     type,
@@ -114,6 +125,7 @@ export const approvePendingTransaction = async (
     externalTxId: item.id,
     merchant: item.merchant || undefined,
     businessId,
+    personId,
   };
 
   await addBudgetEntry(entry);
@@ -136,6 +148,7 @@ export const approvePendingTransaction = async (
       type,
       renameTo,
       businessId,
+      personId,
       useCount: 1,
       lastUsedAt: now,
       createdAt: now,
@@ -251,6 +264,11 @@ export interface ChangeRuleOptions {
    * to keep the rule's current value.
    */
   businessId?: string | null;
+  /**
+   * Person to assign future approved expenses to. Same null/omit contract
+   * as businessId.
+   */
+  personId?: string | null;
 }
 
 /**
@@ -273,6 +291,8 @@ export const changeMerchantRule = async (
     opts.businessId === undefined
       ? rule.businessId
       : opts.businessId ?? undefined;
+  const personId =
+    opts.personId === undefined ? rule.personId : opts.personId ?? undefined;
   await updateMerchantRule(opts.ruleId, {
     action: opts.action,
     category:
@@ -282,6 +302,7 @@ export const changeMerchantRule = async (
     type: rule.type,
     renameTo,
     businessId,
+    personId,
   });
   return reapplyRulesToInbox();
 };

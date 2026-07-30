@@ -91,6 +91,9 @@ jest.mock("../../storage/debtMilestoneStorage", () => ({
 jest.mock("../../storage/businessStorage", () => ({
   getBusinesses: jest.fn(async () => []),
 }));
+jest.mock("../../storage/personStorage", () => ({
+  getPeople: jest.fn(async () => []),
+}));
 const mockRecordBackup = jest.fn(async () => {});
 jest.mock("../../storage/backupReminderStorage", () => ({
   recordBackup: mockRecordBackup,

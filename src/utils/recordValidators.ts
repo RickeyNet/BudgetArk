@@ -234,6 +234,9 @@ export const isBudgetEntryItem = (
   // its business passed, or one entry bricks the whole sync diff.
   const businessIdValid =
     item.businessId === undefined || isSafeText(item.businessId, 120);
+  // Same contract as businessId, for the person assignment.
+  const personIdValid =
+    item.personId === undefined || isSafeText(item.personId, 120);
   // W-2 / 1099 paycheck fields (all optional; see BudgetEntry docs). The
   // rate is bounded 0-100 - a hostile peer's 10_000% rate would otherwise
   // render an absurd "set aside" figure on the summary card.
@@ -265,6 +268,7 @@ export const isBudgetEntryItem = (
     externalTxIdValid &&
     merchantValid &&
     businessIdValid &&
+    personIdValid &&
     incomeTypeValid &&
     retirementContributionValid &&
     taxSetAsideRateValid &&
@@ -329,6 +333,9 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   }
   if (item.businessId !== undefined && !isSafeText(item.businessId, 120)) {
     return '"businessId" must be a non-empty string of at most 120 characters when present';
+  }
+  if (item.personId !== undefined && !isSafeText(item.personId, 120)) {
+    return '"personId" must be a non-empty string of at most 120 characters when present';
   }
   if (
     item.incomeType !== undefined &&
@@ -424,6 +431,24 @@ export const isCustomCategoryItem = (
  * free of storage-layer imports, same as the category cap above).
  */
 export const isBusinessItem = (
+  item: unknown
+): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    isSafeText(item.id) &&
+    isSafeText(item.name, 40) &&
+    isValidDateValue(item.createdAt) &&
+    isOptionalIso(item.updatedAt) &&
+    isOptionalIso(item.deletedAt)
+  );
+};
+
+/**
+ * A person record (the export/sync `people` collection). Same deliberately
+ * permissive trust-boundary stance as isBusinessItem; name length mirrors
+ * MAX_PERSON_NAME_LENGTH.
+ */
+export const isPersonItem = (
   item: unknown
 ): item is Record<string, unknown> => {
   if (!isObject(item)) return false;

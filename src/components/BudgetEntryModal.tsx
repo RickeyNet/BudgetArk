@@ -54,6 +54,7 @@ import {
   RecurrenceInterval,
   AssetAccount,
   Business,
+  Person,
   EntryAttachment,
 } from "../types";
 import { getRecurrenceInterval } from "../utils/recurrence";
@@ -118,6 +119,7 @@ interface BudgetEntryModalProps {
   assetAccounts?: AssetAccount[];
   customCategories?: CustomCategory[];
   businesses?: Business[];
+  people?: Person[];
 }
 
 let nextLineId = 0;
@@ -154,6 +156,7 @@ interface EntryFormState {
   paymentUrl: string;
   linkedAccountId: string | undefined;
   businessId: string | undefined;
+  personId: string | undefined;
   incomeType: IncomeType | undefined;
   retirementContribution: string;
   taxSetAsideRate: string;
@@ -182,6 +185,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
   paymentUrl: entry?.paymentUrl ?? "",
   linkedAccountId: entry?.linkedAccountId,
   businessId: entry?.businessId,
+  personId: entry?.personId,
   incomeType: entry?.incomeType,
   retirementContribution:
     entry?.retirementContribution !== undefined
@@ -207,6 +211,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   assetAccounts = [],
   customCategories = [],
   businesses = [],
+  people = [],
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -236,6 +241,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   );
   const [businessId, setBusinessId] = useState<string | undefined>(
     initialForm.businessId
+  );
+  const [personId, setPersonId] = useState<string | undefined>(
+    initialForm.personId
   );
   const [incomeType, setIncomeType] = useState<IncomeType | undefined>(
     initialForm.incomeType
@@ -281,6 +289,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setPaymentUrl(next.paymentUrl);
       setLinkedAccountId(next.linkedAccountId);
       setBusinessId(next.businessId);
+      setPersonId(next.personId);
       setIncomeType(next.incomeType);
       setRetirementContribution(next.retirementContribution);
       setTaxSetAsideRate(next.taxSetAsideRate);
@@ -316,6 +325,13 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     type === "expense" && (businesses.length > 0 || !!businessId);
   const taggedBusinessMissing =
     !!businessId && !businesses.some((b) => b.id === businessId);
+
+  // Person assignment mirrors the business picker exactly (expense-only,
+  // appears once a person exists, must allow untagging a deleted person).
+  const showPersonPicker =
+    type === "expense" && (people.length > 0 || !!personId);
+  const assignedPersonMissing =
+    !!personId && !people.some((p) => p.id === personId);
 
   const validLineCount = useMemo(
     () => lines.filter((line) => parseFloat(line.amount) > 0).length,
@@ -371,6 +387,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setPaymentUrl(next.paymentUrl);
     setLinkedAccountId(next.linkedAccountId);
     setBusinessId(next.businessId);
+    setPersonId(next.personId);
     setIncomeType(next.incomeType);
     setRetirementContribution(next.retirementContribution);
     setTaxSetAsideRate(next.taxSetAsideRate);
@@ -418,6 +435,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         paymentUrl: normalizedPaymentUrl,
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
         businessId: showBusinessPicker ? businessId : undefined,
+        personId: showPersonPicker ? personId : undefined,
         incomeType: entryIncomeType,
         taxSetAsideRate: entryTaxSetAsideRate,
         isPrivate: isPrivate || undefined,
@@ -450,6 +468,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     linkedAccountId,
     onAdd,
     paymentUrl,
+    personId,
     recurring,
     recurrenceDay,
     recurrenceInterval,
@@ -458,6 +477,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     showAccountPicker,
     showBusinessPicker,
     showDayPicker,
+    showPersonPicker,
     taxSetAsideRate,
     type,
     yearMonth,
@@ -490,6 +510,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       // Cleared when the type flips to income (mirrors linkedAccountId).
       businessId: type === "expense" ? businessId : undefined,
+      personId: type === "expense" ? personId : undefined,
       // Cleared when the type flips to expense or the income type changes
       // (mirrors businessId in the other direction).
       incomeType: entryIncomeType,
@@ -525,6 +546,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     linkedAccountId,
     onSave,
     paymentUrl,
+    personId,
     recurring,
     recurrenceDay,
     recurrenceInterval,
@@ -1047,6 +1069,59 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               >
                 <Text style={[styles.categoryPillText, styles.categoryPillTextActive]}>
                   💼 (deleted business)
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {showPersonPicker && (
+        <View style={styles.field}>
+          <Text style={styles.label}>PERSON (OPTIONAL)</Text>
+          <Text style={styles.accountPickerHint}>
+            Assign this spending to someone so it's clear who spent it.
+          </Text>
+          <View style={styles.categoryWrap}>
+            <TouchableOpacity
+              style={[styles.categoryPill, !personId && styles.categoryPillActive]}
+              onPress={() => setPersonId(undefined)}
+            >
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  !personId && styles.categoryPillTextActive,
+                ]}
+              >
+                Unassigned
+              </Text>
+            </TouchableOpacity>
+            {people.map((person) => (
+              <TouchableOpacity
+                key={person.id}
+                style={[
+                  styles.categoryPill,
+                  personId === person.id && styles.categoryPillActive,
+                ]}
+                onPress={() => setPersonId(person.id)}
+              >
+                <Text
+                  style={[
+                    styles.categoryPillText,
+                    personId === person.id && styles.categoryPillTextActive,
+                  ]}
+                >
+                  👤 {person.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {assignedPersonMissing && (
+              <TouchableOpacity
+                style={[styles.categoryPill, styles.categoryPillActive]}
+                onPress={() => setPersonId(undefined)}
+              >
+                <Text style={[styles.categoryPillText, styles.categoryPillTextActive]}>
+                  👤 (deleted person)
                 </Text>
               </TouchableOpacity>
             )}

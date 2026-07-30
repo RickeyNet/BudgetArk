@@ -231,6 +231,25 @@ export const MAX_BUSINESSES = 20;
 export const MAX_BUSINESS_NAME_LENGTH = 40;
 
 /**
+ * A household member (or anyone else) spending can be assigned to via
+ * `BudgetEntry.personId` - "who spent this". Mirrors `Business` exactly:
+ * entries reference people by id, deletes are tombstoned so they survive
+ * locally and propagate through P2P sync.
+ */
+export interface Person {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Tombstone marker - see Debt.deletedAt. */
+  deletedAt?: string;
+}
+
+export const PERSON_STORAGE_VERSION = 1;
+export const MAX_PEOPLE = 20;
+export const MAX_PERSON_NAME_LENGTH = 40;
+
+/**
  * Metadata for one receipt photo attached to a budget entry. The image
  * itself lives as an encrypted file in the app's document directory
  * (attachments/<id>.jpg.enc + <id>.thumb.jpg.enc - see
@@ -345,6 +364,13 @@ export interface BudgetEntry {
    * harmless: report/badge surfaces show it as "(deleted business)".
    */
   businessId?: string;
+  /**
+   * Person this spending is assigned to (see `Person`) - "who spent this".
+   * Expenses only, same contract as `businessId`: the UI never sets it on
+   * income, clears it when an entry's type flips, and a dangling id shows
+   * as "(deleted person)".
+   */
+  personId?: string;
   /**
    * How this income was earned (W-2 paycheck vs 1099 contractor pay).
    * Income only - the UI never sets it on expenses and clears it (plus the
@@ -727,6 +753,11 @@ export interface PendingTransaction {
    */
   suggestedBusinessId?: string;
   /**
+   * From a matched MerchantRule's `personId`. Expenses only (mirrors
+   * BudgetEntry.personId) - never set on inflows.
+   */
+  suggestedPersonId?: string;
+  /**
    * Heuristic: a manually-entered budget entry with the same amount and
    * direction exists within a few days - approving would double count.
    * Flag only, like transferLikely - never dropped automatically.
@@ -768,6 +799,11 @@ export interface MerchantRule {
    * Unread while action is "ignore".
    */
   businessId?: string;
+  /**
+   * Person to assign future approved expenses to (see BudgetEntry.personId).
+   * Same dangling-id and ignore-action semantics as `businessId`.
+   */
+  personId?: string;
   useCount: number;
   lastUsedAt?: string;
   createdAt: string;

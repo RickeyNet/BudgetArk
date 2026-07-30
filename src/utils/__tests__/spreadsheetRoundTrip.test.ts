@@ -71,9 +71,10 @@ const entryFixtures = [
   // externalTxId is the connections-sync dedup identity, so losing it on a
   // backup/restore cycle would re-offer every approved transaction.
   { id: "e4", type: "expense", category: "Grocery", amount: 82.14, date: "2026-06-03", createdAt: "2026-06-03T00:00:00.000Z", source: "bank", externalTxId: "simplefin:ACT-1:TXN-99", merchant: "COSTCO WHSE" },
-  // Business-tagged expense: BusinessId must round-trip; the readable
-  // Business name column is export-only and ignored on import.
-  { id: "e5", type: "expense", category: "Tech", amount: 199, date: "2026-06-04", createdAt: "2026-06-04T00:00:00.000Z", businessId: "b1" },
+  // Business-tagged, person-assigned expense: BusinessId/PersonId must
+  // round-trip; the readable Business/Person name columns are export-only
+  // and ignored on import.
+  { id: "e5", type: "expense", category: "Tech", amount: 199, date: "2026-06-04", createdAt: "2026-06-04T00:00:00.000Z", businessId: "b1", personId: "per1" },
   // W-2 paycheck: incomeType + retirementContribution must round-trip.
   { id: "e6", type: "income", category: "Salary", amount: 2500, date: "2026-06-05", createdAt: "2026-06-05T00:00:00.000Z", incomeType: "w2", retirementContribution: 150 },
   // 1099 payment: incomeType + taxSetAsideRate must round-trip.
@@ -84,6 +85,9 @@ const entryFixtures = [
 ];
 const businessFixtures = [
   { id: "b1", name: "Acme Consulting LLC", createdAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-02-01T00:00:00.000Z" },
+];
+const peopleFixtures = [
+  { id: "per1", name: "Sam", createdAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-02-01T00:00:00.000Z" },
 ];
 const holdingsFixtures = [
   { id: "h1", symbol: "AAPL", shares: 10, costBasis: 1500, createdAt: "2026-05-01T00:00:00.000Z", updatedAt: "2026-05-02T00:00:00.000Z" },
@@ -103,6 +107,7 @@ jest.mock("../../storage/savingsGoalStorage", () => ({ getSavingsGoals: jest.fn(
 jest.mock("../../storage/assetAccountStorage", () => ({ getAssetAccounts: jest.fn(async () => []) }));
 jest.mock("../../storage/holdingsStorage", () => ({ getHoldings: jest.fn(async () => holdingsRef) }));
 jest.mock("../../storage/businessStorage", () => ({ getBusinesses: jest.fn(async () => businessesRef) }));
+jest.mock("../../storage/personStorage", () => ({ getPeople: jest.fn(async () => peopleRef) }));
 jest.mock("../../storage/debtMilestoneStorage", () => ({ getDebtMilestonePlan: jest.fn(async () => null) }));
 jest.mock("../../storage/backupReminderStorage", () => ({ recordBackup: jest.fn(async () => {}) }));
 
@@ -111,7 +116,7 @@ const mockImportFromString = jest.fn(async (_json: string, _mode?: string) => ({
   debts: 0, payments: 0, budgetEntries: 0, budgetLimits: 0,
   savingsGoals: 0, assetAccounts: 0, holdings: 0, debtMilestones: false,
   payoffStrategy: false, netWorthSnapshots: 0, customCategories: 0,
-  businesses: 0,
+  businesses: 0, people: 0,
 }));
 let mockPicked: any = { canceled: true };
 jest.mock("../importData", () => ({
@@ -124,6 +129,7 @@ const debtRef = debtFixture;
 const entriesRef = entryFixtures;
 const holdingsRef = holdingsFixtures;
 const businessesRef = businessFixtures;
+const peopleRef = peopleFixtures;
 
 // eslint-disable-next-line import/first -- must require after the jest.mock factories' captured consts initialize (ts-jest emits CJS, so import position is require order)
 import { exportSpreadsheet } from "../spreadsheetExport";
@@ -175,6 +181,11 @@ describe("xlsx round-trip", () => {
     expect(byId.e1.businessId).toBeUndefined();
     expect(byId.e5.Business).toBeUndefined();
 
+    // PersonId mirrors the BusinessId contract exactly.
+    expect(byId.e5.personId).toBe("per1");
+    expect(byId.e1.personId).toBeUndefined();
+    expect(byId.e5.Person).toBeUndefined();
+
     // W-2 / 1099 paycheck fields round-trip; plain income never grows them.
     expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });
     expect(byId.e6.taxSetAsideRate).toBeUndefined();
@@ -193,6 +204,14 @@ describe("xlsx round-trip", () => {
     expect(payload.businesses[0]).toMatchObject({
       id: "b1",
       name: "Acme Consulting LLC",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    });
+
+    // The People sheet round-trips the same way.
+    expect(payload.people).toHaveLength(1);
+    expect(payload.people[0]).toMatchObject({
+      id: "per1",
+      name: "Sam",
       updatedAt: "2026-02-01T00:00:00.000Z",
     });
     // Date asserted at month granularity: SheetJS shifts Excel date serials by
@@ -245,9 +264,10 @@ describe("csv round-trip", () => {
       externalTxId: "simplefin:ACT-1:TXN-99",
       merchant: "COSTCO WHSE",
     });
-    // CSV carries the entry-level BusinessId even though the Businesses
-    // sheet is xlsx-only.
+    // CSV carries the entry-level BusinessId/PersonId even though the
+    // Businesses and People sheets are xlsx-only.
     expect(byId.e5.businessId).toBe("b1");
+    expect(byId.e5.personId).toBe("per1");
     expect(result?.skippedRows).toBe(0);
   });
 });
@@ -260,7 +280,7 @@ describe("round-trip schema guard", () => {
     expect(mockWritten.encoding).toBe("base64");
     const wb = XLSX.read(mockWritten.content, { type: "base64" });
     expect(wb.SheetNames).toEqual(
-      expect.arrayContaining(["Budget Entries", "Debts", "Businesses"])
+      expect.arrayContaining(["Budget Entries", "Debts", "Businesses", "People"])
     );
   });
 });

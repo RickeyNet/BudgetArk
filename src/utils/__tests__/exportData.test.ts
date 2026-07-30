@@ -73,6 +73,7 @@ const fixtures = {
       date: "2026-03-03",
       createdAt: "2026-03-03T00:00:00.000Z",
       businessId: "b1",
+      personId: "per1",
       attachments: [
         {
           id: "att-1",
@@ -94,6 +95,22 @@ const fixtures = {
     {
       id: "b2",
       name: "Old Side Hustle",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-02-15T00:00:00.000Z",
+      deletedAt: "2026-02-15T00:00:00.000Z",
+    },
+  ],
+  people: [
+    {
+      id: "per1",
+      name: "Sam",
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    },
+    // Tombstoned person: same restore-can't-resurrect rationale as b2.
+    {
+      id: "per2",
+      name: "Old Roommate",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-02-15T00:00:00.000Z",
       deletedAt: "2026-02-15T00:00:00.000Z",
@@ -161,6 +178,9 @@ jest.mock("../../storage/customCategoriesStorage", () => ({
 }));
 jest.mock("../../storage/businessStorage", () => ({
   getBusinessesIncludingDeleted: jest.fn(async () => fixturesRef.businesses),
+}));
+jest.mock("../../storage/personStorage", () => ({
+  getPeopleIncludingDeleted: jest.fn(async () => fixturesRef.people),
 }));
 jest.mock("../../storage/categoryBucketOverridesStorage", () => ({
   getCategoryBucketOverrides: jest.fn(async () => ({})),
@@ -268,6 +288,29 @@ describe("buildExportMessage - plain JSON", () => {
       storageMock.__store.get("@budgetark_budget_entries") ?? "[]",
     );
     expect(storedEntries.find((e: any) => e.id === "e3").businessId).toBe("b1");
+  });
+
+  it("carries people (incl. tombstones) and entry personId through the round-trip", async () => {
+    const message = await buildExportMessage();
+    const payload = JSON.parse(message);
+    expect(payload.people).toHaveLength(2);
+    expect(payload.people.find((p: any) => p.id === "per2").deletedAt).toBe(
+      "2026-02-15T00:00:00.000Z"
+    );
+
+    await importFromString(message, "replace");
+    const storedPeople = JSON.parse(
+      storageMock.__store.get("@budgetark_people") ?? "{}",
+    );
+    expect(storedPeople.people).toHaveLength(2);
+    expect(
+      storedPeople.people.find((p: any) => p.id === "per2").deletedAt
+    ).toBeTruthy();
+
+    const storedEntries = JSON.parse(
+      storageMock.__store.get("@budgetark_budget_entries") ?? "[]",
+    );
+    expect(storedEntries.find((e: any) => e.id === "e3").personId).toBe("per1");
   });
 
   it("carries month-start balances through the round-trip with LWW merge", async () => {

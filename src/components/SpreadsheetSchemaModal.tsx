@@ -57,6 +57,8 @@ const SHEETS: SheetSpec[] = [
       { name: "LinkedAccountId", required: false, notes: "Asset account UUID for savings entries." },
       { name: "BusinessId", required: false, notes: "UUID from the Businesses sheet for business-tagged expenses. Round-trips." },
       { name: "Business", required: false, notes: "Readable business name. Export-only - ignored on import." },
+      { name: "PersonId", required: false, notes: "UUID from the People sheet for expenses assigned to a person. Round-trips." },
+      { name: "Person", required: false, notes: "Readable person name. Export-only - ignored on import." },
       { name: "Private", required: false, notes: "yes marks a private entry that never syncs to your partner. Round-trips." },
     ],
     footer:
@@ -133,6 +135,17 @@ const SHEETS: SheetSpec[] = [
       "Businesses that expense entries can be tagged with (via BusinessId). Only live businesses are exported.",
     columns: [
       { name: "ID", required: false, notes: "Auto-generated if missing. Budget entries reference this via BusinessId." },
+      { name: "Name", required: true, notes: "Up to 40 characters." },
+      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+    ],
+  },
+  {
+    title: "People",
+    xlsxOnly: true,
+    description:
+      "People that spending can be assigned to (via PersonId). Only live people are exported.",
+    columns: [
+      { name: "ID", required: false, notes: "Auto-generated if missing. Budget entries reference this via PersonId." },
       { name: "Name", required: true, notes: "Up to 40 characters." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
     ],

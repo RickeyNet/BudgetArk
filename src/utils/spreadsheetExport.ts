@@ -27,6 +27,7 @@ import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getHoldings } from "../storage/holdingsStorage";
 import { getBusinesses } from "../storage/businessStorage";
+import { getPeople } from "../storage/personStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { recordBackup } from "../storage/backupReminderStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
@@ -34,6 +35,7 @@ import {
   AssetAccount,
   BudgetEntry,
   Business,
+  Person,
   CategoryBudgetLimit,
   DebtMilestonePlan,
   Debt,
@@ -55,9 +57,12 @@ export type SpreadsheetFormat = "csv" | "xlsx";
  * partner-sync privacy flag. Stripping it on a backup/restore cycle would
  * silently start syncing an entry the user marked private, so
  * round-tripping it is a privacy requirement, not convenience.
+ * v5: Budget Entries gained PersonId (round-trip) + Person (readable name,
+ * export-only) - who the spending is assigned to; new People sheet in xlsx
+ * workbooks (same shape as Businesses).
  * Older files still import - the new columns are simply absent.
  */
-export const SPREADSHEET_SCHEMA_VERSION = 4;
+export const SPREADSHEET_SCHEMA_VERSION = 5;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -123,6 +128,10 @@ const BUDGET_ENTRY_COLUMNS = [
   // time and is IGNORED on import - renames must not fork identities.
   "BusinessId",
   "Business",
+  // Person the spending is assigned to. Same contract as Business above:
+  // PersonId round-trips, Person is the readable name and IGNORED on import.
+  "PersonId",
+  "Person",
   // W-2 / 1099 paycheck fields. IncomeType is "w2" or "1099" (blank for
   // expenses and plain income). Retirement401k is the 401(k) dollars
   // withheld from a W-2 paycheck; TaxSetAsideRate is the percent of a 1099
@@ -208,6 +217,9 @@ const HOLDING_COLUMNS = [
 // path); a human-facing spreadsheet listing deleted clients is just noise.
 const BUSINESS_COLUMNS = ["ID", "Name", "CreatedAt", "UpdatedAt"] as const;
 
+// Same live-only rationale as businesses.
+const PERSON_COLUMNS = ["ID", "Name", "CreatedAt", "UpdatedAt"] as const;
+
 /* ── Row builders - convert app types to flat row objects ── */
 
 const formatDateOnly = (iso: string): string => {
@@ -270,7 +282,8 @@ const promoteStringDateCells = (
 
 const budgetEntryToRow = (
   entry: BudgetEntry,
-  businessNameById?: Map<string, string>
+  businessNameById?: Map<string, string>,
+  personNameById?: Map<string, string>
 ) => ({
   ID: entry.id,
   Date: formatDateOnly(entry.date),
@@ -291,6 +304,11 @@ const budgetEntryToRow = (
   // "(deleted)" so tax-time filtering still groups those rows visibly.
   Business: entry.businessId
     ? businessNameById?.get(entry.businessId) ?? "(deleted)"
+    : "",
+  PersonId: entry.personId ?? "",
+  // Readable name, export-only - same "(deleted)" convention as Business.
+  Person: entry.personId
+    ? personNameById?.get(entry.personId) ?? "(deleted)"
     : "",
   IncomeType: entry.incomeType ?? "",
   Retirement401k: entry.retirementContribution ?? "",
@@ -364,6 +382,13 @@ const businessToRow = (business: Business) => ({
   Name: business.name,
   CreatedAt: business.createdAt,
   UpdatedAt: business.updatedAt ?? "",
+});
+
+const personToRow = (person: Person) => ({
+  ID: person.id,
+  Name: person.name,
+  CreatedAt: person.createdAt,
+  UpdatedAt: person.updatedAt ?? "",
 });
 
 /* ── Total row ──
@@ -911,6 +936,7 @@ export const exportSpreadsheet = async (
     holdingsResult,
     milestonePlanResult,
     businessesResult,
+    peopleResult,
   ] = await Promise.allSettled([
     withTimeout(
       getBudgetEntries(),
@@ -953,6 +979,11 @@ export const exportSpreadsheet = async (
       DATA_LOAD_TIMEOUT_MS,
       "Timed out loading businesses for export."
     ),
+    withTimeout(
+      getPeople(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading people for export."
+    ),
   ]);
   log("data-loaded", `ms=${nowMs() - loadStartedAt}`);
 
@@ -991,6 +1022,11 @@ export const exportSpreadsheet = async (
       ? businessesResult.value
       : (markMissingSection("Businesses"), [] as Business[]);
   const businessNameById = new Map(businesses.map((b) => [b.id, b.name]));
+  const people =
+    peopleResult.status === "fulfilled"
+      ? peopleResult.value
+      : (markMissingSection("People"), [] as Person[]);
+  const personNameById = new Map(people.map((p) => [p.id, p.name]));
 
   // Build the savings-goal list shown in the spreadsheet. If the user has no
   // explicit emergency_fund goal but is tracking one via the Keel milestone
@@ -1040,7 +1076,9 @@ export const exportSpreadsheet = async (
   let entrySheet: XLSX.WorkSheet;
   try {
     const entryRows = expandRecurringRows(
-      budgetEntries.map((entry) => budgetEntryToRow(entry, businessNameById))
+      budgetEntries.map((entry) =>
+        budgetEntryToRow(entry, businessNameById, personNameById)
+      )
     );
     entrySheet = buildBudgetEntriesSheet(entryRows);
   } catch {
@@ -1157,6 +1195,17 @@ export const exportSpreadsheet = async (
       XLSX.utils.book_append_sheet(wb, businessesSheet, "Businesses");
     } catch {
       markMissingSection("Businesses");
+    }
+
+    try {
+      const personRows = people.map(personToRow);
+      const peopleSheet = XLSX.utils.json_to_sheet(personRows, {
+        header: [...PERSON_COLUMNS],
+      });
+      promoteStringDateCells(peopleSheet, PERSON_COLUMNS, ["CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, peopleSheet, "People");
+    } catch {
+      markMissingSection("People");
     }
   }
 

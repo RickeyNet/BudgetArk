@@ -22,6 +22,7 @@ import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
   CUSTOM_CATEGORY_STORAGE_VERSION,
   BUSINESS_STORAGE_VERSION,
+  PERSON_STORAGE_VERSION,
   ACHIEVEMENTS_STORAGE_VERSION,
   ACHIEVEMENT_STATS_VERSION,
   type AchievementStats,
@@ -60,6 +61,7 @@ import {
   isNetWorthSnapshotItem,
   isCustomCategoryItem,
   isBusinessItem,
+  isPersonItem,
   isValidImportCategory,
   isMonthKey,
   sanitizePayoffStrategy,
@@ -81,6 +83,7 @@ const KEYS = {
   NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
   CUSTOM_CATEGORIES: "@budgetark_custom_categories",
   BUSINESSES: "@budgetark_businesses",
+  PEOPLE: "@budgetark_people",
   CATEGORY_BUCKET_OVERRIDES: "@budgetark_category_bucket_overrides",
   ACHIEVEMENTS: "@budgetark_achievements",
   ACHIEVEMENT_STATS: "@budgetark_achievement_stats",
@@ -122,6 +125,7 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     Array.isArray(data.netWorthSnapshots) ||
     Array.isArray(data.customCategories) ||
     Array.isArray(data.businesses) ||
+    Array.isArray(data.people) ||
     isObject(data.categoryBucketOverrides) ||
     isObject(data.achievements) ||
     isObject(data.achievementStats) ||
@@ -147,6 +151,7 @@ interface ImportPayload {
   netWorthSnapshots?: unknown[];
   customCategories?: unknown[];
   businesses?: unknown[];
+  people?: unknown[];
   categoryBucketOverrides?: Record<string, unknown>;
   achievements?: Record<string, unknown>;
   achievementStats?: Record<string, unknown>;
@@ -179,6 +184,7 @@ interface SanitizedImportPayload {
   netWorthSnapshots: Record<string, unknown>[];
   customCategories: Record<string, unknown>[];
   businesses: Record<string, unknown>[];
+  people: Record<string, unknown>[];
   categoryBucketOverrides?: Record<string, "needs" | "wants" | "savings">;
   achievements?: SanitizedAchievements;
   achievementStats?: AchievementStats;
@@ -201,6 +207,7 @@ export interface ImportResult {
   netWorthSnapshots: number;
   customCategories: number;
   businesses: number;
+  people: number;
   /** Number of days since the export was created, or undefined if no exportedAt timestamp */
   staleDays?: number;
 }
@@ -441,6 +448,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     "businesses",
     isBusinessItem
   );
+  const people = sanitizeCollection(data.people, "people", isPersonItem);
   const debtMilestones = sanitizeDebtMilestones(data.debtMilestones);
   const payoffStrategy = sanitizePayoffStrategy(data.payoffStrategy);
   const payoffStrategyUpdatedAt = isValidDateValue(data.payoffStrategyUpdatedAt)
@@ -482,7 +490,8 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     holdings.length +
     netWorthSnapshots.length +
     customCategories.length +
-    businesses.length;
+    businesses.length +
+    people.length;
   if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
     throw new Error(
       `Import rejected: payload is too large. Maximum total records is ${LIMITS.MAX_TOTAL_ITEMS}.`
@@ -501,6 +510,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     netWorthSnapshots,
     customCategories,
     businesses,
+    people,
     categoryBucketOverrides,
     achievements,
     achievementStats,
@@ -667,6 +677,7 @@ export const importFromString = async (
     netWorthSnapshots: 0,
     customCategories: 0,
     businesses: 0,
+    people: 0,
     staleDays,
   };
 
@@ -1113,6 +1124,66 @@ export const importFromString = async (
   };
 
   /**
+   * People mirror businesses exactly: `{people, version}` envelope, LWW by
+   * id, tombstones ride along so a restore can't resurrect a deleted person.
+   */
+  const computeMergedPeople = async (): Promise<{
+    json: string;
+    count: number;
+  } | null> => {
+    if (sanitized.people.length === 0) return null;
+    const wrap = (arr: Record<string, unknown>[]): string =>
+      JSON.stringify({ people: arr, version: PERSON_STORAGE_VERSION });
+
+    if (mode === "replace") {
+      return {
+        json: wrap(sanitized.people),
+        count: sanitized.people.length,
+      };
+    }
+
+    let existing: Record<string, unknown>[] = [];
+    const existingRaw = await EncryptedStorage.getItem(KEYS.PEOPLE);
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (Array.isArray(parsed?.people)) existing = parsed.people;
+      } catch {
+        existing = [];
+      }
+    }
+
+    const indexById = new Map<string, number>();
+    existing.forEach((item, idx) => {
+      if (isObject(item) && typeof item.id === "string") {
+        indexById.set(item.id, idx);
+      }
+    });
+
+    let touched = 0;
+    for (const item of sanitized.people) {
+      const id = typeof item.id === "string" ? item.id : undefined;
+      if (!id) continue;
+      const existingIdx = indexById.get(id);
+      if (existingIdx === undefined) {
+        existing.push(item);
+        indexById.set(id, existing.length - 1);
+        touched++;
+        continue;
+      }
+      if (
+        parseTimestamp(item.updatedAt) >=
+        parseTimestamp(existing[existingIdx].updatedAt)
+      ) {
+        existing[existingIdx] = item;
+        touched++;
+      }
+    }
+
+    return { json: wrap(existing), count: touched };
+  };
+
+  /**
    * Net-worth snapshots: replace mode takes the import verbatim; merge mode
    * unions by dayKey, keeping whichever side captured that day later. Merge
    * must never lose local-only days - importing an old backup in Merge mode
@@ -1421,6 +1492,7 @@ export const importFromString = async (
   const mergedSnapshots = await computeMergedSnapshots();
   const mergedCustomCategories = await computeMergedCustomCategories();
   const mergedBusinesses = await computeMergedBusinesses();
+  const mergedPeople = await computeMergedPeople();
   const mergedCategoryBucketOverrides = await computeMergedBucketOverrides();
   const mergedAchievements = await computeMergedAchievements();
   const mergedAchievementStats = await computeMergedAchievementStats();
@@ -1465,6 +1537,9 @@ export const importFromString = async (
   }
   if (mergedBusinesses) {
     tempWrites.push([KEYS.BUSINESSES + TEMP_SUFFIX, mergedBusinesses.json]);
+  }
+  if (mergedPeople) {
+    tempWrites.push([KEYS.PEOPLE + TEMP_SUFFIX, mergedPeople.json]);
   }
   if (mergedCategoryBucketOverrides) {
     tempWrites.push([
@@ -1587,6 +1662,7 @@ export const importFromString = async (
       // already accounts for both sources.
       if (mergedCustomCategories) keysToRemove.push(KEYS.CUSTOM_CATEGORIES);
       if (sanitized.businesses.length > 0) keysToRemove.push(KEYS.BUSINESSES);
+      if (sanitized.people.length > 0) keysToRemove.push(KEYS.PEOPLE);
       if (sanitized.categoryBucketOverrides) {
         keysToRemove.push(KEYS.CATEGORY_BUCKET_OVERRIDES);
       }
@@ -1627,6 +1703,7 @@ export const importFromString = async (
     counts.netWorthSnapshots = mergedSnapshots?.count ?? 0;
     counts.customCategories = mergedCustomCategories?.count ?? 0;
     counts.businesses = mergedBusinesses?.count ?? 0;
+    counts.people = mergedPeople?.count ?? 0;
     counts.debtMilestones = !!sanitized.debtMilestones;
     counts.payoffStrategy = !!sanitized.payoffStrategy;
   } catch {

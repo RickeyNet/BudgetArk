@@ -53,6 +53,7 @@ import {
   AssetAccount,
   BudgetBucket,
   Business,
+  Person,
   RootTabParamList,
 } from "../types";
 import {
@@ -85,6 +86,7 @@ import {
   saveAssetAccounts,
 } from "../storage/assetAccountStorage";
 import { getBusinesses } from "../storage/businessStorage";
+import { getPeople } from "../storage/personStorage";
 import {
   getCategoryBucketOverrides,
   removeCategoryBucketOverride,
@@ -144,6 +146,7 @@ type ExpenseCategoryEntry = {
   recurring?: boolean;
   recurrenceInterval?: RecurrenceInterval;
   businessId?: string;
+  personId?: string;
   attachmentCount?: number;
   isPrivate?: boolean;
 };
@@ -327,6 +330,8 @@ const BudgetScreen: React.FC = () => {
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
   // Reloaded on every focus, so edits in Profile -> Businesses show up here.
   const [businesses, setBusinesses] = useState<Business[]>([]);
+  // Same focus-reload rationale for Profile -> People edits.
+  const [people, setPeople] = useState<Person[]>([]);
   /** Spending-card "💼 Business only" filter chip. Session-only by design -
    *  a sticky filter would silently misrepresent spending next launch. */
   const [businessOnly, setBusinessOnly] = useState(false);
@@ -339,6 +344,11 @@ const BudgetScreen: React.FC = () => {
   const businessNameById = useMemo(
     () => new Map(businesses.map((b) => [b.id, b.name])),
     [businesses]
+  );
+
+  const personNameById = useMemo(
+    () => new Map(people.map((p) => [p.id, p.name])),
+    [people]
   );
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
@@ -375,6 +385,7 @@ const BudgetScreen: React.FC = () => {
           storedBucketOverrides,
           storedDueDismissals,
           storedBusinesses,
+          storedPeople,
           storedMonthBalances,
         ] = await Promise.all([
           getBudgetEntries(),
@@ -387,6 +398,7 @@ const BudgetScreen: React.FC = () => {
           getCategoryBucketOverrides(),
           getDebtDueDismissals(),
           getBusinesses(),
+          getPeople(),
           getMonthStartBalances(),
         ]);
         if (cancelled) return;
@@ -411,6 +423,7 @@ const BudgetScreen: React.FC = () => {
         setSavingsGoals(storedGoals);
         setAssetAccounts(processed.assetAccounts);
         setBusinesses(storedBusinesses);
+        setPeople(storedPeople);
         setMonthBalances(storedMonthBalances);
         setReviewPreviewData(nextReviewData);
         setBucketOverrides(storedBucketOverrides);
@@ -746,6 +759,7 @@ const BudgetScreen: React.FC = () => {
             recurring: e.recurring,
             recurrenceInterval: e.recurrenceInterval,
             businessId: e.businessId,
+            personId: e.personId,
             attachmentCount: e.attachments?.length,
             isPrivate: e.isPrivate,
           }))
@@ -1879,6 +1893,14 @@ const BudgetScreen: React.FC = () => {
                               💼 {businessNameById.get(entry.businessId) ?? "(deleted)"}
                             </Text>
                           )}
+                          {entry.personId && (
+                            <Text
+                              style={[styles.entryEditHint, { color: colors.accent }]}
+                              numberOfLines={1}
+                            >
+                              👤 {personNameById.get(entry.personId) ?? "(deleted)"}
+                            </Text>
+                          )}
                           {entry.recurring && (
                             <Text style={[styles.entryEditHint, { color: colors.accent }]}>
                               {getRecurrenceTag(entry)}
@@ -2167,6 +2189,7 @@ const BudgetScreen: React.FC = () => {
         assetAccounts={assetAccounts}
         customCategories={customCategories}
         businesses={businesses}
+        people={people}
       />
 
       <BudgetEntryModal
@@ -2178,6 +2201,7 @@ const BudgetScreen: React.FC = () => {
         assetAccounts={assetAccounts}
         customCategories={customCategories}
         businesses={businesses}
+        people={people}
       />
 
       <ReviewInboxModal
@@ -2185,6 +2209,7 @@ const BudgetScreen: React.FC = () => {
         onClose={() => setShowReviewInbox(false)}
         customCategories={customCategories}
         businesses={businesses}
+        people={people}
         onChanged={reloadAfterInboxChange}
       />
 

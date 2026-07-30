@@ -13,6 +13,7 @@ import {
   isHoldingItem,
   isNetWorthSnapshotItem,
   isBusinessItem,
+  isPersonItem,
   sanitizePayoffStrategy,
   explainBudgetEntryProblem,
   VALIDATOR_LIMITS,
@@ -440,6 +441,27 @@ describe("isBudgetEntryItem", () => {
       expect(isBudgetEntryItem({ ...valid, businessId: longId })).toBe(true);
     });
   });
+
+  describe("personId", () => {
+    it("accepts an entry with or without a personId", () => {
+      expect(isBudgetEntryItem({ ...valid, personId: "per1" })).toBe(true);
+      expect(isBudgetEntryItem(valid)).toBe(true);
+    });
+
+    it("rejects an empty, oversized, or non-string personId", () => {
+      expect(isBudgetEntryItem({ ...valid, personId: "" })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, personId: "a".repeat(121) })
+      ).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personId: 42 })).toBe(false);
+    });
+
+    it("accepts any id isPersonItem accepts (cap 120) - an assigned entry must not brick a diff its person passed", () => {
+      const longId = "a".repeat(120);
+      expect(isPersonItem({ id: longId, name: "Sam", createdAt: "2026-06-01" })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, personId: longId })).toBe(true);
+    });
+  });
 });
 
 describe("isBusinessItem", () => {
@@ -494,6 +516,41 @@ describe("isBusinessItem", () => {
   });
 });
 
+describe("isPersonItem", () => {
+  const valid = {
+    id: "per1",
+    name: "Sam",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed person, with or without updatedAt", () => {
+    expect(isPersonItem(valid)).toBe(true);
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isPersonItem(rest)).toBe(true);
+  });
+
+  it("accepts a tombstoned person (deletes must ride sync)", () => {
+    expect(isPersonItem({ ...valid, deletedAt: "2026-06-03" })).toBe(true);
+  });
+
+  it("rejects a non-object, missing id/createdAt, or bad name (cap 40)", () => {
+    expect(isPersonItem(null)).toBe(false);
+    expect(isPersonItem("Sam")).toBe(false);
+    const { id, ...noId } = valid;
+    void id;
+    expect(isPersonItem(noId)).toBe(false);
+    expect(isPersonItem({ ...valid, name: "  " })).toBe(false);
+    expect(isPersonItem({ ...valid, name: "a".repeat(41) })).toBe(false);
+    expect(isPersonItem({ ...valid, name: "a".repeat(40) })).toBe(true);
+  });
+
+  it("rejects a garbage deletedAt tombstone (would break tombstone GC)", () => {
+    expect(isPersonItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+});
+
 describe("explainBudgetEntryProblem", () => {
   it("describes a missing id", () => {
     expect(explainBudgetEntryProblem({ type: "expense" })).toContain("id");
@@ -543,6 +600,12 @@ describe("explainBudgetEntryProblem", () => {
     ).toContain('"businessId"');
     expect(explainBudgetEntryProblem({ ...base, businessId: "" })).toContain(
       '"businessId"'
+    );
+    expect(
+      explainBudgetEntryProblem({ ...base, personId: "a".repeat(121) })
+    ).toContain('"personId"');
+    expect(explainBudgetEntryProblem({ ...base, personId: "" })).toContain(
+      '"personId"'
     );
   });
 

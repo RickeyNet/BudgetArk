@@ -101,6 +101,7 @@ import PartnerSyncSection from "./profile/PartnerSyncSection";
 import ProgressSection from "./profile/ProgressSection";
 import CategoriesSection from "./profile/CategoriesSection";
 import BusinessSection from "./profile/BusinessSection";
+import PeopleSection from "./profile/PeopleSection";
 import DataSection, { type DataSectionHandle } from "./profile/DataSection";
 import ConnectionsSection, {
   type ConnectionsSectionHandle,
@@ -591,6 +592,9 @@ const ProfileScreen: React.FC = () => {
           onOpenManageBusinesses={() => setShowManageBusinesses(true)}
           onCloseManageBusinesses={() => setShowManageBusinesses(false)}
         />
+
+        {/* ── People ── */}
+        <PeopleSection />
 
         {/* ── Data (Export, Import, Reset) ── */}
         <DataSection

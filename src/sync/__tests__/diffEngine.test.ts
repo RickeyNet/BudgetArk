@@ -68,6 +68,12 @@ jest.mock("../../storage/businessStorage", () => ({
     mockState.businesses = v;
   }),
 }));
+jest.mock("../../storage/personStorage", () => ({
+  getPeopleIncludingDeleted: jest.fn(async () => mockState.people),
+  savePeopleFromSync: jest.fn(async (v: any) => {
+    mockState.people = v;
+  }),
+}));
 jest.mock("../../storage/categoryBucketOverridesStorage", () => ({
   getCategoryBucketOverrides: jest.fn(async () => mockState.bucketOverrides),
   saveCategoryBucketOverridesFromSync: jest.fn(async (v: any) => {
@@ -155,6 +161,13 @@ const business = (over: Record<string, unknown> = {}): any => ({
   updatedAt: NEW,
   ...over,
 });
+const person = (over: Record<string, unknown> = {}): any => ({
+  id: "per1",
+  name: "Sam",
+  createdAt: OLD,
+  updatedAt: NEW,
+  ...over,
+});
 
 const monthBalance = (over: Record<string, unknown> = {}): any => ({
   balance: 3200,
@@ -198,6 +211,7 @@ const freshState = () => ({
   strategyEnvelope: null,
   customCategories: [],
   businesses: [],
+  people: [],
   bucketOverrides: {},
   snapshots: [],
   monthBalances: {},
@@ -652,6 +666,63 @@ describe("businesses sync", () => {
     delete (diff as any).businesses;
     await expect(applyIncomingDiff(diff)).resolves.toBe(0);
     expect(mockState.businesses).toHaveLength(1);
+  });
+});
+
+describe("people sync", () => {
+  it("includes changed people in the outgoing diff (upsert + delete)", async () => {
+    mockState.people = [
+      person({ id: "live", updatedAt: NEW }),
+      person({ id: "gone", deletedAt: NEW, updatedAt: NEW }),
+      person({ id: "stale", updatedAt: OLD }),
+    ];
+    const diff = await computeOutgoingDiff(MID);
+    const byId = Object.fromEntries(
+      (diff.people ?? []).map((e) => [e.record.id, e.action])
+    );
+    expect(byId).toEqual({ live: "upsert", gone: "delete" });
+  });
+
+  it("merges an incoming person with last-write-wins", async () => {
+    mockState.people = [person({ id: "per1", name: "Old Name", updatedAt: OLD })];
+    await applyIncomingDiff(
+      emptyDiff({
+        people: [
+          { action: "upsert", record: person({ id: "per1", name: "New Name", updatedAt: NEW }) },
+        ],
+      })
+    );
+    expect(mockState.people.find((p: any) => p.id === "per1").name).toBe("New Name");
+  });
+
+  it("does not resurrect a person deleted locally with a newer tombstone", async () => {
+    mockState.people = [person({ id: "per1", deletedAt: NEW, updatedAt: NEW })];
+    await applyIncomingDiff(
+      emptyDiff({
+        people: [{ action: "upsert", record: person({ id: "per1", updatedAt: OLD }) }],
+      })
+    );
+    expect(mockState.people.find((p: any) => p.id === "per1").deletedAt).toBe(NEW);
+  });
+
+  it("rejects the whole diff on an invalid person record, writing nothing", async () => {
+    const personStorage = require("../../storage/personStorage");
+    const bad = emptyDiff({
+      people: [
+        { action: "upsert", record: person({ id: "ok" }) },
+        { action: "upsert", record: person({ id: "bad", name: "a".repeat(41) }) },
+      ],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/invalid person/);
+    expect(personStorage.savePeopleFromSync).not.toHaveBeenCalled();
+  });
+
+  it("applies cleanly when an older peer's diff omits the people field", async () => {
+    mockState.people = [person({ id: "per1" })];
+    const diff = emptyDiff({});
+    delete (diff as any).people;
+    await expect(applyIncomingDiff(diff)).resolves.toBe(0);
+    expect(mockState.people).toHaveLength(1);
   });
 });
 

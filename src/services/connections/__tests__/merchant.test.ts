@@ -134,29 +134,33 @@ describe("replanInboxForRules", () => {
     expect(plan.updatedItems[0].suggestedCategory).toBeUndefined();
   });
 
-  it("rewrites the suggested name and business when a rule gains them", () => {
+  it("rewrites the suggested name, business, and person when a rule gains them", () => {
     const items = [item("a", "COSTCO WHSE", "Grocery")];
     const withExtras: MerchantRule = {
       ...rule("COSTCO WHSE", "Grocery"),
       renameTo: "Costco",
       businessId: "biz-1",
+      personId: "per-1",
     };
     const plan = replanInboxForRules(items, [withExtras], NOW);
     expect(plan.updatedItems).toHaveLength(1);
     expect(plan.updatedItems[0].suggestedName).toBe("Costco");
     expect(plan.updatedItems[0].suggestedBusinessId).toBe("biz-1");
+    expect(plan.updatedItems[0].suggestedPersonId).toBe("per-1");
   });
 
-  it("clears a stale name/business and never tags income with a business", () => {
+  it("clears a stale name/business/person and never tags income with them", () => {
     const tagged: PendingTransaction = {
       ...item("a", "COSTCO WHSE", "Grocery"),
       suggestedName: "Costco",
       suggestedBusinessId: "biz-1",
+      suggestedPersonId: "per-1",
     };
     const plan = replanInboxForRules([tagged], [rule("COSTCO WHSE", "Grocery")], NOW);
     expect(plan.updatedItems).toHaveLength(1);
     expect(plan.updatedItems[0].suggestedName).toBeUndefined();
     expect(plan.updatedItems[0].suggestedBusinessId).toBeUndefined();
+    expect(plan.updatedItems[0].suggestedPersonId).toBeUndefined();
 
     const income: PendingTransaction = {
       ...item("b", "COSTCO WHSE", "Grocery"),
@@ -165,7 +169,7 @@ describe("replanInboxForRules", () => {
     };
     const incomePlan = replanInboxForRules(
       [income],
-      [{ ...rule("COSTCO WHSE", "Grocery"), businessId: "biz-1" }],
+      [{ ...rule("COSTCO WHSE", "Grocery"), businessId: "biz-1", personId: "per-1" }],
       NOW,
     );
     expect(incomePlan.updatedItems).toEqual([]);

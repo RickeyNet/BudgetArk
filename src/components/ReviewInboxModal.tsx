@@ -37,6 +37,7 @@ import type {
   CustomCategory,
   ExternalAccountLink,
   PendingTransaction,
+  Person,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -60,6 +61,8 @@ interface ReviewInboxModalProps {
   customCategories: CustomCategory[];
   /** Live businesses, for expense tagging. Empty = picker hidden. */
   businesses: Business[];
+  /** Live people, for assigning who spent it. Empty = picker hidden. */
+  people: Person[];
   /** Called after approvals/dismissals so the Budget screen reloads entries. */
   onChanged: () => void | Promise<void>;
 }
@@ -79,6 +82,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   onClose,
   customCategories,
   businesses,
+  people,
   onChanged,
 }) => {
   const { colors } = useTheme();
@@ -98,6 +102,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [draftCategory, setDraftCategory] = useState<CategoryName>(DEFAULT_CATEGORY);
   const [draftName, setDraftName] = useState("");
   const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
+    undefined,
+  );
+  const [draftPersonId, setDraftPersonId] = useState<string | undefined>(
     undefined,
   );
   const [rememberRule, setRememberRule] = useState(false);
@@ -122,6 +129,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const businessNameById = useMemo(
     () => new Map(businesses.map((b) => [b.id, b.name])),
     [businesses],
+  );
+
+  const personNameById = useMemo(
+    () => new Map(people.map((p) => [p.id, p.name])),
+    [people],
   );
 
   const sections = useMemo<InboxSection[]>(() => {
@@ -180,6 +192,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setDraftBusinessId(
         item.suggestedType === "expense" ? item.suggestedBusinessId : undefined,
       );
+      setDraftPersonId(
+        item.suggestedType === "expense" ? item.suggestedPersonId : undefined,
+      );
       setRememberRule(false);
       return item.id;
     });
@@ -192,6 +207,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       remember: boolean,
       name: string,
       businessId: string | undefined,
+      personId: string | undefined,
     ) => {
       setBusyId(item.id);
       try {
@@ -199,9 +215,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           pendingId: item.id,
           category,
           description: name,
-          // null = explicitly personal; never fall back to the suggestion
-          // the user just cleared.
+          // null = explicitly personal/unassigned; never fall back to the
+          // suggestion the user just cleared.
           businessId: businessId ?? null,
+          personId: personId ?? null,
           rememberRule: remember,
         });
         await refresh();
@@ -304,6 +321,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       "(deleted business)"
                     }`
                   : null,
+                item.suggestedPersonId
+                  ? `👤 ${
+                      personNameById.get(item.suggestedPersonId) ??
+                      "(deleted person)"
+                    }`
+                  : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -399,6 +422,67 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 </View>
               </>
             ) : null}
+            {item.suggestedType === "expense" &&
+            (people.length > 0 || draftPersonId) ? (
+              <>
+                <Text style={styles.label}>PERSON</Text>
+                <View style={styles.businessWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.businessPill,
+                      !draftPersonId && styles.businessPillActive,
+                    ]}
+                    onPress={() => setDraftPersonId(undefined)}
+                  >
+                    <Text
+                      style={[
+                        styles.businessPillText,
+                        !draftPersonId && styles.businessPillTextActive,
+                      ]}
+                    >
+                      Unassigned
+                    </Text>
+                  </TouchableOpacity>
+                  {people.map((person) => (
+                    <TouchableOpacity
+                      key={person.id}
+                      style={[
+                        styles.businessPill,
+                        draftPersonId === person.id &&
+                          styles.businessPillActive,
+                      ]}
+                      onPress={() => setDraftPersonId(person.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          draftPersonId === person.id &&
+                            styles.businessPillTextActive,
+                        ]}
+                      >
+                        👤 {person.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {draftPersonId &&
+                  !people.some((p) => p.id === draftPersonId) ? (
+                    <TouchableOpacity
+                      style={[styles.businessPill, styles.businessPillActive]}
+                      onPress={() => setDraftPersonId(undefined)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          styles.businessPillTextActive,
+                        ]}
+                      >
+                        👤 (deleted person)
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
             {item.merchant ? (
               <TouchableOpacity
                 style={styles.rememberRow}
@@ -411,9 +495,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   {rememberRule ? <Text style={styles.checkboxCheck}>✓</Text> : null}
                 </View>
                 <Text style={styles.rememberLabel}>
-                  Always do this for "{item.merchant}" - use this name,
-                  category & business on Approve, or never import it again on
-                  Skip
+                  Always do this for "{item.merchant}" - remember these
+                  choices for future imports on Approve, or never import it
+                  again on Skip
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -436,6 +520,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     rememberRule,
                     draftName,
                     draftBusinessId,
+                    draftPersonId,
                   )
                 }
                 disabled={busy}
@@ -541,6 +626,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 draftCategory,
                 draftName,
                 draftBusinessId,
+                draftPersonId,
                 rememberRule,
                 busyId,
                 bulkBusy,
@@ -568,6 +654,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         onClose={() => setShowRules(false)}
         customCategories={customCategories}
         businesses={businesses}
+        people={people}
       />
     </Modal>
   );

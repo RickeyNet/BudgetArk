@@ -301,6 +301,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             parts.push(`${result.customCategories} custom categories`);
           if (result.businesses > 0)
             parts.push(`${result.businesses} businesses`);
+          if (result.people > 0) parts.push(`${result.people} people`);
           const extras: string[] = [];
           if (result.debtMilestones) extras.push("milestone plan");
           if (result.payoffStrategy) extras.push("payoff strategy");

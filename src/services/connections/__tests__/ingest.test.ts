@@ -263,7 +263,7 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedCategory).toBe("Grocery");
   });
 
-  it("suggests the rename and business from a matching rule", () => {
+  it("suggests the rename, business, and person from a matching rule", () => {
     const rules: MerchantRule[] = [
       {
         id: "r1",
@@ -272,6 +272,7 @@ describe("planIngest - suggestions and transfer heuristics", () => {
         type: "expense",
         renameTo: "Costco",
         businessId: "biz-1",
+        personId: "per-1",
         useCount: 3,
         createdAt: NOW,
         updatedAt: NOW,
@@ -280,9 +281,10 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     const plan = planIngest(baseInputs({ rules }));
     expect(plan.newInboxItems[0].suggestedName).toBe("Costco");
     expect(plan.newInboxItems[0].suggestedBusinessId).toBe("biz-1");
+    expect(plan.newInboxItems[0].suggestedPersonId).toBe("per-1");
   });
 
-  it("never suggests a business on an inflow", () => {
+  it("never suggests a business or person on an inflow", () => {
     const rules: MerchantRule[] = [
       {
         id: "r1",
@@ -291,6 +293,7 @@ describe("planIngest - suggestions and transfer heuristics", () => {
         type: "expense",
         renameTo: "Costco",
         businessId: "biz-1",
+        personId: "per-1",
         useCount: 3,
         createdAt: NOW,
         updatedAt: NOW,
@@ -301,6 +304,7 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedType).toBe("income");
     expect(plan.newInboxItems[0].suggestedName).toBe("Costco");
     expect(plan.newInboxItems[0].suggestedBusinessId).toBeUndefined();
+    expect(plan.newInboxItems[0].suggestedPersonId).toBeUndefined();
   });
 
   it("flags transfer-looking descriptions", () => {

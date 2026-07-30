@@ -621,6 +621,8 @@ const RESET_KEYS = [
   // Businesses expense entries are tagged with (tombstones included - a
   // fresh account must not inherit the previous user's client list).
   "@budgetark_businesses",
+  // People spending is assigned to (same tombstone rationale as businesses).
+  "@budgetark_people",
   "@budgetark_category_bucket_overrides",
   "@budgetark_debt_due_dismissals",
   "@budgetark_card_keepalive_dismissals",

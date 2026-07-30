@@ -19,6 +19,7 @@ import type {
   NetWorthSnapshot,
   Holding,
   Business,
+  Person,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -142,6 +143,12 @@ export interface SyncDiff {
    * feature, so no backfill flag needed (same as holdings).
    */
   businesses?: DiffEntry<Business>[];
+  /**
+   * People spending is assigned to (`BudgetEntry.personId`). Same
+   * tombstone-aware LWW contract and older-peer optionality as
+   * `businesses`; brand-new feature, so no backfill flag needed.
+   */
+  people?: DiffEntry<Person>[];
   /**
    * Per-category 50/30/20 bucket overrides. The store has no per-key
    * timestamps, so the whole map is sent and merged key-wise on receipt.
