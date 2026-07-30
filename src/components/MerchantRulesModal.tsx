@@ -5,7 +5,8 @@
  * Where "Always do this" decisions from the Review Inbox can be changed
  * later. Lists every remembered merchant rule; each row expands so the user
  * can flip it between "always skip" and "always categorize as X", pick a
- * different category, or delete it. Changes are re-applied to items still in
+ * different category, edit the remembered rename/business tag, or delete
+ * it. Changes are re-applied to items still in
  * the inbox via reviewInboxService; already-skipped transactions stay
  * skipped (the ingest ledger remembers them), which the header explains.
  *
@@ -20,15 +21,22 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { CategoryName, CustomCategory, MerchantRule } from "../types";
+import type {
+  Business,
+  CategoryName,
+  CustomCategory,
+  MerchantRule,
+} from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useConnections } from "../connections/ConnectionsProvider";
 import CategoryPillPicker from "./CategoryPillPicker";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import { getMerchantRules } from "../storage/merchantRulesStorage";
 import {
   changeMerchantRule,
@@ -41,12 +49,15 @@ interface MerchantRulesModalProps {
   visible: boolean;
   onClose: () => void;
   customCategories: CustomCategory[];
+  /** Live businesses, for the expense business tag. Empty = pills hidden. */
+  businesses: Business[];
 }
 
 const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   visible,
   onClose,
   customCategories,
+  businesses,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -57,6 +68,10 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftIgnore, setDraftIgnore] = useState(false);
   const [draftCategory, setDraftCategory] = useState<CategoryName>("Other");
+  const [draftRename, setDraftRename] = useState("");
+  const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
+    undefined,
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
     null,
@@ -87,6 +102,8 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       if (prev === rule.id) return null;
       setDraftIgnore(rule.action === "ignore");
       setDraftCategory(rule.category);
+      setDraftRename(rule.renameTo ?? "");
+      setDraftBusinessId(rule.businessId);
       return rule.id;
     });
   }, []);
@@ -99,6 +116,10 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
           ruleId: rule.id,
           action: draftIgnore ? "ignore" : "categorize",
           category: draftIgnore ? undefined : draftCategory,
+          // Ignore rules never read rename/business - keep whatever was
+          // stored so flipping back to categorize restores it.
+          renameTo: draftIgnore ? undefined : draftRename,
+          businessId: draftIgnore ? undefined : draftBusinessId ?? null,
         });
         await loadRules();
         await refresh();
@@ -108,7 +129,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         setBusyId(null);
       }
     },
-    [draftCategory, draftIgnore, loadRules, refresh],
+    [draftBusinessId, draftCategory, draftIgnore, draftRename, loadRules, refresh],
   );
 
   const handleDelete = useCallback(
@@ -128,10 +149,19 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     [loadRules, refresh],
   );
 
-  const behaviorLabel = (rule: MerchantRule): string =>
-    rule.action === "ignore"
-      ? "Always skip - never imports"
-      : `Always ${getCategoryIcon(rule.category, customCategories)} ${rule.category}`;
+  const behaviorLabel = (rule: MerchantRule): string => {
+    if (rule.action === "ignore") return "Always skip - never imports";
+    const parts = [
+      `Always ${getCategoryIcon(rule.category, customCategories)} ${rule.category}`,
+    ];
+    if (rule.renameTo) parts.push(`as "${rule.renameTo}"`);
+    if (rule.businessId) {
+      parts.push(
+        `💼 ${businesses.find((b) => b.id === rule.businessId)?.name ?? "(deleted business)"}`,
+      );
+    }
+    return parts.join(" ");
+  };
 
   const renderRule = ({ item: rule }: { item: MerchantRule }) => {
     const expanded = expandedId === rule.id;
@@ -176,6 +206,82 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               }}
               pinCurrentValue
             />
+            {!draftIgnore ? (
+              <>
+                <Text style={styles.label}>RENAME TO (OPTIONAL)</Text>
+                <TextInput
+                  style={styles.nameInput}
+                  value={draftRename}
+                  onChangeText={setDraftRename}
+                  placeholder="Keep the bank's description"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={220}
+                  returnKeyType="done"
+                />
+              </>
+            ) : null}
+            {!draftIgnore &&
+            rule.type === "expense" &&
+            (businesses.length > 0 || draftBusinessId) ? (
+              <>
+                <Text style={styles.label}>BUSINESS</Text>
+                <View style={styles.businessWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.businessPill,
+                      !draftBusinessId && styles.businessPillActive,
+                    ]}
+                    onPress={() => setDraftBusinessId(undefined)}
+                  >
+                    <Text
+                      style={[
+                        styles.businessPillText,
+                        !draftBusinessId && styles.businessPillTextActive,
+                      ]}
+                    >
+                      Personal
+                    </Text>
+                  </TouchableOpacity>
+                  {businesses.map((business) => (
+                    <TouchableOpacity
+                      key={business.id}
+                      style={[
+                        styles.businessPill,
+                        draftBusinessId === business.id &&
+                          styles.businessPillActive,
+                      ]}
+                      onPress={() => setDraftBusinessId(business.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          draftBusinessId === business.id &&
+                            styles.businessPillTextActive,
+                        ]}
+                      >
+                        💼 {business.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {draftBusinessId &&
+                  !businesses.some((b) => b.id === draftBusinessId) ? (
+                    <TouchableOpacity
+                      style={[styles.businessPill, styles.businessPillActive]}
+                      onPress={() => setDraftBusinessId(undefined)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          styles.businessPillTextActive,
+                        ]}
+                      >
+                        💼 (deleted business)
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.deleteButton, busy && styles.buttonDisabled]}
@@ -206,6 +312,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+      <SheetKeyboardAvoider style={styles.avoider}>
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Text style={styles.title}>Merchant Rules</Text>
@@ -231,7 +338,16 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             keyExtractor={(rule) => rule.id}
             renderItem={renderRule}
             contentContainerStyle={styles.listContent}
-            extraData={[expandedId, draftIgnore, draftCategory, busyId]}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+            extraData={[
+              expandedId,
+              draftIgnore,
+              draftCategory,
+              draftRename,
+              draftBusinessId,
+              busyId,
+            ]}
           />
         )}
 
@@ -248,6 +364,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
           </TouchableOpacity>
         </View>
       </View>
+      </SheetKeyboardAvoider>
 
       <Modal
         visible={confirmingDeleteId !== null}
@@ -297,6 +414,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    avoider: {
+      flex: 1,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.card,
@@ -364,6 +484,41 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       letterSpacing: 0.5,
       marginTop: 8,
+    },
+    nameInput: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      backgroundColor: colors.card,
+      color: colors.text,
+      fontSize: 14,
+      paddingHorizontal: 12,
+      paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    },
+    businessWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    businessPill: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    businessPillActive: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
+    businessPillText: {
+      color: colors.textDim,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    businessPillTextActive: {
+      color: colors.accentButtonText,
     },
     actionRow: {
       flexDirection: "row",

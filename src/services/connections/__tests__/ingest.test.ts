@@ -263,6 +263,46 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedCategory).toBe("Grocery");
   });
 
+  it("suggests the rename and business from a matching rule", () => {
+    const rules: MerchantRule[] = [
+      {
+        id: "r1",
+        merchantKey: "COSTCO WHSE",
+        category: "Grocery",
+        type: "expense",
+        renameTo: "Costco",
+        businessId: "biz-1",
+        useCount: 3,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const plan = planIngest(baseInputs({ rules }));
+    expect(plan.newInboxItems[0].suggestedName).toBe("Costco");
+    expect(plan.newInboxItems[0].suggestedBusinessId).toBe("biz-1");
+  });
+
+  it("never suggests a business on an inflow", () => {
+    const rules: MerchantRule[] = [
+      {
+        id: "r1",
+        merchantKey: "COSTCO WHSE",
+        category: "Grocery",
+        type: "expense",
+        renameTo: "Costco",
+        businessId: "biz-1",
+        useCount: 3,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    // A refund from the same merchant matches the rule but is income.
+    const plan = planIngest(baseInputs({ rules, fetched: [tx({ amount: 25 })] }));
+    expect(plan.newInboxItems[0].suggestedType).toBe("income");
+    expect(plan.newInboxItems[0].suggestedName).toBe("Costco");
+    expect(plan.newInboxItems[0].suggestedBusinessId).toBeUndefined();
+  });
+
   it("flags transfer-looking descriptions", () => {
     const plan = planIngest(
       baseInputs({

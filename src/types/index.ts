@@ -716,6 +716,17 @@ export interface PendingTransaction {
   /** From a matched MerchantRule, else undefined. */
   suggestedCategory?: CategoryName;
   /**
+   * From a matched MerchantRule's `renameTo` - the user's cleaned-up display
+   * name. Inbox rows show it and approval uses it as the entry description
+   * in place of the raw bank text.
+   */
+  suggestedName?: string;
+  /**
+   * From a matched MerchantRule's `businessId`. Expenses only (mirrors
+   * BudgetEntry.businessId) - never set on inflows.
+   */
+  suggestedBusinessId?: string;
+  /**
    * Heuristic: a manually-entered budget entry with the same amount and
    * direction exists within a few days - approving would double count.
    * Flag only, like transferLikely - never dropped automatically.
@@ -743,6 +754,20 @@ export interface MerchantRule {
   action?: "categorize" | "ignore";
   category: CategoryName;
   type: BudgetEntryType;
+  /**
+   * Display name for future imports from this merchant, saved when the user
+   * renamed the transaction in the Review Inbox with "always do this".
+   * Replaces the raw bank description on approved entries. Absent = keep
+   * the provider text. Unread while action is "ignore".
+   */
+  renameTo?: string;
+  /**
+   * Business to tag future approved expenses with (see BudgetEntry.businessId).
+   * A dangling id (business deleted) is harmless - approval just produces an
+   * entry whose business shows as "(deleted business)", same as manual entries.
+   * Unread while action is "ignore".
+   */
+  businessId?: string;
   useCount: number;
   lastUsedAt?: string;
   createdAt: string;

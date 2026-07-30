@@ -56,13 +56,16 @@ export const upsertMerchantRule = async (
 };
 
 /**
- * Patch an existing rule's behavior (action/category/type) by id, preserving
- * its identity fields (merchantKey, createdAt, useCount). Returns the updated
- * list; no-op when the id is unknown.
+ * Patch an existing rule's behavior (action/category/type/rename/business)
+ * by id, preserving its identity fields (merchantKey, createdAt, useCount).
+ * Returns the updated list; no-op when the id is unknown.
  */
 export const updateMerchantRule = async (
   ruleId: string,
-  patch: Pick<MerchantRule, "action" | "category" | "type">,
+  patch: Pick<
+    MerchantRule,
+    "action" | "category" | "type" | "renameTo" | "businessId"
+  >,
 ): Promise<MerchantRule[]> => {
   const rules = await getMerchantRules();
   const updated = rules.map((r) =>

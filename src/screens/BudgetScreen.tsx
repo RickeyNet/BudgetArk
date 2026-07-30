@@ -2184,6 +2184,7 @@ const BudgetScreen: React.FC = () => {
         visible={showReviewInbox}
         onClose={() => setShowReviewInbox(false)}
         customCategories={customCategories}
+        businesses={businesses}
         onChanged={reloadAfterInboxChange}
       />
 

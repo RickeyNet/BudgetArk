@@ -94,11 +94,20 @@ export const replanInboxForRules = (
       dismissIds.push(item.id);
       continue;
     }
-    const suggestion = rule?.category;
-    if (suggestion !== item.suggestedCategory) {
+    const suggestedCategory = rule?.category;
+    const suggestedName = rule?.renameTo;
+    const suggestedBusinessId =
+      item.suggestedType === "expense" ? rule?.businessId : undefined;
+    if (
+      suggestedCategory !== item.suggestedCategory ||
+      suggestedName !== item.suggestedName ||
+      suggestedBusinessId !== item.suggestedBusinessId
+    ) {
       updatedItems.push({
         ...item,
-        suggestedCategory: suggestion,
+        suggestedCategory,
+        suggestedName,
+        suggestedBusinessId,
         updatedAt: now,
       });
     }

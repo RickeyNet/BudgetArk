@@ -33,6 +33,7 @@ import {
   upsertMerchantRule,
 } from "../../storage/merchantRulesStorage";
 import { generateUUID } from "../../utils/uuid";
+import { sanitizeTextInput } from "../../utils/sanitize";
 import { pendingFingerprintFor } from "./ingest";
 import { matchMerchantRule, replanInboxForRules } from "./merchant";
 
@@ -43,9 +44,20 @@ export interface ApproveOptions {
   category: CategoryName;
   /** Defaults to the item's sign-derived suggestedType. */
   type?: BudgetEntryType;
-  /** Defaults to the item's raw description. */
+  /**
+   * Defaults to the item's rule-suggested name (renameTo), then its raw
+   * description - so bulk approval applies remembered renames.
+   */
   description?: string;
-  /** Save a merchant rule so future fetches suggest this category. */
+  /**
+   * Business to tag the entry with (expenses only). `null` = explicitly
+   * personal; undefined = fall back to the item's rule-suggested business.
+   */
+  businessId?: string | null;
+  /**
+   * Save a merchant rule so future fetches suggest this category - plus the
+   * entered name (when it differs from the bank's text) and business.
+   */
   rememberRule?: boolean;
 }
 
@@ -77,9 +89,17 @@ export const approvePendingTransaction = async (
 
   const now = new Date().toISOString();
   const type = opts.type ?? item.suggestedType;
-  const description = (opts.description ?? item.description)
+  const description = sanitizeTextInput(
+    opts.description ?? item.suggestedName ?? item.description,
+  )
     .slice(0, MAX_DESCRIPTION_LENGTH)
     .trim();
+  const businessId =
+    type === "expense"
+      ? (opts.businessId === null
+          ? undefined
+          : opts.businessId ?? item.suggestedBusinessId)
+      : undefined;
   const entry: BudgetEntry = {
     id: generateUUID(),
     type,
@@ -93,6 +113,7 @@ export const approvePendingTransaction = async (
     source: "bank",
     externalTxId: item.id,
     merchant: item.merchant || undefined,
+    businessId,
   };
 
   await addBudgetEntry(entry);
@@ -102,11 +123,19 @@ export const approvePendingTransaction = async (
   await removePendingTransaction(item.id);
 
   if (opts.rememberRule && item.merchant) {
+    // Only remember a rename when the saved name actually differs from the
+    // bank's default text - an untouched name keeps future imports raw.
+    const renameTo =
+      description && description !== item.description.trim()
+        ? description
+        : undefined;
     await upsertMerchantRule({
       id: generateUUID(),
       merchantKey: item.merchant,
       category: opts.category,
       type,
+      renameTo,
+      businessId,
       useCount: 1,
       lastUsedAt: now,
       createdAt: now,
@@ -212,12 +241,22 @@ export interface ChangeRuleOptions {
   action: "categorize" | "ignore";
   /** Required when action is "categorize"; ignored otherwise. */
   category?: CategoryName;
+  /**
+   * Display name for future imports. Empty/whitespace clears the rename.
+   * Omit to keep the rule's current value.
+   */
+  renameTo?: string;
+  /**
+   * Business to tag future approved expenses with. `null` clears it; omit
+   * to keep the rule's current value.
+   */
+  businessId?: string | null;
 }
 
 /**
  * Change what an existing rule does - switch between "always categorize as X"
- * and "always skip", or pick a different category - then bring the inbox in
- * line with the new behavior.
+ * and "always skip", pick a different category, or adjust the remembered
+ * rename/business - then bring the inbox in line with the new behavior.
  */
 export const changeMerchantRule = async (
   opts: ChangeRuleOptions,
@@ -225,6 +264,15 @@ export const changeMerchantRule = async (
   const rules = await getMerchantRules();
   const rule = rules.find((r) => r.id === opts.ruleId);
   if (!rule) return { dismissedCount: 0, recategorizedCount: 0 };
+  const renameTo =
+    opts.renameTo === undefined
+      ? rule.renameTo
+      : sanitizeTextInput(opts.renameTo).slice(0, MAX_DESCRIPTION_LENGTH).trim() ||
+        undefined;
+  const businessId =
+    opts.businessId === undefined
+      ? rule.businessId
+      : opts.businessId ?? undefined;
   await updateMerchantRule(opts.ruleId, {
     action: opts.action,
     category:
@@ -232,6 +280,8 @@ export const changeMerchantRule = async (
         ? opts.category
         : rule.category,
     type: rule.type,
+    renameTo,
+    businessId,
   });
   return reapplyRulesToInbox();
 };

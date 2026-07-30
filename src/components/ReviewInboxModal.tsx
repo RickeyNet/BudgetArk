@@ -5,8 +5,10 @@
  * Where imported bank transactions wait for the user's decision. Grouped by
  * posted date, with heuristic sections ("Likely transfers", "Possibly already
  * in your budget") that offer a Skip-all shortcut. Each row expands into a
- * category picker with an "always do this" rule checkbox - on Approve it
- * remembers the category; on Skip it creates an ignore rule so the merchant
+ * name field (rename the noisy bank text), a category picker, a business
+ * picker (expenses, when businesses exist) and an "always do this" rule
+ * checkbox - on Approve it remembers the category plus any rename/business;
+ * on Skip it creates an ignore rule so the merchant
  * (credit-card payments, debt payments) never imports again. A bulk bar
  * approves everything that already has a rule-suggested category. The Rules
  * header button opens MerchantRulesModal, where saved rules can be changed
@@ -24,11 +26,13 @@ import {
   SectionList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
+  Business,
   CategoryName,
   CustomCategory,
   ExternalAccountLink,
@@ -54,6 +58,8 @@ interface ReviewInboxModalProps {
   visible: boolean;
   onClose: () => void;
   customCategories: CustomCategory[];
+  /** Live businesses, for expense tagging. Empty = picker hidden. */
+  businesses: Business[];
   /** Called after approvals/dismissals so the Budget screen reloads entries. */
   onChanged: () => void | Promise<void>;
 }
@@ -72,6 +78,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   visible,
   onClose,
   customCategories,
+  businesses,
   onChanged,
 }) => {
   const { colors } = useTheme();
@@ -89,6 +96,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [links, setLinks] = useState<ExternalAccountLink[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftCategory, setDraftCategory] = useState<CategoryName>(DEFAULT_CATEGORY);
+  const [draftName, setDraftName] = useState("");
+  const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
+    undefined,
+  );
   const [rememberRule, setRememberRule] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -107,6 +118,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     }
     return map;
   }, [links]);
+
+  const businessNameById = useMemo(
+    () => new Map(businesses.map((b) => [b.id, b.name])),
+    [businesses],
+  );
 
   const sections = useMemo<InboxSection[]>(() => {
     const regular = pendingTransactions.filter(
@@ -160,18 +176,32 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     setExpandedId((prev) => {
       if (prev === item.id) return null;
       setDraftCategory(item.suggestedCategory ?? DEFAULT_CATEGORY);
+      setDraftName(item.suggestedName ?? item.description);
+      setDraftBusinessId(
+        item.suggestedType === "expense" ? item.suggestedBusinessId : undefined,
+      );
       setRememberRule(false);
       return item.id;
     });
   }, []);
 
   const handleApprove = useCallback(
-    async (item: PendingTransaction, category: CategoryName, remember: boolean) => {
+    async (
+      item: PendingTransaction,
+      category: CategoryName,
+      remember: boolean,
+      name: string,
+      businessId: string | undefined,
+    ) => {
       setBusyId(item.id);
       try {
         await approvePendingTransaction({
           pendingId: item.id,
           category,
+          description: name,
+          // null = explicitly personal; never fall back to the suggestion
+          // the user just cleared.
+          businessId: businessId ?? null,
           rememberRule: remember,
         });
         await refresh();
@@ -256,7 +286,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         >
           <View style={styles.itemTextWrap}>
             <Text style={styles.itemMerchant} numberOfLines={1}>
-              {item.merchant || item.description || "(no description)"}
+              {item.suggestedName ||
+                item.merchant ||
+                item.description ||
+                "(no description)"}
             </Text>
             <Text style={styles.itemMeta} numberOfLines={1}>
               {[
@@ -264,6 +297,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 item.pending ? "pending" : null,
                 item.suggestedCategory
                   ? `suggested: ${item.suggestedCategory}`
+                  : null,
+                item.suggestedBusinessId
+                  ? `💼 ${
+                      businessNameById.get(item.suggestedBusinessId) ??
+                      "(deleted business)"
+                    }`
                   : null,
               ]
                 .filter(Boolean)
@@ -283,12 +322,83 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
 
         {expanded ? (
           <View style={styles.expandedArea}>
+            <Text style={styles.label}>NAME</Text>
+            <TextInput
+              style={styles.nameInput}
+              value={draftName}
+              onChangeText={setDraftName}
+              placeholder={item.description || "Name this transaction"}
+              placeholderTextColor={colors.textMuted}
+              maxLength={220}
+              returnKeyType="done"
+            />
             <Text style={styles.label}>CATEGORY</Text>
             <CategoryPillPicker
               value={draftCategory}
               onChange={setDraftCategory}
               customCategories={customCategories}
             />
+            {item.suggestedType === "expense" &&
+            (businesses.length > 0 || draftBusinessId) ? (
+              <>
+                <Text style={styles.label}>BUSINESS</Text>
+                <View style={styles.businessWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.businessPill,
+                      !draftBusinessId && styles.businessPillActive,
+                    ]}
+                    onPress={() => setDraftBusinessId(undefined)}
+                  >
+                    <Text
+                      style={[
+                        styles.businessPillText,
+                        !draftBusinessId && styles.businessPillTextActive,
+                      ]}
+                    >
+                      Personal
+                    </Text>
+                  </TouchableOpacity>
+                  {businesses.map((business) => (
+                    <TouchableOpacity
+                      key={business.id}
+                      style={[
+                        styles.businessPill,
+                        draftBusinessId === business.id &&
+                          styles.businessPillActive,
+                      ]}
+                      onPress={() => setDraftBusinessId(business.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          draftBusinessId === business.id &&
+                            styles.businessPillTextActive,
+                        ]}
+                      >
+                        💼 {business.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {draftBusinessId &&
+                  !businesses.some((b) => b.id === draftBusinessId) ? (
+                    <TouchableOpacity
+                      style={[styles.businessPill, styles.businessPillActive]}
+                      onPress={() => setDraftBusinessId(undefined)}
+                    >
+                      <Text
+                        style={[
+                          styles.businessPillText,
+                          styles.businessPillTextActive,
+                        ]}
+                      >
+                        💼 (deleted business)
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
             {item.merchant ? (
               <TouchableOpacity
                 style={styles.rememberRow}
@@ -301,8 +411,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   {rememberRule ? <Text style={styles.checkboxCheck}>✓</Text> : null}
                 </View>
                 <Text style={styles.rememberLabel}>
-                  Always do this for "{item.merchant}" - use this category on
-                  Approve, or never import it again on Skip
+                  Always do this for "{item.merchant}" - use this name,
+                  category & business on Approve, or never import it again on
+                  Skip
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -318,7 +429,15 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.approveButton, busy && styles.buttonDisabled]}
-                onPress={() => void handleApprove(item, draftCategory, rememberRule)}
+                onPress={() =>
+                  void handleApprove(
+                    item,
+                    draftCategory,
+                    rememberRule,
+                    draftName,
+                    draftBusinessId,
+                  )
+                }
                 disabled={busy}
               >
                 <Text style={styles.approveButtonText}>
@@ -415,7 +534,17 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               )}
               contentContainerStyle={styles.listContent}
               stickySectionHeadersEnabled={false}
-              extraData={[expandedId, draftCategory, rememberRule, busyId, bulkBusy]}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+              extraData={[
+                expandedId,
+                draftCategory,
+                draftName,
+                draftBusinessId,
+                rememberRule,
+                busyId,
+                bulkBusy,
+              ]}
             />
           )}
 
@@ -438,6 +567,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         visible={showRules}
         onClose={() => setShowRules(false)}
         customCategories={customCategories}
+        businesses={businesses}
       />
     </Modal>
   );
@@ -576,6 +706,41 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       letterSpacing: 0.5,
       marginTop: 8,
+    },
+    nameInput: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      backgroundColor: colors.card,
+      color: colors.text,
+      fontSize: 14,
+      paddingHorizontal: 12,
+      paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    },
+    businessWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    businessPill: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    businessPillActive: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
+    businessPillText: {
+      color: colors.textDim,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    businessPillTextActive: {
+      color: colors.accentButtonText,
     },
     rememberRow: {
       flexDirection: "row",
