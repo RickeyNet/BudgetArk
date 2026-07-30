@@ -176,6 +176,55 @@ describe("replanInboxForRules", () => {
     expect(incomePlan.updatedItems).toEqual([]);
   });
 
+  it("keeps the account-level person fallback when no rule names one", () => {
+    const cardPerson = new Map([["acct-1", "per-card"]]);
+    // Fresh item with the card person already applied: replan is a no-op.
+    const applied: PendingTransaction = {
+      ...item("a", "COSTCO WHSE", "Grocery"),
+      suggestedPersonId: "per-card",
+    };
+    const plan = replanInboxForRules(
+      [applied],
+      [rule("COSTCO WHSE", "Grocery")],
+      NOW,
+      cardPerson,
+    );
+    expect(plan.updatedItems).toEqual([]);
+
+    // A rule's person wins; deleting it falls back to the card person
+    // instead of clearing.
+    const rulePlan = replanInboxForRules(
+      [applied],
+      [{ ...rule("COSTCO WHSE", "Grocery"), personId: "per-rule" }],
+      NOW,
+      cardPerson,
+    );
+    expect(rulePlan.updatedItems[0].suggestedPersonId).toBe("per-rule");
+
+    const deletedPlan = replanInboxForRules(
+      [{ ...applied, suggestedPersonId: "per-rule" }],
+      [],
+      NOW,
+      cardPerson,
+    );
+    expect(deletedPlan.updatedItems[0].suggestedPersonId).toBe("per-card");
+  });
+
+  it("never applies the account person fallback to income", () => {
+    const income: PendingTransaction = {
+      ...item("a", "PAYROLL"),
+      amount: 1500,
+      suggestedType: "income",
+    };
+    const plan = replanInboxForRules(
+      [income],
+      [],
+      NOW,
+      new Map([["acct-1", "per-card"]]),
+    );
+    expect(plan.updatedItems).toEqual([]);
+  });
+
   it("hands an item to another matching rule after a deletion", () => {
     // "COSTCO WHSE GAS" rule deleted; the shorter "COSTCO WHSE" rule
     // still prefix-matches, exactly as a fresh ingest would.

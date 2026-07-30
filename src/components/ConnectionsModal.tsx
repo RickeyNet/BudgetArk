@@ -18,11 +18,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import type { BankConnection, ExternalAccountLink } from "../types";
+import type { BankConnection, ExternalAccountLink, Person } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useConnections } from "../connections/ConnectionsProvider";
-import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
+import {
+  getLinksForConnection,
+  updateLink,
+} from "../storage/externalAccountLinksStorage";
+import { getPeople } from "../storage/personStorage";
 import { removeConnection } from "../services/connections/connectionsService";
 import { useValueChanged } from "../hooks/useValueChanged";
 
@@ -80,6 +84,8 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   const [linksLoaded, setLinksLoaded] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
+  /** Live people, for the per-account "whose card is this" picker. */
+  const [people, setPeople] = useState<Person[]>([]);
 
   const selected: BankConnection | undefined = connections.find(
     (c) => c.id === selectedId,
@@ -111,6 +117,27 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   useEffect(() => {
     if (visible) void refresh();
   }, [visible, refresh]);
+
+  // People load per open (Profile -> People edits between opens must show).
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    void getPeople().then((result) => {
+      if (!cancelled) setPeople(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  const assignPerson = useCallback(
+    async (linkId: string, personId: string | null) => {
+      if (!selectedId) return;
+      const all = await updateLink(linkId, { personId });
+      setLinks(all.filter((link) => link.connectionId === selectedId));
+    },
+    [selectedId],
+  );
 
   const handleBack = useCallback(() => {
     setSelectedId(null);
@@ -270,6 +297,46 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                     </Text>
                   </View>
                 </View>
+                {link.importTransactions && people.length > 0 ? (
+                  <View style={styles.personPickerWrap}>
+                    <Text style={styles.personPickerLabel}>Whose card is this?</Text>
+                    <View style={styles.pillWrap}>
+                      <TouchableOpacity
+                        style={[styles.pill, !link.personId && styles.pillActive]}
+                        onPress={() => void assignPerson(link.id, null)}
+                      >
+                        <Text
+                          style={[
+                            styles.pillText,
+                            !link.personId && styles.pillTextActive,
+                          ]}
+                        >
+                          No one
+                        </Text>
+                      </TouchableOpacity>
+                      {people.map((person) => (
+                        <TouchableOpacity
+                          key={person.id}
+                          style={[
+                            styles.pill,
+                            link.personId === person.id && styles.pillActive,
+                          ]}
+                          onPress={() => void assignPerson(link.id, person.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.pillText,
+                              link.personId === person.id && styles.pillTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {person.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
               </React.Fragment>
             ))
           )}
@@ -437,6 +504,42 @@ const makeStyles = (colors: ThemeColors) =>
     divider: {
       height: 1,
       backgroundColor: colors.cardBorder,
+    },
+    personPickerWrap: {
+      paddingBottom: 12,
+    },
+    personPickerLabel: {
+      color: colors.textDim,
+      fontSize: 11,
+      fontWeight: "600",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+      marginBottom: 6,
+    },
+    pillWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    pill: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 14,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      maxWidth: 160,
+    },
+    pillActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}22`,
+    },
+    pillText: {
+      color: colors.textDim,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    pillTextActive: {
+      color: colors.accent,
     },
     emptyCard: {
       backgroundColor: colors.card,

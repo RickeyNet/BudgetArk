@@ -307,6 +307,43 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedPersonId).toBeUndefined();
   });
 
+  it("falls back to the link's person (whose card) when no rule names one", () => {
+    const plan = planIngest(
+      baseInputs({ links: [link("ACT-1", { personId: "per-card" })] }),
+    );
+    expect(plan.newInboxItems[0].suggestedPersonId).toBe("per-card");
+  });
+
+  it("prefers a matching rule's person over the link's", () => {
+    const rules: MerchantRule[] = [
+      {
+        id: "r1",
+        merchantKey: "COSTCO WHSE",
+        category: "Grocery",
+        type: "expense",
+        personId: "per-rule",
+        useCount: 3,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const plan = planIngest(
+      baseInputs({ rules, links: [link("ACT-1", { personId: "per-card" })] }),
+    );
+    expect(plan.newInboxItems[0].suggestedPersonId).toBe("per-rule");
+  });
+
+  it("never applies the link's person to an inflow", () => {
+    const plan = planIngest(
+      baseInputs({
+        links: [link("ACT-1", { personId: "per-card" })],
+        fetched: [tx({ amount: 1500, description: "PAYROLL" })],
+      }),
+    );
+    expect(plan.newInboxItems[0].suggestedType).toBe("income");
+    expect(plan.newInboxItems[0].suggestedPersonId).toBeUndefined();
+  });
+
   it("flags transfer-looking descriptions", () => {
     const plan = planIngest(
       baseInputs({

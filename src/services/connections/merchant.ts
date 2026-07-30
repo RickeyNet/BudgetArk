@@ -107,11 +107,17 @@ export interface InboxReplan {
  * edited, retargeted, or deleted). Each item is re-matched against the FULL
  * current rule set - so deleting one rule can hand an item to another rule
  * that also prefix-matches it, exactly as a fresh ingest would.
+ *
+ * `personIdByAccount` is the account-level "whose card is this" fallback
+ * (ExternalAccountLink.personId keyed by externalAccountId) - without it a
+ * rule edit would wipe card-derived person suggestions that a fresh ingest
+ * would have re-applied.
  */
 export const replanInboxForRules = (
   items: PendingTransaction[],
   rules: MerchantRule[],
   now: string,
+  personIdByAccount?: ReadonlyMap<string, string>,
 ): InboxReplan => {
   const updatedItems: PendingTransaction[] = [];
   const dismissIds: string[] = [];
@@ -128,7 +134,9 @@ export const replanInboxForRules = (
     const suggestedBusinessId =
       item.suggestedType === "expense" ? rule?.businessId : undefined;
     const suggestedPersonId =
-      item.suggestedType === "expense" ? rule?.personId : undefined;
+      item.suggestedType === "expense"
+        ? (rule?.personId ?? personIdByAccount?.get(item.externalAccountId))
+        : undefined;
     if (
       suggestedCategory !== item.suggestedCategory ||
       suggestedName !== item.suggestedName ||

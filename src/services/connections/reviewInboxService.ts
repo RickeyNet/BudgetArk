@@ -21,6 +21,7 @@ import type {
   PendingTransaction,
 } from "../../types";
 import { addBudgetEntry } from "../../storage/budgetStorage";
+import { getLinks } from "../../storage/externalAccountLinksStorage";
 import {
   getPendingTransactions,
   recordLedgerEntries,
@@ -295,11 +296,21 @@ const reapplyRulesToInbox = async (): Promise<{
   dismissedCount: number;
   recategorizedCount: number;
 }> => {
-  const [inbox, rules] = await Promise.all([
+  const [inbox, rules, links] = await Promise.all([
     getPendingTransactions(),
     getMerchantRules(),
+    getLinks(),
   ]);
-  const plan = replanInboxForRules(inbox, rules, new Date().toISOString());
+  const personIdByAccount = new Map<string, string>();
+  for (const link of links) {
+    if (link.personId) personIdByAccount.set(link.externalAccountId, link.personId);
+  }
+  const plan = replanInboxForRules(
+    inbox,
+    rules,
+    new Date().toISOString(),
+    personIdByAccount,
+  );
   await dismissPendingTransactions(plan.dismissIds);
   if (plan.updatedItems.length > 0) {
     await upsertPendingTransactions(plan.updatedItems);

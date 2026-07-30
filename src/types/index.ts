@@ -711,6 +711,14 @@ export interface ExternalAccountLink {
    * debt no longer exists.
    */
   debtId?: string | null;
+  /**
+   * "Whose card is this" - expenses imported from this account default their
+   * person suggestion to this Person when no merchant rule names one (rules
+   * are per-merchant and more specific, so they win). Per-device like the
+   * rest of the link. A deleted person's id may dangle here, same as
+   * MerchantRule.personId - downstream surfaces render "(deleted person)".
+   */
+  personId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

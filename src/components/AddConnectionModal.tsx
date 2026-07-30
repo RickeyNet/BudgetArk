@@ -27,6 +27,7 @@ import {
   AssetAccount,
   AssetAccountCategory,
   BankProvider,
+  Person,
   categoryIsPureHoldings,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
@@ -42,6 +43,7 @@ import {
   type AccountSelection,
 } from "../services/connections/connectionsService";
 import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
+import { getPeople } from "../storage/personStorage";
 import type { NormalizedAccount } from "../services/connections/types";
 import { addAssetAccount } from "../storage/assetAccountStorage";
 import { generateUUID } from "../utils/uuid";
@@ -77,6 +79,8 @@ interface DraftSelection {
   account: NormalizedAccount;
   importTransactions: boolean;
   assetAccountId: string | null;
+  /** "Whose card is this" - imported expenses suggest this person. */
+  personId: string | null;
 }
 
 interface AddConnectionModalProps {
@@ -150,6 +154,8 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [selections, setSelections] = useState<DraftSelection[]>([]);
   const [localAccounts, setLocalAccounts] = useState<AssetAccount[]>(assetAccounts);
+  /** Live people, for the per-account "whose card is this" picker. */
+  const [people, setPeople] = useState<Person[]>([]);
 
   // Inline "+ New account" mini-form state (one at a time, per provider account).
   const [newAccountFor, setNewAccountFor] = useState<string | null>(null);
@@ -211,6 +217,18 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     wasVisible.current = visible;
   }, [visible, reset]);
 
+  // People load per open (Profile -> People edits between opens must show).
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    void getPeople().then((result) => {
+      if (!cancelled) setPeople(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
   const enterMapStep = useCallback((id: string, accounts: NormalizedAccount[]) => {
     setConnectionId(id);
     setSelections(
@@ -218,6 +236,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         account,
         importTransactions: true,
         assetAccountId: null,
+        personId: null,
       })),
     );
     setStep("mapAccounts");
@@ -360,6 +379,19 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     );
   }, []);
 
+  const setPerson = useCallback(
+    (externalAccountId: string, personId: string | null) => {
+      setSelections((prev) =>
+        prev.map((s) =>
+          s.account.externalAccountId === externalAccountId
+            ? { ...s, personId }
+            : s,
+        ),
+      );
+    },
+    [],
+  );
+
   const setMapping = useCallback(
     (externalAccountId: string, assetAccountId: string | null) => {
       setSelections((prev) =>
@@ -408,6 +440,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         account: s.account,
         assetAccountId: s.assetAccountId,
         importTransactions: s.importTransactions,
+        personId: s.personId,
       }));
       await finalizeAccountLinks(connectionId, finalSelections);
       setStep("done");
@@ -703,6 +736,54 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
               </View>
               <Text style={styles.checkboxLabel}>Import transactions</Text>
             </TouchableOpacity>
+
+            {people.length > 0 && selection.importTransactions ? (
+              <>
+                <Text style={styles.label}>WHOSE CARD IS THIS?</Text>
+                <View style={styles.pillWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.pill,
+                      selection.personId === null && styles.pillActive,
+                    ]}
+                    onPress={() => setPerson(ext.externalAccountId, null)}
+                  >
+                    <Text
+                      style={[
+                        styles.pillText,
+                        selection.personId === null && styles.pillTextActive,
+                      ]}
+                    >
+                      No one
+                    </Text>
+                  </TouchableOpacity>
+                  {people.map((person) => (
+                    <TouchableOpacity
+                      key={person.id}
+                      style={[
+                        styles.pill,
+                        selection.personId === person.id && styles.pillActive,
+                      ]}
+                      onPress={() => setPerson(ext.externalAccountId, person.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.pillText,
+                          selection.personId === person.id &&
+                            styles.pillTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {person.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.hint}>
+                  Expenses imported from this account will suggest this person.
+                </Text>
+              </>
+            ) : null}
 
             <Text style={styles.label}>BALANCE UPDATES</Text>
             <View style={styles.pillWrap}>

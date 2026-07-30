@@ -126,6 +126,12 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       .filter((link) => link.importTransactions)
       .map((link) => link.externalAccountId),
   );
+  // Account-level "whose card is this" - the person fallback when no
+  // merchant rule names one.
+  const personIdByAccount = new Map<string, string>();
+  for (const link of input.links) {
+    if (link.personId) personIdByAccount.set(link.externalAccountId, link.personId);
+  }
   const inboxById = new Map(input.inbox.map((item) => [item.id, item]));
   const pendingInboxByAccount = new Map<string, PendingTransaction[]>();
   for (const item of input.inbox) {
@@ -300,7 +306,9 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       suggestedBusinessId:
         suggestedType === "expense" ? rule?.businessId : undefined,
       suggestedPersonId:
-        suggestedType === "expense" ? rule?.personId : undefined,
+        suggestedType === "expense"
+          ? (rule?.personId ?? personIdByAccount.get(tx.externalAccountId))
+          : undefined,
       transferLikely: looksLikeTransfer(tx) || undefined,
       duplicateLikely: looksLikeManualDuplicate(tx) || undefined,
       fetchedAt: input.now,

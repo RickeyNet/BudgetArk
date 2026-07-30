@@ -260,6 +260,8 @@ export interface AccountSelection {
   /** Map balances into this AssetAccount; null = don't track the balance. */
   assetAccountId: string | null;
   importTransactions: boolean;
+  /** "Whose card is this" - see ExternalAccountLink.personId. */
+  personId?: string | null;
 }
 
 /** Persist the wizard's account-mapping step as ExternalAccountLinks. */
@@ -277,6 +279,7 @@ export const finalizeAccountLinks = async (
       currency: selection.account.currency,
       assetAccountId: selection.assetAccountId,
       importTransactions: selection.importTransactions,
+      personId: selection.personId ?? null,
       updateBalance: selection.assetAccountId !== null,
       lastExternalBalance: selection.account.balance,
       lastExternalBalanceAt: selection.account.balanceAsOf ?? now,
