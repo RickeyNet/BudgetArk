@@ -65,6 +65,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
     avgMonthlySpending,
     currentMonthSpending,
     spendingVsAvgPercent,
+    personSpending,
   } = data;
 
   const currentMonth =
@@ -90,8 +91,14 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
   const hasChanges = categoryChanges.length > 0;
   const hasComparisons = categoryComparisons.length > 0;
   const hasStreaks = streaks.length > 0;
+  const hasPersonSpending = personSpending.length > 0;
 
-  const isEmpty = !hasChartData && !hasChanges && !hasComparisons && !hasStreaks;
+  const isEmpty =
+    !hasChartData &&
+    !hasChanges &&
+    !hasComparisons &&
+    !hasStreaks &&
+    !hasPersonSpending;
 
   return (
     <Modal
@@ -171,6 +178,51 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                       </Text>
                     </View>
                   </View>
+                </View>
+              )}
+
+              {/* Spending by person (current month, per category) */}
+              {hasPersonSpending && (
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Spending by Person</Text>
+                  <Text style={styles.cardHint}>
+                    Assigned expenses this month
+                  </Text>
+                  {personSpending.map((person, i) => (
+                    <View
+                      key={person.personId}
+                      style={[
+                        styles.personGroup,
+                        i === personSpending.length - 1 &&
+                          styles.personGroupLast,
+                      ]}
+                    >
+                      <View style={styles.personHeaderRow}>
+                        <Text
+                          style={[
+                            styles.personName,
+                            person.deleted && { color: colors.textMuted },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {person.name}
+                        </Text>
+                        <Text style={styles.personTotal}>
+                          {formatCurrency(person.total)}
+                        </Text>
+                      </View>
+                      {person.byCategory.map((cat) => (
+                        <View key={cat.category} style={styles.personCatRow}>
+                          <Text style={styles.personCatName} numberOfLines={1}>
+                            {cat.category}
+                          </Text>
+                          <Text style={styles.personCatAmount}>
+                            {formatCurrency(cat.total)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
                 </View>
               )}
 
@@ -455,6 +507,55 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 14,
       color: colors.text,
       flex: 1,
+    },
+    /* spending by person */
+    personGroup: {
+      paddingBottom: 10,
+      marginBottom: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.cardBorder,
+    },
+    personGroupLast: {
+      paddingBottom: 0,
+      marginBottom: 0,
+      borderBottomWidth: 0,
+    },
+    personHeaderRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 4,
+    },
+    personName: {
+      flex: 1,
+      marginRight: 12,
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    personTotal: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
+    },
+    personCatRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingLeft: 12,
+      paddingVertical: 3,
+    },
+    personCatName: {
+      flex: 1,
+      marginRight: 12,
+      fontSize: 13,
+      color: colors.textDim,
+    },
+    personCatAmount: {
+      fontSize: 13,
+      color: colors.textDim,
+      fontVariant: ["tabular-nums"],
     },
     /* category changes */
     changeRow: {

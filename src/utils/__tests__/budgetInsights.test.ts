@@ -3,6 +3,7 @@ import {
   computeCategoryChanges,
   computeCategorySpendingComparisons,
   computeStreaks,
+  computePersonMonthSpending,
   buildMonthlyReview,
   type MonthSummary,
 } from "../budgetInsights";
@@ -185,5 +186,85 @@ describe("buildMonthSummaries / buildMonthlyReview (date-relative)", () => {
     expect(review.currentMonthSpending).toBe(1000);
     expect(review.avgMonthlySpending).toBe(1000); // every past month is also 1000
     expect(review.spendingVsAvgPercent).toBe(0);
+  });
+});
+
+describe("computePersonMonthSpending", () => {
+  const people: any[] = [
+    { id: "p1", name: "Alex" },
+    { id: "p2", name: "Sam" },
+  ];
+  // One-off entries pinned to a fixed month so grouping is deterministic.
+  const entries: any[] = [
+    { id: "e1", type: "expense", category: "Food", amount: 40, date: "2026-06-05T12:00:00", personId: "p1" },
+    { id: "e2", type: "expense", category: "Food", amount: 60, date: "2026-06-10T12:00:00", personId: "p1" },
+    { id: "e3", type: "expense", category: "Gas", amount: 25, date: "2026-06-12T12:00:00", personId: "p1" },
+    { id: "e4", type: "expense", category: "Shopping", amount: 200, date: "2026-06-15T12:00:00", personId: "p2" },
+    // Not counted: unassigned expense, income, other month.
+    { id: "e5", type: "expense", category: "Food", amount: 999, date: "2026-06-20T12:00:00" },
+    { id: "e6", type: "income", category: "Salary", amount: 5000, date: "2026-06-01T12:00:00", personId: "p1" },
+    { id: "e7", type: "expense", category: "Food", amount: 999, date: "2026-05-20T12:00:00", personId: "p1" },
+  ];
+
+  it("groups the month's assigned expenses per person with a category breakdown", () => {
+    const spending = computePersonMonthSpending(entries, people, "2026-06");
+    expect(spending).toHaveLength(2);
+
+    // Sorted by total descending: Sam (200) before Alex (125).
+    expect(spending[0]).toMatchObject({ personId: "p2", name: "Sam", total: 200, entryCount: 1 });
+    expect(spending[1]).toMatchObject({ personId: "p1", name: "Alex", total: 125, entryCount: 3 });
+
+    // Categories sorted by total descending.
+    expect(spending[1].byCategory).toEqual([
+      { category: "Food", total: 100 },
+      { category: "Gas", total: 25 },
+    ]);
+  });
+
+  it("counts a recurring assigned expense in later months too", () => {
+    const recurring: any[] = [
+      { id: "r1", type: "expense", category: "Streaming", amount: 15, date: "2026-01-03T12:00:00", recurring: true, recurrenceInterval: 1, personId: "p1" },
+    ];
+    const spending = computePersonMonthSpending(recurring, people, "2026-06");
+    expect(spending).toEqual([
+      expect.objectContaining({
+        personId: "p1",
+        total: 15,
+        byCategory: [{ category: "Streaming", total: 15 }],
+      }),
+    ]);
+  });
+
+  it("reports entries assigned to an unknown person under a placeholder", () => {
+    const spending = computePersonMonthSpending(
+      [{ id: "e1", type: "expense", category: "Food", amount: 50, date: "2026-06-05T12:00:00", personId: "gone" }] as any[],
+      people,
+      "2026-06"
+    );
+    expect(spending).toEqual([
+      expect.objectContaining({ personId: "gone", name: "(deleted person)", deleted: true, total: 50 }),
+    ]);
+  });
+
+  it("returns [] when nothing is assigned in the month", () => {
+    expect(computePersonMonthSpending(entries, people, "2026-04")).toEqual([]);
+  });
+
+  it("rides along in buildMonthlyReview for the current month", () => {
+    const now = new Date();
+    const day = `${getMonthKey(now)}-15T12:00:00`;
+    const monthEntries: any[] = [
+      { id: "m1", type: "expense", category: "Food", amount: 75, date: day, personId: "p1" },
+    ];
+    const review = buildMonthlyReview(monthEntries, {}, 4, people);
+    expect(review.personSpending).toEqual([
+      expect.objectContaining({ personId: "p1", name: "Alex", total: 75 }),
+    ]);
+  });
+
+  it("defaults to no person spending when people are not passed", () => {
+    // People fall back to [] -> assigned spend still reports, as unknown.
+    const review = buildMonthlyReview([], {});
+    expect(review.personSpending).toEqual([]);
   });
 });

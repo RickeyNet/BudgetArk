@@ -362,10 +362,10 @@ const BudgetScreen: React.FC = () => {
 
   const refreshMonthlyReview = useCallback(async (reviewEntries: BudgetEntry[]) => {
     const limitsByMonth = await getAllLimitsByMonth();
-    const nextReviewData = buildMonthlyReview(reviewEntries, limitsByMonth);
+    const nextReviewData = buildMonthlyReview(reviewEntries, limitsByMonth, 6, people);
     setReviewPreviewData(nextReviewData);
     return nextReviewData;
-  }, []);
+  }, [people]);
 
   useFocusEffect(
     useCallback(() => {
@@ -414,7 +414,12 @@ const BudgetScreen: React.FC = () => {
         );
 
         if (cancelled) return;
-        const nextReviewData = buildMonthlyReview(processed.entries, allLimitsByMonth);
+        const nextReviewData = buildMonthlyReview(
+          processed.entries,
+          allLimitsByMonth,
+          6,
+          storedPeople
+        );
 
         setEntries(processed.entries);
         setDebts(storedDebts);
