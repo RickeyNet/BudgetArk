@@ -4,24 +4,38 @@
  *
  * The People row and its manage modal - where the user maintains the list
  * of household members spending can be assigned to (BudgetEntry.personId).
- * Modal visibility is purely local (no feature-spotlight deep link targets
- * it, unlike BusinessSection).
+ * The manage modal's visibility stays in ProfileScreen because the feature
+ * spotlight deep link (openSection: "people") opens it from there - same
+ * pattern as BusinessSection.
  */
 
-import React, { useState } from "react";
+import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
+import NewFeatureBadge from "../../components/NewFeatureBadge";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 
-const PeopleSection: React.FC = () => {
+type PeopleSectionProps = {
+  newFeatureIds: ReadonlySet<string>;
+  onDismissNewBadge: (featureId: string) => void;
+  showManagePeople: boolean;
+  onOpenManagePeople: () => void;
+  onCloseManagePeople: () => void;
+};
+
+const PeopleSection: React.FC<PeopleSectionProps> = ({
+  newFeatureIds,
+  onDismissNewBadge,
+  showManagePeople,
+  onOpenManagePeople,
+  onCloseManagePeople,
+}) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens);
-
-  const [showManagePeople, setShowManagePeople] = useState(false);
 
   return (
     <>
@@ -43,15 +57,19 @@ const PeopleSection: React.FC = () => {
             style={styles.groupedRow}
             onPress={() => {
               triggerHaptic("selection");
-              setShowManagePeople(true);
+              onDismissNewBadge("people-assignment");
+              onOpenManagePeople();
             }}
             accessibilityRole="button"
             accessibilityLabel="Manage people"
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                People 👤
-              </Text>
+              <View style={styles.rowTitleWithBadge}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  People 👤
+                </Text>
+                {newFeatureIds.has("people-assignment") && <NewFeatureBadge />}
+              </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
@@ -67,7 +85,7 @@ const PeopleSection: React.FC = () => {
 
       <ManagePeopleModal
         visible={showManagePeople}
-        onClose={() => setShowManagePeople(false)}
+        onClose={onCloseManagePeople}
       />
     </>
   );

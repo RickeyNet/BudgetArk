@@ -21,6 +21,7 @@ import { compareVersions } from "../utils/versionGuard";
 export type ProfileSpotlightSection =
   | "connections"
   | "businesses"
+  | "people"
   | "tipJar"
   | "trackingReminders"
   | "theme"
@@ -121,6 +122,19 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
       label: "Create a business",
       kind: "profile-section",
       section: "businesses",
+    },
+  },
+  {
+    id: "people-assignment",
+    sinceVersion: "1.9.0",
+    icon: "👤",
+    title: "Who spent that?",
+    blurb:
+      "Add the people in your household and assign any expense to them - when adding entries or approving imported bank transactions. Every entry shows who it belongs to, so shared spending finally has names on it.",
+    cta: {
+      label: "Add your people",
+      kind: "profile-section",
+      section: "people",
     },
   },
   {

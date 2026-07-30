@@ -116,6 +116,7 @@ import AboutSection from "./profile/AboutSection";
 const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
   connections: "bank-connections",
   businesses: "business-expenses",
+  people: "people-assignment",
   tipJar: "tip-jar",
   trackingReminders: "tracking-reminders",
   theme: "deep-sea-theme",
@@ -189,6 +190,7 @@ const ProfileScreen: React.FC = () => {
   /** Deep-link targeted modal visibilities (openSection / openReleaseNotes) */
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showManageBusinesses, setShowManageBusinesses] = useState(false);
+  const [showManagePeople, setShowManagePeople] = useState(false);
   const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
   /** Tip Jar sheet - mounted only while open so the store connection
    *  (expo-iap) is established on demand, not at app start. */
@@ -295,6 +297,9 @@ const ProfileScreen: React.FC = () => {
           break;
         case "businesses":
           setShowManageBusinesses(true);
+          break;
+        case "people":
+          setShowManagePeople(true);
           break;
         case "tipJar":
           setShowTipJar(true);
@@ -594,7 +599,13 @@ const ProfileScreen: React.FC = () => {
         />
 
         {/* ── People ── */}
-        <PeopleSection />
+        <PeopleSection
+          newFeatureIds={newFeatureIds}
+          onDismissNewBadge={dismissNewBadge}
+          showManagePeople={showManagePeople}
+          onOpenManagePeople={() => setShowManagePeople(true)}
+          onCloseManagePeople={() => setShowManagePeople(false)}
+        />
 
         {/* ── Data (Export, Import, Reset) ── */}
         <DataSection

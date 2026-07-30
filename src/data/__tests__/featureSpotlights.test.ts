@@ -125,6 +125,7 @@ describe("FEATURE_SPOTLIGHTS data", () => {
         expect([
           "connections",
           "businesses",
+          "people",
           "tipJar",
           "trackingReminders",
           "theme",
