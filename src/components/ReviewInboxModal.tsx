@@ -393,6 +393,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       onPress={() => setDraftBusinessId(business.id)}
                     >
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.businessPillText,
                           draftBusinessId === business.id &&
@@ -454,6 +455,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       onPress={() => setDraftPersonId(person.id)}
                     >
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.businessPillText,
                           draftPersonId === person.id &&
@@ -816,6 +818,10 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       paddingHorizontal: 12,
       paddingVertical: 7,
+      // A long name must cap at the card width and ellipsize - without this
+      // the pill lays out wider than the row and the itemCard's
+      // overflow:hidden clips the label clean off, leaving a bare 💼.
+      maxWidth: "100%",
     },
     businessPillActive: {
       backgroundColor: colors.accent,

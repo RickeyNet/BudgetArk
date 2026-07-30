@@ -275,6 +275,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                       onPress={() => setDraftBusinessId(business.id)}
                     >
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.businessPillText,
                           draftBusinessId === business.id &&
@@ -337,6 +338,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                       onPress={() => setDraftPersonId(person.id)}
                     >
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.businessPillText,
                           draftPersonId === person.id &&
@@ -592,6 +594,8 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       paddingHorizontal: 12,
       paddingVertical: 7,
+      // Same long-name guard as ReviewInboxModal's businessPill.
+      maxWidth: "100%",
     },
     businessPillActive: {
       backgroundColor: colors.accent,

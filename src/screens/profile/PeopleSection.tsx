@@ -2,16 +2,18 @@
  * BudgetArk - People Section
  * File: src/screens/profile/PeopleSection.tsx
  *
- * The People row and its manage modal - where the user maintains the list
- * of household members spending can be assigned to (BudgetEntry.personId).
- * The manage modal's visibility stays in ProfileScreen because the feature
- * spotlight deep link (openSection: "people") opens it from there - same
- * pattern as BusinessSection.
+ * The People + Person Spending Report rows and their modals - where the
+ * user maintains the list of household members spending can be assigned to
+ * (BudgetEntry.personId) and views who spent what. The manage modal's
+ * visibility stays in ProfileScreen because the feature spotlight deep
+ * link (openSection: "people") opens it from there - same pattern as
+ * BusinessSection; the report modal is purely local.
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
+import PersonReportModal from "../../components/PersonReportModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -36,6 +38,8 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens);
+
+  const [showPersonReport, setShowPersonReport] = useState(false);
 
   return (
     <>
@@ -80,12 +84,47 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
               →
             </Text>
           </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => {
+              triggerHaptic("selection");
+              setShowPersonReport(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open person spending report"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                Person Spending Report
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                Per-person totals by year, with CSV export
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
       <ManagePeopleModal
         visible={showManagePeople}
         onClose={onCloseManagePeople}
+      />
+      <PersonReportModal
+        visible={showPersonReport}
+        onClose={() => setShowPersonReport(false)}
       />
     </>
   );
