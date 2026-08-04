@@ -229,25 +229,47 @@ const ProfileScreen: React.FC = () => {
    */
   const monitoringActiveRef = useRef(false);
 
-  /** Load user on mount */
+  /**
+   * True when the mount-time user read failed (DecryptionError, storage
+   * timeout). Without this the screen sat on "Loading profile..." forever
+   * when any of the mount reads threw - now only the user record is
+   * required, everything else degrades to its default.
+   */
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  /** Load user on mount (re-runs when Try Again bumps loadAttempt) */
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      try {
-        const [u, pairState, syncMeta, backup, reminders] = await Promise.all([
+      const [u, pairState, syncMeta, backup, reminders] =
+        await Promise.allSettled([
           getOrCreateUser(),
           getPairingState(),
           getSyncMetadata(),
           getBackupReminderState(),
           getTrackingReminderSettings(),
         ]);
-        if (cancelled) return;
-        setUser(u);
-        setReminderSettings(reminders);
-        setPairing(pairState);
-        setLastSyncTime(syncMeta.lastSyncTimestamp);
-        setBackupState(backup);
-        if (pairState?.autoSyncEnabled) {
+      if (cancelled) return;
+      if (u.status === "rejected") {
+        if (__DEV__) console.error("Failed to load profile:", u.reason);
+        setLoadFailed(true);
+        return;
+      }
+      setLoadFailed(false);
+      setUser(u.value);
+      if (reminders.status === "fulfilled") {
+        setReminderSettings(reminders.value);
+      }
+      if (syncMeta.status === "fulfilled") {
+        setLastSyncTime(syncMeta.value.lastSyncTimestamp);
+      }
+      if (backup.status === "fulfilled") {
+        setBackupState(backup.value);
+      }
+      if (pairState.status === "fulfilled") {
+        setPairing(pairState.value);
+        if (pairState.value?.autoSyncEnabled) {
           startMonitoring((result) => {
             if (result.success) {
               setLastSyncTime(result.timestamp);
@@ -255,8 +277,13 @@ const ProfileScreen: React.FC = () => {
           });
           monitoringActiveRef.current = true;
         }
-      } catch (error) {
-        if (__DEV__) console.error("Failed to load profile:", error);
+      }
+      if (__DEV__) {
+        [pairState, syncMeta, backup, reminders].forEach((r) => {
+          if (r.status === "rejected") {
+            console.error("Profile secondary read failed:", r.reason);
+          }
+        });
       }
     };
     load();
@@ -267,7 +294,7 @@ const ProfileScreen: React.FC = () => {
         monitoringActiveRef.current = false;
       }
     };
-  }, []);
+  }, [loadAttempt]);
 
   // "What's new" deep-link navigates here with openReleaseNotes set.
   // Deferred past the tab-switch transition: presenting a Modal
@@ -494,11 +521,56 @@ const ProfileScreen: React.FC = () => {
           backgroundColor: showAmbientBackground ? "transparent" : colors.bg,
           justifyContent: "center",
           alignItems: "center",
+          paddingHorizontal: 32,
         }}
       >
-        <Text style={{ color: colors.textDim, fontSize: 14 }}>
-          Loading profile...
-        </Text>
+        {loadFailed ? (
+          <>
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 16,
+                fontWeight: "600",
+                marginBottom: 8,
+                textAlign: "center",
+              }}
+            >
+              Couldn't load your profile
+            </Text>
+            <Text
+              style={{
+                color: colors.textDim,
+                fontSize: 14,
+                lineHeight: 20,
+                textAlign: "center",
+                marginBottom: 20,
+              }}
+            >
+              BudgetArk couldn't read its saved data on this device. This can
+              happen when the phone is very low on free storage. Your data has
+              not been changed.
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: colors.accent,
+                paddingHorizontal: 28,
+                paddingVertical: 10,
+                borderRadius: 10,
+              }}
+              onPress={() => setLoadAttempt((n) => n + 1)}
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+            >
+              <Text style={{ color: colors.bg, fontSize: 15, fontWeight: "600" }}>
+                Try Again
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <Text style={{ color: colors.textDim, fontSize: 14 }}>
+            Loading profile...
+          </Text>
+        )}
       </View>
     );
   }

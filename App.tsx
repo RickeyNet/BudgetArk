@@ -113,19 +113,30 @@ const AppContent: React.FC = () => {
   const canCheckUpdates = !__DEV__ && Updates.isEnabled;
   const latestRelease = RELEASE_NOTES[0];
 
-  /** Check onboarding status on mount */
+  /**
+   * A thrown read here means the user record EXISTS but couldn't be read
+   * (DecryptionError, storage timeout on degraded/full flash) - a missing
+   * record resolves to a fresh user instead of throwing. Treating that
+   * error as "new user" used to re-run onboarding on every launch for
+   * devices with failing storage, so it gets a retry screen instead.
+   */
+  const [startupError, setStartupError] = useState(false);
+  const [startupAttempt, setStartupAttempt] = useState(0);
+
+  /** Check onboarding status on mount (re-runs when Try Again bumps startupAttempt) */
   useEffect(() => {
     const checkOnboarding = async () => {
       try {
         const user = await getOrCreateUser();
+        setStartupError(false);
         setIsOnboardingComplete(user.onboardingComplete);
       } catch (error) {
         if (__DEV__) console.error("Failed to load user:", error);
-        setIsOnboardingComplete(false);
+        setStartupError(true);
       }
     };
-    checkOnboarding();
-  }, []);
+    void checkOnboarding();
+  }, [startupAttempt]);
 
   /**
    * Launch-time data repair: collapse duplicate minimum-due payment rows
@@ -459,6 +470,32 @@ const AppContent: React.FC = () => {
     [replayFeatureTour]
   );
 
+  /** Storage read failed - offer retry rather than restarting onboarding */
+  if (startupError) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.bg }]}>
+        <Text style={[styles.startupErrorTitle, { color: colors.text }]}>
+          Couldn't load your data
+        </Text>
+        <Text style={[styles.startupErrorBody, { color: colors.textDim }]}>
+          BudgetArk couldn't read its saved data on this device. This can
+          happen when the phone is very low on free storage. Your data has
+          not been changed - freeing up space usually fixes it.
+        </Text>
+        <TouchableOpacity
+          style={[styles.startupErrorButton, { backgroundColor: colors.accent }]}
+          onPress={() => setStartupAttempt((n) => n + 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
+        >
+          <Text style={[styles.startupErrorButtonText, { color: colors.bg }]}>
+            Try Again
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   /** Show loading indicator while checking onboarding status */
   if (isOnboardingComplete === null) {
     return (
@@ -690,6 +727,29 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  startupErrorTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 12,
+    textAlign: "center",
+    paddingHorizontal: 32,
+  },
+  startupErrorBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    paddingHorizontal: 32,
+    marginBottom: 24,
+  },
+  startupErrorButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  startupErrorButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
   dialogOverlay: {
     flex: 1,

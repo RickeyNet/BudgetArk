@@ -20,6 +20,7 @@
 
 import React, { useState, useCallback, useMemo } from "react";
 import {
+  Alert,
   View,
   Text,
   TouchableOpacity,
@@ -168,24 +169,59 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   }, [step]);
 
   /**
+   * Persist the onboarding-complete flag, then leave the flow.
+   *
+   * The save is NOT fire-and-forget: if the write fails (full disk,
+   * degraded flash tripping the storage timeout), silently continuing
+   * means the flag never lands on disk and the user is walked through
+   * onboarding again on every launch. Surface it and let them retry -
+   * "Continue Anyway" keeps the old escape hatch for a genuinely broken
+   * device, with the repeat-onboarding consequence stated up front.
+   */
+  const finishOnboarding = useCallback(
+    async (name?: string, options?: { openArkSetup?: boolean }) => {
+      const attempt = async (): Promise<void> => {
+        try {
+          await completeOnboarding(name);
+        } catch (error) {
+          if (__DEV__) console.error("Failed to save onboarding:", error);
+          Alert.alert(
+            "Couldn't Save Your Setup",
+            "Your setup couldn't be saved to this device. This usually happens " +
+              "when the phone is very low on free storage. Free up some space " +
+              "and try again, or continue anyway - the app may ask you to set " +
+              "up again next time it opens.",
+            [
+              { text: "Try Again", onPress: () => void attempt() },
+              {
+                text: "Continue Anyway",
+                style: "cancel",
+                onPress: () => onComplete(options),
+              },
+            ]
+          );
+          return;
+        }
+        onComplete(options);
+      };
+      await attempt();
+    },
+    [onComplete]
+  );
+
+  /**
    * Complete onboarding and mark as done
    */
-  const handleComplete = useCallback(async (openArkSetup?: boolean) => {
-    try {
-      await completeOnboarding(displayName);
-    } catch (error) {
-      if (__DEV__) console.error("Failed to save onboarding:", error);
-    }
-    onComplete({ openArkSetup: !!openArkSetup });
-  }, [displayName, onComplete]);
+  const handleComplete = useCallback(
+    (openArkSetup?: boolean) =>
+      finishOnboarding(displayName, { openArkSetup: !!openArkSetup }),
+    [displayName, finishOnboarding]
+  );
 
   /**
    * Skip to the end (keeps current theme, default name)
    */
-  const handleSkip = useCallback(async () => {
-    await completeOnboarding();
-    onComplete();
-  }, [onComplete]);
+  const handleSkip = useCallback(() => finishOnboarding(), [finishOnboarding]);
 
   /** Render theme selection step */
   const renderThemeStep = () => (
