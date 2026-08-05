@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  BackHandler,
   Dimensions,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,8 +42,8 @@ const TOOLTIP_MIN_HEIGHT = 240;
 /** Margin between the cutout and the tooltip card. */
 const TOOLTIP_GAP = 16;
 /**
- * Wait long enough after the Modal opens that its fade animation has settled
- * and the underlying view has stopped moving before we measure. 80 ms wasn't
+ * Wait long enough after the overlay appears that layout and any
+ * scroll-into-view motion have settled before we measure. 80 ms wasn't
  * always enough on iOS, so the ring landed slightly off the anchor.
  */
 const INITIAL_MEASURE_DELAY_MS = 200;
@@ -64,6 +64,28 @@ const Spotlight: React.FC<SpotlightProps> = ({
   const measure = useMeasureAnchor();
   const [rect, setRect] = useState<AnchorRect | null>(null);
   const [measureToken, setMeasureToken] = useState(0);
+  // Anchor rects are window-relative (measureInWindow), but this overlay is
+  // rendered in the screen's own tree, so its origin may not be the window
+  // origin. Measure the overlay's window frame and subtract it to translate
+  // rects into local coordinates - this also makes the math immune to the
+  // Android status/nav-bar inset drift the old Modal needed
+  // statusBarTranslucent/navigationBarTranslucent to compensate for.
+  const rootRef = useRef<View>(null);
+  const [overlayFrame, setOverlayFrame] = useState<AnchorRect | null>(null);
+  const handleRootLayout = useCallback(() => {
+    rootRef.current?.measureInWindow((x, y, width, height) => {
+      if (
+        Number.isFinite(x) &&
+        Number.isFinite(y) &&
+        Number.isFinite(width) &&
+        Number.isFinite(height) &&
+        width > 0 &&
+        height > 0
+      ) {
+        setOverlayFrame({ x, y, width, height });
+      }
+    });
+  }, []);
   // "Learn more" expander for the step's long-form detail. Collapses on
   // every step change (see the useValueChanged below) so a reader's choice
   // on one card never leaves the next card pre-expanded.
@@ -123,17 +145,26 @@ const Spotlight: React.FC<SpotlightProps> = ({
 
   const screen = Dimensions.get("window");
 
+  /** Anchor rect translated into the overlay's local coordinate space. */
+  const localRect = useMemo(() => {
+    if (!rect) return null;
+    if (!overlayFrame) return rect;
+    return { ...rect, x: rect.x - overlayFrame.x, y: rect.y - overlayFrame.y };
+  }, [rect, overlayFrame]);
+
+  const overlayHeight = overlayFrame?.height ?? screen.height;
+
   const placement = useMemo(() => {
-    if (!rect) return { mode: "centered" as const };
-    const cutoutTop = rect.y - CUTOUT_PADDING;
-    const cutoutBottom = rect.y + rect.height + CUTOUT_PADDING;
+    if (!localRect) return { mode: "centered" as const };
+    const cutoutTop = localRect.y - CUTOUT_PADDING;
+    const cutoutBottom = localRect.y + localRect.height + CUTOUT_PADDING;
     const spaceAbove = cutoutTop;
-    const spaceBelow = screen.height - cutoutBottom;
+    const spaceBelow = overlayHeight - cutoutBottom;
     if (spaceBelow >= TOOLTIP_MIN_HEIGHT || spaceBelow >= spaceAbove) {
       return { mode: "below" as const, top: cutoutBottom + TOOLTIP_GAP };
     }
-    return { mode: "above" as const, bottom: screen.height - cutoutTop + TOOLTIP_GAP };
-  }, [rect, screen.height]);
+    return { mode: "above" as const, bottom: overlayHeight - cutoutTop + TOOLTIP_GAP };
+  }, [localRect, overlayHeight]);
 
   const handleNext = useCallback(() => {
     onNext();
@@ -151,35 +182,43 @@ const Spotlight: React.FC<SpotlightProps> = ({
     onSkipAll();
   }, [onSkipAll]);
 
-  if (!step) return null;
+  // The old Modal's onRequestClose advanced the tour on Android back; keep
+  // that behavior now that there's no Modal to intercept the button.
+  useEffect(() => {
+    if (!visible || !step) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleNext();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible, step, handleNext]);
+
+  if (!visible || !step) return null;
 
   const isLast = stepIndex >= totalSteps - 1;
   const counterText = `${stepIndex + 1} of ${totalSteps}`;
   const nextLabel = isLast ? "Got it" : "Next";
 
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      // Android: Modal otherwise renders below the status bar, so the
-      // coachmark coordinate space is shifted ~24-32 px down vs the
-      // underlying screen. That made the spotlight ring miss the FAB on
-      // devices like the Moto G. statusBarTranslucent makes the Modal
-      // share the screen's window frame (top:0 = screen y=0), so the
-      // computed FAB rect (window-relative) lands exactly on the FAB.
-      // navigationBarTranslucent extends the Modal behind the nav bar so
-      // the bottom of the Modal also matches the activity window - without
-      // it, edge-to-edge activities (SDK 53+ default) measure FAB rects in
-      // a taller window than the Modal can paint over, shifting the ring
-      // up by the nav-bar inset on devices with a 3-button or gesture nav.
-      // Both are no-ops on iOS.
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={handleNext}
+    // Deliberately NOT a <Modal>: the guided tour chains one spotlight per
+    // tab, and presenting the next tab's Modal while the previous one was
+    // still dismissing hit the iOS concurrent present/dismiss race - a stuck
+    // transparent modal window that froze all touches after every step
+    // (reported on iPhone 13). An in-tree absolutely-positioned overlay never
+    // touches UIKit presentation, so there is nothing to race. The screen
+    // renders this as the last child of its root, and zIndex keeps it above
+    // screen content; the tab bar (a later sibling at the navigator level)
+    // stays above and tappable - switching tabs mid-tour is already handled
+    // by the focus-loss guard in useTabCoachmark. No pointerEvents="box-none"
+    // on the root: it must swallow touches everywhere (including the cutout)
+    // exactly like the Modal window did.
+    <View
+      ref={rootRef}
+      onLayout={handleRootLayout}
+      style={styles.root}
+      accessibilityViewIsModal
     >
-      <View style={styles.root} pointerEvents="box-none">
-        {rect ? (
+        {localRect ? (
           <>
             {/* Top dim strip */}
             <View
@@ -189,7 +228,7 @@ const Spotlight: React.FC<SpotlightProps> = ({
                   top: 0,
                   left: 0,
                   right: 0,
-                  height: Math.max(0, rect.y - CUTOUT_PADDING),
+                  height: Math.max(0, localRect.y - CUTOUT_PADDING),
                 },
               ]}
             />
@@ -198,7 +237,7 @@ const Spotlight: React.FC<SpotlightProps> = ({
               style={[
                 styles.dim,
                 {
-                  top: rect.y + rect.height + CUTOUT_PADDING,
+                  top: localRect.y + localRect.height + CUTOUT_PADDING,
                   left: 0,
                   right: 0,
                   bottom: 0,
@@ -210,10 +249,10 @@ const Spotlight: React.FC<SpotlightProps> = ({
               style={[
                 styles.dim,
                 {
-                  top: Math.max(0, rect.y - CUTOUT_PADDING),
+                  top: Math.max(0, localRect.y - CUTOUT_PADDING),
                   left: 0,
-                  width: Math.max(0, rect.x - CUTOUT_PADDING),
-                  height: rect.height + CUTOUT_PADDING * 2,
+                  width: Math.max(0, localRect.x - CUTOUT_PADDING),
+                  height: localRect.height + CUTOUT_PADDING * 2,
                 },
               ]}
             />
@@ -222,10 +261,10 @@ const Spotlight: React.FC<SpotlightProps> = ({
               style={[
                 styles.dim,
                 {
-                  top: Math.max(0, rect.y - CUTOUT_PADDING),
-                  left: rect.x + rect.width + CUTOUT_PADDING,
+                  top: Math.max(0, localRect.y - CUTOUT_PADDING),
+                  left: localRect.x + localRect.width + CUTOUT_PADDING,
                   right: 0,
-                  height: rect.height + CUTOUT_PADDING * 2,
+                  height: localRect.height + CUTOUT_PADDING * 2,
                 },
               ]}
             />
@@ -235,10 +274,10 @@ const Spotlight: React.FC<SpotlightProps> = ({
               style={[
                 styles.ring,
                 {
-                  top: rect.y - CUTOUT_PADDING,
-                  left: rect.x - CUTOUT_PADDING,
-                  width: rect.width + CUTOUT_PADDING * 2,
-                  height: rect.height + CUTOUT_PADDING * 2,
+                  top: localRect.y - CUTOUT_PADDING,
+                  left: localRect.x - CUTOUT_PADDING,
+                  width: localRect.width + CUTOUT_PADDING * 2,
+                  height: localRect.height + CUTOUT_PADDING * 2,
                   borderRadius: tokens.radius + 4,
                   borderColor: colors.accent,
                 },
@@ -310,15 +349,24 @@ const Spotlight: React.FC<SpotlightProps> = ({
             </View>
           </View>
         </View>
-      </View>
-    </Modal>
+    </View>
   );
 };
 
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-    root: { flex: 1 },
+    root: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      // Above everything in the screen's own tree (FABs, banners). The tab
+      // bar lives at the navigator level and still stacks above this.
+      zIndex: 1000,
+      elevation: 1000,
+    },
     dim: {
       position: "absolute",
       backgroundColor: "rgba(0,0,0,0.78)",
