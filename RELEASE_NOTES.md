@@ -1,5 +1,14 @@
 # BudgetArk Release Notes
 
+## v1.9.1 - Stability & Security Fixes (2026-08-14)
+
+**OTA-shippable.** Pure JS + lockfile changes; `runtimeVersion` stays 1.9.0, so existing 1.9.0 builds (including the Play closed test) can receive this over the air.
+
+- **Onboarding walkthrough iOS freeze fixed.** Chaining one spotlight Modal per tab raced iOS's present/dismiss cycle - the timer before navigating to the next tab could fire while the previous Modal was still dismissing, leaving a stuck transparent modal window that ate every touch (reported on iPhone 13, timing-dependent by iOS version). The spotlight now renders as an absolutely-positioned overlay in the screen's own tree - no UIKit presentation, nothing to race - with BackHandler parity on Android and synchronous guided-tour navigation replacing the timer.
+- **Storage failures at startup no longer reset onboarding or blank Profile.** A read/write failure (full disk, degraded flash tripping the 5s storage timeout, DecryptionError) was swallowed on three paths: startup treated a failed user read as a fresh install and re-ran onboarding every launch, a failed onboarding save silently "succeeded" until next launch, and one bad read out of five left Profile on "Loading profile..." forever. Startup and Profile now show a retry screen, onboarding alerts with Try Again / Continue Anyway, and Profile's secondary reads degrade to defaults instead of failing the whole load.
+- **Dependency security updates** (lockfile-only, all within existing semver ranges). App tree: nanoid 3.3.18 (GHSA-2v37-7h3g-55p8, infinite-loop fix incl. the React Native async variant - the only bump that ships in the JS bundle; the trigger is unreachable via react-navigation), postcss 8.5.26, shell-quote 1.10.0. Worker tree: wrangler 4.123.0, pulling patched sharp 0.35.2 (libvips CVEs), undici 7.29.0, and miniflare - `worker/quotes-proxy` now audits at 0 vulnerabilities. Remaining root-audit findings are the Expo/metro chain, addressable only by a deliberate SDK upgrade.
+- **Tooling (dev-only):** demo-data generator for App Store screenshots.
+
 ## v1.9.0 - Bank Connections (2026-07-11)
 
 **NOT OTA-shippable.** New native dependencies - `react-native-webview` (Teller Connect), `expo-iap` (Tip Jar), `react-native-quick-crypto` (native crypto), `expo-notifications` (Tracking Reminders), `expo-image-picker` + `expo-image-manipulator` (receipt photos) - bump `runtimeVersion` 1.4.14 → 1.9.0; both platforms need a new dev-client/EAS build, and existing runtimes never see this over the air. Also carries the Expo SDK 57 / RN 0.86 / TS 6.0 upgrade. No server/Worker changes: everything is device-to-provider by design.

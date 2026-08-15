@@ -7,6 +7,16 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.9.1",
+    title: "Stability & Security Fixes",
+    releasedAt: "2026-08-14",
+    highlights: [
+      "Fixed the welcome walkthrough freezing the app on iPhone. Moving from tab to tab during the guided tour could leave an invisible layer stuck over the screen that swallowed every tap, forcing you to close and reopen the app. The tour was rebuilt so that layer simply no longer exists - steps now advance instantly, and the Android back button behaves the same as before.",
+      "BudgetArk now handles a struggling phone honestly. If storage misbehaved at launch (a full disk, or a device slow to wake), the app could wrongly conclude it was freshly installed and re-run the welcome setup every single launch, or leave the Profile tab on 'Loading profile...' forever. Your data was never gone - the app just couldn't reach it in that moment. Now it says so: a clear retry screen at startup, a Try Again option if saving your setup fails, and the Profile tab loads what it can instead of showing nothing.",
+      "Under-the-hood security updates to several of the third-party building blocks the app is built with. None of them were practically exploitable inside BudgetArk, but staying current is part of keeping the promise that your data is safe here.",
+    ],
+  },
+  {
     version: "1.9.0",
     title: "Bank Connections",
     releasedAt: "2026-07-11",
