@@ -38,6 +38,7 @@ import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import {
+  AssetAccount,
   Debt,
   DebtMilestoneKey,
   DebtMilestonePlan,
@@ -80,6 +81,8 @@ import {
 } from "../storage/cardKeepAliveDismissalStorage";
 import { rescheduleCardKeepAliveReminders } from "../notifications/cardKeepAliveReminders";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { getAssetAccounts } from "../storage/assetAccountStorage";
+import { getEmergencyFundSource } from "../utils/emergencyFund";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
@@ -229,6 +232,10 @@ const DebtTrackerScreen: React.FC = () => {
   const [milestonePlan, setMilestonePlan] = useState<DebtMilestonePlan | null>(null);
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const [savingsReserve, setSavingsReserve] = useState(0);
+  // Live asset accounts, for the EF-designated-accounts resolution: when any
+  // savings account is flagged as the emergency fund, Keel/Deck progress
+  // tracks the flagged accounts' combined balance instead of Savings entries.
+  const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
   const [retirementInvestingMonthly, setRetirementInvestingMonthly] = useState(0);
   const [monthlyEssentialsEstimate, setMonthlyEssentialsEstimate] = useState(3000);
   const [expandedMilestones, setExpandedMilestones] = useState<
@@ -341,6 +348,7 @@ const DebtTrackerScreen: React.FC = () => {
             storedGoals,
             shouldOpenArkSetup,
             storedKeepAliveDismissals,
+            storedAssetAccounts,
           ] = await Promise.all([
             getDebts(),
             getPayments(),
@@ -351,6 +359,7 @@ const DebtTrackerScreen: React.FC = () => {
             getSavingsGoals(),
             consumeArkSetupPromptRequest(),
             getCardKeepAliveDismissals(),
+            getAssetAccounts(),
           ]);
           if (cancelled) return;
           // Filter out any corrupted entries from earlier sessions
@@ -387,6 +396,7 @@ const DebtTrackerScreen: React.FC = () => {
             setStrategy(savedStrategy);
           }
           setSavingsGoals(storedGoals);
+          setAssetAccounts(storedAssetAccounts);
 
           // Emergency-fund / keel reserve. Only the "Savings" category
           // counts here - Retirement and Investing flow into the
@@ -536,17 +546,27 @@ const DebtTrackerScreen: React.FC = () => {
     0
   );
 
+  // EF-designated savings accounts (Bridge account editor). When any exist,
+  // Keel and Deck track the flagged accounts' combined balance - the same
+  // value the Bridge/Budget emergency-fund cards show - instead of the
+  // Savings-entry reserve, and the manual "Set Savings" editor is hidden.
+  const efSource = React.useMemo(
+    () => getEmergencyFundSource(assetAccounts),
+    [assetAccounts]
+  );
+  const effectiveReserve = efSource.linked ? efSource.linkedAmount : savingsReserve;
+
   const computedMilestones = React.useMemo<ComputedMilestone[]>(() => {
     if (!milestonePlan) return [];
 
     return milestonePlan.steps.map((step) => {
       if (step.key === "keel") {
         const target = step.targetAmount || 1200;
-        const progress = target > 0 ? Math.min(savingsReserve / target, 1) : 0;
+        const progress = target > 0 ? Math.min(effectiveReserve / target, 1) : 0;
         return {
           ...step,
           progress,
-          metricLabel: `${formatCurrency(savingsReserve)} / ${formatCurrency(target)}`,
+          metricLabel: `${formatCurrency(effectiveReserve)} / ${formatCurrency(target)}`,
           nextAction: "Set aside your first cushion target before pushing harder elsewhere.",
         };
       }
@@ -566,11 +586,11 @@ const DebtTrackerScreen: React.FC = () => {
 
       if (step.key === "deck") {
         const target = step.targetAmount || monthlyEssentialsEstimate * 3;
-        const progress = target > 0 ? Math.min(savingsReserve / target, 1) : 0;
+        const progress = target > 0 ? Math.min(effectiveReserve / target, 1) : 0;
         return {
           ...step,
           progress,
-          metricLabel: `${formatCurrency(savingsReserve)} / ${formatCurrency(target)}`,
+          metricLabel: `${formatCurrency(effectiveReserve)} / ${formatCurrency(target)}`,
           nextAction: "Grow your reserves toward 3-6 months of essentials for stability.",
         };
       }
@@ -635,6 +655,7 @@ const DebtTrackerScreen: React.FC = () => {
       };
     });
   }, [
+    effectiveReserve,
     formatCurrency,
     milestonePlan,
     monthlyEssentialsEstimate,
@@ -642,7 +663,6 @@ const DebtTrackerScreen: React.FC = () => {
     nonMortgageRemaining,
     retirementInvestingMonthly,
     savingsGoals,
-    savingsReserve,
     mortgageOriginal,
     mortgageRemaining,
   ]);
@@ -662,7 +682,7 @@ const DebtTrackerScreen: React.FC = () => {
     : 0;
   const allMilestonesCompleted =
     computedMilestones.length > 0 && computedMilestones.every((step) => step.isCompleted);
-  const runwayMonths = monthlyEssentialsEstimate > 0 ? savingsReserve / monthlyEssentialsEstimate : 0;
+  const runwayMonths = monthlyEssentialsEstimate > 0 ? effectiveReserve / monthlyEssentialsEstimate : 0;
   const activeSavingsGoal = React.useMemo(() => {
     const openGoals = savingsGoals.filter((goal) => goal.currentAmount < goal.targetAmount);
     if (openGoals.length === 0) return null;
@@ -1073,6 +1093,10 @@ const DebtTrackerScreen: React.FC = () => {
 
   const handleSetSavingsReserve = useCallback(
     async (targetAmount: number) => {
+      // Linked emergency fund: the milestones track the designated accounts'
+      // balances, so logging a Savings-entry correction wouldn't move them -
+      // the editor is hidden in that mode; this guard keeps the invariant.
+      if (efSource.linked) return;
       if (!Number.isFinite(targetAmount) || targetAmount < 0) return;
       const delta = targetAmount - savingsReserve;
       if (delta === 0) { setSavingsDraft(""); return; }
@@ -1093,7 +1117,7 @@ const DebtTrackerScreen: React.FC = () => {
       setSavingsDraft("");
       void notifyAchievementCheck();
     },
-    [notifyAchievementCheck, savingsReserve]
+    [efSource.linked, notifyAchievementCheck, savingsReserve]
   );
 
   /** Sort debts based on payoff strategy.
@@ -1781,7 +1805,26 @@ const DebtTrackerScreen: React.FC = () => {
                         </View>
                       </View>
                     ) : null}
-                    {(step.key === "keel" || step.key === "deck") && !step.isCompleted ? (
+                    {/* Linked emergency fund: the reserve IS the designated
+                        accounts' combined balance, so the manual editor
+                        (which logs Savings budget entries) would no longer
+                        move these milestones - point at the Bridge instead. */}
+                    {(step.key === "keel" || step.key === "deck") &&
+                    !step.isCompleted &&
+                    efSource.linked ? (
+                      <Text style={[styles.msPayoffMetricLabel, { marginBottom: 4 }]}>
+                        🛡️ Tracked from your{" "}
+                        {efSource.accounts.length === 1
+                          ? "designated emergency-fund savings account"
+                          : `${efSource.accounts.length} designated emergency-fund savings accounts`}{" "}
+                        ({formatCurrency(effectiveReserve)}). Update those
+                        balances on the Bridge - bank syncing keeps them
+                        current automatically.
+                      </Text>
+                    ) : null}
+                    {(step.key === "keel" || step.key === "deck") &&
+                    !step.isCompleted &&
+                    !efSource.linked ? (
                       <View style={styles.msSavingsLogSection}>
                         <Text style={styles.msSavingsLogLabel}>Set Savings</Text>
                         <Text style={[styles.msPayoffMetricLabel, { marginBottom: 4 }]}>
