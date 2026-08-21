@@ -669,6 +669,22 @@ describe("isAssetAccountItem", () => {
       })
     ).toBe(false);
   });
+
+  it("accepts a boolean isEmergencyFund and rejects truthy non-booleans", () => {
+    const valid = {
+      id: "a1",
+      name: "HYSA",
+      category: "savings",
+      balance: 100,
+      createdAt: "2026-06-01",
+    };
+    expect(isAssetAccountItem(valid)).toBe(true);
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: true })).toBe(true);
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: false })).toBe(true);
+    // A smuggled truthy value would behave like `true` downstream.
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: "yes" })).toBe(false);
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: 1 })).toBe(false);
+  });
 });
 
 describe("isHoldingItem", () => {

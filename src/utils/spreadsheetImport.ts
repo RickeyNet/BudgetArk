@@ -760,12 +760,19 @@ const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<strin
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Emergency-fund designation. Must round-trip (see ASSET_ACCOUNT_COLUMNS):
+  // dropping it would silently flip the fund back to manual goal tracking.
+  // Same truthy-cell parsing as Recurring; stored as `true`/absent, never
+  // `false`, matching how the Bridge account editor writes it.
+  const isEmergencyFund =
+    parseBoolean(get(row, "EmergencyFund", "Emergency Fund")) || undefined;
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return okRow({
     id,
     name,
     category,
     balance,
+    ...(isEmergencyFund ? { isEmergencyFund } : {}),
     createdAt,
     updatedAt: updatedAtIso || createdAt,
   });

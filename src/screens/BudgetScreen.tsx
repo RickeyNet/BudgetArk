@@ -113,6 +113,7 @@ import {
 } from "../utils/recurrence";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
+import { getEmergencyFundSource } from "../utils/emergencyFund";
 import { totalsByBucket } from "../utils/budgetBucketMath";
 import { summarizePaychecks } from "../utils/paycheckMath";
 import CashFlowCard from "../components/CashFlowCard";
@@ -596,23 +597,41 @@ const BudgetScreen: React.FC = () => {
     [entries]
   );
 
+  // Savings accounts designated as the emergency fund (Bridge account
+  // editor). When any exist the EF value is their combined balance and
+  // manual contributions are disabled - same resolution as BridgeScreen.
+  const efSource = useMemo(() => getEmergencyFundSource(assetAccounts), [assetAccounts]);
+
   const emergencyFundGoal = useMemo(() => {
     const explicit = savingsGoals.find((g) => g.category === "emergency_fund");
-    if (explicit) return explicit;
     // Fall back to Keel milestone data so the emergency fund appears automatically
-    if (keelTarget > 0 || savingsReserve > 0) {
-      return {
-        id: "__keel_ef__",
+    const base =
+      explicit ??
+      (keelTarget > 0 || savingsReserve > 0
+        ? ({
+            id: "__keel_ef__",
+            name: "Emergency Fund",
+            category: "emergency_fund" as const,
+            targetAmount: keelTarget,
+            currentAmount: savingsReserve,
+            createdAt: "",
+            updatedAt: "",
+          } satisfies SavingsGoal)
+        : null);
+    if (!efSource.linked) return base;
+    // Linked mode: the designated accounts' total is the current amount.
+    return {
+      ...(base ?? {
+        id: "__linked_ef__",
         name: "Emergency Fund",
         category: "emergency_fund" as const,
         targetAmount: keelTarget,
-        currentAmount: savingsReserve,
         createdAt: "",
         updatedAt: "",
-      } satisfies SavingsGoal;
-    }
-    return null;
-  }, [savingsGoals, keelTarget, savingsReserve]);
+      }),
+      currentAmount: efSource.linkedAmount,
+    } satisfies SavingsGoal;
+  }, [efSource, savingsGoals, keelTarget, savingsReserve]);
 
   const limitByCategory = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1438,6 +1457,13 @@ const BudgetScreen: React.FC = () => {
   }, [entries, refreshMonthlyReview, reviewPreviewData, notifyAchievementCheck]);
 
   const handleEfContribution = useCallback(async () => {
+    // Linked mode (EF-designated savings accounts): the goal's stored amount
+    // is ignored, so a manual contribution would silently vanish - refuse it.
+    if (efSource.linked) {
+      setShowEfContribModal(false);
+      setEfContribAmount("");
+      return;
+    }
     // Shared pure update (utils/savingsGoals) - BridgeScreen runs the same
     // logic; only the refresh side effects below differ per screen.
     const updatedGoals = applyEmergencyFundContribution(
@@ -1453,7 +1479,7 @@ const BudgetScreen: React.FC = () => {
     setShowEfContribModal(false);
     setEfContribAmount("");
     void notifyAchievementCheck();
-  }, [efContribAmount, keelTarget, notifyAchievementCheck, refreshNetWorthSnapshots, savingsGoals]);
+  }, [efContribAmount, efSource.linked, keelTarget, notifyAchievementCheck, refreshNetWorthSnapshots, savingsGoals]);
 
   const bucketOverrideDefault = bucketOverrideCategory
     ? getDefaultBucketForCategory(bucketOverrideCategory, customCategories) ??
@@ -2412,6 +2438,11 @@ const BudgetScreen: React.FC = () => {
               Current balance: {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
               {emergencyFundGoal?.targetAmount
                 ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                : ""}
+              {efSource.linked
+                ? ` • tracked from ${efSource.accounts.length} designated savings ${
+                    efSource.accounts.length === 1 ? "account" : "accounts"
+                  }`
                 : ""}
             </Text>
 

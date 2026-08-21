@@ -94,6 +94,12 @@ const holdingsFixtures = [
   // Fractional shares + no cost basis: both must round-trip through the sheet.
   { id: "h2", symbol: "VTI", shares: 0.25, createdAt: "2026-05-03T00:00:00.000Z", updatedAt: "2026-05-03T00:00:00.000Z" },
 ];
+const assetAccountFixtures = [
+  // EF-designated savings account: the EmergencyFund flag must round-trip -
+  // stripping it would silently flip the fund back to manual goal tracking.
+  { id: "a1", name: "HYSA", category: "savings", balance: 3200.5, isEmergencyFund: true, createdAt: "2026-03-01T00:00:00.000Z", updatedAt: "2026-03-02T00:00:00.000Z" },
+  { id: "a2", name: "Checking", category: "checking", balance: 800, createdAt: "2026-03-01T00:00:00.000Z", updatedAt: "2026-03-01T00:00:00.000Z" },
+];
 
 jest.mock("../../storage/debtStorage", () => ({
   getDebts: jest.fn(async () => [debtRef]),
@@ -104,7 +110,7 @@ jest.mock("../../storage/budgetStorage", () => ({
   getCategoryBudgetLimits: jest.fn(async () => []),
 }));
 jest.mock("../../storage/savingsGoalStorage", () => ({ getSavingsGoals: jest.fn(async () => []) }));
-jest.mock("../../storage/assetAccountStorage", () => ({ getAssetAccounts: jest.fn(async () => []) }));
+jest.mock("../../storage/assetAccountStorage", () => ({ getAssetAccounts: jest.fn(async () => assetAccountsRef) }));
 jest.mock("../../storage/holdingsStorage", () => ({ getHoldings: jest.fn(async () => holdingsRef) }));
 jest.mock("../../storage/businessStorage", () => ({ getBusinesses: jest.fn(async () => businessesRef) }));
 jest.mock("../../storage/personStorage", () => ({ getPeople: jest.fn(async () => peopleRef) }));
@@ -128,6 +134,7 @@ jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 const debtRef = debtFixture;
 const entriesRef = entryFixtures;
 const holdingsRef = holdingsFixtures;
+const assetAccountsRef = assetAccountFixtures;
 const businessesRef = businessFixtures;
 const peopleRef = peopleFixtures;
 
@@ -235,6 +242,20 @@ describe("xlsx round-trip", () => {
     expect(holdingsById.h1).toMatchObject({ symbol: "AAPL", shares: 10, costBasis: 1500 });
     expect(holdingsById.h2).toMatchObject({ symbol: "VTI", shares: 0.25 });
     expect(holdingsById.h2.costBasis).toBeUndefined();
+
+    // Asset accounts survive; the emergency-fund designation round-trips and
+    // undesignated accounts never grow the flag.
+    const accountsById = Object.fromEntries(
+      payload.assetAccounts.map((a: any) => [a.id, a])
+    );
+    expect(Object.keys(accountsById).sort()).toEqual(["a1", "a2"]);
+    expect(accountsById.a1).toMatchObject({
+      name: "HYSA",
+      category: "savings",
+      balance: 3200.5,
+      isEmergencyFund: true,
+    });
+    expect(accountsById.a2.isEmergencyFund).toBeUndefined();
 
     // No data row was rejected on the way back in.
     expect(result?.skippedRows).toBe(0);

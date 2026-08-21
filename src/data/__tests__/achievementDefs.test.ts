@@ -15,6 +15,7 @@ const ctx = (over: Partial<AchievementContext> = {}): AchievementContext =>
     payments: [],
     savingsGoals: [],
     budgetEntries: [],
+    assetAccounts: [],
     milestonePlan: { steps: [], updatedAt: "2020-01-01T00:00:00.000Z" } as any,
     netWorthSnapshots: [],
     isPaired: false,
@@ -128,6 +129,29 @@ describe("savings & net-worth badges", () => {
     expect(def("galley_stocked").check(viaGoal)).toBe(true);
     expect(def("galley_stocked").check(viaEntries)).toBe(true); // 1100 total
     expect(def("galley_stocked").check(ctx())).toBe(false);
+  });
+
+  it("galley_stocked reads EF-designated accounts over the goal amount", () => {
+    const linked = ctx({
+      savingsGoals: [{ category: "emergency_fund", currentAmount: 0 } as any],
+      assetAccounts: [
+        { category: "savings", balance: 1500, isEmergencyFund: true } as any,
+      ],
+    });
+    const linkedButLow = ctx({
+      // Goal says $5k, but the designated account IS the fund and holds $200.
+      savingsGoals: [{ category: "emergency_fund", currentAmount: 5000 } as any],
+      assetAccounts: [
+        { category: "savings", balance: 200, isEmergencyFund: true } as any,
+      ],
+    });
+    expect(def("galley_stocked").check(linked)).toBe(true);
+    expect(def("galley_stocked").check(linkedButLow)).toBe(false);
+    expect(def("galley_stocked").progress!(linked)).toEqual({
+      current: 1500,
+      target: 1000,
+      isCurrency: true,
+    });
   });
 
   it("sextant_sharp unlocks when any goal hits its target", () => {

@@ -44,6 +44,7 @@ import {
   SavingsGoal,
 } from "../types";
 import { getRecurrenceInterval } from "./recurrence";
+import { getEmergencyFundSource } from "./emergencyFund";
 
 export type SpreadsheetFormat = "csv" | "xlsx";
 
@@ -60,9 +61,13 @@ export type SpreadsheetFormat = "csv" | "xlsx";
  * v5: Budget Entries gained PersonId (round-trip) + Person (readable name,
  * export-only) - who the spending is assigned to; new People sheet in xlsx
  * workbooks (same shape as Businesses).
+ * v6: Asset Accounts gained EmergencyFund ("yes"/blank, round-trip) - marks
+ * savings accounts designated as the emergency fund. Stripping it on a
+ * backup/restore cycle would silently flip the fund back to manual goal
+ * tracking, so it must round-trip.
  * Older files still import - the new columns are simply absent.
  */
-export const SPREADSHEET_SCHEMA_VERSION = 5;
+export const SPREADSHEET_SCHEMA_VERSION = 6;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -197,6 +202,10 @@ const ASSET_ACCOUNT_COLUMNS = [
   "Name",
   "Category",
   "Balance",
+  // "yes" marks a savings account designated as (part of) the emergency
+  // fund. Must round-trip: dropping it on a backup/restore cycle would
+  // silently flip the emergency fund back to manual goal tracking.
+  "EmergencyFund",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
@@ -364,6 +373,7 @@ const assetAccountToRow = (account: AssetAccount) => ({
   Name: account.name,
   Category: account.category,
   Balance: account.balance,
+  EmergencyFund: account.isEmergencyFund === true ? "yes" : "",
   CreatedAt: account.createdAt,
   UpdatedAt: account.updatedAt ?? "",
 });
@@ -1038,8 +1048,12 @@ export const exportSpreadsheet = async (
   const hasExplicitEmergencyFund = savingsGoals.some(
     (goal) => goal.category === "emergency_fund"
   );
-  if (!hasExplicitEmergencyFund && milestonePlan) {
-    const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
+  // Savings accounts designated as the emergency fund (their rows carry
+  // EmergencyFund="yes" on the Asset Accounts sheet). When any exist, the
+  // app displays their combined balance as the fund - mirror that here.
+  const efSource = getEmergencyFundSource(assetAccounts);
+  if (!hasExplicitEmergencyFund && (milestonePlan || efSource.linked)) {
+    const keelStep = milestonePlan?.steps.find((step) => step.key === "keel");
     const keelTarget = keelStep?.targetAmount ?? 0;
     // Only the "Savings" category counts toward the derived emergency fund.
     // Retirement and Investing aren't liquid emergency money - they feed
@@ -1051,7 +1065,11 @@ export const exportSpreadsheet = async (
           entry.type === "expense" && entry.category === "Savings"
       )
       .reduce((sum, entry) => sum + entry.amount, 0);
-    if (keelTarget > 0 || savingsReserve > 0) {
+    // Linked mode wins over the entry-derived reserve, matching the app UI.
+    const currentAmount = efSource.linked
+      ? efSource.linkedAmount
+      : savingsReserve;
+    if (keelTarget > 0 || currentAmount > 0) {
       goalsForSheet.push({
         id: DERIVED_EMERGENCY_FUND_ID,
         name: "Emergency Fund",
@@ -1061,7 +1079,7 @@ export const exportSpreadsheet = async (
         // logged correction entries that exceed their tracked deposits;
         // showing a negative current amount would look like a bug, and
         // import-side validators would reject the row anyway.
-        currentAmount: Math.max(0, savingsReserve),
+        currentAmount: Math.max(0, currentAmount),
         createdAt: "",
         updatedAt: "",
       });

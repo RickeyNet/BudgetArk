@@ -508,6 +508,17 @@ export interface AssetAccount {
   name: string;
   category: AssetAccountCategory;
   balance: number;
+  /**
+   * Marks a savings account as (part of) the user's emergency fund. When any
+   * live account carries this flag, the emergency-fund value everywhere
+   * (Bridge/Budget cards, EF plan, net worth, achievements) is the sum of the
+   * flagged accounts' balances instead of the emergency_fund SavingsGoal's
+   * currentAmount - bank connections that push balances into these accounts
+   * keep the fund current automatically. Resolution lives in
+   * utils/savingsGoals.getEmergencyFundSource; totals that already sum
+   * account balances must NOT add the EF on top in that mode.
+   */
+  isEmergencyFund?: boolean;
   createdAt: string;
   updatedAt: string;
   /** Tombstone marker - see Debt.deletedAt. */

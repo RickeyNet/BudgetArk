@@ -83,6 +83,8 @@ import {
 } from "../utils/exchangeCalculator";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { getAssetAccounts } from "../storage/assetAccountStorage";
+import { resolveEmergencyFundAmount } from "../utils/emergencyFund";
 import { getDebts } from "../storage/debtStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
@@ -91,6 +93,7 @@ import type { MonthlyCashFlow } from "../utils/purchasePlanner";
 import PurchasePlannerCard from "../components/PurchasePlannerCard";
 import TaxCalculatorCard from "../components/TaxCalculatorCard";
 import type {
+  AssetAccount,
   ChapterId,
   CustomCategory,
   Debt,
@@ -419,6 +422,9 @@ const ChartsScreen: React.FC = () => {
   const [efExpenseOverride, setEfExpenseOverride] = useState("");
   const [efMonthlySavings, setEfMonthlySavings] = useState(500);
   const [currentEfAmount, setCurrentEfAmount] = useState(0);
+  // Kept only to re-resolve the EF amount when purchase-plan mutations hand
+  // back a fresh goals array (EF-designated accounts win over the goal).
+  const [efAccounts, setEfAccounts] = useState<AssetAccount[]>([]);
   const [efDataLoaded, setEfDataLoaded] = useState(false);
 
   /* "What If I Stopped Spending on X" state */
@@ -883,21 +889,25 @@ const ChartsScreen: React.FC = () => {
     useCallback(() => {
       let cancelled = false;
       const loadEfData = async () => {
-        const [entries, goals, debts, customCats, storedMilestones] =
+        const [entries, goals, debts, customCats, storedMilestones, accounts] =
           await Promise.all([
             getBudgetEntries(),
             getSavingsGoals(),
             getDebts(),
             getCustomCategories(),
             getDebtMilestonePlan(),
+            getAssetAccounts(),
           ]);
         if (cancelled) return;
 
         const avg = calcAvgMonthlyExpenses(entries);
         setAvgExpenses(avg);
 
-        const efGoal = goals.find((g) => g.category === "emergency_fund");
-        setCurrentEfAmount(efGoal?.currentAmount ?? 0);
+        // EF-designated savings accounts (Bridge account editor) take
+        // precedence over the goal's stored amount - same resolution as the
+        // Bridge/Budget cards.
+        setEfAccounts(accounts);
+        setCurrentEfAmount(resolveEmergencyFundAmount(goals, accounts));
         setEfDataLoaded(true);
 
         setRefiDebts(debts);
@@ -1058,11 +1068,13 @@ const ChartsScreen: React.FC = () => {
   // The purchase card mutates savings goals (create/contribute/delete);
   // mirror the fresh array into every local consumer so the EF calculator
   // never shows a stale balance next to the plan list.
-  const handlePurchaseGoalsChanged = useCallback((goals: SavingsGoal[]) => {
-    setSavingsGoalsAll(goals);
-    const efGoal = goals.find((g) => g.category === "emergency_fund");
-    setCurrentEfAmount(efGoal?.currentAmount ?? 0);
-  }, []);
+  const handlePurchaseGoalsChanged = useCallback(
+    (goals: SavingsGoal[]) => {
+      setSavingsGoalsAll(goals);
+      setCurrentEfAmount(resolveEmergencyFundAmount(goals, efAccounts));
+    },
+    [efAccounts]
+  );
 
   const renderRefiSlider = (key: RefiKey, value: number) => {
     const cfg = REFI_SLIDERS[key];

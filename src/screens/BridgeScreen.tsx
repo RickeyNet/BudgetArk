@@ -104,6 +104,7 @@ import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
+import { getEmergencyFundSource } from "../utils/emergencyFund";
 import { isEntryActiveInMonth } from "../utils/recurrence";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
@@ -203,6 +204,10 @@ const BridgeScreen: React.FC = () => {
   const [assetName, setAssetName] = useState("");
   const [assetBalance, setAssetBalance] = useState("");
   const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("checking");
+  // "This savings account is (part of) my emergency fund" toggle in the
+  // account editor. Only meaningful for the savings category - saveAsset
+  // drops it when the account is saved under any other category.
+  const [assetIsEmergencyFund, setAssetIsEmergencyFund] = useState(false);
   // Editable ticker rows shown in the modal when the account is an Investment
   // (broker). Holds the broker's holdings while editing; reconciled on save.
   const [brokerTickers, setBrokerTickers] = useState<TickerDraft[]>([]);
@@ -409,22 +414,41 @@ const BridgeScreen: React.FC = () => {
     [entries]
   );
 
+  // Savings accounts designated as the emergency fund. When any exist, the
+  // EF value is their combined balance (kept current by bank-connection
+  // balance pushes) and manual EF contributions are disabled.
+  const efSource = useMemo(() => getEmergencyFundSource(assetAccounts), [assetAccounts]);
+
   const emergencyFundGoal = useMemo(() => {
     const explicit = savingsGoals.find((goal) => goal.category === "emergency_fund");
-    if (explicit) return explicit;
-    if (keelTarget > 0 || savingsReserve > 0) {
-      return {
-        id: "__keel_ef__",
+    const base =
+      explicit ??
+      (keelTarget > 0 || savingsReserve > 0
+        ? ({
+            id: "__keel_ef__",
+            name: "Emergency Fund",
+            category: "emergency_fund" as const,
+            targetAmount: keelTarget,
+            currentAmount: savingsReserve,
+            createdAt: "",
+            updatedAt: "",
+          } satisfies SavingsGoal)
+        : null);
+    if (!efSource.linked) return base;
+    // Linked mode: overlay the designated accounts' total as the current
+    // amount (keeping any explicit goal's target for the "x / y" display).
+    return {
+      ...(base ?? {
+        id: "__linked_ef__",
         name: "Emergency Fund",
         category: "emergency_fund" as const,
         targetAmount: keelTarget,
-        currentAmount: savingsReserve,
         createdAt: "",
         updatedAt: "",
-      } satisfies SavingsGoal;
-    }
-    return null;
-  }, [keelTarget, savingsGoals, savingsReserve]);
+      }),
+      currentAmount: efSource.linkedAmount,
+    } satisfies SavingsGoal;
+  }, [efSource, keelTarget, savingsGoals, savingsReserve]);
 
   // Convert holdings (quoted in their own currency - USD for US listings, the
   // pair's quote side for crypto) into the user's display currency, so they
@@ -581,9 +605,13 @@ const BridgeScreen: React.FC = () => {
   );
 
   // Investment accounts carry a 0 balance (value lives in their holdings), so
-  // add holdings value in explicitly to get the true tracked total.
+  // add holdings value in explicitly to get the true tracked total. A linked
+  // emergency fund is already inside totalAssetBalance (it IS designated
+  // accounts) - only a goal-tracked EF is added on top.
   const trackedAccountsTotal =
-    totalAssetBalance + holdingsValue + (emergencyFundGoal?.currentAmount ?? 0);
+    totalAssetBalance +
+    holdingsValue +
+    (efSource.linked ? 0 : emergencyFundGoal?.currentAmount ?? 0);
 
   /**
    * Per-category color palette for the asset donut + category headers.
@@ -682,6 +710,7 @@ const BridgeScreen: React.FC = () => {
     setAssetName("");
     setAssetBalance("");
     setAssetCategory("savings");
+    setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
     setShowAssetModal(true);
   }, []);
@@ -696,6 +725,7 @@ const BridgeScreen: React.FC = () => {
     setAssetName("");
     setAssetBalance("");
     setAssetCategory(category);
+    setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
     setShowAssetModal(true);
   }, []);
@@ -706,6 +736,7 @@ const BridgeScreen: React.FC = () => {
       setAssetName(account.name);
       setAssetBalance(String(account.balance));
       setAssetCategory(account.category);
+      setAssetIsEmergencyFund(account.isEmergencyFund === true);
       // Preload this broker's tickers for inline editing (Investment only).
       setBrokerTickers(
         holdings
@@ -744,6 +775,7 @@ const BridgeScreen: React.FC = () => {
     setAssetName("");
     setAssetBalance("");
     setAssetCategory("savings");
+    setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
   }, []);
 
@@ -818,15 +850,21 @@ const BridgeScreen: React.FC = () => {
     const now = new Date().toISOString();
     const accountId = editingAsset ? editingAsset.id : generateUUID();
 
+    // The emergency-fund designation only exists on savings accounts;
+    // `undefined` (not `false`) clears it so re-categorized accounts don't
+    // carry a stale flag through sync/export.
+    const isEmergencyFund =
+      assetCategory === "savings" && assetIsEmergencyFund ? true : undefined;
+
     const nextAccounts: AssetAccount[] = editingAsset
       ? assetAccounts.map((account) =>
           account.id === editingAsset.id
-            ? { ...account, name, balance, category: assetCategory, updatedAt: now }
+            ? { ...account, name, balance, category: assetCategory, isEmergencyFund, updatedAt: now }
             : account
         )
       : [
           ...assetAccounts,
-          { id: accountId, name, balance, category: assetCategory, createdAt: now, updatedAt: now },
+          { id: accountId, name, balance, category: assetCategory, isEmergencyFund, createdAt: now, updatedAt: now },
         ];
 
     setAssetAccounts(nextAccounts);
@@ -984,6 +1022,7 @@ const BridgeScreen: React.FC = () => {
     assetAccounts,
     assetBalance,
     assetCategory,
+    assetIsEmergencyFund,
     assetName,
     brokerTickers,
     closeAssetModal,
@@ -1108,6 +1147,11 @@ const BridgeScreen: React.FC = () => {
   );
 
   const handleEfContribution = useCallback(async () => {
+    // Linked mode: the fund's value comes from the designated accounts, so a
+    // manual goal contribution would be invisible (and double-counted later
+    // if the accounts are ever un-designated). The entry point is disabled
+    // in that mode; this guard keeps the invariant even if it regresses.
+    if (efSource.linked) return;
     // Shared pure update (utils/savingsGoals) - BudgetScreen runs the same
     // logic; only the refresh side effects below differ per screen.
     const updatedGoals = applyEmergencyFundContribution(
@@ -1123,7 +1167,7 @@ const BridgeScreen: React.FC = () => {
     setShowEfContribModal(false);
     setEfContribAmount("");
     void refreshAchievements();
-  }, [efContribAmount, keelTarget, refreshAchievements, refreshNetWorthSnapshots, savingsGoals]);
+  }, [efContribAmount, efSource.linked, keelTarget, refreshAchievements, refreshNetWorthSnapshots, savingsGoals]);
 
   /** "Later" on the keep-alive banner: mute that card for this month. */
   const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
@@ -1198,7 +1242,9 @@ const BridgeScreen: React.FC = () => {
                   <Text style={[styles.accountsSummaryMeta, { color: colors.textMuted }]}>
                     across {assetAccounts.length}{" "}
                     {assetAccounts.length === 1 ? "account" : "accounts"}
-                    {emergencyFundGoal ? " + Emergency Fund" : ""}
+                    {/* A linked EF is already inside the account balances -
+                        only a goal-tracked EF is an extra line item. */}
+                    {emergencyFundGoal && !efSource.linked ? " + Emergency Fund" : ""}
                   </Text>
                 </View>
               </View>
@@ -1250,6 +1296,10 @@ const BridgeScreen: React.FC = () => {
             {emergencyFundGoal ? (
               <TouchableOpacity
                 style={styles.accountRow}
+                // Linked mode: the value comes from the designated savings
+                // accounts (edit those instead), so manual contributions are
+                // disabled rather than silently ignored.
+                disabled={efSource.linked}
                 onPress={() => {
                   setEfContribAmount("");
                   setShowEfContribModal(true);
@@ -1262,9 +1312,17 @@ const BridgeScreen: React.FC = () => {
                 <View style={styles.accountRowLeft}>
                   <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
                   <Text style={styles.accountCategory}>
-                    {emergencyFundGoal.targetAmount > 0
-                      ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
-                      : "Savings Goal"}
+                    {efSource.linked
+                      ? `From ${efSource.accounts.length} savings ${
+                          efSource.accounts.length === 1 ? "account" : "accounts"
+                        }${
+                          emergencyFundGoal.targetAmount > 0
+                            ? ` • ${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                            : ""
+                        }`
+                      : emergencyFundGoal.targetAmount > 0
+                        ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                        : "Savings Goal"}
                   </Text>
                 </View>
                 <Text style={[styles.accountBalance, { color: colors.teal }]}>
@@ -1311,7 +1369,10 @@ const BridgeScreen: React.FC = () => {
                           activeOpacity={0.7}
                         >
                           <View style={styles.accountRowLeft}>
-                            <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
+                            <Text style={styles.accountName} numberOfLines={1}>
+                              {account.isEmergencyFund ? "🛡️ " : ""}
+                              {account.name}
+                            </Text>
                           </View>
                           <View style={styles.accountRowRight}>
                             <Text style={[styles.accountBalance, { color: colors.success }]}>
@@ -1704,6 +1765,39 @@ const BridgeScreen: React.FC = () => {
                 );
               })}
             </View>
+
+            {assetCategory === "savings" ? (
+              <TouchableOpacity
+                style={styles.efToggleRow}
+                onPress={() => setAssetIsEmergencyFund((prev) => !prev)}
+                activeOpacity={0.7}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: assetIsEmergencyFund }}
+                accessibilityLabel="This account is my emergency fund"
+              >
+                <View
+                  style={[
+                    styles.efToggle,
+                    assetIsEmergencyFund && {
+                      backgroundColor: colors.accent,
+                      borderColor: colors.accent,
+                    },
+                  ]}
+                >
+                  {assetIsEmergencyFund ? (
+                    <Text style={styles.efToggleCheck}>✓</Text>
+                  ) : null}
+                </View>
+                <View style={styles.efToggleTextWrap}>
+                  <Text style={styles.efToggleLabel}>🛡️ Emergency fund</Text>
+                  <Text style={styles.efToggleHint}>
+                    Count this balance as your Emergency Fund. With accounts
+                    designated, the fund tracks their combined balance (bank
+                    syncing keeps it current) instead of manual contributions.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
 
             {categorySupportsHoldings(assetCategory) ? (
               <View style={styles.tickerEditor}>
@@ -2353,6 +2447,41 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     assetCategoryChipText: {
       fontSize: scale(12),
       fontWeight: "600",
+    },
+    efToggleRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: tokens.gapSm + 2,
+      marginBottom: 8,
+    },
+    efToggle: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 1,
+    },
+    efToggleCheck: {
+      color: colors.white,
+      fontSize: scale(13),
+      fontWeight: "700",
+    },
+    efToggleTextWrap: {
+      flex: 1,
+    },
+    efToggleLabel: {
+      fontSize: scale(13),
+      fontWeight: "600",
+      color: colors.text,
+    },
+    efToggleHint: {
+      fontSize: scale(11),
+      color: colors.textMuted,
+      lineHeight: scale(15),
     },
     holdingsAsOf: {
       fontSize: scale(11),

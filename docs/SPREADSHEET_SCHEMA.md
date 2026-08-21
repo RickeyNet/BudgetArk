@@ -105,6 +105,7 @@ Imported limits land in the current month's limit set.
 | `Name`      | Yes      | Max 80 chars.                                                        |
 | `Category`  | Yes      | One of `savings`, `retirement`, `hsa`, `investment`, `other`.        |
 | `Balance`   | Yes      | Number, ≥ 0.                                                         |
+| `EmergencyFund` | No   | `yes` marks a savings account designated as (part of) your emergency fund; the app then tracks the fund from the designated accounts' combined balance. Round-trips. |
 | `CreatedAt` | No       | ISO timestamp; defaults to now.                                      |
 | `UpdatedAt` | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
 

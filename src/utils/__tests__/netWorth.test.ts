@@ -122,4 +122,31 @@ describe("calculateNetWorthTotals", () => {
     });
     expect(result.totalAssets).toBe(1000);
   });
+
+  it("skips the emergency-fund goal when EF-designated accounts exist", () => {
+    const result = calculateNetWorthTotals({
+      entries: [],
+      debts: [],
+      savingsGoals: [
+        { category: "emergency_fund", currentAmount: 900 } as any,
+        { category: "travel", currentAmount: 40 } as any,
+      ],
+      assetAccounts: [
+        { category: "savings", balance: 1200, isEmergencyFund: true } as any,
+      ],
+    });
+    // EF money lives in the designated account balance; the goal's stored
+    // amount must not be added on top. Other goals still count.
+    expect(result.totalAssets).toBe(1240);
+  });
+
+  it("still counts the emergency-fund goal when no account is designated", () => {
+    const result = calculateNetWorthTotals({
+      entries: [],
+      debts: [],
+      savingsGoals: [{ category: "emergency_fund", currentAmount: 900 } as any],
+      assetAccounts: [{ category: "savings", balance: 1200 } as any],
+    });
+    expect(result.totalAssets).toBe(2100);
+  });
 });

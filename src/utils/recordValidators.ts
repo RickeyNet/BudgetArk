@@ -499,6 +499,11 @@ export const isAssetAccountItem = (
     isSafeText(item.name, 80) &&
     typeof item.category === "string" &&
     VALID_ASSET_ACCOUNT_CATEGORIES.has(item.category) &&
+    // Optional emergency-fund designation; same strictness rationale as
+    // isPrivate on budget entries - a truthy non-boolean would silently
+    // behave like `true` downstream, so reject anything but a real boolean.
+    (item.isEmergencyFund === undefined ||
+      typeof item.isEmergencyFund === "boolean") &&
     isSafeNumber(item.balance, { min: 0 }) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&

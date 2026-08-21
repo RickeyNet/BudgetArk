@@ -15,6 +15,7 @@ import type {
   Achievement,
   AchievementTier,
   AchievementStats,
+  AssetAccount,
   CategoryBudgetLimit,
   Debt,
   Payment,
@@ -25,6 +26,7 @@ import type {
   NetWorthSnapshot,
 } from "../types";
 import { isEntryActiveInMonth } from "../utils/recurrence";
+import { resolveEmergencyFundAmount } from "../utils/emergencyFund";
 import { CHAPTERS } from "./lessonChapters";
 import { hasLessonBody } from "./lessonIndex";
 
@@ -33,6 +35,12 @@ export interface AchievementContext {
   payments: Payment[];
   savingsGoals: SavingsGoal[];
   budgetEntries: BudgetEntry[];
+  /**
+   * Live asset accounts - lets EF badges honor savings accounts designated
+   * as the emergency fund (AssetAccount.isEmergencyFund) over the goal's
+   * stored amount.
+   */
+  assetAccounts: AssetAccount[];
   milestonePlan: DebtMilestonePlan;
   netWorthSnapshots: NetWorthSnapshot[];
   isPaired: boolean;
@@ -243,8 +251,10 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     hint: "Save $1,000 for emergencies.",
     revocable: true,
     check: (ctx) => {
-      const ef = ctx.savingsGoals.find((g) => g.category === "emergency_fund");
-      if (ef && ef.currentAmount >= 1000) return true;
+      // Designated EF savings accounts win over the goal's stored amount
+      // (matches Bridge/Budget/Charts resolution).
+      const efAmount = resolveEmergencyFundAmount(ctx.savingsGoals, ctx.assetAccounts);
+      if (efAmount >= 1000) return true;
       // Fall back to "Savings" expense entries (matches Bridge screen logic).
       const savings = ctx.budgetEntries
         .filter((e) => e.type === "expense" && e.category === "Savings")
@@ -252,8 +262,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
       return savings >= 1000;
     },
     progress: (ctx) => {
-      const ef = ctx.savingsGoals.find((g) => g.category === "emergency_fund");
-      const efAmount = ef?.currentAmount ?? 0;
+      const efAmount = resolveEmergencyFundAmount(ctx.savingsGoals, ctx.assetAccounts);
       const savings = ctx.budgetEntries
         .filter((e) => e.type === "expense" && e.category === "Savings")
         .reduce((s, e) => s + e.amount, 0);

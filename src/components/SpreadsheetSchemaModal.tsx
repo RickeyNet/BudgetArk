@@ -125,6 +125,7 @@ const SHEETS: SheetSpec[] = [
       { name: "Name", required: true, notes: "Up to 80 characters." },
       { name: "Category", required: true, notes: "savings / retirement / hsa / investment / other." },
       { name: "Balance", required: true, notes: "Number, ≥ 0." },
+      { name: "EmergencyFund", required: false, notes: "yes marks a savings account designated as your emergency fund. Round-trips." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
     ],
   },
