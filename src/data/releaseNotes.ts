@@ -7,6 +7,17 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.9.2",
+    title: "Emergency Fund, Linked to Your Savings",
+    releasedAt: "2026-08-20",
+    highlights: [
+      "Your emergency fund can now live in your real savings accounts. When adding or editing a savings account on the Bridge, mark it as '🛡️ Emergency fund' and the fund's value becomes that account's balance - mark more than one and they add together. If the account is connected to your bank, every sync updates your emergency fund automatically, so the number is always real - no more logging contributions by hand.",
+      "The linked value follows you everywhere the emergency fund appears: the Bridge and Budget screens, the emergency fund planner on the Charts tab (your 3- and 6-month targets and time-to-goal), your net worth (counted exactly once, never doubled), the Galley Stocked achievement, and the Keel and Deck steps of Build Your Ark - including the months-of-runway estimate.",
+      "Manual contributions pause while accounts are designated, because the accounts ARE the fund: you update it by updating them, or by letting your bank connection do it for you. Change your mind and un-designate every account, and the fund returns to manual tracking right where you left it.",
+      "The designation is part of your data, like everything else: it syncs to your partner, rides your backups, and round-trips through spreadsheet exports in a new EmergencyFund column - so restoring a backup can never quietly switch your fund back to manual tracking. And as always, none of it leaves your phone.",
+    ],
+  },
+  {
     version: "1.9.1",
     title: "Stability & Security Fixes",
     releasedAt: "2026-08-14",

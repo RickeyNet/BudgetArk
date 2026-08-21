@@ -1,5 +1,15 @@
 # BudgetArk Release Notes
 
+## v1.9.2 - Emergency Fund, Linked to Your Savings (2026-08-20)
+
+**OTA-shippable.** Pure JS; `runtimeVersion` stays 1.9.0, so existing 1.9.0 builds receive this over the air.
+
+- **Designate savings accounts as the emergency fund.** New optional `isEmergencyFund` flag on `AssetAccount`, set via a checkbox in the Bridge account editor (savings category only; saving under any other category clears it). When at least one live account is flagged the fund is "linked": its value is the flagged accounts' combined balance, kept current by bank-connection balance pushes. Resolution lives in new pure helpers (`src/utils/emergencyFund.ts` - deliberately separate from `savingsGoals.ts` so pure consumers don't inherit its uuid dependency).
+- **One value everywhere.** Linked resolution feeds the Bridge EF row ("From N savings accounts", 🛡️ markers on flagged accounts), Budget's EF display, the Charts emergency-fund plan, the Galley Stocked badge (`AchievementContext` gains `assetAccounts`), and the Keel/Deck Ark milestones plus the deck runway estimate on the Debts tab. `calculateNetWorthTotals` skips the emergency_fund goal's stored amount in linked mode - the balances are already summed, so the fund is never double-counted (this also removes the Bridge tracked-total double count for linked users).
+- **Manual contributions disabled while linked.** The EF contribution entry points are gated with handler guards, and the Keel/Deck "Set Savings" editor is replaced by a pointer to the Bridge - a Savings-entry correction would no longer move the fund. Un-designating every account falls back to the goal's stored amount, untouched.
+- **Round-trips everywhere data goes.** The flag flows through partner sync and JSON backups (`isAssetAccountItem` accepts a strict optional boolean - truthy non-booleans are rejected fail-closed), and the Asset Accounts sheet gains an `EmergencyFund` column ("yes"/blank, spreadsheet schema v6, both schema docs updated) so a backup/restore cycle can't silently flip the fund back to manual tracking. Older app versions ignore the field; sync wire format unchanged.
+- **Tests:** new resolver suite plus cases for net worth, validators, achievements, and the spreadsheet round-trip - 1256 tests across 83 suites.
+
 ## v1.9.1 - Stability & Security Fixes (2026-08-14)
 
 **OTA-shippable.** Pure JS + lockfile changes; `runtimeVersion` stays 1.9.0, so existing 1.9.0 builds (including the Play closed test) can receive this over the air.
