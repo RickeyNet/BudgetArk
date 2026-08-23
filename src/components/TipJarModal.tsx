@@ -8,7 +8,10 @@
  *
  * Privacy: the entire payment flow runs inside Apple/Google's purchase
  * sheet. BudgetArk never sees payment details and persists nothing about
- * the transaction - the thank-you state below is in-memory only.
+ * the transaction on its own - the thank-you state below is in-memory
+ * only. The one exception is user-initiated: the thank-you view offers to
+ * log the tip as an ordinary budget entry (expense, Giving category), and
+ * only an explicit tap creates that record.
  *
  * Mount this component only while the sheet is open (the useIAP hook opens
  * a store connection on mount and closes it on unmount), e.g.:
@@ -30,6 +33,10 @@ import { ErrorCode, useIAP, type Product } from "expo-iap";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { triggerHaptic } from "../utils/haptics";
+import { generateUUID } from "../utils/uuid";
+import { roundToCents } from "../utils/money";
+import { addBudgetEntry } from "../storage/budgetStorage";
+import type { BudgetEntry } from "../types";
 
 interface TipJarModalProps {
   onClose: () => void;
@@ -71,6 +78,12 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
   const [fetchState, setFetchState] = useState<"loading" | "ready" | "failed">(
     "loading",
   );
+  /** SKU of the tip just completed - drives the "add to budget?" offer. */
+  const [lastTipSku, setLastTipSku] = useState<string | null>(null);
+  /** Lifecycle of the optional log-to-budget action in the thank-you view. */
+  const [logState, setLogState] = useState<
+    "offer" | "saving" | "logged" | "failed"
+  >("offer");
 
   const {
     connected,
@@ -91,6 +104,8 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
       setBusySku(null);
       if (purchase.purchaseState === "purchased") {
         setErrorText(null);
+        setLastTipSku(purchase.productId);
+        setLogState("offer");
         setThanked(true);
         triggerHaptic("success");
       } else {
@@ -179,6 +194,53 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
     if (!busySku) onClose();
   }, [busySku, onClose]);
 
+  /**
+   * The just-purchased tip joined back to its store product, for the
+   * "add to budget?" offer. `price` is optional in the store schema, so the
+   * offer only renders when a real positive number came back - otherwise
+   * the thank-you view simply omits it.
+   */
+  const lastTip = useMemo(() => {
+    if (!lastTipSku) return null;
+    const product = products.find((p: Product) => p.id === lastTipSku);
+    if (!product) return null;
+    const { price } = product;
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+      return null;
+    }
+    return { amount: roundToCents(price), displayPrice: product.displayPrice };
+  }, [lastTipSku, products]);
+
+  /**
+   * Log the tip as an ordinary budget entry: today's expense under the
+   * built-in "Giving" category, editable/deletable in Budget like any other
+   * entry. The store charges in the storefront's currency; the entry is
+   * recorded at that face value in the user's budget currency (the two match
+   * for virtually everyone, and the entry stays editable if not).
+   */
+  const handleLogTip = useCallback(async () => {
+    if (!lastTip || logState === "saving" || logState === "logged") return;
+    setLogState("saving");
+    try {
+      const now = new Date();
+      const entry: BudgetEntry = {
+        id: generateUUID(),
+        type: "expense",
+        category: "Giving",
+        amount: lastTip.amount,
+        description: "BudgetArk tip 💛",
+        date: now.toISOString().slice(0, 10),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      await addBudgetEntry(entry);
+      setLogState("logged");
+      triggerHaptic("success");
+    } catch {
+      setLogState("failed");
+    }
+  }, [lastTip, logState]);
+
   const loading = connected ? fetchState === "loading" : !connectTimedOut;
   const unavailable =
     !loading &&
@@ -201,8 +263,47 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
                   Your tip helps keep BudgetArk sailing. Nothing changed in
                   the app - it was already all yours.
                 </Text>
+
+                {lastTip ? (
+                  logState === "logged" ? (
+                    <Text style={styles.logDoneText}>
+                      🎁 Added to your budget under Giving. You can edit or
+                      remove it there like any other entry.
+                    </Text>
+                  ) : (
+                    <View style={styles.logSection}>
+                      <Text style={styles.logPrompt}>
+                        Want to count this tip in your budget? It'll be added
+                        as a {lastTip.displayPrice} expense today under the
+                        Giving category.
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.logButton}
+                        onPress={handleLogTip}
+                        disabled={logState === "saving"}
+                      >
+                        {logState === "saving" ? (
+                          <ActivityIndicator color={colors.white} />
+                        ) : (
+                          <Text style={styles.logButtonText}>
+                            Add to Budget · Giving 🎁
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                      {logState === "failed" ? (
+                        <Text style={styles.errorText}>
+                          Couldn't save the entry. You can try again, or add
+                          it later from the Budget tab.
+                        </Text>
+                      ) : null}
+                    </View>
+                  )
+                ) : null}
+
                 <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                  <Text style={styles.closeText}>Close</Text>
+                  <Text style={styles.closeText}>
+                    {lastTip && logState !== "logged" ? "No Thanks" : "Close"}
+                  </Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -356,6 +457,31 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
       fontSize: 13,
       color: colors.warning,
       textAlign: "center",
+    },
+    logSection: {
+      gap: 10,
+    },
+    logPrompt: {
+      fontSize: 14,
+      color: colors.textDim,
+      lineHeight: 20,
+    },
+    logButton: {
+      backgroundColor: colors.accent,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    logButtonText: {
+      color: colors.white,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    logDoneText: {
+      fontSize: 14,
+      color: colors.success,
+      textAlign: "center",
+      lineHeight: 20,
     },
     privacyText: {
       fontSize: 12,

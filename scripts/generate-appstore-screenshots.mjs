@@ -12,6 +12,7 @@ const OUTPUT_DIR = join(ROOT, "screenshots", "app-store");
 const TARGETS = [
   { key: "iphone-6.9", width: 1320, height: 2868, source: "iphone" },
   { key: "iphone-6.5", width: 1242, height: 2688, source: "iphone" },
+  { key: "iphone-6.1", width: 1179, height: 2556, source: "iphone" },
   { key: "ipad-13", width: 2064, height: 2752, source: "ipad" },
   { key: "ipad-12.9", width: 2048, height: 2732, source: "ipad" },
 ];
