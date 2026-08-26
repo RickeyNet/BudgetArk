@@ -15,6 +15,7 @@
  *   4. identity key already in the inbox     -> update (pending->posted, drift)
  *   5. posted tx with a NEW id matching a pending twin by fingerprint
  *      (same account, same amount, ±4 days)  -> update + ledger alias
+ *      (the twin may be in the inbox, or already decided in the ledger)
  *   6. otherwise                             -> new inbox item
  *
  * Node-testable: no storage, no fetch, injectable clock via `now`.
@@ -65,13 +66,36 @@ export const identityKeyFor = (
 /**
  * Fingerprint used to recognize a transaction across a provider-side id
  * change (SimpleFIN institutions sometimes reissue ids when a pending
- * transaction posts): account + exact amount + posted day.
+ * transaction posts): account + exact amount + the day it was seen.
+ *
+ * The day is the PENDING item's date (transacted), while the posted twin
+ * carries the settlement date - usually 1-3 days later - so consumers must
+ * never compare fingerprints for exact equality: match the account+amount
+ * prefix and allow PENDING_MATCH_WINDOW_DAYS on the day (see
+ * splitPendingFingerprint / findDecidedTwinKey). Stored verbatim in the
+ * ingest ledger, so the format is a persistence contract.
  */
 export const pendingFingerprintFor = (
   externalAccountId: string,
   amount: number,
   postedAtIso: string,
 ): string => `${externalAccountId}|${amount.toFixed(2)}|${postedAtIso.slice(0, 10)}`;
+
+/**
+ * Pull a stored fingerprint apart into its account+amount prefix and its
+ * day. Account ids may themselves contain "|", so the split is from the
+ * right. Returns null for anything that isn't a well-formed fingerprint
+ * (fail closed: a malformed ledger value simply never matches).
+ */
+export const splitPendingFingerprint = (
+  fingerprint: string,
+): { prefix: string; day: string } | null => {
+  const cut = fingerprint.lastIndexOf("|");
+  if (cut <= 0) return null;
+  const day = fingerprint.slice(cut + 1);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  return { prefix: fingerprint.slice(0, cut), day };
+};
 
 const daysBetween = (aIso: string, bIso: string): number =>
   Math.abs(Date.parse(aIso) - Date.parse(bIso)) / (24 * 3600_000);
@@ -140,11 +164,30 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     list.push(item);
     pendingInboxByAccount.set(item.externalAccountId, list);
   }
-  const ledgerFingerprints = new Map<string, string>();
+  // Ledger decisions made while pending, indexed by account+amount; the day
+  // is matched with slack below because posting shifts the date.
+  const decidedByPrefix = new Map<string, { day: string; key: string }[]>();
   for (const key of Object.keys(input.ledger)) {
     const fp = input.ledger[key].pendingFingerprint;
-    if (fp) ledgerFingerprints.set(fp, key);
+    if (!fp) continue;
+    const parts = splitPendingFingerprint(fp);
+    if (!parts) continue;
+    const list = decidedByPrefix.get(parts.prefix) ?? [];
+    list.push({ day: parts.day, key });
+    decidedByPrefix.set(parts.prefix, list);
   }
+  const findDecidedTwinKey = (fingerprint: string): string | null => {
+    const parts = splitPendingFingerprint(fingerprint);
+    if (!parts) return null;
+    const candidates = decidedByPrefix.get(parts.prefix) ?? [];
+    let best: { key: string; distance: number } | null = null;
+    for (const candidate of candidates) {
+      const distance = daysBetween(candidate.day, parts.day);
+      if (!(distance <= PENDING_MATCH_WINDOW_DAYS)) continue;
+      if (!best || distance < best.distance) best = { key: candidate.key, distance };
+    }
+    return best?.key ?? null;
+  };
 
   // Opposite-signed same-amount pairs across accounts in this batch suggest
   // an internal transfer.
@@ -229,8 +272,10 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
         tx.postedAt,
       );
 
-      // Twin already decided while pending -> alias the new id to that decision.
-      const decidedKey = ledgerFingerprints.get(fingerprint);
+      // Twin already decided while pending -> alias the new id to that
+      // decision. Day-tolerant: the decision was stamped with the pending
+      // (transacted) date and this tx carries the settlement date.
+      const decidedKey = findDecidedTwinKey(fingerprint);
       if (decidedKey) {
         plan.ledgerAliases[key] = {
           status: input.ledger[decidedKey].status,

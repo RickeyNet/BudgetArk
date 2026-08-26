@@ -1,13 +1,15 @@
 # BudgetArk Release Notes
 
-## v1.9.3 - Change Your Bank Account Choices Anytime (2026-08-25)
+## v1.9.3 - Change Your Bank Account Choices Anytime (2026-08-26)
 
 **OTA-shippable.** Pure JS; `runtimeVersion` stays 1.9.0, so existing 1.9.0 builds receive this over the air.
+
+- **Fixed: pending bank transactions resurfacing as duplicates once posted.** `planIngest` recognizes a posted transaction that came back under a new provider id by fingerprint (`account|amount|day`). The inbox-twin path already allowed `PENDING_MATCH_WINDOW_DAYS` (±4) on the day, but the ledger path - a twin already approved/dismissed while pending - required the exact day. The fingerprint is stamped with the pending item's transacted date while the posted twin carries the settlement date (typically 1-3 days later), so every decide-while-pending case missed, produced a fresh inbox item, and an always-approve merchant rule would turn it into a duplicate `BudgetEntry` without the user seeing it. Ledger fingerprints are now indexed by `account|amount` and matched on day within the same ±4-day window (nearest day wins; malformed stored values never match). Stored fingerprint format is unchanged, so existing ledger decisions keep working - no migration. Regression tests cover 1-4 day settlement, dismissals, out-of-window/different-amount, nearest-day tie-break, and `splitPendingFingerprint`. Known gap: a posted amount that differs from the pending one (e.g. a tip added) is still a genuinely new item.
 
 - **Bank-account link choices are editable after setup.** The Add Connection wizard's mapping step was one-shot: an account given "None" for balance updates on day one could never be mapped later, which also meant no Bridge account existed to designate as the emergency fund (v1.9.2). Each linked account row in the Connections manager (`ConnectionsModal`) now carries an "Import transactions" checkbox and a "Balance updates" picker - None / any existing cash-holding account / "+ New account" inline form (name + category; a Savings pick hints that it can be marked as the emergency fund from the Bridge).
 - **Immediate, sync-consistent effects.** New `updateLinkPreferences` in `connectionsService` applies a pure plan from `services/connections/linkPreferences.ts`: a newly chosen target is seeded with the link's last-known provider balance (clamped at 0, same as the sync path) so the Bridge - and a linked emergency fund - is right without waiting out the sync cooldown; turning import on clears the connection's sync window for the initial backfill, exactly like `finalizeAccountLinks` (the ingest ledger still dedupes). `MAPPABLE_ASSET_CATEGORIES` moved to the service and is shared by the wizard and the manager so both offer the same targets.
 - **Tip Jar → budget entry.** After a completed tip, the thank-you view offers to log it as today's expense under the built-in Giving category (`TipJarModal`). Only an explicit tap creates the entry; it's an ordinary `BudgetEntry`, editable/deletable in Budget. The offer renders only when the store returned a real positive price.
-- **Tests:** new `linkPreferences` planner suite (no-op detection, `updateBalance` tracking, backfill-on-enable, balance seeding + clamp) - 1266 tests across 84 suites.
+- **Tests:** new `linkPreferences` planner suite (no-op detection, `updateBalance` tracking, backfill-on-enable, balance seeding + clamp) plus the pending→posted ledger regression cases - 1276 tests across 84 suites.
 
 ## v1.9.2 - Emergency Fund, Linked to Your Savings (2026-08-20)
 

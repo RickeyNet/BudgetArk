@@ -2,6 +2,7 @@ import {
   identityKeyFor,
   pendingFingerprintFor,
   planIngest,
+  splitPendingFingerprint,
   IngestInputs,
 } from "../ingest";
 import type {
@@ -243,6 +244,150 @@ describe("planIngest - pending->posted id instability", () => {
       budgetEntryId: "entry-1",
       aliasOf: decidedKey,
     });
+  });
+
+  // Regression: a pending item's date is the transacted date; the posted
+  // twin carries the settlement date, usually 1-3 days later. The ledger
+  // match used to require the exact day, so approving while pending let
+  // the posted twin come back as a brand-new (duplicate) expense.
+  const decidedWhilePending = (
+    status: "approved" | "dismissed",
+  ): IngestInputs["ledger"] => ({
+    [pendingItem.id]: {
+      status,
+      budgetEntryId: status === "approved" ? "entry-1" : undefined,
+      at: "2026-06-28T02:00:00.000Z",
+      pendingFingerprint: pendingFingerprintFor(
+        "ACT-1",
+        -25.0,
+        pendingItem.postedAt,
+      ),
+    },
+  });
+
+  it.each([1, 2, 3, 4])(
+    "aliases a posted twin that settled %i day(s) after the pending decision",
+    (days) => {
+      const posted = tx({
+        providerTxId: `POSTED-LATER-${days}`,
+        pending: false,
+        // Settles `days` after the pending item was transacted.
+        postedAt: new Date(
+          Date.parse(pendingItem.postedAt) + days * 24 * 3600_000,
+        ).toISOString(),
+      });
+      const plan = planIngest(
+        baseInputs({ fetched: [posted], ledger: decidedWhilePending("approved") }),
+      );
+      expect(plan.newInboxItems).toHaveLength(0);
+      expect(plan.updatedInboxItems).toHaveLength(0);
+      const aliasKey = identityKeyFor("simplefin", "ACT-1", posted.providerTxId);
+      expect(plan.ledgerAliases[aliasKey]).toMatchObject({
+        status: "approved",
+        budgetEntryId: "entry-1",
+        aliasOf: pendingItem.id,
+      });
+    },
+  );
+
+  it("keeps a pending dismissal in force when the twin posts days later", () => {
+    const posted = tx({
+      providerTxId: "POSTED-LATER-D",
+      pending: false,
+      postedAt: "2026-06-30T00:00:00.000Z",
+    });
+    const plan = planIngest(
+      baseInputs({ fetched: [posted], ledger: decidedWhilePending("dismissed") }),
+    );
+    expect(plan.newInboxItems).toHaveLength(0);
+    const aliasKey = identityKeyFor("simplefin", "ACT-1", "POSTED-LATER-D");
+    expect(plan.ledgerAliases[aliasKey]).toMatchObject({
+      status: "dismissed",
+      aliasOf: pendingItem.id,
+    });
+  });
+
+  it("does not alias to a ledger decision outside the ±4 day window or with a different amount", () => {
+    const tooLate = tx({
+      providerTxId: "POSTED-LATE",
+      pending: false,
+      postedAt: "2026-07-03T00:00:00.000Z", // well past the ±4 day window
+    });
+    const plan = planIngest(
+      baseInputs({ fetched: [tooLate], ledger: decidedWhilePending("approved") }),
+    );
+    expect(plan.newInboxItems).toHaveLength(1);
+    expect(Object.keys(plan.ledgerAliases)).toHaveLength(0);
+
+    const differentAmount = tx({
+      providerTxId: "POSTED-TIP",
+      pending: false,
+      amount: -30.0,
+      postedAt: "2026-06-29T00:00:00.000Z",
+    });
+    const plan2 = planIngest(
+      baseInputs({ fetched: [differentAmount], ledger: decidedWhilePending("approved") }),
+    );
+    expect(plan2.newInboxItems).toHaveLength(1);
+    expect(Object.keys(plan2.ledgerAliases)).toHaveLength(0);
+  });
+
+  it("prefers the nearest-day decision when several share account and amount", () => {
+    const farKey = identityKeyFor("simplefin", "ACT-1", "PENDING-FAR");
+    const nearKey = identityKeyFor("simplefin", "ACT-1", "PENDING-NEAR");
+    const ledger: IngestInputs["ledger"] = {
+      [farKey]: {
+        status: "approved",
+        budgetEntryId: "entry-far",
+        at: "2026-06-26T00:00:00.000Z",
+        pendingFingerprint: pendingFingerprintFor("ACT-1", -25.0, "2026-06-26T00:00:00.000Z"),
+      },
+      [nearKey]: {
+        status: "approved",
+        budgetEntryId: "entry-near",
+        at: "2026-06-29T00:00:00.000Z",
+        pendingFingerprint: pendingFingerprintFor("ACT-1", -25.0, "2026-06-29T00:00:00.000Z"),
+      },
+    };
+    const posted = tx({
+      providerTxId: "POSTED-NEAR",
+      pending: false,
+      postedAt: "2026-06-30T00:00:00.000Z",
+    });
+    const plan = planIngest(baseInputs({ fetched: [posted], ledger }));
+    const aliasKey = identityKeyFor("simplefin", "ACT-1", "POSTED-NEAR");
+    expect(plan.ledgerAliases[aliasKey]).toMatchObject({
+      budgetEntryId: "entry-near",
+      aliasOf: nearKey,
+    });
+  });
+
+  it("ignores malformed stored fingerprints instead of matching them", () => {
+    const ledger: IngestInputs["ledger"] = {
+      [pendingItem.id]: {
+        status: "approved",
+        at: "2026-06-28T02:00:00.000Z",
+        pendingFingerprint: "garbage",
+      },
+    };
+    const posted = tx({ providerTxId: "POSTED-G", pending: false });
+    const plan = planIngest(baseInputs({ fetched: [posted], ledger }));
+    expect(plan.newInboxItems).toHaveLength(1);
+  });
+});
+
+describe("splitPendingFingerprint", () => {
+  it("splits from the right so account ids containing '|' survive", () => {
+    expect(
+      splitPendingFingerprint(pendingFingerprintFor("ACT|1", -25, "2026-06-28T00:00:00.000Z")),
+    ).toEqual({ prefix: "ACT|1|-25.00", day: "2026-06-28" });
+  });
+
+  it("rejects values without a trailing YYYY-MM-DD day", () => {
+    expect(splitPendingFingerprint("ACT-1|-25.00")).toBeNull();
+    expect(splitPendingFingerprint("ACT-1|-25.00|2026-6-28")).toBeNull();
+    expect(splitPendingFingerprint("|2026-06-28")).toBeNull();
+    expect(splitPendingFingerprint("")).toBeNull();
   });
 });
 

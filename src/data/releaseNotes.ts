@@ -9,8 +9,9 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.9.3",
     title: "Change Your Bank Account Choices Anytime",
-    releasedAt: "2026-08-25",
+    releasedAt: "2026-08-26",
     highlights: [
+      "Fixed: a bank transaction you approved (or skipped) while it was still pending could show up in the Review Inbox a second time once it finally posted - and if an always-approve rule matched, it went straight into your budget as a duplicate expense. Banks usually settle a purchase a day or three after you make it, and BudgetArk's pending-to-posted matching insisted on the exact same day. It now allows the same few days of slack it already used elsewhere. Duplicates that were already created are ordinary entries - delete them from the Budget tab.",
       "Your bank connection choices are no longer set in stone. Open Profile → Bank Connections and tap a connection: every linked account now has an 'Import transactions' switch and a 'Balance updates' picker, so an account you skipped when you first connected can start updating a Bridge account whenever you like - pick an existing checking, savings, HSA, or other account, or create a new one right there.",
       "This unblocks the emergency fund: if you chose not to track a savings account's balance at setup, there was no Bridge account to mark as your 🛡️ Emergency fund. Map it now, and the last balance your bank reported lands on the Bridge immediately - then mark it as the emergency fund from the Bridge tab and every sync keeps the fund current.",
       "Turning imports on for an account you previously left out fetches its recent history right away, the same as a freshly connected account, and anything already in your budget is never imported twice.",
