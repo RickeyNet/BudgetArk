@@ -40,6 +40,7 @@ import {
   createTellerConnection,
   discoverSimplefinAccounts,
   finalizeAccountLinks,
+  MAPPABLE_ASSET_CATEGORIES,
   type AccountSelection,
 } from "../services/connections/connectionsService";
 import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
@@ -67,13 +68,8 @@ const TELLER_ENVIRONMENTS: TellerEnvironment[] = [
   "sandbox",
 ];
 
-/** Balance targets must hold a cash balance - pure-holdings accounts store 0. */
-const MAPPABLE_CATEGORIES: AssetAccountCategory[] = [
-  "checking",
-  "savings",
-  "hsa",
-  "other",
-];
+/** Balance targets must hold a cash balance - see MAPPABLE_ASSET_CATEGORIES. */
+const MAPPABLE_CATEGORIES = MAPPABLE_ASSET_CATEGORIES;
 
 interface DraftSelection {
   account: NormalizedAccount;

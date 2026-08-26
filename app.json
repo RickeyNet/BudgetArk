@@ -2,7 +2,7 @@
   "expo": {
     "name": "BudgetArk",
     "slug": "BudgetArk",
-    "version": "1.9.2",
+    "version": "1.9.3",
     "scheme": "budgetark",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

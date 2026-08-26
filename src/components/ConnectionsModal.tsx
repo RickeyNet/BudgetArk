@@ -6,6 +6,12 @@
  * bank connections with a per-connection detail view: mapped accounts, last
  * sync, sync-now, and remove-with-confirm. The Add Connection wizard itself
  * is rendered by ProfileScreen; this modal only signals `onAddConnection`.
+ *
+ * Each linked account is editable here - import on/off, whose card it is,
+ * and where its balance lands (including creating a new Bridge account).
+ * The wizard asks these once at setup; without this editor a "None" chosen
+ * on day one was permanent, which blocked e.g. designating that savings
+ * account as the emergency fund later.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -15,10 +21,19 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import type { BankConnection, ExternalAccountLink, Person } from "../types";
+import {
+  ASSET_ACCOUNT_CATEGORY_LABELS,
+  type AssetAccount,
+  type AssetAccountCategory,
+  type BankConnection,
+  type ExternalAccountLink,
+  type Person,
+  categoryIsPureHoldings,
+} from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useConnections } from "../connections/ConnectionsProvider";
@@ -27,7 +42,17 @@ import {
   updateLink,
 } from "../storage/externalAccountLinksStorage";
 import { getPeople } from "../storage/personStorage";
-import { removeConnection } from "../services/connections/connectionsService";
+import {
+  addAssetAccount,
+  getAssetAccounts,
+} from "../storage/assetAccountStorage";
+import {
+  MAPPABLE_ASSET_CATEGORIES,
+  removeConnection,
+  updateLinkPreferences,
+} from "../services/connections/connectionsService";
+import type { LinkPreferenceChange } from "../services/connections/linkPreferences";
+import { generateUUID } from "../utils/uuid";
 import { useValueChanged } from "../hooks/useValueChanged";
 
 interface ConnectionsModalProps {
@@ -86,6 +111,20 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   const [removing, setRemoving] = useState(false);
   /** Live people, for the per-account "whose card is this" picker. */
   const [people, setPeople] = useState<Person[]>([]);
+  /** Live Bridge accounts, for the per-account "balance updates" picker. */
+  const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
+  /** Link whose preference write is in flight (guards double taps). */
+  const [savingLinkId, setSavingLinkId] = useState<string | null>(null);
+  // Inline "+ New account" mini-form state (one at a time, per link).
+  const [newAccountFor, setNewAccountFor] = useState<string | null>(null);
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountCategory, setNewAccountCategory] =
+    useState<AssetAccountCategory>("checking");
+
+  const mappableAccounts = useMemo(
+    () => assetAccounts.filter((a) => !categoryIsPureHoldings(a.category)),
+    [assetAccounts],
+  );
 
   const selected: BankConnection | undefined = connections.find(
     (c) => c.id === selectedId,
@@ -118,12 +157,16 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     if (visible) void refresh();
   }, [visible, refresh]);
 
-  // People load per open (Profile -> People edits between opens must show).
+  // People and Bridge accounts load per open (edits made elsewhere between
+  // opens must show in the pickers).
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     void getPeople().then((result) => {
       if (!cancelled) setPeople(result);
+    });
+    void getAssetAccounts().then((result) => {
+      if (!cancelled) setAssetAccounts(result);
     });
     return () => {
       cancelled = true;
@@ -139,9 +182,55 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     [selectedId],
   );
 
+  const applyPreference = useCallback(
+    async (linkId: string, change: LinkPreferenceChange) => {
+      if (!selectedId || savingLinkId) return;
+      setSavingLinkId(linkId);
+      try {
+        const updated = await updateLinkPreferences(linkId, change);
+        setLinks(updated);
+        setNewAccountFor(null);
+        // A seeded balance changed an account; keep the picker's copy fresh.
+        setAssetAccounts(await getAssetAccounts());
+      } finally {
+        setSavingLinkId(null);
+      }
+    },
+    [savingLinkId, selectedId],
+  );
+
+  const openNewAccountForm = useCallback((link: ExternalAccountLink) => {
+    setNewAccountFor((current) => (current === link.id ? null : link.id));
+    setNewAccountName(link.externalName.slice(0, 80));
+    setNewAccountCategory("checking");
+  }, []);
+
+  const createAndMap = useCallback(
+    async (link: ExternalAccountLink) => {
+      const name = newAccountName.trim();
+      if (!name || savingLinkId) return;
+      const now = new Date().toISOString();
+      const account: AssetAccount = {
+        id: generateUUID(),
+        name: name.slice(0, 80),
+        category: newAccountCategory,
+        // Seeded here as well so the account never flashes $0 before the
+        // link's preference write seeds it again (same clamp as sync).
+        balance: Math.max(0, link.lastExternalBalance ?? 0),
+        createdAt: now,
+        updatedAt: now,
+      };
+      await addAssetAccount(account);
+      setNewAccountName("");
+      await applyPreference(link.id, { assetAccountId: account.id });
+    },
+    [applyPreference, newAccountCategory, newAccountName, savingLinkId],
+  );
+
   const handleBack = useCallback(() => {
     setSelectedId(null);
     setConfirmingRemove(false);
+    setNewAccountFor(null);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -282,7 +371,12 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           {links.length === 0 ? (
             <Text style={styles.emptyText}>No accounts mapped.</Text>
           ) : (
-            links.map((link, index) => (
+            links.map((link, index) => {
+              const target = link.assetAccountId
+                ? assetAccounts.find((a) => a.id === link.assetAccountId)
+                : undefined;
+              const saving = savingLinkId === link.id;
+              return (
               <React.Fragment key={link.id}>
                 {index > 0 ? <View style={styles.divider} /> : null}
                 <View style={styles.row}>
@@ -290,13 +384,42 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                     <Text style={styles.rowTitle}>{link.externalName}</Text>
                     <Text style={styles.rowSubtext}>
                       {link.importTransactions ? "Imports transactions" : "Import off"}
-                      {link.assetAccountId ? " · updates balance" : ""}
+                      {link.assetAccountId
+                        ? ` · updates ${target?.name ?? "balance"}`
+                        : " · balance not tracked"}
                       {typeof link.lastExternalBalance === "number"
                         ? ` · $${link.lastExternalBalance.toFixed(2)}`
                         : ""}
                     </Text>
                   </View>
+                  {saving ? (
+                    <ActivityIndicator size="small" color={colors.textDim} />
+                  ) : null}
                 </View>
+
+                <TouchableOpacity
+                  style={styles.checkboxRow}
+                  onPress={() =>
+                    void applyPreference(link.id, {
+                      importTransactions: !link.importTransactions,
+                    })
+                  }
+                  disabled={saving}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      link.importTransactions && styles.checkboxActive,
+                    ]}
+                  >
+                    {link.importTransactions ? (
+                      <Text style={styles.checkboxCheck}>✓</Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.checkboxLabel}>Import transactions</Text>
+                </TouchableOpacity>
+
                 {link.importTransactions && people.length > 0 ? (
                   <View style={styles.personPickerWrap}>
                     <Text style={styles.personPickerLabel}>Whose card is this?</Text>
@@ -337,8 +460,108 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                     </View>
                   </View>
                 ) : null}
+
+                <View style={styles.personPickerWrap}>
+                  <Text style={styles.personPickerLabel}>Balance updates</Text>
+                  <View style={styles.pillWrap}>
+                    <TouchableOpacity
+                      style={[styles.pill, !link.assetAccountId && styles.pillActive]}
+                      onPress={() => void applyPreference(link.id, { assetAccountId: null })}
+                      disabled={saving}
+                    >
+                      <Text
+                        style={[
+                          styles.pillText,
+                          !link.assetAccountId && styles.pillTextActive,
+                        ]}
+                      >
+                        None
+                      </Text>
+                    </TouchableOpacity>
+                    {mappableAccounts.map((asset) => (
+                      <TouchableOpacity
+                        key={asset.id}
+                        style={[
+                          styles.pill,
+                          link.assetAccountId === asset.id && styles.pillActive,
+                        ]}
+                        onPress={() =>
+                          void applyPreference(link.id, { assetAccountId: asset.id })
+                        }
+                        disabled={saving}
+                      >
+                        <Text
+                          style={[
+                            styles.pillText,
+                            link.assetAccountId === asset.id && styles.pillTextActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {asset.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity
+                      style={styles.pill}
+                      onPress={() => openNewAccountForm(link)}
+                      disabled={saving}
+                    >
+                      <Text style={styles.pillText}>+ New account</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {newAccountFor === link.id ? (
+                    <View style={styles.newAccountForm}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Account name"
+                        placeholderTextColor={colors.textMuted}
+                        value={newAccountName}
+                        onChangeText={setNewAccountName}
+                        maxLength={80}
+                      />
+                      <View style={styles.pillWrap}>
+                        {MAPPABLE_ASSET_CATEGORIES.map((category) => (
+                          <TouchableOpacity
+                            key={category}
+                            style={[
+                              styles.pill,
+                              newAccountCategory === category && styles.pillActive,
+                            ]}
+                            onPress={() => setNewAccountCategory(category)}
+                          >
+                            <Text
+                              style={[
+                                styles.pillText,
+                                newAccountCategory === category && styles.pillTextActive,
+                              ]}
+                            >
+                              {ASSET_ACCOUNT_CATEGORY_LABELS[category]}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.smallButton,
+                          (!newAccountName.trim() || saving) && styles.buttonDisabled,
+                        ]}
+                        disabled={!newAccountName.trim() || saving}
+                        onPress={() => void createAndMap(link)}
+                      >
+                        <Text style={styles.smallButtonText}>Create & map</Text>
+                      </TouchableOpacity>
+                      {newAccountCategory === "savings" ? (
+                        <Text style={styles.hint}>
+                          Savings accounts can be marked as your emergency fund
+                          from the Bridge tab once created.
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
               </React.Fragment>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -540,6 +763,67 @@ const makeStyles = (colors: ThemeColors) =>
     },
     pillTextActive: {
       color: colors.accent,
+    },
+    checkboxRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingBottom: 12,
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    checkboxActive: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
+    checkboxCheck: {
+      color: colors.white,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 16,
+    },
+    checkboxLabel: {
+      color: colors.text,
+      fontSize: 14,
+    },
+    newAccountForm: {
+      gap: 10,
+      paddingTop: 10,
+    },
+    input: {
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      color: colors.text,
+      fontSize: 15,
+    },
+    smallButton: {
+      alignSelf: "flex-start",
+      backgroundColor: colors.accent,
+      borderRadius: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    smallButtonText: {
+      color: colors.accentButtonText,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    hint: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
     },
     emptyCard: {
       backgroundColor: colors.card,

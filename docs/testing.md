@@ -16,7 +16,7 @@ npm run test:coverage
 ## What's covered
 
 Tests live next to the code under `__tests__/` folders (`src/utils/`,
-`src/sync/`, `src/data/`):
+`src/sync/`, `src/data/`, `src/services/connections/`):
 
 | Suite | Module under test | Feature it guards |
 | --- | --- | --- |
@@ -49,6 +49,7 @@ Tests live next to the code under `__tests__/` folders (`src/utils/`,
 | `syncOrchestrator.test.ts` | `sync/syncOrchestrator.ts` | End-to-end sync coordination: client vs server role selection, the SYNC_REQUEST→SYNC_RESPONSE→SYNC_ACK message dance, record-count reporting, server→client switch on the retry scan, timeouts, protocol-mismatch error mapping, and finally-block cleanup |
 | `autoSyncManager.test.ts` | `sync/autoSyncManager.ts` | Auto-sync gating: Android location-permission flow, SSID read, NetInfo/AppState listener wiring (idempotent start, teardown), and every trigger gate (foreground, paired, enabled, home-SSID match, cooldown, in-flight guard, silent-failure recovery) |
 | `discoveryService.test.ts` | `sync/discoveryService.ts` | mDNS publish/browse: service-name + TXT advertisement, partner matching (pairing accepts any service, sync matches a specific userId, host/port required), timeout/error→null, browse-instance reuse without tearing down the publish channel, stop() unpublish + idempotence |
+| `linkPreferences.test.ts` | `services/connections/linkPreferences.ts` | Editing a bank-account link after setup: no-op detection, `updateBalance` follows the chosen target, backfill only when import turns on, balance seeding only with a known provider balance (clamped at 0) |
 | `achievementDefs.test.ts` | `data/achievementDefs.ts` | Ship's Log badge rules: presence badges, debt-payoff ratios (mortgage excluded), savings/net-worth thresholds, milestone completion, savings streak, under-budget consecutive runs, chapter-completion against real lesson data |
 | `importData.test.ts` | `importData.ts` | JSON import: validation, merge vs replace, last-write-wins, stale-age, encrypted-payload gating |
 | `exportData.test.ts` | `exportData.ts` | JSON export payload shape + a real encrypt→decrypt round-trip back through the importer |

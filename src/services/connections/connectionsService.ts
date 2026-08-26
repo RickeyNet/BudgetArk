@@ -8,8 +8,13 @@
  * a user-ready message on failure.
  */
 
-import type { BankConnection, BankProvider, ExternalAccountLink } from "../../types";
-import { BANK_PROVIDER_LABELS } from "../../types";
+import type {
+  AssetAccountCategory,
+  BankConnection,
+  BankProvider,
+  ExternalAccountLink,
+} from "../../types";
+import { BANK_PROVIDER_LABELS, categoryIsPureHoldings } from "../../types";
 import { addConnection, deleteConnection, updateConnection } from "../../storage/connectionsStorage";
 import { isEncryptionAvailable } from "../../storage/encryptedStorage";
 import {
@@ -17,7 +22,9 @@ import {
   setConnectionSecrets,
   setTellerAccessToken,
 } from "../../storage/connectionSecretsStorage";
-import { upsertLink } from "../../storage/externalAccountLinksStorage";
+import { getLinks, updateLink, upsertLink } from "../../storage/externalAccountLinksStorage";
+import { getAssetAccounts, updateAssetAccount } from "../../storage/assetAccountStorage";
+import { type LinkPreferenceChange, planLinkPreferenceChange } from "./linkPreferences";
 import { generateUUID } from "../../utils/uuid";
 import { claimAccessUrl, fetchSimplefinAccounts } from "./simplefinClient";
 import { decodeSetupToken } from "./simplefinParser";
@@ -255,6 +262,19 @@ export const addTellerEnrollment = async (
   return { ok: true, connectionId, accounts: fetched.accounts };
 };
 
+/**
+ * Bridge categories a provider account's balance can land in - the account
+ * must hold a cash balance, and pure-holdings categories (investment,
+ * retirement) store 0 by design. Shared by the wizard's mapping step and the
+ * Connections manager's after-the-fact editor so both offer the same targets.
+ */
+export const MAPPABLE_ASSET_CATEGORIES: readonly AssetAccountCategory[] = [
+  "checking",
+  "savings",
+  "hsa",
+  "other",
+];
+
 export interface AccountSelection {
   account: NormalizedAccount;
   /** Map balances into this AssetAccount; null = don't track the balance. */
@@ -298,6 +318,50 @@ export const finalizeAccountLinks = async (
     lastSyncedAt: undefined,
     lastAttemptAt: undefined,
   });
+};
+
+/**
+ * Edit an account link's import / balance-target choices after setup (the
+ * wizard's mapping step is otherwise one-shot). Applies the pure plan from
+ * linkPreferences: writes the link, resets the connection's sync window when
+ * import just turned on, and seeds a newly chosen target with the last-known
+ * provider balance so the Bridge (and anything reading it, like a linked
+ * emergency fund) is right immediately instead of after the next sync.
+ * Returns the connection's links after the change; unknown ids are a no-op.
+ */
+export const updateLinkPreferences = async (
+  linkId: string,
+  change: LinkPreferenceChange,
+): Promise<ExternalAccountLink[]> => {
+  const links = await getLinks();
+  const link = links.find((l) => l.id === linkId);
+  if (!link) return [];
+  const plan = planLinkPreferenceChange(link, change);
+
+  let all = links;
+  if (Object.keys(plan.linkUpdates).length > 0) {
+    all = await updateLink(linkId, plan.linkUpdates);
+  }
+  if (plan.backfill) {
+    await updateConnection(link.connectionId, {
+      lastSyncedAt: undefined,
+      lastAttemptAt: undefined,
+    });
+  }
+  if (plan.seedBalance) {
+    const asset = (await getAssetAccounts()).find(
+      (a) => a.id === plan.seedBalance?.assetAccountId,
+    );
+    // Same guards as the sync path: the target must exist and hold cash.
+    if (
+      asset &&
+      !categoryIsPureHoldings(asset.category) &&
+      asset.balance !== plan.seedBalance.balance
+    ) {
+      await updateAssetAccount(asset.id, { balance: plan.seedBalance.balance });
+    }
+  }
+  return all.filter((l) => l.connectionId === link.connectionId);
 };
 
 /** Remove a connection (cascades to secrets/links/inbox; ledger stays). */
