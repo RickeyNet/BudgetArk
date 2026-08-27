@@ -16,7 +16,8 @@
 import * as XLSX from "xlsx";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { Platform } from "react-native";
-import { shareLocalFile, waitForIosModalTeardown } from "./iosNativeShare";
+import { waitForIosModalTeardown } from "./iosNativeShare";
+import { deleteLocalFileQuietly, shareLocalFileThenDelete } from "./shareTempFile";
 import { roundToCents } from "./money";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import {
@@ -923,7 +924,12 @@ export const exportSpreadsheet = async (
   options: SpreadsheetExportOptions = {}
 ): Promise<SpreadsheetExportResult> => {
   const runId = `${nowMs().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  // Dev-only timing/phase trace (no amounts, names or PII - see rule 14).
+  // `typeof` guard: this module also runs under Jest/Node, where the RN
+  // `__DEV__` global isn't defined.
+  const devLogging = typeof __DEV__ !== "undefined" && __DEV__;
   const log = (phase: string, detail?: string) => {
+    if (!devLogging) return;
     const suffix = detail ? ` ${detail}` : "";
     console.info(`[spreadsheetExport:${runId}] ${phase}${suffix}`);
   };
@@ -1245,6 +1251,8 @@ export const exportSpreadsheet = async (
     }
   } catch (error) {
     log("file-write-failed");
+    // A partial file is still plaintext on disk - don't leave it behind.
+    deleteLocalFileQuietly(file);
     throw error;
   }
   log("file-written", `ms=${nowMs() - writeStartedAt}`);
@@ -1263,7 +1271,8 @@ export const exportSpreadsheet = async (
   }
 
   log("share-open");
-  await shareLocalFile(file.uri, {
+  // Deletes the plaintext file once the sheet closes (or if sharing throws).
+  await shareLocalFileThenDelete(file, {
     mimeType:
       format === "csv"
         ? "text/csv"

@@ -26,7 +26,7 @@ import {
   View,
 } from "react-native";
 import { File as ExpoFile, Paths } from "expo-file-system";
-import { shareLocalFile } from "../utils/iosNativeShare";
+import { shareLocalFileThenDelete } from "../utils/shareTempFile";
 import { useFocusEffect , useNavigation } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -778,7 +778,8 @@ const ChartsScreen: React.FC = () => {
       file.create({ overwrite: true });
       file.write(buildLoanScheduleCsv(loanSchedule), { encoding: "utf8" });
 
-      await shareLocalFile(file.uri, {
+      // Deleted once the share sheet closes - no export file lingers on disk.
+      await shareLocalFileThenDelete(file, {
         mimeType: "text/csv",
         dialogTitle: "Export Amortization Schedule",
         UTI: "public.comma-separated-values-text",

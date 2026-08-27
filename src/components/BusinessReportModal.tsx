@@ -33,6 +33,7 @@ import {
   type BusinessReport,
 } from "../utils/businessReport";
 import { shareLocalFile } from "../utils/iosNativeShare";
+import { shareLocalFileThenDelete } from "../utils/shareTempFile";
 import { useValueChanged } from "../hooks/useValueChanged";
 import {
   buildReceiptZip,
@@ -109,7 +110,8 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
       const file = new ExpoFile(fileDir, filename);
       file.create({ overwrite: true });
       file.write(csv, { encoding: "utf8" });
-      await shareLocalFile(file.uri, {
+      // Plaintext expense data - deleted once the share sheet closes.
+      await shareLocalFileThenDelete(file, {
         mimeType: "text/csv",
         dialogTitle: "Export Business Expenses",
         UTI: "public.comma-separated-values-text",

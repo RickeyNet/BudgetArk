@@ -33,7 +33,7 @@ import {
   computePersonReport,
   type PersonReport,
 } from "../utils/personReport";
-import { shareLocalFile } from "../utils/iosNativeShare";
+import { shareLocalFileThenDelete } from "../utils/shareTempFile";
 import { useValueChanged } from "../hooks/useValueChanged";
 import type { BudgetEntry, Person } from "../types";
 
@@ -104,7 +104,8 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
       const file = new ExpoFile(fileDir, filename);
       file.create({ overwrite: true });
       file.write(csv, { encoding: "utf8" });
-      await shareLocalFile(file.uri, {
+      // Plaintext spending data - deleted once the share sheet closes.
+      await shareLocalFileThenDelete(file, {
         mimeType: "text/csv",
         dialogTitle: "Export Person Spending",
         UTI: "public.comma-separated-values-text",

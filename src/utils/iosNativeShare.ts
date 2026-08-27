@@ -61,9 +61,9 @@ export const shareLocalFile = async (
 ): Promise<void> => {
   const isAvailable = await Sharing.isAvailableAsync();
   if (!isAvailable) {
-    throw new Error(
-      "Sharing is not available on this device. The file has been saved to the app cache."
-    );
+    // Don't claim the file was kept: export callers delete their temp file
+    // after the share attempt (see shareTempFile.ts).
+    throw new Error("Sharing is not available on this device.");
   }
 
   let screenGuardSuspended = false;
