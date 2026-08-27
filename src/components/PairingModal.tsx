@@ -32,6 +32,7 @@ import {
 } from "../sync/pairingService";
 import * as Discovery from "../sync/discoveryService";
 import type { PairingState, PairingRole } from "../sync/types";
+import { EncryptionUnavailableError } from "../storage/encryptedStorage";
 
 const CODE_LENGTH = 8;
 
@@ -197,7 +198,15 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       onPaired(pending.pairingState);
     } catch (err) {
       setStatus("error");
-      setError(err instanceof Error ? err.message : "Failed to save pairing");
+      // savePairingState is fail-closed: the sync key is never written in
+      // plaintext. Its error message names the storage key, so translate.
+      setError(
+        err instanceof EncryptionUnavailableError
+          ? "BudgetArk couldn't store the pairing key securely on this device (secure keystore unavailable). Nothing was saved - try again after restarting the app."
+          : err instanceof Error
+            ? err.message
+            : "Failed to save pairing"
+      );
     }
   }, [pending, onPaired]);
 

@@ -431,7 +431,19 @@ const ProfileScreen: React.FC = () => {
       });
       return;
     }
-    await updateHomeSSID(ssid);
+    try {
+      await updateHomeSSID(ssid);
+    } catch (error) {
+      // savePairingState is fail-closed (the sync key must never be written
+      // in plaintext); tell the user rather than pretend the toggle took.
+      if (__DEV__) console.error("Failed to save home network:", error);
+      setInfoModal({
+        title: "Couldn't Save Home Network",
+        message:
+          "BudgetArk couldn't write the pairing settings securely on this device. Nothing was changed - please try again.",
+      });
+      return;
+    }
     setPairing((prev) => (prev ? { ...prev, homeSSID: ssid } : null));
     setInfoModal({
       title: "Home Network Set",
@@ -442,7 +454,18 @@ const ProfileScreen: React.FC = () => {
   const handleToggleAutoSync = useCallback(async () => {
     if (!pairing) return;
     const next = !pairing.autoSyncEnabled;
-    await setAutoSyncEnabled(next);
+    try {
+      await setAutoSyncEnabled(next);
+    } catch (error) {
+      // Same fail-closed write as the home-network toggle.
+      if (__DEV__) console.error("Failed to save auto-sync setting:", error);
+      setInfoModal({
+        title: "Couldn't Save Setting",
+        message:
+          "BudgetArk couldn't write the pairing settings securely on this device. Nothing was changed - please try again.",
+      });
+      return;
+    }
     setPairing((prev) => (prev ? { ...prev, autoSyncEnabled: next } : null));
     if (next) {
       startMonitoring((result) => {

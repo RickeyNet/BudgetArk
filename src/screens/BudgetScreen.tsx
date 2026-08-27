@@ -450,7 +450,16 @@ const BudgetScreen: React.FC = () => {
         setIsLoaded(true);
       };
 
-      loadBudgetData();
+      // A rejected read (5 s storage timeout on a near-full device, decrypt
+      // failure) must not leave isLoaded false forever - that's a blank tab
+      // with no retry. Keep whatever state we have (empty defaults on a
+      // cold load, the previous load's data otherwise), settle the loader,
+      // and let the next focus try again. Mirrors DebtTracker/Bridge.
+      loadBudgetData().catch((error: unknown) => {
+        if (cancelled) return;
+        if (__DEV__) console.error("Failed to load budget:", error);
+        setIsLoaded(true);
+      });
       return () => {
         cancelled = true;
       };
@@ -465,9 +474,15 @@ const BudgetScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getCategoryBudgetLimits(selectedMonthKey).then((storedLimits) => {
-        if (!cancelled) setLimits(storedLimits);
-      });
+      getCategoryBudgetLimits(selectedMonthKey)
+        .then((storedLimits) => {
+          if (!cancelled) setLimits(storedLimits);
+        })
+        .catch((error: unknown) => {
+          // Keep the previous month's limits on screen rather than crash
+          // with an unhandled rejection; the next focus/page retries.
+          if (__DEV__) console.error("Failed to load budget limits:", error);
+        });
       return () => {
         cancelled = true;
       };

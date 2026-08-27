@@ -26,7 +26,14 @@ export const getPairingState = async (): Promise<PairingState | null> => {
 };
 
 export const savePairingState = async (state: PairingState): Promise<void> => {
-  await EncryptedStorage.setItem(STORAGE_KEYS.PAIRING, JSON.stringify(state));
+  // requireEncryption: `sharedSecret` is the AES + HMAC key for every sync
+  // frame. Without this flag encryptedStorage falls back to plaintext
+  // AsyncStorage when the keystore is unavailable, which would leave the
+  // sync key readable on disk. Throwing EncryptionUnavailableError instead
+  // surfaces in PairingModal (commit) and the Profile toggles.
+  await EncryptedStorage.setItem(STORAGE_KEYS.PAIRING, JSON.stringify(state), {
+    requireEncryption: true,
+  });
 };
 
 export const clearPairingState = async (): Promise<void> => {

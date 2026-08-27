@@ -8,6 +8,7 @@
 import {
   getSyncMetadata,
   resetSyncWatermark,
+  savePairingState,
   updateSyncMetadata,
 } from "../pairingStorage";
 
@@ -27,6 +28,35 @@ const META_KEY = "@budgetark_sync_meta";
 
 beforeEach(() => {
   mockStore = new Map();
+});
+
+describe("savePairingState (fail-closed, security rule 2)", () => {
+  const storageMock = jest.requireMock("../../storage/encryptedStorage") as {
+    setItem: jest.Mock;
+  };
+
+  const state = {
+    partnerId: "p1",
+    partnerName: "Partner",
+    sharedSecret: "deadbeef",
+    pairedAt: "2026-08-01T00:00:00.000Z",
+    autoSyncEnabled: false,
+  };
+
+  it("writes the shared secret with requireEncryption so it can never land in plaintext", async () => {
+    await savePairingState(state as never);
+    expect(storageMock.setItem).toHaveBeenCalledWith(
+      "@budgetark_pairing",
+      expect.any(String),
+      { requireEncryption: true }
+    );
+  });
+
+  it("propagates a keystore failure instead of swallowing it", async () => {
+    storageMock.setItem.mockRejectedValueOnce(new Error("keystore unavailable"));
+    await expect(savePairingState(state as never)).rejects.toThrow("keystore unavailable");
+    expect(mockStore.has("@budgetark_pairing")).toBe(false);
+  });
 });
 
 describe("updateSyncMetadata", () => {

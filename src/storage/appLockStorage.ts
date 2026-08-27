@@ -44,7 +44,14 @@ export const getAppLockRecord = async (): Promise<AppLockRecord | null> => {
 };
 
 const saveRecord = async (record: AppLockRecord): Promise<void> => {
-  await EncryptedStorage.setItem(APP_LOCK_KEY, JSON.stringify(record));
+  // requireEncryption: the record is a salted PBKDF2 hash, not the PIN, but
+  // a 4-8 digit space is still brute-forceable offline, so it must never be
+  // written in plaintext. A keystore outage throws EncryptionUnavailableError,
+  // which AppLockSetupModal shows as "couldn't save" (read stays fail-open -
+  // see getAppLockRecord).
+  await EncryptedStorage.setItem(APP_LOCK_KEY, JSON.stringify(record), {
+    requireEncryption: true,
+  });
 };
 
 /** Turns the lock on with a fresh salt + hash for the given PIN. */
