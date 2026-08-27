@@ -158,6 +158,48 @@ describe("planIngest - inbox updates", () => {
     expect(plan.updatedInboxItems[0].updatedAt).toBe(NOW);
   });
 
+  it("recomputes rule suggestions when the posted description changes the merchant key", () => {
+    // Pending "PENDING COSTCO" had no matching rule; once it posts as
+    // "COSTCO WHSE #1234" the categorize rule must apply - previously the
+    // update kept the stale (empty) suggestions until a rule edit replanned.
+    const rules: MerchantRule[] = [
+      {
+        id: "r1",
+        merchantKey: "COSTCO WHSE",
+        category: "Grocery",
+        type: "expense",
+        renameTo: "Costco",
+        useCount: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const plan = planIngest(
+      baseInputs({
+        rules,
+        inbox: [{ ...inboxItem, description: "PENDING COSTCO", merchant: "PENDING COSTCO" }],
+        fetched: [tx({ pending: false })],
+      }),
+    );
+    expect(plan.updatedInboxItems).toHaveLength(1);
+    expect(plan.updatedInboxItems[0]).toMatchObject({
+      merchant: "COSTCO WHSE",
+      suggestedCategory: "Grocery",
+      suggestedName: "Costco",
+    });
+  });
+
+  it("does not treat a >220-char description as drift on every sync", () => {
+    const longDescription = "X".repeat(300);
+    const plan = planIngest(
+      baseInputs({
+        inbox: [{ ...inboxItem, pending: false, description: longDescription.slice(0, 220) }],
+        fetched: [tx({ pending: false, description: longDescription })],
+      }),
+    );
+    expect(plan.updatedInboxItems).toHaveLength(0);
+  });
+
   it("does nothing when the re-fetched item is unchanged", () => {
     const plan = planIngest(
       baseInputs({
@@ -199,6 +241,123 @@ describe("planIngest - pending->posted id instability", () => {
       status: "dismissed",
       aliasOf: migrated.id,
     });
+  });
+
+  it("migrates the twin even when the fetch lists the pending id BEFORE the posted id", () => {
+    // Regression: the pending id is handled through the `existing` path
+    // first, which used to mark it as "handled" and hide it from the twin
+    // search - the posted id then became a second inbox row (double count).
+    const pendingAgain = tx({
+      providerTxId: "PENDING-9",
+      pending: true,
+      postedAt: pendingItem.postedAt,
+      description: "PENDING COSTCO",
+    });
+    const posted = tx({ providerTxId: "POSTED-1", pending: false });
+    const plan = planIngest(
+      baseInputs({ inbox: [pendingItem], fetched: [pendingAgain, posted] }),
+    );
+
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.updatedInboxItems).toHaveLength(1);
+    expect(plan.updatedInboxItems[0].id).toBe(
+      identityKeyFor("simplefin", "ACT-1", "POSTED-1"),
+    );
+    expect(plan.ledgerAliases[pendingItem.id]?.aliasOf).toBe(
+      plan.updatedInboxItems[0].id,
+    );
+  });
+
+  it("folds a same-batch drift update of the pending id into the migration", () => {
+    // Pending id re-listed with a drifted date (still within the twin
+    // window; twin matching is exact-amount by design), then its posted twin.
+    const pendingDrifted = tx({
+      providerTxId: "PENDING-9",
+      pending: true,
+      postedAt: "2026-06-28T00:00:00.000Z",
+      description: "PENDING COSTCO",
+    });
+    const posted = tx({ providerTxId: "POSTED-1", pending: false });
+    const plan = planIngest(
+      baseInputs({ inbox: [pendingItem], fetched: [pendingDrifted, posted] }),
+    );
+    // Exactly one row, under the new id - no stale update left behind for
+    // the old id (which the migration's alias is about to retire).
+    expect(plan.updatedInboxItems.map((i) => i.id)).toEqual([
+      identityKeyFor("simplefin", "ACT-1", "POSTED-1"),
+    ]);
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.updatedInboxItems[0].postedAt).toBe(posted.postedAt);
+  });
+
+  it("applies rule suggestions from the POSTED merchant when migrating a twin", () => {
+    const rules: MerchantRule[] = [
+      {
+        id: "r1",
+        merchantKey: "COSTCO WHSE",
+        category: "Grocery",
+        type: "expense",
+        useCount: 1,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const posted = tx({ providerTxId: "POSTED-1", pending: false });
+    const plan = planIngest(baseInputs({ rules, inbox: [pendingItem], fetched: [posted] }));
+    expect(plan.updatedInboxItems[0]).toMatchObject({
+      merchant: "COSTCO WHSE",
+      suggestedCategory: "Grocery",
+    });
+  });
+
+  it("lets a ledger decision be the twin of only one posted tx, so the second migrates the inbox twin", () => {
+    // Mon: P1 approved from the inbox (ledger + fingerprint). Tue: P2, same
+    // amount, still pending in the inbox. Both post later under new ids.
+    // X1 must alias P1; X2 must migrate P2 - not alias P1 as well and leave
+    // P2 stuck pending forever.
+    const p1Key = identityKeyFor("simplefin", "ACT-1", "P1");
+    const p2 = { ...pendingItem, id: identityKeyFor("simplefin", "ACT-1", "P2"), providerTxId: "P2", postedAt: "2026-06-28T00:00:00.000Z" };
+    const ledger: IngestInputs["ledger"] = {
+      [p1Key]: {
+        status: "approved",
+        budgetEntryId: "entry-1",
+        at: "2026-06-27T02:00:00.000Z",
+        pendingFingerprint: pendingFingerprintFor("ACT-1", -25.0, "2026-06-27T00:00:00.000Z"),
+      },
+    };
+    const x1 = tx({ providerTxId: "X1", pending: false, postedAt: "2026-06-29T00:00:00.000Z" });
+    const x2 = tx({ providerTxId: "X2", pending: false, postedAt: "2026-06-30T00:00:00.000Z" });
+
+    const plan = planIngest(baseInputs({ inbox: [p2], ledger, fetched: [x1, x2] }));
+
+    const x1Key = identityKeyFor("simplefin", "ACT-1", "X1");
+    const x2Key = identityKeyFor("simplefin", "ACT-1", "X2");
+    expect(plan.ledgerAliases[x1Key]?.aliasOf).toBe(p1Key);
+    expect(plan.ledgerAliases[x2Key]).toBeUndefined();
+    expect(plan.updatedInboxItems.map((i) => i.id)).toEqual([x2Key]);
+    expect(plan.newInboxItems).toHaveLength(0);
+  });
+
+  it("honours a claim persisted in the ledger from an earlier sync", () => {
+    // X1 aliased P1 last sync; this sync only sees X2. Without consulting
+    // the stored alias, X2 would alias P1 again instead of migrating P2.
+    const p1Key = identityKeyFor("simplefin", "ACT-1", "P1");
+    const x1Key = identityKeyFor("simplefin", "ACT-1", "X1");
+    const p2 = { ...pendingItem, id: identityKeyFor("simplefin", "ACT-1", "P2"), providerTxId: "P2", postedAt: "2026-06-28T00:00:00.000Z" };
+    const ledger: IngestInputs["ledger"] = {
+      [p1Key]: {
+        status: "approved",
+        budgetEntryId: "entry-1",
+        at: "2026-06-27T02:00:00.000Z",
+        pendingFingerprint: pendingFingerprintFor("ACT-1", -25.0, "2026-06-27T00:00:00.000Z"),
+      },
+      [x1Key]: { status: "approved", budgetEntryId: "entry-1", at: NOW, aliasOf: p1Key },
+    };
+    const x2 = tx({ providerTxId: "X2", pending: false, postedAt: "2026-06-30T00:00:00.000Z" });
+    const plan = planIngest(baseInputs({ inbox: [p2], ledger, fetched: [x2] }));
+    const x2Key = identityKeyFor("simplefin", "ACT-1", "X2");
+    expect(plan.ledgerAliases[x2Key]).toBeUndefined();
+    expect(plan.updatedInboxItems.map((i) => i.id)).toEqual([x2Key]);
   });
 
   it("does not match a twin outside the ±4 day window or with a different amount", () => {

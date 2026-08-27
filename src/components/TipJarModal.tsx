@@ -36,6 +36,7 @@ import { triggerHaptic } from "../utils/haptics";
 import { generateUUID } from "../utils/uuid";
 import { roundToCents } from "../utils/money";
 import { addBudgetEntry } from "../storage/budgetStorage";
+import { buildEntryDateISO, localYearMonth } from "../utils/entryDate";
 import type { BudgetEntry } from "../types";
 
 interface TipJarModalProps {
@@ -229,7 +230,10 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
         category: "Giving",
         amount: lastTip.amount,
         description: "BudgetArk tip 💛",
-        date: now.toISOString().slice(0, 10),
+        // Local calendar day in the canonical noon-UTC form. The previous
+        // `toISOString().slice(0, 10)` was the UTC day, so a tip at 7pm PDT
+        // on the 31st filed under next month.
+        date: buildEntryDateISO(localYearMonth(now), now.getDate()),
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };

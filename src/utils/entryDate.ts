@@ -9,6 +9,16 @@
 
 export const DEFAULT_RECURRENCE_DAY = 15;
 
+/**
+ * "YYYY-MM" of the given instant in the DEVICE's local calendar - the month
+ * the user would say it is. Pair with `buildEntryDateISO` (and the local
+ * `getDate()`) when stamping "today" on an auto-created entry; never use
+ * `toISOString().slice(0, 7)`, which is the UTC month and files an evening
+ * entry near a month boundary into the wrong month.
+ */
+export const localYearMonth = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
 /** Number of days in the given "YYYY-MM" month. */
 export const lastDayOfYearMonth = (yearMonth: string): number => {
   const [yStr, mStr] = yearMonth.split("-");

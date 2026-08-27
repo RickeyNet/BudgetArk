@@ -61,6 +61,7 @@ import {
   savePayoffStrategyPreference,
 } from "../storage/debtStorage";
 import { subscribeDataChanged } from "../storage/dataChangeNotifier";
+import { buildEntryDateISO, localYearMonth } from "../utils/entryDate";
 import {
   dismissDebtDueForMonth,
   getDebtDueDismissals,
@@ -1118,7 +1119,9 @@ const DebtTrackerScreen: React.FC = () => {
         category: "Savings",
         amount: delta,
         description: delta > 0 ? "Logged from Build Your Ark" : "Correction from Build Your Ark",
-        date: now.toISOString().slice(0, 10),
+        // Local calendar day in the canonical noon-UTC form (the UTC day
+        // from toISOString() filed evening entries into the wrong month).
+        date: buildEntryDateISO(localYearMonth(now), now.getDate()),
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };

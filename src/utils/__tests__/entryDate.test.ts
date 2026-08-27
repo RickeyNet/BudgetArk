@@ -9,6 +9,7 @@ import {
   buildEntryDateISO,
   dayOfMonthFromIso,
   lastDayOfYearMonth,
+  localYearMonth,
 } from "../entryDate";
 
 describe("buildEntryDateISO", () => {
@@ -55,6 +56,24 @@ describe("dayOfMonthFromIso", () => {
   it("falls back to the default for garbage", () => {
     expect(dayOfMonthFromIso("not a date")).toBe(DEFAULT_RECURRENCE_DAY);
     expect(dayOfMonthFromIso("")).toBe(DEFAULT_RECURRENCE_DAY);
+  });
+});
+
+describe("localYearMonth", () => {
+  it("uses the device's local calendar month, not the UTC one", () => {
+    // Local parts are what the user sees; build a Date from local parts so
+    // the expectation holds in any test-runner timezone.
+    const lateEvening = new Date(2026, 6, 31, 23, 30); // Jul 31, 23:30 local
+    expect(localYearMonth(lateEvening)).toBe("2026-07");
+    // Pairing with buildEntryDateISO keeps the entry in July regardless of
+    // how far the UTC clock has rolled over.
+    expect(buildEntryDateISO(localYearMonth(lateEvening), lateEvening.getDate())).toBe(
+      "2026-07-31T12:00:00.000Z"
+    );
+  });
+
+  it("zero-pads the month", () => {
+    expect(localYearMonth(new Date(2026, 0, 5))).toBe("2026-01");
   });
 });
 

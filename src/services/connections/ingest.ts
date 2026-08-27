@@ -176,17 +176,57 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     list.push({ day: parts.day, key });
     decidedByPrefix.set(parts.prefix, list);
   }
+  // A decision can be the twin of exactly ONE posted transaction. Once a
+  // posted id has aliased to it (this batch or an earlier one - aliases are
+  // persisted in the ledger), it must not absorb a second same-amount
+  // purchase from the same account within the window: that second posted
+  // tx belongs to a different pending item, which would otherwise sit in
+  // the inbox as "pending" forever (never migrated, never auto-approved).
+  const claimedDecisionKeys = new Set<string>();
+  for (const key of Object.keys(input.ledger)) {
+    const aliasOf = input.ledger[key].aliasOf;
+    if (aliasOf) claimedDecisionKeys.add(aliasOf);
+  }
   const findDecidedTwinKey = (fingerprint: string): string | null => {
     const parts = splitPendingFingerprint(fingerprint);
     if (!parts) return null;
     const candidates = decidedByPrefix.get(parts.prefix) ?? [];
     let best: { key: string; distance: number } | null = null;
     for (const candidate of candidates) {
+      if (claimedDecisionKeys.has(candidate.key)) continue;
       const distance = daysBetween(candidate.day, parts.day);
       if (!(distance <= PENDING_MATCH_WINDOW_DAYS)) continue;
       if (!best || distance < best.distance) best = { key: candidate.key, distance };
     }
     return best?.key ?? null;
+  };
+
+  /**
+   * Rule-derived suggestions for a merchant key. Shared by the new-item
+   * path and BOTH update paths: when a pending item posts (same id or a
+   * reissued one) its description usually changes ("PENDING COSTCO" ->
+   * "COSTCO WHSE #1234"), so the merchant key changes and the suggestions
+   * must be recomputed - otherwise a categorize rule for the posted
+   * merchant never applies until some unrelated rule edit triggers
+   * replanInboxForRules. Mirrors merchant.replanInboxForRules.
+   */
+  const suggestionsFor = (
+    merchant: string,
+    suggestedType: BudgetEntryType,
+    externalAccountId: string,
+  ) => {
+    const rule = matchMerchantRule(merchant, input.rules);
+    return {
+      rule,
+      suggestedCategory: rule?.category,
+      suggestedName: rule?.renameTo,
+      suggestedBusinessId:
+        suggestedType === "expense" ? rule?.businessId : undefined,
+      suggestedPersonId:
+        suggestedType === "expense"
+          ? (rule?.personId ?? personIdByAccount.get(externalAccountId))
+          : undefined,
+    };
   };
 
   // Opposite-signed same-amount pairs across accounts in this batch suggest
@@ -230,6 +270,13 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
   // Track keys handled this batch so a provider double-listing one
   // transaction (seen in the wild) can't create two inbox rows.
   const handledKeys = new Set<string>();
+  // Pending inbox items already migrated to a posted id this batch. Kept
+  // SEPARATE from handledKeys on purpose: a fetch that lists both forms of
+  // one purchase (pending id P, then its reissued posted id X) handles P
+  // through the `existing` path first, which puts P in handledKeys - if the
+  // twin search also consulted handledKeys, X would find no eligible twin
+  // and become a second inbox row for the same purchase.
+  const claimedTwinIds = new Set<string>();
 
   for (const tx of input.fetched) {
     if (!importableAccounts.has(tx.externalAccountId)) continue;
@@ -242,22 +289,35 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     if (input.ledger[key]) continue;
     if (input.knownEntryExternalIds.has(key)) continue;
 
+    const description = tx.description.slice(0, MAX_DESCRIPTION_LENGTH);
+
     const existing = inboxById.get(key);
     if (existing) {
+      // Compare against the stored (capped) form - a >220-char provider
+      // description would otherwise "drift" on every sync and rewrite the
+      // item, bumping updatedAt forever.
       const drifted =
         existing.pending !== tx.pending ||
         existing.amount !== tx.amount ||
-        existing.description !== tx.description ||
+        existing.description !== description ||
         existing.postedAt !== tx.postedAt;
       if (drifted) {
+        const merchant = normalizeMerchant(tx.description);
+        const suggestedType: BudgetEntryType = tx.amount < 0 ? "expense" : "income";
+        const { rule: _rule, ...suggestions } = suggestionsFor(
+          merchant,
+          suggestedType,
+          tx.externalAccountId,
+        );
         plan.updatedInboxItems.push({
           ...existing,
           pending: tx.pending,
           postedAt: tx.postedAt,
           amount: tx.amount,
-          description: tx.description.slice(0, MAX_DESCRIPTION_LENGTH),
-          merchant: normalizeMerchant(tx.description),
-          suggestedType: tx.amount < 0 ? "expense" : "income",
+          description,
+          merchant,
+          suggestedType,
+          ...suggestions,
           updatedAt: input.now,
         });
       }
@@ -277,6 +337,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       // (transacted) date and this tx carries the settlement date.
       const decidedKey = findDecidedTwinKey(fingerprint);
       if (decidedKey) {
+        claimedDecisionKeys.add(decidedKey);
         plan.ledgerAliases[key] = {
           status: input.ledger[decidedKey].status,
           budgetEntryId: input.ledger[decidedKey].budgetEntryId,
@@ -292,18 +353,35 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
         (item) =>
           item.amount === tx.amount &&
           daysBetween(item.postedAt, tx.postedAt) <= PENDING_MATCH_WINDOW_DAYS &&
-          !handledKeys.has(item.id),
+          !claimedTwinIds.has(item.id),
       );
       if (twin) {
-        handledKeys.add(twin.id);
+        claimedTwinIds.add(twin.id);
+        // If the pending id was ALSO listed in this batch and drifted, that
+        // update targets the old id - fold it into the migration instead of
+        // upserting a row the migration is about to retire.
+        const driftedIndex = plan.updatedInboxItems.findIndex(
+          (item) => item.id === twin.id,
+        );
+        const base =
+          driftedIndex >= 0
+            ? plan.updatedInboxItems.splice(driftedIndex, 1)[0]
+            : twin;
+        const merchant = normalizeMerchant(tx.description);
+        const { rule: _rule, ...suggestions } = suggestionsFor(
+          merchant,
+          base.suggestedType,
+          tx.externalAccountId,
+        );
         plan.updatedInboxItems.push({
-          ...twin,
+          ...base,
           id: key,
           providerTxId: tx.providerTxId,
           pending: false,
           postedAt: tx.postedAt,
-          description: tx.description.slice(0, MAX_DESCRIPTION_LENGTH),
-          merchant: normalizeMerchant(tx.description),
+          description,
+          merchant,
+          ...suggestions,
           updatedAt: input.now,
         });
         // Remember the old id as dismissed-by-alias so a stale re-fetch of
@@ -319,7 +397,11 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
 
     const merchant = normalizeMerchant(tx.description);
     const suggestedType: BudgetEntryType = tx.amount < 0 ? "expense" : "income";
-    const rule = matchMerchantRule(merchant, input.rules);
+    const { rule, ...suggestions } = suggestionsFor(
+      merchant,
+      suggestedType,
+      tx.externalAccountId,
+    );
 
     // "Ignore" rule: auto-skip, recorded as dismissed. The fingerprint is
     // kept for pending transactions so the posted twin (possibly under a new
@@ -343,17 +425,10 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       pending: tx.pending,
       postedAt: tx.postedAt,
       amount: tx.amount,
-      description: tx.description.slice(0, MAX_DESCRIPTION_LENGTH),
+      description,
       merchant,
       suggestedType,
-      suggestedCategory: rule?.category,
-      suggestedName: rule?.renameTo,
-      suggestedBusinessId:
-        suggestedType === "expense" ? rule?.businessId : undefined,
-      suggestedPersonId:
-        suggestedType === "expense"
-          ? (rule?.personId ?? personIdByAccount.get(tx.externalAccountId))
-          : undefined,
+      ...suggestions,
       transferLikely: looksLikeTransfer(tx) || undefined,
       duplicateLikely: looksLikeManualDuplicate(tx) || undefined,
       fetchedAt: input.now,
