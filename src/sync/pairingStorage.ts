@@ -64,11 +64,36 @@ export const updateSyncMetadata = async (
   timestamp: string
 ): Promise<void> => {
   const meta = await getSyncMetadata();
-  await EncryptedStorage.setItem(
-    STORAGE_KEYS.SYNC_META,
-    JSON.stringify({
-      lastSyncTimestamp: timestamp,
-      syncCount: meta.syncCount + 1,
-    })
-  );
+  const next: SyncMetadata = {
+    lastSyncTimestamp: timestamp,
+    syncCount: meta.syncCount + 1,
+    lastSyncCompletedAt: timestamp,
+  };
+  await EncryptedStorage.setItem(STORAGE_KEYS.SYNC_META, JSON.stringify(next));
+};
+
+/**
+ * Forces the next sync to send everything, keeping the sync count and the
+ * display timestamp. Called after an import/restore: merged records keep
+ * their original `updatedAt` (correct for last-write-wins), so with the
+ * old watermark in place `computeOutgoingDiff` would filter every restored
+ * record older than the last sync out of every future diff - the partner
+ * would simply never hear about them. A full re-send is idempotent under
+ * LWW, so the only cost is one larger payload. No-op when there is no
+ * watermark to reset (never paired / never synced).
+ *
+ * Limitation (documented, not solved here): this only pushes OUR records
+ * to the partner. If a replace-mode restore dropped records the partner
+ * had already sent us, the partner's own watermark still hides them, so
+ * they come back only when the partner next edits them.
+ */
+export const resetSyncWatermark = async (): Promise<void> => {
+  const meta = await getSyncMetadata();
+  if (meta.lastSyncTimestamp === null) return;
+  const next: SyncMetadata = {
+    lastSyncTimestamp: null,
+    syncCount: meta.syncCount,
+    lastSyncCompletedAt: meta.lastSyncCompletedAt ?? meta.lastSyncTimestamp,
+  };
+  await EncryptedStorage.setItem(STORAGE_KEYS.SYNC_META, JSON.stringify(next));
 };

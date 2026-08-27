@@ -8,6 +8,7 @@ import {
   untombstone,
 } from "./tombstones";
 import { repairCollectionInPlace } from "./collectionRepair";
+import { applyBalanceDeltas, type BalanceDelta } from "../utils/assetBalanceDeltas";
 
 const STORAGE_KEY = "@budgetark_asset_accounts";
 
@@ -69,57 +70,84 @@ export const saveAssetAccounts = async (accounts: AssetAccount[]): Promise<void>
   await writeAssetAccounts(mergePreservingTombstones(accounts, stored));
 };
 
-export const addAssetAccount = async (account: AssetAccount): Promise<AssetAccount[]> => {
-  const accounts = await getAssetAccountsIncludingDeleted();
-  const updated = [...accounts, account];
-  await writeAssetAccounts(updated);
-  return filterLive(updated);
+/**
+ * Atomic read-modify-write for the accounts collection - same contract as
+ * budgetStorage's `mutateBudgetEntries` and for the same reason: partner
+ * sync and bank balance refreshes write accounts behind the screens' backs,
+ * so every mutation must fold into the CURRENT stored array rather than
+ * persist a screen-state snapshot. Returns the live result.
+ */
+const mutateAssetAccounts = async (
+  mutate: (stored: AssetAccount[]) => AssetAccount[]
+): Promise<AssetAccount[]> => {
+  let result: AssetAccount[] = [];
+  await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+    let stored: AssetAccount[] = [];
+    if (current) {
+      try {
+        const parsed: unknown = JSON.parse(current);
+        if (Array.isArray(parsed)) stored = parsed as AssetAccount[];
+      } catch {
+        stored = [];
+      }
+    }
+    result = mutate(stored);
+    return JSON.stringify(result);
+  });
+  return filterLive(result);
 };
+
+export const addAssetAccount = async (account: AssetAccount): Promise<AssetAccount[]> =>
+  mutateAssetAccounts((stored) =>
+    stored.some((existing) => existing.id === account.id)
+      ? stored
+      : [...stored, account]
+  );
 
 export const updateAssetAccount = async (
   accountId: string,
   updates: Partial<AssetAccount>
-): Promise<AssetAccount[]> => {
-  const accounts = await getAssetAccountsIncludingDeleted();
-  const updated = accounts.map((account) =>
-    account.id === accountId
-      ? {
-          ...account,
-          ...updates,
-          updatedAt: new Date().toISOString(),
-        }
-      : account
-  );
-  await writeAssetAccounts(updated);
-  return filterLive(updated);
-};
+): Promise<AssetAccount[]> =>
+  mutateAssetAccounts((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((account) =>
+      account.id === accountId ? { ...account, ...updates, updatedAt: now } : account
+    );
+  });
+
+/**
+ * Shifts linked-account balances by the net of `deltas` (a budget entry
+ * being added, edited, deleted or undone) in one atomic write, and returns
+ * the live accounts. Unknown ids are ignored; a zero-net delta list is a
+ * no-op that still returns the current live accounts.
+ */
+export const adjustAssetAccountBalances = async (
+  deltas: BalanceDelta[]
+): Promise<AssetAccount[]> =>
+  mutateAssetAccounts((stored) => applyBalanceDeltas(stored, deltas));
 
 /**
  * Soft-deletes an asset account. See debtStorage.deleteDebt for rationale.
  */
-export const deleteAssetAccount = async (accountId: string): Promise<AssetAccount[]> => {
-  const accounts = await getAssetAccountsIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = accounts.map((account) =>
-    account.id === accountId ? tombstone(account, now) : account
-  );
-  await writeAssetAccounts(next);
-  return filterLive(next);
-};
+export const deleteAssetAccount = async (accountId: string): Promise<AssetAccount[]> =>
+  mutateAssetAccounts((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((account) =>
+      account.id === accountId ? tombstone(account, now) : account
+    );
+  });
 
 /**
  * Undo a soft-deleted asset account. No-op if id isn't a tombstone.
  */
 export const restoreAssetAccount = async (
   accountId: string
-): Promise<AssetAccount[]> => {
-  const accounts = await getAssetAccountsIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = accounts.map((account) =>
-    account.id === accountId && account.deletedAt
-      ? untombstone(account, now)
-      : account
-  );
-  await writeAssetAccounts(next);
-  return filterLive(next);
-};
+): Promise<AssetAccount[]> =>
+  mutateAssetAccounts((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((account) =>
+      account.id === accountId && account.deletedAt
+        ? untombstone(account, now)
+        : account
+    );
+  });

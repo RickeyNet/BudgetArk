@@ -252,6 +252,43 @@ describe("importFromString - merge mode", () => {
   });
 });
 
+describe("importFromString - partner sync watermark", () => {
+  const SYNC_META = "@budgetark_sync_meta";
+
+  it("resets the outgoing watermark after a successful import so restored records get sent", async () => {
+    // Paired device that last synced AFTER the record being restored was
+    // last edited: with the watermark left in place, computeOutgoingDiff
+    // would filter the restored record out of every future diff.
+    storageMock.__store.set(
+      SYNC_META,
+      JSON.stringify({ lastSyncTimestamp: "2026-08-01T00:00:00.000Z", syncCount: 7 })
+    );
+    await importFromString(
+      JSON.stringify({ debts: [validDebt({ updatedAt: "2026-03-01T00:00:00.000Z" })] }),
+      "merge"
+    );
+    const meta = readStore(SYNC_META);
+    expect(meta.lastSyncTimestamp).toBeNull();
+    expect(meta.syncCount).toBe(7);
+    // Display timestamp survives so Profile still shows "Last synced ...".
+    expect(meta.lastSyncCompletedAt).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("does not create sync metadata on a device that has never synced", async () => {
+    await importFromString(JSON.stringify({ debts: [validDebt()] }), "replace");
+    expect(storageMock.__store.has(SYNC_META)).toBe(false);
+  });
+
+  it("leaves the watermark alone when the import is rejected", async () => {
+    storageMock.__store.set(
+      SYNC_META,
+      JSON.stringify({ lastSyncTimestamp: "2026-08-01T00:00:00.000Z", syncCount: 1 })
+    );
+    await expect(importFromString("not json", "merge")).rejects.toThrow();
+    expect(readStore(SYNC_META).lastSyncTimestamp).toBe("2026-08-01T00:00:00.000Z");
+  });
+});
+
 describe("importFromString - merge preserves device-local attachments", () => {
   // Attachment metadata points at encrypted photo files on THIS device, and
   // spreadsheet rows carry no attachments column. A merge re-import of an

@@ -60,7 +60,7 @@ import {
   getBudgetEntries,
   getAllLimitsByMonth,
   getCategoryBudgetLimits,
-  saveBudgetEntries,
+  addBudgetEntries,
   saveCategoryBudgetLimits,
   deleteBudgetEntry,
   restoreBudgetEntry,
@@ -69,6 +69,8 @@ import {
   restoreBudgetEntries,
   setBudgetEntryCategories,
 } from "../storage/budgetStorage";
+import { subscribeDataChanged } from "../storage/dataChangeNotifier";
+import type { BalanceDelta } from "../utils/assetBalanceDeltas";
 import {
   buildMonthlyReview,
   type MonthlyReviewData,
@@ -83,7 +85,7 @@ import {
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
-  saveAssetAccounts,
+  adjustAssetAccountBalances,
 } from "../storage/assetAccountStorage";
 import { getBusinesses } from "../storage/businessStorage";
 import { getPeople } from "../storage/personStorage";
@@ -368,6 +370,16 @@ const BudgetScreen: React.FC = () => {
     return nextReviewData;
   }, [people]);
 
+  // Bumped when partner sync / bank sync / an import writes storage while
+  // this tab is mounted; it's a dep of the focus loader below, so the loader
+  // re-runs (while focused) and the screen picks up the merged records
+  // instead of holding a stale snapshot until the next tab switch.
+  const [reloadTick, setReloadTick] = useState(0);
+  useEffect(
+    () => subscribeDataChanged(() => setReloadTick((tick) => tick + 1)),
+    []
+  );
+
   useFocusEffect(
     useCallback(() => {
       // Guard every setState after an await so that a fast tab/month switch
@@ -442,7 +454,8 @@ const BudgetScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [refreshNetWorthSnapshots])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
+    }, [refreshNetWorthSnapshots, reloadTick])
   );
 
   // Category limits are the ONLY month-scoped collection, so they reload on
@@ -908,30 +921,20 @@ const BudgetScreen: React.FC = () => {
     [expenseRows]
   );
 
-  const adjustAssetAccounts = useCallback(
-    (
-      accounts: AssetAccount[],
-      deltas: { accountId: string; amount: number }[]
-    ): AssetAccount[] => {
-      if (deltas.length === 0) return accounts;
-
-      const totalsById = new Map<string, number>();
-      deltas.forEach(({ accountId, amount }) => {
-        totalsById.set(accountId, (totalsById.get(accountId) ?? 0) + amount);
-      });
-
-      return accounts.map((account) => {
-        const delta = totalsById.get(account.id);
-        if (!delta) return account;
-        return {
-          ...account,
-          balance: account.balance + delta,
-          updatedAt: new Date().toISOString(),
-        };
-      });
-    },
-    []
-  );
+  /**
+   * Every entry mutation below goes through a storage-level
+   * read-modify-write (`addBudgetEntries`, `updateBudgetEntry`, ...) and
+   * then adopts the live array storage hands back - never
+   * `save*(stateArray)`. Partner sync and bank auto-approvals write
+   * entries while this tab is mounted; saving this screen's snapshot
+   * over them silently hard-deleted their records (and the partner never
+   * re-sent them). Same rule for linked-account balances:
+   * `adjustAssetAccountBalances` nets the deltas onto the stored accounts.
+   */
+  const applyAssetDeltas = useCallback(async (deltas: BalanceDelta[]) => {
+    if (deltas.length === 0) return;
+    setAssetAccounts(await adjustAssetAccountBalances(deltas));
+  }, []);
 
   const handleAddEntry = useCallback(async (inputs: NewBudgetEntryInput[]) => {
     if (inputs.length === 0) return;
@@ -946,26 +949,18 @@ const BudgetScreen: React.FC = () => {
       lastAppliedMonth: input.linkedAccountId ? monthKey : undefined,
     }));
 
-    const deltas = newEntries
+    const deltas: BalanceDelta[] = newEntries
       .filter((entry) => entry.linkedAccountId)
       .map((entry) => ({
         accountId: entry.linkedAccountId as string,
         amount: entry.amount,
       }));
 
-    const nextEntries = [...entries, ...newEntries];
-    const nextAssets =
-      deltas.length > 0 ? adjustAssetAccounts(assetAccounts, deltas) : assetAccounts;
-
+    // Entries first, then balances - same order the recurring-apply shell
+    // relies on, so a crash between the two can't double-credit.
+    const nextEntries = await addBudgetEntries(newEntries);
     setEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      setAssetAccounts(nextAssets);
-    }
-
-    await saveBudgetEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      await saveAssetAccounts(nextAssets);
-    }
+    await applyAssetDeltas(deltas);
     await Promise.all([
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(nextEntries),
@@ -974,7 +969,7 @@ const BudgetScreen: React.FC = () => {
     setQuickAddCategory(undefined);
     triggerHaptic("success");
     void notifyAchievementCheck();
-  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
+  }, [applyAssetDeltas, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   /**
    * Reload entries after Review Inbox approvals - they're written by
@@ -1097,7 +1092,7 @@ const BudgetScreen: React.FC = () => {
       return;
     }
 
-    const deltas: { accountId: string; amount: number }[] = [];
+    const deltas: BalanceDelta[] = [];
     if (original.linkedAccountId) {
       deltas.push({ accountId: original.linkedAccountId, amount: -original.amount });
     }
@@ -1105,20 +1100,11 @@ const BudgetScreen: React.FC = () => {
       deltas.push({ accountId: updated.linkedAccountId, amount: updated.amount });
     }
 
-    const nextEntries = entries.map((entry) => (entry.id === updated.id ? updated : entry));
-    const nextAssets = deltas.length > 0
-      ? adjustAssetAccounts(assetAccounts, deltas)
-      : assetAccounts;
-
+    // Whole-record patch: the edit sheet hands back the full entry, and
+    // `updateBudgetEntry` re-stamps updatedAt for LWW.
+    const nextEntries = await updateBudgetEntry(updated.id, updated);
     setEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      setAssetAccounts(nextAssets);
-    }
-
-    await saveBudgetEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      await saveAssetAccounts(nextAssets);
-    }
+    await applyAssetDeltas(deltas);
     await Promise.all([
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(nextEntries),
@@ -1134,12 +1120,7 @@ const BudgetScreen: React.FC = () => {
       onUndo: async () => {
         const reverted = await updateBudgetEntry(updated.id, original);
         setEntries(reverted);
-        if (inverseDeltas.length > 0) {
-          const fresh = await getAssetAccounts();
-          const adjusted = adjustAssetAccounts(fresh, inverseDeltas);
-          await saveAssetAccounts(adjusted);
-          setAssetAccounts(adjusted);
-        }
+        await applyAssetDeltas(inverseDeltas);
         await Promise.all([
           refreshNetWorthSnapshots(),
           refreshMonthlyReview(reverted),
@@ -1147,22 +1128,20 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
+  }, [applyAssetDeltas, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
-    const nextAssets = target?.linkedAccountId
-      ? adjustAssetAccounts(assetAccounts, [{ accountId: target.linkedAccountId, amount: -target.amount }])
-      : assetAccounts;
 
     // Soft-delete the entry so a paired partner removes its copy on next
     // sync. `deleteBudgetEntry` returns only live entries, which is what
     // the screen renders.
     const nextEntries = await deleteBudgetEntry(id);
     setEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      setAssetAccounts(nextAssets);
-      await saveAssetAccounts(nextAssets);
+    if (target?.linkedAccountId) {
+      await applyAssetDeltas([
+        { accountId: target.linkedAccountId, amount: -target.amount },
+      ]);
     }
     await Promise.all([
       refreshNetWorthSnapshots(),
@@ -1180,12 +1159,9 @@ const BudgetScreen: React.FC = () => {
         // The delete pulled `target.amount` out of its linked asset;
         // putting the entry back must add it again.
         if (target?.linkedAccountId) {
-          const fresh = await getAssetAccounts();
-          const adjusted = adjustAssetAccounts(fresh, [
+          await applyAssetDeltas([
             { accountId: target.linkedAccountId, amount: target.amount },
           ]);
-          await saveAssetAccounts(adjusted);
-          setAssetAccounts(adjusted);
         }
         await Promise.all([
           refreshNetWorthSnapshots(),
@@ -1194,7 +1170,7 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
+  }, [applyAssetDeltas, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   /* ─── Bulk multi-select ─── */
 
@@ -1264,12 +1240,7 @@ const BudgetScreen: React.FC = () => {
 
     const nextEntries = await deleteBudgetEntries(ids);
     setEntries(nextEntries);
-    if (deltas.length > 0) {
-      const fresh = await getAssetAccounts();
-      const adjusted = adjustAssetAccounts(fresh, deltas);
-      await saveAssetAccounts(adjusted);
-      setAssetAccounts(adjusted);
-    }
+    await applyAssetDeltas(deltas);
     await Promise.all([
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(nextEntries),
@@ -1282,12 +1253,7 @@ const BudgetScreen: React.FC = () => {
       onUndo: async () => {
         const restored = await restoreBudgetEntries(ids);
         setEntries(restored);
-        if (inverse.length > 0) {
-          const fresh = await getAssetAccounts();
-          const adjusted = adjustAssetAccounts(fresh, inverse);
-          await saveAssetAccounts(adjusted);
-          setAssetAccounts(adjusted);
-        }
+        await applyAssetDeltas(inverse);
         await Promise.all([
           refreshNetWorthSnapshots(),
           refreshMonthlyReview(restored),
@@ -1295,7 +1261,7 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [adjustAssetAccounts, entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
+  }, [applyAssetDeltas, entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
 
   const handleBulkRecategorize = useCallback(
     async (category: CategoryName) => {
@@ -1354,14 +1320,20 @@ const BudgetScreen: React.FC = () => {
   }, []);
 
   const applyFoodSplit = useCallback(async () => {
-    const nextEntries = entries.map((entry) => {
-      if (entry.type !== "expense" || entry.category !== "Food") return entry;
+    // Only the entries the draft actually maps; `setBudgetEntryCategories`
+    // stamps updatedAt on those and leaves everything else (including
+    // records synced in behind this screen) untouched.
+    const categoryById: Record<string, "Grocery" | "Restaurant"> = {};
+    for (const entry of entries) {
+      if (entry.type !== "expense" || entry.category !== "Food") continue;
       const mapped = foodSplitDraft[entry.id];
-      return mapped ? { ...entry, category: mapped } : entry;
-    });
-    setEntries(nextEntries);
-    await saveBudgetEntries(nextEntries);
-    await refreshMonthlyReview(nextEntries);
+      if (mapped) categoryById[entry.id] = mapped;
+    }
+    if (Object.keys(categoryById).length > 0) {
+      const nextEntries = await setBudgetEntryCategories(categoryById);
+      setEntries(nextEntries);
+      await refreshMonthlyReview(nextEntries);
+    }
     setShowFoodSplitModal(false);
   }, [entries, foodSplitDraft, refreshMonthlyReview]);
 

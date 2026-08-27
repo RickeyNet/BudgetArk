@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -54,9 +54,11 @@ import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
-  saveAssetAccounts,
+  addAssetAccount,
+  updateAssetAccount,
   deleteAssetAccount,
 } from "../storage/assetAccountStorage";
+import { subscribeDataChanged } from "../storage/dataChangeNotifier";
 import {
   getHoldings,
   saveHoldings,
@@ -287,7 +289,9 @@ const BridgeScreen: React.FC = () => {
         createdAt: now,
         updatedAt: now,
       };
-      await saveAssetAccounts([...accounts, broker]);
+      // Storage-level append: partner sync may have written accounts since
+      // `accounts` was read, and `saveAssetAccounts(snapshot)` would drop them.
+      await addAssetAccount(broker);
     }
     const brokerId = broker.id;
     const nextHoldings = holdings.map((h) =>
@@ -324,6 +328,15 @@ const BridgeScreen: React.FC = () => {
     useCallback(() => {
       void refreshAchievements();
     }, [refreshAchievements])
+  );
+
+  // Bumped when partner sync / bank sync / an import writes storage while
+  // this tab is mounted; a dep of the focus loader below so it re-runs and
+  // the screen shows the merged accounts/holdings instead of a stale snapshot.
+  const [reloadTick, setReloadTick] = useState(0);
+  useEffect(
+    () => subscribeDataChanged(() => setReloadTick((tick) => tick + 1)),
+    []
   );
 
   useFocusEffect(
@@ -397,7 +410,8 @@ const BridgeScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [loadHoldingsState, migrateOrphanHoldings, refreshNetWorthSnapshots])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
+    }, [loadHoldingsState, migrateOrphanHoldings, refreshNetWorthSnapshots, reloadTick])
   );
 
   // Emergency-fund derived current amount. Only the "Savings" category
@@ -856,19 +870,27 @@ const BridgeScreen: React.FC = () => {
     const isEmergencyFund =
       assetCategory === "savings" && assetIsEmergencyFund ? true : undefined;
 
+    // Storage-level upsert (never `saveAssetAccounts(stateArray)`): a
+    // partner sync landing while this tab is mounted adds accounts this
+    // screen's state doesn't know about, and persisting the snapshot over
+    // them hard-deleted those accounts with no tombstone.
     const nextAccounts: AssetAccount[] = editingAsset
-      ? assetAccounts.map((account) =>
-          account.id === editingAsset.id
-            ? { ...account, name, balance, category: assetCategory, isEmergencyFund, updatedAt: now }
-            : account
-        )
-      : [
-          ...assetAccounts,
-          { id: accountId, name, balance, category: assetCategory, isEmergencyFund, createdAt: now, updatedAt: now },
-        ];
-
+      ? await updateAssetAccount(editingAsset.id, {
+          name,
+          balance,
+          category: assetCategory,
+          isEmergencyFund,
+        })
+      : await addAssetAccount({
+          id: accountId,
+          name,
+          balance,
+          category: assetCategory,
+          isEmergencyFund,
+          createdAt: now,
+          updatedAt: now,
+        });
     setAssetAccounts(nextAccounts);
-    await saveAssetAccounts(nextAccounts);
 
     if (hasHoldings) {
       const parseCost = (raw: string): number | undefined => {
@@ -1019,7 +1041,6 @@ const BridgeScreen: React.FC = () => {
     await loadHoldingsState();
     void refreshAchievements();
   }, [
-    assetAccounts,
     assetBalance,
     assetCategory,
     assetIsEmergencyFund,

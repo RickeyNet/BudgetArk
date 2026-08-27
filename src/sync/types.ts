@@ -190,10 +190,22 @@ export interface SyncDiff {
 /* ─── Sync State ─── */
 
 export interface SyncMetadata {
-  /** ISO timestamp of last successful sync */
+  /**
+   * Outgoing-diff watermark: only records with `updatedAt` after this are
+   * sent (null = first sync, send everything). Reset to null by
+   * `resetSyncWatermark` after an import/restore, because restored records
+   * keep their original `updatedAt` and would otherwise never be sent.
+   */
   lastSyncTimestamp: string | null;
   /** Number of syncs completed */
   syncCount: number;
+  /**
+   * ISO timestamp of the last successful sync, for display only. Unlike
+   * `lastSyncTimestamp` it survives a watermark reset, so Profile keeps
+   * showing "Last synced ..." after a restore. Optional: absent on
+   * metadata written before it existed (fall back to lastSyncTimestamp).
+   */
+  lastSyncCompletedAt?: string;
 }
 
 export type SyncStatus =

@@ -71,6 +71,7 @@ import type {
 } from "../types";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
 import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
+import { notifyDataChanged } from "../storage/dataChangeNotifier";
 import {
   isObject,
   isDebtItem,
@@ -773,6 +774,10 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
       changedCount++;
     }
   }
+
+  // Mounted tabs re-run their focus loaders so the merged records show up
+  // now, not on the next tab switch (see dataChangeNotifier.ts).
+  if (changedCount > 0) notifyDataChanged("partner-sync");
 
   return changedCount;
 };

@@ -262,7 +262,11 @@ const ProfileScreen: React.FC = () => {
         setReminderSettings(reminders.value);
       }
       if (syncMeta.status === "fulfilled") {
-        setLastSyncTime(syncMeta.value.lastSyncTimestamp);
+        // Display timestamp survives the post-import watermark reset;
+        // older metadata only has the watermark itself.
+        setLastSyncTime(
+          syncMeta.value.lastSyncCompletedAt ?? syncMeta.value.lastSyncTimestamp
+        );
       }
       if (backup.status === "fulfilled") {
         setBackupState(backup.value);

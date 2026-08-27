@@ -51,6 +51,7 @@ import { fetchSimplefinAccounts } from "./simplefinClient";
 import { fetchTellerData } from "./tellerClient";
 import { planIngest } from "./ingest";
 import { autoApproveInboxByRules } from "./reviewInboxService";
+import { notifyDataChanged } from "../../storage/dataChangeNotifier";
 import { computeFetchWindow, isSyncDue } from "./syncGate";
 import type {
   NormalizedAccount,
@@ -340,6 +341,12 @@ export const syncConnections = async (
           errorMessage: "Something went wrong syncing this connection.",
         });
       }
+    }
+    // An "updated" pass may have written budget entries (auto-approvals),
+    // asset balances and keep-alive stamps behind a mounted tab's back;
+    // tell the screens to reload (see dataChangeNotifier.ts).
+    if (results.some((r) => r.outcome === "updated")) {
+      notifyDataChanged("bank-sync");
     }
     return results;
   })();

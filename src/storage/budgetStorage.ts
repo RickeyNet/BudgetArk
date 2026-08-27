@@ -161,58 +161,91 @@ export const saveBudgetEntries = async (entries: BudgetEntry[]): Promise<void> =
   await writeBudgetEntries(mergePreservingTombstones(entries, stored));
 };
 
-export const addBudgetEntry = async (entry: BudgetEntry): Promise<BudgetEntry[]> => {
-  const entries = await getBudgetEntriesIncludingDeleted();
-  entries.push(entry);
-  await writeBudgetEntries(entries);
-  return filterLive(entries);
+/**
+ * Atomic read-modify-write for the entries collection. `mutate` receives
+ * the CURRENT stored array (tombstones included, corrupt/missing -> empty)
+ * inside encryptedStorage's per-key write queue and returns the next array.
+ *
+ * Every CRUD helper below goes through this rather than the getX -> mutate
+ * -> saveX pattern. The difference matters because entries have writers the
+ * Budget screen never sees: an incoming partner sync (`applyIncomingDiff`)
+ * and bank auto-approvals (`reviewInboxService`) both land on app
+ * foreground. A screen-level `saveBudgetEntries(stateArray)` after either
+ * one hard-deleted their records (`mergePreservingTombstones` deliberately
+ * drops live records absent from its input) - and the partner never
+ * re-sent them because their `updatedAt` predated the sync watermark.
+ * Mutating the stored array in place means those records survive whatever
+ * the screen's state was when the user tapped Save.
+ *
+ * Returns the live (non-tombstoned) result, which is what screens render.
+ */
+const mutateBudgetEntries = async (
+  mutate: (stored: BudgetEntry[]) => BudgetEntry[]
+): Promise<BudgetEntry[]> => {
+  let result: BudgetEntry[] = [];
+  await EncryptedStorage.updateItem(BUDGET_STORAGE_KEYS.ENTRIES, (current) => {
+    let stored: BudgetEntry[] = [];
+    if (current) {
+      try {
+        const parsed: unknown = JSON.parse(current);
+        if (Array.isArray(parsed)) stored = parsed as BudgetEntry[];
+      } catch {
+        stored = [];
+      }
+    }
+    result = mutate(stored);
+    return JSON.stringify(result);
+  });
+  return filterLive(result);
 };
+
+export const addBudgetEntry = async (entry: BudgetEntry): Promise<BudgetEntry[]> =>
+  addBudgetEntries([entry]);
+
+/**
+ * Appends several new entries in one atomic write (the Add Entry modal can
+ * submit a batch). Ids already present in storage are skipped so a retried
+ * save can't duplicate a record.
+ */
+export const addBudgetEntries = async (
+  newEntries: BudgetEntry[]
+): Promise<BudgetEntry[]> =>
+  mutateBudgetEntries((stored) => {
+    if (newEntries.length === 0) return stored;
+    const existingIds = new Set(stored.map((entry) => entry.id));
+    const fresh = newEntries.filter((entry) => !existingIds.has(entry.id));
+    return fresh.length === 0 ? stored : [...stored, ...fresh];
+  });
 
 /**
  * Soft-deletes a budget entry. See debtStorage.deleteDebt for rationale.
  */
-export const deleteBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
-  const entries = await getBudgetEntriesIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = entries.map((entry) =>
-    entry.id === id ? tombstone(entry, now) : entry
-  );
-  await writeBudgetEntries(next);
-  return filterLive(next);
-};
+export const deleteBudgetEntry = async (id: string): Promise<BudgetEntry[]> =>
+  deleteBudgetEntries([id]);
 
 /**
  * Tombstone-safe field update for a single entry. Operates on the
  * including-deleted array (like deleteBudgetEntry) so we never drop a
  * tombstone the next sync needs, and bumps `updatedAt` for LWW. Used by
- * undo-of-edit and bulk recategorize.
+ * the edit sheet, undo-of-edit and bulk recategorize.
  */
 export const updateBudgetEntry = async (
   id: string,
   patch: Partial<BudgetEntry>
-): Promise<BudgetEntry[]> => {
-  const entries = await getBudgetEntriesIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = entries.map((entry) =>
-    entry.id === id ? { ...entry, ...patch, id: entry.id, updatedAt: now } : entry
-  );
-  await writeBudgetEntries(next);
-  return filterLive(next);
-};
+): Promise<BudgetEntry[]> =>
+  mutateBudgetEntries((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((entry) =>
+      entry.id === id ? { ...entry, ...patch, id: entry.id, updatedAt: now } : entry
+    );
+  });
 
 /**
  * Undo a soft-delete: clears the tombstone so the entry is live again.
  * No-op (returns current live set) if the id isn't a tombstone.
  */
-export const restoreBudgetEntry = async (id: string): Promise<BudgetEntry[]> => {
-  const entries = await getBudgetEntriesIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = entries.map((entry) =>
-    entry.id === id && entry.deletedAt ? untombstone(entry, now) : entry
-  );
-  await writeBudgetEntries(next);
-  return filterLive(next);
-};
+export const restoreBudgetEntry = async (id: string): Promise<BudgetEntry[]> =>
+  restoreBudgetEntries([id]);
 
 /* ─── Bulk operations (multi-select) ─── */
 
@@ -223,13 +256,12 @@ export const deleteBudgetEntries = async (
   ids: string[]
 ): Promise<BudgetEntry[]> => {
   const idSet = new Set(ids);
-  const entries = await getBudgetEntriesIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = entries.map((entry) =>
-    idSet.has(entry.id) && !entry.deletedAt ? tombstone(entry, now) : entry
-  );
-  await writeBudgetEntries(next);
-  return filterLive(next);
+  return mutateBudgetEntries((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((entry) =>
+      idSet.has(entry.id) && !entry.deletedAt ? tombstone(entry, now) : entry
+    );
+  });
 };
 
 /**
@@ -239,34 +271,31 @@ export const restoreBudgetEntries = async (
   ids: string[]
 ): Promise<BudgetEntry[]> => {
   const idSet = new Set(ids);
-  const entries = await getBudgetEntriesIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = entries.map((entry) =>
-    idSet.has(entry.id) && entry.deletedAt ? untombstone(entry, now) : entry
-  );
-  await writeBudgetEntries(next);
-  return filterLive(next);
+  return mutateBudgetEntries((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((entry) =>
+      idSet.has(entry.id) && entry.deletedAt ? untombstone(entry, now) : entry
+    );
+  });
 };
 
 /**
  * Sets the category on each entry id in the map (id -> category) in one
- * read/write, bumping updatedAt. Used by bulk recategorize and, with the
- * captured prior categories, by its undo.
+ * read/write, bumping updatedAt. Used by bulk recategorize, the Food split
+ * sheet and, with the captured prior categories, by their undo.
  */
 export const setBudgetEntryCategories = async (
   categoryById: Record<string, BudgetEntry["category"]>
-): Promise<BudgetEntry[]> => {
-  const entries = await getBudgetEntriesIncludingDeleted();
-  const now = new Date().toISOString();
-  const next = entries.map((entry) => {
-    const nextCategory = categoryById[entry.id];
-    return nextCategory != null
-      ? { ...entry, category: nextCategory, updatedAt: now }
-      : entry;
+): Promise<BudgetEntry[]> =>
+  mutateBudgetEntries((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((entry) => {
+      const nextCategory = categoryById[entry.id];
+      return nextCategory != null
+        ? { ...entry, category: nextCategory, updatedAt: now }
+        : entry;
+    });
   });
-  await writeBudgetEntries(next);
-  return filterLive(next);
-};
 
 export const getAllLimitsByMonth = async (): Promise<BudgetLimitHistory> =>
   getLimitHistory();

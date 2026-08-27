@@ -33,6 +33,8 @@ import {
   isBudgetBucket,
 } from "../data/categoryBuckets";
 import { generateUUID } from "./uuid";
+import { resetSyncWatermark } from "../sync/pairingStorage";
+import { notifyDataChanged } from "../storage/dataChangeNotifier";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
 import {
   parseMonthStartBalances,
@@ -1747,6 +1749,22 @@ export const importFromString = async (
   if (tempKeys.length > 0) {
     await EncryptedStorage.multiRemove(tempKeys);
   }
+
+  // Phase 5: Make the restored records visible to a paired partner. Merged
+  // records keep their original `updatedAt` (phase 2, LWW), which is older
+  // than the sync watermark for anything restored from a backup - the
+  // outgoing diff would never send them. Resetting the watermark turns the
+  // next sync into a full (idempotent) send. Best-effort: the import itself
+  // has already succeeded, so a metadata write failure must not report the
+  // whole restore as failed.
+  try {
+    await resetSyncWatermark();
+  } catch (error) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn("Import: could not reset sync watermark", error);
+    }
+  }
+  notifyDataChanged("import");
 
   return counts;
 };

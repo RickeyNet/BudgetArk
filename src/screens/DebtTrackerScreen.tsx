@@ -14,7 +14,7 @@
  * - Uses useCallback extensively to prevent unnecessary child re-renders
  */
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -60,6 +60,7 @@ import {
   getPayoffStrategyPreference,
   savePayoffStrategyPreference,
 } from "../storage/debtStorage";
+import { subscribeDataChanged } from "../storage/dataChangeNotifier";
 import {
   dismissDebtDueForMonth,
   getDebtDueDismissals,
@@ -330,6 +331,15 @@ const DebtTrackerScreen: React.FC = () => {
     });
   }, []);
 
+  // Bumped when partner sync / bank sync / an import writes storage while
+  // this tab is mounted; a dep of the focus loader below so it re-runs and
+  // the screen shows the merged debts/payments instead of a stale snapshot.
+  const [reloadTick, setReloadTick] = useState(0);
+  useEffect(
+    () => subscribeDataChanged(() => setReloadTick((tick) => tick + 1)),
+    []
+  );
+
   /** Load debts from device storage whenever this tab is focused */
   useFocusEffect(
     useCallback(() => {
@@ -460,7 +470,8 @@ const DebtTrackerScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [primeMilestonesModal])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
+    }, [primeMilestonesModal, reloadTick])
   );
 
   // A keep-alive notification tap (or the Bridge banner) navigates here with
