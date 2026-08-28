@@ -31,7 +31,6 @@ import {
   type AssetAccountCategory,
   type BankConnection,
   type ExternalAccountLink,
-  type Person,
   categoryIsPureHoldings,
 } from "../types";
 import { describeError } from "../utils/errorMessage";
@@ -44,7 +43,7 @@ import {
   getLinksForConnection,
   updateLink,
 } from "../storage/externalAccountLinksStorage";
-import { getPeople } from "../storage/personStorage";
+import { usePeople } from "../people/PeopleProvider";
 import {
   addAssetAccount,
   getAssetAccounts,
@@ -113,7 +112,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
   /** Live people, for the per-account "whose card is this" picker. */
-  const [people, setPeople] = useState<Person[]>([]);
+  const { people } = usePeople();
   /** Live Bridge accounts, for the per-account "balance updates" picker. */
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
   /** Link whose preference write is in flight (guards double taps). */
@@ -170,18 +169,13 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     if (visible) void refresh();
   }, [visible, refresh]);
 
-  // People and Bridge accounts load per open (edits made elsewhere between
-  // opens must show in the pickers).
+  // Bridge accounts load per open (edits made elsewhere between opens must
+  // show in the picker); people come from PeopleProvider.
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     // Picker sources: a failed read leaves the previous list in place (the
     // pickers just offer fewer choices) rather than blocking the modal.
-    void getPeople()
-      .then((result) => {
-        if (!cancelled) setPeople(result);
-      })
-      .catch(() => undefined);
     void getAssetAccounts()
       .then((result) => {
         if (!cancelled) setAssetAccounts(result);

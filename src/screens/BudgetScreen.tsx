@@ -64,8 +64,6 @@ import {
   SavingsGoal,
   AssetAccount,
   BudgetBucket,
-  Business,
-  Person,
   RootTabParamList,
 } from "../types";
 import {
@@ -99,8 +97,7 @@ import {
   getAssetAccounts,
   adjustAssetAccountBalances,
 } from "../storage/assetAccountStorage";
-import { getBusinesses } from "../storage/businessStorage";
-import { getPeople } from "../storage/personStorage";
+import { useBusinesses, usePeople } from "../people/PeopleProvider";
 import {
   getCategoryBucketOverrides,
   removeCategoryBucketOverride,
@@ -315,9 +312,9 @@ const BudgetScreen: React.FC = () => {
   const [reviewPreviewData, setReviewPreviewData] = useState<MonthlyReviewData | null>(null);
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
   // Reloaded on every focus, so edits in Profile -> Businesses show up here.
-  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const { businesses } = useBusinesses();
   // Same focus-reload rationale for Profile -> People edits.
-  const [people, setPeople] = useState<Person[]>([]);
+  const { people } = usePeople();
   /** Spending-card "💼 Business only" filter chip. Session-only by design -
    *  a sticky filter would silently misrepresent spending next launch. */
   const [businessOnly, setBusinessOnly] = useState(false);
@@ -380,8 +377,6 @@ const BudgetScreen: React.FC = () => {
           allLimitsByMonth,
           storedBucketOverrides,
           storedDueDismissals,
-          storedBusinesses,
-          storedPeople,
           storedMonthBalances,
         ] = await Promise.all([
           getBudgetEntries(),
@@ -393,8 +388,6 @@ const BudgetScreen: React.FC = () => {
           getAllLimitsByMonth(),
           getCategoryBucketOverrides(),
           getDebtDueDismissals(),
-          getBusinesses(),
-          getPeople(),
           getMonthStartBalances(),
         ]);
         if (cancelled) return;
@@ -414,7 +407,7 @@ const BudgetScreen: React.FC = () => {
           processed.entries,
           allLimitsByMonth,
           6,
-          storedPeople
+          people
         );
 
         setEntries(processed.entries);
@@ -423,8 +416,6 @@ const BudgetScreen: React.FC = () => {
         setDueDismissals(storedDueDismissals);
         setSavingsGoals(storedGoals);
         setAssetAccounts(processed.assetAccounts);
-        setBusinesses(storedBusinesses);
-        setPeople(storedPeople);
         setMonthBalances(storedMonthBalances);
         setReviewPreviewData(nextReviewData);
         setBucketOverrides(storedBucketOverrides);
@@ -447,7 +438,7 @@ const BudgetScreen: React.FC = () => {
         cancelled = true;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
-    }, [refreshNetWorthSnapshots, reloadTick])
+    }, [people, refreshNetWorthSnapshots, reloadTick])
   );
 
   // Category limits are the ONLY month-scoped collection, so they reload on

@@ -30,32 +30,24 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { Business } from "../types";
 import { MAX_BUSINESS_NAME_LENGTH } from "../types";
-import {
-  addBusiness,
-  deleteBusiness,
-  getBusinesses,
-  updateBusiness,
-} from "../storage/businessStorage";
+import { useBusinesses } from "../people/PeopleProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 
 interface ManageBusinessesModalProps {
   visible: boolean;
   onClose: () => void;
-  /** Fired after any successful add/rename/delete so parents can refresh. */
-  onChanged?: () => void;
 }
 
 const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   visible,
   onClose,
-  onChanged,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const sheet = useSheetStyles();
 
-  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const { businesses, addBusiness, updateBusiness, deleteBusiness } = useBusinesses();
   const [entryCounts, setEntryCounts] = useState<Record<string, number>>({});
   const [name, setName] = useState("");
   /** Business id being renamed; null = the form adds a new business. */
@@ -68,12 +60,8 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
     let cancelled = false;
     void (async () => {
       try {
-        const [list, entries] = await Promise.all([
-          getBusinesses(),
-          getBudgetEntries(),
-        ]);
+        const entries = await getBudgetEntries();
         if (cancelled) return;
-        setBusinesses(list);
         const counts: Record<string, number> = {};
         for (const entry of entries) {
           if (entry.businessId) {
@@ -111,9 +99,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
         ? await updateBusiness(editingId, { name })
         : await addBusiness(name);
       if (result.ok) {
-        setBusinesses(result.businesses);
         resetForm();
-        onChanged?.();
       } else {
         setError(result.error);
       }
@@ -123,7 +109,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [editingId, name, onChanged, resetForm, saving]);
+  }, [addBusiness, editingId, name, resetForm, saving, updateBusiness]);
 
   const handleStartRename = useCallback((business: Business) => {
     setEditingId(business.id);
@@ -149,10 +135,8 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
             onPress: () => {
               void (async () => {
                 try {
-                  const next = await deleteBusiness(id);
-                  setBusinesses(next);
+                  await deleteBusiness(id);
                   if (editingId === id) resetForm();
-                  onChanged?.();
                 } catch (error) {
                   setError(
                     describeError(error, "Couldn't delete this business. Please try again."),
@@ -164,7 +148,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
         ],
       );
     },
-    [editingId, entryCounts, onChanged, resetForm],
+    [deleteBusiness, editingId, entryCounts, resetForm],
   );
 
   const canSubmit = name.trim().length > 0 && !saving;

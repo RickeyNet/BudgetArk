@@ -27,7 +27,6 @@ import {
   AssetAccount,
   AssetAccountCategory,
   BankProvider,
-  Person,
   categoryIsPureHoldings,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
@@ -44,7 +43,7 @@ import {
   type AccountSelection,
 } from "../services/connections/connectionsService";
 import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
-import { getPeople } from "../storage/personStorage";
+import { usePeople } from "../people/PeopleProvider";
 import type { NormalizedAccount } from "../services/connections/types";
 import { addAssetAccount } from "../storage/assetAccountStorage";
 import { generateUUID } from "../utils/uuid";
@@ -151,7 +150,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   const [selections, setSelections] = useState<DraftSelection[]>([]);
   const [localAccounts, setLocalAccounts] = useState<AssetAccount[]>(assetAccounts);
   /** Live people, for the per-account "whose card is this" picker. */
-  const [people, setPeople] = useState<Person[]>([]);
+  const { people } = usePeople();
 
   // Inline "+ New account" mini-form state (one at a time, per provider account).
   const [newAccountFor, setNewAccountFor] = useState<string | null>(null);
@@ -212,18 +211,6 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     if (visible && !wasVisible.current) reset();
     wasVisible.current = visible;
   }, [visible, reset]);
-
-  // People load per open (Profile -> People edits between opens must show).
-  useEffect(() => {
-    if (!visible) return;
-    let cancelled = false;
-    void getPeople().then((result) => {
-      if (!cancelled) setPeople(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [visible]);
 
   const enterMapStep = useCallback((id: string, accounts: NormalizedAccount[]) => {
     setConnectionId(id);

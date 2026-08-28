@@ -27,7 +27,7 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
-import { getPeopleIncludingDeleted } from "../storage/personStorage";
+import { usePeople } from "../people/PeopleProvider";
 import {
   buildPersonReportCsv,
   computePersonReport,
@@ -35,7 +35,7 @@ import {
 } from "../utils/personReport";
 import { shareLocalFileThenDelete } from "../utils/shareTempFile";
 import { useValueChanged } from "../hooks/useValueChanged";
-import type { BudgetEntry, Person } from "../types";
+import type { BudgetEntry } from "../types";
 
 interface PersonReportModalProps {
   visible: boolean;
@@ -53,7 +53,7 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
   const { formatCurrency } = useCurrency();
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
-  const [people, setPeople] = useState<Person[]>([]);
+  const { peopleIncludingDeleted: people } = usePeople();
   const [year, setYear] = useState(new Date().getFullYear());
   const [loaded, setLoaded] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -69,19 +69,14 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
     let cancelled = false;
     void (async () => {
       try {
-        const [storedEntries, storedPeople] = await Promise.all([
-          getBudgetEntries(),
-          getPeopleIncludingDeleted(),
-        ]);
+        const storedEntries = await getBudgetEntries();
         if (cancelled) return;
         setEntries(storedEntries);
-        setPeople(storedPeople);
       } catch (error) {
         // Show an empty report rather than a stuck "Loading…" screen.
         if (cancelled) return;
         if (__DEV__) console.error("Person report load failed:", error);
         setEntries([]);
-        setPeople([]);
       }
       setLoaded(true);
     })();

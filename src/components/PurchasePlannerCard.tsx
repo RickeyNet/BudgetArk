@@ -48,7 +48,8 @@ import { calcDebtRedirectImpact, formatWhatIfMonths } from "../utils/whatIfSpend
 import { sanitizeTextInput } from "../utils/sanitize";
 import { generateUUID } from "../utils/uuid";
 import { triggerHaptic } from "../utils/haptics";
-import SmoothSlider from "./SmoothSlider";
+import SliderRow from "./SliderRow";
+import { useToolStyles } from "../theme/toolStyles";
 import MonthYearPicker from "./MonthYearPicker";
 import PurchasePlanList, {
   filterPurchasePlans,
@@ -79,6 +80,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const tool = useToolStyles();
 
   const [open, setOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -217,23 +219,23 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
 
   return (
     <>
-      <TouchableOpacity style={styles.toolHeader} onPress={toggleOpen} activeOpacity={0.7}>
+      <TouchableOpacity style={tool.toolHeader} onPress={toggleOpen} activeOpacity={0.7}>
         <View>
-          <Text style={styles.toolTitle}>Plan a Purchase</Text>
-          <Text style={styles.toolHint}>
+          <Text style={tool.toolTitle}>Plan a Purchase</Text>
+          <Text style={tool.toolHint}>
             Sinking funds that fit around your Ark milestones
           </Text>
         </View>
-        <Text style={styles.toolChevron}>{open ? "▾" : "›"}</Text>
+        <Text style={tool.toolChevron}>{open ? "▾" : "›"}</Text>
       </TouchableOpacity>
 
       {open && (
-        <View style={styles.toolBody}>
+        <View style={tool.toolBody}>
           {/* Existing plans - tracked day-to-day on the Bridge, editable here too */}
           {plans.length > 0 && (
-            <View style={styles.efCard}>
-              <Text style={styles.efSectionTitle}>Your plans</Text>
-              <Text style={styles.efAutoHint}>
+            <View style={tool.efCard}>
+              <Text style={tool.efSectionTitle}>Your plans</Text>
+              <Text style={tool.efAutoHint}>
                 Tap a plan to add funds. Plans live on your Bridge and count
                 toward net worth.
               </Text>
@@ -251,21 +253,21 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
             </TouchableOpacity>
           ) : (
             <>
-              <View style={styles.efCard}>
-                <Text style={styles.efSectionTitle}>What are you saving for?</Text>
+              <View style={tool.efCard}>
+                <Text style={tool.efSectionTitle}>What are you saving for?</Text>
                 <TextInput
-                  style={styles.input}
+                  style={tool.input}
                   placeholder="e.g. New laptop"
                   placeholderTextColor={colors.textMuted}
                   value={itemName}
                   onChangeText={(text) => setItemName(sanitizeTextInput(text))}
                   maxLength={40}
                 />
-                <View style={styles.inputRow}>
-                  <View style={styles.inputHalf}>
-                    <Text style={styles.inputLabel}>Price</Text>
+                <View style={tool.inputRow}>
+                  <View style={tool.inputHalf}>
+                    <Text style={tool.inputLabel}>Price</Text>
                     <TextInput
-                      style={styles.input}
+                      style={tool.input}
                       placeholder="0"
                       placeholderTextColor={colors.textMuted}
                       keyboardType="decimal-pad"
@@ -274,10 +276,10 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                       maxLength={12}
                     />
                   </View>
-                  <View style={styles.inputHalf}>
-                    <Text style={styles.inputLabel}>Already saved</Text>
+                  <View style={tool.inputHalf}>
+                    <Text style={tool.inputLabel}>Already saved</Text>
                     <TextInput
-                      style={styles.input}
+                      style={tool.input}
                       placeholder="0"
                       placeholderTextColor={colors.textMuted}
                       keyboardType="decimal-pad"
@@ -287,18 +289,18 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                     />
                   </View>
                 </View>
-                <View style={styles.chipWrap}>
+                <View style={tool.chipWrap}>
                   {PLAN_CATEGORIES.map((option) => {
                     const isSelected = option.key === category;
                     return (
                       <TouchableOpacity
                         key={option.key}
-                        style={[styles.chip, isSelected && styles.chipActive]}
+                        style={[tool.chip, isSelected && tool.chipActive]}
                         onPress={() => setCategory(option.key)}
                         activeOpacity={0.7}
                       >
                         <Text
-                          style={[styles.chipText, isSelected && styles.chipTextActive]}
+                          style={[tool.chipText, isSelected && tool.chipTextActive]}
                         >
                           {option.icon} {option.label}
                         </Text>
@@ -311,50 +313,20 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
               {price > 0 && (
                 <>
                   {/* Monthly set-aside */}
-                  <View style={styles.efCard}>
-                    <View style={styles.sliderGroup}>
-                      <View style={styles.sliderHeader}>
-                        <Text style={styles.sliderLabel}>Set aside each month</Text>
-                        <Text style={styles.sliderValue}>{formatCurrency(monthly)}</Text>
-                      </View>
-                      <View style={styles.sliderRow}>
-                        <TouchableOpacity
-                          style={styles.sliderBtn}
-                          onPress={() => setMonthly((p) => Math.max(0, p - 25))}
-                          disabled={monthly <= 0}
-                        >
-                          <Text
-                            style={[styles.sliderBtnText, monthly <= 0 && styles.sliderBtnDisabled]}
-                          >
-                            -
-                          </Text>
-                        </TouchableOpacity>
-                        <SmoothSlider
-                          value={monthly}
-                          min={0}
-                          max={sliderMax}
-                          step={5}
-                          onValueChange={setMonthly}
-                          trackColor={colors.bg}
-                          fillColor={colors.accent}
-                          thumbColor={colors.accent}
-                          thumbBorderColor={colors.card}
-                        />
-                        <TouchableOpacity
-                          style={styles.sliderBtn}
-                          onPress={() => setMonthly((p) => Math.min(sliderMax, p + 25))}
-                          disabled={monthly >= sliderMax}
-                        >
-                          <Text
-                            style={[
-                              styles.sliderBtnText,
-                              monthly >= sliderMax && styles.sliderBtnDisabled,
-                            ]}
-                          >
-                            +
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                  <View style={tool.efCard}>
+                    <View style={tool.sliderGroup}>
+                      <SliderRow
+                        label="Set aside each month"
+                        value={monthly}
+                        min={0}
+                        max={sliderMax}
+                        step={5}
+                        displayValue={formatCurrency(monthly)}
+                        onValueChange={setMonthly}
+                        onAdjust={(delta) =>
+                          setMonthly((p) => Math.max(0, Math.min(sliderMax, p + delta * 25)))
+                        }
+                      />
 
                       {/* Need-by month */}
                       <TouchableOpacity
@@ -369,7 +341,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                         </Text>
                       </TouchableOpacity>
                       {requiredMonthly !== null && requiredMonthly > 0 && (
-                        <Text style={styles.efAutoHint}>
+                        <Text style={tool.efAutoHint}>
                           That date needs {formatCurrency(requiredMonthly)}/mo
                           {monthly > 0 && monthly < requiredMonthly
                             ? ` - your current ${formatCurrency(monthly)}/mo won't make it in time.`
@@ -380,8 +352,8 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                   </View>
 
                   {/* Timeline + fit */}
-                  <View style={styles.efCard}>
-                    <Text style={styles.efSectionTitle}>
+                  <View style={tool.efCard}>
+                    <Text style={tool.efSectionTitle}>
                       {timeline.monthsToReady === 0
                         ? "You could buy this today"
                         : timeline.readyDate
@@ -390,7 +362,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                     </Text>
                     {fitLine && <Text style={styles.fitText}>{fitLine}</Text>}
                     {fit === "unknown" && cashFlow.monthsTracked === 0 && monthly > 0 && (
-                      <Text style={styles.efAutoHint}>
+                      <Text style={tool.efAutoHint}>
                         Log a few months of income and expenses in the Budget tab
                         and this tool can check the pace against your real cash
                         flow.
@@ -462,153 +434,11 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
  * tools despite living in its own file.
  */
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
-  const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-    toolHeader: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: `${colors.accent}30`,
-      borderRadius: tokens.radius,
-      paddingVertical: tokens.pad,
-      paddingHorizontal: tokens.pad + 2,
-      marginBottom: tokens.gapSm,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    toolTitle: {
-      fontSize: scale(16),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 2,
-    },
-    toolHint: {
-      fontSize: 12,
-      color: colors.textMuted,
-    },
-    toolChevron: {
-      fontSize: 18,
-      color: colors.textMuted,
-      fontWeight: "600",
-      marginLeft: 12,
-    },
-    toolBody: {
-      gap: tokens.gapSm,
-    },
-    efCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 14,
-      padding: 16,
-      gap: 8,
-    },
-    efSectionTitle: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.text,
-    },
-    efAutoHint: {
-      fontSize: 12,
-      color: colors.textDim,
-    },
 
     /* Inputs */
-    input: {
-      backgroundColor: colors.bg,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: scale(15),
-      color: colors.text,
-    },
-    inputRow: {
-      flexDirection: "row",
-      gap: 10,
-    },
-    inputHalf: {
-      flex: 1,
-      gap: 4,
-    },
-    inputLabel: {
-      fontSize: 12,
-      color: colors.textDim,
-      fontWeight: "500",
-    },
-    chipWrap: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 4,
-    },
-    chip: {
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      backgroundColor: colors.bg,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      alignItems: "center",
-    },
-    chipActive: {
-      borderColor: colors.accent,
-      backgroundColor: `${colors.accent}15`,
-    },
-    chipText: {
-      fontSize: scale(13),
-      color: colors.text,
-      fontWeight: "600",
-    },
-    chipTextActive: {
-      color: colors.accent,
-    },
 
     /* Slider */
-    sliderGroup: {
-      gap: 8,
-    },
-    sliderHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    sliderLabel: {
-      fontSize: 13,
-      color: colors.textDim,
-      fontWeight: "500",
-    },
-    sliderValue: {
-      fontSize: 15,
-      color: colors.text,
-      fontWeight: "700",
-      fontVariant: ["tabular-nums"],
-    },
-    sliderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
-    sliderBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      backgroundColor: colors.bg,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    sliderBtnText: {
-      fontSize: 20,
-      color: colors.text,
-      fontWeight: "600",
-      lineHeight: 22,
-    },
-    sliderBtnDisabled: {
-      opacity: 0.2,
-    },
     needByRow: {
       flexDirection: "row",
       justifyContent: "space-between",

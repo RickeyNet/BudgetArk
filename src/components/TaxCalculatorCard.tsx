@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import CodeChipGrid, { type CodeChipStyles } from "./CodeChipGrid";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
+import { useToolStyles } from "../theme/toolStyles";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -62,6 +63,7 @@ const TaxCalculatorCard: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const tool = useToolStyles();
 
   const [open, setOpen] = useState(false);
   const [grossText, setGrossText] = useState("");
@@ -77,13 +79,13 @@ const TaxCalculatorCard: React.FC = () => {
   // keystroke in the salary/deduction inputs (see CodeChipGrid).
   const stateChipStyles = useMemo<CodeChipStyles>(
     () => ({
-      wrap: styles.chipWrap,
+      wrap: tool.chipWrap,
       chip: styles.stateChip,
-      chipActive: styles.chipActive,
-      text: styles.chipText,
-      textActive: styles.chipTextActive,
+      chipActive: tool.chipActive,
+      text: tool.chipText,
+      textActive: tool.chipTextActive,
     }),
-    [styles],
+    [styles, tool],
   );
   const compareOptions = useMemo(
     () => STATE_TAX_2026.filter((s) => s.code !== stateCode),
@@ -151,24 +153,24 @@ const TaxCalculatorCard: React.FC = () => {
 
   return (
     <>
-      <TouchableOpacity style={styles.toolHeader} onPress={toggleOpen} activeOpacity={0.7}>
+      <TouchableOpacity style={tool.toolHeader} onPress={toggleOpen} activeOpacity={0.7}>
         <View>
-          <Text style={styles.toolTitle}>Take-Home Pay</Text>
-          <Text style={styles.toolHint}>
+          <Text style={tool.toolTitle}>Take-Home Pay</Text>
+          <Text style={tool.toolHint}>
             Estimate US federal, state, and payroll tax on a salary
           </Text>
         </View>
-        <Text style={styles.toolChevron}>{open ? "▾" : "›"}</Text>
+        <Text style={tool.toolChevron}>{open ? "▾" : "›"}</Text>
       </TouchableOpacity>
 
       {open && (
         <View style={styles.toolBody}>
           {/* Income + filing status + frequency */}
-          <View style={styles.efCard}>
-            <Text style={styles.efSectionTitle}>Your income</Text>
+          <View style={tool.efCard}>
+            <Text style={tool.efSectionTitle}>Your income</Text>
             <Text style={styles.inputLabel}>Gross annual salary (USD)</Text>
             <TextInput
-              style={styles.input}
+              style={tool.input}
               placeholder="e.g. 75000"
               placeholderTextColor={colors.textMuted}
               keyboardType="decimal-pad"
@@ -177,30 +179,30 @@ const TaxCalculatorCard: React.FC = () => {
               maxLength={12}
             />
             <Text style={styles.inputLabel}>Filing status</Text>
-            <View style={styles.chipWrap}>
+            <View style={tool.chipWrap}>
               {FILING_STATUS_OPTIONS.map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
-                  style={[styles.chip, status === opt.value && styles.chipActive]}
+                  style={[tool.chip, status === opt.value && tool.chipActive]}
                   onPress={() => setStatus(opt.value)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.chipText, status === opt.value && styles.chipTextActive]}>
+                  <Text style={[tool.chipText, status === opt.value && tool.chipTextActive]}>
                     {opt.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
             <Text style={styles.inputLabel}>Paid every</Text>
-            <View style={styles.chipWrap}>
+            <View style={tool.chipWrap}>
               {PAY_FREQUENCY_OPTIONS.map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
-                  style={[styles.chip, payPeriods === opt.value && styles.chipActive]}
+                  style={[tool.chip, payPeriods === opt.value && tool.chipActive]}
                   onPress={() => setPayPeriods(opt.value)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.chipText, payPeriods === opt.value && styles.chipTextActive]}>
+                  <Text style={[tool.chipText, payPeriods === opt.value && tool.chipTextActive]}>
                     {opt.label}
                   </Text>
                 </TouchableOpacity>
@@ -209,8 +211,8 @@ const TaxCalculatorCard: React.FC = () => {
           </View>
 
           {/* State */}
-          <View style={styles.efCard}>
-            <Text style={styles.efSectionTitle}>State</Text>
+          <View style={tool.efCard}>
+            <Text style={tool.efSectionTitle}>State</Text>
             <CodeChipGrid
               options={STATE_TAX_2026}
               selected={stateCode}
@@ -229,13 +231,13 @@ const TaxCalculatorCard: React.FC = () => {
           </View>
 
           {/* Pre-tax deductions */}
-          <View style={styles.efCard}>
-            <Text style={styles.efSectionTitle}>Pre-tax deductions (optional)</Text>
-            <View style={styles.inputRow}>
-              <View style={styles.inputHalf}>
+          <View style={tool.efCard}>
+            <Text style={tool.efSectionTitle}>Pre-tax deductions (optional)</Text>
+            <View style={tool.inputRow}>
+              <View style={tool.inputHalf}>
                 <Text style={styles.inputLabel}>401(k) % of pay</Text>
                 <TextInput
-                  style={styles.input}
+                  style={tool.input}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
                   keyboardType="decimal-pad"
@@ -244,10 +246,10 @@ const TaxCalculatorCard: React.FC = () => {
                   maxLength={5}
                 />
               </View>
-              <View style={styles.inputHalf}>
+              <View style={tool.inputHalf}>
                 <Text style={styles.inputLabel}>HSA per year</Text>
                 <TextInput
-                  style={styles.input}
+                  style={tool.input}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
                   keyboardType="decimal-pad"
@@ -256,10 +258,10 @@ const TaxCalculatorCard: React.FC = () => {
                   maxLength={8}
                 />
               </View>
-              <View style={styles.inputHalf}>
+              <View style={tool.inputHalf}>
                 <Text style={styles.inputLabel}>Health / month</Text>
                 <TextInput
-                  style={styles.input}
+                  style={tool.input}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
                   keyboardType="decimal-pad"
@@ -290,8 +292,8 @@ const TaxCalculatorCard: React.FC = () => {
 
               {/* Where each dollar goes */}
               {segments.length > 0 && (
-                <View style={styles.efCard}>
-                  <Text style={styles.efSectionTitle}>Where each dollar goes</Text>
+                <View style={tool.efCard}>
+                  <Text style={tool.efSectionTitle}>Where each dollar goes</Text>
                   <View style={styles.dollarBar}>
                     {segments.map((s) => (
                       <View
@@ -313,8 +315,8 @@ const TaxCalculatorCard: React.FC = () => {
                 </View>
               )}
 
-              <View style={styles.efCard}>
-                <Text style={styles.efSectionTitle}>Yearly breakdown</Text>
+              <View style={tool.efCard}>
+                <Text style={tool.efSectionTitle}>Yearly breakdown</Text>
                 {breakdownRow("Gross salary", usd(result.grossAnnual))}
                 {result.pretax401k > 0 &&
                   breakdownRow("401(k) contribution", `-${usd(result.pretax401k)}`)}
@@ -345,8 +347,8 @@ const TaxCalculatorCard: React.FC = () => {
               </View>
 
               {/* Compare states */}
-              <View style={styles.efCard}>
-                <Text style={styles.efSectionTitle}>What if you moved?</Text>
+              <View style={tool.efCard}>
+                <Text style={tool.efSectionTitle}>What if you moved?</Text>
                 <CodeChipGrid
                   options={compareOptions}
                   selected={compareCode}
@@ -388,94 +390,20 @@ const TaxCalculatorCard: React.FC = () => {
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-    toolHeader: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: `${colors.accent}30`,
-      borderRadius: tokens.radius,
-      paddingVertical: tokens.pad,
-      paddingHorizontal: tokens.pad + 2,
-      marginBottom: tokens.gapSm,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    toolTitle: {
-      fontSize: scale(16),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 2,
-    },
-    toolHint: {
-      fontSize: 12,
-      color: colors.textMuted,
-    },
-    toolChevron: {
-      fontSize: 18,
-      color: colors.textMuted,
-      fontWeight: "600",
-      marginLeft: 12,
-    },
     toolBody: {
       gap: tokens.gapSm,
       marginBottom: tokens.gapSm,
-    },
-    efCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 14,
-      padding: 16,
-      gap: 8,
-    },
-    efSectionTitle: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.text,
     },
     efAutoHint: {
       fontSize: 12,
       color: colors.textDim,
       lineHeight: 17,
     },
-    input: {
-      backgroundColor: colors.bg,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: scale(15),
-      color: colors.text,
-    },
-    inputRow: {
-      flexDirection: "row",
-      gap: 10,
-    },
-    inputHalf: {
-      flex: 1,
-      gap: 4,
-    },
     inputLabel: {
       fontSize: 12,
       color: colors.textDim,
       fontWeight: "500",
       marginTop: 4,
-    },
-    chipWrap: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 4,
-    },
-    chip: {
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      backgroundColor: colors.bg,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      alignItems: "center",
     },
     stateChip: {
       borderWidth: 1,
@@ -486,18 +414,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       paddingVertical: 7,
       alignItems: "center",
       minWidth: 42,
-    },
-    chipActive: {
-      borderColor: colors.accent,
-      backgroundColor: `${colors.accent}15`,
-    },
-    chipText: {
-      fontSize: scale(13),
-      color: colors.text,
-      fontWeight: "600",
-    },
-    chipTextActive: {
-      color: colors.accent,
     },
     resultCard: {
       backgroundColor: colors.card,

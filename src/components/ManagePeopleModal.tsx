@@ -30,32 +30,24 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import type { Person } from "../types";
 import { MAX_PERSON_NAME_LENGTH } from "../types";
-import {
-  addPerson,
-  deletePerson,
-  getPeople,
-  updatePerson,
-} from "../storage/personStorage";
+import { usePeople } from "../people/PeopleProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 
 interface ManagePeopleModalProps {
   visible: boolean;
   onClose: () => void;
-  /** Fired after any successful add/rename/delete so parents can refresh. */
-  onChanged?: () => void;
 }
 
 const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
   visible,
   onClose,
-  onChanged,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const sheet = useSheetStyles();
 
-  const [people, setPeople] = useState<Person[]>([]);
+  const { people, addPerson, updatePerson, deletePerson } = usePeople();
   const [entryCounts, setEntryCounts] = useState<Record<string, number>>({});
   const [name, setName] = useState("");
   /** Person id being renamed; null = the form adds a new person. */
@@ -68,12 +60,8 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
     let cancelled = false;
     void (async () => {
       try {
-        const [list, entries] = await Promise.all([
-          getPeople(),
-          getBudgetEntries(),
-        ]);
+        const entries = await getBudgetEntries();
         if (cancelled) return;
-        setPeople(list);
         const counts: Record<string, number> = {};
         for (const entry of entries) {
           if (entry.personId) {
@@ -111,9 +99,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
         ? await updatePerson(editingId, { name })
         : await addPerson(name);
       if (result.ok) {
-        setPeople(result.people);
         resetForm();
-        onChanged?.();
       } else {
         setError(result.error);
       }
@@ -123,7 +109,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [editingId, name, onChanged, resetForm, saving]);
+  }, [addPerson, editingId, name, resetForm, saving, updatePerson]);
 
   const handleStartRename = useCallback((person: Person) => {
     setEditingId(person.id);
@@ -149,10 +135,8 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
             onPress: () => {
               void (async () => {
                 try {
-                  const next = await deletePerson(id);
-                  setPeople(next);
+                  await deletePerson(id);
                   if (editingId === id) resetForm();
-                  onChanged?.();
                 } catch (error) {
                   setError(
                     describeError(error, "Couldn't delete this person. Please try again."),
@@ -164,7 +148,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
         ],
       );
     },
-    [editingId, entryCounts, onChanged, resetForm],
+    [deletePerson, editingId, entryCounts, resetForm],
   );
 
   const canSubmit = name.trim().length > 0 && !saving;

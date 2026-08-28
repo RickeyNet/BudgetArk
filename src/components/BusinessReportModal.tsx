@@ -26,7 +26,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
-import { getBusinessesIncludingDeleted } from "../storage/businessStorage";
+import { useBusinesses } from "../people/PeopleProvider";
 import {
   buildBusinessReportCsv,
   computeBusinessReport,
@@ -40,7 +40,7 @@ import {
   countPlannedReceipts,
   deleteReceiptZip,
 } from "../services/attachments/receiptZipExport";
-import type { BudgetEntry, Business } from "../types";
+import type { BudgetEntry } from "../types";
 
 interface BusinessReportModalProps {
   visible: boolean;
@@ -57,7 +57,7 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
   const { formatCurrency } = useCurrency();
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
-  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const { businessesIncludingDeleted: businesses } = useBusinesses();
   const [year, setYear] = useState(new Date().getFullYear());
   const [loaded, setLoaded] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -74,19 +74,14 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
     let cancelled = false;
     void (async () => {
       try {
-        const [storedEntries, storedBusinesses] = await Promise.all([
-          getBudgetEntries(),
-          getBusinessesIncludingDeleted(),
-        ]);
+        const storedEntries = await getBudgetEntries();
         if (cancelled) return;
         setEntries(storedEntries);
-        setBusinesses(storedBusinesses);
       } catch (error) {
         // Show an empty report rather than a stuck "Loading…" screen.
         if (cancelled) return;
         if (__DEV__) console.error("Business report load failed:", error);
         setEntries([]);
-        setBusinesses([]);
       }
       setLoaded(true);
     })();

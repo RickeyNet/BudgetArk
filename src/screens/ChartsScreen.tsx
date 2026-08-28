@@ -107,7 +107,8 @@ import type {
   SavingsGoal,
 } from "../types";
 import { LESSON_TOPICS } from "../types";
-import SmoothSlider from "../components/SmoothSlider";
+import SliderRow from "../components/SliderRow";
+import { useToolStyles } from "../theme/toolStyles";
 import { CHAPTERS } from "../data/lessonChapters";
 import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
 import {
@@ -339,6 +340,7 @@ const ChartsScreen: React.FC = () => {
   // automaticallyAdjustKeyboardInsets. See the hook's header for the split.
   const onKeyboardInputScroll = useAndroidKeyboardInputScroll(scrollRef);
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const tool = useToolStyles();
 
   /* Compound interest calculator state */
   const [calcOpen, setCalcOpen] = useState(false);
@@ -699,59 +701,25 @@ const ChartsScreen: React.FC = () => {
           : `${value} yr`;
 
     return (
-      <View key={key} style={styles.sliderGroup}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          {loanEditor.editingKey === key ? (
-            <TextInput
-              style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
-              value={loanEditor.editingText}
-              onChangeText={(text) => loanEditor.changeEditingText(key, text)}
-              onBlur={() => loanEditor.commitEditing(key)}
-              onSubmitEditing={() => loanEditor.commitEditing(key)}
-              keyboardType={key === "loanRate" ? "decimal-pad" : "numeric"}
-              returnKeyType="done"
-              selectTextOnFocus
-              autoFocus
-              placeholderTextColor={colors.textMuted}
-            />
-          ) : (
-            <TouchableOpacity
-              style={styles.sliderValueDisplay}
-              onPress={() => loanEditor.beginEditing(key, value)}
-            >
-              <Text style={styles.sliderValue}>{displayValue}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <View style={styles.sliderRow}>
-          <TouchableOpacity
-            style={styles.sliderBtn}
-            onPress={() => loanEditor.adjustBy(key, -1)}
-            disabled={value <= cfg.min}
-          >
-            <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
-          </TouchableOpacity>
-          <SmoothSlider
-            value={value}
-            min={cfg.min}
-            max={cfg.max}
-            step={cfg.step}
-            onValueChange={(val) => loanEditor.setValue(key, val)}
-            trackColor={colors.bg}
-            fillColor={colors.accent}
-            thumbColor={colors.accent}
-            thumbBorderColor={colors.card}
-          />
-          <TouchableOpacity
-            style={styles.sliderBtn}
-            onPress={() => loanEditor.adjustBy(key, 1)}
-            disabled={value >= cfg.max}
-          >
-            <Text style={[styles.sliderBtnText, value >= cfg.max && styles.sliderBtnDisabled]}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <SliderRow
+        key={key}
+        label={cfg.label}
+        value={value}
+        min={cfg.min}
+        max={cfg.max}
+        step={cfg.step}
+        displayValue={displayValue}
+        onValueChange={(val) => loanEditor.setValue(key, val)}
+        onAdjust={(delta) => loanEditor.adjustBy(key, delta)}
+        editor={{
+          active: loanEditor.editingKey === key,
+          text: loanEditor.editingText,
+          decimal: key === "loanRate",
+          onBegin: () => loanEditor.beginEditing(key, value),
+          onChangeText: (text) => loanEditor.changeEditingText(key, text),
+          onCommit: () => loanEditor.commitEditing(key),
+        }}
+      />
     );
   };
 
@@ -1057,13 +1025,13 @@ const ChartsScreen: React.FC = () => {
   // in the amount field (see CodeChipGrid).
   const fxChipStyles = useMemo<CodeChipStyles>(
     () => ({
-      wrap: styles.whatIfChipWrap,
-      chip: styles.whatIfChip,
-      chipActive: styles.whatIfChipActive,
-      text: styles.whatIfChipText,
-      textActive: styles.whatIfChipTextActive,
+      wrap: tool.chipWrap,
+      chip: tool.chip,
+      chipActive: tool.chipActive,
+      text: tool.chipText,
+      textActive: tool.chipTextActive,
     }),
-    [styles],
+    [tool],
   );
 
   const handleFxSelectFrom = useCallback(
@@ -1121,59 +1089,25 @@ const ChartsScreen: React.FC = () => {
         : `${value} yr`;
 
     return (
-      <View key={key} style={styles.sliderGroup}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          {refiEditor.editingKey === key ? (
-            <TextInput
-              style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
-              value={refiEditor.editingText}
-              onChangeText={(text) => refiEditor.changeEditingText(key, text)}
-              onBlur={() => refiEditor.commitEditing(key)}
-              onSubmitEditing={() => refiEditor.commitEditing(key)}
-              keyboardType={isRate ? "decimal-pad" : "numeric"}
-              returnKeyType="done"
-              selectTextOnFocus
-              autoFocus
-              placeholderTextColor={colors.textMuted}
-            />
-          ) : (
-            <TouchableOpacity
-              style={styles.sliderValueDisplay}
-              onPress={() => refiEditor.beginEditing(key, value)}
-            >
-              <Text style={styles.sliderValue}>{displayValue}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <View style={styles.sliderRow}>
-          <TouchableOpacity
-            style={styles.sliderBtn}
-            onPress={() => refiEditor.adjustBy(key, -1)}
-            disabled={value <= cfg.min}
-          >
-            <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
-          </TouchableOpacity>
-          <SmoothSlider
-            value={value}
-            min={cfg.min}
-            max={cfg.max}
-            step={cfg.step}
-            onValueChange={(val) => refiEditor.setValue(key, val)}
-            trackColor={colors.bg}
-            fillColor={colors.accent}
-            thumbColor={colors.accent}
-            thumbBorderColor={colors.card}
-          />
-          <TouchableOpacity
-            style={styles.sliderBtn}
-            onPress={() => refiEditor.adjustBy(key, 1)}
-            disabled={value >= cfg.max}
-          >
-            <Text style={[styles.sliderBtnText, value >= cfg.max && styles.sliderBtnDisabled]}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <SliderRow
+        key={key}
+        label={cfg.label}
+        value={value}
+        min={cfg.min}
+        max={cfg.max}
+        step={cfg.step}
+        displayValue={displayValue}
+        onValueChange={(val) => refiEditor.setValue(key, val)}
+        onAdjust={(delta) => refiEditor.adjustBy(key, delta)}
+        editor={{
+          active: refiEditor.editingKey === key,
+          text: refiEditor.editingText,
+          decimal: isRate,
+          onBegin: () => refiEditor.beginEditing(key, value),
+          onChangeText: (text) => refiEditor.changeEditingText(key, text),
+          onCommit: () => refiEditor.commitEditing(key),
+        }}
+      />
     );
   };
 
@@ -1187,59 +1121,25 @@ const ChartsScreen: React.FC = () => {
           : `${value} yr`;
 
     return (
-      <View key={key} style={styles.sliderGroup}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>{cfg.label}</Text>
-          {calcEditor.editingKey === key ? (
-            <TextInput
-              style={[styles.sliderValue, styles.sliderValueInput, styles.sliderValueInputActive]}
-              value={calcEditor.editingText}
-              onChangeText={(text) => calcEditor.changeEditingText(key, text)}
-              onBlur={() => calcEditor.commitEditing(key)}
-              onSubmitEditing={() => calcEditor.commitEditing(key)}
-              keyboardType={key === "returnRate" ? "decimal-pad" : "numeric"}
-              returnKeyType="done"
-              selectTextOnFocus
-              autoFocus
-              placeholderTextColor={colors.textMuted}
-            />
-          ) : (
-            <TouchableOpacity
-              style={styles.sliderValueDisplay}
-              onPress={() => calcEditor.beginEditing(key, value)}
-            >
-              <Text style={styles.sliderValue}>{displayValue}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <View style={styles.sliderRow}>
-          <TouchableOpacity
-            style={styles.sliderBtn}
-            onPress={() => calcEditor.adjustBy(key, -1)}
-            disabled={value <= cfg.min}
-          >
-            <Text style={[styles.sliderBtnText, value <= cfg.min && styles.sliderBtnDisabled]}>-</Text>
-          </TouchableOpacity>
-          <SmoothSlider
-            value={value}
-            min={cfg.min}
-            max={cfg.max}
-            step={cfg.step}
-            onValueChange={(val) => calcEditor.setValue(key, val)}
-            trackColor={colors.bg}
-            fillColor={colors.accent}
-            thumbColor={colors.accent}
-            thumbBorderColor={colors.card}
-          />
-          <TouchableOpacity
-            style={styles.sliderBtn}
-            onPress={() => calcEditor.adjustBy(key, 1)}
-            disabled={value >= cfg.max}
-          >
-            <Text style={[styles.sliderBtnText, value >= cfg.max && styles.sliderBtnDisabled]}>+</Text>
-          </TouchableOpacity>
-        </View>
-
+      <SliderRow
+        key={key}
+        label={cfg.label}
+        value={value}
+        min={cfg.min}
+        max={cfg.max}
+        step={cfg.step}
+        displayValue={displayValue}
+        onValueChange={(val) => calcEditor.setValue(key, val)}
+        onAdjust={(delta) => calcEditor.adjustBy(key, delta)}
+        editor={{
+          active: calcEditor.editingKey === key,
+          text: calcEditor.editingText,
+          decimal: key === "returnRate",
+          onBegin: () => calcEditor.beginEditing(key, value),
+          onChangeText: (text) => calcEditor.changeEditingText(key, text),
+          onCommit: () => calcEditor.commitEditing(key),
+        }}
+      >
         {/* Return rate presets - shown only for the returnRate slider */}
         {key === "returnRate" && (
           <View style={styles.ratePresetRow}>
@@ -1272,7 +1172,7 @@ const ChartsScreen: React.FC = () => {
             ))}
           </View>
         )}
-      </View>
+      </SliderRow>
     );
   };
 
@@ -1485,16 +1385,16 @@ const ChartsScreen: React.FC = () => {
         </View>
 
         {/* ── Compound Interest Calculator Tool ── */}
-        <TouchableOpacity ref={anchorUtilitiesTool} style={styles.toolHeader} onPress={toggleCalc} activeOpacity={0.7}>
+        <TouchableOpacity ref={anchorUtilitiesTool} style={tool.toolHeader} onPress={toggleCalc} activeOpacity={0.7}>
           <View>
-            <Text style={styles.toolTitle}>Compound Interest Calculator</Text>
-            <Text style={styles.toolHint}>Project your investment growth over time</Text>
+            <Text style={tool.toolTitle}>Compound Interest Calculator</Text>
+            <Text style={tool.toolHint}>Project your investment growth over time</Text>
           </View>
-          <Text style={styles.toolChevron}>{calcOpen ? "▾" : "›"}</Text>
+          <Text style={tool.toolChevron}>{calcOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
 
         {calcOpen && (
-          <View style={styles.toolBody}>
+          <View style={tool.toolBody}>
             {/* Result Card */}
             <View style={styles.resultCard}>
               <Text style={styles.resultLabel}>PROJECTED VALUE</Text>
@@ -1544,7 +1444,7 @@ const ChartsScreen: React.FC = () => {
             )}
 
             {/* Sliders */}
-            <View style={styles.slidersCard}>
+            <View style={tool.slidersCard}>
               {renderSlider("contribution", contribution)}
               {renderSlider("returnRate", returnRate)}
               {renderSlider("years", years)}
@@ -1635,16 +1535,16 @@ const ChartsScreen: React.FC = () => {
         )}
 
         {/* ── Loan / Mortgage Calculator Tool ── */}
-        <TouchableOpacity style={styles.toolHeader} onPress={toggleLoan} activeOpacity={0.7}>
+        <TouchableOpacity style={tool.toolHeader} onPress={toggleLoan} activeOpacity={0.7}>
           <View>
-            <Text style={styles.toolTitle}>Loan / Mortgage Calculator</Text>
-            <Text style={styles.toolHint}>See your monthly payment and total interest</Text>
+            <Text style={tool.toolTitle}>Loan / Mortgage Calculator</Text>
+            <Text style={tool.toolHint}>See your monthly payment and total interest</Text>
           </View>
-          <Text style={styles.toolChevron}>{loanOpen ? "▾" : "›"}</Text>
+          <Text style={tool.toolChevron}>{loanOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
 
         {loanOpen && (
-          <View style={styles.toolBody}>
+          <View style={tool.toolBody}>
             {/* Result */}
             <View style={styles.resultCard}>
               <Text style={styles.resultLabel}>MONTHLY PAYMENT</Text>
@@ -1657,7 +1557,7 @@ const ChartsScreen: React.FC = () => {
             </View>
 
             {/* Sliders */}
-            <View style={styles.slidersCard}>
+            <View style={tool.slidersCard}>
               {renderLoanSlider("loanAmount", loanAmount)}
               {renderLoanSlider("loanRate", loanRate)}
               {renderLoanSlider("loanTerm", loanTerm)}
@@ -1900,18 +1800,18 @@ const ChartsScreen: React.FC = () => {
         )}
 
         {/* ── Refinance Break-Even Calculator Tool ── */}
-        <TouchableOpacity style={styles.toolHeader} onPress={toggleRefi} activeOpacity={0.7}>
+        <TouchableOpacity style={tool.toolHeader} onPress={toggleRefi} activeOpacity={0.7}>
           <View>
-            <Text style={styles.toolTitle}>Refinance Break-Even Calculator</Text>
-            <Text style={styles.toolHint}>
+            <Text style={tool.toolTitle}>Refinance Break-Even Calculator</Text>
+            <Text style={tool.toolHint}>
               See if refinancing actually saves you money
             </Text>
           </View>
-          <Text style={styles.toolChevron}>{refiOpen ? "▾" : "›"}</Text>
+          <Text style={tool.toolChevron}>{refiOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
 
         {refiOpen && (
-          <View style={styles.toolBody}>
+          <View style={tool.toolBody}>
             {/* Result card - break-even */}
             <View style={styles.resultCard}>
               <Text style={styles.resultLabel}>BREAK-EVEN</Text>
@@ -2001,7 +1901,7 @@ const ChartsScreen: React.FC = () => {
 
             {/* Current loan derived summary + years-remaining slider */}
             {hasRefiSelection && (
-              <View style={styles.slidersCard}>
+              <View style={tool.slidersCard}>
                 <Text style={styles.refiSectionLabel}>CURRENT LOAN SUMMARY</Text>
                 <View style={styles.refiSummaryRow}>
                   <View style={styles.refiSummaryItem}>
@@ -2037,7 +1937,7 @@ const ChartsScreen: React.FC = () => {
 
             {/* New loan sliders */}
             {hasRefiSelection && (
-              <View style={styles.slidersCard}>
+              <View style={tool.slidersCard}>
                 <Text style={styles.refiSectionLabel}>NEW LOAN</Text>
                 {renderRefiSlider("refiNewRate", refiNewRate)}
                 {renderRefiSlider("refiNewTerm", refiNewTerm)}
@@ -2170,35 +2070,35 @@ const ChartsScreen: React.FC = () => {
         )}
 
         {/* ── Emergency Fund Calculator Tool ── */}
-        <TouchableOpacity style={styles.toolHeader} onPress={toggleEf} activeOpacity={0.7}>
+        <TouchableOpacity style={tool.toolHeader} onPress={toggleEf} activeOpacity={0.7}>
           <View>
-            <Text style={styles.toolTitle}>Emergency Fund Calculator</Text>
-            <Text style={styles.toolHint}>Track your safety net progress</Text>
+            <Text style={tool.toolTitle}>Emergency Fund Calculator</Text>
+            <Text style={tool.toolHint}>Track your safety net progress</Text>
           </View>
-          <Text style={styles.toolChevron}>{efOpen ? "▾" : "›"}</Text>
+          <Text style={tool.toolChevron}>{efOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
 
         {efOpen && (
-          <View style={styles.toolBody}>
+          <View style={tool.toolBody}>
             {/* Monthly expenses */}
-            <View style={styles.efCard}>
-              <Text style={styles.efSectionTitle}>Your Monthly Expenses</Text>
+            <View style={tool.efCard}>
+              <Text style={tool.efSectionTitle}>Your Monthly Expenses</Text>
               {toolsLoadError ? (
-                <Text style={[styles.efAutoHint, { color: colors.danger }]}>
+                <Text style={[tool.efAutoHint, { color: colors.danger }]}>
                   {toolsLoadError}
                 </Text>
               ) : null}
               {efDataLoaded && avgExpenses > 0 ? (
-                <Text style={styles.efAutoHint}>
+                <Text style={tool.efAutoHint}>
                   Based on your budget: {formatCurrency(avgExpenses)}/mo average
                 </Text>
               ) : efDataLoaded ? (
-                <Text style={styles.efAutoHint}>
+                <Text style={tool.efAutoHint}>
                   No budget data yet - enter your monthly expenses below
                 </Text>
               ) : null}
               <TextInput
-                style={styles.efInput}
+                style={tool.input}
                 placeholder={avgExpenses > 0 ? String(avgExpenses) : "Monthly expenses"}
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
@@ -2210,7 +2110,7 @@ const ChartsScreen: React.FC = () => {
             {efMonthlyExpenses > 0 && (
               <>
                 {/* 3-month target */}
-                <View style={styles.efCard}>
+                <View style={tool.efCard}>
                   <View style={styles.efTargetHeader}>
                     <Text style={styles.efTargetTitle}>3-Month Fund</Text>
                     <Text style={[styles.efTargetAmount, { color: colors.accent }]}>
@@ -2249,7 +2149,7 @@ const ChartsScreen: React.FC = () => {
                 </View>
 
                 {/* 6-month target */}
-                <View style={styles.efCard}>
+                <View style={tool.efCard}>
                   <View style={styles.efTargetHeader}>
                     <Text style={styles.efTargetTitle}>6-Month Fund</Text>
                     <Text style={[styles.efTargetAmount, { color: colors.accent }]}>
@@ -2288,40 +2188,19 @@ const ChartsScreen: React.FC = () => {
                 </View>
 
                 {/* Monthly savings slider */}
-                <View style={styles.slidersCard}>
-                  <View style={styles.sliderGroup}>
-                    <View style={styles.sliderHeader}>
-                      <Text style={styles.sliderLabel}>Monthly Savings</Text>
-                      <Text style={styles.sliderValue}>{formatCurrency(efMonthlySavings)}</Text>
-                    </View>
-                    <View style={styles.sliderRow}>
-                      <TouchableOpacity
-                        style={styles.sliderBtn}
-                        onPress={() => setEfMonthlySavings((p) => Math.max(50, p - 50))}
-                        disabled={efMonthlySavings <= 50}
-                      >
-                        <Text style={[styles.sliderBtnText, efMonthlySavings <= 50 && styles.sliderBtnDisabled]}>-</Text>
-                      </TouchableOpacity>
-                      <SmoothSlider
-                        value={efMonthlySavings}
-                        min={50}
-                        max={10000}
-                        step={50}
-                        onValueChange={setEfMonthlySavings}
-                        trackColor={colors.bg}
-                        fillColor={colors.accent}
-                        thumbColor={colors.accent}
-                        thumbBorderColor={colors.card}
-                      />
-                      <TouchableOpacity
-                        style={styles.sliderBtn}
-                        onPress={() => setEfMonthlySavings((p) => Math.min(10000, p + 50))}
-                        disabled={efMonthlySavings >= 10000}
-                      >
-                        <Text style={[styles.sliderBtnText, efMonthlySavings >= 10000 && styles.sliderBtnDisabled]}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                <View style={tool.slidersCard}>
+                  <SliderRow
+                    label="Monthly Savings"
+                    value={efMonthlySavings}
+                    min={50}
+                    max={10000}
+                    step={50}
+                    displayValue={formatCurrency(efMonthlySavings)}
+                    onValueChange={setEfMonthlySavings}
+                    onAdjust={(delta) =>
+                      setEfMonthlySavings((p) => Math.max(50, Math.min(10000, p + delta * 50)))
+                    }
+                  />
                 </View>
 
                 {/* Educational note */}
@@ -2336,16 +2215,16 @@ const ChartsScreen: React.FC = () => {
         )}
 
         {/* ── Currency Exchange Tool ── */}
-        <TouchableOpacity style={styles.toolHeader} onPress={toggleFx} activeOpacity={0.7}>
+        <TouchableOpacity style={tool.toolHeader} onPress={toggleFx} activeOpacity={0.7}>
           <View>
-            <Text style={styles.toolTitle}>Currency Exchange</Text>
-            <Text style={styles.toolHint}>Convert an amount between currencies</Text>
+            <Text style={tool.toolTitle}>Currency Exchange</Text>
+            <Text style={tool.toolHint}>Convert an amount between currencies</Text>
           </View>
-          <Text style={styles.toolChevron}>{fxOpen ? "▾" : "›"}</Text>
+          <Text style={tool.toolChevron}>{fxOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
 
         {fxOpen && (
-          <View style={styles.toolBody}>
+          <View style={tool.toolBody}>
             {/* Result */}
             <View style={styles.resultCard}>
               <Text style={styles.resultLabel}>CONVERTED VALUE</Text>
@@ -2360,10 +2239,10 @@ const ChartsScreen: React.FC = () => {
             </View>
 
             {/* Amount + currency pickers */}
-            <View style={styles.efCard}>
-              <Text style={styles.efSectionTitle}>Amount</Text>
+            <View style={tool.efCard}>
+              <Text style={tool.efSectionTitle}>Amount</Text>
               <TextInput
-                style={styles.efInput}
+                style={tool.input}
                 placeholder="Amount to convert"
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
@@ -2371,7 +2250,7 @@ const ChartsScreen: React.FC = () => {
                 onChangeText={setFxAmountText}
               />
 
-              <Text style={styles.efSectionTitle}>From</Text>
+              <Text style={tool.efSectionTitle}>From</Text>
               <CodeChipGrid
                 options={EXCHANGE_CURRENCIES}
                 selected={fxFromCode}
@@ -2388,7 +2267,7 @@ const ChartsScreen: React.FC = () => {
                 <Text style={styles.fxSwapBtnText}>⇅ Swap</Text>
               </TouchableOpacity>
 
-              <Text style={styles.efSectionTitle}>To</Text>
+              <Text style={tool.efSectionTitle}>To</Text>
               <CodeChipGrid
                 options={EXCHANGE_CURRENCIES}
                 selected={fxToCode}
@@ -2401,7 +2280,7 @@ const ChartsScreen: React.FC = () => {
             {/* Rates freshness + manual refresh */}
             {fxRatesLabel !== null && (
               <View style={styles.fxRatesRow}>
-                <Text style={styles.efAutoHint}>{fxRatesLabel}</Text>
+                <Text style={tool.efAutoHint}>{fxRatesLabel}</Text>
                 <TouchableOpacity
                   onPress={handleFxRefresh}
                   disabled={fxRefreshing}
@@ -2426,18 +2305,18 @@ const ChartsScreen: React.FC = () => {
         )}
 
         {/* ── "What If I Stopped Spending on X" Tool ── */}
-        <TouchableOpacity style={styles.toolHeader} onPress={toggleWhatIf} activeOpacity={0.7}>
+        <TouchableOpacity style={tool.toolHeader} onPress={toggleWhatIf} activeOpacity={0.7}>
           <View>
-            <Text style={styles.toolTitle}>What If I Stopped Spending on…</Text>
-            <Text style={styles.toolHint}>Redirect a category toward debt or savings</Text>
+            <Text style={tool.toolTitle}>What If I Stopped Spending on…</Text>
+            <Text style={tool.toolHint}>Redirect a category toward debt or savings</Text>
           </View>
-          <Text style={styles.toolChevron}>{whatIfOpen ? "▾" : "›"}</Text>
+          <Text style={tool.toolChevron}>{whatIfOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
 
         {whatIfOpen && (
-          <View style={styles.toolBody}>
+          <View style={tool.toolBody}>
             {whatIfOptions.length === 0 ? (
-              <View style={styles.efCard}>
+              <View style={tool.efCard}>
                 <Text style={styles.refiEmptyText}>
                   Log a few months of expenses in the Budget tab, then come back to see what redirecting a category could do.
                 </Text>
@@ -2445,25 +2324,25 @@ const ChartsScreen: React.FC = () => {
             ) : (
               <>
                 {/* Category picker */}
-                <View style={styles.efCard}>
-                  <Text style={styles.efSectionTitle}>Pick a category</Text>
-                  <Text style={styles.efAutoHint}>
+                <View style={tool.efCard}>
+                  <Text style={tool.efSectionTitle}>Pick a category</Text>
+                  <Text style={tool.efAutoHint}>
                     Monthly averages from your last {WHAT_IF_LOOKBACK_MONTHS} months of entries
                   </Text>
-                  <View style={styles.whatIfChipWrap}>
+                  <View style={tool.chipWrap}>
                     {whatIfOptions.map((option) => {
                       const isSelected = option.category === whatIfCategory;
                       return (
                         <TouchableOpacity
                           key={option.category}
-                          style={[styles.whatIfChip, isSelected && styles.whatIfChipActive]}
+                          style={[tool.chip, isSelected && tool.chipActive]}
                           onPress={() => handleSelectWhatIfCategory(option)}
                           activeOpacity={0.7}
                         >
                           <Text
                             style={[
-                              styles.whatIfChipText,
-                              isSelected && styles.whatIfChipTextActive,
+                              tool.chipText,
+                              isSelected && tool.chipTextActive,
                             ]}
                           >
                             {getCategoryIcon(option.category, customCategories)} {option.category}
@@ -2471,7 +2350,7 @@ const ChartsScreen: React.FC = () => {
                           <Text
                             style={[
                               styles.whatIfChipAmount,
-                              isSelected && styles.whatIfChipTextActive,
+                              isSelected && tool.chipTextActive,
                             ]}
                           >
                             {formatCurrency(option.monthlyAverage)}/mo
@@ -2485,49 +2364,31 @@ const ChartsScreen: React.FC = () => {
                 {selectedWhatIfOption && (
                   <>
                     {/* Redirect amount */}
-                    <View style={styles.slidersCard}>
-                      <View style={styles.sliderGroup}>
-                        <View style={styles.sliderHeader}>
-                          <Text style={styles.sliderLabel}>Monthly Amount to Redirect</Text>
-                          <Text style={styles.sliderValue}>{formatCurrency(whatIfAmount)}</Text>
-                        </View>
-                        <View style={styles.sliderRow}>
-                          <TouchableOpacity
-                            style={styles.sliderBtn}
-                            onPress={() => setWhatIfAmount((p) => Math.max(0, p - 25))}
-                            disabled={whatIfAmount <= 0}
-                          >
-                            <Text style={[styles.sliderBtnText, whatIfAmount <= 0 && styles.sliderBtnDisabled]}>-</Text>
-                          </TouchableOpacity>
-                          <SmoothSlider
-                            value={whatIfAmount}
-                            min={0}
-                            max={whatIfSliderMax}
-                            step={5}
-                            onValueChange={setWhatIfAmount}
-                            trackColor={colors.bg}
-                            fillColor={colors.accent}
-                            thumbColor={colors.accent}
-                            thumbBorderColor={colors.card}
-                          />
-                          <TouchableOpacity
-                            style={styles.sliderBtn}
-                            onPress={() => setWhatIfAmount((p) => Math.min(whatIfSliderMax, p + 25))}
-                            disabled={whatIfAmount >= whatIfSliderMax}
-                          >
-                            <Text style={[styles.sliderBtnText, whatIfAmount >= whatIfSliderMax && styles.sliderBtnDisabled]}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <Text style={styles.efAutoHint}>
+                    <View style={tool.slidersCard}>
+                      <SliderRow
+                        label="Monthly Amount to Redirect"
+                        value={whatIfAmount}
+                        min={0}
+                        max={whatIfSliderMax}
+                        step={5}
+                        displayValue={formatCurrency(whatIfAmount)}
+                        onValueChange={setWhatIfAmount}
+                        onAdjust={(delta) =>
+                          setWhatIfAmount((p) =>
+                            Math.max(0, Math.min(whatIfSliderMax, p + delta * 25)),
+                          )
+                        }
+                      >
+                        <Text style={tool.efAutoHint}>
                           You average {formatCurrency(selectedWhatIfOption.monthlyAverage)}/mo on {selectedWhatIfOption.category}
                         </Text>
-                      </View>
+                      </SliderRow>
                     </View>
 
                     {/* Debt payoff impact */}
                     {whatIfDebtImpact && (
-                      <View style={styles.efCard}>
-                        <Text style={styles.efSectionTitle}>Put it toward debt</Text>
+                      <View style={tool.efCard}>
+                        <Text style={tool.efSectionTitle}>Put it toward debt</Text>
                         <View style={styles.whatIfMethodRow}>
                           {(["avalanche", "snowball"] as const).map((method) => (
                             <TouchableOpacity
@@ -2583,12 +2444,12 @@ const ChartsScreen: React.FC = () => {
                     )}
 
                     {/* Savings growth */}
-                    <View style={styles.efCard}>
-                      <Text style={styles.efSectionTitle}>
+                    <View style={tool.efCard}>
+                      <Text style={tool.efSectionTitle}>
                         {whatIfDebtImpact ? "…or grow it in savings" : "Grow it in savings"}
                       </Text>
                       {whatIfActiveDebts.length === 0 && (
-                        <Text style={styles.efAutoHint}>
+                        <Text style={tool.efAutoHint}>
                           No active debts to pay down - showing savings growth only.
                         </Text>
                       )}
@@ -2609,7 +2470,7 @@ const ChartsScreen: React.FC = () => {
                           </View>
                         </View>
                       ))}
-                      <Text style={styles.efAutoHint}>
+                      <Text style={tool.efAutoHint}>
                         Assumes a {WHAT_IF_DEFAULT_RETURN_RATE}% average annual return, compounded monthly.
                       </Text>
                     </View>
@@ -2692,37 +2553,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* Tool header - collapsible */
-    toolHeader: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: `${colors.accent}30`,
-      borderRadius: tokens.radius,
-      paddingVertical: tokens.pad,
-      paddingHorizontal: tokens.pad + 2,
-      marginBottom: tokens.gapSm,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    toolTitle: {
-      fontSize: scale(16),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 2,
-    },
-    toolHint: {
-      fontSize: 12,
-      color: colors.textMuted,
-    },
-    toolChevron: {
-      fontSize: 18,
-      color: colors.textMuted,
-      fontWeight: "600",
-      marginLeft: 12,
-    },
-    toolBody: {
-      gap: tokens.gapSm,
-    },
 
     /* Result Card */
     resultCard: {
@@ -2804,80 +2634,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* Sliders */
-    slidersCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: tokens.radius,
-      padding: tokens.pad + 2,
-      gap: tokens.gapLg,
-    },
-    sliderGroup: {
-      gap: 8,
-    },
-    sliderHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    sliderLabel: {
-      fontSize: 13,
-      color: colors.textDim,
-      fontWeight: "500",
-    },
-    sliderValue: {
-      fontSize: 15,
-      color: colors.text,
-      fontWeight: "700",
-      fontVariant: ["tabular-nums"],
-    },
-    sliderValueDisplay: {
-      borderWidth: 1,
-      borderColor: "transparent",
-      borderRadius: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      minWidth: 90,
-      alignItems: "flex-end",
-      justifyContent: "center",
-    },
-    sliderValueInput: {
-      borderRadius: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      minWidth: 90,
-      textAlign: "right",
-      textAlignVertical: "center",
-    },
-    sliderValueInputActive: {
-      borderWidth: 1,
-      borderColor: colors.accent,
-      backgroundColor: colors.bg,
-    },
-    sliderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
-    sliderBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      backgroundColor: colors.bg,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    sliderBtnText: {
-      fontSize: 20,
-      color: colors.text,
-      fontWeight: "600",
-      lineHeight: 22,
-    },
-    sliderBtnDisabled: {
-      opacity: 0.2,
-    },
 
     /* Return rate presets */
     ratePresetRow: {
@@ -3301,33 +3057,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* Emergency Fund */
-    efCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 14,
-      padding: 16,
-      gap: 8,
-    },
-    efSectionTitle: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.text,
-    },
-    efAutoHint: {
-      fontSize: 12,
-      color: colors.textDim,
-    },
-    efInput: {
-      backgroundColor: colors.bg,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      color: colors.text,
-      fontSize: 15,
-    },
     efTargetHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -3401,33 +3130,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* "What If I Stopped Spending on X" */
-    whatIfChipWrap: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 4,
-    },
-    whatIfChip: {
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      backgroundColor: colors.bg,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      alignItems: "center",
-    },
-    whatIfChipActive: {
-      borderColor: colors.accent,
-      backgroundColor: `${colors.accent}15`,
-    },
-    whatIfChipText: {
-      fontSize: scale(13),
-      color: colors.text,
-      fontWeight: "600",
-    },
-    whatIfChipTextActive: {
-      color: colors.accent,
-    },
     whatIfChipAmount: {
       fontSize: scale(11),
       color: colors.textMuted,

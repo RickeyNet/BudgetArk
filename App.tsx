@@ -42,6 +42,7 @@ import { CoachmarkAnchorProvider } from "./src/onboarding/CoachmarkAnchorContext
 import { OnboardingGateProvider } from "./src/onboarding/OnboardingGateContext";
 import { AchievementsProvider } from "./src/achievements/AchievementsProvider";
 import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvider";
+import { PeopleProvider } from "./src/people/PeopleProvider";
 import { ConnectionsProvider } from "./src/connections/ConnectionsProvider";
 import { UndoProvider } from "./src/undo/UndoProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
@@ -703,11 +704,13 @@ export default function App(): React.JSX.Element {
                     <CoachmarkAnchorProvider>
                       <AchievementsProvider>
                         <CustomCategoriesProvider>
+                          <PeopleProvider>
                           <ConnectionsProvider>
                             <UndoProvider>
                               <AppContent />
                             </UndoProvider>
                           </ConnectionsProvider>
+                          </PeopleProvider>
                         </CustomCategoriesProvider>
                       </AchievementsProvider>
                     </CoachmarkAnchorProvider>
