@@ -41,6 +41,7 @@ import type {
   PendingTransaction,
   Person,
 } from "../types";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -114,11 +115,20 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  /** Last failed load/approve/skip, shown under the header until the next action. */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
-    void refresh();
-    void getLinks().then(setLinks);
+    void refresh()
+      .then(() => setActionError(null))
+      .catch((error: unknown) =>
+        setActionError(describeError(error, "Couldn't load the inbox.")),
+      );
+    // Account names are cosmetic here - a failed read just shows ids.
+    void getLinks()
+      .then(setLinks)
+      .catch(() => setLinks([]));
   }, [visible, refresh]);
 
   const accountNameById = useMemo(() => {
@@ -213,6 +223,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       personId: string | undefined,
     ) => {
       setBusyId(item.id);
+      setActionError(null);
       try {
         await approvePendingTransaction({
           pendingId: item.id,
@@ -233,6 +244,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         await onChanged();
         triggerHaptic("success");
         setExpandedId(null);
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't approve this transaction."));
       } finally {
         setBusyId(null);
       }
@@ -243,6 +257,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const handleSkip = useCallback(
     async (item: PendingTransaction, remember: boolean) => {
       setBusyId(item.id);
+      setActionError(null);
       try {
         // "Always" + Skip = ignore this merchant on every future sync (and
         // clear its other inbox items right now).
@@ -254,6 +269,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         await refresh();
         triggerHaptic("selection");
         setExpandedId(null);
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't skip this transaction."));
       } finally {
         setBusyId(null);
       }
@@ -264,10 +282,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const handleSkipSection = useCallback(
     async (items: PendingTransaction[]) => {
       setBulkBusy(true);
+      setActionError(null);
       try {
         await dismissPendingTransactions(items.map((item) => item.id));
         await refresh();
         triggerHaptic("selection");
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't skip those transactions."));
       } finally {
         setBulkBusy(false);
       }
@@ -282,6 +304,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     );
     if (ready.length === 0) return;
     setBulkBusy(true);
+    setActionError(null);
     try {
       for (const item of ready) {
         await approvePendingTransaction({
@@ -292,6 +315,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       await refresh();
       await onChanged();
       triggerHaptic("success");
+    } catch (error) {
+      // Approvals already written stay written (each is its own atomic
+      // save); refresh so the list reflects exactly what landed.
+      triggerHaptic("error");
+      setActionError(
+        describeError(error, "Couldn't approve all of the suggested transactions."),
+      );
+      await refresh().catch(() => undefined);
     } finally {
       setBulkBusy(false);
     }
@@ -592,6 +623,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </TouchableOpacity>
           </View>
 
+          {actionError ? (
+            <Text style={styles.errorText}>{actionError}</Text>
+          ) : null}
+
           {suggestedReadyCount > 0 ? (
             <TouchableOpacity
               style={[styles.bulkBar, bulkBusy && styles.buttonDisabled]}
@@ -716,6 +751,12 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 13,
       color: colors.textDim,
       marginTop: 2,
+    },
+    errorText: {
+      fontSize: 13,
+      color: colors.danger,
+      paddingHorizontal: 20,
+      paddingBottom: 8,
     },
     syncButton: {
       borderWidth: 1,

@@ -20,6 +20,7 @@ import {
   Text,
   FlatList,
   Keyboard,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
@@ -106,6 +107,7 @@ import DebtPaymentCelebrationModal from "../components/DebtPaymentCelebrationMod
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import { simulatePayoffPlan } from "../utils/calculations";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -503,18 +505,34 @@ const DebtTrackerScreen: React.FC = () => {
 
   /** "I used it" on a card's keep-alive tracker: stamp now, replan nudges. */
   const handleKeepAliveUse = useCallback(async (debtId: string) => {
-    const updated = await updateDebt(debtId, {
-      keepAliveLastUsedAt: new Date().toISOString(),
-    });
-    setDebts(updated);
-    void rescheduleCardKeepAliveReminders();
-    triggerHaptic("success");
+    try {
+      const updated = await updateDebt(debtId, {
+        keepAliveLastUsedAt: new Date().toISOString(),
+      });
+      setDebts(updated);
+      void rescheduleCardKeepAliveReminders();
+      triggerHaptic("success");
+    } catch (error) {
+      triggerHaptic("error");
+      Alert.alert(
+        "Couldn't save",
+        describeError(error, "The card's last-used date wasn't updated. Please try again."),
+      );
+    }
   }, []);
 
   /** "Later" on the keep-alive banner: mute that card for this month. */
   const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
-    await dismissCardKeepAliveForMonth(debt.id);
-    setKeepAliveDismissals(await getCardKeepAliveDismissals());
+    try {
+      await dismissCardKeepAliveForMonth(debt.id);
+      setKeepAliveDismissals(await getCardKeepAliveDismissals());
+    } catch (error) {
+      triggerHaptic("error");
+      Alert.alert(
+        "Couldn't save",
+        describeError(error, "The reminder wasn't muted. Please try again."),
+      );
+    }
   }, []);
 
   const filteredDebts = React.useMemo(() => {

@@ -31,6 +31,7 @@ import { useFocusEffect , useNavigation } from "@react-navigation/native";
 import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
@@ -426,6 +427,8 @@ const ChartsScreen: React.FC = () => {
   // back a fresh goals array (EF-designated accounts win over the goal).
   const [efAccounts, setEfAccounts] = useState<AssetAccount[]>([]);
   const [efDataLoaded, setEfDataLoaded] = useState(false);
+  /** Focus-time tools load failed (storage error) - shown in the EF card. */
+  const [toolsLoadError, setToolsLoadError] = useState<string | null>(null);
 
   /* "What If I Stopped Spending on X" state */
   const [whatIfOpen, setWhatIfOpen] = useState(false);
@@ -890,33 +893,42 @@ const ChartsScreen: React.FC = () => {
     useCallback(() => {
       let cancelled = false;
       const loadEfData = async () => {
-        const [entries, goals, debts, customCats, storedMilestones, accounts] =
-          await Promise.all([
-            getBudgetEntries(),
-            getSavingsGoals(),
-            getDebts(),
-            getCustomCategories(),
-            getDebtMilestonePlan(),
-            getAssetAccounts(),
-          ]);
-        if (cancelled) return;
+        try {
+          const [entries, goals, debts, customCats, storedMilestones, accounts] =
+            await Promise.all([
+              getBudgetEntries(),
+              getSavingsGoals(),
+              getDebts(),
+              getCustomCategories(),
+              getDebtMilestonePlan(),
+              getAssetAccounts(),
+            ]);
+          if (cancelled) return;
+          setToolsLoadError(null);
 
-        const avg = calcAvgMonthlyExpenses(entries);
-        setAvgExpenses(avg);
+          const avg = calcAvgMonthlyExpenses(entries);
+          setAvgExpenses(avg);
 
-        // EF-designated savings accounts (Bridge account editor) take
-        // precedence over the goal's stored amount - same resolution as the
-        // Bridge/Budget cards.
-        setEfAccounts(accounts);
-        setCurrentEfAmount(resolveEmergencyFundAmount(goals, accounts));
-        setEfDataLoaded(true);
+          // EF-designated savings accounts (Bridge account editor) take
+          // precedence over the goal's stored amount - same resolution as the
+          // Bridge/Budget cards.
+          setEfAccounts(accounts);
+          setCurrentEfAmount(resolveEmergencyFundAmount(goals, accounts));
+          setEfDataLoaded(true);
 
-        setRefiDebts(debts);
-        setWhatIfOptions(buildCategorySpendOptions(entries));
-        setCustomCategories(customCats);
-        setPurchaseCashFlow(calcMonthlyCashFlow(entries));
-        setSavingsGoalsAll(goals);
-        setMilestonePlan(storedMilestones);
+          setRefiDebts(debts);
+          setWhatIfOptions(buildCategorySpendOptions(entries));
+          setCustomCategories(customCats);
+          setPurchaseCashFlow(calcMonthlyCashFlow(entries));
+          setSavingsGoalsAll(goals);
+          setMilestonePlan(storedMilestones);
+        } catch (error) {
+          if (cancelled) return;
+          if (__DEV__) console.error("Failed to load Charts tool data:", error);
+          setToolsLoadError(
+            describeError(error, "Couldn't load your data. Reopen this tab to try again."),
+          );
+        }
       };
       loadEfData();
       return () => {
@@ -1015,9 +1027,13 @@ const ChartsScreen: React.FC = () => {
   useEffect(() => {
     if (!fxOpen) return;
     let active = true;
-    void getConverterRates().then((snapshot) => {
-      if (active) applyFxSnapshot(snapshot);
-    });
+    void getConverterRates()
+      .then((snapshot) => {
+        if (active) applyFxSnapshot(snapshot);
+      })
+      .catch(() => {
+        if (active) setFxRatesLabel("Couldn't load rates - tap Refresh to try again.");
+      });
     return () => {
       active = false;
     };
@@ -1027,6 +1043,9 @@ const ChartsScreen: React.FC = () => {
     setFxRefreshing(true);
     void getConverterRates({ forceRefresh: true })
       .then(applyFxSnapshot)
+      .catch(() =>
+        setFxRatesLabel("Couldn't refresh rates - showing the last saved rates."),
+      )
       .finally(() => setFxRefreshing(false));
   }, [applyFxSnapshot]);
 
@@ -2150,6 +2169,11 @@ const ChartsScreen: React.FC = () => {
             {/* Monthly expenses */}
             <View style={styles.efCard}>
               <Text style={styles.efSectionTitle}>Your Monthly Expenses</Text>
+              {toolsLoadError ? (
+                <Text style={[styles.efAutoHint, { color: colors.danger }]}>
+                  {toolsLoadError}
+                </Text>
+              ) : null}
               {efDataLoaded && avgExpenses > 0 ? (
                 <Text style={styles.efAutoHint}>
                   Based on your budget: {formatCurrency(avgExpenses)}/mo average

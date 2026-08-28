@@ -24,6 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -123,9 +124,12 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
   const accountToUpdate =
     isCurrent && checkingAccounts.length === 1 ? checkingAccounts[0] : null;
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const handleSave = async () => {
     if (parsed === null || saving) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const balances = await setMonthStartBalance(monthKey, parsed);
       let accounts: AssetAccount[] | null = null;
@@ -135,9 +139,11 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
         });
       }
       onSaved(balances, accounts);
-    } catch {
-      // Storage failure: keep the modal open so the entry isn't lost.
+    } catch (error) {
+      // Storage failure: keep the modal open so the entry isn't lost, and
+      // say why the Save didn't take.
       setSaving(false);
+      setSaveError(describeError(error, "Couldn't save your balance. Please try again."));
     }
   };
 
@@ -182,6 +188,9 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
               stays current.
             </Text>
           )}
+          {saveError ? (
+            <Text style={[styles.note, { color: colors.danger }]}>{saveError}</Text>
+          ) : null}
 
           <View style={styles.buttonRow}>
             <TouchableOpacity

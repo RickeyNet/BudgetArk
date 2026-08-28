@@ -10,3 +10,23 @@
 /** Round to cents (2 decimals). Non-finite input returns 0 - never NaN. */
 export const roundToCents = (value: number): number =>
   Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
+
+/**
+ * A bank-reported balance in the BANK's currency (ExternalAccountLink
+ * .currency), deliberately NOT the app's display currency: the link row
+ * shows what the provider said, unconverted, so the user can compare it to
+ * the Bridge account it updates. Unknown or missing codes fall back to a
+ * plain 2-decimal number with the code appended instead of throwing (Intl
+ * rejects codes it doesn't know).
+ */
+export const formatBankBalance = (amount: number, currency?: string): string => {
+  const code = (currency ?? "USD").toUpperCase();
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+    }).format(roundToCents(amount));
+  } catch {
+    return `${roundToCents(amount).toFixed(2)} ${code}`;
+  }
+};

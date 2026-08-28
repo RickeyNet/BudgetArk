@@ -34,6 +34,7 @@ import type {
   MerchantRule,
   Person,
 } from "../types";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useConnections } from "../connections/ConnectionsProvider";
@@ -85,6 +86,8 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
     null,
   );
+  /** Last failed load/save/delete, shown under the header until the next action. */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadRules = useCallback(
     () =>
@@ -98,7 +101,11 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
 
   useEffect(() => {
     if (!visible) return;
-    void loadRules();
+    void loadRules()
+      .then(() => setActionError(null))
+      .catch((error: unknown) =>
+        setActionError(describeError(error, "Couldn't load your rules.")),
+      );
   }, [visible, loadRules]);
 
   const handleClose = useCallback(() => {
@@ -122,6 +129,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const handleSave = useCallback(
     async (rule: MerchantRule) => {
       setBusyId(rule.id);
+      setActionError(null);
       try {
         await changeMerchantRule({
           ruleId: rule.id,
@@ -141,6 +149,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         await refresh();
         triggerHaptic("success");
         setExpandedId(null);
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't save this rule."));
       } finally {
         setBusyId(null);
       }
@@ -160,6 +171,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const handleDelete = useCallback(
     async (ruleId: string) => {
       setBusyId(ruleId);
+      setActionError(null);
       try {
         await removeMerchantRule(ruleId);
         setConfirmingDeleteId(null);
@@ -167,6 +179,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         await refresh();
         triggerHaptic("selection");
         setExpandedId(null);
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't delete this rule."));
       } finally {
         setBusyId(null);
       }
@@ -438,6 +453,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               ? `${rules.length} remembered rule${rules.length === 1 ? "" : "s"}. Changes apply to future imports and anything still in your inbox - transactions you already skipped stay skipped.`
               : "Rules remember what to do when a merchant's transactions import."}
           </Text>
+          {actionError ? (
+            <Text style={styles.errorText}>{actionError}</Text>
+          ) : null}
         </View>
 
         {rules.length === 0 ? (
@@ -556,6 +574,11 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
       marginTop: 4,
       lineHeight: 18,
+    },
+    errorText: {
+      fontSize: 13,
+      color: colors.danger,
+      marginTop: 8,
     },
     listContent: {
       paddingHorizontal: 24,

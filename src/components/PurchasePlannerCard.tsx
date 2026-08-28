@@ -23,6 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -159,24 +160,33 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
     setNeedBy("");
   }, []);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const handleStartFund = useCallback(async () => {
     if (!canSave) return;
+    setSaveError(null);
     const now = new Date().toISOString();
-    const updated = await addSavingsGoal({
-      id: generateUUID(),
-      name: sanitizeTextInput(itemName.trim()),
-      category,
-      targetAmount: price,
-      currentAmount: alreadySaved,
-      targetDate: needBy ? `${needBy}-01` : undefined,
-      createdAt: now,
-      updatedAt: now,
-    });
-    triggerHaptic("success");
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    resetForm();
-    setShowForm(false);
-    onGoalsChanged(updated);
+    try {
+      const updated = await addSavingsGoal({
+        id: generateUUID(),
+        name: sanitizeTextInput(itemName.trim()),
+        category,
+        targetAmount: price,
+        currentAmount: alreadySaved,
+        targetDate: needBy ? `${needBy}-01` : undefined,
+        createdAt: now,
+        updatedAt: now,
+      });
+      triggerHaptic("success");
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      resetForm();
+      setShowForm(false);
+      onGoalsChanged(updated);
+    } catch (error) {
+      // Keep the form (and what the user typed) so they can retry.
+      triggerHaptic("error");
+      setSaveError(describeError(error, "Couldn't start this fund. Please try again."));
+    }
   }, [alreadySaved, canSave, category, itemName, needBy, onGoalsChanged, price, resetForm]);
 
   /* ── Render helpers ── */
@@ -411,6 +421,9 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                       )}
                   </View>
 
+                  {saveError ? (
+                    <Text style={styles.saveError}>{saveError}</Text>
+                  ) : null}
                   <TouchableOpacity
                     style={[styles.startBtn, !canSave && styles.startBtnDisabled]}
                     onPress={handleStartFund}
@@ -647,6 +660,11 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: 14,
       fontWeight: "700",
       color: colors.accent,
+    },
+    saveError: {
+      fontSize: 12,
+      color: colors.danger,
+      marginBottom: 8,
     },
     startBtn: {
       backgroundColor: colors.accent,

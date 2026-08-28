@@ -34,6 +34,8 @@ import {
   type Person,
   categoryIsPureHoldings,
 } from "../types";
+import { describeError } from "../utils/errorMessage";
+import { formatBankBalance } from "../utils/money";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useConnections } from "../connections/ConnectionsProvider";
@@ -130,6 +132,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     (c) => c.id === selectedId,
   );
 
+  /** Last failed link load/edit for the selected connection. */
+  const [linkError, setLinkError] = useState<string | null>(null);
+
   // Structural stale-links guard: whenever the selected connection changes -
   // no matter which code path changed it - drop the previous connection's
   // account list before the fetch effect below repopulates it. Render-time
@@ -137,17 +142,24 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   if (useValueChanged(selectedId)) {
     setLinks([]);
     setLinksLoaded(false);
+    setLinkError(null);
   }
 
   useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
-    void getLinksForConnection(selectedId).then((result) => {
-      if (!cancelled) {
-        setLinks(result);
+    void getLinksForConnection(selectedId)
+      .then((result) => {
+        if (!cancelled) {
+          setLinks(result);
+          setLinksLoaded(true);
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
         setLinksLoaded(true);
-      }
-    });
+        setLinkError(describeError(error, "Couldn't load this connection's accounts."));
+      });
     return () => {
       cancelled = true;
     };
@@ -162,12 +174,18 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    void getPeople().then((result) => {
-      if (!cancelled) setPeople(result);
-    });
-    void getAssetAccounts().then((result) => {
-      if (!cancelled) setAssetAccounts(result);
-    });
+    // Picker sources: a failed read leaves the previous list in place (the
+    // pickers just offer fewer choices) rather than blocking the modal.
+    void getPeople()
+      .then((result) => {
+        if (!cancelled) setPeople(result);
+      })
+      .catch(() => undefined);
+    void getAssetAccounts()
+      .then((result) => {
+        if (!cancelled) setAssetAccounts(result);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -176,8 +194,13 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   const assignPerson = useCallback(
     async (linkId: string, personId: string | null) => {
       if (!selectedId) return;
-      const all = await updateLink(linkId, { personId });
-      setLinks(all.filter((link) => link.connectionId === selectedId));
+      setLinkError(null);
+      try {
+        const all = await updateLink(linkId, { personId });
+        setLinks(all.filter((link) => link.connectionId === selectedId));
+      } catch (error) {
+        setLinkError(describeError(error, "Couldn't save who this card belongs to."));
+      }
     },
     [selectedId],
   );
@@ -186,12 +209,15 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     async (linkId: string, change: LinkPreferenceChange) => {
       if (!selectedId || savingLinkId) return;
       setSavingLinkId(linkId);
+      setLinkError(null);
       try {
         const updated = await updateLinkPreferences(linkId, change);
         setLinks(updated);
         setNewAccountFor(null);
         // A seeded balance changed an account; keep the picker's copy fresh.
         setAssetAccounts(await getAssetAccounts());
+      } catch (error) {
+        setLinkError(describeError(error, "Couldn't save this account's settings."));
       } finally {
         setSavingLinkId(null);
       }
@@ -220,7 +246,14 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         createdAt: now,
         updatedAt: now,
       };
-      await addAssetAccount(account);
+      setLinkError(null);
+      try {
+        await addAssetAccount(account);
+      } catch (error) {
+        // Nothing was created - keep the typed name so the user can retry.
+        setLinkError(describeError(error, "Couldn't create the Bridge account."));
+        return;
+      }
       setNewAccountName("");
       await applyPreference(link.id, { assetAccountId: account.id });
     },
@@ -340,6 +373,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           {PROVIDER_GLYPHS[connection.provider] ?? "🏦"} {connection.name}
         </Text>
         <Text style={[styles.subtitle, { color: status.tone }]}>{status.text}</Text>
+        {linkError ? (
+          <Text style={[styles.subtitle, { color: colors.danger }]}>{linkError}</Text>
+        ) : null}
 
         {connection.authStatus === "needs-reauth" ? (
           <View style={styles.warningBanner}>
@@ -388,7 +424,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                         ? ` · updates ${target?.name ?? "balance"}`
                         : " · balance not tracked"}
                       {typeof link.lastExternalBalance === "number"
-                        ? ` · $${link.lastExternalBalance.toFixed(2)}`
+                        ? ` · ${formatBankBalance(link.lastExternalBalance, link.currency)}`
                         : ""}
                     </Text>
                   </View>

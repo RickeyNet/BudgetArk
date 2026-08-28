@@ -26,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { Person } from "../types";
@@ -67,19 +68,24 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
     if (!visible) return;
     let cancelled = false;
     void (async () => {
-      const [list, entries] = await Promise.all([
-        getPeople(),
-        getBudgetEntries(),
-      ]);
-      if (cancelled) return;
-      setPeople(list);
-      const counts: Record<string, number> = {};
-      for (const entry of entries) {
-        if (entry.personId) {
-          counts[entry.personId] = (counts[entry.personId] ?? 0) + 1;
+      try {
+        const [list, entries] = await Promise.all([
+          getPeople(),
+          getBudgetEntries(),
+        ]);
+        if (cancelled) return;
+        setPeople(list);
+        const counts: Record<string, number> = {};
+        for (const entry of entries) {
+          if (entry.personId) {
+            counts[entry.personId] = (counts[entry.personId] ?? 0) + 1;
+          }
         }
+        setEntryCounts(counts);
+      } catch (error) {
+        if (cancelled) return;
+        setError(describeError(error, "Couldn't load your people. Close and try again."));
       }
-      setEntryCounts(counts);
     })();
     return () => {
       cancelled = true;
@@ -101,16 +107,22 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
     if (saving) return;
     setSaving(true);
     setError(null);
-    const result = editingId
-      ? await updatePerson(editingId, { name })
-      : await addPerson(name);
-    setSaving(false);
-    if (result.ok) {
-      setPeople(result.people);
-      resetForm();
-      onChanged?.();
-    } else {
-      setError(result.error);
+    try {
+      const result = editingId
+        ? await updatePerson(editingId, { name })
+        : await addPerson(name);
+      if (result.ok) {
+        setPeople(result.people);
+        resetForm();
+        onChanged?.();
+      } else {
+        setError(result.error);
+      }
+    } catch (error) {
+      // A storage failure must not leave the button stuck on "Saving...".
+      setError(describeError(error, "Couldn't save. Please try again."));
+    } finally {
+      setSaving(false);
     }
   }, [editingId, name, onChanged, resetForm, saving]);
 
@@ -137,10 +149,16 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
             style: "destructive",
             onPress: () => {
               void (async () => {
-                const next = await deletePerson(id);
-                setPeople(next);
-                if (editingId === id) resetForm();
-                onChanged?.();
+                try {
+                  const next = await deletePerson(id);
+                  setPeople(next);
+                  if (editingId === id) resetForm();
+                  onChanged?.();
+                } catch (error) {
+                  setError(
+                    describeError(error, "Couldn't delete this person. Please try again."),
+                  );
+                }
               })();
             },
           },

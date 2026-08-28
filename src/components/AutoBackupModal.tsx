@@ -28,6 +28,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -103,13 +104,20 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getAutoBackupSettings(), listAutoBackups()]).then(
-      ([loadedSettings, loadedFiles]) => {
+    void Promise.all([getAutoBackupSettings(), listAutoBackups()])
+      .then(([loadedSettings, loadedFiles]) => {
         if (cancelled) return;
         setSettings(loadedSettings);
         setFiles(loadedFiles);
-      }
-    );
+      })
+      // Without this a failed settings read left `settings` null forever:
+      // "Back Up Now" disabled with no explanation.
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setInlineError(
+          describeError(error, "Couldn't load backup settings. Close and reopen to try again."),
+        );
+      });
     return () => {
       cancelled = true;
     };

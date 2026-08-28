@@ -175,7 +175,15 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
           setPin("");
           setError(null);
           if (intent === "disable") {
-            await disableAppLock();
+            try {
+              await disableAppLock();
+            } catch {
+              // The PIN was right but the record couldn't be removed - the
+              // lock is still on; say so instead of reporting "App Lock Off".
+              triggerHaptic("error");
+              setError("Couldn't turn off App Lock. Please try again.");
+              return;
+            }
             triggerHaptic("success");
             finish({
               title: "App Lock Off",

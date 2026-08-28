@@ -21,6 +21,7 @@ import {
   View,
 } from "react-native";
 import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -90,6 +91,8 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
   const [contributeText, setContributeText] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SavingsGoal | null>(null);
+  /** Last failed contribute/delete, shown inside the plan dialog. */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const plans = filterPurchasePlans(savingsGoals);
 
@@ -101,22 +104,37 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
       setContributeText("");
       return;
     }
-    const updated = await updateSavingsGoal(contributeGoal.id, {
-      currentAmount: Math.max(0, contributeGoal.currentAmount + amount),
-    });
-    triggerHaptic("success");
-    setContributeGoal(null);
-    setContributeText("");
-    onGoalsChanged(updated);
+    setActionError(null);
+    try {
+      const updated = await updateSavingsGoal(contributeGoal.id, {
+        currentAmount: Math.max(0, contributeGoal.currentAmount + amount),
+      });
+      triggerHaptic("success");
+      setContributeGoal(null);
+      setContributeText("");
+      onGoalsChanged(updated);
+    } catch (error) {
+      // Dialog stays open with the typed amount so the user can retry.
+      triggerHaptic("error");
+      setActionError(describeError(error, "Couldn't save this contribution."));
+    }
   }, [contributeGoal, contributeText, onGoalsChanged]);
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
-    const updated = await deleteSavingsGoal(deleteTarget.id);
-    triggerHaptic("warning");
-    setDeleteTarget(null);
-    setContributeGoal(null);
-    onGoalsChanged(updated);
+    setActionError(null);
+    try {
+      const updated = await deleteSavingsGoal(deleteTarget.id);
+      triggerHaptic("warning");
+      setDeleteTarget(null);
+      setContributeGoal(null);
+      onGoalsChanged(updated);
+    } catch (error) {
+      // Back out of the confirm; the plan dialog underneath shows why.
+      triggerHaptic("error");
+      setDeleteTarget(null);
+      setActionError(describeError(error, "Couldn't delete this plan."));
+    }
   }, [deleteTarget, onGoalsChanged]);
 
   if (plans.length === 0 && !emptyText) return null;
@@ -205,6 +223,11 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 ? `${formatCurrency(contributeGoal.currentAmount)} of ${formatCurrency(contributeGoal.targetAmount)} saved.`
                 : ""}
             </Text>
+            {actionError ? (
+              <Text style={[styles.dialogMessage, { color: colors.danger }]}>
+                {actionError}
+              </Text>
+            ) : null}
             <TextInput
               style={styles.input}
               placeholder="Amount to add"

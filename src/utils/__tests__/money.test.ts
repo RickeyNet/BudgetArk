@@ -4,7 +4,7 @@
 // were consolidated (connections/types re-export, paycheckMath, and
 // currencyConversion's inline).
 
-import { roundToCents } from "../money";
+import { formatBankBalance, roundToCents } from "../money";
 
 describe("roundToCents", () => {
   it("sheds float accumulation artifacts", () => {
@@ -31,5 +31,22 @@ describe("roundToCents", () => {
     expect(roundToCents(NaN)).toBe(0);
     expect(roundToCents(Infinity)).toBe(0);
     expect(roundToCents(-Infinity)).toBe(0);
+  });
+});
+
+describe("formatBankBalance", () => {
+  it("formats in the bank's own currency, not the app display currency", () => {
+    expect(formatBankBalance(1234.5, "USD")).toContain("1,234.50");
+    expect(formatBankBalance(1234.5, "EUR")).toContain("1,234.50");
+    expect(formatBankBalance(1234.5, "EUR")).not.toContain("$");
+  });
+
+  it("defaults to USD when the link carries no currency code", () => {
+    expect(formatBankBalance(12.5)).toBe(formatBankBalance(12.5, "USD"));
+  });
+
+  it("never throws on an unknown code - falls back to number + code", () => {
+    expect(formatBankBalance(12.499, "XX1")).toBe("12.50 XX1");
+    expect(formatBankBalance(Number.NaN, "???")).toBe("0.00 ???");
   });
 });

@@ -26,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { Business } from "../types";
@@ -67,19 +68,24 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
     if (!visible) return;
     let cancelled = false;
     void (async () => {
-      const [list, entries] = await Promise.all([
-        getBusinesses(),
-        getBudgetEntries(),
-      ]);
-      if (cancelled) return;
-      setBusinesses(list);
-      const counts: Record<string, number> = {};
-      for (const entry of entries) {
-        if (entry.businessId) {
-          counts[entry.businessId] = (counts[entry.businessId] ?? 0) + 1;
+      try {
+        const [list, entries] = await Promise.all([
+          getBusinesses(),
+          getBudgetEntries(),
+        ]);
+        if (cancelled) return;
+        setBusinesses(list);
+        const counts: Record<string, number> = {};
+        for (const entry of entries) {
+          if (entry.businessId) {
+            counts[entry.businessId] = (counts[entry.businessId] ?? 0) + 1;
+          }
         }
+        setEntryCounts(counts);
+      } catch (error) {
+        if (cancelled) return;
+        setError(describeError(error, "Couldn't load your businesses. Close and try again."));
       }
-      setEntryCounts(counts);
     })();
     return () => {
       cancelled = true;
@@ -101,16 +107,22 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
     if (saving) return;
     setSaving(true);
     setError(null);
-    const result = editingId
-      ? await updateBusiness(editingId, { name })
-      : await addBusiness(name);
-    setSaving(false);
-    if (result.ok) {
-      setBusinesses(result.businesses);
-      resetForm();
-      onChanged?.();
-    } else {
-      setError(result.error);
+    try {
+      const result = editingId
+        ? await updateBusiness(editingId, { name })
+        : await addBusiness(name);
+      if (result.ok) {
+        setBusinesses(result.businesses);
+        resetForm();
+        onChanged?.();
+      } else {
+        setError(result.error);
+      }
+    } catch (error) {
+      // A storage failure must not leave the button stuck on "Saving...".
+      setError(describeError(error, "Couldn't save. Please try again."));
+    } finally {
+      setSaving(false);
     }
   }, [editingId, name, onChanged, resetForm, saving]);
 
@@ -137,10 +149,16 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
             style: "destructive",
             onPress: () => {
               void (async () => {
-                const next = await deleteBusiness(id);
-                setBusinesses(next);
-                if (editingId === id) resetForm();
-                onChanged?.();
+                try {
+                  const next = await deleteBusiness(id);
+                  setBusinesses(next);
+                  if (editingId === id) resetForm();
+                  onChanged?.();
+                } catch (error) {
+                  setError(
+                    describeError(error, "Couldn't delete this business. Please try again."),
+                  );
+                }
               })();
             },
           },
