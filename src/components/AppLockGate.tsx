@@ -20,7 +20,8 @@
  *   turned off in Profile is honored without an app restart.
  *
  * Wrong guesses feed the persisted escalating lockout in appLockStorage -
- * force-quitting the app does not reset the clock.
+ * force-quitting the app does not reset the clock. The verify/lockout
+ * machine itself is hooks/usePinVerifier, shared with AppLockSetupModal.
  */
 
 import React, {
@@ -43,18 +44,10 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
-import {
-  type AppLockRecord,
-  formatLockoutRemaining,
-  lockoutRemainingMs,
-  verifyPinAgainstRecord,
-} from "../utils/appLock";
-import {
-  getAppLockRecord,
-  recordFailedAttempt,
-  recordSuccessfulUnlock,
-} from "../storage/appLockStorage";
+import { formatLockoutRemaining } from "../utils/appLock";
+import { getAppLockRecord } from "../storage/appLockStorage";
 import { triggerHaptic } from "../utils/haptics";
+import { usePinVerifier } from "../hooks/usePinVerifier";
 import PinPad from "./PinPad";
 
 const RELOCK_GRACE_MS = 15_000;
@@ -68,11 +61,17 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [status, setStatus] = useState<GateStatus>("loading");
-  const [record, setRecord] = useState<AppLockRecord | null>(null);
   const [pin, setPin] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
-  const [lockoutMsLeft, setLockoutMsLeft] = useState(0);
+  const {
+    record,
+    adoptRecord,
+    lockoutMsLeft,
+    lockedOut,
+    verifying,
+    error,
+    setError,
+    verify,
+  } = usePinVerifier(status === "locked");
 
   const loadedRef = useRef(false);
   const backgroundedAtRef = useRef<number | null>(null);
@@ -83,14 +82,13 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     void getAppLockRecord().then((loaded) => {
       if (cancelled) return;
       loadedRef.current = true;
-      setRecord(loaded);
-      if (loaded) setLockoutMsLeft(lockoutRemainingMs(loaded, Date.now()));
+      adoptRecord(loaded);
       setStatus(loaded ? "locked" : "unlocked");
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [adoptRecord]);
 
   /** Relock when returning from a long background stay. */
   useEffect(() => {
@@ -105,7 +103,8 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       const backgroundedAt = backgroundedAtRef.current;
       backgroundedAtRef.current = null;
       void getAppLockRecord().then((loaded) => {
-        setRecord(loaded);
+        // Adopting also re-syncs the lockout countdown with the clock.
+        adoptRecord(loaded);
         if (!loaded) {
           // PIN was turned off (or the record became unreadable) - never
           // strand the user on a lock screen with nothing to verify against.
@@ -117,61 +116,12 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         if (awayMs > RELOCK_GRACE_MS) {
           setPin("");
           setError(null);
-          setLockoutMsLeft(lockoutRemainingMs(loaded, Date.now()));
           setStatus("locked");
-        } else {
-          setLockoutMsLeft(lockoutRemainingMs(loaded, Date.now()));
         }
       });
     });
     return () => subscription.remove();
-  }, []);
-
-  /** One-second countdown while a lockout is active. */
-  const lockedOut = lockoutMsLeft > 0;
-  useEffect(() => {
-    if (status !== "locked" || !lockedOut) return;
-    const id = setInterval(() => {
-      setLockoutMsLeft((prev) => Math.max(0, prev - 1000));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [status, lockedOut]);
-
-  const verify = useCallback(
-    async (candidate: string, current: AppLockRecord) => {
-      setVerifying(true);
-      try {
-        if (await verifyPinAgainstRecord(candidate, current)) {
-          triggerHaptic("success");
-          setPin("");
-          setError(null);
-          setStatus("unlocked");
-          // Reset the attempt counter in the background; a failed write
-          // only means a stale counter, never a stuck gate.
-          recordSuccessfulUnlock(current)
-            .then(setRecord)
-            .catch(() => {});
-          return;
-        }
-        triggerHaptic("error");
-        let next = current;
-        try {
-          next = await recordFailedAttempt(current);
-        } catch {
-          // Persisting the counter failed - still enforce it in memory.
-          next = { ...current, failedAttempts: current.failedAttempts + 1 };
-        }
-        setRecord(next);
-        setPin("");
-        const remaining = lockoutRemainingMs(next, Date.now());
-        setLockoutMsLeft(remaining);
-        setError("Incorrect PIN - try again");
-      } finally {
-        setVerifying(false);
-      }
-    },
-    []
-  );
+  }, [adoptRecord, setError]);
 
   const handleChange = useCallback(
     (next: string) => {
@@ -179,10 +129,16 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setError(null);
       setPin(next);
       if (next.length === record.pinLength) {
-        void verify(next, record);
+        void verify(next).then((ok) => {
+          setPin("");
+          if (ok) {
+            triggerHaptic("success");
+            setStatus("unlocked");
+          }
+        });
       }
     },
-    [lockedOut, record, verify, verifying]
+    [lockedOut, record, setError, verify, verifying]
   );
 
   const handleForgotPin = useCallback(() => {

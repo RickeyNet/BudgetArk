@@ -16,8 +16,11 @@
  * and components/MonthBalancePromptModal.
  */
 
-import type { MonthStartBalance } from "../types";
+import type { BudgetEntry, Debt, MonthStartBalance, Payment } from "../types";
 import { isMonthKey, isMonthStartBalanceRecord } from "./recordValidators";
+import { isEntryActiveInMonth } from "./recurrence";
+import { paymentMonthKey } from "./debtDueCalendar";
+import { buildDebtPaymentPlanForMonth } from "./debtPaymentPlan";
 
 export type MonthStartBalanceMap = Record<string, MonthStartBalance>;
 
@@ -88,6 +91,55 @@ export const computeReconciliation = (input: {
 }): Reconciliation => {
   const expected = input.previousBalance + input.previousNet;
   return { expected, delta: input.actualBalance - expected };
+};
+
+/**
+ * Reconciliation delta for the Budget screen's Cash Flow card: how the
+ * selected month's entered starting balance compares against last month's
+ * projected end. Null unless both months have a recorded balance. Last
+ * month's net is built from the exact same blocks as the on-screen totals
+ * (recurring entries via isEntryActiveInMonth + the debt payment plan,
+ * payments of deleted debts excluded) so plan and projection can never
+ * disagree.
+ */
+export const computeMonthReconciliationDelta = (input: {
+  monthKey: string;
+  monthBalances: MonthStartBalanceMap;
+  entries: readonly BudgetEntry[];
+  debts: readonly Debt[];
+  payments: readonly Payment[];
+  /** The real current month - the payment plan floors unpaid minimums only there. */
+  currentMonthKey: string;
+}): number | null => {
+  const current = input.monthBalances[input.monthKey];
+  const prevKey = previousMonthKey(input.monthKey);
+  const previous = input.monthBalances[prevKey];
+  if (!current || !previous) return null;
+
+  const prevEntries = input.entries.filter((e) => isEntryActiveInMonth(e, prevKey));
+  const prevIncome = prevEntries
+    .filter((e) => e.type === "income")
+    .reduce((sum, e) => sum + e.amount, 0);
+  const liveDebtIds = new Set(input.debts.map((d) => d.id));
+  const prevPayments = input.payments.filter(
+    (p) => liveDebtIds.has(p.debtId) && paymentMonthKey(p.date) === prevKey
+  );
+  const prevDebtTotal = buildDebtPaymentPlanForMonth(
+    input.debts,
+    prevPayments,
+    prevKey,
+    input.currentMonthKey
+  ).reduce((sum, line) => sum + line.amount, 0);
+  const prevExpenses =
+    prevEntries
+      .filter((e) => e.type === "expense")
+      .reduce((sum, e) => sum + e.amount, 0) + prevDebtTotal;
+
+  return computeReconciliation({
+    previousBalance: previous.balance,
+    previousNet: prevIncome - prevExpenses,
+    actualBalance: current.balance,
+  }).delta;
 };
 
 /** Rounds to cents so projections never render float dust like 449.99999. */

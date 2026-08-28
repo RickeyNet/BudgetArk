@@ -8,8 +8,9 @@
  *
  * Changing or disabling always verifies the current PIN first, and wrong
  * guesses here feed the same persisted escalating lockout as the launch
- * gate - otherwise this modal would be an unthrottled oracle for someone
- * holding an unlocked phone (PINs get reused on other things).
+ * gate (via the shared hooks/usePinVerifier) - otherwise this modal would
+ * be an unthrottled oracle for someone holding an unlocked phone (PINs get
+ * reused on other things).
  */
 
 import React, {
@@ -31,23 +32,19 @@ import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import {
-  type AppLockRecord,
   PIN_MAX_LENGTH,
   PIN_MIN_LENGTH,
   formatLockoutRemaining,
   isValidPin,
-  lockoutRemainingMs,
-  verifyPinAgainstRecord,
 } from "../utils/appLock";
 import {
   changeAppLockPin,
   disableAppLock,
   enableAppLock,
   getAppLockRecord,
-  recordFailedAttempt,
-  recordSuccessfulUnlock,
 } from "../storage/appLockStorage";
 import { triggerHaptic } from "../utils/haptics";
+import { usePinVerifier } from "../hooks/usePinVerifier";
 import { waitForIosModalTeardown } from "../utils/iosNativeShare";
 import PinPad from "./PinPad";
 
@@ -69,22 +66,28 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
-  const [record, setRecord] = useState<AppLockRecord | null>(null);
   const [step, setStep] = useState<Step>("loading");
   const [intent, setIntent] = useState<Intent>("enable");
   const [pin, setPin] = useState("");
   const [firstPin, setFirstPin] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [lockoutMsLeft, setLockoutMsLeft] = useState(0);
+  const {
+    record,
+    adoptRecord,
+    refreshLockout,
+    lockoutMsLeft,
+    lockedOut,
+    error,
+    setError,
+    verify,
+  } = usePinVerifier(step === "verify");
 
   useEffect(() => {
     let cancelled = false;
     void getAppLockRecord().then((loaded) => {
       if (cancelled) return;
-      setRecord(loaded);
+      adoptRecord(loaded);
       if (loaded) {
-        setLockoutMsLeft(lockoutRemainingMs(loaded, Date.now()));
         setStep("menu");
       } else {
         setIntent("enable");
@@ -94,26 +97,17 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const lockedOut = lockoutMsLeft > 0;
-  useEffect(() => {
-    if (step !== "verify" || !lockedOut) return;
-    const id = setInterval(() => {
-      setLockoutMsLeft((prev) => Math.max(0, prev - 1000));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [step, lockedOut]);
+  }, [adoptRecord]);
 
   const beginVerify = useCallback(
     (nextIntent: Intent) => {
       setIntent(nextIntent);
       setPin("");
       setError(null);
-      if (record) setLockoutMsLeft(lockoutRemainingMs(record, Date.now()));
+      refreshLockout();
       setStep("verify");
     },
-    [record]
+    [refreshLockout, setError]
   );
 
   const finish = useCallback(
@@ -159,7 +153,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
         setStep("new");
       }
     },
-    [finish, intent]
+    [finish, intent, setError]
   );
 
   const handleVerifySubmit = useCallback(
@@ -167,49 +161,32 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
       if (!record || busy) return;
       setBusy(true);
       try {
-        if (await verifyPinAgainstRecord(candidate, record)) {
-          const cleared = await recordSuccessfulUnlock(record).catch(
-            () => record
-          );
-          setRecord(cleared);
-          setPin("");
-          setError(null);
-          if (intent === "disable") {
-            try {
-              await disableAppLock();
-            } catch {
-              // The PIN was right but the record couldn't be removed - the
-              // lock is still on; say so instead of reporting "App Lock Off".
-              triggerHaptic("error");
-              setError("Couldn't turn off App Lock. Please try again.");
-              return;
-            }
-            triggerHaptic("success");
-            finish({
-              title: "App Lock Off",
-              message: "BudgetArk will open without asking for a PIN.",
-            });
+        const ok = await verify(candidate);
+        setPin("");
+        if (!ok) return;
+        if (intent === "disable") {
+          try {
+            await disableAppLock();
+          } catch {
+            // The PIN was right but the record couldn't be removed - the
+            // lock is still on; say so instead of reporting "App Lock Off".
+            triggerHaptic("error");
+            setError("Couldn't turn off App Lock. Please try again.");
             return;
           }
-          setStep("new");
+          triggerHaptic("success");
+          finish({
+            title: "App Lock Off",
+            message: "BudgetArk will open without asking for a PIN.",
+          });
           return;
         }
-        triggerHaptic("error");
-        let next = record;
-        try {
-          next = await recordFailedAttempt(record);
-        } catch {
-          next = { ...record, failedAttempts: record.failedAttempts + 1 };
-        }
-        setRecord(next);
-        setPin("");
-        setLockoutMsLeft(lockoutRemainingMs(next, Date.now()));
-        setError("Incorrect PIN - try again");
+        setStep("new");
       } finally {
         setBusy(false);
       }
     },
-    [busy, finish, intent, record]
+    [busy, finish, intent, record, setError, verify]
   );
 
   const handlePinChange = useCallback(
@@ -231,7 +208,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
         }
       }
     },
-    [busy, firstPin, handleVerifySubmit, record, saveNewPin, step]
+    [busy, firstPin, handleVerifySubmit, record, saveNewPin, setError, step]
   );
 
   const handleNewPinSubmit = useCallback(() => {
@@ -243,7 +220,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
     setPin("");
     setError(null);
     setStep("confirm");
-  }, [pin]);
+  }, [pin, setError]);
 
   const stepTitle =
     step === "menu"

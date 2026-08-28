@@ -12,7 +12,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePresentAfterDismiss } from "../hooks/usePresentAfterDismiss";
 import {
-  Alert,
   FlatList,
   InteractionManager,
   Modal,
@@ -28,8 +27,13 @@ import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/nativ
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
-import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import BudgetBucketCard from "../components/BudgetBucketCard";
+import SpendingCard, {
+  type ExpenseCategoryEntry,
+  type ExpenseCategoryRow,
+  isAutoEntryId,
+} from "../components/SpendingCard";
+import FoodSplitModal, { type FoodSplitCategory } from "../components/FoodSplitModal";
 import BudgetEntryModal from "../components/BudgetEntryModal";
 import ReviewInboxModal from "../components/ReviewInboxModal";
 import { useConnections } from "../connections/ConnectionsProvider";
@@ -60,7 +64,6 @@ import {
   Debt,
   NewBudgetEntryInput,
   Payment,
-  RecurrenceInterval,
   SavingsGoal,
   AssetAccount,
   BudgetBucket,
@@ -140,8 +143,7 @@ import {
   setLastBalancePromptMonth,
 } from "../storage/monthlyBalanceStorage";
 import {
-  computeReconciliation,
-  previousMonthKey,
+  computeMonthReconciliationDelta,
   type MonthStartBalanceMap,
 } from "../utils/cashFlow";
 
@@ -154,50 +156,6 @@ import {
  */
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
-
-type ExpenseCategoryEntry = {
-  id: string;
-  amount: number;
-  description?: string;
-  date: string;
-  recurring?: boolean;
-  recurrenceInterval?: RecurrenceInterval;
-  businessId?: string;
-  personId?: string;
-  attachmentCount?: number;
-  isPrivate?: boolean;
-};
-
-type ExpenseCategoryRow = {
-  category: CategoryName;
-  spent: number;
-  limit: number | null;
-  ratio: number | null;
-  entries: ExpenseCategoryEntry[];
-};
-
-const inferFoodSplitCategory = (entry: BudgetEntry): Extract<BudgetCategory, "Grocery" | "Restaurant"> => {
-  const text = `${entry.description || ""} ${entry.category}`.toLowerCase();
-  const restaurantHints = [
-    "restaurant",
-    "dine",
-    "dinner",
-    "lunch",
-    "breakfast",
-    "takeout",
-    "delivery",
-    "uber eats",
-    "doordash",
-    "grubhub",
-    "cafe",
-    "coffee",
-    "bar",
-    "pizza",
-  ];
-  return restaurantHints.some((hint) => text.includes(hint))
-    ? "Restaurant"
-    : "Grocery";
-};
 
 const CATEGORY_CHART_PALETTE = [
   "#4E79A7",
@@ -226,18 +184,12 @@ const CATEGORY_CHART_PALETTE = [
   "#7B6D8D",
 ] as const;
 
-// How many entries an expanded category renders before the "Show all"
-// button. The screen's content is one giant ListHeaderComponent (nothing is
-// virtualized), so a bank-synced category with hundreds of entries would
-// otherwise mount them all in a single frame.
-const EXPANDED_ENTRY_CAP = 30;
-
 const BudgetScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const route = useRoute<RouteProp<RootTabParamList, "Budget">>();
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
-  const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const { formatCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
   const insets = useSafeAreaInsets();
   const { pushUndo } = useUndo();
@@ -254,11 +206,6 @@ const BudgetScreen: React.FC = () => {
   const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const presentAfterDismiss = usePresentAfterDismiss();
-  // Spending donut scales with the effective font scale (Density × Text Size)
-  // so the accessibility Text Size setting zooms the chart too, not just text.
-  const donutSize = Math.round(108 * tokens.fontScale);
-  const donutStroke = Math.round(16 * tokens.fontScale);
-
   const { customCategories } = useCustomCategories();
   const customCategoryNames = useMemo(
     () => customCategories.map((c) => c.name),
@@ -291,22 +238,12 @@ const BudgetScreen: React.FC = () => {
   const [limitInput, setLimitInput] = useState("");
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  // Everything on this screen lives in one ListHeaderComponent (the outer
-  // FlatList has no real rows), so nothing is virtualized. Expanding a
-  // bank-synced category with hundreds of entries would render them all at
-  // once - instead the first EXPANDED_ENTRY_CAP render and a "Show all"
-  // button opts into the rest per category.
-  const [fullyRevealedCategories, setFullyRevealedCategories] = useState<Set<string>>(
-    new Set()
-  );
   // Multi-select for bulk delete / recategorize. `selectionMode` flips row
   // taps from "edit" to "toggle select"; auto-debt-payment rows are never
   // selectable (they're derived from debts, not real budget entries).
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
   const [showBulkCategoryPicker, setShowBulkCategoryPicker] = useState(false);
-  const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
   const [reviewPreviewData, setReviewPreviewData] = useState<MonthlyReviewData | null>(null);
@@ -323,16 +260,6 @@ const BudgetScreen: React.FC = () => {
   const [efContribAmount, setEfContribAmount] = useState("");
   const [bucketOverrides, setBucketOverrides] = useState<CategoryBucketOverrides>({});
   const [bucketOverrideCategory, setBucketOverrideCategory] = useState<string | null>(null);
-
-  const businessNameById = useMemo(
-    () => new Map(businesses.map((b) => [b.id, b.name])),
-    [businesses]
-  );
-
-  const personNameById = useMemo(
-    () => new Map(people.map((p) => [p.id, p.name])),
-    [people]
-  );
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
   const selectedMonthIndex = Math.max(0, monthKeys.indexOf(selectedMonthKey));
@@ -553,37 +480,18 @@ const BudgetScreen: React.FC = () => {
    * isEntryActiveInMonth + the debt payment plan) so plan and projection
    * can never disagree.
    */
-  const cashFlowReconciliationDelta = useMemo(() => {
-    const current = monthBalances[selectedMonthKey];
-    const prevKey = previousMonthKey(selectedMonthKey);
-    const previous = monthBalances[prevKey];
-    if (!current || !previous) return null;
-
-    const prevEntries = entries.filter((e) => isEntryActiveInMonth(e, prevKey));
-    const prevIncome = prevEntries
-      .filter((e) => e.type === "income")
-      .reduce((sum, e) => sum + e.amount, 0);
-    const liveDebtIds = new Set(debts.map((d) => d.id));
-    const prevPayments = payments.filter(
-      (p) => liveDebtIds.has(p.debtId) && paymentMonthKey(p.date) === prevKey
-    );
-    const prevDebtTotal = buildDebtPaymentPlanForMonth(
-      debts,
-      prevPayments,
-      prevKey,
-      getMonthKey(new Date())
-    ).reduce((sum, line) => sum + line.amount, 0);
-    const prevExpenses =
-      prevEntries
-        .filter((e) => e.type === "expense")
-        .reduce((sum, e) => sum + e.amount, 0) + prevDebtTotal;
-
-    return computeReconciliation({
-      previousBalance: previous.balance,
-      previousNet: prevIncome - prevExpenses,
-      actualBalance: current.balance,
-    }).delta;
-  }, [monthBalances, selectedMonthKey, entries, debts, payments]);
+  const cashFlowReconciliationDelta = useMemo(
+    () =>
+      computeMonthReconciliationDelta({
+        monthKey: selectedMonthKey,
+        monthBalances,
+        entries,
+        debts,
+        payments,
+        currentMonthKey: getMonthKey(new Date()),
+      }),
+    [monthBalances, selectedMonthKey, entries, debts, payments]
+  );
 
   const savingsReserve = useMemo(() => sumSavingsReserve(entries), [entries]);
 
@@ -811,14 +719,6 @@ const BudgetScreen: React.FC = () => {
     spendingByCategory,
   ]);
 
-  const chartData = useMemo(
-    () =>
-      expenseRows
-        .filter((row) => row.spent > 0)
-        .map((row) => ({ category: row.category, amount: row.spent })),
-    [expenseRows]
-  );
-
   const categoryChartColors = useMemo(() => {
     const palette = [
       colors.accent,
@@ -851,27 +751,6 @@ const BudgetScreen: React.FC = () => {
       ];
     },
     [categoryChartColors]
-  );
-
-  const pieData = useMemo<DonutSlice[]>(
-    () =>
-      chartData.map((item) => ({
-        label: item.category,
-        value: item.amount,
-        color: colorForCategory(item.category),
-      })),
-    [colorForCategory, chartData]
-  );
-
-  const spendingTotal = useMemo(
-    () => chartData.reduce((sum, item) => sum + item.amount, 0),
-    [chartData]
-  );
-
-  // Scale denominator for limit-less category bars (kept ≥1 to avoid /0).
-  const maxCategorySpent = useMemo(
-    () => Math.max(1, ...expenseRows.map((row) => row.spent)),
-    [expenseRows]
   );
 
   /**
@@ -1127,22 +1006,6 @@ const BudgetScreen: React.FC = () => {
 
   /* ─── Bulk multi-select ─── */
 
-  /**
-   * Synthetic Debt Payments rows derived from the debt tracker rather than
-   * stored budget entries: logged payments (`payment-`), planned-minimum
-   * shortfalls (`debt-min-topup-`), and unpaid planned minimums
-   * (`auto-debt-`). None exist in budget storage, so edit/select/delete
-   * must exclude all three - `deleteBudgetEntries` would silently no-op on
-   * their ids while the toast claims success and the row re-derives.
-   */
-  const isAutoEntry = useCallback(
-    (id: string) =>
-      id.startsWith("auto-debt-") ||
-      id.startsWith("payment-") ||
-      id.startsWith("debt-min-topup-"),
-    []
-  );
-
   const exitSelection = useCallback(() => {
     setSelectionMode(false);
     setSelectedEntryIds(new Set());
@@ -1150,7 +1013,7 @@ const BudgetScreen: React.FC = () => {
 
   const toggleSelectEntry = useCallback(
     (id: string) => {
-      if (isAutoEntry(id)) return;
+      if (isAutoEntryId(id)) return;
       setSelectedEntryIds((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
@@ -1158,16 +1021,24 @@ const BudgetScreen: React.FC = () => {
         return next;
       });
     },
-    [isAutoEntry]
+    []
   );
+
+  const toggleBusinessOnly = useCallback(() => {
+    setBusinessOnly((prev) => !prev);
+  }, []);
+
+  const openFoodSplitModal = useCallback(() => {
+    setShowFoodSplitModal(true);
+  }, []);
 
   const enterSelectionWith = useCallback(
     (id: string) => {
-      if (isAutoEntry(id)) return;
+      if (isAutoEntryId(id)) return;
       setSelectionMode(true);
       setSelectedEntryIds(new Set([id]));
     },
-    [isAutoEntry]
+    []
   );
 
   // Same category set the Add/Edit pickers offer, plus the user's customs.
@@ -1179,7 +1050,7 @@ const BudgetScreen: React.FC = () => {
   }, [customCategories]);
 
   const handleBulkDelete = useCallback(async () => {
-    const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntry(id));
+    const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntryId(id));
     if (ids.length === 0) {
       exitSelection();
       return;
@@ -1214,11 +1085,11 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [applyAssetDeltas, entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
+  }, [applyAssetDeltas, entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
 
   const handleBulkRecategorize = useCallback(
     async (category: CategoryName) => {
-      const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntry(id));
+      const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntryId(id));
       if (ids.length === 0) {
         setShowBulkCategoryPicker(false);
         exitSelection();
@@ -1251,7 +1122,7 @@ const BudgetScreen: React.FC = () => {
         },
       });
     },
-    [entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, selectedEntryIds]
+    [entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, selectedEntryIds]
   );
 
   const foodEntriesToSplit = useMemo(
@@ -1259,56 +1130,26 @@ const BudgetScreen: React.FC = () => {
     [entries]
   );
 
-  const openFoodSplitModal = useCallback(() => {
-    const draft: Record<string, "Grocery" | "Restaurant"> = {};
-    foodEntriesToSplit.forEach((entry) => {
-      draft[entry.id] = inferFoodSplitCategory(entry);
-    });
-    setFoodSplitDraft(draft);
-    setShowFoodSplitModal(true);
-  }, [foodEntriesToSplit]);
-
-  const setFoodSplitForEntry = useCallback((entryId: string, category: "Grocery" | "Restaurant") => {
-    setFoodSplitDraft((current) => ({ ...current, [entryId]: category }));
-  }, []);
-
-  const applyFoodSplit = useCallback(async () => {
-    // Only the entries the draft actually maps; `setBudgetEntryCategories`
-    // stamps updatedAt on those and leaves everything else (including
-    // records synced in behind this screen) untouched.
-    const categoryById: Record<string, "Grocery" | "Restaurant"> = {};
-    for (const entry of entries) {
-      if (entry.type !== "expense" || entry.category !== "Food") continue;
-      const mapped = foodSplitDraft[entry.id];
-      if (mapped) categoryById[entry.id] = mapped;
-    }
-    if (Object.keys(categoryById).length > 0) {
-      const nextEntries = await setBudgetEntryCategories(categoryById);
-      setEntries(nextEntries);
-      await refreshMonthlyReview(nextEntries);
-    }
-    setShowFoodSplitModal(false);
-  }, [entries, foodSplitDraft, refreshMonthlyReview]);
-
-  const toggleCategory = useCallback((category: string) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) {
-        next.delete(category);
-      } else {
-        next.add(category);
+  const applyFoodSplit = useCallback(
+    async (draft: Record<string, FoodSplitCategory>) => {
+      // Only the entries the draft actually maps; `setBudgetEntryCategories`
+      // stamps updatedAt on those and leaves everything else (including
+      // records synced in behind this screen) untouched.
+      const categoryById: Record<string, FoodSplitCategory> = {};
+      for (const entry of entries) {
+        if (entry.type !== "expense" || entry.category !== "Food") continue;
+        const mapped = draft[entry.id];
+        if (mapped) categoryById[entry.id] = mapped;
       }
-      return next;
-    });
-    // Collapsing (or re-expanding) resets the entry cap so the next expand
-    // starts cheap again.
-    setFullyRevealedCategories((prev) => {
-      if (!prev.has(category)) return prev;
-      const next = new Set(prev);
-      next.delete(category);
-      return next;
-    });
-  }, []);
+      if (Object.keys(categoryById).length > 0) {
+        const nextEntries = await setBudgetEntryCategories(categoryById);
+        setEntries(nextEntries);
+        await refreshMonthlyReview(nextEntries);
+      }
+      setShowFoodSplitModal(false);
+    },
+    [entries, refreshMonthlyReview]
+  );
 
   const openLimitModal = useCallback(
     (category: CategoryName) => {
@@ -1623,277 +1464,23 @@ const BudgetScreen: React.FC = () => {
         style={styles.reminderBanner}
       />
 
-      {/* Spending card - donut chart + category rows in one card */}
-      <View ref={anchorBudgetSpending} collapsable={false} style={styles.spendingCard}>
-        <View style={styles.topHairline} />
-        <View style={styles.spendingHeaderRow}>
-          <Text style={styles.spendingTitle}>Spending</Text>
-          {foodEntriesToSplit.length > 0 ? (
-            <TouchableOpacity onPress={openFoodSplitModal}>
-              <Text style={[styles.spendingHint, { color: colors.accent }]}>Split Food ({foodEntriesToSplit.length})</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.spendingHint}>Tap row to expand · Hold for limit</Text>
-          )}
-        </View>
-
-        {/* Chip stays visible while active even if paging lands on a month
-            with no business spend - otherwise there'd be no way to toggle
-            the filter back off. */}
-        {(hasBusinessSpending || businessOnly) && (
-          <View style={styles.spendingFilterRow}>
-            <TouchableOpacity
-              style={[styles.filterChip, businessOnly && styles.filterChipActive]}
-              onPress={() => setBusinessOnly((prev) => !prev)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: businessOnly }}
-              accessibilityLabel="Show business expenses only"
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  businessOnly && styles.filterChipTextActive,
-                ]}
-              >
-                💼 Business only
-              </Text>
-            </TouchableOpacity>
-            {businessOnly && (
-              <Text style={styles.spendingHint}>Limits hidden while filtered</Text>
-            )}
-          </View>
-        )}
-
-        {chartData.length > 0 ? (
-          <View style={styles.donutSection}>
-            <View style={[styles.donutWrap, { width: donutSize, height: donutSize }]}>
-              <DonutChart data={pieData} size={donutSize} strokeWidth={donutStroke} />
-              <View style={styles.donutCenter}>
-                <Text style={styles.donutLabel}>Total</Text>
-                <Text style={styles.donutTotal}>
-                  {formatCompactCurrency(
-                    businessOnly ? spendingTotal : monthlyExpenses
-                  )}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.legend}>
-              {pieData.slice(0, 6).map((slice) => {
-                const pct =
-                  spendingTotal > 0
-                    ? Math.round((slice.value / spendingTotal) * 100)
-                    : 0;
-                return (
-                  <View key={slice.label} style={styles.legendItem}>
-                    <View
-                      style={[styles.legendDot, { backgroundColor: slice.color }]}
-                    />
-                    <Text style={styles.legendName} numberOfLines={1}>
-                      {slice.label}
-                    </Text>
-                    <Text style={styles.legendPct}>{pct}%</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        ) : (
-          <View style={styles.spendingEmptyWrap}>
-            <Text style={styles.emptyCardTitle}>
-              {businessOnly
-                ? "No business expenses this month"
-                : "No expenses this month"}
-            </Text>
-            <Text style={styles.emptyCardSubtext}>
-              {businessOnly
-                ? "Tag an expense with a business to see it here."
-                : "Add entries to see your spending chart."}
-            </Text>
-          </View>
-        )}
-
-        {expenseRows.map((item) => {
-          const ratio = item.ratio;
-          const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
-          const isOver = ratio != null && ratio >= 1;
-          const dotColor = colorForCategory(item.category);
-          const isExpanded = expandedCategories.has(item.category);
-          const isFullyRevealed = fullyRevealedCategories.has(item.category);
-          const visibleEntries = isFullyRevealed
-            ? item.entries
-            : item.entries.slice(0, EXPANDED_ENTRY_CAP);
-          const hiddenEntryCount = item.entries.length - visibleEntries.length;
-          // With a limit, the track represents the limit (100% = at limit).
-          // Without one, it scales against the biggest category this month so
-          // the bars stay comparable.
-          const fillPercent = item.limit
-            ? Math.min(ratio ?? 0, 1) * 100
-            : Math.min(1, item.spent / maxCategorySpent) * 100;
-          const fillColor = item.limit
-            ? isOver
-              ? colors.danger
-              : hasWarning
-                ? colors.warning
-                : dotColor
-            : dotColor;
-
-          return (
-            <View key={item.category}>
-              <TouchableOpacity
-                style={styles.spendRow}
-                activeOpacity={0.7}
-                onPress={() => toggleCategory(item.category)}
-                onLongPress={() => openLimitModal(item.category)}
-              >
-                <View style={[styles.spendDot, { backgroundColor: dotColor }]} />
-                <Text style={styles.spendName} numberOfLines={1}>
-                  {getCategoryIcon(item.category, customCategories)} {item.category}
-                </Text>
-                <View style={styles.spendBarTrack}>
-                  <View
-                    style={[
-                      styles.spendBarFill,
-                      { width: `${fillPercent}%`, backgroundColor: fillColor },
-                    ]}
-                  />
-                  {item.limit ? (
-                    <View style={styles.spendLimitMark} />
-                  ) : null}
-                </View>
-                <Text
-                  style={[
-                    styles.spendAmount,
-                    isOver ? { color: colors.danger } : null,
-                  ]}
-                >
-                  {formatCurrency(item.spent)}
-                </Text>
-                <Text style={styles.spendChevron}>{isExpanded ? "▾" : "›"}</Text>
-              </TouchableOpacity>
-
-              {isExpanded && item.entries.length > 0 && (
-                <View style={styles.expandedEntries}>
-                  <Text style={styles.expandedHeader}>
-                    Expanded - {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
-                  </Text>
-                  {visibleEntries.map((entry) => {
-                    const isLoggedPayment = entry.id.startsWith("payment-");
-                    const isAutoDebtRow = isAutoEntry(entry.id);
-                    const isSelected = selectedEntryIds.has(entry.id);
-                    const entryDate = new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-                    return (
-                      <TouchableOpacity
-                        key={entry.id}
-                        style={[
-                          styles.expandedEntryRow,
-                          isSelected && {
-                            backgroundColor: `${colors.accent}22`,
-                            borderRadius: 8,
-                          },
-                        ]}
-                        onPress={() => {
-                          if (isAutoDebtRow) {
-                            // Not a stored budget entry - point at the real
-                            // home instead of silently doing nothing.
-                            if (isLoggedPayment) {
-                              Alert.alert(
-                                "Logged debt payment",
-                                "This payment was logged on the Debts tab. To edit or delete it, open the debt's payment history there."
-                              );
-                            }
-                            return;
-                          }
-                          if (selectionMode) toggleSelectEntry(entry.id);
-                          else handleEditEntry(entry.id);
-                        }}
-                        onLongPress={() => {
-                          if (!isAutoDebtRow) enterSelectionWith(entry.id);
-                        }}
-                        delayLongPress={300}
-                        activeOpacity={isAutoDebtRow && !isLoggedPayment ? 1 : 0.6}
-                      >
-                        {selectionMode && !isAutoDebtRow && (
-                          <Text
-                            style={[
-                              styles.entryEditHint,
-                              {
-                                color: isSelected ? colors.accent : colors.textMuted,
-                                marginRight: 8,
-                                fontSize: 16,
-                              },
-                            ]}
-                          >
-                            {isSelected ? "☑" : "☐"}
-                          </Text>
-                        )}
-                        <View style={styles.expandedEntryLeft}>
-                          <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
-                          {entry.description ? (
-                            <Text style={styles.entryDesc} numberOfLines={1}> - {entry.description}</Text>
-                          ) : null}
-                        </View>
-                        <View style={styles.expandedEntryRight}>
-                          {entry.isPrivate && (
-                            <Text style={styles.entryEditHint}>🔒</Text>
-                          )}
-                          {(entry.attachmentCount ?? 0) > 0 && (
-                            <Text style={styles.entryEditHint}>
-                              📷{(entry.attachmentCount ?? 0) > 1 ? ` ${entry.attachmentCount}` : ""}
-                            </Text>
-                          )}
-                          {entry.businessId && (
-                            <Text
-                              style={[styles.entryEditHint, { color: colors.accent }]}
-                              numberOfLines={1}
-                            >
-                              💼 {businessNameById.get(entry.businessId) ?? "(deleted)"}
-                            </Text>
-                          )}
-                          {entry.personId && (
-                            <Text
-                              style={[styles.entryEditHint, { color: colors.accent }]}
-                              numberOfLines={1}
-                            >
-                              👤 {personNameById.get(entry.personId) ?? "(deleted)"}
-                            </Text>
-                          )}
-                          {entry.recurring && (
-                            <Text style={[styles.entryEditHint, { color: colors.accent }]}>
-                              {getRecurrenceTag(entry)}
-                            </Text>
-                          )}
-                          {isAutoDebtRow && !isLoggedPayment ? (
-                            <Text style={styles.entryEditHint}>Auto</Text>
-                          ) : (
-                            <Text style={styles.expandedEntryDate}>{entryDate}</Text>
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                  {hiddenEntryCount > 0 && (
-                    <TouchableOpacity
-                      style={styles.showAllEntriesBtn}
-                      onPress={() =>
-                        setFullyRevealedCategories((prev) =>
-                          new Set(prev).add(item.category)
-                        )
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel={`Show ${hiddenEntryCount} more entries`}
-                    >
-                      <Text style={styles.showAllEntriesText}>
-                        Show {hiddenEntryCount} more{" "}
-                        {hiddenEntryCount === 1 ? "entry" : "entries"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-            </View>
-          );
-        })}
-      </View>
+      <SpendingCard
+        anchorRef={anchorBudgetSpending}
+        rows={expenseRows}
+        monthlyExpenses={monthlyExpenses}
+        hasBusinessSpending={hasBusinessSpending}
+        businessOnly={businessOnly}
+        onToggleBusinessOnly={toggleBusinessOnly}
+        colorForCategory={colorForCategory}
+        foodSplitCount={foodEntriesToSplit.length}
+        onSplitFood={openFoodSplitModal}
+        onLongPressCategory={openLimitModal}
+        selectionMode={selectionMode}
+        selectedEntryIds={selectedEntryIds}
+        onToggleSelect={toggleSelectEntry}
+        onEnterSelection={enterSelectionWith}
+        onEditEntry={handleEditEntry}
+      />
 
       <BudgetBucketCard
         takeHomeIncome={monthlyIncome}
@@ -2239,78 +1826,13 @@ const BudgetScreen: React.FC = () => {
         }}
       />
 
-      <Modal
-        visible={showFoodSplitModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowFoodSplitModal(false)}
-      >
-        <View style={styles.limitOverlay}>
-          <View style={styles.limitModalCard}>
-            <Text style={styles.limitModalTitle}>Split Food Entries</Text>
-            <Text style={styles.limitModalSub}>Review each Food expense and assign Grocery or Restaurant.</Text>
-
-            <FlatList
-              data={foodEntriesToSplit}
-              keyExtractor={(item) => item.id}
-              style={styles.foodSplitList}
-              contentContainerStyle={styles.foodSplitListContent}
-              renderItem={({ item }) => {
-                const selected = foodSplitDraft[item.id] || "Grocery";
-                return (
-                  <View style={[styles.foodSplitRow, { borderColor: colors.cardBorder }]}> 
-                    <View style={styles.foodSplitInfo}>
-                      <Text style={styles.foodSplitAmount}>{formatCurrency(item.amount)}</Text>
-                      <Text style={styles.foodSplitDesc} numberOfLines={1}>
-                        {item.description || new Date(item.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                      </Text>
-                    </View>
-                    <View style={styles.foodSplitOptions}>
-                      {(["Grocery", "Restaurant"] as const).map((option) => {
-                        const isSelected = selected === option;
-                        return (
-                          <TouchableOpacity
-                            key={option}
-                            style={[
-                              styles.foodSplitOption,
-                              {
-                                borderColor: isSelected ? colors.accent : colors.cardBorder,
-                                backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
-                              },
-                            ]}
-                            onPress={() => setFoodSplitForEntry(item.id, option)}
-                          >
-                            <Text
-                              style={[
-                                styles.foodSplitOptionText,
-                                { color: isSelected ? colors.accent : colors.textDim },
-                              ]}
-                            >
-                              {option}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              }}
-            />
-
-            <View style={styles.limitActions}>
-              <TouchableOpacity
-                style={styles.limitCancelBtn}
-                onPress={() => setShowFoodSplitModal(false)}
-              >
-                <Text style={styles.limitCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.limitSaveBtn} onPress={applyFoodSplit}>
-                <Text style={styles.limitSaveText}>Apply Split</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {showFoodSplitModal ? (
+        <FoodSplitModal
+          entries={foodEntriesToSplit}
+          onClose={() => setShowFoodSplitModal(false)}
+          onApply={applyFoodSplit}
+        />
+      ) : null}
 
       <Modal
         visible={limitModalCategory != null}
@@ -2548,15 +2070,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       marginVertical: 6,
       backgroundColor: colors.cardBorder,
     },
-    topHairline: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 1,
-      backgroundColor: colors.accent,
-      opacity: 0.18,
-    },
     summaryCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
@@ -2735,178 +2248,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: 11,
       color: colors.textMuted,
     },
-    spendingCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: tokens.radius,
-      padding: tokens.pad,
-      overflow: "hidden",
-    },
     reminderBanner: {
       marginBottom: tokens.gap,
-    },
-    spendingHeaderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 12,
-    },
-    spendingTitle: {
-      fontSize: scale(18),
-      fontWeight: "800",
-      color: colors.text,
-    },
-    spendingFilterRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.gapSm,
-      marginBottom: 10,
-    },
-    filterChip: {
-      borderRadius: tokens.radius,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      backgroundColor: colors.bg,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-    },
-    filterChipActive: {
-      borderColor: colors.accent,
-      backgroundColor: `${colors.accent}20`,
-    },
-    filterChipText: {
-      fontSize: scale(12),
-      fontWeight: "600",
-      color: colors.textDim,
-    },
-    filterChipTextActive: {
-      color: colors.accent,
-      fontWeight: "700",
-    },
-    donutSection: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
-      marginBottom: 8,
-      paddingBottom: 8,
-    },
-    donutWrap: {
-      width: 92,
-      height: 92,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    donutCenter: {
-      ...StyleSheet.absoluteFill,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    donutLabel: {
-      fontSize: scale(7),
-      fontWeight: "600",
-      letterSpacing: 1,
-      color: colors.textDim,
-      textTransform: "uppercase",
-    },
-    donutTotal: {
-      fontSize: scale(12),
-      fontWeight: "800",
-      color: colors.text,
-      fontVariant: ["tabular-nums"] as any,
-    },
-    legend: {
-      flex: 1,
-      gap: 5,
-    },
-    legendItem: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 7,
-    },
-    legendDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 2,
-    },
-    legendName: {
-      flex: 1,
-      fontSize: scale(11),
-      color: colors.textDim,
-    },
-    legendPct: {
-      fontSize: scale(10),
-      fontWeight: "600",
-      color: colors.textMuted,
-      fontVariant: ["tabular-nums"] as any,
-    },
-    spendRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 9,
-      paddingVertical: 9,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-    },
-    spendDot: {
-      width: scale(9),
-      height: scale(9),
-      borderRadius: 2,
-    },
-    spendName: {
-      width: scale(98),
-      fontSize: scale(13),
-      fontWeight: "600",
-      color: colors.text,
-    },
-    spendBarTrack: {
-      flex: 1,
-      height: scale(8),
-      borderRadius: 4,
-      backgroundColor: `${colors.textMuted}33`,
-      overflow: "hidden",
-      justifyContent: "center",
-    },
-    spendBarFill: {
-      height: "100%",
-      borderRadius: 4,
-      minWidth: 2,
-    },
-    spendLimitMark: {
-      position: "absolute",
-      right: 0,
-      top: -2,
-      bottom: -2,
-      width: 2,
-      backgroundColor: colors.textDim,
-      opacity: 0.6,
-    },
-    spendAmount: {
-      minWidth: scale(58),
-      textAlign: "right",
-      fontSize: scale(12),
-      fontWeight: "700",
-      color: colors.textDim,
-      fontVariant: ["tabular-nums"] as any,
-    },
-    spendChevron: {
-      fontSize: scale(14),
-      color: colors.textMuted,
-      fontWeight: "600",
-      width: 12,
-      textAlign: "center",
-    },
-    spendingHint: {
-      fontSize: 11,
-      color: colors.textMuted,
     },
     spendingChartWrap: {
       alignItems: "center",
       marginBottom: 8,
-    },
-    spendingEmptyWrap: {
-      alignItems: "center",
-      paddingVertical: 16,
     },
     categoryRow: {
       flexDirection: "row",
@@ -2939,48 +2286,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       overflow: "hidden",
       marginBottom: 4,
     },
-    expandedEntries: {
-      backgroundColor: colors.bg,
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 8,
-      gap: 8,
-    },
-    expandedHeader: {
-      fontSize: 11,
-      color: colors.textMuted,
-      marginBottom: 2,
-    },
-    showAllEntriesBtn: {
-      paddingVertical: 8,
-      alignItems: "center",
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-    },
-    showAllEntriesText: {
-      color: colors.accent,
-      fontSize: 12,
-      fontWeight: "600",
-    },
-    expandedEntryRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: 8,
-    },
-    expandedEntryLeft: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    expandedEntryRight: {
-      alignItems: "flex-end",
-    },
-    expandedEntryDate: {
-      fontSize: 11,
-      color: colors.textMuted,
-    },
     emptyCard: {
       backgroundColor: colors.card,
       borderWidth: 1,
@@ -2988,17 +2293,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: 16,
       padding: 20,
       alignItems: "center",
-    },
-    emptyCardTitle: {
-      fontSize: 15,
-      color: colors.text,
-      fontWeight: "600",
-      marginBottom: 4,
-    },
-    emptyCardSubtext: {
-      fontSize: 13,
-      color: colors.textDim,
-      textAlign: "center",
     },
     categoryDot: {
       width: 10,
@@ -3086,47 +2380,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       gap: 10,
       marginTop: 16,
     },
-    foodSplitList: {
-      maxHeight: 320,
-    },
-    foodSplitListContent: {
-      gap: 8,
-    },
-    foodSplitRow: {
-      borderWidth: 1,
-      borderRadius: 10,
-      padding: 10,
-      gap: 8,
-      backgroundColor: colors.bg,
-    },
-    foodSplitInfo: {
-      gap: 2,
-    },
-    foodSplitAmount: {
-      color: colors.text,
-      fontSize: 13,
-      fontWeight: "700",
-      fontVariant: ["tabular-nums"],
-    },
-    foodSplitDesc: {
-      color: colors.textDim,
-      fontSize: 12,
-    },
-    foodSplitOptions: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    foodSplitOption: {
-      flex: 1,
-      borderWidth: 1,
-      borderRadius: 8,
-      paddingVertical: 8,
-      alignItems: "center",
-    },
-    foodSplitOptionText: {
-      fontSize: 12,
-      fontWeight: "600",
-    },
     bucketAssignRow: {
       flexDirection: "row",
       gap: 8,
@@ -3167,22 +2420,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.white,
       fontSize: 14,
       fontWeight: "700",
-    },
-    entryAmount: {
-      color: colors.text,
-      fontSize: 13,
-      fontWeight: "600",
-      fontVariant: ["tabular-nums"],
-    },
-    entryDesc: {
-      flex: 1,
-      color: colors.textDim,
-      fontSize: 12,
-    },
-    entryEditHint: {
-      color: colors.accent,
-      fontSize: 10,
-      fontWeight: "600",
     },
 
     /* Accounts card */
