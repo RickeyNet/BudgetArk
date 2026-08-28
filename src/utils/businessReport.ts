@@ -12,6 +12,7 @@
  */
 
 import type { BudgetEntry, Business } from "../types";
+import { getMonthKey } from "./budgetMonths";
 import { listOccurrenceMonths } from "./recurrence";
 
 /** One expense occurrence attributed to a business within the report year. */
@@ -75,8 +76,7 @@ const lastDayOfMonth = (monthKey: string): number => {
 };
 
 /** Current local month as YYYY-MM (default expansion cap). */
-export const currentMonthKey = (now: Date = new Date()): string =>
-  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+export const currentMonthKey = (now: Date = new Date()): string => getMonthKey(now);
 
 /**
  * Aggregates business-tagged expenses for one calendar year.

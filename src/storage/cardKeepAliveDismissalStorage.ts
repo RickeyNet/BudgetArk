@@ -11,7 +11,7 @@
 
 import * as EncryptedStorage from "./encryptedStorage";
 import { keepAliveDismissalKey } from "../utils/cardKeepAlive";
-import { getMonthKey } from "../utils/debtDueCalendar";
+import { getMonthKey } from "../utils/budgetMonths";
 
 const CARD_KEEP_ALIVE_DISMISSALS_KEY =
   "@budgetark_card_keepalive_dismissals" as const;

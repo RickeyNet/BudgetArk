@@ -16,8 +16,6 @@
 
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,8 +23,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
+import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -50,7 +48,6 @@ import {
   type SearchFilters,
   type SearchScope,
 } from "../utils/searchFilter";
-import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 const DEBT_CLASS_GLYPHS: Record<DebtClass, string> = {
   personal_credit: "💳",
@@ -86,8 +83,8 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const sheet = useSheetStyles();
   const { formatCurrency, preference } = useCurrency();
   const { customCategories } = useCustomCategories();
 
@@ -181,17 +178,25 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     ) : null;
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <SheetKeyboardAvoider style={styles.overlay}>
-        <View style={styles.modalSheet}>
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
+    <SheetModal
+      visible
+      onRequestClose={onClose}
+      keyboardAvoiding
+      footer={
+        <>
+          <TouchableOpacity
+            style={sheet.doneButton}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close search"
           >
-            <Text style={styles.title}>Search</Text>
-            <Text style={styles.subtitle}>
+            <Text style={sheet.doneText}>Done</Text>
+          </TouchableOpacity>
+        </>
+      }
+    >
+            <Text style={sheet.title}>Search</Text>
+            <Text style={sheet.subtitle}>
               Find anything you have recorded - debts, payments, and budget
               entries.
             </Text>
@@ -501,69 +506,13 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 )}
               </View>
             )}
-          </ScrollView>
-
-          {/* ── Pinned footer ── */}
-          <View
-            style={[
-              styles.buttonRow,
-              Platform.OS === "android" && insets.bottom > 0
-                ? { paddingBottom: insets.bottom + 12 }
-                : null,
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.doneButton}
-              onPress={onClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close search"
-            >
-              <Text style={styles.doneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SheetKeyboardAvoider>
-    </Modal>
+    </SheetModal>
   );
 };
 
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: colors.overlayStrong,
-      justifyContent: "flex-end",
-    },
-    modalSheet: {
-      flex: 1,
-      marginTop: Platform.OS === "ios" ? 44 : 32,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: tokens.radius,
-      borderTopRightRadius: tokens.radius,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderBottomWidth: 0,
-      overflow: "hidden",
-    },
-    scrollArea: {
-      flex: 1,
-    },
-    scrollContent: {
-      padding: tokens.padLg,
-      paddingBottom: 40,
-    },
-    title: {
-      fontSize: scale(22),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 4,
-    },
-    subtitle: {
-      fontSize: scale(14),
-      color: colors.textDim,
-      marginBottom: tokens.gap,
-    },
 
     /* Query */
     searchRow: {
@@ -745,26 +694,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* Pinned footer */
-    buttonRow: {
-      flexDirection: "row",
-      paddingHorizontal: tokens.padLg,
-      paddingTop: tokens.padSm,
-      paddingBottom: Platform.OS === "ios" ? 32 : 20,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-    },
-    doneButton: {
-      flex: 1,
-      paddingVertical: tokens.padSm,
-      borderRadius: tokens.radius,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-    },
-    doneText: {
-      color: colors.accentButtonText,
-      fontSize: scale(15),
-      fontWeight: "700",
-    },
   });
 };
 

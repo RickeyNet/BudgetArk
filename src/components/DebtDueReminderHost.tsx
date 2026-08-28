@@ -22,7 +22,8 @@ import {
   getDebtDueDismissals,
   type DebtDueDismissals,
 } from "../storage/debtDueReminderStorage";
-import { debtsDueOrOverdueNeedingPrompt, getMonthKey } from "../utils/debtDueCalendar";
+import { debtsDueOrOverdueNeedingPrompt } from "../utils/debtDueCalendar";
+import { getMonthKey } from "../utils/budgetMonths";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { minimumDuePaymentId } from "../utils/debtPaymentDedupe";
 

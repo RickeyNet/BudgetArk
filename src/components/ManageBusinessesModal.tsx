@@ -16,17 +16,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Modal,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { describeError } from "../utils/errorMessage";
+import { useDensity } from "../theme/DensityProvider";
+import type { DensityTokens } from "../theme/density";
+import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { Business } from "../types";
@@ -38,7 +37,6 @@ import {
   updateBusiness,
 } from "../storage/businessStorage";
 import { getBudgetEntries } from "../storage/budgetStorage";
-import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 interface ManageBusinessesModalProps {
   visible: boolean;
@@ -53,8 +51,9 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   onChanged,
 }) => {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
+  const { tokens } = useDensity();
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const sheet = useSheetStyles();
 
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [entryCounts, setEntryCounts] = useState<Record<string, number>>({});
@@ -171,22 +170,21 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   const canSubmit = name.trim().length > 0 && !saving;
 
   return (
-    <Modal
+    <SheetModal
       visible={visible}
-      animationType="slide"
-      transparent
       onRequestClose={handleClose}
+      keyboardAvoiding
+      contentContainerStyle={styles.sheetContent}
+      footer={
+        <>
+          <TouchableOpacity style={sheet.doneButton} onPress={handleClose}>
+            <Text style={sheet.doneText}>Done</Text>
+          </TouchableOpacity>
+        </>
+      }
     >
-      <SheetKeyboardAvoider style={styles.overlay}>
-        <View style={styles.modalSheet}>
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
-          >
-            <Text style={styles.title}>Businesses</Text>
-            <Text style={styles.subtitle}>
+            <Text style={sheet.title}>Businesses</Text>
+            <Text style={sheet.subtitle}>
               Add the businesses you spend for (a company, side gig, or
               freelance client). Tag expenses to them when adding entries, then
               pull a per-business report at tax time.
@@ -280,167 +278,104 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
                 );
               })
             )}
-          </ScrollView>
-
-          <View
-            style={[
-              styles.buttonRow,
-              Platform.OS === "android" && insets.bottom > 0
-                ? { paddingBottom: insets.bottom + 12 }
-                : null,
-            ]}
-          >
-            <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
-              <Text style={styles.doneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SheetKeyboardAvoider>
-    </Modal>
+    </SheetModal>
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: colors.overlayStrong,
-      justifyContent: "flex-end",
-    },
-    modalSheet: {
-      flex: 1,
-      marginTop: Platform.OS === "ios" ? 44 : 32,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderBottomWidth: 0,
-      overflow: "hidden",
-    },
-    scrollArea: { flex: 1 },
-    scrollContent: { padding: 24, gap: 14 },
-    title: {
-      fontSize: 22,
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 4,
-    },
-    subtitle: {
-      fontSize: 14,
-      color: colors.textDim,
-      marginBottom: 8,
-    },
-    field: { gap: 8 },
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
+    sheetContent: { gap: tokens.gap },
+    field: { gap: tokens.gapSm },
     label: {
-      fontSize: 11,
+      fontSize: scale(11),
       color: colors.textDim,
       fontWeight: "600",
       letterSpacing: 0.5,
     },
-    listHeader: { marginTop: 12 },
+    listHeader: { marginTop: tokens.gap },
     input: {
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: tokens.padSm,
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
     },
     errorText: {
       color: colors.danger,
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
     },
     formButtons: {
       flexDirection: "row",
-      gap: 12,
+      gap: tokens.gap,
     },
     cancelEditButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: 12,
+      borderRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       alignItems: "center",
     },
     cancelEditText: {
       color: colors.textDim,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
     },
     addButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: 12,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
     addButtonDisabled: { opacity: 0.4 },
     addButtonText: {
       color: colors.accentButtonText,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
     },
     emptyText: {
       color: colors.textMuted,
-      fontSize: 13,
+      fontSize: scale(13),
       fontStyle: "italic",
     },
     row: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
-      paddingVertical: 12,
+      gap: tokens.gap,
+      paddingVertical: tokens.padSm,
       borderBottomWidth: 1,
       borderBottomColor: colors.cardBorder,
     },
-    rowIcon: { fontSize: 18 },
+    rowIcon: { fontSize: scale(18) },
     rowTextWrap: { flex: 1 },
     rowName: {
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
     },
     rowCount: {
       color: colors.textMuted,
-      fontSize: 12,
+      fontSize: scale(12),
       marginTop: 2,
     },
     rowRename: {
       color: colors.accent,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       marginRight: 4,
     },
     rowDelete: {
       color: colors.danger,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
     },
-    buttonRow: {
-      flexDirection: "row",
-      gap: 12,
-      paddingHorizontal: 24,
-      paddingTop: 12,
-      paddingBottom: Platform.OS === "ios" ? 32 : 20,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-    },
-    doneButton: {
-      flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-    },
-    doneText: {
-      color: colors.accentButtonText,
-      fontSize: 15,
-      fontWeight: "700",
-    },
   });
+};
 
 export default React.memo(ManageBusinessesModal);

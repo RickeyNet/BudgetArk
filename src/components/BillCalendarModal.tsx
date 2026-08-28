@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { formatMonthKeyLabel } from "../utils/budgetMonths";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -47,11 +48,6 @@ interface BillCalendarModalProps {
 }
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
-
-const monthLabel = (monthKey: string): string => {
-  const d = new Date(`${monthKey}-01T00:00:00`);
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-};
 
 interface GridCell {
   day: number | null;
@@ -158,7 +154,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>Bill Calendar</Text>
-            <Text style={styles.subtitle}>{monthLabel(monthKey)}</Text>
+            <Text style={styles.subtitle}>{formatMonthKeyLabel(monthKey)}</Text>
           </View>
 
           <ScrollView
@@ -314,7 +310,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
           >
             <Text style={styles.dayCardTitle}>
               {selectedDay != null
-                ? `${monthLabel(monthKey).split(" ")[0]} ${selectedDay}`
+                ? `${formatMonthKeyLabel(monthKey).split(" ")[0]} ${selectedDay}`
                 : ""}
             </Text>
             <ScrollView style={styles.dayList}>

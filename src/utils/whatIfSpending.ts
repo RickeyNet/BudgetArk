@@ -11,6 +11,7 @@
  */
 
 import type { BudgetEntry } from "../types";
+import { getMonthKey } from "./budgetMonths";
 import {
   calcInvestmentGrowth,
   simulatePayoffPlan,
@@ -23,11 +24,6 @@ import type {
 import { isEntryActiveInMonth } from "./recurrence";
 
 /* ── Category spend averages (from budget history) ── */
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
 
 /** How many past full months feed the per-category average. */
 export const WHAT_IF_LOOKBACK_MONTHS = 6;

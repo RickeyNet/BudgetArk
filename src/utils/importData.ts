@@ -38,6 +38,7 @@ import { generateUUID } from "./uuid";
 import { resetSyncWatermark } from "../sync/pairingStorage";
 import { notifyDataChanged } from "../storage/dataChangeNotifier";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
+import { getMonthKey } from "./budgetMonths";
 import {
   parseMonthStartBalances,
   type MonthStartBalanceMap,
@@ -97,11 +98,7 @@ const KEYS = {
   LEARNING_PROGRESS: "@budgetark_learning_progress",
 } as const;
 
-const getCurrentMonthKey = (): string => {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${month}`;
-};
+const getCurrentMonthKey = (): string => getMonthKey();
 
 /* ── Minimal shape checks ── */
 

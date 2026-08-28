@@ -15,16 +15,13 @@
 
 import React, { useMemo, useState } from "react";
 import {
-  Modal,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -37,7 +34,6 @@ import {
 import { searchGuide } from "../utils/guideSearch";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { triggerHaptic } from "../utils/haptics";
-import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 interface OnboardingGuideModalProps {
   onClose: () => void;
@@ -74,8 +70,8 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const sheet = useSheetStyles();
 
   const [query, setQuery] = useState("");
   const [expandedTab, setExpandedTab] = useState<string | null>(null);
@@ -84,17 +80,29 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
   const results = useMemo(() => searchGuide(trimmed), [trimmed]);
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <SheetKeyboardAvoider style={styles.overlay}>
-        <View style={styles.modalSheet}>
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
+    <SheetModal
+      visible
+      onRequestClose={onClose}
+      keyboardAvoiding
+      footer={
+        <>
+          <TouchableOpacity
+            style={styles.redoButton}
+            onPress={() => {
+              triggerHaptic("selection");
+              onRedoOnboarding();
+            }}
           >
-            <Text style={styles.title}>Onboarding</Text>
-            <Text style={styles.subtitle}>
+            <Text style={styles.redoText}>Redo onboarding</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={sheet.doneButton} onPress={onClose}>
+            <Text style={sheet.doneText}>Done</Text>
+          </TouchableOpacity>
+        </>
+      }
+    >
+            <Text style={sheet.title}>Onboarding</Text>
+            <Text style={sheet.subtitle}>
               Everything in BudgetArk - browse by tab, or search for what you
               want to do.
             </Text>
@@ -180,73 +188,13 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
                 })}
               </View>
             )}
-          </ScrollView>
-
-          {/* ── Pinned footer ── */}
-          <View
-            style={[
-              styles.buttonRow,
-              Platform.OS === "android" && insets.bottom > 0
-                ? { paddingBottom: insets.bottom + 12 }
-                : null,
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.redoButton}
-              onPress={() => {
-                triggerHaptic("selection");
-                onRedoOnboarding();
-              }}
-            >
-              <Text style={styles.redoText}>Redo onboarding</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.doneButton} onPress={onClose}>
-              <Text style={styles.doneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SheetKeyboardAvoider>
-    </Modal>
+    </SheetModal>
   );
 };
 
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: colors.overlayStrong,
-      justifyContent: "flex-end",
-    },
-    modalSheet: {
-      flex: 1,
-      marginTop: Platform.OS === "ios" ? 44 : 32,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: tokens.radius,
-      borderTopRightRadius: tokens.radius,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderBottomWidth: 0,
-      overflow: "hidden",
-    },
-    scrollArea: {
-      flex: 1,
-    },
-    scrollContent: {
-      padding: tokens.padLg,
-      paddingBottom: 40,
-    },
-    title: {
-      fontSize: scale(22),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 4,
-    },
-    subtitle: {
-      fontSize: scale(14),
-      color: colors.textDim,
-      marginBottom: tokens.gap,
-    },
 
     /* Search */
     searchRow: {
@@ -348,15 +296,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
 
     /* Pinned footer */
-    buttonRow: {
-      flexDirection: "row",
-      gap: tokens.gap,
-      paddingHorizontal: tokens.padLg,
-      paddingTop: tokens.padSm,
-      paddingBottom: Platform.OS === "ios" ? 32 : 20,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-    },
     redoButton: {
       flex: 1,
       paddingVertical: tokens.pad,
@@ -369,18 +308,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.textDim,
       fontSize: scale(15),
       fontWeight: "600",
-    },
-    doneButton: {
-      flex: 1,
-      paddingVertical: tokens.pad,
-      borderRadius: tokens.radius,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-    },
-    doneText: {
-      color: colors.accentButtonText,
-      fontSize: scale(15),
-      fontWeight: "700",
     },
   });
 };

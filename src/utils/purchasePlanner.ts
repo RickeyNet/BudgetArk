@@ -12,17 +12,13 @@
  */
 
 import type { BudgetEntry, DebtMilestoneKey, DebtMilestonePlan } from "../types";
+import { getMonthKey } from "./budgetMonths";
 import { isEntryActiveInMonth } from "./recurrence";
 
 /* ── Monthly cash flow (from budget history) ── */
 
 /** How many past full months feed the income/expense averages. */
 export const PURCHASE_LOOKBACK_MONTHS = 6;
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
 
 export type MonthlyCashFlow = {
   /** Average monthly income over the tracked lookback months, rounded. */

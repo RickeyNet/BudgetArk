@@ -126,6 +126,7 @@ import {
 } from "../utils/recurrence";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
+import { formatMonthKeyLabel, getBudgetMonthKeys, getMonthDateFromKey, getMonthKey } from "../utils/budgetMonths";
 import {
   getEmergencyFundSource,
   resolveEmergencyFundGoal,
@@ -198,41 +199,6 @@ const inferFoodSplitCategory = (entry: BudgetEntry): Extract<BudgetCategory, "Gr
   return restaurantHints.some((hint) => text.includes(hint))
     ? "Restaurant"
     : "Grocery";
-};
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
-
-const getMonthDateFromKey = (monthKey: string): Date =>
-  new Date(`${monthKey}-01T00:00:00`);
-
-const formatMonthLabel = (monthKey: string): string =>
-  getMonthDateFromKey(monthKey).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-
-const getMonthKeyOffset = (offset: number, fromDate: Date = new Date()): string => {
-  const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-  cursor.setMonth(cursor.getMonth() + offset);
-  return getMonthKey(cursor);
-};
-
-/**
- * Selectable months: next month (forecast) + current + a full trailing
- * year of history. Matches the 13-month limit-history retention in
- * budgetStorage so every navigable month still has its saved limits.
- */
-const BUDGET_HISTORY_MONTHS = 12;
-
-const getBudgetMonthKeys = (): string[] => {
-  const keys = [getMonthKeyOffset(1)];
-  for (let offset = 0; offset >= -BUDGET_HISTORY_MONTHS; offset--) {
-    keys.push(getMonthKeyOffset(offset));
-  }
-  return keys;
 };
 
 const CATEGORY_CHART_PALETTE = [
@@ -1524,7 +1490,7 @@ const BudgetScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.monthPillLabel}>{formatMonthLabel(selectedMonthKey)}</Text>
+        <Text style={styles.monthPillLabel}>{formatMonthKeyLabel(selectedMonthKey)}</Text>
 
         <TouchableOpacity
           style={styles.monthPillArrowBtn}

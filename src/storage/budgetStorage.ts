@@ -1,4 +1,5 @@
 import * as EncryptedStorage from "./encryptedStorage";
+import { getMonthKey } from "../utils/budgetMonths";
 import { BudgetEntry, CategoryBudgetLimit } from "../types";
 import {
   filterLive,
@@ -15,11 +16,6 @@ export const BUDGET_STORAGE_KEYS = {
 } as const;
 
 type BudgetLimitHistory = Record<string, CategoryBudgetLimit[]>;
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
 
 /**
  * Records persisted before `updatedAt` existed default to the epoch. That way

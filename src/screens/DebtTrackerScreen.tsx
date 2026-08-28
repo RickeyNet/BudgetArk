@@ -70,9 +70,9 @@ import {
 } from "../storage/debtDueReminderStorage";
 import {
   debtsDueOrOverdueNeedingPrompt,
-  getMonthKey,
   upcomingDebtDuesWithin,
 } from "../utils/debtDueCalendar";
+import { getMonthKey } from "../utils/budgetMonths";
 import { minimumDuePaymentId } from "../utils/debtPaymentDedupe";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
 import DebtDuePaymentPromptModal from "../components/DebtDuePaymentPromptModal";

@@ -18,7 +18,8 @@
 
 import type { Debt, ExternalAccountLink } from "../types";
 import type { NormalizedTransaction } from "../services/connections/types";
-import { dismissalKey, getMonthKey } from "./debtDueCalendar";
+import { dismissalKey } from "./debtDueCalendar";
+import { getMonthKey } from "./budgetMonths";
 
 export const KEEP_ALIVE_DEFAULT_WINDOW_MONTHS = 6;
 export const KEEP_ALIVE_DEFAULT_LEAD_DAYS = 30;

@@ -23,6 +23,7 @@ import {
   type PayoffMethod,
 } from "./calculations";
 import { roundToCents } from "./money";
+import { getMonthKey } from "./budgetMonths";
 
 /** The slice of Payment this module reads - keeps tests dependency-light. */
 export interface PaymentLike {
@@ -68,9 +69,6 @@ export interface DebtFreeProjection {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const VELOCITY_WINDOW_MONTHS = 6;
-
-const monthKeyOf = (date: Date): string =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
 const startOfDay = (date: Date): Date =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -144,11 +142,11 @@ export const calcPaymentVelocity = (
   );
   if (live.length === 0) return null;
 
-  const currentKey = monthKeyOf(now);
+  const currentKey = getMonthKey(now);
   const windowKeys: string[] = [];
   for (let i = 1; i <= VELOCITY_WINDOW_MONTHS; i++) {
     windowKeys.push(
-      monthKeyOf(new Date(now.getFullYear(), now.getMonth() - i, 1))
+      getMonthKey(new Date(now.getFullYear(), now.getMonth() - i, 1))
     );
   }
 
@@ -158,7 +156,7 @@ export const calcPaymentVelocity = (
   for (const payment of live) {
     const paidAt = new Date(payment.date);
     if (Number.isNaN(paidAt.getTime())) continue;
-    const key = monthKeyOf(paidAt);
+    const key = getMonthKey(paidAt);
     totals.set(key, (totals.get(key) ?? 0) + payment.amount);
     if (firstPaymentKey === null || key < firstPaymentKey) {
       firstPaymentKey = key;

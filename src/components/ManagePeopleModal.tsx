@@ -16,17 +16,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Modal,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { describeError } from "../utils/errorMessage";
+import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -40,7 +37,6 @@ import {
   updatePerson,
 } from "../storage/personStorage";
 import { getBudgetEntries } from "../storage/budgetStorage";
-import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 interface ManagePeopleModalProps {
   visible: boolean;
@@ -57,7 +53,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
-  const insets = useSafeAreaInsets();
+  const sheet = useSheetStyles();
 
   const [people, setPeople] = useState<Person[]>([]);
   const [entryCounts, setEntryCounts] = useState<Record<string, number>>({});
@@ -174,22 +170,21 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
   const canSubmit = name.trim().length > 0 && !saving;
 
   return (
-    <Modal
+    <SheetModal
       visible={visible}
-      animationType="slide"
-      transparent
       onRequestClose={handleClose}
+      keyboardAvoiding
+      contentContainerStyle={styles.sheetContent}
+      footer={
+        <>
+          <TouchableOpacity style={sheet.doneButton} onPress={handleClose}>
+            <Text style={sheet.doneText}>Done</Text>
+          </TouchableOpacity>
+        </>
+      }
     >
-      <SheetKeyboardAvoider style={styles.overlay}>
-        <View style={styles.modalSheet}>
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
-          >
-            <Text style={styles.title}>People</Text>
-            <Text style={styles.subtitle}>
+            <Text style={sheet.title}>People</Text>
+            <Text style={sheet.subtitle}>
               Add the people in your household (or anyone you track spending
               for). Assign expenses to them when adding entries or approving
               imported transactions, so it's clear who spent what.
@@ -283,58 +278,14 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
                 );
               })
             )}
-          </ScrollView>
-
-          <View
-            style={[
-              styles.buttonRow,
-              Platform.OS === "android" && insets.bottom > 0
-                ? { paddingBottom: insets.bottom + 12 }
-                : null,
-            ]}
-          >
-            <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
-              <Text style={styles.doneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SheetKeyboardAvoider>
-    </Modal>
+    </SheetModal>
   );
 };
 
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: colors.overlayStrong,
-      justifyContent: "flex-end",
-    },
-    modalSheet: {
-      flex: 1,
-      marginTop: Platform.OS === "ios" ? 44 : 32,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: tokens.radius + 8,
-      borderTopRightRadius: tokens.radius + 8,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderBottomWidth: 0,
-      overflow: "hidden",
-    },
-    scrollArea: { flex: 1 },
-    scrollContent: { padding: tokens.padLg, gap: tokens.gap },
-    title: {
-      fontSize: scale(22),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 4,
-    },
-    subtitle: {
-      fontSize: scale(14),
-      color: colors.textDim,
-      marginBottom: tokens.gapSm,
-    },
+    sheetContent: { gap: tokens.gap },
     field: { gap: tokens.gapSm },
     label: {
       fontSize: scale(11),
@@ -423,27 +374,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.danger,
       fontSize: scale(14),
       fontWeight: "600",
-    },
-    buttonRow: {
-      flexDirection: "row",
-      gap: tokens.gap,
-      paddingHorizontal: tokens.padLg,
-      paddingTop: tokens.padSm,
-      paddingBottom: Platform.OS === "ios" ? 32 : 20,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-    },
-    doneButton: {
-      flex: 1,
-      paddingVertical: 14,
-      borderRadius: tokens.radius,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-    },
-    doneText: {
-      color: colors.accentButtonText,
-      fontSize: scale(15),
-      fontWeight: "700",
     },
   });
 };

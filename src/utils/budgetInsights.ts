@@ -1,21 +1,6 @@
 import { BudgetCategory, BudgetEntry, CategoryBudgetLimit, Person } from "../types";
 import { isEntryActiveInMonth } from "./recurrence";
-
-/* ─── Month-key helpers (same logic as BudgetScreen) ─── */
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
-
-const getMonthKeyOffset = (
-  offset: number,
-  fromDate: Date = new Date()
-): string => {
-  const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-  cursor.setMonth(cursor.getMonth() + offset);
-  return getMonthKey(cursor);
-};
+import { getMonthKeyOffset } from "./budgetMonths";
 
 
 /* ─── Types ─── */

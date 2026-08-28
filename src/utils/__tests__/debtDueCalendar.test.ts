@@ -2,13 +2,13 @@ import {
   DEFAULT_DEBT_PAYMENT_DUE_DAY,
   getEffectivePaymentDueDay,
   clampDueDayToMonth,
-  getMonthKey,
   dismissalKey,
   hasPaymentInMonth,
   upcomingDebtDuesWithin,
   debtsDueTodayNeedingPrompt,
   debtsDueOrOverdueNeedingPrompt,
 } from "../debtDueCalendar";
+import { getMonthKey } from "../budgetMonths";
 
 // ts-jest runs transpile-only, so light `as any` casts keep fixtures concise.
 const debt = (over: Record<string, unknown> = {}): any => ({

@@ -13,16 +13,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { File as ExpoFile, Paths } from "expo-file-system";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -51,7 +49,7 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
-  const insets = useSafeAreaInsets();
+  const sheet = useSheetStyles();
   const { formatCurrency } = useCurrency();
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
@@ -126,20 +124,32 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
   const hasData = report.perPerson.length > 0;
 
   return (
-    <Modal
+    <SheetModal
       visible={visible}
-      animationType="slide"
-      transparent
       onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.modalSheet}>
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={styles.sheetContent}
+      footer={
+        <>
+          <TouchableOpacity style={sheet.closeButton} onPress={onClose}>
+            <Text style={sheet.closeText}>Close</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.exportButton,
+              (!hasData || exporting) && styles.exportButtonDisabled,
+            ]}
+            onPress={handleExportCsv}
+            disabled={!hasData || exporting}
           >
-            <Text style={styles.title}>Person Spending</Text>
-            <Text style={styles.subtitle}>
+            <Text style={styles.exportText}>
+              {exporting ? "Exporting…" : "Export CSV"}
+            </Text>
+          </TouchableOpacity>
+        </>
+      }
+    >
+            <Text style={sheet.title}>Person Spending</Text>
+            <Text style={sheet.subtitle}>
               Everything assigned to a person, by calendar year. Recurring
               bills count once per month they hit, same as the Budget screen.
             </Text>
@@ -215,70 +225,14 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
                 </View>
               ))
             )}
-          </ScrollView>
-
-          <View
-            style={[
-              styles.buttonRow,
-              Platform.OS === "android" && insets.bottom > 0
-                ? { paddingBottom: insets.bottom + 12 }
-                : null,
-            ]}
-          >
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeText}>Close</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.exportButton,
-                (!hasData || exporting) && styles.exportButtonDisabled,
-              ]}
-              onPress={handleExportCsv}
-              disabled={!hasData || exporting}
-            >
-              <Text style={styles.exportText}>
-                {exporting ? "Exporting…" : "Export CSV"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };
 
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: colors.overlayStrong,
-      justifyContent: "flex-end",
-    },
-    modalSheet: {
-      flex: 1,
-      marginTop: Platform.OS === "ios" ? 44 : 32,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: tokens.radius + 8,
-      borderTopRightRadius: tokens.radius + 8,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderBottomWidth: 0,
-      overflow: "hidden",
-    },
-    scrollArea: { flex: 1 },
-    scrollContent: { padding: tokens.padLg, gap: tokens.gap },
-    title: {
-      fontSize: scale(22),
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: 4,
-    },
-    subtitle: {
-      fontSize: scale(14),
-      color: colors.textDim,
-      marginBottom: tokens.gapSm,
-    },
+    sheetContent: { gap: tokens.gap },
     yearRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -368,28 +322,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     categoryTotal: {
       color: colors.textDim,
       fontSize: scale(13),
-      fontWeight: "600",
-    },
-    buttonRow: {
-      flexDirection: "row",
-      gap: tokens.gap,
-      paddingHorizontal: tokens.padLg,
-      paddingTop: tokens.padSm,
-      paddingBottom: Platform.OS === "ios" ? 32 : 20,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-    },
-    closeButton: {
-      flex: 1,
-      paddingVertical: tokens.pad,
-      borderRadius: tokens.radius,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      alignItems: "center",
-    },
-    closeText: {
-      color: colors.textDim,
-      fontSize: scale(15),
       fontWeight: "600",
     },
     exportButton: {

@@ -15,6 +15,7 @@
  */
 
 import type { BudgetEntry } from "../types";
+import { getMonthKey } from "./budgetMonths";
 import {
   calcMonthsUntilDate,
   calcPaymentForGoalDate,
@@ -327,11 +328,6 @@ export const calcEmergencyFundPlan = (
 };
 
 /* ── Average monthly expenses (from budget history) ── */
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
 
 /** Average expenses across the last 6 tracked months. `now` is injectable
  * for tests; production uses the current date. */

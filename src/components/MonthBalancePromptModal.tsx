@@ -26,6 +26,7 @@ import {
 } from "react-native";
 import { describeError } from "../utils/errorMessage";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
+import { formatMonthKeyLabel, getMonthKey } from "../utils/budgetMonths";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -51,17 +52,6 @@ interface MonthBalancePromptModalProps {
   onSaved: (balances: MonthStartBalanceMap, accounts: AssetAccount[] | null) => void;
   onClose: () => void;
 }
-
-const monthLabel = (monthKey: string): string =>
-  new Date(`${monthKey}-01T00:00:00`).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-
-const currentMonthKey = (): string => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-};
 
 /** Shared money rule (utils/parseMoneyInput); negatives allowed - overdrawn happens. */
 const parseBalanceInput = (text: string): number | null => {
@@ -113,7 +103,7 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
   );
 
   const parsed = parseBalanceInput(input);
-  const isCurrent = monthKey === currentMonthKey();
+  const isCurrent = monthKey === getMonthKey();
   // A single checking account can safely mirror the entered total; more
   // than one can't be distributed from one number.
   const accountToUpdate =
@@ -150,7 +140,7 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
             {isPrompt ? "New month - update your balance" : "Starting balance"}
           </Text>
           <Text style={styles.subtitle}>
-            What's in checking at the start of {monthLabel(monthKey)}? BudgetArk
+            What's in checking at the start of {formatMonthKeyLabel(monthKey)}? BudgetArk
             uses it to project your end-of-month cash and what's safe to spend.
           </Text>
 
