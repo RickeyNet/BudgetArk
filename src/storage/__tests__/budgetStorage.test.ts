@@ -9,16 +9,21 @@
  * Storage is mocked with an in-memory map whose `updateItem` runs the
  * updater against the live map, everything else is real.
  */
-import type { BudgetEntry } from "../../types";
+import type { BudgetEntry, CategoryBudgetLimit } from "../../types";
 import {
   BUDGET_STORAGE_KEYS,
   addBudgetEntry,
   addBudgetEntries,
   deleteBudgetEntries,
   deleteBudgetEntry,
+  getAllLimitsByMonth,
+  getAllLimitsByMonthIncludingDeleted,
   getBudgetEntries,
+  getCategoryBudgetLimits,
+  mergeLimitHistoryFromSync,
   restoreBudgetEntry,
   saveBudgetEntries,
+  saveCategoryBudgetLimits,
   setBudgetEntryCategories,
   updateBudgetEntry,
 } from "../budgetStorage";
@@ -43,6 +48,7 @@ jest.mock("../encryptedStorage", () => ({
 
 const KEY = BUDGET_STORAGE_KEYS.ENTRIES;
 const T0 = "2026-06-01T00:00:00.000Z";
+const T1 = "2026-06-15T00:00:00.000Z";
 
 const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
   ({
@@ -141,6 +147,68 @@ describe("setBudgetEntryCategories", () => {
     expect(live.find((e) => e.id === "e2")?.category).toBe("Restaurant");
     expect(live.find((e) => e.id === "e-partner")?.category).toBe("Food");
     expect(live.find((e) => e.id === "e-partner")?.updatedAt).toBe(T0);
+  });
+});
+
+describe("category limits - removals become tombstones", () => {
+  const LIMITS_KEY = BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH;
+  const MONTH = "2026-06";
+  const limit = (category: string, monthlyLimit: number, updatedAt = T0) =>
+    ({ category, monthlyLimit, updatedAt }) as CategoryBudgetLimit;
+  const storedMonth = () => (JSON.parse(mockStore.get(LIMITS_KEY) ?? "{}") as Record<string, CategoryBudgetLimit[]>)[MONTH] ?? [];
+
+  it("tombstones a category omitted from the save and hides it from live reads", async () => {
+    await saveCategoryBudgetLimits([limit("Food", 400), limit("Gas", 60)], MONTH);
+    // User removes the Gas limit: the screen saves the remaining live list.
+    await saveCategoryBudgetLimits([limit("Food", 400)], MONTH);
+
+    const stored = storedMonth();
+    const gas = stored.find((l) => l.category === "Gas")!;
+    expect(gas.deletedAt).toBeTruthy();
+    expect(new Date(gas.updatedAt).getTime()).toBeGreaterThan(new Date(T0).getTime());
+    // Untouched limit keeps its own stamp.
+    expect(stored.find((l) => l.category === "Food")?.updatedAt).toBe(T0);
+
+    expect((await getCategoryBudgetLimits(MONTH)).map((l) => l.category)).toEqual(["Food"]);
+    expect((await getAllLimitsByMonth())[MONTH].map((l) => l.category)).toEqual(["Food"]);
+    // Sync/export still see the removal.
+    expect((await getAllLimitsByMonthIncludingDeleted())[MONTH].map((l) => l.category).sort()).toEqual(["Food", "Gas"]);
+  });
+
+  it("resurrects a removed category when it is saved again, and keeps existing tombstones", async () => {
+    await saveCategoryBudgetLimits([limit("Food", 400), limit("Gas", 60)], MONTH);
+    await saveCategoryBudgetLimits([limit("Food", 400)], MONTH);
+    await saveCategoryBudgetLimits([limit("Food", 400), limit("Gas", 75, T1)], MONTH);
+    const gas = storedMonth().find((l) => l.category === "Gas")!;
+    expect(gas.deletedAt).toBeUndefined();
+    expect(gas.monthlyLimit).toBe(75);
+
+    // A tombstone that stays omitted is kept as-is (no re-stamp churn).
+    await saveCategoryBudgetLimits([limit("Food", 400)], MONTH);
+    const firstTombstone = storedMonth().find((l) => l.category === "Gas")!;
+    await saveCategoryBudgetLimits([limit("Food", 400)], MONTH);
+    expect(storedMonth().find((l) => l.category === "Gas")).toEqual(firstTombstone);
+  });
+
+  it("a month whose limits were all removed reads as empty, not as the previous month's limits", async () => {
+    await saveCategoryBudgetLimits([limit("Food", 400)], "2026-05");
+    await saveCategoryBudgetLimits([limit("Food", 400)], MONTH);
+    await saveCategoryBudgetLimits([], MONTH);
+    expect(await getCategoryBudgetLimits(MONTH)).toEqual([]);
+    // Fallback for a month with no record still works and is live-only.
+    expect((await getCategoryBudgetLimits("2026-07")).map((l) => l.category)).toEqual([]);
+    expect((await getCategoryBudgetLimits("2026-05")).map((l) => l.category)).toEqual(["Food"]);
+  });
+
+  it("mergeLimitHistoryFromSync hands the merge the stored history including tombstones", async () => {
+    await saveCategoryBudgetLimits([limit("Food", 400), limit("Gas", 60)], MONTH);
+    await saveCategoryBudgetLimits([limit("Food", 400)], MONTH);
+    let seen: string[] = [];
+    await mergeLimitHistoryFromSync((history) => {
+      seen = history[MONTH].map((l) => l.category).sort();
+      return history;
+    });
+    expect(seen).toEqual(["Food", "Gas"]);
   });
 });
 

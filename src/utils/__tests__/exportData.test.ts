@@ -153,6 +153,7 @@ jest.mock("../../storage/debtStorage", () => ({
 jest.mock("../../storage/budgetStorage", () => ({
   getBudgetEntriesIncludingDeleted: jest.fn(async () => fixturesRef.budgetEntries),
   getAllLimitsByMonth: jest.fn(async () => ({})),
+  getAllLimitsByMonthIncludingDeleted: jest.fn(async () => ({})),
   getCategoryBudgetLimits: jest.fn(async () => []),
 }));
 jest.mock("../../storage/userStorage", () => ({

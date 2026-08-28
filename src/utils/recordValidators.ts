@@ -393,7 +393,9 @@ export const isBudgetLimitItem = (
       min: 0.01,
       max: VALIDATOR_LIMITS.MAX_MONEY,
     }) &&
-    (item.updatedAt === undefined || isValidDateValue(item.updatedAt))
+    (item.updatedAt === undefined || isValidDateValue(item.updatedAt)) &&
+    // Removed limits travel as tombstones (see CategoryBudgetLimit.deletedAt).
+    isOptionalIso(item.deletedAt)
   );
 };
 

@@ -16,7 +16,7 @@ import {
 } from "../storage/debtStorage";
 import {
   getBudgetEntriesIncludingDeleted,
-  getAllLimitsByMonth,
+  getAllLimitsByMonthIncludingDeleted,
   getCategoryBudgetLimits,
 } from "../storage/budgetStorage";
 import { getOrCreateUser } from "../storage/userStorage";
@@ -95,7 +95,9 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getPaymentsIncludingDeleted(),
     getBudgetEntriesIncludingDeleted(),
     getCategoryBudgetLimits(),
-    getAllLimitsByMonth(),
+    // Removed limits ride along as tombstones for the same reason as the
+    // other collections above.
+    getAllLimitsByMonthIncludingDeleted(),
     getOrCreateUser(),
     getSavingsGoalsIncludingDeleted(),
     getAssetAccountsIncludingDeleted(),

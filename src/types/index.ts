@@ -424,6 +424,17 @@ export interface CategoryBudgetLimit {
    * fresh edit will win over them on the first paired sync.
    */
   updatedAt: string;
+  /**
+   * Tombstone marker (see Debt.deletedAt). A limit the user REMOVED keeps
+   * its row with `deletedAt` set so the removal reaches a paired device -
+   * the per-category LWW merge used to be a union, so an omitted row was
+   * simply "no news" and the partner kept (and re-sent) the old limit
+   * forever. Live getters filter these out; only sync/export see them.
+   * Optional so older peers/imports stay compatible: a peer without this
+   * field treats the row as a live limit, which is exactly what it did
+   * before (no regression), and a row without it is live.
+   */
+  deletedAt?: string;
 }
 
 /* ─── Savings Goal Types ─── */

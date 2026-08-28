@@ -36,7 +36,14 @@ jest.mock("../../storage/budgetStorage", () => ({
   mergeBudgetEntriesFromSync: jest.fn(async (merge: any) => {
     mockState.budgetEntries = merge(mockState.budgetEntries);
   }),
-  getAllLimitsByMonth: jest.fn(async () => mockState.limitsByMonth),
+  getAllLimitsByMonthIncludingDeleted: jest.fn(async () => mockState.limitsByMonth),
+  mergeLimitHistoryFromSync: jest.fn(async (merge: any) => {
+    mockState.limitsByMonth = merge(mockState.limitsByMonth);
+    mockState.encStore.set(
+      "@budgetark_budget_limits_by_month",
+      JSON.stringify(mockState.limitsByMonth)
+    );
+  }),
 }));
 jest.mock("../../storage/savingsGoalStorage", () => ({
   getSavingsGoalsIncludingDeleted: jest.fn(async () => mockState.savingsGoals),
@@ -767,6 +774,66 @@ describe("people sync", () => {
     delete (diff as any).people;
     await expect(applyIncomingDiff(diff)).resolves.toBe(0);
     expect(mockState.people).toHaveLength(1);
+  });
+});
+
+describe("budget limits - removals propagate as tombstones", () => {
+  it("sends a removed limit's tombstone in the outgoing diff", async () => {
+    mockState.limitsByMonth = {
+      "2026-06": [
+        { category: "Food", monthlyLimit: 400, updatedAt: OLD },
+        { category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }, // removed after last sync
+      ],
+    };
+    const diff = await computeOutgoingDiff(MID);
+    expect(diff.budgetLimits).toEqual([
+      {
+        monthKey: "2026-06",
+        limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }],
+      },
+    ]);
+  });
+
+  it("an incoming newer tombstone retires the local live limit (kept as a tombstone)", async () => {
+    mockState.limitsByMonth = {
+      "2026-06": [{ category: "Gas", monthlyLimit: 60, updatedAt: OLD }],
+    };
+    await applyIncomingDiff(
+      emptyDiff({
+        budgetLimits: [
+          { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }] },
+        ],
+      })
+    );
+    const gas = mockState.limitsByMonth["2026-06"].find((l: any) => l.category === "Gas");
+    expect(gas.deletedAt).toBe(NEW);
+  });
+
+  it("a local newer tombstone beats the partner's stale live copy (no resurrection)", async () => {
+    mockState.limitsByMonth = {
+      "2026-06": [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }],
+    };
+    await applyIncomingDiff(
+      emptyDiff({
+        budgetLimits: [
+          { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: OLD }] },
+        ],
+      })
+    );
+    const gas = mockState.limitsByMonth["2026-06"].find((l: any) => l.category === "Gas");
+    expect(gas.deletedAt).toBe(NEW);
+  });
+
+  it("rejects a limit whose deletedAt is not a timestamp", async () => {
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({
+          budgetLimits: [
+            { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: "soon" } as any] },
+          ],
+        })
+      )
+    ).rejects.toThrow();
   });
 });
 

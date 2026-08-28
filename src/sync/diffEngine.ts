@@ -17,7 +17,8 @@ import {
 import {
   getBudgetEntriesIncludingDeleted,
   mergeBudgetEntriesFromSync,
-  getAllLimitsByMonth,
+  getAllLimitsByMonthIncludingDeleted,
+  mergeLimitHistoryFromSync,
 } from "../storage/budgetStorage";
 import {
   getSavingsGoalsIncludingDeleted,
@@ -93,8 +94,6 @@ import {
   sanitizeDebtMilestones,
   VALID_PAYOFF_STRATEGIES,
 } from "../utils/recordValidators";
-
-const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
 
 /**
  * One-time backfill marker. Net-worth snapshots (and custom categories)
@@ -195,18 +194,21 @@ export const computeOutgoingDiff = async (
       }));
   };
 
-  // Load full budget limits history. On first sync we send everything;
-  // otherwise filter per-category by updatedAt so unchanged limits don't
-  // get re-broadcast every sync. Storage normalizes missing updatedAt to
-  // the epoch - those still ride along on first sync, then get superseded
-  // by any fresh remote edit.
+  // Load full budget limits history, TOMBSTONES INCLUDED: a removed limit
+  // keeps its row with `deletedAt` and a fresh `updatedAt`, which is how the
+  // removal reaches the partner (the per-category merge on the other side
+  // is an LWW union - an omitted row would just be "no news"). On first
+  // sync we send everything; otherwise filter per-category by updatedAt so
+  // unchanged limits don't get re-broadcast every sync. Storage normalizes
+  // missing updatedAt to the epoch - those still ride along on first sync,
+  // then get superseded by any fresh remote edit.
   const budgetLimits: BudgetLimitDiff[] = [];
-  const history = await getAllLimitsByMonth();
+  const history = await getAllLimitsByMonthIncludingDeleted();
   const isFirstSync = !lastSyncTimestamp;
   for (const [monthKey, limits] of Object.entries(history)) {
     const changed = isFirstSync
       ? limits
-      : limits.filter((limit) => new Date(limit.updatedAt).getTime() > since);
+      : limits.filter((limit) => timestampMs(limit.updatedAt) > since);
     if (changed.length > 0) {
       budgetLimits.push({ monthKey, limits: changed });
     }
@@ -595,33 +597,34 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
   // Merge budget limits (union of months, per-category last-write-wins).
   // Use getAllLimitsByMonth so legacy local rows are normalized to the epoch
   // and lose to any incoming row carrying a real timestamp.
+  // Tombstone-aware: an incoming row with `deletedAt` that wins LWW retires
+  // the local limit (kept as a tombstone so it can flow onward); a local
+  // tombstone newer than the partner's live row keeps the removal. Merged
+  // atomically inside the store (see mergeLimitHistoryFromSync).
   if (diff.budgetLimits.length > 0) {
-    const localHistory = (await getAllLimitsByMonth()) as Record<
-      string,
-      CategoryBudgetLimit[]
-    >;
-    const merged: Record<string, CategoryBudgetLimit[]> = { ...localHistory };
+    const incomingLimits = diff.budgetLimits;
+    await mergeLimitHistoryFromSync((localHistory) => {
+      const merged: Record<string, CategoryBudgetLimit[]> = { ...localHistory };
+      const limitTime = (limit: CategoryBudgetLimit | undefined): number =>
+        limit ? timestampMs(limit.updatedAt) : -Infinity;
 
-    const limitTime = (limit: CategoryBudgetLimit | undefined): number =>
-      limit ? new Date(limit.updatedAt).getTime() : -Infinity;
-
-    for (const incoming of diff.budgetLimits) {
-      const localLimits = Array.isArray(merged[incoming.monthKey])
-        ? merged[incoming.monthKey]
-        : [];
-      const localCatMap = new Map<string, CategoryBudgetLimit>(
-        localLimits.map((l) => [l.category, l])
-      );
-      for (const remote of incoming.limits) {
-        const local = localCatMap.get(remote.category);
-        if (limitTime(remote) >= limitTime(local)) {
-          localCatMap.set(remote.category, remote);
+      for (const incoming of incomingLimits) {
+        const localLimits = Array.isArray(merged[incoming.monthKey])
+          ? merged[incoming.monthKey]
+          : [];
+        const localCatMap = new Map<string, CategoryBudgetLimit>(
+          localLimits.map((l) => [l.category, l])
+        );
+        for (const remote of incoming.limits) {
+          const local = localCatMap.get(remote.category);
+          if (limitTime(remote) >= limitTime(local)) {
+            localCatMap.set(remote.category, remote);
+          }
         }
+        merged[incoming.monthKey] = Array.from(localCatMap.values());
       }
-      merged[incoming.monthKey] = Array.from(localCatMap.values());
-    }
-
-    await EncryptedStorage.setItem(BUDGET_LIMITS_KEY, JSON.stringify(merged));
+      return merged;
+    });
     changedCount += diff.budgetLimits.length;
   }
 

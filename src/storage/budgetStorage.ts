@@ -310,7 +310,31 @@ export const setBudgetEntryCategories = async (
     });
   });
 
+const isLiveLimit = (limit: CategoryBudgetLimit): boolean => !limit.deletedAt;
+
+const liveLimitsByMonth = (history: BudgetLimitHistory): BudgetLimitHistory => {
+  const live: BudgetLimitHistory = {};
+  for (const [monthKey, limits] of Object.entries(history)) {
+    live[monthKey] = limits.filter(isLiveLimit);
+  }
+  return live;
+};
+
+/**
+ * Live limits per month - what every screen, report and achievement
+ * reads. Removed limits (tombstones, see CategoryBudgetLimit.deletedAt)
+ * are filtered out here; a month whose limits were all removed comes back
+ * as an empty array, not as "no data" (so it doesn't fall back to an
+ * earlier month's limits).
+ */
 export const getAllLimitsByMonth = async (): Promise<BudgetLimitHistory> =>
+  liveLimitsByMonth(await getLimitHistory());
+
+/**
+ * Sync/export-only: includes tombstoned limits so the diff engine can tell
+ * a paired device about removals and a backup preserves them.
+ */
+export const getAllLimitsByMonthIncludingDeleted = async (): Promise<BudgetLimitHistory> =>
   getLimitHistory();
 
 export const getCategoryBudgetLimits = async (
@@ -319,7 +343,7 @@ export const getCategoryBudgetLimits = async (
   const history = await getLimitHistory();
   const exact = history[monthKey];
   if (exact) {
-    return cloneLimits(exact);
+    return cloneLimits(exact.filter(isLiveLimit));
   }
 
   const fallbackKey = Object.keys(history)
@@ -331,19 +355,74 @@ export const getCategoryBudgetLimits = async (
     return [];
   }
 
-  return cloneLimits(history[fallbackKey]);
+  return cloneLimits(history[fallbackKey].filter(isLiveLimit));
 };
 
+/** Parse the stored history inside an updater (missing/corrupt -> {}). */
+const parseLimitHistory = (raw: string | null): BudgetLimitHistory => {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const normalized: BudgetLimitHistory = {};
+    for (const [monthKey, limits] of Object.entries(parsed as Record<string, unknown>)) {
+      if (Array.isArray(limits)) {
+        normalized[monthKey] = (limits as CategoryBudgetLimit[]).map(normalizeLimit);
+      }
+    }
+    return normalized;
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Persists one month's LIVE limits. Atomic against sync and other writers
+ * on the key (the merge runs inside encryptedStorage.updateItem).
+ *
+ * A category present in storage but absent from `limits` is a removal:
+ * it stays in the month as a tombstone (`deletedAt` + a fresh `updatedAt`)
+ * so the next sync sends it and the partner's per-category LWW retires
+ * its copy. A category that comes back in `limits` after being removed is
+ * resurrected (tombstone cleared). Callers pass live arrays and never see
+ * tombstones - `getCategoryBudgetLimits` filters them.
+ */
 export const saveCategoryBudgetLimits = async (
   limits: CategoryBudgetLimit[],
   monthKey: string = getMonthKey(new Date())
 ): Promise<void> => {
-  const history = await getLimitHistory();
-  history[monthKey] = cloneLimits(limits);
-  const pruned = pruneLimitHistory(history);
-  await EncryptedStorage.setItem(
-    BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH,
-    JSON.stringify(pruned)
+  const now = new Date().toISOString();
+  await EncryptedStorage.updateItem(BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH, (current) => {
+    const history = parseLimitHistory(current);
+    const stored = history[monthKey] ?? [];
+    const nextByCategory = new Map<string, CategoryBudgetLimit>();
+    for (const limit of cloneLimits(limits)) {
+      const { deletedAt: _cleared, ...live } = limit;
+      nextByCategory.set(limit.category, live);
+    }
+    for (const limit of stored) {
+      if (nextByCategory.has(limit.category)) continue;
+      nextByCategory.set(
+        limit.category,
+        limit.deletedAt ? limit : { ...limit, deletedAt: now, updatedAt: now }
+      );
+    }
+    history[monthKey] = Array.from(nextByCategory.values());
+    return JSON.stringify(pruneLimitHistory(history));
+  });
+};
+
+/**
+ * Incoming-sync merge for the whole history (tombstones included), atomic
+ * against every other writer on the key. `merge` receives the current
+ * normalized history and returns the history to persist; the 13-month
+ * prune is applied on the way out.
+ */
+export const mergeLimitHistoryFromSync = async (
+  merge: (stored: BudgetLimitHistory) => BudgetLimitHistory
+): Promise<void> => {
+  await EncryptedStorage.updateItem(BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH, (current) =>
+    JSON.stringify(pruneLimitHistory(merge(parseLimitHistory(current))))
   );
 };
 
