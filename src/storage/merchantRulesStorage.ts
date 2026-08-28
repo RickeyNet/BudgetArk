@@ -10,6 +10,7 @@
 
 import * as EncryptedStorage from "./encryptedStorage";
 import type { MerchantRule } from "../types";
+import { mutateCollectionInPlace } from "./collectionRepair";
 
 const STORAGE_KEY = "@budgetark_merchant_rules" as const;
 
@@ -98,4 +99,40 @@ export const touchRuleUsage = async (ruleId: string): Promise<void> => {
       : r,
   );
   await writeMerchantRules(updated);
+};
+
+/**
+ * Referential cleanup when a person/business is deleted (in-app tombstone
+ * or one received over sync): rules that named the deleted assignee drop
+ * that field so the Review Inbox stops suggesting "(deleted person)" on
+ * every future import from that merchant. The rule itself survives - its
+ * category/rename/action are still right. Atomic against concurrent rule
+ * edits; a no-op (no write) when nothing references the ids.
+ */
+export const clearAssigneesFromMerchantRules = async (ids: {
+  personIds?: Iterable<string>;
+  businessIds?: Iterable<string>;
+}): Promise<void> => {
+  const personIds = new Set(ids.personIds ?? []);
+  const businessIds = new Set(ids.businessIds ?? []);
+  if (personIds.size === 0 && businessIds.size === 0) return;
+  await mutateCollectionInPlace<MerchantRule>(STORAGE_KEY, (stored) => {
+    const now = new Date().toISOString();
+    let changed = false;
+    const next = stored.map((rule) => {
+      const dropPerson = rule.personId !== undefined && personIds.has(rule.personId);
+      const dropBusiness =
+        rule.businessId !== undefined && businessIds.has(rule.businessId);
+      if (!dropPerson && !dropBusiness) return rule;
+      changed = true;
+      const { personId, businessId, ...rest } = rule;
+      return {
+        ...rest,
+        ...(dropPerson ? {} : personId !== undefined ? { personId } : {}),
+        ...(dropBusiness ? {} : businessId !== undefined ? { businessId } : {}),
+        updatedAt: now,
+      };
+    });
+    return changed ? next : stored;
+  });
 };

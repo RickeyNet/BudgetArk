@@ -199,6 +199,19 @@ const mutateBudgetEntries = async (
   return filterLive(result);
 };
 
+/**
+ * Incoming-sync merge, atomic against every other writer on the key.
+ * `merge` sees the CURRENT stored array (tombstones included, legacy
+ * records normalized exactly as the getter would) and returns the full
+ * array to persist. Replaces the old getX -> mergeById -> saveX sequence in
+ * applyIncomingDiff, whose read-to-write window could drop a user edit.
+ */
+export const mergeBudgetEntriesFromSync = async (
+  merge: (stored: BudgetEntry[]) => BudgetEntry[]
+): Promise<void> => {
+  await mutateBudgetEntries((stored) => merge(stored.map(normalizeBudgetEntry)));
+};
+
 export const addBudgetEntry = async (entry: BudgetEntry): Promise<BudgetEntry[]> =>
   addBudgetEntries([entry]);
 

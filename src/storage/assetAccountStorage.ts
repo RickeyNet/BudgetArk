@@ -107,6 +107,16 @@ const mutateAssetAccounts = async (
   return filterLive(result);
 };
 
+/**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync).
+ */
+export const mergeAssetAccountsFromSync = async (
+  merge: (stored: AssetAccount[]) => AssetAccount[]
+): Promise<void> => {
+  await mutateAssetAccounts((stored) => merge(stored.map((a) => ensureUpdatedAt(a))));
+};
+
 export const addAssetAccount = async (account: AssetAccount): Promise<AssetAccount[]> =>
   mutateAssetAccounts((stored) =>
     stored.some((existing) => existing.id === account.id)

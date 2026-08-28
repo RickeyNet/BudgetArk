@@ -8,27 +8,28 @@
 
 import {
   getDebtsIncludingDeleted,
-  saveDebts,
+  mergeDebtsFromSync,
+  mergePaymentsFromSync,
   getPaymentsIncludingDeleted,
 
   getPayoffStrategyEnvelope,
   savePayoffStrategyEnvelope} from "../storage/debtStorage";
 import {
   getBudgetEntriesIncludingDeleted,
-  saveBudgetEntries,
+  mergeBudgetEntriesFromSync,
   getAllLimitsByMonth,
 } from "../storage/budgetStorage";
 import {
   getSavingsGoalsIncludingDeleted,
-  saveSavingsGoals,
+  mergeSavingsGoalsFromSync,
 } from "../storage/savingsGoalStorage";
 import {
   getAssetAccountsIncludingDeleted,
-  saveAssetAccounts,
+  mergeAssetAccountsFromSync,
 } from "../storage/assetAccountStorage";
 import {
   getHoldingsIncludingDeleted,
-  saveHoldings,
+  mergeHoldingsFromSync,
 } from "../storage/holdingsStorage";
 import {
   getDebtMilestonePlan,
@@ -41,11 +42,11 @@ import {
 } from "../storage/customCategoriesStorage";
 import {
   getBusinessesIncludingDeleted,
-  saveBusinessesFromSync,
+  mergeBusinessesFromSync,
 } from "../storage/businessStorage";
 import {
   getPeopleIncludingDeleted,
-  savePeopleFromSync,
+  mergePeopleFromSync,
 } from "../storage/personStorage";
 import {
   getCategoryBucketOverrides,
@@ -488,13 +489,18 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   let changedCount = 0;
 
-  // Merge debts. Read+write via the tombstone-aware getters/setters so
-  // local tombstones survive the merge and stop a stale partner from
-  // resurrecting the deleted record.
+  // Every tombstoned collection below merges through its store's
+  // `merge*FromSync` helper: the LWW merge runs INSIDE encryptedStorage's
+  // per-key write queue against the array that is actually stored at that
+  // moment. The old getX -> mergeById -> saveX sequence had a read-to-write
+  // window in which a user tap (or bank auto-approval) could land and be
+  // silently reverted by the merge's write - sync runs in the foreground
+  // while the user is active, so the window was small but real.
+
+  // Merge debts. Tombstone-aware so local tombstones survive the merge and
+  // stop a stale partner from resurrecting the deleted record.
   if (diff.debts.length > 0) {
-    const localDebts = await getDebtsIncludingDeleted();
-    const merged = mergeById(localDebts, diff.debts);
-    await saveDebts(merged);
+    await mergeDebtsFromSync((localDebts) => mergeById(localDebts, diff.debts));
     changedCount += diff.debts.length;
   }
 
@@ -505,22 +511,14 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
   // record. The dedupe tombstones the duplicate (balance untouched - it
   // was only ever decremented once, see debtPaymentDedupe), and the
   // tombstone flows back to the partner on the next sync. Runs against the
-  // just-merged debts (the debts block above saves before this reads).
+  // just-merged debts (the debts block above writes before this reads).
   if (diff.payments.length > 0) {
-    const [localPayments, localDebts] = await Promise.all([
-      getPaymentsIncludingDeleted(),
-      getDebtsIncludingDeleted(),
-    ]);
-    const merged = mergeById(localPayments, diff.payments);
-    const { payments: deduped } = dedupeMinimumDuePayments(
-      localDebts,
-      merged,
-      new Date().toISOString()
-    );
-    await EncryptedStorage.setItem(
-      "@budgetark_payments",
-      JSON.stringify(deduped)
-    );
+    const localDebts = await getDebtsIncludingDeleted();
+    const dedupeAt = new Date().toISOString();
+    await mergePaymentsFromSync((localPayments) => {
+      const merged = mergeById(localPayments, diff.payments);
+      return dedupeMinimumDuePayments(localDebts, merged, dedupeAt).payments;
+    });
     changedCount += diff.payments.length;
   }
 
@@ -533,64 +531,65 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
   // still merges normally, and un-privating stays a local UI action.
   // importData's reconcileBudgetEntry applies the same rule on imports.
   if (diff.budgetEntries.length > 0) {
-    const localEntries = await getBudgetEntriesIncludingDeleted();
-    const locallyPrivateIds = new Set(
-      localEntries.filter((entry) => entry.isPrivate).map((entry) => entry.id)
-    );
-    const merged = mergeById(localEntries, diff.budgetEntries).map((entry) =>
-      locallyPrivateIds.has(entry.id) && !entry.isPrivate
-        ? { ...entry, isPrivate: true }
-        : entry
-    );
-    await saveBudgetEntries(merged);
+    await mergeBudgetEntriesFromSync((localEntries) => {
+      const locallyPrivateIds = new Set(
+        localEntries.filter((entry) => entry.isPrivate).map((entry) => entry.id)
+      );
+      return mergeById(localEntries, diff.budgetEntries).map((entry) =>
+        locallyPrivateIds.has(entry.id) && !entry.isPrivate
+          ? { ...entry, isPrivate: true }
+          : entry
+      );
+    });
     changedCount += diff.budgetEntries.length;
   }
 
   // Merge savings goals
   if (diff.savingsGoals.length > 0) {
-    const localGoals = await getSavingsGoalsIncludingDeleted();
-    const merged = mergeById(localGoals, diff.savingsGoals);
-    await saveSavingsGoals(merged);
+    await mergeSavingsGoalsFromSync((localGoals) =>
+      mergeById(localGoals, diff.savingsGoals)
+    );
     changedCount += diff.savingsGoals.length;
   }
 
   // Merge asset accounts
   if (diff.assetAccounts && diff.assetAccounts.length > 0) {
-    const localAccounts = await getAssetAccountsIncludingDeleted();
-    const merged = mergeById(localAccounts, diff.assetAccounts);
-    await saveAssetAccounts(merged);
-    changedCount += diff.assetAccounts.length;
+    const incoming = diff.assetAccounts;
+    await mergeAssetAccountsFromSync((localAccounts) =>
+      mergeById(localAccounts, incoming)
+    );
+    changedCount += incoming.length;
   }
 
   // Merge holdings - same tombstone-aware LWW as asset accounts. Guarded
   // with `diff.holdings &&` because an older peer's diff omits the field.
   if (diff.holdings && diff.holdings.length > 0) {
-    const localHoldings = await getHoldingsIncludingDeleted();
-    const merged = mergeById(localHoldings, diff.holdings);
-    await saveHoldings(merged);
-    changedCount += diff.holdings.length;
+    const incoming = diff.holdings;
+    await mergeHoldingsFromSync((localHoldings) => mergeById(localHoldings, incoming));
+    changedCount += incoming.length;
   }
 
   // Merge businesses - same tombstone-aware LWW as holdings. Guarded with
   // `diff.businesses &&` because an older peer's diff omits the field.
-  // Written via the raw sync setter: the merge already carries every local
-  // tombstone, and re-running name validation here would reject the very
-  // merge we just computed (dup names are cosmetic - entries reference by
-  // id).
+  // The store's sync merge skips per-mutation name validation: the merge
+  // already carries every local tombstone, and re-running it would reject
+  // the very merge we just computed (dup names are cosmetic - entries
+  // reference by id). Businesses tombstoned by the merge cascade to
+  // merchant rules inside the helper.
   if (diff.businesses && diff.businesses.length > 0) {
-    const localBusinesses = await getBusinessesIncludingDeleted();
-    const merged = mergeById(localBusinesses, diff.businesses);
-    await saveBusinessesFromSync(merged);
-    changedCount += diff.businesses.length;
+    const incoming = diff.businesses;
+    await mergeBusinessesFromSync((localBusinesses) =>
+      mergeById(localBusinesses, incoming)
+    );
+    changedCount += incoming.length;
   }
 
-  // Merge people - same tombstone-aware LWW and raw-setter rationale as
-  // businesses above.
+  // Merge people - same rationale as businesses above; tombstoned people
+  // cascade to merchant rules and account links inside the helper.
   if (diff.people && diff.people.length > 0) {
-    const localPeople = await getPeopleIncludingDeleted();
-    const merged = mergeById(localPeople, diff.people);
-    await savePeopleFromSync(merged);
-    changedCount += diff.people.length;
+    const incoming = diff.people;
+    await mergePeopleFromSync((localPeople) => mergeById(localPeople, incoming));
+    changedCount += incoming.length;
   }
 
   // Merge budget limits (union of months, per-category last-write-wins).

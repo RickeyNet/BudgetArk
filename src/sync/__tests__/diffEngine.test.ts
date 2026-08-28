@@ -16,8 +16,14 @@ let mockState: any;
 
 jest.mock("../../storage/debtStorage", () => ({
   getDebtsIncludingDeleted: jest.fn(async () => mockState.debts),
-  saveDebts: jest.fn(async (v: any) => {
-    mockState.debts = v;
+  // The atomic merge helpers hand the merge callback the stored array and
+  // persist its return value - the mocks do the same against mockState.
+  mergeDebtsFromSync: jest.fn(async (merge: any) => {
+    mockState.debts = merge(mockState.debts);
+  }),
+  mergePaymentsFromSync: jest.fn(async (merge: any) => {
+    mockState.payments = merge(mockState.payments);
+    mockState.encStore.set("@budgetark_payments", JSON.stringify(mockState.payments));
   }),
   getPaymentsIncludingDeleted: jest.fn(async () => mockState.payments),
   getPayoffStrategyEnvelope: jest.fn(async () => mockState.strategyEnvelope),
@@ -27,27 +33,27 @@ jest.mock("../../storage/debtStorage", () => ({
 }));
 jest.mock("../../storage/budgetStorage", () => ({
   getBudgetEntriesIncludingDeleted: jest.fn(async () => mockState.budgetEntries),
-  saveBudgetEntries: jest.fn(async (v: any) => {
-    mockState.budgetEntries = v;
+  mergeBudgetEntriesFromSync: jest.fn(async (merge: any) => {
+    mockState.budgetEntries = merge(mockState.budgetEntries);
   }),
   getAllLimitsByMonth: jest.fn(async () => mockState.limitsByMonth),
 }));
 jest.mock("../../storage/savingsGoalStorage", () => ({
   getSavingsGoalsIncludingDeleted: jest.fn(async () => mockState.savingsGoals),
-  saveSavingsGoals: jest.fn(async (v: any) => {
-    mockState.savingsGoals = v;
+  mergeSavingsGoalsFromSync: jest.fn(async (merge: any) => {
+    mockState.savingsGoals = merge(mockState.savingsGoals);
   }),
 }));
 jest.mock("../../storage/assetAccountStorage", () => ({
   getAssetAccountsIncludingDeleted: jest.fn(async () => mockState.assetAccounts),
-  saveAssetAccounts: jest.fn(async (v: any) => {
-    mockState.assetAccounts = v;
+  mergeAssetAccountsFromSync: jest.fn(async (merge: any) => {
+    mockState.assetAccounts = merge(mockState.assetAccounts);
   }),
 }));
 jest.mock("../../storage/holdingsStorage", () => ({
   getHoldingsIncludingDeleted: jest.fn(async () => mockState.holdings),
-  saveHoldings: jest.fn(async (v: any) => {
-    mockState.holdings = v;
+  mergeHoldingsFromSync: jest.fn(async (merge: any) => {
+    mockState.holdings = merge(mockState.holdings);
   }),
 }));
 jest.mock("../../storage/debtMilestoneStorage", () => ({
@@ -64,14 +70,14 @@ jest.mock("../../storage/customCategoriesStorage", () => ({
 }));
 jest.mock("../../storage/businessStorage", () => ({
   getBusinessesIncludingDeleted: jest.fn(async () => mockState.businesses),
-  saveBusinessesFromSync: jest.fn(async (v: any) => {
-    mockState.businesses = v;
+  mergeBusinessesFromSync: jest.fn(async (merge: any) => {
+    mockState.businesses = merge(mockState.businesses);
   }),
 }));
 jest.mock("../../storage/personStorage", () => ({
   getPeopleIncludingDeleted: jest.fn(async () => mockState.people),
-  savePeopleFromSync: jest.fn(async (v: any) => {
-    mockState.people = v;
+  mergePeopleFromSync: jest.fn(async (merge: any) => {
+    mockState.people = merge(mockState.people);
   }),
 }));
 jest.mock("../../storage/categoryBucketOverridesStorage", () => ({
@@ -321,7 +327,7 @@ describe("applyIncomingDiff - validation gate", () => {
       ],
     });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/Sync rejected/);
-    expect(debtStorage.saveDebts).not.toHaveBeenCalled();
+    expect(debtStorage.mergeDebtsFromSync).not.toHaveBeenCalled();
   });
 
   it("rejects a malformed diff entry (bad action)", async () => {
@@ -338,7 +344,7 @@ describe("applyIncomingDiff - validation gate", () => {
     const missing = emptyDiff();
     delete (missing as any).debts;
     await expect(applyIncomingDiff(missing)).rejects.toThrow(/missing debt collection/);
-    expect(debtStorage.saveDebts).not.toHaveBeenCalled();
+    expect(debtStorage.mergeDebtsFromSync).not.toHaveBeenCalled();
 
     const noLimits = emptyDiff();
     delete (noLimits as any).budgetLimits;
@@ -695,7 +701,7 @@ describe("businesses sync", () => {
       ],
     });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/invalid business/);
-    expect(businessStorage.saveBusinessesFromSync).not.toHaveBeenCalled();
+    expect(businessStorage.mergeBusinessesFromSync).not.toHaveBeenCalled();
   });
 
   it("applies cleanly when an older peer's diff omits the businesses field", async () => {
@@ -752,7 +758,7 @@ describe("people sync", () => {
       ],
     });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/invalid person/);
-    expect(personStorage.savePeopleFromSync).not.toHaveBeenCalled();
+    expect(personStorage.mergePeopleFromSync).not.toHaveBeenCalled();
   });
 
   it("applies cleanly when an older peer's diff omits the people field", async () => {

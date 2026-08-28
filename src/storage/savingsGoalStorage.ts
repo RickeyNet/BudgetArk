@@ -7,7 +7,7 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
-import { repairCollectionInPlace } from "./collectionRepair";
+import { mutateCollectionInPlace, repairCollectionInPlace } from "./collectionRepair";
 import { ensureUpdatedAt } from "../utils/recordTimestamps";
 
 const STORAGE_KEY = "@budgetark_savings_goals";
@@ -66,6 +66,18 @@ const writeSavingsGoals = async (goals: SavingsGoal[]): Promise<void> => {
  * merged back in so a screen-level save can't erase the soft-deletes that
  * Undo and sync need.
  */
+/**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync).
+ */
+export const mergeSavingsGoalsFromSync = async (
+  merge: (stored: SavingsGoal[]) => SavingsGoal[]
+): Promise<void> => {
+  await mutateCollectionInPlace<SavingsGoal>(STORAGE_KEY, (stored) =>
+    merge(stored.map((g) => ensureUpdatedAt(g)))
+  );
+};
+
 export const saveSavingsGoals = async (goals: SavingsGoal[]): Promise<void> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEY);
   let stored: SavingsGoal[] = [];

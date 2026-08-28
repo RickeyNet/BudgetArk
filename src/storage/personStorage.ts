@@ -12,6 +12,8 @@
 
 import * as EncryptedStorage from "./encryptedStorage";
 import { ensureUpdatedAt } from "../utils/recordTimestamps";
+import { clearAssigneesFromMerchantRules } from "./merchantRulesStorage";
+import { clearPersonFromLinks } from "./externalAccountLinksStorage";
 import {
   Person,
   PERSON_STORAGE_VERSION,
@@ -141,6 +143,54 @@ export const savePeopleFromSync = async (people: Person[]): Promise<void> =>
   writeStore(people);
 
 /**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync). People newly tombstoned by
+ * the merge cascade to merchant rules and account links, the same as an
+ * in-app delete.
+ */
+export const mergePeopleFromSync = async (
+  merge: (stored: Person[]) => Person[]
+): Promise<void> => {
+  const newlyDeleted: string[] = [];
+  await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+    let stored: Person[] = [];
+    if (current) {
+      try {
+        const cur = JSON.parse(current) as Partial<PersonStore>;
+        if (cur && Array.isArray(cur.people)) {
+          stored = cleanPeople(cur.people).map((p) => ensureUpdatedAt(p));
+        }
+      } catch {
+        stored = [];
+      }
+    }
+    const liveBefore = new Set(stored.filter((p) => !p.deletedAt).map((p) => p.id));
+    const next = merge(stored);
+    for (const p of next) {
+      if (p.deletedAt && liveBefore.has(p.id)) newlyDeleted.push(p.id);
+    }
+    const store: PersonStore = { people: next, version: PERSON_STORAGE_VERSION };
+    return JSON.stringify(store);
+  });
+  if (newlyDeleted.length > 0) {
+    await clearPersonReferences(newlyDeleted);
+  }
+};
+
+/**
+ * Referential cleanup for deleted people: merchant rules that name them and
+ * bank-account links whose "whose card is this" points at them. Either
+ * would keep the Review Inbox suggesting "(deleted person)" on every future
+ * import (ingest falls back to the link's person when no rule names one).
+ */
+const clearPersonReferences = async (personIds: string[]): Promise<void> => {
+  await Promise.all([
+    clearAssigneesFromMerchantRules({ personIds }),
+    clearPersonFromLinks(personIds),
+  ]);
+};
+
+/**
  * Validate a candidate name: sanitize, length-cap, case-insensitive
  * duplicate check against live people (optionally excluding one id, for
  * rename). Returns the cleaned name or an error string.
@@ -224,6 +274,7 @@ export const deletePerson = async (id: string): Promise<Person[]> => {
   const now = new Date().toISOString();
   const next = all.map((p) => (p.id === id ? tombstone(p, now) : p));
   await writeStore(next);
+  await clearPersonReferences([id]);
   return filterLive(next);
 };
 

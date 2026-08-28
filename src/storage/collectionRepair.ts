@@ -21,6 +21,41 @@ import * as EncryptedStorage from "./encryptedStorage";
 import { Tombstoneable, purgeExpiredTombstones } from "./tombstones";
 
 /**
+ * Atomic read-modify-write for a bare-array collection: `mutate` receives
+ * the CURRENT stored array (missing/corrupt -> empty, matching the getters'
+ * catch branches) inside encryptedStorage's per-key write queue and returns
+ * the next array, which is persisted. Returns what was written.
+ *
+ * This is what every CRUD helper and every incoming-sync merge must use
+ * instead of getX -> mutate -> saveX: with two writers that land on app
+ * foreground (partner sync, bank sync) plus the user's own taps, a snapshot
+ * taken outside the queue can be stale by the time it's written back, and
+ * the write silently reverts whatever landed in between.
+ */
+export const mutateCollectionInPlace = async <T>(
+  key: string,
+  mutate: (stored: T[]) => T[]
+): Promise<T[]> => {
+  let result: T[] = [];
+  await EncryptedStorage.updateItem(key, (current) => {
+    let stored: T[] = [];
+    if (current) {
+      try {
+        const parsed: unknown = JSON.parse(current);
+        if (Array.isArray(parsed)) stored = parsed as T[];
+      } catch {
+        stored = [];
+      }
+    }
+    result = mutate(stored);
+    // Same-ref contract: a mutate that returns its input means "nothing to
+    // do" and skips the write entirely.
+    return result === stored ? null : JSON.stringify(result);
+  });
+  return result;
+};
+
+/**
  * Re-runs `normalize` + tombstone purge against the current stored value of
  * `key` and persists the result - atomically with respect to all other
  * writes on that key. No-ops when the key is empty, unparseable (the

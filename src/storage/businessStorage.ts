@@ -12,6 +12,7 @@
 
 import * as EncryptedStorage from "./encryptedStorage";
 import { ensureUpdatedAt } from "../utils/recordTimestamps";
+import { clearAssigneesFromMerchantRules } from "./merchantRulesStorage";
 import {
   Business,
   BUSINESS_STORAGE_VERSION,
@@ -142,6 +143,42 @@ export const saveBusinessesFromSync = async (
 ): Promise<void> => writeStore(businesses);
 
 /**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync). `merge` sees the current
+ * cleaned + normalized array and returns the full array to persist.
+ * Businesses newly tombstoned by the merge cascade to merchant rules, the
+ * same as an in-app delete.
+ */
+export const mergeBusinessesFromSync = async (
+  merge: (stored: Business[]) => Business[]
+): Promise<void> => {
+  const newlyDeleted: string[] = [];
+  await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+    let stored: Business[] = [];
+    if (current) {
+      try {
+        const cur = JSON.parse(current) as Partial<BusinessStore>;
+        if (cur && Array.isArray(cur.businesses)) {
+          stored = cleanBusinesses(cur.businesses).map((b) => ensureUpdatedAt(b));
+        }
+      } catch {
+        stored = [];
+      }
+    }
+    const liveBefore = new Set(stored.filter((b) => !b.deletedAt).map((b) => b.id));
+    const next = merge(stored);
+    for (const b of next) {
+      if (b.deletedAt && liveBefore.has(b.id)) newlyDeleted.push(b.id);
+    }
+    const store: BusinessStore = { businesses: next, version: BUSINESS_STORAGE_VERSION };
+    return JSON.stringify(store);
+  });
+  if (newlyDeleted.length > 0) {
+    await clearAssigneesFromMerchantRules({ businessIds: newlyDeleted });
+  }
+};
+
+/**
  * Validate a candidate name: sanitize, length-cap, case-insensitive
  * duplicate check against live businesses (optionally excluding one id,
  * for rename). Returns the cleaned name or an error string.
@@ -225,6 +262,9 @@ export const deleteBusiness = async (id: string): Promise<Business[]> => {
   const now = new Date().toISOString();
   const next = all.map((b) => (b.id === id ? tombstone(b, now) : b));
   await writeStore(next);
+  // Referential cleanup: merchant rules that tag this business would keep
+  // suggesting "(deleted business)" on every future import.
+  await clearAssigneesFromMerchantRules({ businessIds: [id] });
   return filterLive(next);
 };
 

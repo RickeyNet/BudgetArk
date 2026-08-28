@@ -20,7 +20,7 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
-import { repairCollectionInPlace } from "./collectionRepair";
+import { mutateCollectionInPlace, repairCollectionInPlace } from "./collectionRepair";
 import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
 import {
   KEEP_ALIVE_MAX_LEAD_DAYS,
@@ -219,6 +219,19 @@ const writeDebts = async (debts: Debt[]): Promise<void> => {
 };
 
 /**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync). `merge` sees the current
+ * stored array normalized exactly as the getter would.
+ */
+export const mergeDebtsFromSync = async (
+  merge: (stored: Debt[]) => Debt[]
+): Promise<void> => {
+  await mutateCollectionInPlace<Debt>(STORAGE_KEYS.DEBTS, (stored) =>
+    merge(stored.map(normalizeDebt))
+  );
+};
+
+/**
  * Persists the debts array. Safe to call with a live-only (`getDebts`)
  * array: stored tombstones missing from `debts` are merged back in so a
  * screen-level save can't erase the soft-deletes that Undo and sync need.
@@ -330,6 +343,21 @@ export const savePayments = async (payments: Payment[]): Promise<void> => {
   await EncryptedStorage.setItem(
     STORAGE_KEYS.PAYMENTS,
     JSON.stringify(payments)
+  );
+};
+
+/**
+ * Incoming-sync merge for payments, atomic against every other writer on
+ * the payments key (see budgetStorage.mergeBudgetEntriesFromSync). The
+ * debts the caller's merge may consult are read separately - a debt write
+ * landing in between only affects the minimum-due dedupe heuristic, never
+ * which payment records survive.
+ */
+export const mergePaymentsFromSync = async (
+  merge: (stored: Payment[]) => Payment[]
+): Promise<void> => {
+  await mutateCollectionInPlace<Payment>(STORAGE_KEYS.PAYMENTS, (stored) =>
+    merge(stored.map(normalizePayment))
   );
 };
 

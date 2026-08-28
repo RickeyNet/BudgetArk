@@ -10,6 +10,7 @@
 
 import * as EncryptedStorage from "./encryptedStorage";
 import type { ExternalAccountLink } from "../types";
+import { mutateCollectionInPlace } from "./collectionRepair";
 
 const STORAGE_KEY = "@budgetark_external_account_links" as const;
 
@@ -26,6 +27,30 @@ export const getLinks = async (): Promise<ExternalAccountLink[]> => {
 
 const writeLinks = async (links: ExternalAccountLink[]): Promise<void> => {
   await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(links));
+};
+
+/**
+ * Referential cleanup when people are deleted: a link's "whose card is
+ * this" is the ingest planner's person fallback, so a dangling id would
+ * keep suggesting "(deleted person)" on every import from that account.
+ * Atomic; no write when nothing references the ids.
+ */
+export const clearPersonFromLinks = async (
+  personIds: Iterable<string>
+): Promise<void> => {
+  const ids = new Set(personIds);
+  if (ids.size === 0) return;
+  await mutateCollectionInPlace<ExternalAccountLink>(STORAGE_KEY, (stored) => {
+    const now = new Date().toISOString();
+    let changed = false;
+    const next = stored.map((link) => {
+      if (link.personId == null || !ids.has(link.personId)) return link;
+      changed = true;
+      const { personId: _dropped, ...rest } = link;
+      return { ...rest, updatedAt: now };
+    });
+    return changed ? next : stored;
+  });
 };
 
 export const getLinksForConnection = async (
