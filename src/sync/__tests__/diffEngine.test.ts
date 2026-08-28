@@ -240,6 +240,22 @@ describe("computeOutgoingDiff", () => {
     expect(diff.debts.map((e) => e.record.id)).toEqual(["fresh"]);
   });
 
+  it("still sends a record lacking updatedAt on the first sync, and as epoch afterwards", async () => {
+    // Regression: `NaN > since` is always false, so such a record was
+    // excluded from every diff forever - including the first one.
+    const legacy = debt({ id: "legacy" });
+    delete (legacy as any).updatedAt;
+    mockState.debts = [legacy, debt({ id: "fresh", updatedAt: NEW })];
+
+    const first = await computeOutgoingDiff(null);
+    expect(first.debts.map((e) => e.record.id).sort()).toEqual(["fresh", "legacy"]);
+
+    // After a sync the epoch mapping keeps it out of incremental diffs
+    // (the storage getters persist a real stamp on read anyway).
+    const later = await computeOutgoingDiff(OLD);
+    expect(later.debts.map((e) => e.record.id)).toEqual(["fresh"]);
+  });
+
   it("marks a tombstoned record as a delete action", async () => {
     mockState.debts = [debt({ id: "d1", deletedAt: NEW, updatedAt: NEW })];
     const diff = await computeOutgoingDiff(null);
@@ -477,6 +493,28 @@ describe("applyIncomingDiff - last-write-wins merge", () => {
       })
     );
     expect(mockState.debts.find((d: any) => d.id === "d1").deletedAt).toBe(NEW);
+  });
+
+  it("lets a stamped incoming record overwrite a local one that has no updatedAt", async () => {
+    // Regression: `x >= NaN` is false, so a legacy local record without
+    // updatedAt could never be overwritten - while changedCount still
+    // counted the incoming record as applied.
+    const legacy = debt({ id: "d1", balance: 100 });
+    delete (legacy as any).updatedAt;
+    mockState.debts = [legacy];
+    const applied = await applyIncomingDiff(
+      emptyDiff({ debts: [{ action: "upsert", record: debt({ id: "d1", balance: 999, updatedAt: OLD }) }] })
+    );
+    expect(mockState.debts.find((d: any) => d.id === "d1").balance).toBe(999);
+    expect(applied).toBe(1);
+  });
+
+  it("treats an incoming record without updatedAt as epoch, so any stamped local wins", async () => {
+    mockState.debts = [debt({ id: "d1", balance: 100, updatedAt: OLD })];
+    const incoming = debt({ id: "d1", balance: 999 });
+    delete (incoming as any).updatedAt;
+    await applyIncomingDiff(emptyDiff({ debts: [{ action: "upsert", record: incoming }] }));
+    expect(mockState.debts.find((d: any) => d.id === "d1").balance).toBe(100);
   });
 
   it("adds a brand-new incoming record", async () => {

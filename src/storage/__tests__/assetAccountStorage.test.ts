@@ -106,6 +106,27 @@ describe("add / update", () => {
   });
 });
 
+describe("read-time updatedAt normalizer", () => {
+  it("fills a missing updatedAt from createdAt and persists the repair", async () => {
+    const legacy = account({ id: "legacy" });
+    delete (legacy as Partial<AssetAccount>).updatedAt;
+    seed([legacy, account({ id: "a2" })]);
+
+    const live = await getAssetAccounts();
+    expect(live.find((a) => a.id === "legacy")?.updatedAt).toBe(T0);
+    // Persisted, so sync sees a stable stamp instead of a fresh value per read.
+    expect(stored().find((a) => a.id === "legacy")?.updatedAt).toBe(T0);
+    expect(stored().find((a) => a.id === "a2")?.updatedAt).toBe(T0);
+  });
+
+  it("does not rewrite storage when nothing is missing", async () => {
+    seed([account({ id: "a1" })]);
+    const before = mockStore.get(KEY);
+    await getAssetAccounts();
+    expect(mockStore.get(KEY)).toBe(before);
+  });
+});
+
 describe("delete / restore", () => {
   it("soft-deletes with a tombstone and restore clears it", async () => {
     seed([account({ id: "a1" }), account({ id: "a2" })]);

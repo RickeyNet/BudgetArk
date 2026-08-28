@@ -11,6 +11,7 @@
  */
 
 import * as EncryptedStorage from "./encryptedStorage";
+import { ensureUpdatedAt } from "../utils/recordTimestamps";
 import {
   Person,
   PERSON_STORAGE_VERSION,
@@ -54,11 +55,19 @@ const readStore = async (): Promise<Person[]> => {
     const parsed = JSON.parse(raw) as Partial<PersonStore>;
     if (!parsed || !Array.isArray(parsed.people)) return [];
     const cleaned = cleanPeople(parsed.people);
-    const purged = purgeExpiredTombstones(cleaned);
-    if (purged !== cleaned) {
+    // Legacy/imported people may lack `updatedAt`; without it they are
+    // invisible to sync in both directions (see recordTimestamps.ts).
+    let normalizeChanged = false;
+    const normalized = cleaned.map((p) => {
+      const next = ensureUpdatedAt(p);
+      if (next !== p) normalizeChanged = true;
+      return next;
+    });
+    const purged = purgeExpiredTombstones(normalized);
+    if (normalizeChanged || purged !== normalized) {
       // Atomic recompute instead of writing our own (possibly stale)
       // snapshot: a mutation or sync write landing between the read above
-      // and this write must not be reverted by the purge. Bespoke updater
+      // and this write must not be reverted by the repair. Bespoke updater
       // (not repairCollectionInPlace) because people persist inside a
       // versioned envelope, not a bare array. Same shape as businessStorage.
       await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
@@ -67,10 +76,16 @@ const readStore = async (): Promise<Person[]> => {
           const cur = JSON.parse(current) as Partial<PersonStore>;
           if (!cur || !Array.isArray(cur.people)) return null;
           const curCleaned = cleanPeople(cur.people);
-          const curPurged = purgeExpiredTombstones(curCleaned);
-          // Same trigger as the read path: rewrite only when the purge
-          // actually dropped a tombstone.
-          if (curPurged === curCleaned) return null;
+          let curNormalizeChanged = false;
+          const curNormalized = curCleaned.map((p) => {
+            const next = ensureUpdatedAt(p);
+            if (next !== p) curNormalizeChanged = true;
+            return next;
+          });
+          const curPurged = purgeExpiredTombstones(curNormalized);
+          // Same trigger as the read path: rewrite only when a field was
+          // filled in or the purge actually dropped a tombstone.
+          if (!curNormalizeChanged && curPurged === curNormalized) return null;
           const store: PersonStore = {
             people: curPurged,
             version: PERSON_STORAGE_VERSION,

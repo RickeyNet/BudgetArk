@@ -9,6 +9,7 @@
  */
 
 import * as EncryptedStorage from "./encryptedStorage";
+import { ensureUpdatedAt } from "../utils/recordTimestamps";
 import {
   CustomCategory,
   CUSTOM_CATEGORY_STORAGE_VERSION,
@@ -42,13 +43,49 @@ const readStore = async (): Promise<CustomCategory[]> => {
   try {
     const parsed = JSON.parse(raw) as Partial<CustomCategoryStore>;
     if (parsed && Array.isArray(parsed.categories)) {
-      return parsed.categories.filter(
+      const cleaned = parsed.categories.filter(
         (c): c is CustomCategory =>
           !!c &&
           typeof c.id === "string" &&
           typeof c.name === "string" &&
           (c.defaultBucket === undefined || isBudgetBucket(c.defaultBucket))
       );
+      // Legacy/imported categories may lack `updatedAt`; the sync merge
+      // maps a missing one to the epoch, so a partner's copy always wins
+      // and this device's edit never propagates. Fill it in (createdAt,
+      // else now) and persist atomically so the stamp is stable across
+      // reads rather than a fresh `now` every time.
+      let normalizeChanged = false;
+      const normalized = cleaned.map((c) => {
+        const next = ensureUpdatedAt(c);
+        if (next !== c) normalizeChanged = true;
+        return next;
+      });
+      if (normalizeChanged) {
+        await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+          if (!current) return null;
+          try {
+            const cur = JSON.parse(current) as Partial<CustomCategoryStore>;
+            if (!cur || !Array.isArray(cur.categories)) return null;
+            let curChanged = false;
+            const curNormalized = cur.categories.map((c) => {
+              if (!c || typeof c !== "object") return c;
+              const next = ensureUpdatedAt(c as CustomCategory);
+              if (next !== c) curChanged = true;
+              return next;
+            });
+            if (!curChanged) return null;
+            const store: CustomCategoryStore = {
+              categories: curNormalized as CustomCategory[],
+              version: CUSTOM_CATEGORY_STORAGE_VERSION,
+            };
+            return JSON.stringify(store);
+          } catch {
+            return null;
+          }
+        });
+      }
+      return normalized;
     }
     return [];
   } catch {

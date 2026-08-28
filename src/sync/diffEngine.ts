@@ -72,6 +72,7 @@ import type {
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
 import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
 import { notifyDataChanged } from "../storage/dataChangeNotifier";
+import { timestampMs } from "../utils/recordTimestamps";
 import {
   isObject,
   isDebtItem,
@@ -177,11 +178,16 @@ export const computeOutgoingDiff = async (
   // remove locally). Without the delete branch the partner would silently
   // resurrect any record we deleted - its next sync would upsert it back to
   // us, since we wouldn't even mention the deletion.
+  // NaN-safe: the getters normalize missing `updatedAt` on read, but a
+  // record that somehow still lacks one must not vanish from every diff
+  // forever (`NaN > since` is always false). It rides along on the first
+  // sync like everything else, and `timestampMs` maps it to the epoch after
+  // that so a stamped edit supersedes it.
   const filterChanged = <T extends { updatedAt: string; deletedAt?: string }>(
     items: T[]
   ): DiffEntry<T>[] => {
     return items
-      .filter((item) => new Date(item.updatedAt).getTime() > since)
+      .filter((item) => !lastSyncTimestamp || timestampMs(item.updatedAt) > since)
       .map((item) => ({
         action: item.deletedAt ? ("delete" as const) : ("upsert" as const),
         record: item,
@@ -309,10 +315,11 @@ const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string
 
   for (const entry of incoming) {
     const localItem = localMap.get(entry.record.id);
-    const incomingTime = new Date(entry.record.updatedAt).getTime();
-    const localTime = localItem
-      ? new Date(localItem.updatedAt).getTime()
-      : -Infinity;
+    // NaN-safe (missing/garbage -> epoch): a local record without
+    // `updatedAt` used to be un-overwritable (`x >= NaN` is false) and an
+    // incoming one could never apply, while changedCount still counted it.
+    const incomingTime = timestampMs(entry.record.updatedAt);
+    const localTime = localItem ? timestampMs(localItem.updatedAt) : -Infinity;
 
     if (incomingTime >= localTime) {
       localMap.set(entry.record.id, entry.record);
@@ -625,11 +632,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
   if (diff.customCategories && diff.customCategories.length > 0) {
     // Older exports relayed through a peer may lack updatedAt (the
     // validator allows it); treat those as epoch so any stamped record wins.
-    const tsOf = (v: string | undefined): number => {
-      if (typeof v !== "string") return 0;
-      const t = Date.parse(v);
-      return Number.isFinite(t) ? t : 0;
-    };
+    const tsOf = timestampMs;
 
     const localCategories = await getCustomCategories();
     const byId = new Map<string, CustomCategory>(

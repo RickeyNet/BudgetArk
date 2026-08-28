@@ -8,6 +8,7 @@ import {
   untombstone,
 } from "./tombstones";
 import { repairCollectionInPlace } from "./collectionRepair";
+import { ensureUpdatedAt } from "../utils/recordTimestamps";
 
 const STORAGE_KEY = "@budgetark_savings_goals";
 
@@ -25,15 +26,24 @@ export const getSavingsGoalsIncludingDeleted = async (): Promise<SavingsGoal[]> 
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as SavingsGoal[];
-    const purged = purgeExpiredTombstones(parsed);
+    // Legacy/imported goals may lack `updatedAt`; without it they are
+    // invisible to sync in both directions (see recordTimestamps.ts).
+    let normalizeChanged = false;
+    const normalized = parsed.map((goal) => {
+      const next = ensureUpdatedAt(goal);
+      if (next !== goal) normalizeChanged = true;
+      return next;
+    });
+    const purged = purgeExpiredTombstones(normalized);
     // Ref equality: `purgeExpiredTombstones` returns the original array
-    // when nothing was dropped, so the steady-state read costs O(1) here
-    // instead of the previous O(n × record-size) JSON.stringify diff.
-    if (purged !== parsed) {
+    // when nothing was dropped and `ensureUpdatedAt` returns the same
+    // element refs when nothing was missing, so the steady-state read
+    // costs O(1) here instead of a JSON.stringify diff.
+    if (normalizeChanged || purged !== normalized) {
       // Atomic recompute instead of writing our own (possibly stale)
       // snapshot: a mutation or sync write landing between the read above
-      // and this write must not be reverted by the purge.
-      await repairCollectionInPlace<SavingsGoal>(STORAGE_KEY, (g) => g);
+      // and this write must not be reverted by the repair.
+      await repairCollectionInPlace<SavingsGoal>(STORAGE_KEY, ensureUpdatedAt);
     }
     return purged;
   } catch {

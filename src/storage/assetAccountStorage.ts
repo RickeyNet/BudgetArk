@@ -9,6 +9,7 @@ import {
 } from "./tombstones";
 import { repairCollectionInPlace } from "./collectionRepair";
 import { applyBalanceDeltas, type BalanceDelta } from "../utils/assetBalanceDeltas";
+import { ensureUpdatedAt } from "../utils/recordTimestamps";
 
 const STORAGE_KEY = "@budgetark_asset_accounts";
 
@@ -26,15 +27,24 @@ export const getAssetAccountsIncludingDeleted = async (): Promise<AssetAccount[]
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as AssetAccount[];
-    const purged = purgeExpiredTombstones(parsed);
+    // Legacy/imported accounts may lack `updatedAt`; without it they are
+    // invisible to sync in both directions (see recordTimestamps.ts).
+    let normalizeChanged = false;
+    const normalized = parsed.map((account) => {
+      const next = ensureUpdatedAt(account);
+      if (next !== account) normalizeChanged = true;
+      return next;
+    });
+    const purged = purgeExpiredTombstones(normalized);
     // Ref equality: `purgeExpiredTombstones` returns the original array
-    // when nothing was dropped, so the steady-state read costs O(1) here
-    // instead of the previous O(n × record-size) JSON.stringify diff.
-    if (purged !== parsed) {
+    // when nothing was dropped and `ensureUpdatedAt` returns the same
+    // element refs when nothing was missing, so the steady-state read
+    // costs O(1) here instead of a JSON.stringify diff.
+    if (normalizeChanged || purged !== normalized) {
       // Atomic recompute instead of writing our own (possibly stale)
       // snapshot: a mutation or sync write landing between the read above
-      // and this write must not be reverted by the purge.
-      await repairCollectionInPlace<AssetAccount>(STORAGE_KEY, (a) => a);
+      // and this write must not be reverted by the repair.
+      await repairCollectionInPlace<AssetAccount>(STORAGE_KEY, ensureUpdatedAt);
     }
     return purged;
   } catch {
