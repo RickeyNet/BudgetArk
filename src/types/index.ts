@@ -853,6 +853,15 @@ export interface ConnectionsSettings {
 }
 
 /**
+ * Per-device consent state for the live exchange-rate fetch behind the
+ * Settings currency switch. Same shape/rationale as ConnectionsSettings:
+ * shown once before the first network request, never re-prompted.
+ */
+export interface ExchangeRatesSettings {
+  disclosureAcknowledged: boolean;
+}
+
+/**
  * One ingest-ledger decision: remembers that a fetched bank transaction
  * (keyed by its identity key) was approved or dismissed, so overlapping
  * re-fetches and reconnects never re-offer it. See

@@ -25,7 +25,9 @@ import {
   PERSON_STORAGE_VERSION,
   ACHIEVEMENTS_STORAGE_VERSION,
   ACHIEVEMENT_STATS_VERSION,
+  LEARNING_STORAGE_VERSION,
   type AchievementStats,
+  type LearningProgress,
 } from "../types";
 import { isBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
 import {
@@ -92,6 +94,7 @@ const KEYS = {
   MONTH_START_BALANCES: "@budgetark_month_start_balances",
   DEBT_DUE_DISMISSALS: "@budgetark_debt_due_dismissals",
   CARD_KEEP_ALIVE_DISMISSALS: "@budgetark_card_keepalive_dismissals",
+  LEARNING_PROGRESS: "@budgetark_learning_progress",
 } as const;
 
 const getCurrentMonthKey = (): string => {
@@ -133,7 +136,8 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     isObject(data.achievementStats) ||
     isObject(data.monthStartBalances) ||
     isObject(data.debtDueDismissals) ||
-    isObject(data.cardKeepAliveDismissals);
+    isObject(data.cardKeepAliveDismissals) ||
+    isObject(data.learningProgress);
 
   return hasAny;
 };
@@ -160,6 +164,7 @@ interface ImportPayload {
   monthStartBalances?: Record<string, unknown>;
   debtDueDismissals?: Record<string, unknown>;
   cardKeepAliveDismissals?: Record<string, unknown>;
+  learningProgress?: Record<string, unknown>;
   user?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -193,6 +198,7 @@ interface SanitizedImportPayload {
   monthStartBalances?: MonthStartBalanceMap;
   debtDueDismissals?: Record<string, string>;
   cardKeepAliveDismissals?: Record<string, string>;
+  learningProgress?: LearningProgress;
   user?: Record<string, unknown>;
 }
 
@@ -390,6 +396,58 @@ const sanitizeAchievementStats = (raw: unknown): AchievementStats | undefined =>
 };
 
 /**
+ * Learning-hub progress (`lessonId -> ISO first-completed`, the Resume
+ * pointer, and the dormant affiliate flags). Invalid completions are dropped
+ * individually and bad scalars degrade to their defaults - like the other
+ * cosmetic stores, a corrupt lesson record must never block restoring
+ * financial data. Returns undefined when nothing usable is present so an
+ * older export without the field leaves the local key untouched.
+ */
+const LESSON_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
+const isLessonId = (value: unknown): value is string =>
+  typeof value === "string" && LESSON_ID_PATTERN.test(value);
+
+const sanitizeLearningProgress = (raw: unknown): LearningProgress | undefined => {
+  if (!isObject(raw)) return undefined;
+  const completedLessons: Record<string, string> = {};
+  if (isObject(raw.completedLessons)) {
+    for (const [lessonId, completedAt] of Object.entries(raw.completedLessons)) {
+      // Lesson ids are catalog slugs ("ch1-l1-what-is-budget"); anything
+      // else is not a lesson this or a future build could ever look up.
+      if (!isLessonId(lessonId)) continue;
+      if (!isValidDateValue(completedAt)) continue;
+      completedLessons[lessonId] = completedAt;
+    }
+  }
+  const currentLessonId = isLessonId(raw.currentLessonId)
+    ? raw.currentLessonId
+    : undefined;
+  const affiliateDisclosureSeenAt = isValidDateValue(raw.affiliateDisclosureSeenAt)
+    ? raw.affiliateDisclosureSeenAt
+    : undefined;
+  if (
+    Object.keys(completedLessons).length === 0 &&
+    !currentLessonId &&
+    !affiliateDisclosureSeenAt
+  ) {
+    return undefined;
+  }
+  return {
+    completedLessons,
+    currentLessonId,
+    affiliateTapCount:
+      typeof raw.affiliateTapCount === "number" &&
+      Number.isFinite(raw.affiliateTapCount) &&
+      raw.affiliateTapCount >= 0
+        ? Math.floor(raw.affiliateTapCount)
+        : 0,
+    affiliateDisclosureSeenAt,
+    showAffiliateLinks: raw.showAffiliateLinks === true,
+    version: LEARNING_STORAGE_VERSION,
+  };
+};
+
+/**
  * Debt due-day dismissals: `"<debtId>:<YYYY-MM>" → ISO dismissed-at`. Only
  * the key matters to the reminder engine (the value is bookkeeping), so
  * validation gates on key shape and a sane value string; bad pairs are
@@ -475,6 +533,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const cardKeepAliveDismissals = sanitizeDebtDueDismissals(
     data.cardKeepAliveDismissals
   );
+  const learningProgress = sanitizeLearningProgress(data.learningProgress);
   const user = sanitizeUser(data.user);
 
   const limitsByMonthCount = budgetLimitsByMonth
@@ -519,6 +578,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     monthStartBalances,
     debtDueDismissals,
     cardKeepAliveDismissals,
+    learningProgress,
     debtMilestones,
     payoffStrategy,
     payoffStrategyUpdatedAt,
@@ -1367,6 +1427,56 @@ export const importFromString = async (
   };
 
   /**
+   * Learning progress: completions are "first completed at" facts, so the
+   * merge unions both sides keeping the EARLIEST timestamp per lesson (same
+   * rule as achievement unlocks). The Resume pointer keeps the local one
+   * when set (it is this device's "where I left off"); the affiliate tap
+   * counter takes the max and the disclosure-seen date the earliest, both
+   * for the same "more real activity / older truth" reasons as the
+   * achievement stats. Replace mode takes the import verbatim.
+   */
+  const computeMergedLearningProgress = async (): Promise<{ json: string } | null> => {
+    const incoming = sanitized.learningProgress;
+    if (!incoming) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(incoming) };
+    }
+    let local: LearningProgress | undefined;
+    const existingRaw = await EncryptedStorage.getItem(KEYS.LEARNING_PROGRESS);
+    if (existingRaw) {
+      try {
+        local = sanitizeLearningProgress(JSON.parse(existingRaw));
+      } catch {
+        local = undefined;
+      }
+    }
+    if (!local) return { json: JSON.stringify(incoming) };
+    const completedLessons: Record<string, string> = { ...local.completedLessons };
+    for (const [lessonId, completedAt] of Object.entries(incoming.completedLessons)) {
+      const prev = completedLessons[lessonId];
+      // ISO-8601 UTC strings compare correctly as strings.
+      completedLessons[lessonId] =
+        prev === undefined || completedAt < prev ? completedAt : prev;
+    }
+    const seenCandidates = [
+      local.affiliateDisclosureSeenAt,
+      incoming.affiliateDisclosureSeenAt,
+    ].filter((v): v is string => typeof v === "string");
+    const merged: LearningProgress = {
+      completedLessons,
+      currentLessonId: local.currentLessonId ?? incoming.currentLessonId,
+      affiliateTapCount: Math.max(local.affiliateTapCount, incoming.affiliateTapCount),
+      affiliateDisclosureSeenAt:
+        seenCandidates.length > 0
+          ? seenCandidates.reduce((a, b) => (a < b ? a : b))
+          : undefined,
+      showAffiliateLinks: local.showAffiliateLinks || incoming.showAffiliateLinks,
+      version: LEARNING_STORAGE_VERSION,
+    };
+    return { json: JSON.stringify(merged) };
+  };
+
+  /**
    * Month-start balances: merge is per-month LWW on updatedAt, mirroring
    * the sync merge in diffEngine - with ties going to the incoming record
    * since the user explicitly chose to import (same tie rule as every
@@ -1501,6 +1611,7 @@ export const importFromString = async (
   const mergedMonthStartBalances = await computeMergedMonthStartBalances();
   const mergedDueDismissals = await computeMergedDueDismissals();
   const mergedKeepAliveDismissals = await computeMergedKeepAliveDismissals();
+  const mergedLearningProgress = await computeMergedLearningProgress();
 
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
@@ -1556,6 +1667,12 @@ export const importFromString = async (
     tempWrites.push([
       KEYS.ACHIEVEMENT_STATS + TEMP_SUFFIX,
       mergedAchievementStats.json,
+    ]);
+  }
+  if (mergedLearningProgress) {
+    tempWrites.push([
+      KEYS.LEARNING_PROGRESS + TEMP_SUFFIX,
+      mergedLearningProgress.json,
     ]);
   }
   if (mergedMonthStartBalances) {
@@ -1670,6 +1787,7 @@ export const importFromString = async (
       }
       if (sanitized.achievements) keysToRemove.push(KEYS.ACHIEVEMENTS);
       if (sanitized.achievementStats) keysToRemove.push(KEYS.ACHIEVEMENT_STATS);
+      if (sanitized.learningProgress) keysToRemove.push(KEYS.LEARNING_PROGRESS);
       if (sanitized.monthStartBalances) {
         keysToRemove.push(KEYS.MONTH_START_BALANCES);
       }

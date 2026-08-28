@@ -34,6 +34,7 @@ import { getAchievementStats } from "../storage/achievementStatsStorage";
 import { getMonthStartBalances } from "../storage/monthlyBalanceStorage";
 import { getDebtDueDismissals } from "../storage/debtDueReminderStorage";
 import { getCardKeepAliveDismissals } from "../storage/cardKeepAliveDismissalStorage";
+import { getLearningProgress } from "../storage/learningProgressStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
@@ -86,6 +87,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     monthStartBalances,
     debtDueDismissals,
     cardKeepAliveDismissals,
+    learningProgress,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
     // restore on this device, or another paired device, doesn't accidentally
@@ -135,6 +137,10 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getDebtDueDismissals(),
     // Same shape/rationale for card keep-alive banner dismissals.
     getCardKeepAliveDismissals(),
+    // Lesson completions + the Resume pointer are not derivable from any
+    // other data, so a device migration silently reset the learning hub.
+    // Still deliberately NOT partner-synced (see learningProgressStorage).
+    getLearningProgress(),
   ]);
 
   // Bank-connection data (connections, credentials/secrets, account links,
@@ -178,6 +184,7 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     monthStartBalances,
     debtDueDismissals,
     cardKeepAliveDismissals,
+    learningProgress,
   };
 
   // Compact, not pretty-printed: indentation tripled the file size, and

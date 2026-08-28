@@ -203,6 +203,15 @@ jest.mock("../../storage/cardKeepAliveDismissalStorage", () => ({
     "debt-1:2026-07": "2026-07-19T00:00:00.000Z",
   })),
 }));
+jest.mock("../../storage/learningProgressStorage", () => ({
+  getLearningProgress: jest.fn(async () => ({
+    completedLessons: { "ch1-l1-what-is-budget": "2026-04-01T00:00:00.000Z" },
+    currentLessonId: "ch1-l2-needs-wants-savings",
+    affiliateTapCount: 0,
+    showAffiliateLinks: false,
+    version: 1,
+  })),
+}));
 jest.mock("../../storage/backupReminderStorage", () => ({
   recordBackup: jest.fn(async () => {}),
 }));
@@ -256,6 +265,12 @@ describe("buildExportMessage - plain JSON", () => {
     expect(payload.holdings[0]).toMatchObject({ symbol: "AAPL", shares: 10 });
     expect(typeof payload.exportedAt).toBe("string");
     expect(payload.appVersion).toBeTruthy();
+    // Learning progress rides along in backups (not sync) so a device
+    // migration keeps completed lessons.
+    expect(payload.learningProgress).toMatchObject({
+      completedLessons: { "ch1-l1-what-is-budget": "2026-04-01T00:00:00.000Z" },
+      currentLessonId: "ch1-l2-needs-wants-savings",
+    });
   });
 
   it("round-trips through importFromString", async () => {

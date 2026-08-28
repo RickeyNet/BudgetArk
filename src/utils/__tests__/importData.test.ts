@@ -753,6 +753,110 @@ describe("importFromString - month-start balances", () => {
   });
 });
 
+describe("importFromString - learning progress", () => {
+  const LEARN_KEY = "@budgetark_learning_progress";
+  const progress = (over: Record<string, unknown> = {}) => ({
+    completedLessons: { "ch1-l1-what-is-budget": "2026-04-01T00:00:00.000Z" },
+    currentLessonId: "ch1-l1-what-is-budget",
+    affiliateTapCount: 0,
+    showAffiliateLinks: false,
+    version: 1,
+    ...over,
+  });
+
+  it("restores completions onto a device with no progress", async () => {
+    await importFromString(JSON.stringify({ learningProgress: progress() }), "merge");
+    expect(readStore(LEARN_KEY)).toMatchObject({
+      completedLessons: { "ch1-l1-what-is-budget": "2026-04-01T00:00:00.000Z" },
+      currentLessonId: "ch1-l1-what-is-budget",
+      version: 1,
+    });
+  });
+
+  it("merges by union, keeping the earliest completion and the local Resume pointer", async () => {
+    storageMock.__store.set(
+      LEARN_KEY,
+      JSON.stringify(
+        progress({
+          completedLessons: {
+            "ch1-l1-what-is-budget": "2026-04-05T00:00:00.000Z",
+            "ch1-l2-needs-wants-savings": "2026-04-06T00:00:00.000Z",
+          },
+          currentLessonId: "ch1-l2-needs-wants-savings",
+          affiliateTapCount: 2,
+        })
+      )
+    );
+    await importFromString(
+      JSON.stringify({
+        learningProgress: progress({
+          completedLessons: {
+            "ch1-l1-what-is-budget": "2026-04-01T00:00:00.000Z",
+            "ch1-l3-tracking-vs-budgeting": "2026-04-07T00:00:00.000Z",
+          },
+          currentLessonId: "ch1-l3-tracking-vs-budgeting",
+          affiliateTapCount: 1,
+        }),
+      }),
+      "merge"
+    );
+    const stored = readStore(LEARN_KEY);
+    expect(stored.completedLessons).toEqual({
+      "ch1-l1-what-is-budget": "2026-04-01T00:00:00.000Z", // earliest wins
+      "ch1-l2-needs-wants-savings": "2026-04-06T00:00:00.000Z", // local kept
+      "ch1-l3-tracking-vs-budgeting": "2026-04-07T00:00:00.000Z", // imported
+    });
+    expect(stored.currentLessonId).toBe("ch1-l2-needs-wants-savings");
+    expect(stored.affiliateTapCount).toBe(2);
+  });
+
+  it("drops invalid completions individually and ignores an unusable blob", async () => {
+    await importFromString(
+      JSON.stringify({
+        learningProgress: progress({
+          completedLessons: {
+            "ch1-l1-what-is-budget": "2026-04-01T00:00:00.000Z",
+            "bad<script>": "2026-04-01T00:00:00.000Z",
+            "ch1-l2-needs-wants-savings": "not a date",
+          },
+          currentLessonId: 42,
+          affiliateTapCount: -5,
+          showAffiliateLinks: "yes",
+        }),
+        debts: [validDebt()],
+      }),
+      "merge"
+    );
+    const stored = readStore(LEARN_KEY);
+    expect(Object.keys(stored.completedLessons)).toEqual(["ch1-l1-what-is-budget"]);
+    expect(stored.currentLessonId).toBeUndefined();
+    expect(stored.affiliateTapCount).toBe(0);
+    expect(stored.showAffiliateLinks).toBe(false);
+
+    storageMock.__store.clear();
+    await importFromString(
+      JSON.stringify({ learningProgress: { completedLessons: {} }, debts: [validDebt()] }),
+      "merge"
+    );
+    expect(storageMock.__store.has(LEARN_KEY)).toBe(false);
+  });
+
+  it("replace mode takes the imported progress verbatim", async () => {
+    storageMock.__store.set(
+      LEARN_KEY,
+      JSON.stringify(
+        progress({
+          completedLessons: { "ch1-l2-needs-wants-savings": "2026-04-06T00:00:00.000Z" },
+        })
+      )
+    );
+    await importFromString(JSON.stringify({ learningProgress: progress() }), "replace");
+    expect(Object.keys(readStore(LEARN_KEY).completedLessons)).toEqual([
+      "ch1-l1-what-is-budget",
+    ]);
+  });
+});
+
 describe("importFromString - replace mode", () => {
   it("replaces existing records wholesale", async () => {
     storageMock.__store.set(

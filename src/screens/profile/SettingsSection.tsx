@@ -33,6 +33,7 @@ import type {
   CurrencyPreferenceId,
   UpdatePreferences,
   HoldingsSettings,
+  ExchangeRatesSettings,
 } from "../../types";
 import { CURRENT_APP_VERSION } from "../../data/releaseNotes";
 import {
@@ -73,6 +74,15 @@ import {
   HOLDINGS_DISCLOSURE_INTRO,
   HOLDINGS_DISCLOSURE_POINTS,
 } from "../../data/holdingsDisclosure";
+import {
+  getExchangeRatesSettings,
+  acknowledgeExchangeRatesDisclosure,
+} from "../../storage/exchangeRatesSettingsStorage";
+import {
+  EXCHANGE_RATES_DISCLOSURE_TITLE,
+  EXCHANGE_RATES_DISCLOSURE_INTRO,
+  EXCHANGE_RATES_DISCLOSURE_POINTS,
+} from "../../data/exchangeRatesDisclosure";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
@@ -204,18 +214,33 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
   });
   const [showHoldingsDisclosure, setShowHoldingsDisclosure] = useState(false);
 
+  /**
+   * Consent for the live exchange-rate fetch (rule 4: the first network
+   * request needs a plain-language disclosure). `fxDisclosurePending` holds
+   * the currency change waiting behind the disclosure dialog.
+   */
+  const [fxSettings, setFxSettings] = useState<ExchangeRatesSettings>({
+    disclosureAcknowledged: false,
+  });
+  const [fxDisclosurePending, setFxDisclosurePending] = useState<{
+    id: CurrencyPreferenceId;
+    fromLabel: string;
+    toLabel: string;
+  } | null>(null);
+
   /** Load persisted settings on mount */
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [prefs, privacy, haptics, holdingsSet, appLock] =
+        const [prefs, privacy, haptics, holdingsSet, appLock, fxSet] =
           await Promise.all([
             getUpdatePreferences(),
             getPrivacyMode(),
             getHapticsEnabled(),
             getHoldingsSettings(),
             getAppLockRecord(),
+            getExchangeRatesSettings(),
           ]);
         if (cancelled) return;
         setUpdatePrefs(prefs);
@@ -223,6 +248,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
         setHapticsState(haptics);
         setHapticsCache(haptics);
         setHoldingsSettings(holdingsSet);
+        setFxSettings(fxSet);
         setAppLockEnabled(appLock !== null);
       } catch (error) {
         if (__DEV__) console.error("Failed to load profile settings:", error);
@@ -245,6 +271,39 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     [onCurrencyApplied, setPreferenceId],
   );
 
+  /**
+   * Present the convert/relabel dialog for a pending change. iOS can't
+   * present it while another Modal is still open - stacked modals silently
+   * fail to appear (the same iOS quirk the import flows handle) - so the
+   * caller closes whatever is open and this waits for the teardown. The
+   * rate fetch (unpaired only - paired devices can't convert, see
+   * handleCurrencyConvert) is kicked off first so it overlaps the teardown
+   * delay rather than adding to it. getCurrentRates never throws (it falls
+   * back to cache, then static).
+   */
+  const openCurrencyPrompt = useCallback(
+    async (
+      prompt: { id: CurrencyPreferenceId; fromLabel: string; toLabel: string },
+      fetchRates: boolean,
+    ) => {
+      setCurrencyRates(null);
+      const ratesPromise = fetchRates
+        ? getCurrentRates({ forceRefresh: true })
+        : null;
+      setCurrencyRatesLoading(ratesPromise !== null);
+      await waitForIosModalTeardown(350);
+      setCurrencyPrompt(prompt);
+      if (ratesPromise) {
+        try {
+          setCurrencyRates(await ratesPromise);
+        } finally {
+          setCurrencyRatesLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
   const handleCurrencySelect = useCallback(
     async (id: CurrencyPreferenceId) => {
       if (id === preference.id) {
@@ -258,35 +317,52 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
         await applyCurrencyPreference(id);
         return;
       }
-      // iOS can't present the convert dialog while the picker Modal is still
-      // open - stacked modals silently fail to appear (the same iOS quirk the
-      // import flows handle). Close the picker, wait for it to tear down, then
-      // show the prompt. The rate fetch is kicked off first so it overlaps the
-      // teardown delay rather than adding to it. Paired devices can't convert
-      // (see handleCurrencyConvert), so only the unpaired path needs a rate;
-      // getCurrentRates never throws (it falls back to cache, then static).
       setShowCurrencyModal(false);
-      setCurrencyRates(null);
-      const ratesPromise = pairing
-        ? null
-        : getCurrentRates({ forceRefresh: true });
-      setCurrencyRatesLoading(ratesPromise !== null);
-      await waitForIosModalTeardown(350);
-      setCurrencyPrompt({
+      const prompt = {
         id,
         fromLabel: preference.currencyCode,
         toLabel: target.currencyCode,
-      });
-      if (ratesPromise) {
-        try {
-          setCurrencyRates(await ratesPromise);
-        } finally {
-          setCurrencyRatesLoading(false);
-        }
+      };
+      if (pairing) {
+        await openCurrencyPrompt(prompt, false);
+        return;
       }
+      // First live rate fetch on this device: show what leaves the phone
+      // BEFORE the request goes out (rule 4). Once acknowledged, later
+      // switches go straight to the prompt.
+      if (!fxSettings.disclosureAcknowledged) {
+        await waitForIosModalTeardown(350);
+        setFxDisclosurePending(prompt);
+        return;
+      }
+      await openCurrencyPrompt(prompt, true);
     },
-    [applyCurrencyPreference, pairing, preference.currencyCode, preference.id],
+    [
+      applyCurrencyPreference,
+      fxSettings.disclosureAcknowledged,
+      openCurrencyPrompt,
+      pairing,
+      preference.currencyCode,
+      preference.id,
+    ],
   );
+
+  /** User accepted the exchange-rate disclosure: persist it, then continue. */
+  const confirmFxDisclosure = useCallback(async () => {
+    const prompt = fxDisclosurePending;
+    if (!prompt) return;
+    setFxDisclosurePending(null);
+    try {
+      setFxSettings(await acknowledgeExchangeRatesDisclosure());
+    } catch (error) {
+      // The user said yes, so the fetch still goes ahead; a failed ack write
+      // only means the disclosure shows again next time.
+      if (__DEV__) {
+        console.error("Failed to save exchange-rate disclosure:", error);
+      }
+    }
+    await openCurrencyPrompt(prompt, true);
+  }, [fxDisclosurePending, openCurrencyPrompt]);
 
   /** Convert every stored amount to the new currency, then switch to it. */
   const handleCurrencyConvert = useCallback(async () => {
@@ -1007,6 +1083,59 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 </>
               );
             })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Exchange-rate fetch disclosure (first currency switch) ── */}
+      <Modal
+        visible={!!fxDisclosurePending}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setFxDisclosurePending(null)}
+      >
+        <View style={styles.dialogOverlay}>
+          <View
+            style={[
+              styles.dialogBox,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>
+              {EXCHANGE_RATES_DISCLOSURE_TITLE}
+            </Text>
+            <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
+              {EXCHANGE_RATES_DISCLOSURE_INTRO}
+            </Text>
+            {EXCHANGE_RATES_DISCLOSURE_POINTS.map((point) => (
+              <Text
+                key={point}
+                style={[
+                  styles.dialogMessage,
+                  { color: colors.textDim, textAlign: "left", marginBottom: 10 },
+                ]}
+              >
+                • {point}
+              </Text>
+            ))}
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
+                onPress={() => setFxDisclosurePending(null)}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.text }]}>
+                  Not now
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
+                onPress={confirmFxDisclosure}
+              >
+                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  Continue
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

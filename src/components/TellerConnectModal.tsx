@@ -93,10 +93,15 @@ const TellerConnectModal: React.FC<TellerConnectModalProps> = ({
       } catch {
         return;
       }
+      // Fail-closed shape check (rule 15): both credentials must be
+      // non-empty strings before anything is persisted into the secrets
+      // map - a truthy non-string (object/number) would otherwise land there.
       if (
         payload.type === "success" &&
-        payload.accessToken &&
-        payload.enrollmentId
+        typeof payload.accessToken === "string" &&
+        payload.accessToken.length > 0 &&
+        typeof payload.enrollmentId === "string" &&
+        payload.enrollmentId.length > 0
       ) {
         onSuccess({
           enrollmentId: payload.enrollmentId,
