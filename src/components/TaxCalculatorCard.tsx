@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import CodeChipGrid, { type CodeChipStyles } from "./CodeChipGrid";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -74,6 +75,27 @@ const TaxCalculatorCard: React.FC = () => {
   const [hsaText, setHsaText] = useState("");
   const [premiumText, setPremiumText] = useState("");
   const [compareCode, setCompareCode] = useState("");
+
+  // Memoized so the two 51-chip state grids skip re-rendering on every
+  // keystroke in the salary/deduction inputs (see CodeChipGrid).
+  const stateChipStyles = useMemo<CodeChipStyles>(
+    () => ({
+      wrap: styles.chipWrap,
+      chip: styles.stateChip,
+      chipActive: styles.chipActive,
+      text: styles.chipText,
+      textActive: styles.chipTextActive,
+    }),
+    [styles],
+  );
+  const compareOptions = useMemo(
+    () => STATE_TAX_2026.filter((s) => s.code !== stateCode),
+    [stateCode],
+  );
+  const handleCompareSelect = useCallback(
+    (code: string) => setCompareCode((prev) => (prev === code ? "" : code)),
+    [],
+  );
 
   const toggleOpen = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -192,22 +214,12 @@ const TaxCalculatorCard: React.FC = () => {
           {/* State */}
           <View style={styles.efCard}>
             <Text style={styles.efSectionTitle}>State</Text>
-            <View style={styles.chipWrap}>
-              {STATE_TAX_2026.map((state) => (
-                <TouchableOpacity
-                  key={state.code}
-                  style={[styles.stateChip, stateCode === state.code && styles.chipActive]}
-                  onPress={() => setStateCode(state.code)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[styles.chipText, stateCode === state.code && styles.chipTextActive]}
-                  >
-                    {state.code}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <CodeChipGrid
+              options={STATE_TAX_2026}
+              selected={stateCode}
+              onSelect={setStateCode}
+              styles={stateChipStyles}
+            />
             {selectedState ? (
               <Text style={styles.efAutoHint}>
                 {selectedState.name}
@@ -338,27 +350,13 @@ const TaxCalculatorCard: React.FC = () => {
               {/* Compare states */}
               <View style={styles.efCard}>
                 <Text style={styles.efSectionTitle}>What if you moved?</Text>
-                <View style={styles.chipWrap}>
-                  {STATE_TAX_2026.filter((s) => s.code !== stateCode).map((state) => (
-                    <TouchableOpacity
-                      key={state.code}
-                      style={[styles.stateChip, compareCode === state.code && styles.chipActive]}
-                      onPress={() =>
-                        setCompareCode((prev) => (prev === state.code ? "" : state.code))
-                      }
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          compareCode === state.code && styles.chipTextActive,
-                        ]}
-                      >
-                        {state.code}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <CodeChipGrid
+                  options={compareOptions}
+                  selected={compareCode}
+                  onSelect={handleCompareSelect}
+                  styles={stateChipStyles}
+                  keyPrefix="compare-"
+                />
                 {compareResult && (
                   <Text style={styles.compareText}>
                     Same salary in {findStateTax(compareCode)?.name}:{" "}

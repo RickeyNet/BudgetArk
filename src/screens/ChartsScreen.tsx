@@ -32,6 +32,7 @@ import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-na
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { describeError } from "../utils/errorMessage";
+import CodeChipGrid, { type CodeChipStyles } from "../components/CodeChipGrid";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
@@ -1051,6 +1052,19 @@ const ChartsScreen: React.FC = () => {
 
   const fxFromCode = fxFrom ?? preference.currencyCode;
   const fxToCode = fxTo ?? (fxFromCode === "USD" ? "EUR" : "USD");
+
+  // Memoized so the two currency grids skip re-rendering on every keystroke
+  // in the amount field (see CodeChipGrid).
+  const fxChipStyles = useMemo<CodeChipStyles>(
+    () => ({
+      wrap: styles.whatIfChipWrap,
+      chip: styles.whatIfChip,
+      chipActive: styles.whatIfChipActive,
+      text: styles.whatIfChipText,
+      textActive: styles.whatIfChipTextActive,
+    }),
+    [styles],
+  );
 
   const handleFxSelectFrom = useCallback(
     (code: string) => {
@@ -2358,28 +2372,13 @@ const ChartsScreen: React.FC = () => {
               />
 
               <Text style={styles.efSectionTitle}>From</Text>
-              <View style={styles.whatIfChipWrap}>
-                {EXCHANGE_CURRENCIES.map((currency) => {
-                  const active = currency.code === fxFromCode;
-                  return (
-                    <TouchableOpacity
-                      key={`fx-from-${currency.code}`}
-                      style={[styles.whatIfChip, active && styles.whatIfChipActive]}
-                      onPress={() => handleFxSelectFrom(currency.code)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.whatIfChipText,
-                          active && styles.whatIfChipTextActive,
-                        ]}
-                      >
-                        {currency.code}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <CodeChipGrid
+                options={EXCHANGE_CURRENCIES}
+                selected={fxFromCode}
+                onSelect={handleFxSelectFrom}
+                styles={fxChipStyles}
+                keyPrefix="fx-from-"
+              />
 
               <TouchableOpacity
                 style={styles.fxSwapBtn}
@@ -2390,28 +2389,13 @@ const ChartsScreen: React.FC = () => {
               </TouchableOpacity>
 
               <Text style={styles.efSectionTitle}>To</Text>
-              <View style={styles.whatIfChipWrap}>
-                {EXCHANGE_CURRENCIES.map((currency) => {
-                  const active = currency.code === fxToCode;
-                  return (
-                    <TouchableOpacity
-                      key={`fx-to-${currency.code}`}
-                      style={[styles.whatIfChip, active && styles.whatIfChipActive]}
-                      onPress={() => handleFxSelectTo(currency.code)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.whatIfChipText,
-                          active && styles.whatIfChipTextActive,
-                        ]}
-                      >
-                        {currency.code}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <CodeChipGrid
+                options={EXCHANGE_CURRENCIES}
+                selected={fxToCode}
+                onSelect={handleFxSelectTo}
+                styles={fxChipStyles}
+                keyPrefix="fx-to-"
+              />
             </View>
 
             {/* Rates freshness + manual refresh */}

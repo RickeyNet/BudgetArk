@@ -12,7 +12,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Image,
   Modal,
   ScrollView,
@@ -20,6 +19,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
@@ -100,7 +100,8 @@ const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const windowWidth = Dimensions.get("window").width;
+  // Hook, not Dimensions.get: a rotation mid-view must re-page the strip.
+  const { width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [pageIndex, setPageIndex] = useState(initialIndex);
 

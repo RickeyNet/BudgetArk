@@ -15,7 +15,7 @@
  * The pure helpers are exported for unit tests.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 /**
@@ -104,45 +104,46 @@ export const useSliderValueEditor = <K extends string>(
   const [editingKey, setEditingKey] = useState<K | null>(null);
   const [editingText, setEditingText] = useState("");
 
+  // Callers build `fields` inline every render (the config is a literal
+  // around state setters), so keying the callbacks on it made every one a
+  // fresh function each render and the memoization was void. The handlers
+  // only run from user events, after commit, so a ref refreshed in an
+  // effect always sees the current config - and the callbacks stay stable.
+  const fieldsRef = useRef(fields);
+  useEffect(() => {
+    fieldsRef.current = fields;
+  });
+
   /** Tap-to-type: open the text editor seeded with the current value. */
   const beginEditing = useCallback((key: K, value: number) => {
     setEditingKey(key);
     setEditingText(String(value));
   }, []);
 
-  const changeEditingText = useCallback(
-    (key: K, text: string) => {
-      setEditingText(sanitizeSliderText(text, fields[key].decimal));
-    },
-    [fields]
-  );
+  const changeEditingText = useCallback((key: K, text: string) => {
+    setEditingText(sanitizeSliderText(text, fieldsRef.current[key].decimal));
+  }, []);
 
   /** Blur/submit: parse + clamp, apply when valid, close the editor. */
   const commitEditing = useCallback(
     (key: K) => {
-      const field = fields[key];
+      const field = fieldsRef.current[key];
       const next = commitSliderValue(editingText, field);
       if (next !== null) field.set(next);
       setEditingKey(null);
     },
-    [editingText, fields]
+    [editingText]
   );
 
-  const adjustBy = useCallback(
-    (key: K, delta: number) => {
-      const field = fields[key];
-      field.set((prev) => adjustSliderValue(prev, delta, field));
-    },
-    [fields]
-  );
+  const adjustBy = useCallback((key: K, delta: number) => {
+    const field = fieldsRef.current[key];
+    field.set((prev) => adjustSliderValue(prev, delta, field));
+  }, []);
 
   /** Slider-drag passthrough (SmoothSlider already steps/clamps). */
-  const setValue = useCallback(
-    (key: K, value: number) => {
-      fields[key].set(value);
-    },
-    [fields]
-  );
+  const setValue = useCallback((key: K, value: number) => {
+    fieldsRef.current[key].set(value);
+  }, []);
 
   return {
     editingKey,

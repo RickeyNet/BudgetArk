@@ -60,6 +60,49 @@ interface MerchantRulesModalProps {
   people: Person[];
 }
 
+type RuleStyles = ReturnType<typeof makeStyles>;
+
+interface MerchantRuleRowProps {
+  rule: MerchantRule;
+  expanded: boolean;
+  /** Pre-built "Suggests 🍔 Food as ... · used 3×" line - a string so the memo holds. */
+  meta: string;
+  styles: RuleStyles;
+  onToggle: (rule: MerchantRule) => void;
+  /** The editor, passed only for the expanded row (null keeps collapsed rows memoized). */
+  children?: React.ReactNode;
+}
+
+/**
+ * One rule card. Memoized so typing in the expanded row's rename field
+ * (which lives in the modal's draft state) re-renders only that row -
+ * previously every keystroke rebuilt the whole list through an inline
+ * renderItem + 8-value extraData.
+ */
+const MerchantRuleRow = React.memo(
+  ({ rule, expanded, meta, styles, onToggle, children }: MerchantRuleRowProps) => (
+    <View style={styles.ruleCard}>
+      <TouchableOpacity
+        style={styles.ruleHeader}
+        onPress={() => onToggle(rule)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.ruleTextWrap}>
+          <Text style={styles.ruleMerchant} numberOfLines={1}>
+            {rule.merchantKey}
+          </Text>
+          <Text style={styles.ruleMeta} numberOfLines={1}>
+            {meta}
+          </Text>
+        </View>
+        <Text style={styles.ruleChevron}>{expanded ? "▾" : "▸"}</Text>
+      </TouchableOpacity>
+      {children}
+    </View>
+  ),
+);
+MerchantRuleRow.displayName = "MerchantRuleRow";
+
 const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   visible,
   onClose,
@@ -211,32 +254,22 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     return parts.join(" ");
   };
 
+  const metaLabel = (rule: MerchantRule): string =>
+    [behaviorLabel(rule), rule.useCount > 1 ? `used ${rule.useCount}×` : null]
+      .filter(Boolean)
+      .join(" · ");
+
   const renderRule = ({ item: rule }: { item: MerchantRule }) => {
     const expanded = expandedId === rule.id;
     const busy = busyId === rule.id;
     return (
-      <View style={styles.ruleCard}>
-        <TouchableOpacity
-          style={styles.ruleHeader}
-          onPress={() => toggleExpand(rule)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.ruleTextWrap}>
-            <Text style={styles.ruleMerchant} numberOfLines={1}>
-              {rule.merchantKey}
-            </Text>
-            <Text style={styles.ruleMeta} numberOfLines={1}>
-              {[
-                behaviorLabel(rule),
-                rule.useCount > 1 ? `used ${rule.useCount}×` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </Text>
-          </View>
-          <Text style={styles.ruleChevron}>{expanded ? "▾" : "▸"}</Text>
-        </TouchableOpacity>
-
+      <MerchantRuleRow
+        rule={rule}
+        expanded={expanded}
+        meta={metaLabel(rule)}
+        styles={styles}
+        onToggle={toggleExpand}
+      >
         {expanded ? (
           <View style={styles.expandedArea}>
             <Text style={styles.label}>WHEN THIS MERCHANT IMPORTS</Text>
@@ -437,7 +470,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             </View>
           </View>
         ) : null}
-      </View>
+      </MerchantRuleRow>
     );
   };
 

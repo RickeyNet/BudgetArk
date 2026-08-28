@@ -13,13 +13,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   BackHandler,
-  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
   useAnimatedValue,
+  useWindowDimensions,
 } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -154,7 +154,8 @@ const Spotlight: React.FC<SpotlightProps> = ({
     };
   }, [visible, step, measure, measureToken]);
 
-  const screen = Dimensions.get("window");
+  // Hook, not Dimensions.get: rotation / split-screen re-place the tooltip.
+  const screen = useWindowDimensions();
 
   /** Anchor rect translated into the overlay's local coordinate space. */
   const localRect = useMemo(() => {
