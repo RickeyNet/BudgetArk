@@ -11,6 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { usePresentAfterDismiss } from "../hooks/usePresentAfterDismiss";
 import { AppState, InteractionManager } from "react-native";
 import type { Debt, Payment } from "../types";
 import DebtDuePaymentPromptModal from "./DebtDuePaymentPromptModal";
@@ -67,6 +68,7 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
   // payment twice, and stops a foreground re-eval from swapping the prompt
   // mid-submit.
   const submittingRef = useRef(false);
+  const presentAfterDismiss = usePresentAfterDismiss();
   // Latest data backing the queue, so the dismiss handler can advance without
   // re-reading debts/payments it already has in hand.
   const dataRef = useRef<{
@@ -159,14 +161,11 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
         // presents - iOS drops one of two modals swapped in the same frame.
         // The queue advances once the celebration is dismissed.
         if (paidOff) {
-          setTimeout(() => setCelebrationDebt(paidOff), 250);
+          presentAfterDismiss(() => setCelebrationDebt(paidOff));
         } else {
           const updatedDebt = result.debts.find((d) => d.id === debtId) ?? null;
           if (updatedDebt) {
-            setTimeout(
-              () => setPaymentCelebration({ debt: updatedDebt, amount }),
-              250
-            );
+            presentAfterDismiss(() => setPaymentCelebration({ debt: updatedDebt, amount }));
           } else {
             advance(result.debts, result.payments, dismissals, debtId);
           }
@@ -175,7 +174,7 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
         submittingRef.current = false;
       }
     },
-    [advance]
+    [advance, presentAfterDismiss]
   );
 
   const handleDismissForMonth = useCallback(
@@ -195,14 +194,14 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
     setCelebrationDebt(null);
     // Surface the next still-due debt, if any, once the confetti dismisses.
     const { debts, payments, dismissals } = dataRef.current;
-    setTimeout(() => advance(debts, payments, dismissals), 250);
-  }, [advance]);
+    presentAfterDismiss(() => advance(debts, payments, dismissals));
+  }, [advance, presentAfterDismiss]);
 
   const handlePaymentCelebrationClose = useCallback(() => {
     setPaymentCelebration(null);
     const { debts, payments, dismissals } = dataRef.current;
-    setTimeout(() => advance(debts, payments, dismissals), 250);
-  }, [advance]);
+    presentAfterDismiss(() => advance(debts, payments, dismissals));
+  }, [advance, presentAfterDismiss]);
 
   return (
     <>

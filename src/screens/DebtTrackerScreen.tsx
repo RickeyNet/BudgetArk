@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
+import { usePresentAfterDismiss } from "../hooks/usePresentAfterDismiss";
 import {
   View,
   Text,
@@ -309,6 +310,7 @@ const DebtTrackerScreen: React.FC = () => {
   const anchorDebtsFab = useCoachmarkAnchor("debts-fab");
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const presentAfterDismiss = usePresentAfterDismiss();
 
   const primeMilestonesModal = useCallback((plan: DebtMilestonePlan) => {
     setTargetDraftByStep((prev) => {
@@ -886,16 +888,13 @@ const DebtTrackerScreen: React.FC = () => {
           // presents. Any remaining due debts re-prompt on next focus -
           // advancing now would pop the prompt over the celebration.
           const paidOff = result.paidOffDebt;
-          setTimeout(() => setCelebrationDebt(paidOff), 250);
+          presentAfterDismiss(() => setCelebrationDebt(paidOff));
         } else {
           // Celebrate the logged payment, then advance to the next due debt
           // once that confetti is dismissed (see the modal's onClose below).
           const updatedDebt = result.debts.find((d) => d.id === debtId) ?? null;
           if (updatedDebt) {
-            setTimeout(
-              () => setPaymentCelebration({ debt: updatedDebt, amount }),
-              250
-            );
+            presentAfterDismiss(() => setPaymentCelebration({ debt: updatedDebt, amount }));
           } else {
             advanceDuePrompt(result.debts, result.payments, dueDismissals, debtId);
           }
@@ -904,7 +903,7 @@ const DebtTrackerScreen: React.FC = () => {
         duePromptSubmittingRef.current = false;
       }
     },
-    [advanceDuePrompt, dueDismissals, handlePayment]
+    [advanceDuePrompt, dueDismissals, handlePayment, presentAfterDismiss]
   );
 
   const handleDuePromptDismissMonth = useCallback(
@@ -963,12 +962,12 @@ const DebtTrackerScreen: React.FC = () => {
       // Defer the celebration Modal so the edit Modal's close animation
       // finishes first - RN can't stack two Modal presentations in the
       // same frame on iOS without one being queued or visually clipped.
-      setTimeout(() => setCelebrationDebt(paidOffDebt), 250);
+      presentAfterDismiss(() => setCelebrationDebt(paidOffDebt));
     } else {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
-  }, [applyKeepAliveLink, debts, notifyAchievementCheck, pushUndo]);
+  }, [applyKeepAliveLink, debts, notifyAchievementCheck, presentAfterDismiss, pushUndo]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -1531,10 +1530,7 @@ const DebtTrackerScreen: React.FC = () => {
           setShowHistory(false);
           // Deleting this month's payment can re-arm today's due prompt;
           // present it only after the sheet's dismiss animation finishes.
-          setTimeout(
-            () => advanceDuePrompt(debts, payments, dueDismissals),
-            250
-          );
+          presentAfterDismiss(() => advanceDuePrompt(debts, payments, dueDismissals));
         }}
         debts={debts}
         onPaymentsChanged={handlePaymentsChanged}
@@ -1552,20 +1548,17 @@ const DebtTrackerScreen: React.FC = () => {
             // presenting the edit Modal - iOS doesn't reliably handle
             // dismiss-then-present in the same frame.
             setShowSearch(false);
-            setTimeout(() => handleEdit(debt), 250);
+            presentAfterDismiss(() => handleEdit(debt));
           }}
           onSelectPayment={() => {
             setShowSearch(false);
-            setTimeout(() => setShowHistory(true), 250);
+            presentAfterDismiss(() => setShowHistory(true));
           }}
           onSelectEntry={(entry) => {
             // Cross-tab hop: BudgetScreen consumes searchEntryId on focus
             // (deferred there past the tab transition).
             setShowSearch(false);
-            setTimeout(
-              () => navigation.navigate("Budget", { searchEntryId: entry.id }),
-              250
-            );
+            presentAfterDismiss(() => navigation.navigate("Budget", { searchEntryId: entry.id }));
           }}
         />
       )}
@@ -1579,7 +1572,7 @@ const DebtTrackerScreen: React.FC = () => {
           // the history Modal - iOS doesn't reliably handle dismiss-then-
           // present in the same frame and one of the two ends up hidden.
           setCelebrationDebt(null);
-          setTimeout(() => setShowHistory(true), 250);
+          presentAfterDismiss(() => setShowHistory(true));
         }}
       />
 
@@ -1599,10 +1592,7 @@ const DebtTrackerScreen: React.FC = () => {
           setPaymentCelebration(null);
           // Advance to the next due debt after the confetti dismisses; reads
           // current state so it reflects the payment just recorded.
-          setTimeout(
-            () => advanceDuePrompt(debts, payments, dueDismissals),
-            250
-          );
+          presentAfterDismiss(() => advanceDuePrompt(debts, payments, dueDismissals));
         }}
       />
 

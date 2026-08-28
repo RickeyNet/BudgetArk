@@ -36,6 +36,7 @@ import {
 } from "../types";
 import { describeError } from "../utils/errorMessage";
 import { formatBankBalance } from "../utils/money";
+import TagPillPicker from "./TagPillPicker";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useConnections } from "../connections/ConnectionsProvider";
@@ -459,41 +460,12 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                 {link.importTransactions && people.length > 0 ? (
                   <View style={styles.personPickerWrap}>
                     <Text style={styles.personPickerLabel}>Whose card is this?</Text>
-                    <View style={styles.pillWrap}>
-                      <TouchableOpacity
-                        style={[styles.pill, !link.personId && styles.pillActive]}
-                        onPress={() => void assignPerson(link.id, null)}
-                      >
-                        <Text
-                          style={[
-                            styles.pillText,
-                            !link.personId && styles.pillTextActive,
-                          ]}
-                        >
-                          No one
-                        </Text>
-                      </TouchableOpacity>
-                      {people.map((person) => (
-                        <TouchableOpacity
-                          key={person.id}
-                          style={[
-                            styles.pill,
-                            link.personId === person.id && styles.pillActive,
-                          ]}
-                          onPress={() => void assignPerson(link.id, person.id)}
-                        >
-                          <Text
-                            style={[
-                              styles.pillText,
-                              link.personId === person.id && styles.pillTextActive,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {person.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                    <TagPillPicker
+                      options={people}
+                      value={link.personId}
+                      onChange={(id) => void assignPerson(link.id, id ?? null)}
+                      noneLabel="No one"
+                    />
                   </View>
                 ) : null}
 

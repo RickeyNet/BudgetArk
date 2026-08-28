@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePresentAfterDismiss } from "../hooks/usePresentAfterDismiss";
 import {
   Alert,
   FlatList,
@@ -255,6 +256,7 @@ const BudgetScreen: React.FC = () => {
   // FAB - by definition.
   const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const presentAfterDismiss = usePresentAfterDismiss();
   // Spending donut scales with the effective font scale (Density × Text Size)
   // so the accessibility Text Size setting zooms the chart too, not just text.
   const donutSize = Math.round(108 * tokens.fontScale);
@@ -2214,21 +2216,18 @@ const BudgetScreen: React.FC = () => {
             // presenting the edit sheet - iOS doesn't reliably handle
             // dismiss-then-present in the same frame.
             setShowSearch(false);
-            setTimeout(() => setEditingEntry(entry), 250);
+            presentAfterDismiss(() => setEditingEntry(entry));
           }}
           onSelectDebt={() => {
             // Debts live on the Debt Tracker tab; hop over after dismiss.
             setShowSearch(false);
-            setTimeout(() => navigation.navigate("DebtTracker"), 250);
+            presentAfterDismiss(() => navigation.navigate("DebtTracker"));
           }}
           onSelectPayment={() => {
             // DebtTrackerScreen consumes openHistory on focus (deferred
             // there past the tab transition).
             setShowSearch(false);
-            setTimeout(
-              () => navigation.navigate("DebtTracker", { openHistory: true }),
-              250
-            );
+            presentAfterDismiss(() => navigation.navigate("DebtTracker", { openHistory: true }));
           }}
         />
       )}
@@ -2245,7 +2244,7 @@ const BudgetScreen: React.FC = () => {
           // Wait for the calendar Modal's close animation before presenting
           // the edit sheet - iOS doesn't reliably handle dismiss-then-present
           // in the same frame and one of the two ends up hidden.
-          setTimeout(() => setEditingEntry(entry), 250);
+          presentAfterDismiss(() => setEditingEntry(entry));
         }}
       />
 

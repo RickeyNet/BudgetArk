@@ -35,6 +35,7 @@ import type {
   Person,
 } from "../types";
 import { describeError } from "../utils/errorMessage";
+import TagPillPicker from "./TagPillPicker";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -329,62 +330,14 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             (businesses.length > 0 || draftBusinessId) ? (
               <>
                 <Text style={styles.label}>BUSINESS</Text>
-                <View style={styles.businessWrap}>
-                  <TouchableOpacity
-                    style={[
-                      styles.businessPill,
-                      !draftBusinessId && styles.businessPillActive,
-                    ]}
-                    onPress={() => setDraftBusinessId(undefined)}
-                  >
-                    <Text
-                      style={[
-                        styles.businessPillText,
-                        !draftBusinessId && styles.businessPillTextActive,
-                      ]}
-                    >
-                      Personal
-                    </Text>
-                  </TouchableOpacity>
-                  {businesses.map((business) => (
-                    <TouchableOpacity
-                      key={business.id}
-                      style={[
-                        styles.businessPill,
-                        draftBusinessId === business.id &&
-                          styles.businessPillActive,
-                      ]}
-                      onPress={() => setDraftBusinessId(business.id)}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.businessPillText,
-                          draftBusinessId === business.id &&
-                            styles.businessPillTextActive,
-                        ]}
-                      >
-                        💼 {business.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  {draftBusinessId &&
-                  !businesses.some((b) => b.id === draftBusinessId) ? (
-                    <TouchableOpacity
-                      style={[styles.businessPill, styles.businessPillActive]}
-                      onPress={() => setDraftBusinessId(undefined)}
-                    >
-                      <Text
-                        style={[
-                          styles.businessPillText,
-                          styles.businessPillTextActive,
-                        ]}
-                      >
-                        💼 (deleted business)
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
+                <TagPillPicker
+                    options={businesses}
+                    value={draftBusinessId}
+                    onChange={setDraftBusinessId}
+                    noneLabel="Personal"
+                    glyph="💼"
+                    deletedLabel="(deleted business)"
+                  />
               </>
             ) : null}
             {!draftIgnore &&
@@ -392,62 +345,14 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             (people.length > 0 || draftPersonId) ? (
               <>
                 <Text style={styles.label}>PERSON</Text>
-                <View style={styles.businessWrap}>
-                  <TouchableOpacity
-                    style={[
-                      styles.businessPill,
-                      !draftPersonId && styles.businessPillActive,
-                    ]}
-                    onPress={() => setDraftPersonId(undefined)}
-                  >
-                    <Text
-                      style={[
-                        styles.businessPillText,
-                        !draftPersonId && styles.businessPillTextActive,
-                      ]}
-                    >
-                      Unassigned
-                    </Text>
-                  </TouchableOpacity>
-                  {people.map((person) => (
-                    <TouchableOpacity
-                      key={person.id}
-                      style={[
-                        styles.businessPill,
-                        draftPersonId === person.id &&
-                          styles.businessPillActive,
-                      ]}
-                      onPress={() => setDraftPersonId(person.id)}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.businessPillText,
-                          draftPersonId === person.id &&
-                            styles.businessPillTextActive,
-                        ]}
-                      >
-                        👤 {person.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  {draftPersonId &&
-                  !people.some((p) => p.id === draftPersonId) ? (
-                    <TouchableOpacity
-                      style={[styles.businessPill, styles.businessPillActive]}
-                      onPress={() => setDraftPersonId(undefined)}
-                    >
-                      <Text
-                        style={[
-                          styles.businessPillText,
-                          styles.businessPillTextActive,
-                        ]}
-                      >
-                        👤 (deleted person)
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
+                <TagPillPicker
+                    options={people}
+                    value={draftPersonId}
+                    onChange={setDraftPersonId}
+                    noneLabel="Unassigned"
+                    glyph="👤"
+                    deletedLabel="(deleted person)"
+                  />
               </>
             ) : null}
             <View style={styles.actionRow}>
@@ -705,33 +610,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(12),
       fontWeight: "700",
       lineHeight: scale(14),
-    },
-    businessWrap: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.gapSm,
-    },
-    businessPill: {
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: tokens.radiusPill,
-      backgroundColor: colors.card,
-      paddingHorizontal: tokens.padSm,
-      paddingVertical: 7,
-      // Same long-name guard as ReviewInboxModal's businessPill.
-      maxWidth: "100%",
-    },
-    businessPillActive: {
-      backgroundColor: colors.accent,
-      borderColor: colors.accent,
-    },
-    businessPillText: {
-      color: colors.textDim,
-      fontSize: scale(12),
-      fontWeight: "600",
-    },
-    businessPillTextActive: {
-      color: colors.accentButtonText,
     },
     actionRow: {
       flexDirection: "row",
