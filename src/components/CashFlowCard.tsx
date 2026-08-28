@@ -17,8 +17,10 @@
 import React, { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import type { MonthStartBalance } from "../types";
 import { computeCashFlow, roundCashAmount } from "../utils/cashFlow";
 
@@ -41,8 +43,9 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
   onSetBalance,
 }) => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   if (!record) {
     // Nothing to project. Only the current month earns a CTA - backfilling
@@ -144,48 +147,49 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     card: {
       backgroundColor: colors.card,
       borderColor: colors.cardBorder,
       borderWidth: 1,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 12,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      marginBottom: tokens.gap,
     },
     headerRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 10,
+      marginBottom: tokens.gapSm,
     },
     title: {
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
       color: colors.text,
     },
     updateLink: {
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
       color: colors.accent,
     },
     emptyText: {
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: scale(13),
+      lineHeight: scale(18),
       color: colors.textMuted,
-      marginTop: 6,
-      marginBottom: 12,
+      marginTop: tokens.gapSm,
+      marginBottom: tokens.gap,
     },
     ctaBtn: {
       alignSelf: "flex-start",
       backgroundColor: colors.accent,
-      borderRadius: 10,
-      paddingHorizontal: 16,
-      paddingVertical: 9,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.pad,
+      paddingVertical: tokens.padSm,
     },
     ctaBtnText: {
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "700",
       color: colors.accentButtonText,
     },
@@ -196,40 +200,41 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 4,
     },
     rowLabel: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textMuted,
     },
     rowValue: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       color: colors.text,
     },
     safeRow: {
       marginTop: 4,
-      paddingTop: 8,
+      paddingTop: tokens.gapSm,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     safeLabel: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "700",
       color: colors.text,
     },
     safeValue: {
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "700",
     },
     hint: {
-      fontSize: 11,
-      lineHeight: 15,
+      fontSize: scale(11),
+      lineHeight: scale(15),
       color: colors.textDim,
       marginTop: 4,
     },
     reconcileText: {
-      fontSize: 12,
+      fontSize: scale(12),
       fontWeight: "600",
-      marginTop: 8,
+      marginTop: tokens.gapSm,
     },
   });
+};
 
 export default CashFlowCard;

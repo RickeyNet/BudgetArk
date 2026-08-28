@@ -26,8 +26,10 @@ import {
 } from "react-native";
 import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import type { AssetAccount } from "../types";
 import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
 import { getAssetAccounts, updateAssetAccount } from "../storage/assetAccountStorage";
@@ -83,8 +85,9 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
   onClose,
 }) => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [input, setInput] = useState(
     existingBalance !== null ? String(existingBalance) : ""
@@ -223,14 +226,15 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.55)",
       justifyContent: "center",
       alignItems: "center",
-      padding: 24,
+      padding: tokens.padLg,
     },
     card: {
       width: "100%",
@@ -238,81 +242,82 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       borderColor: colors.cardBorder,
       borderWidth: 1,
-      borderRadius: 16,
-      padding: 20,
+      borderRadius: tokens.radius,
+      padding: tokens.padLg,
     },
     title: {
-      fontSize: 17,
+      fontSize: scale(17),
       fontWeight: "700",
       color: colors.text,
-      marginBottom: 6,
+      marginBottom: tokens.gapSm,
     },
     subtitle: {
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: scale(13),
+      lineHeight: scale(18),
       color: colors.textMuted,
-      marginBottom: 14,
+      marginBottom: tokens.gap,
     },
     input: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
+      borderRadius: tokens.radiusSm,
       backgroundColor: colors.bg,
       color: colors.text,
-      fontSize: 22,
+      fontSize: scale(22),
       fontWeight: "600",
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      paddingHorizontal: tokens.pad,
+      paddingVertical: tokens.padSm,
     },
     prefillChip: {
       alignSelf: "flex-start",
-      marginTop: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 14,
+      marginTop: tokens.gapSm,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: tokens.padSm,
+      borderRadius: tokens.radiusSm,
       borderWidth: 1,
       borderColor: colors.accent,
     },
     prefillChipText: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.accent,
       fontWeight: "600",
     },
     note: {
-      marginTop: 10,
-      fontSize: 12,
-      lineHeight: 16,
+      marginTop: tokens.gapSm,
+      fontSize: scale(12),
+      lineHeight: scale(16),
       color: colors.textDim,
     },
     buttonRow: {
       flexDirection: "row",
       justifyContent: "flex-end",
-      gap: 10,
-      marginTop: 18,
+      gap: tokens.gapSm,
+      marginTop: tokens.gap,
     },
     cancelBtn: {
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      paddingHorizontal: tokens.pad,
+      paddingVertical: tokens.padSm,
     },
     cancelBtnText: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       color: colors.textMuted,
     },
     saveBtn: {
       backgroundColor: colors.accent,
-      borderRadius: 10,
-      paddingHorizontal: 22,
-      paddingVertical: 10,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padLg,
+      paddingVertical: tokens.padSm,
     },
     saveBtnDisabled: {
       opacity: 0.5,
     },
     saveBtnText: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "700",
       color: colors.accentButtonText,
     },
   });
+};
 
 export default MonthBalancePromptModal;

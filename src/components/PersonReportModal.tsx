@@ -24,7 +24,9 @@ import {
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getPeopleIncludingDeleted } from "../storage/personStorage";
@@ -47,7 +49,8 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
   onClose,
 }) => {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { tokens } = useDensity();
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const insets = useSafeAreaInsets();
   const { formatCurrency } = useCurrency();
 
@@ -244,8 +247,9 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: "rgba(0, 0, 0, 0.85)",
@@ -255,41 +259,41 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       marginTop: Platform.OS === "ios" ? 44 : 32,
       backgroundColor: colors.card,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: tokens.radius + 8,
+      borderTopRightRadius: tokens.radius + 8,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
       overflow: "hidden",
     },
     scrollArea: { flex: 1 },
-    scrollContent: { padding: 24, gap: 14 },
+    scrollContent: { padding: tokens.padLg, gap: tokens.gap },
     title: {
-      fontSize: 22,
+      fontSize: scale(22),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textDim,
-      marginBottom: 8,
+      marginBottom: tokens.gapSm,
     },
     yearRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 24,
+      gap: tokens.gapLg,
     },
     yearArrow: {
-      fontSize: 20,
+      fontSize: scale(20),
       color: colors.accent,
       fontWeight: "700",
-      paddingHorizontal: 8,
+      paddingHorizontal: tokens.padSm,
     },
     yearText: {
       color: colors.text,
-      fontSize: 18,
+      fontSize: scale(18),
       fontWeight: "700",
       minWidth: 64,
       textAlign: "center",
@@ -298,109 +302,110 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
       alignItems: "center",
       gap: 4,
     },
     grandTotalLabel: {
-      fontSize: 11,
+      fontSize: scale(11),
       color: colors.textDim,
       fontWeight: "600",
       letterSpacing: 0.5,
     },
     grandTotalValue: {
-      fontSize: 24,
+      fontSize: scale(24),
       fontWeight: "700",
       color: colors.accent,
     },
     emptyText: {
       color: colors.textMuted,
-      fontSize: 13,
+      fontSize: scale(13),
       fontStyle: "italic",
-      lineHeight: 19,
+      lineHeight: scale(19),
     },
     personCard: {
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 12,
-      padding: 14,
-      gap: 6,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      gap: tokens.gapSm,
     },
     personHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: 12,
+      gap: tokens.gap,
     },
     personName: {
       flex: 1,
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
     },
     personTotal: {
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
     },
     personMeta: {
       color: colors.textMuted,
-      fontSize: 12,
+      fontSize: scale(12),
       marginBottom: 4,
     },
     categoryRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      gap: 12,
+      gap: tokens.gap,
       paddingVertical: 3,
     },
     categoryName: {
       flex: 1,
       color: colors.textDim,
-      fontSize: 13,
+      fontSize: scale(13),
     },
     categoryTotal: {
       color: colors.textDim,
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
     },
     buttonRow: {
       flexDirection: "row",
-      gap: 12,
-      paddingHorizontal: 24,
-      paddingTop: 12,
+      gap: tokens.gap,
+      paddingHorizontal: tokens.padLg,
+      paddingTop: tokens.padSm,
       paddingBottom: Platform.OS === "ios" ? 32 : 20,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     closeButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       alignItems: "center",
     },
     closeText: {
       color: colors.textDim,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
     },
     exportButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
     exportButtonDisabled: { opacity: 0.4 },
     exportText: {
-      color: colors.white,
-      fontSize: 15,
+      color: colors.accentButtonText,
+      fontSize: scale(15),
       fontWeight: "700",
     },
   });
+};
 
 export default React.memo(PersonReportModal);

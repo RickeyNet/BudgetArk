@@ -26,7 +26,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import {
   COACHMARK_TAB_IDS,
   COACHMARKS,
@@ -71,8 +73,9 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
   onRedoOnboarding,
 }) => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [query, setQuery] = useState("");
   const [expandedTab, setExpandedTab] = useState<string | null>(null);
@@ -207,8 +210,9 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: "rgba(0, 0, 0, 0.85)",
@@ -218,8 +222,8 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       marginTop: Platform.OS === "ios" ? 44 : 32,
       backgroundColor: colors.card,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: tokens.radius,
+      borderTopRightRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
@@ -229,62 +233,62 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
     },
     scrollContent: {
-      padding: 24,
+      padding: tokens.padLg,
       paddingBottom: 40,
     },
     title: {
-      fontSize: 22,
+      fontSize: scale(22),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textDim,
-      marginBottom: 16,
+      marginBottom: tokens.gap,
     },
 
     /* Search */
     searchRow: {
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 14,
+      marginBottom: tokens.gap,
     },
     searchInput: {
       flex: 1,
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: tokens.padSm,
       paddingRight: 38,
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
     },
     clearBtn: {
       position: "absolute",
-      right: 12,
+      right: tokens.padSm,
     },
     clearBtnText: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textMuted,
       fontWeight: "600",
     },
 
     /* Result / accordion cards */
     resultList: {
-      gap: 8,
+      gap: tokens.gapSm,
     },
     resultItem: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
       backgroundColor: colors.bg,
     },
     resultTab: {
-      fontSize: 10,
+      fontSize: scale(10),
       fontWeight: "700",
       letterSpacing: 0.8,
       marginBottom: 4,
@@ -293,34 +297,34 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      gap: 12,
+      gap: tokens.gap,
     },
     accordionTitle: {
       flex: 1,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       color: colors.text,
     },
     accordionArrow: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textDim,
     },
     stepBlock: {
-      marginTop: 10,
+      marginTop: tokens.gapSm,
     },
     stepTitle: {
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "700",
       color: colors.text,
     },
     stepLocation: {
-      fontSize: 12,
+      fontSize: scale(12),
       fontWeight: "600",
       marginTop: 2,
     },
     stepDetail: {
-      fontSize: 13,
-      lineHeight: 19,
+      fontSize: scale(13),
+      lineHeight: scale(19),
       color: colors.textDim,
       marginTop: 4,
     },
@@ -328,17 +332,17 @@ const makeStyles = (colors: ThemeColors) =>
     /* Empty state */
     emptyState: {
       alignItems: "center",
-      paddingVertical: 32,
-      gap: 6,
+      paddingVertical: tokens.padLg,
+      gap: tokens.gapSm,
     },
     emptyTitle: {
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
       color: colors.text,
     },
     emptyBody: {
-      fontSize: 13,
-      lineHeight: 19,
+      fontSize: scale(13),
+      lineHeight: scale(19),
       color: colors.textDim,
       textAlign: "center",
     },
@@ -346,38 +350,39 @@ const makeStyles = (colors: ThemeColors) =>
     /* Pinned footer */
     buttonRow: {
       flexDirection: "row",
-      gap: 12,
-      paddingHorizontal: 24,
-      paddingTop: 12,
+      gap: tokens.gap,
+      paddingHorizontal: tokens.padLg,
+      paddingTop: tokens.padSm,
       paddingBottom: Platform.OS === "ios" ? 32 : 20,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     redoButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       alignItems: "center",
     },
     redoText: {
       color: colors.textDim,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
     },
     doneButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
     doneText: {
       color: colors.accentButtonText,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
     },
   });
+};
 
 export default React.memo(OnboardingGuideModal);

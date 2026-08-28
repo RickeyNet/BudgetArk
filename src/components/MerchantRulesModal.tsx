@@ -36,7 +36,9 @@ import type {
 } from "../types";
 import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import { useConnections } from "../connections/ConnectionsProvider";
 import CategoryPillPicker from "./CategoryPillPicker";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
@@ -66,7 +68,8 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   people,
 }) => {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { tokens } = useDensity();
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const insets = useSafeAreaInsets();
   const { refresh } = useConnections();
 
@@ -551,8 +554,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     avoider: {
       flex: 1,
     },
@@ -561,92 +565,92 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
     },
     header: {
-      padding: 24,
-      paddingBottom: 12,
+      padding: tokens.padLg,
+      paddingBottom: tokens.padSm,
     },
     title: {
-      fontSize: 22,
+      fontSize: scale(22),
       fontWeight: "700",
       color: colors.text,
     },
     subtitle: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textDim,
       marginTop: 4,
-      lineHeight: 18,
+      lineHeight: scale(18),
     },
     errorText: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.danger,
-      marginTop: 8,
+      marginTop: tokens.gapSm,
     },
     listContent: {
-      paddingHorizontal: 24,
-      paddingBottom: 32,
+      paddingHorizontal: tokens.padLg,
+      paddingBottom: tokens.pad * 2,
     },
     ruleCard: {
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 12,
-      marginBottom: 8,
+      borderRadius: tokens.radius,
+      marginBottom: tokens.gapSm,
       overflow: "hidden",
     },
     ruleHeader: {
       flexDirection: "row",
       alignItems: "center",
-      padding: 14,
-      gap: 10,
+      padding: tokens.pad,
+      gap: tokens.gapSm,
     },
     ruleTextWrap: {
       flex: 1,
     },
     ruleMerchant: {
       color: colors.text,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
     },
     ruleMeta: {
       color: colors.textMuted,
-      fontSize: 12,
+      fontSize: scale(12),
       marginTop: 2,
     },
     ruleChevron: {
       color: colors.textDim,
-      fontSize: 13,
+      fontSize: scale(13),
     },
     expandedArea: {
-      padding: 14,
+      padding: tokens.pad,
       paddingTop: 4,
-      gap: 10,
+      gap: tokens.gapSm,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     label: {
-      fontSize: 11,
+      fontSize: scale(11),
       color: colors.textDim,
       fontWeight: "600",
       letterSpacing: 0.5,
-      marginTop: 8,
+      marginTop: tokens.gapSm,
     },
     nameInput: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
+      borderRadius: tokens.radiusSm,
       backgroundColor: colors.card,
       color: colors.text,
-      fontSize: 14,
-      paddingHorizontal: 12,
+      fontSize: scale(14),
+      paddingHorizontal: tokens.padSm,
       paddingVertical: Platform.OS === "ios" ? 10 : 8,
     },
     autoApproveRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
+      gap: tokens.gapSm,
     },
     autoApproveLabel: {
       color: colors.textDim,
-      fontSize: 12,
+      fontSize: scale(12),
       flex: 1,
     },
     checkbox: {
@@ -664,22 +668,22 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.accent,
     },
     checkboxCheck: {
-      color: colors.white,
-      fontSize: 12,
+      color: colors.accentButtonText,
+      fontSize: scale(12),
       fontWeight: "700",
-      lineHeight: 14,
+      lineHeight: scale(14),
     },
     businessWrap: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: 8,
+      gap: tokens.gapSm,
     },
     businessPill: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
+      borderRadius: tokens.radiusPill,
       backgroundColor: colors.card,
-      paddingHorizontal: 12,
+      paddingHorizontal: tokens.padSm,
       paddingVertical: 7,
       // Same long-name guard as ReviewInboxModal's businessPill.
       maxWidth: "100%",
@@ -690,7 +694,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     businessPillText: {
       color: colors.textDim,
-      fontSize: 12,
+      fontSize: scale(12),
       fontWeight: "600",
     },
     businessPillTextActive: {
@@ -698,32 +702,32 @@ const makeStyles = (colors: ThemeColors) =>
     },
     actionRow: {
       flexDirection: "row",
-      gap: 10,
+      gap: tokens.gapSm,
       marginTop: 2,
     },
     deleteButton: {
       flex: 1,
-      paddingVertical: 11,
-      borderRadius: 10,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.warning,
       alignItems: "center",
     },
     deleteButtonText: {
       color: colors.warning,
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
     },
     saveButton: {
       flex: 2,
-      paddingVertical: 11,
-      borderRadius: 10,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
     saveButtonText: {
       color: colors.accentButtonText,
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "700",
     },
     buttonDisabled: {
@@ -733,35 +737,35 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      gap: 10,
-      padding: 32,
+      gap: tokens.gapSm,
+      padding: tokens.padLg,
     },
     emptyGlyph: {
-      fontSize: 40,
+      fontSize: scale(40),
     },
     emptyText: {
       color: colors.textDim,
-      fontSize: 14,
+      fontSize: scale(14),
       textAlign: "center",
-      lineHeight: 20,
+      lineHeight: scale(20),
     },
     buttonRow: {
-      paddingHorizontal: 24,
-      paddingTop: 12,
+      paddingHorizontal: tokens.padLg,
+      paddingTop: tokens.padSm,
       paddingBottom: Platform.OS === "ios" ? 32 : 20,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     closeButton: {
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       alignItems: "center",
     },
     closeButtonText: {
       color: colors.textDim,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
     },
     dialogOverlay: {
@@ -769,58 +773,59 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: "rgba(0, 0, 0, 0.6)",
       alignItems: "center",
       justifyContent: "center",
-      padding: 32,
+      padding: tokens.padLg,
     },
     dialogBox: {
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      padding: 20,
+      borderRadius: tokens.radius,
+      padding: tokens.padLg,
       width: "100%",
       maxWidth: 400,
-      gap: 10,
+      gap: tokens.gapSm,
     },
     dialogTitle: {
-      fontSize: 17,
+      fontSize: scale(17),
       fontWeight: "700",
       color: colors.text,
     },
     dialogBody: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textDim,
-      lineHeight: 19,
+      lineHeight: scale(19),
     },
     dialogActions: {
       flexDirection: "row",
-      gap: 10,
-      marginTop: 6,
+      gap: tokens.gapSm,
+      marginTop: tokens.gapSm,
     },
     dialogCancel: {
       flex: 1,
-      paddingVertical: 11,
-      borderRadius: 10,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       alignItems: "center",
     },
     dialogCancelText: {
       color: colors.textDim,
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
     },
     dialogDelete: {
       flex: 1,
-      paddingVertical: 11,
-      borderRadius: 10,
+      paddingVertical: tokens.pad,
+      borderRadius: tokens.radius,
       backgroundColor: colors.warning,
       alignItems: "center",
     },
     dialogDeleteText: {
       color: colors.white,
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "700",
     },
   });
+};
 
 export default React.memo(MerchantRulesModal);

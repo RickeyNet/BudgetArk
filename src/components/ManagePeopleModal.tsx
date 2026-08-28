@@ -28,7 +28,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import type { Person } from "../types";
 import { MAX_PERSON_NAME_LENGTH } from "../types";
 import {
@@ -53,7 +55,8 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
   onChanged,
 }) => {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { tokens } = useDensity();
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const insets = useSafeAreaInsets();
 
   const [people, setPeople] = useState<Person[]>([]);
@@ -300,8 +303,9 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: "rgba(0, 0, 0, 0.85)",
@@ -311,120 +315,120 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       marginTop: Platform.OS === "ios" ? 44 : 32,
       backgroundColor: colors.card,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: tokens.radius + 8,
+      borderTopRightRadius: tokens.radius + 8,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
       overflow: "hidden",
     },
     scrollArea: { flex: 1 },
-    scrollContent: { padding: 24, gap: 14 },
+    scrollContent: { padding: tokens.padLg, gap: tokens.gap },
     title: {
-      fontSize: 22,
+      fontSize: scale(22),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textDim,
-      marginBottom: 8,
+      marginBottom: tokens.gapSm,
     },
-    field: { gap: 8 },
+    field: { gap: tokens.gapSm },
     label: {
-      fontSize: 11,
+      fontSize: scale(11),
       color: colors.textDim,
       fontWeight: "600",
       letterSpacing: 0.5,
     },
-    listHeader: { marginTop: 12 },
+    listHeader: { marginTop: tokens.gap },
     input: {
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: tokens.padSm,
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
     },
     errorText: {
       color: colors.danger,
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
     },
     formButtons: {
       flexDirection: "row",
-      gap: 12,
+      gap: tokens.gap,
     },
     cancelEditButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: 12,
+      borderRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       alignItems: "center",
     },
     cancelEditText: {
       color: colors.textDim,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
     },
     addButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: 12,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
     addButtonDisabled: { opacity: 0.4 },
     addButtonText: {
-      color: colors.white,
-      fontSize: 15,
+      color: colors.accentButtonText,
+      fontSize: scale(15),
       fontWeight: "700",
     },
     emptyText: {
       color: colors.textMuted,
-      fontSize: 13,
+      fontSize: scale(13),
       fontStyle: "italic",
     },
     row: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
-      paddingVertical: 12,
+      gap: tokens.gap,
+      paddingVertical: tokens.padSm,
       borderBottomWidth: 1,
       borderBottomColor: colors.cardBorder,
     },
-    rowIcon: { fontSize: 18 },
+    rowIcon: { fontSize: scale(18) },
     rowTextWrap: { flex: 1 },
     rowName: {
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "600",
     },
     rowCount: {
       color: colors.textMuted,
-      fontSize: 12,
+      fontSize: scale(12),
       marginTop: 2,
     },
     rowRename: {
       color: colors.accent,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       marginRight: 4,
     },
     rowDelete: {
       color: colors.danger,
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
     },
     buttonRow: {
       flexDirection: "row",
-      gap: 12,
-      paddingHorizontal: 24,
-      paddingTop: 12,
+      gap: tokens.gap,
+      paddingHorizontal: tokens.padLg,
+      paddingTop: tokens.padSm,
       paddingBottom: Platform.OS === "ios" ? 32 : 20,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
@@ -432,15 +436,16 @@ const makeStyles = (colors: ThemeColors) =>
     doneButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: 12,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
     doneText: {
-      color: colors.white,
-      fontSize: 15,
+      color: colors.accentButtonText,
+      fontSize: scale(15),
       fontWeight: "700",
     },
   });
+};
 
 export default React.memo(ManagePeopleModal);

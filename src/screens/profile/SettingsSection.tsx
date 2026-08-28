@@ -924,10 +924,10 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                   onPress={handleCurrencyConvert}
                 >
                   {currencyConverting || currencyRatesLoading ? (
-                    <ActivityIndicator color={colors.white} />
+                    <ActivityIndicator color={colors.accentButtonText} />
                   ) : (
                     <Text
-                      style={[styles.dialogBtnText, { color: colors.white }]}
+                      style={[styles.dialogBtnText, { color: colors.accentButtonText }]}
                     >
                       Convert my amounts
                     </Text>
@@ -1074,7 +1074,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                       onPress={installPendingUpdate}
                     >
                       <Text
-                        style={[styles.dialogBtnText, { color: colors.white }]}
+                        style={[styles.dialogBtnText, { color: colors.accentButtonText }]}
                       >
                         Install Now
                       </Text>
@@ -1131,7 +1131,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                 onPress={confirmFxDisclosure}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                   Continue
                 </Text>
               </TouchableOpacity>
@@ -1184,7 +1184,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                 onPress={confirmEnableHoldings}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                   Enable
                 </Text>
               </TouchableOpacity>

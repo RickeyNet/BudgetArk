@@ -188,7 +188,7 @@ const AboutSection: React.FC<AboutSectionProps> = ({
               style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
               onPress={onCloseReleaseNotes}
             >
-              <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+              <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                 Done
               </Text>
             </TouchableOpacity>

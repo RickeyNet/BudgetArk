@@ -858,7 +858,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   {exportEncrypt ? (
                     <Text
                       style={{
-                        color: colors.white,
+                        color: colors.accentButtonText,
                         fontSize: 14,
                         fontWeight: "700",
                       }}
@@ -912,7 +912,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                   onPress={confirmExport}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                     {exportEncrypt ? "Encrypt & Share" : "Share Plaintext"}
                   </Text>
                 </TouchableOpacity>
@@ -984,7 +984,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                   onPress={confirmImportPassword}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                     Decrypt & Import
                   </Text>
                 </TouchableOpacity>
@@ -1074,7 +1074,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                   onPress={handleImportFromFile}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                     Pick File
                   </Text>
                 </TouchableOpacity>
@@ -1086,7 +1086,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                     setShowPasteModal(true);
                   }}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                     Paste Text
                   </Text>
                 </TouchableOpacity>
@@ -1198,7 +1198,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                   onPress={() => confirmSpreadsheetExport("csv")}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                     CSV
                   </Text>
                 </TouchableOpacity>
@@ -1206,7 +1206,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                   onPress={() => confirmSpreadsheetExport("xlsx")}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                     Excel
                   </Text>
                 </TouchableOpacity>

@@ -192,6 +192,10 @@ export const makeProfileStyles = (tokens: DensityTokens) => {
       marginBottom: 8,
       minHeight: tokens.rowHeight,
     },
+    /** Text column of a settings row - fills the space left of the chevron/toggle. */
+    rowTextWrap: {
+      flex: 1,
+    },
     settingsRowText: {
       fontSize: scale(15),
       fontWeight: "500",

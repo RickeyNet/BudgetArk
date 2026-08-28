@@ -264,7 +264,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
             ]}
           >
             <TouchableOpacity style={styles.row} onPress={handleToggle}>
-              <View style={{ flex: 1 }}>
+              <View style={styles.rowTextWrap}>
                 <Text style={[styles.rowText, { color: colors.text }]}>
                   Automatic backups
                 </Text>
@@ -302,7 +302,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                       <Text
                         style={[
                           styles.cadenceChipText,
-                          { color: selected ? colors.white : colors.text },
+                          { color: selected ? colors.accentButtonText : colors.text },
                         ]}
                       >
                         {cadenceLabel(cadence)}
@@ -324,9 +324,9 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
             disabled={busy || settings === null}
           >
             {busy && restoreTarget === null ? (
-              <ActivityIndicator color={colors.white} />
+              <ActivityIndicator color={colors.accentButtonText} />
             ) : (
-              <Text style={[styles.backupNowText, { color: colors.white }]}>
+              <Text style={[styles.backupNowText, { color: colors.accentButtonText }]}>
                 Back Up Now
               </Text>
             )}
@@ -382,7 +382,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                       }}
                       disabled={busy}
                     >
-                      <View style={{ flex: 1 }}>
+                      <View style={styles.rowTextWrap}>
                         <Text style={[styles.rowText, { color: colors.text }]}>
                           {new Date(file.timestampMs).toLocaleString()}
                         </Text>
@@ -416,12 +416,12 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                             disabled={busy}
                           >
                             {busy && isTarget ? (
-                              <ActivityIndicator color={colors.white} />
+                              <ActivityIndicator color={colors.accentButtonText} />
                             ) : (
                               <Text
                                 style={[
                                   styles.restoreButtonText,
-                                  { color: colors.white },
+                                  { color: colors.accentButtonText },
                                 ]}
                               >
                                 Merge
@@ -524,6 +524,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       alignItems: "center",
       paddingHorizontal: tokens.pad,
       paddingVertical: 12,
+    },
+    rowTextWrap: {
+      flex: 1,
     },
     rowText: {
       fontSize: 15 * tokens.fontScale,

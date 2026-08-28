@@ -89,7 +89,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
               setShowGuide(true);
             }}
           >
-            <View style={{ flex: 1 }}>
+            <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
                 Onboarding
               </Text>
@@ -119,7 +119,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
             }}
             accessibilityLabel="Replay the feature tour"
           >
-            <View style={{ flex: 1 }}>
+            <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
                 Feature tour
               </Text>

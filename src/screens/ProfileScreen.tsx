@@ -779,7 +779,7 @@ const ProfileScreen: React.FC = () => {
                 style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                 onPress={() => setInfoModal(null)}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                   OK
                 </Text>
               </TouchableOpacity>

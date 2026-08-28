@@ -254,7 +254,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                 onPress={handleContribute}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                   Add funds
                 </Text>
               </TouchableOpacity>

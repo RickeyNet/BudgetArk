@@ -27,7 +27,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
+import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 import type { BudgetEntry, Debt, DebtClass, Payment } from "../types";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
@@ -89,8 +91,9 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   onSelectEntry,
 }) => {
   const { colors } = useTheme();
+  const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const { formatCurrency, preference } = useCurrency();
   const { customCategories } = useCustomCategories();
 
@@ -530,8 +533,9 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   );
 };
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
+  const scale = (n: number) => Math.round(n * tokens.fontScale);
+  return StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: "rgba(0, 0, 0, 0.85)",
@@ -541,8 +545,8 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       marginTop: Platform.OS === "ios" ? 44 : 32,
       backgroundColor: colors.card,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: tokens.radius,
+      borderTopRightRadius: tokens.radius,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderBottomWidth: 0,
@@ -552,45 +556,45 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
     },
     scrollContent: {
-      padding: 24,
+      padding: tokens.padLg,
       paddingBottom: 40,
     },
     title: {
-      fontSize: 22,
+      fontSize: scale(22),
       fontWeight: "700",
       color: colors.text,
       marginBottom: 4,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textDim,
-      marginBottom: 16,
+      marginBottom: tokens.gap,
     },
 
     /* Query */
     searchRow: {
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 10,
+      marginBottom: tokens.gapSm,
     },
     searchInput: {
       flex: 1,
       backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: tokens.padSm,
       paddingRight: 38,
       color: colors.text,
-      fontSize: 15,
+      fontSize: scale(15),
     },
     clearBtn: {
       position: "absolute",
       right: 12,
     },
     clearBtnText: {
-      fontSize: 14,
+      fontSize: scale(14),
       color: colors.textMuted,
       fontWeight: "600",
     },
@@ -600,105 +604,105 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 10,
+      marginBottom: tokens.gapSm,
     },
     filterToggle: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      gap: tokens.gapSm,
     },
     filterToggleText: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       color: colors.text,
     },
     filterToggleArrow: {
-      fontSize: 13,
+      fontSize: scale(13),
       color: colors.textDim,
     },
     filterReset: {
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
     },
     filterPanel: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: tokens.radius,
+      padding: tokens.padSm,
       backgroundColor: colors.bg,
-      marginBottom: 14,
+      marginBottom: tokens.gap,
     },
     filterLabel: {
-      fontSize: 11,
+      fontSize: scale(11),
       fontWeight: "700",
       letterSpacing: 0.8,
       textTransform: "uppercase",
       color: colors.textDim,
-      marginBottom: 6,
-      marginTop: 10,
+      marginBottom: tokens.gapSm,
+      marginTop: tokens.gapSm,
     },
     chipRow: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: 8,
+      gap: tokens.gapSm,
     },
     chipRowScroll: {
       flexDirection: "row",
-      gap: 8,
-      paddingRight: 12,
+      gap: tokens.gapSm,
+      paddingRight: tokens.padSm,
     },
     chip: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 16,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      borderRadius: tokens.radiusPill,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: tokens.gapSm,
       backgroundColor: colors.card,
     },
     chipText: {
-      fontSize: 13,
+      fontSize: scale(13),
       fontWeight: "600",
       color: colors.textDim,
     },
     amountRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: tokens.gapSm,
     },
     amountInput: {
       flex: 1,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      borderRadius: tokens.radiusSm,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: tokens.padSm,
       color: colors.text,
-      fontSize: 14,
+      fontSize: scale(14),
     },
     amountDash: {
       color: colors.textDim,
-      fontSize: 14,
+      fontSize: scale(14),
     },
 
     /* Results */
     resultList: {
-      gap: 8,
+      gap: tokens.gapSm,
     },
     sectionHeader: {
-      fontSize: 10,
+      fontSize: scale(10),
       fontWeight: "700",
       letterSpacing: 0.8,
-      marginTop: 8,
+      marginTop: tokens.gapSm,
     },
     resultItem: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
+      gap: tokens.gapSm,
       borderWidth: 1,
       borderColor: colors.cardBorder,
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: tokens.radius,
+      padding: tokens.padSm,
       backgroundColor: colors.bg,
     },
     resultIcon: {
@@ -708,22 +712,22 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
     },
     resultTitle: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "600",
       color: colors.text,
     },
     resultMeta: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textDim,
       marginTop: 1,
     },
     resultAmount: {
-      fontSize: 14,
+      fontSize: scale(14),
       fontWeight: "700",
       color: colors.text,
     },
     truncationNote: {
-      fontSize: 12,
+      fontSize: scale(12),
       color: colors.textMuted,
       marginTop: 2,
     },
@@ -731,17 +735,17 @@ const makeStyles = (colors: ThemeColors) =>
     /* Empty / prompt states */
     emptyState: {
       alignItems: "center",
-      paddingVertical: 32,
-      gap: 6,
+      paddingVertical: tokens.padLg,
+      gap: tokens.gapSm,
     },
     emptyTitle: {
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
       color: colors.text,
     },
     emptyBody: {
-      fontSize: 13,
-      lineHeight: 19,
+      fontSize: scale(13),
+      lineHeight: scale(19),
       color: colors.textDim,
       textAlign: "center",
     },
@@ -749,24 +753,25 @@ const makeStyles = (colors: ThemeColors) =>
     /* Pinned footer */
     buttonRow: {
       flexDirection: "row",
-      paddingHorizontal: 24,
-      paddingTop: 12,
+      paddingHorizontal: tokens.padLg,
+      paddingTop: tokens.padSm,
       paddingBottom: Platform.OS === "ios" ? 32 : 20,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     doneButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: tokens.padSm,
+      borderRadius: tokens.radius,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
     doneText: {
       color: colors.accentButtonText,
-      fontSize: 15,
+      fontSize: scale(15),
       fontWeight: "700",
     },
   });
+};
 
 export default React.memo(GlobalSearchModal);

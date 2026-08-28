@@ -345,7 +345,7 @@ const ConnectionsSection = forwardRef<
                 style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
                 onPress={confirmConnectionsDisclosure}
               >
-                <Text style={[styles.dialogBtnText, { color: colors.white }]}>
+                <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
                   Continue
                 </Text>
               </TouchableOpacity>

@@ -350,7 +350,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     addButtonDisabled: { opacity: 0.4 },
     addButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },
@@ -401,7 +401,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     doneText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

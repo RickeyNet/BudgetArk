@@ -67,7 +67,7 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
             accessibilityRole="button"
             accessibilityLabel="Manage people"
           >
-            <View style={{ flex: 1 }}>
+            <View style={styles.rowTextWrap}>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   People 👤
@@ -101,7 +101,7 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
             accessibilityRole="button"
             accessibilityLabel="Open person spending report"
           >
-            <View style={{ flex: 1 }}>
+            <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
                 Person Spending Report
               </Text>

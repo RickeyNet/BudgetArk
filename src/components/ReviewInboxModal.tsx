@@ -916,7 +916,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.accent,
     },
     checkboxCheck: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 12,
       fontWeight: "700",
       lineHeight: 14,
