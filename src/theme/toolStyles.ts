@@ -202,6 +202,160 @@ export const makeToolStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     sliderBtnDisabled: {
       opacity: 0.2,
     },
+
+    /* Result / breakdown / summary blocks shared by the calculators */
+    resultCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: `${colors.accent}30`,
+      borderRadius: tokens.radius + 4,
+      padding: tokens.padLg,
+      alignItems: "center",
+    },
+    resultLabel: {
+      fontSize: scale(10),
+      color: colors.textMuted,
+      letterSpacing: 1.5,
+      marginBottom: 8,
+    },
+    resultValue: {
+      fontSize: scale(32),
+      fontWeight: "700",
+      color: colors.accent,
+      fontVariant: ["tabular-nums"],
+      marginBottom: 4,
+    },
+    resultSub: {
+      fontSize: 13,
+      color: colors.textDim,
+      textAlign: "center",
+    },
+    insightCard: {
+      backgroundColor: `${colors.accent}10`,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+    },
+    insightText: {
+      fontSize: 13,
+      color: colors.textDim,
+      textAlign: "center",
+      lineHeight: 18,
+    },
+    presetRow: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 4,
+    },
+    presetBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingVertical: 10,
+      alignItems: "center",
+      backgroundColor: colors.bg,
+    },
+    presetBtnActive: {
+      borderColor: colors.accent,
+      backgroundColor: `${colors.accent}20`,
+    },
+    presetBtnText: {
+      fontSize: 13,
+      color: colors.textDim,
+      fontWeight: "600",
+    },
+    presetBtnTextActive: {
+      color: colors.accent,
+      fontWeight: "700",
+    },
+    breakdownCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      padding: 18,
+    },
+    breakdownTitle: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 14,
+    },
+    breakdownRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    breakdownItem: {
+      flex: 1,
+      alignItems: "center",
+    },
+    breakdownValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+      marginBottom: 4,
+    },
+    breakdownLabel: {
+      fontSize: 12,
+      color: colors.textDim,
+    },
+    breakdownDivider: {
+      width: 1,
+      height: 40,
+      backgroundColor: colors.cardBorder,
+    },
+    ratioBar: {
+      flexDirection: "row",
+      height: 8,
+      borderRadius: tokens.radiusPill,
+      overflow: "hidden",
+      marginTop: 16,
+    },
+    ratioFillContrib: {
+      height: "100%",
+      backgroundColor: colors.success,
+    },
+    ratioFillInterest: {
+      height: "100%",
+      backgroundColor: colors.accent,
+    },
+    ratioText: {
+      fontSize: 12,
+      color: colors.textDim,
+      textAlign: "center",
+      marginTop: 10,
+    },
+    refiEmptyText: {
+      fontSize: 13,
+      color: colors.textMuted,
+      paddingVertical: 8,
+    },
+    refiSummaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    refiSummaryItem: {
+      flex: 1,
+      alignItems: "center",
+    },
+    refiSummaryLabel: {
+      fontSize: 11,
+      color: colors.textDim,
+      letterSpacing: 0.4,
+      marginBottom: 4,
+    },
+    refiSummaryValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
+    },
+    efTimeEstimate: {
+      fontSize: scale(12),
+      color: colors.textMuted,
+      textAlign: "center",
+    },
   });
 };
 
