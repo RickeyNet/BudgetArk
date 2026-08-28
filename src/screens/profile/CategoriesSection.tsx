@@ -18,7 +18,7 @@ import { useProfileStyles } from "./profileStyles";
 const CategoriesSection: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   const { customCategories } = useCustomCategories();
   /** Whether the manage-custom-categories modal is visible */

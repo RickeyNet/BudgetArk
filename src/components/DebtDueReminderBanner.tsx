@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Debt Due Reminder Banner
+ * File: src/components/DebtDueReminderBanner.tsx
+ *
+ * Passive banner on the DebtTracker tab listing debts due within the next
+ * few days (utils/debtDueCalendar). Tapping opens the payment flow. Shown
+ * only while the app is open - no notifications are involved.
+ */
+
 import React, { useMemo } from "react";
 import {
   StyleProp,

@@ -376,7 +376,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     dialogOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: 28,
     },

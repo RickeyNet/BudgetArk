@@ -231,7 +231,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   return StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.55)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       alignItems: "center",
       padding: tokens.padLg,

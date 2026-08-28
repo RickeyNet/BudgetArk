@@ -54,7 +54,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
     textSizePresets,
     setTextSizeId,
   } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
   const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", {
     scrollRef,
   });

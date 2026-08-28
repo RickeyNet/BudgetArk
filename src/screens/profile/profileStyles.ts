@@ -12,8 +12,9 @@
 import { useMemo } from "react";
 import { StyleSheet } from "react-native";
 import type { DensityTokens } from "../../theme/density";
+import type { ThemeColors } from "../../theme/themes";
 
-export const makeProfileStyles = (tokens: DensityTokens) => {
+export const makeProfileStyles = (tokens: DensityTokens, colors: ThemeColors) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
     screen: {
@@ -324,7 +325,7 @@ export const makeProfileStyles = (tokens: DensityTokens) => {
     /* Theme Modal */
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     modalTitle: {
@@ -367,7 +368,7 @@ export const makeProfileStyles = (tokens: DensityTokens) => {
     /* Paste Import Modal */
     pasteModalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.92)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-start",
     },
     pasteModalContent: {
@@ -412,7 +413,7 @@ export const makeProfileStyles = (tokens: DensityTokens) => {
     /* Themed Dialog (replaces Alert.alert) */
     dialogOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "center",
       alignItems: "center",
       paddingHorizontal: 28,
@@ -502,6 +503,8 @@ export const makeProfileStyles = (tokens: DensityTokens) => {
 
 export type ProfileStyles = ReturnType<typeof makeProfileStyles>;
 
-/** Memoized profile stylesheet, keyed on the density tokens. */
-export const useProfileStyles = (tokens: DensityTokens): ProfileStyles =>
-  useMemo(() => makeProfileStyles(tokens), [tokens]);
+/** Memoized profile stylesheet, keyed on the density tokens + theme scrims. */
+export const useProfileStyles = (
+  tokens: DensityTokens,
+  colors: ThemeColors,
+): ProfileStyles => useMemo(() => makeProfileStyles(tokens, colors), [tokens, colors]);

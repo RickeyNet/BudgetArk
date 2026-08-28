@@ -1,3 +1,14 @@
+/**
+ * BudgetArk - Coachmark Spotlight
+ * File: src/onboarding/Spotlight.tsx
+ *
+ * The highlight + tooltip overlay behind the first-launch walkthrough and
+ * tab tours. Deliberately a plain in-tree absolute overlay rather than a
+ * Modal: chaining Modals step-to-step raced iOS's present/dismiss and froze
+ * the app (see useTabCoachmark). Anchor rects come from the target's
+ * measureInWindow, translated into this overlay's own coordinate space.
+ */
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -369,7 +380,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     dim: {
       position: "absolute",
-      backgroundColor: "rgba(0,0,0,0.78)",
+      backgroundColor: colors.overlay,
     },
     ring: {
       position: "absolute",

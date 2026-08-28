@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Tracking Reminder Host
+ * File: src/components/TrackingReminderHost.tsx
+ *
+ * App-root glue for the opt-in "log your spending" check-in notifications:
+ * routes a tapped notification to the Budget tab and re-plans the schedule
+ * on foreground so the nudges track the user's real entry history. The
+ * notifications themselves carry no financial details (rule 11).
+ */
+
 import { useEffect } from "react";
 import { AppState, InteractionManager } from "react-native";
 import * as Notifications from "expo-notifications";

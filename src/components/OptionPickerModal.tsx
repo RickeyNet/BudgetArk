@@ -23,6 +23,7 @@ import {
   ViewStyle,
 } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
+import type { ThemeColors } from "../theme/themes";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 
@@ -66,7 +67,7 @@ function OptionPickerModal<T>({
 }: OptionPickerModalProps<T>): React.ReactElement {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = React.useMemo(() => makeStyles(tokens), [tokens]);
+  const styles = React.useMemo(() => makeStyles(tokens, colors), [tokens, colors]);
 
   return (
     <Modal
@@ -151,12 +152,12 @@ function OptionPickerModal<T>({
 
 export default OptionPickerModal;
 
-const makeStyles = (tokens: DensityTokens) => {
+const makeStyles = (tokens: DensityTokens, colors: ThemeColors) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     modalContent: {

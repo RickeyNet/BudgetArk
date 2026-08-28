@@ -37,7 +37,7 @@ const AboutSection: React.FC<AboutSectionProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   /** Release notes accordion state */
   const [expandedReleaseNote, setExpandedReleaseNote] =

@@ -1,3 +1,15 @@
+/**
+ * BudgetArk - Debt Due Reminder Host
+ * File: src/components/DebtDueReminderHost.tsx
+ *
+ * App-root controller that decides when to present the due-day payment
+ * prompt and the payment / payoff celebrations. Re-checks on foreground
+ * (AppState) and defers presentation past interactions - presenting a
+ * Modal mid-navigation is the iOS silent-present failure this codebase
+ * keeps hitting. Records the payment and refreshes the net-worth snapshot
+ * when the user confirms.
+ */
+
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, InteractionManager } from "react-native";
 import type { Debt, Payment } from "../types";

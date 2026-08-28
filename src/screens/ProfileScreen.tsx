@@ -138,7 +138,7 @@ const ProfileScreen: React.FC = () => {
   // Keeps inline inputs (display-name editor) visible above the keyboard on
   // Android; iOS uses the ScrollView's automaticallyAdjustKeyboardInsets.
   const onKeyboardInputScroll = useAndroidKeyboardInputScroll(scrollRef);
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
   const { setPreferenceId } = useCurrency();
 
   /** Imperative handles into sections for the banner + deep links. */

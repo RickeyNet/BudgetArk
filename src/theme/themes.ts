@@ -24,6 +24,15 @@ export type ThemeColors = Readonly<{
   teal: string;           
   tealDim: string;
   accentButtonText: string;
+  /**
+   * Scrim behind centered dialogs and celebration cards - dims the screen
+   * but keeps it recognisable. Every scrim in the app reads these two
+   * tokens instead of hardcoding rgba() so a theme can tune them (a light
+   * parchment theme, for instance, could use a warm brown scrim).
+   */
+  overlay: string;
+  /** Scrim behind bottom sheets / full-screen pickers - nearly opaque. */
+  overlayStrong: string;
 }>;
 
 export type ThemePreset = Readonly<{
@@ -60,6 +69,8 @@ const ARK_PARCHMENT: ThemePreset = {
     teal: "#5A8A7A",
     tealDim: "rgba(90, 138, 122, 0.15)",
     accentButtonText: "#D4B896",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -84,6 +95,8 @@ const FOREST_GOLD: ThemePreset = {
     teal: "#3aaa8a",
     tealDim: "rgba(58, 170, 138, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -108,6 +121,8 @@ const NEON_PURPLE: ThemePreset = {
     teal: "#00bcd4",                         
     tealDim: "rgba(0, 188, 212, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -132,6 +147,8 @@ const SLATE_DARK: ThemePreset = {
     teal: "#7aaca0",
     tealDim: "rgba(122, 172, 160, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -156,6 +173,8 @@ const ROSE_LIGHT: ThemePreset = {
     teal: "#5aafb0",
     tealDim: "rgba(90, 175, 176, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -180,6 +199,8 @@ const SYNTHWAVE: ThemePreset = {
     teal: "#6aadcc",
     tealDim: "rgba(106, 173, 204, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -204,6 +225,8 @@ const DEEPFOREST: ThemePreset = {
     teal: "#7bd7c6",
     tealDim: "rgba(123, 215, 198, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -230,6 +253,8 @@ const OCEAN_CORAL: ThemePreset = {
     teal: "#5abaa0",
     tealDim: "rgba(90, 186, 160, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -260,6 +285,8 @@ const SLATE: ThemePreset = {
     teal: "#63b0a0",
     tealDim: "rgba(99, 176, 160, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -295,6 +322,8 @@ const CLASSIC: ThemePreset = {
     teal: "#006666",
     tealDim: "rgba(0, 102, 102, 0.15)",
     accentButtonText: "#ffffff",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -326,6 +355,8 @@ const DEEP_SPACE: ThemePreset = {
     teal: "#2dd4bf",
     tealDim: "rgba(45, 212, 191, 0.14)",
     accentButtonText: "#ffffff",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -357,6 +388,8 @@ const DEEP_SEA: ThemePreset = {
     teal: "#54b8e8",
     tealDim: "rgba(84, 184, 232, 0.14)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -391,6 +424,8 @@ const LIGHTHOUSE: ThemePreset = {
     teal: "#79e0e8",
     tealDim: "rgba(121, 224, 232, 0.18)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -422,6 +457,8 @@ const CHART_ROOM: ThemePreset = {
     teal: "#275f6b",
     tealDim: "rgba(39, 95, 107, 0.15)",
     accentButtonText: "#f2e4c4",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -458,6 +495,8 @@ const HARBOR_DAWN: ThemePreset = {
     teal: "#2b756c",
     tealDim: "rgba(43, 117, 108, 0.15)",
     accentButtonText: "#ffffff",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -490,6 +529,8 @@ const LEDGER: ThemePreset = {
     teal: "#34756d",
     tealDim: "rgba(52, 117, 109, 0.15)",
     accentButtonText: "#eaf4ea",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 

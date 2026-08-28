@@ -35,7 +35,7 @@ const BackupReminderBanner: React.FC<BackupReminderBannerProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   if (!shouldShowBackupReminder(backupState, CURRENT_APP_VERSION)) {
     return null;

@@ -647,7 +647,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                   </Text>
                 )}
                 {goalPaymentInfo && !isFinite(goalPaymentInfo.required) && (
-                  <Text style={[styles.goalHint, { color: colors.danger || "#ff5252" }]}>
+                  <Text style={[styles.goalHint, { color: colors.danger }]}>
                     Goal date is too soon - not achievable
                   </Text>
                 )}
@@ -850,7 +850,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     modalSheet: {

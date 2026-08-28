@@ -25,7 +25,7 @@ type ProfileCardProps = {
 const ProfileCard: React.FC<ProfileCardProps> = ({ user, onUserUpdated }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   /** Editable display name (local state before saving) */
   const [editName, setEditName] = useState("");

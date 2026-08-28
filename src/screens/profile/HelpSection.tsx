@@ -30,7 +30,7 @@ type HelpSectionProps = {
 const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
   const { replay: replayCoachmarks } = useCoachmarks();
   const { restartOnboarding } = useOnboardingGate();
   const { replayFeatureTour } = useFeatureTour();

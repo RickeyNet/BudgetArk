@@ -3271,7 +3271,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       backgroundColor: colors.accent,
     },
     refiDebtCheckboxMark: {
-      color: colors.white ?? "#fff",
+      color: colors.white,
       fontSize: 14,
       fontWeight: "700",
       lineHeight: 16,

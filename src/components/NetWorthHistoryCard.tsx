@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Net Worth History Card
+ * File: src/components/NetWorthHistoryCard.tsx
+ *
+ * Bridge-tab card that plots the monthly net-worth snapshots
+ * (netWorthSnapshotStorage) as an SVG line with a selectable range, so the
+ * user sees the trend rather than just today's number.
+ */
+
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import Svg, {

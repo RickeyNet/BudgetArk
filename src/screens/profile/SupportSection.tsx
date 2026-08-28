@@ -35,7 +35,7 @@ const SupportSection: React.FC<SupportSectionProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 

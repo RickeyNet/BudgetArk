@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Upcoming Bills Banner
+ * File: src/components/DueDateReminderBanner.tsx
+ *
+ * Passive banner (Budget and DebtTracker tabs) listing recurring expenses
+ * due soon (utils/billCalendar). The bill counterpart of
+ * DebtDueReminderBanner - in-app only, never a notification.
+ */
+
 import React, { useMemo } from "react";
 import {
   StyleProp,

@@ -186,6 +186,9 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
+      // Deliberately not the theme scrim: this is a photo viewer, and photos
+      // read best on a near-black backdrop in every theme (same as the OS
+      // photo apps). The only intentional rgba() left outside themes.ts.
       backgroundColor: "rgba(0, 0, 0, 0.96)",
     },
     topBar: {

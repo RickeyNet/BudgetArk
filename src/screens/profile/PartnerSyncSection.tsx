@@ -42,7 +42,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [showUnpairConfirm, setShowUnpairConfirm] = useState(false);

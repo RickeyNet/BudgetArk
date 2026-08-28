@@ -157,7 +157,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
 }, ref) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
   const {
     preference,
     options: currencyOptions,

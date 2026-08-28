@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Debt Payoff Celebration
+ * File: src/components/DebtPayoffCelebrationModal.tsx
+ *
+ * The "you paid it off" moment when a debt's balance reaches zero: an
+ * animated congratulation card with confetti. Presented by
+ * DebtDueReminderHost and the DebtTracker payment flow.
+ */
+
 import React, { useEffect, useMemo } from "react";
 import {
   Animated,

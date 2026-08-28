@@ -224,7 +224,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     pickerOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: 20,
     },

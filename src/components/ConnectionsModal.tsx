@@ -953,7 +953,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     dialogOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "center",
       alignItems: "center",
       paddingHorizontal: 28,

@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Bridge Tab (net worth)
+ * File: src/screens/BridgeScreen.tsx
+ *
+ * The app's home tab: assets vs debts, net worth history, per-account
+ * rise/drop deltas, Live Holdings, and the emergency-fund summary. Asset
+ * accounts are edited here (add/update via atomic assetAccountStorage
+ * helpers); the debts themselves live on the DebtTracker tab.
+ */
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -2386,7 +2396,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: tokens.padLg,
     },

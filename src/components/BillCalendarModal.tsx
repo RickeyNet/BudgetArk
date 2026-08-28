@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Bill Calendar Modal
+ * File: src/components/BillCalendarModal.tsx
+ *
+ * Month-grid view of when recurring expenses and debt payments land, from
+ * utils/billCalendar + utils/debtDueCalendar. Read-only: it visualises
+ * timing so the user can see cash-flow pinch points, and links out to the
+ * device calendar for reminders (BudgetArk never pushes bill alerts).
+ */
+
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
@@ -371,7 +381,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
     },
     sheet: {
       flex: 1,
@@ -575,7 +585,7 @@ const makeStyles = (colors: ThemeColors) =>
     /* Day-detail sheet */
     dayOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.7)",
+      backgroundColor: colors.overlay,
       justifyContent: "flex-end",
     },
     dayCard: {

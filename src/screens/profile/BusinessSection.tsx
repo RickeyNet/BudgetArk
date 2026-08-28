@@ -35,7 +35,7 @@ const BusinessSection: React.FC<BusinessSectionProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   const [showBusinessReport, setShowBusinessReport] = useState(false);
 

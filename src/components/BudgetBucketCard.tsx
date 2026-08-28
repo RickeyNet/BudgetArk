@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Budget Bucket Card (Needs / Wants / Savings)
+ * File: src/components/BudgetBucketCard.tsx
+ *
+ * The 50/30/20-style card on the Budget tab: groups this month's spending
+ * into needs/wants/savings buckets (built-in mapping + the user's
+ * per-category overrides) and shows each bucket against its target share.
+ */
+
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {

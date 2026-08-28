@@ -19,7 +19,7 @@ import { useProfileStyles } from "./profileStyles";
 const ProgressSection: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   const { unlocked: achievementUnlocked, totalCount: totalAchievements } =
     useAchievements();

@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Monthly Review Modal
+ * File: src/components/MonthlyReviewModal.tsx
+ *
+ * End-of-month recap (income vs spending, category movers, streaks) built
+ * from utils/budgetInsights. Opening it counts toward the monthly-review
+ * achievement (BudgetScreen records the open), which is why it is a
+ * distinct surface rather than a Budget-tab section.
+ */
+
 import React, { useMemo } from "react";
 import {
   Modal,

@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Confetti Burst
+ * File: src/components/ConfettiBurst.tsx
+ *
+ * Deterministic falling-confetti animation shared by the celebration
+ * modals (debt payment / payoff, achievement unlock, lesson complete).
+ * Seeded positions (no Math.random) so the burst is identical on every
+ * device and never jitters between renders.
+ */
+
 import React, { useEffect } from "react";
 import {
   Animated,

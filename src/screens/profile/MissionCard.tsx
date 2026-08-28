@@ -17,7 +17,7 @@ import { useProfileStyles } from "./profileStyles";
 const MissionCard: React.FC = () => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   /** Whether the mission statement body is expanded */
   const [missionExpanded, setMissionExpanded] = useState(false);

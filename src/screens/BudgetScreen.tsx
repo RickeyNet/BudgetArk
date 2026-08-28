@@ -1,3 +1,14 @@
+/**
+ * BudgetArk - Budget Tab
+ * File: src/screens/BudgetScreen.tsx
+ *
+ * Monthly income/expense ledger: entry list with category budgets and
+ * limits, the month-start cash-flow card, recurring entries, private
+ * entries, bank Review Inbox access, and the Add/Edit entry modal. Every
+ * write goes through the atomic budgetStorage helpers so a partner sync or
+ * bank sync landing behind this screen is never reverted by a stale save.
+ */
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -3109,7 +3120,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     limitOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: 20,
     },
@@ -3388,7 +3399,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     bulkPickerOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.7)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: 28,
     },

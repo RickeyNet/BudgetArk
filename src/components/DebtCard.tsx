@@ -293,9 +293,9 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
 
       {/* ── Goal Date Info ── */}
       {goalInfo && (
-        <View style={[styles.goalRow, { backgroundColor: goalInfo.expired ? (colors.dangerDim || "#ff525220") : goalInfo.onTrack ? colors.successDim : `${colors.accent}20` }]}>
+        <View style={[styles.goalRow, { backgroundColor: goalInfo.expired ? colors.dangerDim : goalInfo.onTrack ? colors.successDim : `${colors.accent}20` }]}>
           {goalInfo.expired ? (
-            <Text style={[styles.goalText, { color: colors.danger || "#ff5252" }]}>
+            <Text style={[styles.goalText, { color: colors.danger }]}>
               Goal date has passed
             </Text>
           ) : (

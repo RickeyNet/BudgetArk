@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Quick Entry Deep-Link Host
+ * File: src/components/QuickAddLinkHost.tsx
+ *
+ * App-root listener for the home-screen widget's budgetark:// links. Parses
+ * them fail-closed (parseQuickAddUri - only a category name, never an
+ * amount) and navigates to the Budget tab with the prefilled Add Entry
+ * param. Guards the cold-start URL so it is handled once per launch.
+ */
+
 import { useEffect } from "react";
 import { Linking } from "react-native";
 import type { NavigationContainerRefWithCurrent } from "@react-navigation/native";

@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Debt Payment Celebration
+ * File: src/components/DebtPaymentCelebrationModal.tsx
+ *
+ * Short confetti confirmation after a payment is logged from the due-day
+ * prompt that did NOT clear the debt: shows the amount, then hands back to
+ * the host. Kept separate from the payoff celebration, which is a bigger
+ * moment with its own animation.
+ */
+
 import React, { useEffect, useMemo } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -75,7 +85,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.75)",
+      backgroundColor: colors.overlay,
       justifyContent: "flex-end",
       paddingHorizontal: 20,
     },

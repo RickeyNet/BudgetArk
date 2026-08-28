@@ -37,7 +37,7 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
 
   const [showPersonReport, setShowPersonReport] = useState(false);
 

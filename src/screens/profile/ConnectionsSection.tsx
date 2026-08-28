@@ -68,7 +68,7 @@ const ConnectionsSection = forwardRef<
 >(({ newFeatureIds, onDismissNewBadge }, ref) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const styles = useProfileStyles(tokens);
+  const styles = useProfileStyles(tokens, colors);
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
 
   /** Bank Connections (BYO API): modals + first-use disclosure. */

@@ -412,7 +412,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       fontWeight: "600",
     },
     filterChipTextActive: {
-      color: colors.white ?? "#fff",
+      color: colors.white,
     },
     gridContent: {
       paddingHorizontal: tokens.pad,
@@ -459,7 +459,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     },
     detailOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.7)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       alignItems: "center",
       paddingHorizontal: 32,
@@ -514,7 +514,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       backgroundColor: colors.accent,
     },
     detailButtonText: {
-      color: colors.white ?? "#fff",
+      color: colors.white,
       fontWeight: "700",
       fontSize: 14,
     },

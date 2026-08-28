@@ -73,7 +73,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
   ({ showInfo, onRefreshBackupState, onConfirmReset }, ref) => {
     const { colors } = useTheme();
     const { tokens } = useDensity();
-    const styles = useProfileStyles(tokens);
+    const styles = useProfileStyles(tokens, colors);
 
     const { runCheck: refreshAchievements } = useAchievements();
     const { refresh: refreshCustomCategories } = useCustomCategories();

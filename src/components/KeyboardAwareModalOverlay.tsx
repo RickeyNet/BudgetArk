@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Keyboard-Aware Modal Overlay
+ * File: src/components/KeyboardAwareModalOverlay.tsx
+ *
+ * The dim overlay for centered dialog modals, wrapped in a
+ * KeyboardAvoidingView so the card lifts above the keyboard. This is the
+ * centered-card strategy; bottom sheets use SheetKeyboardAvoider instead -
+ * the two are deliberately separate because their offsets differ.
+ */
+
 import React from "react";
 import {
   KeyboardAvoidingView,
