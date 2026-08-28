@@ -85,7 +85,7 @@ import {
 import { rescheduleCardKeepAliveReminders } from "../notifications/cardKeepAliveReminders";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
-import { getEmergencyFundSource } from "../utils/emergencyFund";
+import { getEmergencyFundSource, sumSavingsReserve } from "../utils/emergencyFund";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
@@ -415,13 +415,7 @@ const DebtTrackerScreen: React.FC = () => {
           // counts here - Retirement and Investing flow into the
           // gather_animals milestone via retirementInvestingMonthly below
           // because those funds aren't liquid emergency money.
-          const savings = budgetEntries
-            .filter(
-              (entry) =>
-                entry.type === "expense" && entry.category === "Savings"
-            )
-            .reduce((sum, entry) => sum + entry.amount, 0);
-          setSavingsReserve(savings);
+          setSavingsReserve(sumSavingsReserve(budgetEntries));
 
           const monthTotals = budgetEntries.reduce<Record<string, number>>((acc, entry) => {
             if (

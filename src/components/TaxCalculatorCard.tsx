@@ -23,6 +23,7 @@ import {
   View,
 } from "react-native";
 import CodeChipGrid, { type CodeChipStyles } from "./CodeChipGrid";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -39,12 +40,8 @@ import {
   type TakeHomeResult,
 } from "../utils/taxCalc";
 
-/** Tolerant "$1,234.56" / "1234" parser; NaN-safe (0). */
-const parseMoney = (text: string): number => {
-  const cleaned = text.replace(/[^0-9.]/g, "");
-  const value = parseFloat(cleaned);
-  return Number.isFinite(value) ? value : 0;
-};
+/** Shared money rule (utils/parseMoneyInput); empty/invalid reads as 0 here. */
+const parseMoney = (text: string): number => parseMoneyInput(text) ?? 0;
 
 const usd = (value: number, decimals = 0): string =>
   `$${value.toLocaleString("en-US", {

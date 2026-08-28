@@ -6,8 +6,10 @@
 import {
   getEmergencyFundSource,
   resolveEmergencyFundAmount,
+  resolveEmergencyFundGoal,
+  sumSavingsReserve,
 } from "../emergencyFund";
-import type { AssetAccount, SavingsGoal } from "../../types";
+import type { AssetAccount, BudgetEntry, SavingsGoal } from "../../types";
 
 const efGoal = (over: Partial<SavingsGoal> = {}): SavingsGoal => ({
   id: "g1",
@@ -79,5 +81,83 @@ describe("resolveEmergencyFundAmount", () => {
   it("skips a tombstoned emergency-fund goal", () => {
     const dead = efGoal({ deletedAt: "2026-02-01T00:00:00.000Z" });
     expect(resolveEmergencyFundAmount([dead], [])).toBe(0);
+  });
+});
+
+const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry => ({
+  id: "e1",
+  type: "expense",
+  category: "Savings",
+  amount: 100,
+  date: "2026-03-01",
+  createdAt: "2026-03-01T00:00:00.000Z",
+  updatedAt: "2026-03-01T00:00:00.000Z",
+  ...over,
+});
+
+describe("sumSavingsReserve", () => {
+  it("counts only Savings expenses - not Retirement/Investing or income", () => {
+    expect(
+      sumSavingsReserve([
+        entry({ amount: 100 }),
+        entry({ id: "e2", amount: 50 }),
+        entry({ id: "e3", category: "Retirement", amount: 999 }),
+        entry({ id: "e4", category: "Investing", amount: 999 }),
+        entry({ id: "e5", type: "income", category: "Salary", amount: 999 }),
+      ])
+    ).toBe(150);
+    expect(sumSavingsReserve([])).toBe(0);
+  });
+});
+
+describe("resolveEmergencyFundGoal", () => {
+  const resolve = (over: Partial<Parameters<typeof resolveEmergencyFundGoal>[0]> = {}) =>
+    resolveEmergencyFundGoal({
+      savingsGoals: [],
+      assetAccounts: [],
+      keelTarget: 0,
+      savingsReserve: 0,
+      ...over,
+    });
+
+  it("is null when there is no goal, no Keel target, and no savings yet", () => {
+    expect(resolve()).toBeNull();
+  });
+
+  it("prefers the explicit emergency_fund goal", () => {
+    const goal = efGoal({ targetAmount: 5000, currentAmount: 1200 });
+    expect(resolve({ savingsGoals: [goal], keelTarget: 999, savingsReserve: 42 })).toBe(goal);
+  });
+
+  it("synthesises a goal from the Keel target + Savings reserve", () => {
+    expect(resolve({ keelTarget: 3000, savingsReserve: 450 })).toMatchObject({
+      id: "__keel_ef__",
+      category: "emergency_fund",
+      targetAmount: 3000,
+      currentAmount: 450,
+    });
+    // Either side alone is enough for the fund to appear.
+    expect(resolve({ savingsReserve: 10 })?.currentAmount).toBe(10);
+    expect(resolve({ keelTarget: 10 })?.targetAmount).toBe(10);
+  });
+
+  it("linked mode overlays the designated accounts' total, keeping the explicit target", () => {
+    const goal = efGoal({ targetAmount: 5000, currentAmount: 1200 });
+    const linked = resolve({
+      savingsGoals: [goal],
+      assetAccounts: [
+        account({ isEmergencyFund: true, balance: 800 }),
+        account({ id: "a2", isEmergencyFund: true, balance: 700 }),
+        account({ id: "a3", balance: 99999 }),
+        account({ id: "a4", isEmergencyFund: true, balance: 5, deletedAt: "2026-02-01T00:00:00.000Z" }),
+      ],
+    });
+    expect(linked).toMatchObject({ id: "g1", targetAmount: 5000, currentAmount: 1500 });
+  });
+
+  it("linked mode creates a synthetic goal when nothing else exists", () => {
+    expect(
+      resolve({ assetAccounts: [account({ isEmergencyFund: true, balance: 250 })] })
+    ).toMatchObject({ id: "__linked_ef__", targetAmount: 0, currentAmount: 250 });
   });
 });

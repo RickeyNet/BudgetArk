@@ -12,6 +12,7 @@
 
 import { CURRENCY_PREFERENCE_OPTIONS } from "../types";
 import type { RatesSnapshot } from "./exchangeRates";
+import { parseMoneyInput } from "./parseMoneyInput";
 
 /** One selectable currency in the converter's From/To chip rows. */
 export interface ExchangeCurrency {
@@ -41,35 +42,12 @@ export const MAX_EXCHANGE_AMOUNT = 1_000_000_000;
 
 /**
  * Parse the free-typed amount field into a non-negative number, or null if
- * the text isn't a usable amount yet (empty, minus signs, letters, two
- * decimal points...). Accepts both "1,234.56" (comma thousands) and the
- * European "1234,56" (single comma as decimal separator, no dot) since
- * decimal-pad keyboards emit either depending on device locale. Amounts are
- * clamped to MAX_EXCHANGE_AMOUNT so extreme input can't overflow the math.
+ * the text isn't a usable amount yet. The comma/decimal rule and the clamp
+ * live in utils/parseMoneyInput (shared with every other money field);
+ * this wrapper only pins the converter's non-negative, capped contract.
  */
-export const parseAmountInput = (text: string): number | null => {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return null;
-
-  let normalized: string;
-  const hasDot = trimmed.includes(".");
-  const commaCount = (trimmed.match(/,/g) ?? []).length;
-  if (!hasDot && commaCount === 1) {
-    // Single comma, no dot: comma is the decimal separator ("1234,56").
-    normalized = trimmed.replace(",", ".");
-  } else {
-    // Otherwise commas are thousands separators ("1,234.56").
-    normalized = trimmed.replace(/,/g, "");
-  }
-  normalized = normalized.replace(/\s+/g, "");
-
-  if (!/^\d*\.?\d*$/.test(normalized) || normalized === "." || normalized === "") {
-    return null;
-  }
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value < 0) return null;
-  return Math.min(value, MAX_EXCHANGE_AMOUNT);
-};
+export const parseAmountInput = (text: string): number | null =>
+  parseMoneyInput(text, { max: MAX_EXCHANGE_AMOUNT });
 
 /**
  * Units of `toCode` per 1 unit of `fromCode`, derived from a units-per-USD

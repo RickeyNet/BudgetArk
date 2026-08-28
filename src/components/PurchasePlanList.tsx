@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
 import { describeError } from "../utils/errorMessage";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -52,10 +53,9 @@ export const iconForPlanCategory = (category: SavingsGoalCategory): string =>
   PLAN_CATEGORIES.find((c) => c.key === category)?.icon ?? "🎁";
 
 /** Parse a user-typed amount; NaN-safe, returns 0 for junk. */
-export const parsePlanAmount = (text: string): number => {
-  const parsed = parseFloat(text.replace(/,/g, "."));
-  return Number.isFinite(parsed) ? parsed : 0;
-};
+/** Shared money rule (utils/parseMoneyInput); negative = withdraw from the plan. */
+export const parsePlanAmount = (text: string): number =>
+  parseMoneyInput(text, { allowNegative: true }) ?? 0;
 
 export const formatPlanMonthYear = (date: Date): string =>
   date.toLocaleDateString(undefined, { month: "short", year: "numeric" });

@@ -116,7 +116,11 @@ import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
-import { getEmergencyFundSource } from "../utils/emergencyFund";
+import {
+  getEmergencyFundSource,
+  resolveEmergencyFundGoal,
+  sumSavingsReserve,
+} from "../utils/emergencyFund";
 import { isEntryActiveInMonth } from "../utils/recurrence";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
@@ -424,55 +428,19 @@ const BridgeScreen: React.FC = () => {
     }, [loadHoldingsState, migrateOrphanHoldings, refreshNetWorthSnapshots, reloadTick])
   );
 
-  // Emergency-fund derived current amount. Only the "Savings" category
-  // counts toward the EF; Retirement and Investing aren't liquid emergency
-  // money and feed the Gather Animals milestone separately.
-  const savingsReserve = useMemo(
-    () =>
-      entries
-        .filter(
-          (entry) =>
-            entry.type === "expense" && entry.category === "Savings"
-        )
-        .reduce((sum, entry) => sum + entry.amount, 0),
-    [entries]
-  );
+  const savingsReserve = useMemo(() => sumSavingsReserve(entries), [entries]);
 
-  // Savings accounts designated as the emergency fund. When any exist, the
-  // EF value is their combined balance (kept current by bank-connection
-  // balance pushes) and manual EF contributions are disabled.
+  // Savings accounts designated as the emergency fund (Bridge account
+  // editor). When any exist the EF value is their combined balance and
+  // manual contributions are disabled. Goal resolution itself lives in
+  // utils/emergencyFund.resolveEmergencyFundGoal, shared with BudgetScreen.
   const efSource = useMemo(() => getEmergencyFundSource(assetAccounts), [assetAccounts]);
 
-  const emergencyFundGoal = useMemo(() => {
-    const explicit = savingsGoals.find((goal) => goal.category === "emergency_fund");
-    const base =
-      explicit ??
-      (keelTarget > 0 || savingsReserve > 0
-        ? ({
-            id: "__keel_ef__",
-            name: "Emergency Fund",
-            category: "emergency_fund" as const,
-            targetAmount: keelTarget,
-            currentAmount: savingsReserve,
-            createdAt: "",
-            updatedAt: "",
-          } satisfies SavingsGoal)
-        : null);
-    if (!efSource.linked) return base;
-    // Linked mode: overlay the designated accounts' total as the current
-    // amount (keeping any explicit goal's target for the "x / y" display).
-    return {
-      ...(base ?? {
-        id: "__linked_ef__",
-        name: "Emergency Fund",
-        category: "emergency_fund" as const,
-        targetAmount: keelTarget,
-        createdAt: "",
-        updatedAt: "",
-      }),
-      currentAmount: efSource.linkedAmount,
-    } satisfies SavingsGoal;
-  }, [efSource, keelTarget, savingsGoals, savingsReserve]);
+  const emergencyFundGoal = useMemo(
+    () =>
+      resolveEmergencyFundGoal({ savingsGoals, assetAccounts, keelTarget, savingsReserve }),
+    [assetAccounts, savingsGoals, keelTarget, savingsReserve],
+  );
 
   // Convert holdings (quoted in their own currency - USD for US listings, the
   // pair's quote side for crypto) into the user's display currency, so they

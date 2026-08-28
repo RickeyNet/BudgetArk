@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { describeError } from "../utils/errorMessage";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -62,19 +63,10 @@ const currentMonthKey = (): string => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
 
-/** Accepts "1,234.56" and "1234,56" style typing; null when not a number. */
+/** Shared money rule (utils/parseMoneyInput); negatives allowed - overdrawn happens. */
 const parseBalanceInput = (text: string): number | null => {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  // If a comma appears but no dot, treat the comma as the decimal separator;
-  // otherwise commas are thousands separators and drop out.
-  const normalized =
-    trimmed.includes(",") && !trimmed.includes(".")
-      ? trimmed.replace(/,/g, ".")
-      : trimmed.replace(/,/g, "");
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || Math.abs(value) > 1_000_000_000) return null;
-  return roundCashAmount(value);
+  const value = parseMoneyInput(text, { allowNegative: true });
+  return value === null ? null : roundCashAmount(value);
 };
 
 const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({

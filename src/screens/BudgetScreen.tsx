@@ -126,7 +126,11 @@ import {
 } from "../utils/recurrence";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
-import { getEmergencyFundSource } from "../utils/emergencyFund";
+import {
+  getEmergencyFundSource,
+  resolveEmergencyFundGoal,
+  sumSavingsReserve,
+} from "../utils/emergencyFund";
 import { totalsByBucket } from "../utils/budgetBucketMath";
 import { summarizePaychecks } from "../utils/paycheckMath";
 import CashFlowCard from "../components/CashFlowCard";
@@ -622,55 +626,19 @@ const BudgetScreen: React.FC = () => {
     }).delta;
   }, [monthBalances, selectedMonthKey, entries, debts, payments]);
 
-  // Emergency-fund derived current amount. Only the "Savings" category
-  // counts toward the EF; Retirement and Investing aren't liquid emergency
-  // money. Kept in sync with the same narrowing in BridgeScreen and
-  // DebtTrackerScreen.
-  const savingsReserve = useMemo(
-    () =>
-      entries
-        .filter(
-          (e) => e.type === "expense" && e.category === "Savings"
-        )
-        .reduce((sum, e) => sum + e.amount, 0),
-    [entries]
-  );
+  const savingsReserve = useMemo(() => sumSavingsReserve(entries), [entries]);
 
   // Savings accounts designated as the emergency fund (Bridge account
   // editor). When any exist the EF value is their combined balance and
-  // manual contributions are disabled - same resolution as BridgeScreen.
+  // manual contributions are disabled. Goal resolution itself lives in
+  // utils/emergencyFund.resolveEmergencyFundGoal, shared with BridgeScreen.
   const efSource = useMemo(() => getEmergencyFundSource(assetAccounts), [assetAccounts]);
 
-  const emergencyFundGoal = useMemo(() => {
-    const explicit = savingsGoals.find((g) => g.category === "emergency_fund");
-    // Fall back to Keel milestone data so the emergency fund appears automatically
-    const base =
-      explicit ??
-      (keelTarget > 0 || savingsReserve > 0
-        ? ({
-            id: "__keel_ef__",
-            name: "Emergency Fund",
-            category: "emergency_fund" as const,
-            targetAmount: keelTarget,
-            currentAmount: savingsReserve,
-            createdAt: "",
-            updatedAt: "",
-          } satisfies SavingsGoal)
-        : null);
-    if (!efSource.linked) return base;
-    // Linked mode: the designated accounts' total is the current amount.
-    return {
-      ...(base ?? {
-        id: "__linked_ef__",
-        name: "Emergency Fund",
-        category: "emergency_fund" as const,
-        targetAmount: keelTarget,
-        createdAt: "",
-        updatedAt: "",
-      }),
-      currentAmount: efSource.linkedAmount,
-    } satisfies SavingsGoal;
-  }, [efSource, savingsGoals, keelTarget, savingsReserve]);
+  const emergencyFundGoal = useMemo(
+    () =>
+      resolveEmergencyFundGoal({ savingsGoals, assetAccounts, keelTarget, savingsReserve }),
+    [assetAccounts, savingsGoals, keelTarget, savingsReserve],
+  );
 
   const limitByCategory = useMemo(() => {
     const map: Record<string, number> = {};

@@ -26,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -73,13 +74,6 @@ interface GlobalSearchModalProps {
 }
 
 /** Strip user amount input to a number; blank/garbage → undefined. */
-const parseAmountInput = (raw: string): number | undefined => {
-  const cleaned = raw.replace(/[$,\s]/g, "");
-  if (!cleaned) return undefined;
-  const value = Number(cleaned);
-  return Number.isFinite(value) && value >= 0 ? value : undefined;
-};
-
 const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   onClose,
   debts,
@@ -346,7 +340,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     onChangeText={(text) => {
                       const clean = sanitizeTextInput(text);
                       setAmountMinText(clean);
-                      patchFilters({ amountMin: parseAmountInput(clean) });
+                      patchFilters({ amountMin: parseMoneyInput(clean) ?? undefined });
                     }}
                     keyboardType="decimal-pad"
                     accessibilityLabel="Minimum amount"
@@ -360,7 +354,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     onChangeText={(text) => {
                       const clean = sanitizeTextInput(text);
                       setAmountMaxText(clean);
-                      patchFilters({ amountMax: parseAmountInput(clean) });
+                      patchFilters({ amountMax: parseMoneyInput(clean) ?? undefined });
                     }}
                     keyboardType="decimal-pad"
                     accessibilityLabel="Maximum amount"
