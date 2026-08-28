@@ -69,18 +69,24 @@ Imported limits land in the current month's limit set.
 | `DebtClass`       | No       | `personal_credit` / `car` / `house`. Legacy `car_house` is accepted on import and split to `house` when the name mentions mortgage/house/home, otherwise `car`. |
 | `DebtClassSource` | No       | `manual` / `inferred`.                        |
 | `GoalDate`        | No       | Optional payoff target date.                  |
+| `PaymentDueDay`   | No       | Day of month (1–31) the payment is due.       |
+| `KeepAlive`       | No       | Card keep-alive watch: `yes` / `no`. Blank leaves the watch unset. Round-trips, so re-importing a workbook doesn't switch the watch off. |
+| `KeepAliveWindowMonths` | No | Issuer inactivity window in whole months, 1–60. |
+| `KeepAliveLeadDays` | No     | Days before the deadline reminders begin, 1–180. |
+| `KeepAliveLastUsedAt` | No   | When the card was last used (ISO timestamp or date). |
 | `CreatedAt`       | No       | ISO timestamp; defaults to now.               |
 | `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
 
 ## Sheet: Payments (xlsx only)
 
-| Column      | Required | Notes                            |
-| ----------- | -------- | -------------------------------- |
-| `ID`        | No       | Auto-generated if missing.       |
-| `DebtID`    | Yes      | Must match a debt's `ID`.        |
-| `Amount`    | Yes      | Positive number, ≥ 0.01.         |
-| `Date`      | Yes      | ISO date or US `M/D/YYYY` style. |
-| `UpdatedAt` | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
+| Column          | Required | Notes                            |
+| --------------- | -------- | -------------------------------- |
+| `ID`            | No       | Auto-generated if missing.       |
+| `DebtID`        | Yes      | Must match a debt's `ID`.        |
+| `Amount`        | Yes      | Positive number, ≥ 0.01.         |
+| `AppliedAmount` | No       | The part of `Amount` that actually reduced the balance (an overpayment is clamped at zero). 0 – `Amount`. Blank means the whole amount. Round-trips so deleting the payment later adds back the right delta. |
+| `Date`          | Yes      | ISO date or US `M/D/YYYY` style. |
+| `UpdatedAt`     | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
 
 ## Sheet: Savings Goals (xlsx only)
 
@@ -116,13 +122,18 @@ Imported limits land in the current month's limit set.
 | Column       | Required | Notes                                                                |
 | ------------ | -------- | -------------------------------------------------------------------- |
 | `ID`         | No       | Auto-generated if missing.                                           |
-| `Symbol`     | Yes      | Ticker, e.g. `AAPL`, `VTI`. Up to 12 chars (letters, digits, `.`, `-`). |
-| `Shares`     | Yes      | Positive number. Fractional shares allowed.                          |
+| `Symbol`     | Ticker/proxy | Ticker, e.g. `AAPL`, `VTI`. Up to 12 chars (letters, digits, `.`, `-`). For a proxy-tracked fund this is the proxy ticker; blank for a manual-value fund. |
+| `Shares`     | Ticker   | Positive number. Fractional shares allowed. Ignored (0) for proxy/manual funds. |
 | `CostBasis`  | No       | Total dollars invested, ≥ 0. Used for gain/loss.                    |
+| `Name`       | Proxy/manual | Display label for a fund with no public ticker (e.g. a 401k pool). |
+| `ManualValue` | Manual  | Fixed market value of a manual-value fund, ≥ 0. Filling this makes the row a manual-value holding. |
+| `AnchorValue` | Proxy   | Dollar value entered when the proxy price was captured, ≥ 0. Filling this makes the row a proxy-tracked holding (needs `Symbol`, `Name`, `AnchorPrice`). |
+| `AnchorPrice` | Proxy   | Proxy ticker price at the time `AnchorValue` was set, > 0. A proxy that has never been priced can't be represented and is skipped. |
+| `AccountId`  | No       | `ID` of the Investment asset account (broker) the position sits in. Round-trips so holdings stay grouped under their broker on the Bridge. |
 | `CreatedAt`  | No       | ISO timestamp; defaults to now.                                      |
 | `UpdatedAt`  | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
 
-> Stock/ETF positions only. Live prices are fetched per-device and are **never** included in exports or imports - a spreadsheet carries the holding, not its market value.
+> Three shapes share the sheet and are told apart by which optional columns are filled: **ticker** (`Symbol` + `Shares`), **proxy** (`Symbol` + `Name` + `AnchorValue` + `AnchorPrice`), **manual** (`Name` + `ManualValue`, no `Symbol`). Live prices are fetched per-device and are **never** included in exports or imports - a spreadsheet carries the holding, not its market value.
 
 ## Sheet: Businesses (xlsx only)
 

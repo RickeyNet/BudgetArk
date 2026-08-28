@@ -252,6 +252,77 @@ describe("importSpreadsheet - XLSX multi-sheet", () => {
   });
 });
 
+describe("importSpreadsheet - holding shapes", () => {
+  it("imports proxy-tracked and manual-value funds, and skips an unpriced proxy", async () => {
+    useXlsx({
+      "Budget Entries": [entryRow()],
+      Holdings: [
+        { ID: "h1", Symbol: "voo", Name: "Spartan 500", AnchorValue: 12000, AnchorPrice: 480.5, AccountId: "a3" },
+        { ID: "h2", Name: "Stable Value", ManualValue: 5000, AccountId: "a3" },
+        // Proxy without an anchor price can't satisfy the validator - skipped
+        // with a reason, not silently turned into another kind.
+        { ID: "h3", Symbol: "VTI", Name: "Unpriced", AnchorValue: 100 },
+        // Manual fund needs a name.
+        { ID: "h4", ManualValue: 10 },
+      ],
+    });
+    const result = await importSpreadsheet("merge");
+    const payload = lastPayload();
+    expect(payload.holdings.map((h: any) => h.id)).toEqual(["h1", "h2"]);
+    expect(payload.holdings[0]).toMatchObject({
+      symbol: "VOO", name: "Spartan 500", anchorValue: 12000, anchorPrice: 480.5, accountId: "a3", shares: 0,
+    });
+    expect(payload.holdings[1]).toMatchObject({
+      symbol: "", name: "Stable Value", manualValue: 5000, accountId: "a3",
+    });
+    expect(result?.skippedRows).toBe(2);
+    expect(result?.skippedRowDetails.map((d) => d.reason)).toEqual([
+      expect.stringContaining("AnchorPrice"),
+      expect.stringContaining("Name"),
+    ]);
+  });
+});
+
+describe("importSpreadsheet - debt keep-alive and payment applied amount", () => {
+  it("round-trips keep-alive fields and drops out-of-range values without skipping the debt", async () => {
+    useXlsx({
+      "Budget Entries": [entryRow()],
+      Debts: [
+        { ID: "d1", Name: "Visa", Balance: 100, OriginalBalance: 500, Rate: 19.9, MinPayment: 25, KeepAlive: "yes", KeepAliveWindowMonths: 6, KeepAliveLeadDays: 30, KeepAliveLastUsedAt: "2026-05-20" },
+        { ID: "d2", Name: "Amex", Balance: 100, OriginalBalance: 500, Rate: 19.9, MinPayment: 25, KeepAlive: "no", KeepAliveWindowMonths: 999, KeepAliveLeadDays: 0 },
+        { ID: "d3", Name: "Old export", Balance: 100, OriginalBalance: 500, Rate: 19.9, MinPayment: 25 },
+      ],
+    });
+    const result = await importSpreadsheet("merge");
+    const [d1, d2, d3] = lastPayload().debts;
+    expect(d1).toMatchObject({ keepAliveEnabled: true, keepAliveWindowMonths: 6, keepAliveLeadDays: 30 });
+    expect(d1.keepAliveLastUsedAt).toMatch(/^2026-05-20/);
+    // Explicit "no" survives; the two out-of-range numbers are dropped, not fatal.
+    expect(d2.keepAliveEnabled).toBe(false);
+    expect(d2.keepAliveWindowMonths).toBeUndefined();
+    expect(d2.keepAliveLeadDays).toBeUndefined();
+    // A workbook from before the columns existed leaves the watch unset.
+    expect(d3.keepAliveEnabled).toBeUndefined();
+    expect(result?.skippedRows).toBe(0);
+  });
+
+  it("keeps AppliedAmount when it is within [0, Amount] and drops it otherwise", async () => {
+    useXlsx({
+      "Budget Entries": [entryRow()],
+      Payments: [
+        { ID: "p1", DebtID: "d1", Amount: 300, AppliedAmount: 250, Date: "2026-06-10" },
+        { ID: "p2", DebtID: "d1", Amount: 300, AppliedAmount: 999, Date: "2026-06-11" },
+        { ID: "p3", DebtID: "d1", Amount: 300, Date: "2026-06-12" },
+      ],
+    });
+    await importSpreadsheet("merge");
+    const [p1, p2, p3] = lastPayload().payments;
+    expect(p1.appliedAmount).toBe(250);
+    expect(p2.appliedAmount).toBeUndefined();
+    expect(p3.appliedAmount).toBeUndefined();
+  });
+});
+
 describe("importSpreadsheet - row filtering", () => {
   it("skips invalid rows and reports a reason", async () => {
     useCsv([entryRow({ ID: "good" }), entryRow({ ID: "bad", Type: "transfer" })]);

@@ -40,6 +40,10 @@ import {
 import { generateUUID } from "./uuid";
 import { normalizeImportCategory, VALIDATOR_LIMITS } from "./recordValidators";
 import { isValidSymbol, normalizeSymbol } from "./holdingsMath";
+import {
+  KEEP_ALIVE_MAX_LEAD_DAYS,
+  KEEP_ALIVE_MAX_WINDOW_MONTHS,
+} from "./cardKeepAlive";
 import { normalizePaymentUrl } from "./paymentUrl";
 import {
   ASSET_ACCOUNT_CATEGORIES,
@@ -634,6 +638,33 @@ const rowToDebt = (row: Record<string, unknown>): RowResult<Record<string, unkno
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   const now = new Date().toISOString();
 
+  // Card keep-alive watch. All optional; an out-of-range value drops just
+  // that field (mirroring isDebtItem's bounds) rather than skipping the
+  // whole debt - the watch is a convenience, the debt is the data. Blank
+  // KeepAlive stays undefined so a workbook from before the column existed
+  // doesn't flip every card to an explicit "off".
+  const keepAliveRaw = parseString(get(row, "KeepAlive", "Keep Alive")).toLowerCase();
+  const keepAliveEnabled = keepAliveRaw
+    ? parseBoolean(keepAliveRaw)
+    : undefined;
+  const optionalInt = (raw: unknown, min: number, max: number): number | undefined => {
+    if (raw === undefined || raw === null || String(raw).trim() === "") return undefined;
+    const n = parseAmount(raw);
+    return Number.isInteger(n) && n >= min && n <= max ? n : undefined;
+  };
+  const keepAliveWindowMonths = optionalInt(
+    get(row, "KeepAliveWindowMonths", "Keep Alive Window Months"),
+    1,
+    KEEP_ALIVE_MAX_WINDOW_MONTHS
+  );
+  const keepAliveLeadDays = optionalInt(
+    get(row, "KeepAliveLeadDays", "Keep Alive Lead Days"),
+    1,
+    KEEP_ALIVE_MAX_LEAD_DAYS
+  );
+  const keepAliveLastUsedAt =
+    parseDate(get(row, "KeepAliveLastUsedAt", "Keep Alive Last Used At")) || undefined;
+
   // Preserve `updatedAt` so a paired sync doesn't treat every imported row
   // as "freshly edited" and clobber the partner's data. Falls back to
   // CreatedAt (the row pre-existed but the export was older than the
@@ -650,6 +681,10 @@ const rowToDebt = (row: Record<string, unknown>): RowResult<Record<string, unkno
     debtClassSource,
     goalDate: goalDate || undefined,
     paymentDueDay,
+    ...(keepAliveEnabled !== undefined ? { keepAliveEnabled } : {}),
+    ...(keepAliveWindowMonths !== undefined ? { keepAliveWindowMonths } : {}),
+    ...(keepAliveLeadDays !== undefined ? { keepAliveLeadDays } : {}),
+    ...(keepAliveLastUsedAt ? { keepAliveLastUsedAt } : {}),
     createdAt: createdAtIso || now,
     updatedAt: updatedAtIso || createdAtIso || now,
   });
@@ -673,11 +708,29 @@ const rowToPayment = (row: Record<string, unknown>): RowResult<Record<string, un
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // AppliedAmount: the slice of Amount that actually hit the balance
+  // (overpayments are clamped). Optional; blank keeps the legacy "absent =
+  // whole amount" meaning, and a nonsense value (negative, > Amount) is
+  // dropped rather than skipping the payment - it only affects what a later
+  // delete adds back.
+  const appliedRaw = get(row, "AppliedAmount", "Applied Amount");
+  const appliedParsed =
+    appliedRaw === undefined || appliedRaw === null || String(appliedRaw).trim() === ""
+      ? undefined
+      : parseAmount(appliedRaw);
+  const appliedAmount =
+    appliedParsed !== undefined &&
+    Number.isFinite(appliedParsed) &&
+    appliedParsed >= 0 &&
+    appliedParsed <= amount
+      ? appliedParsed
+      : undefined;
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return okRow({
     id,
     debtId,
     amount,
+    ...(appliedAmount !== undefined ? { appliedAmount } : {}),
     date: dateIso,
     updatedAt: updatedAtIso || dateIso || new Date().toISOString(),
   });
@@ -778,34 +831,66 @@ const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<strin
   });
 };
 
+/** Blank-aware optional money cell: undefined when empty, else parsed. */
+const optionalMoney = (raw: unknown): number | undefined =>
+  raw === undefined || raw === null || String(raw).trim() === ""
+    ? undefined
+    : parseAmount(raw);
+
+const isMoneyInRange = (n: number, min = 0): boolean =>
+  Number.isFinite(n) && n >= min && n <= VALIDATOR_LIMITS.MAX_MONEY;
+
+/**
+ * Three holding shapes share the sheet (see HOLDING_COLUMNS in the
+ * exporter): a plain ticker, a proxy-tracked fund (Symbol is the proxy
+ * ticker; value = AnchorValue × price / AnchorPrice), and a manual
+ * fixed-value fund (no Symbol at all). Bounds mirror isHoldingItem's three
+ * branches; a row that fits none is skipped with a reason so the strict
+ * downstream sanitizer can't abort the whole import.
+ */
 const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const symbolRaw = parseString(get(row, "Symbol", "Ticker"), 12);
   const symbol = normalizeSymbol(symbolRaw);
-  const shares = parseAmount(get(row, "Shares"));
-  const costBasisRaw = get(row, "CostBasis", "Cost Basis");
-  const hasCostBasis =
-    costBasisRaw !== undefined &&
-    costBasisRaw !== null &&
-    String(costBasisRaw).trim() !== "";
-  const costBasis = hasCostBasis ? parseAmount(costBasisRaw) : undefined;
+  const sharesCell = get(row, "Shares");
+  const shares = optionalMoney(sharesCell) ?? 0;
+  const costBasis = optionalMoney(get(row, "CostBasis", "Cost Basis"));
+  const name = parseString(get(row, "Name"), 80) || undefined;
+  const manualValue = optionalMoney(get(row, "ManualValue", "Manual Value"));
+  const anchorValue = optionalMoney(get(row, "AnchorValue", "Anchor Value"));
+  const anchorPrice = optionalMoney(get(row, "AnchorPrice", "Anchor Price"));
+  const accountId = parseString(get(row, "AccountId", "Account ID", "Account Id"), 80) || undefined;
 
-  // Bounds mirror isHoldingItem: symbol matches the ticker pattern, shares in
-  // (0, MAX_MONEY], optional costBasis in [0, MAX_MONEY]. Out-of-range rows are
-  // skipped so the strict downstream sanitizer can't abort the whole import.
-  if (!symbolRaw) {
-    return skipRow("Symbol is missing");
+  if (costBasis !== undefined && !isMoneyInRange(costBasis)) {
+    return skipRow("Cost basis must be a number of 0 or more");
   }
-  if (!isValidSymbol(symbol)) {
+  if (symbolRaw && !isValidSymbol(symbol)) {
     return skipRow(`Symbol "${symbolRaw}" is not a valid ticker`);
   }
-  if (!Number.isFinite(shares) || shares <= 0 || shares > VALIDATOR_LIMITS.MAX_MONEY) {
-    return skipRow("Shares must be a positive number");
-  }
-  if (
-    costBasis !== undefined &&
-    (!Number.isFinite(costBasis) || costBasis < 0 || costBasis > VALIDATOR_LIMITS.MAX_MONEY)
-  ) {
-    return skipRow("Cost basis must be a number of 0 or more");
+
+  let shape: Record<string, unknown>;
+  if (anchorValue !== undefined) {
+    // Proxy-tracked. isHoldingItem requires the anchor price too; a proxy
+    // that was never priced can't be represented, so the row is skipped
+    // rather than guessed into a different kind.
+    if (!symbolRaw) return skipRow("Proxy holding needs a Symbol (the proxy ticker)");
+    if (!name) return skipRow("Proxy holding needs a Name");
+    if (!isMoneyInRange(anchorValue)) return skipRow("Anchor value must be a number of 0 or more");
+    if (anchorPrice === undefined || !isMoneyInRange(anchorPrice) || anchorPrice <= 0) {
+      return skipRow("Proxy holding needs a positive AnchorPrice");
+    }
+    shape = { symbol, shares: isMoneyInRange(shares) ? shares : 0, name, anchorValue, anchorPrice };
+  } else if (manualValue !== undefined) {
+    // Manual fixed value: a named position with no ticker.
+    if (!name) return skipRow("Manual-value holding needs a Name");
+    if (!isMoneyInRange(manualValue)) return skipRow("Manual value must be a number of 0 or more");
+    shape = { symbol: "", shares: isMoneyInRange(shares) ? shares : 0, name, manualValue };
+  } else {
+    // Plain ticker (the legacy shape).
+    if (!symbolRaw) return skipRow("Symbol is missing");
+    if (!isMoneyInRange(shares) || shares <= 0) {
+      return skipRow("Shares must be a positive number");
+    }
+    shape = { symbol, shares, ...(name ? { name } : {}) };
   }
 
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
@@ -814,9 +899,9 @@ const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, un
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return okRow({
     id,
-    symbol,
-    shares,
+    ...shape,
     costBasis,
+    ...(accountId ? { accountId } : {}),
     createdAt,
     updatedAt: updatedAtIso || createdAt,
   });

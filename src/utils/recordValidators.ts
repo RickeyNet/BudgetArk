@@ -169,6 +169,10 @@ export const isPaymentItem = (
     isSafeText(item.id) &&
     isSafeText(item.debtId) &&
     isSafeNumber(item.amount, { min: 0.01 }) &&
+    // Optional clamped delta; never more than the payment itself.
+    (item.appliedAmount === undefined ||
+      (isSafeNumber(item.appliedAmount, { min: 0 }) &&
+        (item.appliedAmount as number) <= (item.amount as number))) &&
     isValidDateValue(item.date) &&
     isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)

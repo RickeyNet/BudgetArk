@@ -58,9 +58,22 @@ const debtFixture = {
   owner: "mine",
   debtClass: "car",
   debtClassSource: "manual",
+  // Card keep-alive watch: every field must round-trip - on an updatedAt tie
+  // the merge takes the incoming row, so a workbook without them silently
+  // switched the watch off for every card.
+  keepAliveEnabled: true,
+  keepAliveWindowMonths: 6,
+  keepAliveLeadDays: 30,
+  keepAliveLastUsedAt: "2026-05-20T15:30:00.000Z",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-02T00:00:00.000Z",
 };
+const paymentFixtures = [
+  // Overpayment clamped at the balance: AppliedAmount (the real delta) must
+  // round-trip or a later delete restores the full Amount.
+  { id: "p1", debtId: "d1", amount: 300, appliedAmount: 250, date: "2026-06-10T12:00:00.000Z", updatedAt: "2026-06-10T12:00:00.000Z" },
+  { id: "p2", debtId: "d1", amount: 200, date: "2026-05-10T12:00:00.000Z", updatedAt: "2026-05-10T12:00:00.000Z" },
+];
 const entryFixtures = [
   { id: "e1", type: "income", category: "Salary", amount: 4000, date: "2026-06-01", createdAt: "2026-06-01T00:00:00.000Z" },
   { id: "e2", type: "expense", category: "Food", amount: 30.5, date: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z" },
@@ -93,6 +106,13 @@ const holdingsFixtures = [
   { id: "h1", symbol: "AAPL", shares: 10, costBasis: 1500, createdAt: "2026-05-01T00:00:00.000Z", updatedAt: "2026-05-02T00:00:00.000Z" },
   // Fractional shares + no cost basis: both must round-trip through the sheet.
   { id: "h2", symbol: "VTI", shares: 0.25, createdAt: "2026-05-03T00:00:00.000Z", updatedAt: "2026-05-03T00:00:00.000Z" },
+  // Proxy-tracked 401k fund riding VOO, linked to its broker account: the
+  // name/anchor fields and AccountId must survive or the fund comes back as
+  // a plain 0-share VOO position orphaned from its account.
+  { id: "h3", symbol: "VOO", shares: 0, name: "Spartan 500 Index Pool", anchorValue: 12000, anchorPrice: 480.5, accountId: "a3", createdAt: "2026-05-04T00:00:00.000Z", updatedAt: "2026-05-05T00:00:00.000Z" },
+  // Manual fixed-value fund with no ticker at all: used to be skipped on
+  // import ("Symbol is missing") and silently lost.
+  { id: "h4", symbol: "", shares: 0, name: "Stable Value Fund", manualValue: 5000, accountId: "a3", createdAt: "2026-05-06T00:00:00.000Z", updatedAt: "2026-05-06T00:00:00.000Z" },
 ];
 const assetAccountFixtures = [
   // EF-designated savings account: the EmergencyFund flag must round-trip -
@@ -103,7 +123,7 @@ const assetAccountFixtures = [
 
 jest.mock("../../storage/debtStorage", () => ({
   getDebts: jest.fn(async () => [debtRef]),
-  getPayments: jest.fn(async () => []),
+  getPayments: jest.fn(async () => paymentsRef),
 }));
 jest.mock("../../storage/budgetStorage", () => ({
   getBudgetEntries: jest.fn(async () => entriesRef),
@@ -132,6 +152,7 @@ jest.mock("../importData", () => ({
 jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 
 const debtRef = debtFixture;
+const paymentsRef = paymentFixtures;
 const entriesRef = entryFixtures;
 const holdingsRef = holdingsFixtures;
 const assetAccountsRef = assetAccountFixtures;
@@ -227,21 +248,59 @@ describe("xlsx round-trip", () => {
     // exact-day check here would flake on the offset, not on a real regression.
     expect(byId.e3.date).toMatch(/^2026-01/);
 
-    // Debts survive with their numeric fields intact.
+    // Debts survive with their numeric fields intact, and the card keep-alive
+    // watch comes back exactly as exported.
     expect(payload.debts).toHaveLength(1);
     expect(payload.debts[0]).toMatchObject({
       id: "d1", name: "Car Loan", balance: 5000, originalBalance: 10000, rate: 6.5, minPayment: 200,
+      keepAliveEnabled: true,
+      keepAliveWindowMonths: 6,
+      keepAliveLeadDays: 30,
     });
+    // Precision of the last-used stamp is kept (not flattened to a date cell).
+    expect(payload.debts[0].keepAliveLastUsedAt).toBe("2026-05-20T15:30:00.000Z");
 
-    // Holdings survive: symbol/shares/costBasis, including a fractional-share
-    // position with no cost basis. Prices are never in the sheet to begin with.
+    // Payments: the clamped AppliedAmount round-trips; a legacy payment
+    // without one never grows the field.
+    const paymentsById = Object.fromEntries(
+      payload.payments.map((p: any) => [p.id, p])
+    );
+    expect(Object.keys(paymentsById).sort()).toEqual(["p1", "p2"]);
+    expect(paymentsById.p1).toMatchObject({ debtId: "d1", amount: 300, appliedAmount: 250 });
+    expect(paymentsById.p2.amount).toBe(200);
+    expect(paymentsById.p2.appliedAmount).toBeUndefined();
+
+    // Holdings survive in all three shapes. Prices are never in the sheet to
+    // begin with.
     const holdingsById = Object.fromEntries(
       payload.holdings.map((h: any) => [h.id, h])
     );
-    expect(Object.keys(holdingsById).sort()).toEqual(["h1", "h2"]);
+    expect(Object.keys(holdingsById).sort()).toEqual(["h1", "h2", "h3", "h4"]);
     expect(holdingsById.h1).toMatchObject({ symbol: "AAPL", shares: 10, costBasis: 1500 });
     expect(holdingsById.h2).toMatchObject({ symbol: "VTI", shares: 0.25 });
     expect(holdingsById.h2.costBasis).toBeUndefined();
+    // Plain tickers never grow fund-only fields or an account they didn't have.
+    expect(holdingsById.h1.name).toBeUndefined();
+    expect(holdingsById.h1.anchorValue).toBeUndefined();
+    expect(holdingsById.h1.manualValue).toBeUndefined();
+    expect(holdingsById.h1.accountId).toBeUndefined();
+    // Proxy-tracked fund keeps its proxy ticker, label, anchor and broker link.
+    expect(holdingsById.h3).toMatchObject({
+      symbol: "VOO",
+      name: "Spartan 500 Index Pool",
+      anchorValue: 12000,
+      anchorPrice: 480.5,
+      accountId: "a3",
+    });
+    expect(holdingsById.h3.manualValue).toBeUndefined();
+    // Manual-value fund keeps its label, value and broker link, with no ticker.
+    expect(holdingsById.h4).toMatchObject({
+      symbol: "",
+      name: "Stable Value Fund",
+      manualValue: 5000,
+      accountId: "a3",
+    });
+    expect(holdingsById.h4.anchorValue).toBeUndefined();
 
     // Asset accounts survive; the emergency-fund designation round-trips and
     // undesignated accounts never grow the flag.

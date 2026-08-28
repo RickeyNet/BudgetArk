@@ -181,11 +181,30 @@ const DEBT_COLUMNS = [
   "DebtClassSource",
   "GoalDate",
   "PaymentDueDay",
+  // Card keep-alive watch (credit cards only). Must round-trip: on an
+  // updatedAt tie the importer's merge takes the incoming row, so a
+  // re-imported workbook without these columns silently switched the watch
+  // OFF for every card. "yes"/"no" so an explicit off survives too.
+  "KeepAlive",
+  "KeepAliveWindowMonths",
+  "KeepAliveLeadDays",
+  "KeepAliveLastUsedAt",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
 
-const PAYMENT_COLUMNS = ["ID", "DebtID", "Amount", "Date", "UpdatedAt"] as const;
+// AppliedAmount is the slice of Amount that actually reduced the balance
+// (an overpayment is clamped at zero). Deleting a payment adds back only
+// this delta; without the column a round-tripped payment restores the full
+// Amount and the balance can end up higher than was ever owed.
+const PAYMENT_COLUMNS = [
+  "ID",
+  "DebtID",
+  "Amount",
+  "AppliedAmount",
+  "Date",
+  "UpdatedAt",
+] as const;
 
 const SAVINGS_GOAL_COLUMNS = [
   "ID",
@@ -211,14 +230,25 @@ const ASSET_ACCOUNT_COLUMNS = [
   "UpdatedAt",
 ] as const;
 
-// Live prices are NOT exported - only the position itself (Symbol/Shares/
-// CostBasis). Prices live in a per-device cache and re-fetch on demand, so a
-// spreadsheet round-trips the holding without ever carrying a market value.
+// Live prices are NOT exported - only the position itself. Prices live in a
+// per-device cache and re-fetch on demand, so a spreadsheet round-trips the
+// holding without ever carrying a market value. Three shapes share the
+// sheet, told apart by which optional columns are filled:
+//   ticker  - Symbol + Shares (+ CostBasis)
+//   proxy   - Symbol (the proxy ticker) + Name + AnchorValue + AnchorPrice
+//   manual  - Name + ManualValue, no Symbol
+// AccountId links the position to its broker AssetAccount; dropping it on a
+// round-trip orphaned every holding from the Bridge's account grouping.
 const HOLDING_COLUMNS = [
   "ID",
   "Symbol",
   "Shares",
   "CostBasis",
+  "Name",
+  "ManualValue",
+  "AnchorValue",
+  "AnchorPrice",
+  "AccountId",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
@@ -346,6 +376,13 @@ const debtToRow = (debt: Debt) => ({
   DebtClassSource: debt.debtClassSource,
   GoalDate: debt.goalDate ? formatDateOnly(debt.goalDate) : "",
   PaymentDueDay: debt.paymentDueDay ?? "",
+  KeepAlive:
+    debt.keepAliveEnabled === undefined ? "" : debt.keepAliveEnabled ? "yes" : "no",
+  KeepAliveWindowMonths: debt.keepAliveWindowMonths ?? "",
+  KeepAliveLeadDays: debt.keepAliveLeadDays ?? "",
+  // Kept verbatim (full ISO or date-only) - not promoted to an Excel date
+  // cell, so the stamp's precision survives the trip.
+  KeepAliveLastUsedAt: debt.keepAliveLastUsedAt ?? "",
   CreatedAt: debt.createdAt,
   UpdatedAt: debt.updatedAt ?? "",
 });
@@ -354,6 +391,7 @@ const paymentToRow = (payment: Payment) => ({
   ID: payment.id,
   DebtID: payment.debtId,
   Amount: payment.amount,
+  AppliedAmount: payment.appliedAmount ?? "",
   Date: formatDateOnly(payment.date),
   UpdatedAt: payment.updatedAt ?? "",
 });
@@ -384,6 +422,11 @@ const holdingToRow = (holding: Holding) => ({
   Symbol: holding.symbol,
   Shares: holding.shares,
   CostBasis: holding.costBasis ?? "",
+  Name: holding.name ?? "",
+  ManualValue: holding.manualValue ?? "",
+  AnchorValue: holding.anchorValue ?? "",
+  AnchorPrice: holding.anchorPrice ?? "",
+  AccountId: holding.accountId ?? "",
   CreatedAt: holding.createdAt,
   UpdatedAt: holding.updatedAt ?? "",
 });
