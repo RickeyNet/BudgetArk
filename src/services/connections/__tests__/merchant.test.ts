@@ -3,7 +3,9 @@ import {
   matchMerchantRule,
   replanInboxForRules,
   selectAutoApprovable,
+  renameForRule,
 } from "../merchant";
+import { sanitizeTextInput } from "../../../utils/sanitize";
 import type { MerchantRule, PendingTransaction } from "../../../types";
 
 const rule = (merchantKey: string, category: string): MerchantRule => ({
@@ -58,6 +60,26 @@ describe("normalizeMerchant", () => {
     expect(normalizeMerchant("A".repeat(60)).length).toBeLessThanOrEqual(40);
     expect(normalizeMerchant("#12345 06/28")).toBe("");
     expect(normalizeMerchant("")).toBe("");
+  });
+});
+
+describe("renameForRule", () => {
+  it("remembers a real rename and ignores an untouched name", () => {
+    expect(renameForRule("Costco", "COSTCO WHSE #1234")).toBe("Costco");
+    expect(renameForRule("COSTCO WHSE #1234", "COSTCO WHSE #1234")).toBeUndefined();
+    expect(renameForRule("  COSTCO WHSE #1234 ", "COSTCO WHSE #1234")).toBeUndefined();
+    expect(renameForRule("", "COSTCO WHSE #1234")).toBeUndefined();
+  });
+
+  it("does not treat a control character in the bank text as a rename", () => {
+    // The saved name went through sanitizeTextInput (control chars
+    // stripped); the raw bank text didn't. Comparing raw vs sanitized used
+    // to pin the bank's own text as a "rename" rule.
+    const bankText = "COSTCOWHSE #1234";
+    // What the inbox saves for an untouched name is the sanitized bank text.
+    expect(renameForRule(sanitizeTextInput(bankText), bankText)).toBeUndefined();
+    // A genuine edit on top of such text is still remembered.
+    expect(renameForRule("Costco", bankText)).toBe("Costco");
   });
 });
 

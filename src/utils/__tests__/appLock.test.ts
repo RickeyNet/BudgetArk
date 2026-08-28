@@ -201,6 +201,16 @@ describe("lockout math", () => {
   });
 });
 
+describe("lockoutRemainingMs clamp", () => {
+  it("never reports more than the 5-minute cap, even if the clock was set back", async () => {
+    const record = await createAppLockRecord("1234", new Date(NOW_MS).toISOString());
+    // Locked out until "a year from now" as far as the (now earlier) clock
+    // can tell - e.g. the user changed the date after a lockout.
+    const farFuture = { ...record, lockoutUntil: new Date(NOW_MS + 365 * 86_400_000).toISOString() };
+    expect(lockoutRemainingMs(farFuture, NOW_MS)).toBe(5 * 60_000);
+  });
+});
+
 describe("formatLockoutRemaining", () => {
   it("formats m:ss, rounding up partial seconds", () => {
     expect(formatLockoutRemaining(0)).toBe("0:00");

@@ -41,6 +41,7 @@ import { sanitizeTextInput } from "../../utils/sanitize";
 import { pendingFingerprintFor } from "./ingest";
 import {
   matchMerchantRule,
+  renameForRule,
   replanInboxForRules,
   selectAutoApprovable,
 } from "./merchant";
@@ -148,10 +149,10 @@ export const approvePendingTransaction = async (
   if (opts.rememberRule && item.merchant) {
     // Only remember a rename when the saved name actually differs from the
     // bank's default text - an untouched name keeps future imports raw.
-    const renameTo =
-      description && description !== item.description.trim()
-        ? description
-        : undefined;
+    // Compared in sanitized form on both sides (see renameForRule): the
+    // saved name has been through sanitizeTextInput, the bank text hasn't,
+    // so a stray control character used to pin a bogus rename.
+    const renameTo = renameForRule(description, item.description);
     await upsertMerchantRule({
       id: generateUUID(),
       merchantKey: item.merchant,

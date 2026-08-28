@@ -237,7 +237,11 @@ export const lockoutRemainingMs = (
   if (!record.lockoutUntil) return 0;
   const until = Date.parse(record.lockoutUntil);
   if (Number.isNaN(until)) return 0;
-  return Math.max(0, until - nowMs);
+  // `lockoutUntil` is an absolute stamp, so a device clock set back after a
+  // lockout (or a tampered record) would otherwise show a countdown of
+  // days/years with no way out but waiting or resetting data. No legitimate
+  // lockout is ever longer than the cap, so clamp to it.
+  return Math.min(LOCKOUT_MAX_MS, Math.max(0, until - nowMs));
 };
 
 /** "0:07", "1:30", "5:00" - for the "try again in ..." countdown line. */

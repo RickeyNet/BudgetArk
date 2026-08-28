@@ -41,6 +41,23 @@ export const normalizeMerchant = (description: string): string => {
  * prefix relationship (either direction, both sides >= MIN_PREFIX_MATCH_LENGTH)
  * so "COSTCO WHSE" still matches a rule saved as "COSTCO WHSE GAS".
  */
+/**
+ * The rename to remember on a rule, or undefined when the user kept the
+ * bank's text. `savedName` is what the Review Inbox saved (already through
+ * sanitizeTextInput); `bankDescription` is the provider's raw text, so it
+ * is sanitized the same way before comparing - otherwise a control
+ * character in the bank text made an untouched name look "renamed" and
+ * pinned the bank's own text as a rename rule.
+ */
+export const renameForRule = (
+  savedName: string,
+  bankDescription: string,
+): string | undefined => {
+  const saved = savedName.trim();
+  if (!saved) return undefined;
+  return saved === sanitizeTextInput(bankDescription).trim() ? undefined : saved;
+};
+
 export const matchMerchantRule = (
   merchant: string,
   rules: MerchantRule[],
