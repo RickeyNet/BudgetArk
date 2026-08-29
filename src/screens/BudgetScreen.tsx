@@ -36,6 +36,7 @@ import { buildExpenseCategoryRows } from "../utils/expenseCategoryRows";
 import { resolveCategoryBuckets } from "../utils/categoryBucketResolve";
 import FoodSplitModal, { type FoodSplitCategory } from "../components/FoodSplitModal";
 import BudgetEntryModal from "../components/BudgetEntryModal";
+import BudgetLimitsModal from "../components/BudgetLimitsModal";
 import ReviewInboxModal from "../components/ReviewInboxModal";
 import { useConnections } from "../connections/ConnectionsProvider";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
@@ -254,6 +255,8 @@ const BudgetScreen: React.FC = () => {
   const [showReviewInbox, setShowReviewInbox] = useState(false);
   const [limitModalCategory, setLimitModalCategory] = useState<CategoryName | null>(null);
   const [limitInput, setLimitInput] = useState("");
+  /** The all-categories Limits sheet (header link on the Spending card). */
+  const [showLimitsModal, setShowLimitsModal] = useState(false);
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
   // Multi-select for bulk delete / recategorize. `selectionMode` flips row
@@ -706,7 +709,10 @@ const BudgetScreen: React.FC = () => {
     setAssetAccounts(await adjustAssetAccountBalances(deltas));
   }, []);
 
-  const handleAddEntry = useCallback(async (inputs: NewBudgetEntryInput[]) => {
+  const handleAddEntry = useCallback(async (
+    inputs: NewBudgetEntryInput[],
+    options?: { keepOpen?: boolean }
+  ) => {
     if (inputs.length === 0) return;
 
     const now = new Date().toISOString();
@@ -735,9 +741,12 @@ const BudgetScreen: React.FC = () => {
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(nextEntries),
     ]);
-    setShowAddModal(false);
-    setQuickAddCategory(undefined);
-    setLogActualBill(undefined);
+    // "Save & add another" keeps the sheet up for the next receipt.
+    if (!options?.keepOpen) {
+      setShowAddModal(false);
+      setQuickAddCategory(undefined);
+      setLogActualBill(undefined);
+    }
     triggerHaptic("success");
     void notifyAchievementCheck();
     // A charge filed against its bill ("Log actual" or the picker) is a
@@ -1461,6 +1470,7 @@ const BudgetScreen: React.FC = () => {
         foodSplitCount={foodEntriesToSplit.length}
         onSplitFood={openFoodSplitModal}
         onLongPressCategory={openLimitModal}
+        onOpenLimits={() => setShowLimitsModal(true)}
         selectionMode={selectionMode}
         selectedEntryIds={selectedEntryIds}
         onToggleSelect={toggleSelectEntry}
@@ -1861,6 +1871,18 @@ const BudgetScreen: React.FC = () => {
           </View>
         </KeyboardAwareModalOverlay>
       </Modal>
+
+      <BudgetLimitsModal
+        visible={showLimitsModal}
+        monthKey={selectedMonthKey}
+        entries={entries}
+        customCategories={customCategories}
+        onClose={() => setShowLimitsModal(false)}
+        onSaved={(next) => {
+          setLimits(next);
+          void refreshMonthlyReview(entries);
+        }}
+      />
 
       {/* Emergency Fund Contribution Modal */}
       <Modal

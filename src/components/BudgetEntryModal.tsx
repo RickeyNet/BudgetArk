@@ -79,6 +79,11 @@ import {
   lastDayOfYearMonth,
 } from "../utils/entryDate";
 import { formatYearMonthLabel } from "../utils/dateFormat";
+import {
+  buildDescriptionMemory,
+  categoryForDescription,
+  suggestDescriptions,
+} from "../utils/entryMemory";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useValueChanged } from "../hooks/useValueChanged";
 
@@ -110,8 +115,11 @@ interface BudgetEntryModalProps {
   /** edit mode's target; null keeps the modal closed. */
   entry?: BudgetEntry | null;
   onClose: () => void;
-  /** add mode: receives one payload per valid line. */
-  onAdd?: (entries: NewBudgetEntryInput[]) => void;
+  /**
+   * add mode: receives one payload per valid line. `keepOpen` is the
+   * "Save & add another" button - the host saves but leaves the sheet up.
+   */
+  onAdd?: (entries: NewBudgetEntryInput[], options?: { keepOpen?: boolean }) => void;
   /** edit mode: receives the updated entry. */
   onSave?: (updated: BudgetEntry) => void;
   /** edit mode: soft-delete (undoable upstream). */
@@ -484,7 +492,28 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setStagingSession((s) => s + 1);
   }, []);
 
-  const handleAddSubmit = useCallback(() => {
+  /**
+   * What past entries teach the form (utils/entryMemory): recent
+   * descriptions as chips, and the category a known description belongs
+   * to. Add mode only - an edit already has its description.
+   */
+  const descriptionMemory = useMemo(
+    () => (isEdit ? [] : buildDescriptionMemory(entries)),
+    [entries, isEdit]
+  );
+
+  const handleDescriptionChange = useCallback(
+    (lineId: string, text: string) => {
+      updateLine(lineId, { description: text });
+      // A description the form has seen before switches to its category
+      // (exact match only - a prefix is still being typed).
+      const known = categoryForDescription(descriptionMemory, type, text);
+      if (known && known !== category) setCategory(known);
+    },
+    [category, descriptionMemory, type, updateLine]
+  );
+
+  const submitAdd = useCallback((keepOpen: boolean) => {
     if (!onAdd) return;
     const entryDate = buildEntryDateISO(yearMonth, entryDay);
     const normalizedPaymentUrl = showDayPicker
@@ -539,8 +568,17 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       payloads[0] = { ...payloads[0], retirementContribution: contributionNum };
     }
 
-    onAdd(payloads);
-    reset();
+    onAdd(payloads, { keepOpen });
+    if (keepOpen) {
+      // Next receipt: same category, date and tags; fresh amounts and
+      // photos (the staged ones were just committed to the saved entry).
+      setLines([createEmptyLine()]);
+      setAttachments([]);
+      setNewlyStagedIds(new Set());
+      setStagingSession((s) => s + 1);
+    } else {
+      reset();
+    }
   }, [
     attachments,
     businessId,
@@ -566,6 +604,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     type,
     yearMonth,
   ]);
+
+  const handleAddSubmit = useCallback(() => submitAdd(false), [submitAdd]);
+  const handleAddAnother = useCallback(() => submitAdd(true), [submitAdd]);
 
   const handleEditSave = useCallback(() => {
     if (!entry || !onSave || !isValid) return;
@@ -934,9 +975,42 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                 placeholder="Description (optional)"
                 placeholderTextColor={colors.textMuted}
                 value={line.description}
-                onChangeText={(text) => updateLine(line.id, { description: text })}
+                onChangeText={(text) => handleDescriptionChange(line.id, text)}
                 maxLength={100}
               />
+              {(() => {
+                const chips = suggestDescriptions(descriptionMemory, {
+                  type,
+                  category,
+                  query: line.description,
+                });
+                if (chips.length === 0) return null;
+                return (
+                  <View style={styles.suggestionRow}>
+                    {chips.map((chip) => (
+                      <TouchableOpacity
+                        key={`${chip.category}:${chip.description}`}
+                        style={styles.suggestionChip}
+                        onPress={() => {
+                          updateLine(line.id, { description: chip.description });
+                          if (chip.category !== category) setCategory(chip.category);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Use ${chip.description}${
+                          chip.category !== category ? ` in ${chip.category}` : ""
+                        }`}
+                      >
+                        <Text style={styles.suggestionChipText}>
+                          {chip.description}
+                          {chip.category !== category ? (
+                            <Text style={styles.suggestionChipMeta}> · {chip.category}</Text>
+                          ) : null}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })()}
             </View>
           ))}
         </View>
@@ -1419,6 +1493,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   <Text style={styles.cancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  style={[styles.addAnotherButton, !isValid && styles.submitButtonDisabled]}
+                  onPress={handleAddAnother}
+                  disabled={!isValid}
+                  accessibilityLabel="Save and add another entry"
+                >
+                  <Text style={styles.addAnotherText}>Save + another</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
                   onPress={handleAddSubmit}
                   disabled={!isValid}
@@ -1755,6 +1837,41 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.cardBorder,
       alignItems: "center",
+    },
+    addAnotherButton: {
+      flex: 1.2,
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      alignItems: "center",
+    },
+    addAnotherText: {
+      color: colors.accent,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    suggestionRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 8,
+    },
+    suggestionChip: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    suggestionChipText: {
+      color: colors.text,
+      fontSize: 13,
+    },
+    suggestionChipMeta: {
+      color: colors.textMuted,
+      fontSize: 11,
     },
     cancelText: {
       color: colors.textDim,

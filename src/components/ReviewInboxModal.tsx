@@ -59,6 +59,14 @@ import {
 } from "../services/connections/reviewInboxService";
 import { getLinks } from "../storage/externalAccountLinksStorage";
 import { triggerHaptic } from "../utils/haptics";
+import { generateUUID } from "../utils/uuid";
+import { sanitizeTextInput } from "../utils/sanitize";
+import { addBudgetEntry } from "../storage/budgetStorage";
+import { buildEntryDateISO, lastDayOfYearMonth } from "../utils/entryDate";
+import {
+  detectRecurringBill,
+  type RecurringBillSuggestion,
+} from "../utils/recurringBillDetection";
 import { useTipJar } from "../tipjar/TipJarProvider";
 import { useValueChanged } from "../hooks/useValueChanged";
 import type { TipNudgeCopy } from "../utils/tipJarNudge";
@@ -139,6 +147,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
    * when the sheet closes - render-time reset, not an effect.
    */
   const [inboxNudge, setInboxNudge] = useState<TipNudgeCopy | null>(null);
+  /** Pending id whose "make it a recurring bill" is being created. */
+  const [creatingBillId, setCreatingBillId] = useState<string | null>(null);
   const { noteWin, openTipJar } = useTipJar();
   if (useValueChanged(visible) && !visible && inboxNudge) setInboxNudge(null);
 
@@ -314,6 +324,53 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     [refresh],
   );
 
+  /**
+   * "Make it a recurring bill" (utils/recurringBillDetection): create the
+   * bill from the draft name/category with the average charge as its
+   * estimate, starting this month on the usual posting day, then preselect
+   * it as the bill this charge fulfils and tick "Always do this" so the
+   * merchant rule files future charges against it automatically. The host
+   * reloads entries via onChanged, which is what makes the new bill appear
+   * in the "Applies to bill" picker.
+   */
+  const handleCreateBill = useCallback(
+    async (item: PendingTransaction, suggestion: RecurringBillSuggestion) => {
+      if (creatingBillId) return;
+      setCreatingBillId(item.id);
+      setActionError(null);
+      try {
+        const now = new Date().toISOString();
+        const monthKey = entryMonthKey(item.postedAt);
+        const day = Math.min(suggestion.dayOfMonth, lastDayOfYearMonth(monthKey));
+        const bill: BudgetEntry = {
+          id: generateUUID(),
+          type: "expense",
+          category: draftCategory,
+          amount: suggestion.averageAmount,
+          description: sanitizeTextInput(draftName.trim() || suggestion.label) || undefined,
+          date: buildEntryDateISO(monthKey, day),
+          recurring: true,
+          recurrenceInterval: 1,
+          // Remembered so the detector never re-offers this merchant.
+          merchant: suggestion.merchant,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await addBudgetEntry(bill);
+        await onChanged();
+        setDraftRecurringId(bill.id);
+        setRememberRule(true);
+        triggerHaptic("success");
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't create the recurring bill."));
+      } finally {
+        setCreatingBillId(null);
+      }
+    },
+    [creatingBillId, draftCategory, draftName, onChanged],
+  );
+
   const handleBulkApprove = useCallback(async () => {
     const ready = pendingTransactions.filter(
       (item) =>
@@ -360,6 +417,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             keepId: draftRecurringId,
           })
         : [];
+    // A merchant that has charged once a month for three months with no
+    // bill on file: offer to create one (hidden once a bill is picked).
+    const billSuggestion =
+      expanded && item.suggestedType === "expense" && !draftRecurringId
+        ? detectRecurringBill(item, entries)
+        : null;
     return (
       <View style={styles.itemCard}>
         <TouchableOpacity
@@ -431,6 +494,34 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               onChange={setDraftCategory}
               customCategories={customCategories}
             />
+            {billSuggestion ? (
+              <View style={styles.billSuggestCard}>
+                <Text style={styles.billSuggestTitle}>🧾 Looks like a monthly bill</Text>
+                <Text style={styles.billSuggestText}>
+                  {billSuggestion.label} has posted once a month for{" "}
+                  {billSuggestion.months.length} months, averaging{" "}
+                  {formatCurrency(billSuggestion.averageAmount)}. Make it a
+                  recurring bill and this charge - and future ones - file
+                  against it instead of stacking on the estimate.
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.billSuggestButton,
+                    creatingBillId !== null && styles.buttonDisabled,
+                  ]}
+                  onPress={() => void handleCreateBill(item, billSuggestion)}
+                  disabled={creatingBillId !== null || busy}
+                >
+                  <Text style={styles.billSuggestButtonText}>
+                    {creatingBillId === item.id
+                      ? "Creating..."
+                      : `Make it a recurring bill · ${formatCurrency(
+                          billSuggestion.averageAmount,
+                        )}/mo`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             {billCandidates.length > 0 ? (
               <>
                 <Text style={styles.label}>APPLIES TO BILL</Text>
@@ -730,6 +821,37 @@ const makeStyles = (colors: ThemeColors) =>
     nudgeCard: {
       marginHorizontal: 24,
       marginBottom: 8,
+    },
+    billSuggestCard: {
+      marginTop: 10,
+      backgroundColor: `${colors.accent}12`,
+      borderWidth: 1,
+      borderColor: `${colors.accent}35`,
+      borderRadius: 12,
+      padding: 12,
+      gap: 6,
+    },
+    billSuggestTitle: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    billSuggestText: {
+      color: colors.textDim,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    billSuggestButton: {
+      marginTop: 4,
+      backgroundColor: colors.accent,
+      borderRadius: 10,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    billSuggestButtonText: {
+      color: colors.accentButtonText,
+      fontSize: 13,
+      fontWeight: "700",
     },
     syncButton: {
       borderWidth: 1,

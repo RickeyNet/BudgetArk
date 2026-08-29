@@ -58,6 +58,9 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `budgetInsights.test.ts` | `budgetInsights.ts` | Monthly Review: month summaries, month-over-month changes, 3-month comparisons, streaks (frozen clock) |
 | `budgetPacing.test.ts` | `budgetPacing.ts` | Spending pace: current-month clock, day-weighted expected spend, over/ahead/on-track with early-month guard, alert ordering, ordinal days |
 | `tipJarNudge.test.ts` | `tipJarNudge.ts` | Post-win Tip Jar cadence: Nth-win + minimum-days gating, disabled still counts, clock rollback, fail-closed state parse, per-win copy |
+| `entryMemory.test.ts` | `entryMemory.ts` | Add-form memory: description dedupe/recency/category re-filing, chip suggestions (category recents vs typed prefix/substring across categories), exact-match category lookup |
+| `recurringBillDetection.test.ts` | `recurringBillDetection.ts` | "Looks like a monthly bill": once-a-month-for-N-months rule, store exclusion, existing-bill/linked/deleted exclusions, average + median day, month-key shifting |
+| `limitsSheet.test.ts` | `limitsSheet.ts` | Limits sheet rows: month fallback resolution, lookback average over months with data, average-to-limit rounding, drafts -> limit list with LWW timestamps |
 | `trackingReminderOffer.test.ts` | `trackingReminderOffer.ts` | One-time reminders offer shows only to a phone that never decided (enabled / sheet visited / dismissed all retire it) |
 | `whatIfSpending.test.ts` | `whatIfSpending.ts` | "What if I stopped spending on X": category averages, redirect impact on payoff and savings |
 | `purchasePlanner.test.ts` | `purchasePlanner.ts` | Plan-a-Purchase sinking funds: monthly need, Ark-step guidance |

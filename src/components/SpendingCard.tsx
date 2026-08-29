@@ -70,6 +70,8 @@ interface SpendingCardProps {
   foodSplitCount: number;
   onSplitFood: () => void;
   onLongPressCategory: (category: CategoryName) => void;
+  /** Header link to the all-categories Limits sheet (BudgetLimitsModal). */
+  onOpenLimits?: () => void;
   selectionMode: boolean;
   selectedEntryIds: ReadonlySet<string>;
   onToggleSelect: (entryId: string) => void;
@@ -103,6 +105,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
   foodSplitCount,
   onSplitFood,
   onLongPressCategory,
+  onOpenLimits,
   selectionMode,
   selectedEntryIds,
   onToggleSelect,
@@ -208,6 +211,17 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
         {foodSplitCount > 0 ? (
           <TouchableOpacity onPress={onSplitFood}>
             <Text style={[styles.spendingHint, { color: colors.accent }]}>Split Food ({foodSplitCount})</Text>
+          </TouchableOpacity>
+        ) : onOpenLimits ? (
+          <TouchableOpacity
+            onPress={onOpenLimits}
+            accessibilityRole="button"
+            accessibilityLabel="Set monthly limits for every category"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.spendingHint}>
+              Tap row to expand · <Text style={{ color: colors.accent }}>Limits ›</Text>
+            </Text>
           </TouchableOpacity>
         ) : (
           <Text style={styles.spendingHint}>Tap row to expand · Hold for limit</Text>
