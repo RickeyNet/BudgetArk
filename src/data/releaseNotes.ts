@@ -7,6 +7,24 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.10.0",
+    title: "Sturdier Sync, Safer Data",
+    releasedAt: "2026-08-28",
+    highlights: [
+      "A deep pass over how BudgetArk stores, syncs, and restores your data. Nothing looks different - it's the version that makes what you already have more trustworthy.",
+      "Fixed: saving on the Budget or Bridge tab could quietly undo records a partner sync or bank sync had just written behind the screen. Every save now merges into what is actually stored, and the tabs refresh on their own after a sync or restore instead of waiting for you to switch away and back.",
+      "Fixed: removing a category budget limit never reached your partner's phone - the old limit came straight back on the next sync. Removals now travel like every other change.",
+      "Fixed: restoring from a backup file tells the next partner sync to start from scratch, so records the backup didn't know about are exchanged again rather than silently assumed.",
+      "Bank connections: a transaction you approved or skipped while pending is matched to its posted version even when the bank rewrites the description, always-approve rules use the bank's own dates, and business/person suggestions follow your rules more reliably.",
+      "Spreadsheet exports now carry card keep-alive settings, the amount each payment actually applied, and fund holdings, so re-importing one restores them.",
+      "Your lesson progress now rides along in backups and restores.",
+      "Switching display currency explains up front that BudgetArk fetches public exchange rates (never your amounts) and asks before the first fetch.",
+      "When something can't be saved - full storage, an unavailable keystore, a failed bank action - you now see a message where it happened instead of nothing. App Lock's lockout countdown can no longer run for days after a device clock change.",
+      "Plaintext export files are deleted the moment the share sheet closes; nothing lingers in the app's cache.",
+      "Under the hood: about 500 new automated checks (1,883 in all) now cover storage, partner sync, bank import, and every calculator's math, and the Charts and Budget tabs were rebuilt from smaller pieces. No visual changes are intended - tell us if you spot one.",
+    ],
+  },
+  {
     version: "1.9.3",
     title: "Change Your Bank Account Choices Anytime",
     releasedAt: "2026-08-26",
