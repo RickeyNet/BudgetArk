@@ -74,9 +74,9 @@ import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 import { clampTaxSetAsideRate } from "../utils/paycheckMath";
 import {
-  DEFAULT_RECURRENCE_DAY,
   buildEntryDateISO,
   dayOfMonthFromIso,
+  lastDayOfYearMonth,
 } from "../utils/entryDate";
 import { formatYearMonthLabel } from "../utils/dateFormat";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -158,6 +158,9 @@ const todayYearMonth = () => {
 
 const toYearMonth = (iso: string) => new Date(iso).toISOString().slice(0, 7);
 
+/** Local calendar day, paired with todayYearMonth so "today" is one date. */
+const todayDay = () => new Date().getDate();
+
 /**
  * Single source of truth for mapping an entry (or none = add-mode defaults)
  * to the form fields. Feeds the useState initializers, the render-time
@@ -171,7 +174,13 @@ interface EntryFormState {
   yearMonth: string;
   recurring: boolean;
   recurrenceInterval: RecurrenceInterval;
-  recurrenceDay: number;
+  /**
+   * Day of month. For a one-off it is the date the entry happened (defaults
+   * to today - manual entries used to be stamped on the 15th, which broke
+   * the date column and the calendar's one-off overlay). For a recurring
+   * bill it is the day the bill hits each month.
+   */
+  entryDay: number;
   paymentUrl: string;
   linkedAccountId: string | undefined;
   businessId: string | undefined;
@@ -203,7 +212,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
   recurrenceInterval: entry
     ? getRecurrenceInterval(entry)
     : DEFAULT_RECURRENCE_INTERVAL,
-  recurrenceDay: entry ? dayOfMonthFromIso(entry.date) : DEFAULT_RECURRENCE_DAY,
+  entryDay: entry ? dayOfMonthFromIso(entry.date) : todayDay(),
   paymentUrl: entry?.paymentUrl ?? "",
   linkedAccountId: entry?.linkedAccountId,
   businessId: entry?.businessId,
@@ -257,8 +266,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval>(
     initialForm.recurrenceInterval
   );
-  const [recurrenceDay, setRecurrenceDay] = useState<number>(
-    initialForm.recurrenceDay
+  const [entryDay, setEntryDay] = useState<number>(
+    initialForm.entryDay
   );
   const [paymentUrl, setPaymentUrl] = useState(initialForm.paymentUrl);
   const [linkedAccountId, setLinkedAccountId] = useState<string | undefined>(
@@ -311,7 +320,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setYearMonth(next.yearMonth);
       setRecurring(next.recurring);
       setRecurrenceInterval(next.recurrenceInterval);
-      setRecurrenceDay(next.recurrenceDay);
+      setEntryDay(next.entryDay);
       setPaymentUrl(next.paymentUrl);
       setLinkedAccountId(next.linkedAccountId);
       setBusinessId(next.businessId);
@@ -458,7 +467,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setShowMonthPicker(false);
     setRecurring(next.recurring);
     setRecurrenceInterval(next.recurrenceInterval);
-    setRecurrenceDay(next.recurrenceDay);
+    setEntryDay(next.entryDay);
     setPaymentUrl(next.paymentUrl);
     setLinkedAccountId(next.linkedAccountId);
     setBusinessId(next.businessId);
@@ -477,10 +486,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
   const handleAddSubmit = useCallback(() => {
     if (!onAdd) return;
-    const entryDate = buildEntryDateISO(
-      yearMonth,
-      showDayPicker ? recurrenceDay : DEFAULT_RECURRENCE_DAY
-    );
+    const entryDate = buildEntryDateISO(yearMonth, entryDay);
     const normalizedPaymentUrl = showDayPicker
       ? normalizePaymentUrl(paymentUrl) ?? undefined
       : undefined;
@@ -548,7 +554,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     paymentUrl,
     personIds,
     recurring,
-    recurrenceDay,
+    entryDay,
     recurrenceInterval,
     reset,
     retirementContribution,
@@ -576,10 +582,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       category,
       amount: amountNum,
       description: line.description.trim() || undefined,
-      date: buildEntryDateISO(
-        yearMonth,
-        showDayPicker ? recurrenceDay : dayOfMonthFromIso(entry.date)
-      ),
+      date: buildEntryDateISO(yearMonth, entryDay),
       recurring: recurring || undefined,
       recurrenceInterval: recurring ? recurrenceInterval : undefined,
       paymentUrl: showDayPicker
@@ -628,7 +631,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     paymentUrl,
     personIds,
     recurring,
-    recurrenceDay,
+    entryDay,
     recurrenceInterval,
     retirementContribution,
     showAccountPicker,
@@ -940,7 +943,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       )}
 
       <View style={styles.field}>
-        <Text style={styles.label}>MONTH</Text>
+        <Text style={styles.label}>{recurring ? "START MONTH" : "MONTH"}</Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowMonthPicker(true)}
@@ -950,6 +953,50 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           </Text>
         </TouchableOpacity>
       </View>
+
+      {!recurring && (
+        <View style={styles.field}>
+          <View style={styles.linesHeader}>
+            <Text style={styles.label}>DAY</Text>
+            {(yearMonth !== todayYearMonth() || entryDay !== todayDay()) && (
+              <TouchableOpacity
+                style={styles.estimateHintButton}
+                onPress={() => {
+                  setYearMonth(todayYearMonth());
+                  setEntryDay(todayDay());
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Set the date to today"
+              >
+                <Text style={styles.estimateHintButtonText}>Today</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={styles.dayGrid}>
+            {Array.from({ length: lastDayOfYearMonth(yearMonth) }, (_, i) => i + 1).map(
+              (day) => (
+                <TouchableOpacity
+                  key={day}
+                  style={[styles.dayBtn, entryDay === day && styles.dayBtnActive]}
+                  onPress={() => setEntryDay(day)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Day ${day}`}
+                  accessibilityState={{ selected: entryDay === day }}
+                >
+                  <Text
+                    style={[
+                      styles.dayBtnText,
+                      entryDay === day && styles.dayBtnTextActive,
+                    ]}
+                  >
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+        </View>
+      )}
 
       {showBillPicker && (
         <View style={styles.field}>
@@ -1087,13 +1134,13 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
             {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
               <TouchableOpacity
                 key={day}
-                style={[styles.dayBtn, recurrenceDay === day && styles.dayBtnActive]}
-                onPress={() => setRecurrenceDay(day)}
+                style={[styles.dayBtn, entryDay === day && styles.dayBtnActive]}
+                onPress={() => setEntryDay(day)}
               >
                 <Text
                   style={[
                     styles.dayBtnText,
-                    recurrenceDay === day && styles.dayBtnTextActive,
+                    entryDay === day && styles.dayBtnTextActive,
                   ]}
                 >
                   {day}
@@ -1387,7 +1434,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       <MonthYearPicker
         visible={showMonthPicker}
         value={yearMonth}
-        onSelect={setYearMonth}
+        onSelect={(next) => {
+          setYearMonth(next);
+          // A one-off's day can't outlive the month it moved to (Jan 31 ->
+          // Feb 28); recurring bills keep their day and clamp at render.
+          if (!recurring) {
+            setEntryDay((day) => Math.min(day, lastDayOfYearMonth(next)));
+          }
+        }}
         onClose={() => setShowMonthPicker(false)}
       />
     </>
