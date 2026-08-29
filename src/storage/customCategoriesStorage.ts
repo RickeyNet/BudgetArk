@@ -15,7 +15,7 @@ import {
   CUSTOM_CATEGORY_STORAGE_VERSION,
   BudgetBucket,
 } from "../types";
-import { isBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
+import { collidesWithBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
 import {
   DEFAULT_CUSTOM_CATEGORY_BUCKET,
   isBudgetBucket,
@@ -143,7 +143,7 @@ const validateName = (
       error: `Keep it under ${MAX_CATEGORY_NAME_LENGTH} characters.`,
     };
   }
-  if (isBuiltInCategory(name)) {
+  if (collidesWithBuiltInCategory(name)) {
     return { ok: false, error: `"${name}" is already a built-in category.` };
   }
   const lower = name.toLowerCase();
@@ -257,7 +257,7 @@ export const restoreCustomCategory = async (
   }
   const lower = category.name.toLowerCase();
   if (
-    isBuiltInCategory(category.name) ||
+    collidesWithBuiltInCategory(category.name) ||
     existing.some((c) => c.name.toLowerCase() === lower)
   ) {
     return { ok: false, error: `"${category.name}" already exists.` };

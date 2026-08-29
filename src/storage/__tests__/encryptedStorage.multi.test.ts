@@ -7,7 +7,7 @@
  *    tail per key, so a duplicate would let an earlier queued write resolve
  *    AFTER the multiSet and silently clobber it.
  *  - `multiSet`'s encryption behaviour is pinned exactly as implemented,
- *    INCLUDING its plaintext fallback when the vault is unavailable - it has
+ *    INCLUDING its vault contract (plaintext fallback for ordinary data, fail-closed
  *    no `requireEncryption` option, so no secret-bearing caller may use it.
  *  - `decryptStoredRaw` fails closed: tampered or garbage envelopes, and
  *    encrypted blobs with no vault key, raise rather than handing back
@@ -64,6 +64,7 @@ import {
   multiSet,
   setItem,
   updateItem,
+  EncryptionUnavailableError,
 } from "../encryptedStorage";
 
 const MASTER_KEY = "3f".repeat(32); // 64-hex master key like the real generator makes
@@ -173,14 +174,11 @@ describe("multiSet", () => {
     await expect(getItem("@debts")).resolves.toBe("from-multiSet");
   });
 
-  it("documents a setItem issued right after multiSet still losing to it", async () => {
-    // multiSet awaits getEncryptionKey BEFORE splicing itself into
-    // writeQueues, so a setItem started inside that window never sees a tail
-    // to queue behind. Both writes run, in issue order, and the multiSet -
-    // issued FIRST - lands last. Its docstring claims "subsequent setItem
-    // calls on those keys queue behind us", which only holds once the key
-    // lookup has resolved. Nothing in the app issues both on one key in the
-    // same tick today; pinned so a change here is deliberate.
+  it("queues a setItem issued right after multiSet behind it", async () => {
+    // multiSet claims its per-key queue tail synchronously - before the
+    // vault-key lookup - so a setItem started in the same tick queues
+    // behind it and lands last. (It used to await the key first, leaving a
+    // window where the later setItem ran first and was silently clobbered.)
     const order: string[] = [];
     mockAsyncStorage.setItem.mockImplementation(async (k: string, v: string) => {
       order.push("setItem");
@@ -195,16 +193,16 @@ describe("multiSet", () => {
     const write = setItem("@debts", "from-setItem");
     await Promise.all([both, write]);
 
-    expect(order).toEqual(["setItem", "multiSet"]);
-    await expect(getItem("@debts")).resolves.toBe("from-multiSet");
+    expect(order).toEqual(["multiSet", "setItem"]);
+    await expect(getItem("@debts")).resolves.toBe("from-setItem");
   });
 });
 
 /**
- * multiSet has NO `requireEncryption` option: when the vault is unavailable
- * it writes plaintext, the same data-loss-avoiding fallback plain `setItem`
- * takes. Pinned here so nobody routes a secret-bearing write through it
- * assuming it fails closed the way `setItem(..., { requireEncryption })` does.
+ * multiSet mirrors setItem's vault contract: ordinary app data degrades to
+ * plaintext when the vault is unavailable (data-loss avoidance), while a
+ * `requireEncryption` caller fails closed with EncryptionUnavailableError
+ * and nothing reaches AsyncStorage (CLAUDE.md rule 2).
  */
 describe("multiSet with no vault key", () => {
   beforeAll(() => jest.useFakeTimers());
@@ -215,7 +213,26 @@ describe("multiSet with no vault key", () => {
     wireBrokenVault();
   });
 
-  it("falls back to plaintext instead of throwing", async () => {
+  it("rejects with EncryptionUnavailableError and writes nothing when encryption is required", async () => {
+    await expect(
+      multiSet(
+        [
+          ["@secret-a", "token"],
+          ["@secret-b", "more"],
+        ],
+        { requireEncryption: true }
+      )
+    ).rejects.toBeInstanceOf(EncryptionUnavailableError);
+
+    expect(mockAsyncStorage.multiSet).not.toHaveBeenCalled();
+    expect(store.has("@secret-a")).toBe(false);
+    expect(store.has("@secret-b")).toBe(false);
+    // The failed call must not wedge the per-key queue for later writes.
+    await setItem("@secret-a", "later");
+    expect(store.get("@secret-a")).toBe("later");
+  });
+
+  it("falls back to plaintext for ordinary data instead of throwing", async () => {
     await multiSet([
       ["@debts", "ordinary-app-data"],
       ["@payments", "more-data"],

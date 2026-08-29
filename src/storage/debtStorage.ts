@@ -139,7 +139,9 @@ const normalizeDebt = (debt: Debt): Debt => {
     ...debt,
     owner: ownerOk ? debt.owner : "mine",
     debtClass: nextClass,
-    debtClassSource: sourceOk ? debt.debtClassSource : "inferred",
+    // A class we just inferred (missing, or split from legacy car_house) is
+    // not a user choice, whatever the stored source claimed.
+    debtClassSource: sourceOk && classOk ? debt.debtClassSource : "inferred",
     paymentDueDay: isPaymentDueDay(debt.paymentDueDay)
       ? Math.floor(debt.paymentDueDay!)
       : undefined,

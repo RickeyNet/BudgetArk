@@ -338,15 +338,23 @@ describe("legacy car_house debt class split on read", () => {
     expect(JSON.stringify(storedDebts())).not.toContain("car_house");
   });
 
-  it("keeps an explicit debtClassSource but infers a missing one", async () => {
+  it("marks a split class as inferred even if the record claimed manual", async () => {
+    // The user never chose "house" - BudgetArk guessed it from the name -
+    // so the source must say so or the UI reports a choice never made.
     seedDebts([
       carHouseRecord("Home Mortgage", { id: "a", debtClassSource: "manual" }),
       carHouseRecord("Home Mortgage", { id: "b", debtClassSource: undefined }),
     ]);
 
     const debts = await getDebts();
-    expect(debts.find((d) => d.id === "a")!.debtClassSource).toBe("manual");
+    expect(debts.find((d) => d.id === "a")!.debtClassSource).toBe("inferred");
     expect(debts.find((d) => d.id === "b")!.debtClassSource).toBe("inferred");
+  });
+
+  it("leaves a valid class's manual source alone", async () => {
+    seedDebts([makeDebt({ id: "a", debtClass: "house", debtClassSource: "manual" })]);
+    const debts = await getDebts();
+    expect(debts[0].debtClassSource).toBe("manual");
   });
 
   it("infers from the name when debtClass is missing entirely", async () => {
@@ -363,10 +371,8 @@ describe("legacy car_house debt class split on read", () => {
 
     const debts = await getDebts();
     expect(debts.map((d) => d.debtClass)).toEqual(["car", "car"]);
-    // Documents current behaviour: normalizeDebt only rewrites
-    // debtClassSource when the STORED source is itself invalid, so a record
-    // whose class it just inferred can keep claiming "manual".
-    expect(debts.find((d) => d.id === "x")!.debtClassSource).toBe("manual");
+    // An inferred class is never "manual", whatever the stored source said.
+    expect(debts.find((d) => d.id === "x")!.debtClassSource).toBe("inferred");
     expect(debts.find((d) => d.id === "y")!.debtClassSource).toBe("inferred");
   });
 });

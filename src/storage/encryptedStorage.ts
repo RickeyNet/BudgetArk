@@ -710,15 +710,23 @@ export const multiRemove = async (keys: string[]): Promise<void> => {
  *
  * Each pair is enqueued through its own per-key write chain *before* the
  * combined `multiSet` runs, so it still serializes correctly against any
- * in-flight `setItem`/`removeItem` on the same keys. We don't promise
- * atomicity at the platform layer (AsyncStorage's `multiSet` isn't a
- * transaction on Android), but a single I/O is meaningfully safer than two.
+ * in-flight `setItem`/`removeItem` on the same keys - and the tail is
+ * claimed synchronously, before the first `await`, so a `setItem` issued in
+ * the same tick queues behind this call instead of racing it. We don't
+ * promise atomicity at the platform layer (AsyncStorage's `multiSet` isn't
+ * a transaction on Android), but a single I/O is meaningfully safer than two.
+ *
+ * Same vault contract as `setItem`: without `requireEncryption` a missing
+ * vault key degrades to plaintext (data-loss avoidance for ordinary app
+ * data); with it, the call rejects with `EncryptionUnavailableError` and
+ * writes nothing.
  *
  * Throws on failure - callers must handle the inconsistency rather than
  * silently leaving partial state.
  */
 export const multiSet = async (
-  pairs: readonly (readonly [string, string])[]
+  pairs: readonly (readonly [string, string])[],
+  options?: { requireEncryption?: boolean }
 ): Promise<void> => {
   if (pairs.length === 0) return;
 
@@ -731,15 +739,12 @@ export const multiSet = async (
     throw new Error("multiSet: duplicate keys are not allowed");
   }
 
-  const encKey = await getEncryptionKey();
-  const encrypted: [string, string][] = pairs.map(([key, value]) => [
-    key,
-    encKey === null ? value : encrypt(value, encKey),
-  ]);
-
   // Take the tail of every per-key chain so this multiSet runs after any
-  // in-flight write for those keys. We splice ourselves in as the new tail
+  // in-flight write for those keys, and splice ourselves in as the new tail
   // for each so subsequent setItem calls on those keys queue behind us.
+  // This MUST happen before the first await (the vault-key lookup used to
+  // sit above it, leaving a window where a same-tick setItem saw no tail,
+  // ran first, and was silently overwritten by this earlier-issued call).
   const previousTails = pairs.map(
     ([key]) => writeQueues.get(key) ?? Promise.resolve()
   );
@@ -752,9 +757,18 @@ export const multiSet = async (
 
   try {
     await Promise.all(previousTails.map((p) => p.catch(() => {})));
+    const encKey = await getEncryptionKey();
+    if (encKey === null && options?.requireEncryption) {
+      // Secret-bearing caller: never degrade to plaintext.
+      throw new EncryptionUnavailableError(keys.join(","));
+    }
+    const encrypted: [string, string][] = pairs.map(([key, value]) => [
+      key,
+      encKey === null ? value : encrypt(value, encKey),
+    ]);
     await withTimeout(
       AsyncStorage.multiSet(encrypted),
-      `multiSet(${pairs.map(([k]) => k).join(",")})`
+      `multiSet(${keys.join(",")})`
     );
   } finally {
     resolveTail();

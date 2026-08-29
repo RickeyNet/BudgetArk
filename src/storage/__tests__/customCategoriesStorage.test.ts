@@ -104,14 +104,15 @@ describe("addCustomCategory name validation", () => {
     });
   });
 
-  it("BUG: the built-in collision check is case-SENSITIVE, unlike the existing-custom check below - a differently-cased built-in name (e.g. \"food\" vs. \"Food\") slips through as a new custom category", async () => {
-    // isBuiltInCategory does an exact Set.has() with no case-folding, while
-    // the existing-custom clash check a few lines down lowercases both
-    // sides. Documenting current behavior, not asserting it's desired -
-    // this lets a user create a custom "food" that shadows the built-in
-    // "Food" category (same icon lookup key collision surface).
+  it("rejects a differently-cased built-in name (\"food\" vs. \"Food\")", async () => {
+    // The built-in check folds case like the existing-custom check does;
+    // otherwise a custom "food" would shadow the built-in "Food" in every
+    // picker.
     const result = await addCustomCategory("food", "🍽️");
-    expect(result.ok).toBe(true);
+    expect(result).toEqual({
+      ok: false,
+      error: `"food" is already a built-in category.`,
+    });
   });
 
   it("rejects a duplicate of an existing custom category (case-insensitive)", async () => {
