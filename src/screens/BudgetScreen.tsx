@@ -124,6 +124,8 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { getRecurrenceTag } from "../utils/recurrence";
 import { entriesForMonth } from "../utils/billFulfillment";
+import { buildPaceAlerts, pacingClockFor } from "../utils/budgetPacing";
+import SpendingPaceBanner from "../components/SpendingPaceBanner";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
 import { formatMonthKeyLabel, getBudgetMonthKeys, getMonthDateFromKey, getMonthKey } from "../utils/budgetMonths";
@@ -227,6 +229,10 @@ const BudgetScreen: React.FC = () => {
   /** Category preselected by the Quick Entry widget's deep link, if any. */
   const [quickAddCategory, setQuickAddCategory] = useState<CategoryName | undefined>(undefined);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
+  /** Pace banner tap -> Spending card expands this category. */
+  const [paceExpandRequest, setPaceExpandRequest] = useState<
+    { category: CategoryName; nonce: number } | null
+  >(null);
   /** "Log actual" target: the add sheet opens prefilled as this bill's charge. */
   const [logActualBill, setLogActualBill] = useState<
     { bill: BudgetEntry; yearMonth: string } | undefined
@@ -628,6 +634,18 @@ const BudgetScreen: React.FC = () => {
       selectedMonthDate,
       spendingByCategory,
     ]
+  );
+
+  // Day-weighted pace for the viewed month (null unless it's the current
+  // one). Read once per month switch; a screen left open across midnight
+  // catches up on the next focus/reload like the rest of the tab.
+  const pacingClock = useMemo(
+    () => pacingClockFor(selectedMonthKey, new Date()),
+    [selectedMonthKey]
+  );
+  const paceAlerts = useMemo(
+    () => (businessOnly ? [] : buildPaceAlerts(expenseRows, pacingClock)),
+    [businessOnly, expenseRows, pacingClock]
   );
 
   const categoryChartColors = useMemo(() => {
@@ -1386,6 +1404,20 @@ const BudgetScreen: React.FC = () => {
         style={styles.reminderBanner}
       />
 
+      {pacingClock && paceAlerts.length > 0 && (
+        <SpendingPaceBanner
+          alerts={paceAlerts}
+          dayOfMonth={pacingClock.dayOfMonth}
+          onOpen={(category) =>
+            setPaceExpandRequest((prev) => ({
+              category,
+              nonce: (prev?.nonce ?? 0) + 1,
+            }))
+          }
+          style={styles.reminderBanner}
+        />
+      )}
+
       <SpendingCard
         anchorRef={anchorBudgetSpending}
         rows={expenseRows}
@@ -1403,6 +1435,8 @@ const BudgetScreen: React.FC = () => {
         onEnterSelection={enterSelectionWith}
         onEditEntry={handleEditEntry}
         onLogActual={handleLogActual}
+        pacingClock={pacingClock}
+        expandCategoryRequest={paceExpandRequest}
       />
 
       <BudgetBucketCard

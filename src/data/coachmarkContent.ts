@@ -159,9 +159,9 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
         body:
           "The donut chart breaks down spending by category. Tap any category to see the entries inside or set a monthly limit.",
         detail:
-          "Every expense lands in a category, and the donut shows where the month went. Tap a slice or row to expand the category: every entry inside, with edit and delete, plus a monthly limit you can set per category - limits track how close you are and carry month to month. Categories are grouped into Needs, Wants, and Savings buckets (reassignable in Profile → Categories), and you can create custom categories of your own for anything the built-ins don't cover.",
+          "Every expense lands in a category, and the donut shows where the month went. Tap a slice or row to expand the category: every entry inside, with edit and delete, plus a monthly limit you can set per category - limits carry month to month and, in the current month, know what day it is: a small mark on each bar shows where an even spread would be today, the bar turns amber when you are spending faster than that, and a Spending Pace card at the top of the tab calls out any category that is over or projecting past its limit. Categories are grouped into Needs, Wants, and Savings buckets (reassignable in Profile → Categories), and you can create custom categories of your own for anything the built-ins don't cover.",
         location: "Budget tab → spending donut",
-        keywords: ["category", "categories", "donut", "chart", "limit", "budget limit", "needs", "wants", "custom category"],
+        keywords: ["category", "categories", "donut", "chart", "limit", "budget limit", "pace", "on track", "spending pace", "needs", "wants", "custom category"],
       },
       {
         id: "budget-fab",

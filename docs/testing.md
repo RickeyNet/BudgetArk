@@ -56,6 +56,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `categoryBucketResolve.test.ts` | `categoryBucketResolve.ts` | Which bucket each spend category lands in: override > custom default > built-in default |
 | `expenseCategoryRows.test.ts` | `expenseCategoryRows.ts` | Budget Spending rows: per-category totals/limits/ratios, synthetic debt-payment rows, business-only filter, sort |
 | `budgetInsights.test.ts` | `budgetInsights.ts` | Monthly Review: month summaries, month-over-month changes, 3-month comparisons, streaks (frozen clock) |
+| `budgetPacing.test.ts` | `budgetPacing.ts` | Spending pace: current-month clock, day-weighted expected spend, over/ahead/on-track with early-month guard, alert ordering, ordinal days |
 | `whatIfSpending.test.ts` | `whatIfSpending.ts` | "What if I stopped spending on X": category averages, redirect impact on payoff and savings |
 | `purchasePlanner.test.ts` | `purchasePlanner.ts` | Plan-a-Purchase sinking funds: monthly need, Ark-step guidance |
 | `emergencyFund.test.ts` | `emergencyFund.ts` | EF goal resolution (explicit goal > Keel synthetic > linked savings accounts), savings reserve sum |

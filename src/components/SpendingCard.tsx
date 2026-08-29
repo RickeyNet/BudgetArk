@@ -26,6 +26,8 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { getRecurrenceTag } from "../utils/recurrence";
 import type { ExpenseCategoryRow } from "../utils/expenseCategoryRows";
+import { computeCategoryPacing, type PacingClock } from "../utils/budgetPacing";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 // The row shapes live with the builder (utils/expenseCategoryRows) so the
 // pure logic is testable off-device; re-exported here because this card is
@@ -78,6 +80,16 @@ interface SpendingCardProps {
    * prefilled as that bill's real charge for the month.
    */
   onLogActual?: (entryId: string) => void;
+  /**
+   * Where today sits in the viewed month (utils/budgetPacing). Null for past
+   * and future months - bars then show plain spent/limit with no pace mark.
+   */
+  pacingClock?: PacingClock | null;
+  /**
+   * Host request to expand one category (the pace banner tap). A new nonce
+   * re-fires it even for the same category.
+   */
+  expandCategoryRequest?: { category: CategoryName; nonce: number } | null;
 }
 
 const SpendingCard: React.FC<SpendingCardProps> = ({
@@ -97,6 +109,8 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
   onEnterSelection,
   onEditEntry,
   onLogActual,
+  pacingClock = null,
+  expandCategoryRequest = null,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
@@ -111,6 +125,13 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
   const donutStroke = Math.round(16 * tokens.fontScale);
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Render-time state adjustment (not an effect) so the banner's target
+  // category is open in the same pass the request arrives.
+  if (useValueChanged(expandCategoryRequest) && expandCategoryRequest) {
+    if (!expandedCategories.has(expandCategoryRequest.category)) {
+      setExpandedCategories((prev) => new Set(prev).add(expandCategoryRequest.category));
+    }
+  }
   // Everything on this screen lives in one ListHeaderComponent (the outer
   // FlatList has no real rows), so nothing is virtualized. Expanding a
   // bank-synced category with hundreds of entries would render them all at
@@ -285,13 +306,25 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
         const fillPercent = item.limit
           ? Math.min(ratio ?? 0, 1) * 100
           : Math.min(1, item.spent / maxCategorySpent) * 100;
+        // Day-weighted pace for the current month: the mark shows where an
+        // even spread would be today, and running ahead of it turns the bar
+        // amber before the raw 80% threshold would.
+        const pacing = computeCategoryPacing(item.spent, item.limit, pacingClock);
+        const isAhead = pacing?.status === "ahead";
         const fillColor = item.limit
           ? isOver
             ? colors.danger
-            : hasWarning
+            : hasWarning || isAhead
               ? colors.warning
               : dotColor
           : dotColor;
+        const paceLabel = pacing
+          ? pacing.status === "over"
+            ? `Over limit by ${formatCurrency(pacing.overBy)}`
+            : pacing.status === "ahead"
+              ? `Ahead of pace - on track would be ${formatCurrency(pacing.expectedSpent)} by today`
+              : `On pace - ${formatCurrency(pacing.expectedSpent)} expected by today`
+          : null;
 
         return (
           <View key={item.category}>
@@ -315,6 +348,14 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                 {item.limit ? (
                   <View style={styles.spendLimitMark} />
                 ) : null}
+                {pacing && pacing.expectedRatio < 1 ? (
+                  <View
+                    style={[
+                      styles.spendPaceMark,
+                      { left: `${pacing.expectedRatio * 100}%` },
+                    ]}
+                  />
+                ) : null}
               </View>
               <Text
                 style={[
@@ -331,6 +372,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
               <View style={styles.expandedEntries}>
                 <Text style={styles.expandedHeader}>
                   Expanded - {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
+                  {paceLabel ? ` · ${paceLabel}` : ""}
                 </Text>
                 {visibleEntries.map((entry) => {
                   const isLoggedPayment = entry.id.startsWith("payment-");
@@ -653,6 +695,15 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       width: 2,
       backgroundColor: colors.textDim,
       opacity: 0.6,
+    },
+    spendPaceMark: {
+      position: "absolute",
+      top: -2,
+      bottom: -2,
+      width: 2,
+      marginLeft: -1,
+      backgroundColor: colors.text,
+      opacity: 0.55,
     },
     spendAmount: {
       minWidth: scale(58),
