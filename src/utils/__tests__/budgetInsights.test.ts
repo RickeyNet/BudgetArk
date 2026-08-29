@@ -7,6 +7,7 @@ import {
   buildMonthlyReview,
   type MonthSummary,
 } from "../budgetInsights";
+import { getMonthKey } from "../budgetMonths";
 
 /** Build a MonthSummary directly so the summary-based functions are deterministic. */
 const summary = (
@@ -21,9 +22,6 @@ const summary = (
   net: income - expenses,
   byCategory,
 });
-
-const getMonthKey = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
 describe("computeCategoryChanges", () => {
   it("returns [] with fewer than two months", () => {
@@ -171,13 +169,22 @@ describe("buildMonthSummaries / buildMonthlyReview (date-relative)", () => {
   ];
 
   it("builds one summary per month, newest last", () => {
-    const summaries = buildMonthSummaries(entries, 3);
-    expect(summaries).toHaveLength(3);
-    expect(summaries[summaries.length - 1].monthKey).toBe(getMonthKey(new Date()));
-    for (const s of summaries) {
-      expect(s.totalIncome).toBe(5000);
-      expect(s.totalExpenses).toBe(1000);
-      expect(s.byCategory.Food).toBe(1000);
+    // Fixed system time: `buildMonthSummaries` and the test's own
+    // `getMonthKey(new Date())` each read the clock separately, so on the
+    // real clock the two reads could straddle a month/midnight boundary.
+    const fixedNow = new Date("2026-06-15T12:00:00");
+    jest.useFakeTimers().setSystemTime(fixedNow);
+    try {
+      const summaries = buildMonthSummaries(entries, 3);
+      expect(summaries).toHaveLength(3);
+      expect(summaries[summaries.length - 1].monthKey).toBe(getMonthKey(fixedNow));
+      for (const s of summaries) {
+        expect(s.totalIncome).toBe(5000);
+        expect(s.totalExpenses).toBe(1000);
+        expect(s.byCategory.Food).toBe(1000);
+      }
+    } finally {
+      jest.useRealTimers();
     }
   });
 
@@ -251,15 +258,23 @@ describe("computePersonMonthSpending", () => {
   });
 
   it("rides along in buildMonthlyReview for the current month", () => {
-    const now = new Date();
-    const day = `${getMonthKey(now)}-15T12:00:00`;
-    const monthEntries: any[] = [
-      { id: "m1", type: "expense", category: "Food", amount: 75, date: day, personId: "p1" },
-    ];
-    const review = buildMonthlyReview(monthEntries, {}, 4, people);
-    expect(review.personSpending).toEqual([
-      expect.objectContaining({ personId: "p1", name: "Alex", total: 75 }),
-    ]);
+    // Same midnight-flake shape as above: pin the clock so the entry's
+    // month key and buildMonthlyReview's notion of "current month" can't
+    // diverge on a real-clock read.
+    const fixedNow = new Date("2026-06-15T12:00:00");
+    jest.useFakeTimers().setSystemTime(fixedNow);
+    try {
+      const day = `${getMonthKey(fixedNow)}-15T12:00:00`;
+      const monthEntries: any[] = [
+        { id: "m1", type: "expense", category: "Food", amount: 75, date: day, personId: "p1" },
+      ];
+      const review = buildMonthlyReview(monthEntries, {}, 4, people);
+      expect(review.personSpending).toEqual([
+        expect.objectContaining({ personId: "p1", name: "Alex", total: 75 }),
+      ]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("defaults to no person spending when people are not passed", () => {

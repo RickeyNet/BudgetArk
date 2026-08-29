@@ -1,25 +1,21 @@
 import { buildDebtPaymentPlanForMonth } from "../debtPaymentPlan";
 import { paymentMonthKey } from "../debtDueCalendar";
+import { makeDebt, makePayment } from "../../__tests__/fixtures";
 import type { Debt, Payment } from "../../types";
 
-// Minimal fixtures - `as any` keeps them concise (ts-jest is transpile-only).
+// Minimal fixtures on top of the shared builders - only the fields these
+// tests actually vary get overridden per call.
 const debt = (over: Partial<Debt> = {}): Debt =>
-  ({
-    id: "d1",
-    name: "Card",
-    balance: 1000,
-    minPayment: 150,
-    ...over,
-  }) as any;
+  makeDebt({ id: "d1", name: "Card", balance: 1000, minPayment: 150, ...over });
 
 const payment = (over: Partial<Payment> = {}): Payment =>
-  ({
+  makePayment({
     id: "p1",
     debtId: "d1",
     amount: 150,
     date: "2026-06-15T12:00:00.000Z",
     ...over,
-  }) as any;
+  });
 
 const CUR = "2026-07";
 

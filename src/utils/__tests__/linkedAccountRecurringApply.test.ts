@@ -23,30 +23,34 @@ jest.mock("../../storage/assetAccountStorage", () => ({
 
 // eslint-disable-next-line import/first -- import after the mock factories register
 import { applyAndPersistMissedContributions } from "../linkedAccountRecurringApply";
+// eslint-disable-next-line import/first -- import after the mock factories register
+import { makeBudgetEntry, makeAssetAccount } from "../../__tests__/fixtures";
+// eslint-disable-next-line import/first -- import after the mock factories register
+import type { BudgetEntry, AssetAccount } from "../../types";
 
 const budgetStorage = require("../../storage/budgetStorage");
 const assetStorage = require("../../storage/assetAccountStorage");
 
-const entry = (over: Record<string, unknown> = {}): any => ({
-  id: "e1",
-  type: "expense",
-  category: "Savings",
-  amount: 100,
-  date: "2026-01-15",
-  recurring: true,
-  recurrenceInterval: 1,
-  linkedAccountId: "a1",
-  ...over,
-});
+const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({
+    id: "e1",
+    category: "Savings",
+    date: "2026-01-15",
+    recurring: true,
+    recurrenceInterval: 1,
+    linkedAccountId: "a1",
+    ...over,
+  });
 
-const account = (over: Record<string, unknown> = {}): any => ({
-  id: "a1",
-  name: "Brokerage",
-  category: "investment",
-  balance: 500,
-  updatedAt: "2020-01-01T00:00:00.000Z",
-  ...over,
-});
+const account = (over: Partial<AssetAccount> = {}): AssetAccount =>
+  makeAssetAccount({
+    id: "a1",
+    name: "Brokerage",
+    category: "investment",
+    balance: 500,
+    updatedAt: "2020-01-01T00:00:00.000Z",
+    ...over,
+  });
 
 const APRIL = new Date(Date.UTC(2026, 3, 10));
 

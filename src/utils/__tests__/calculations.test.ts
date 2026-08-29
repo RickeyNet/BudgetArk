@@ -194,4 +194,84 @@ describe("simulatePayoffPlan", () => {
     expect(result.monthsToPayoff).toBe(Infinity);
     expect(result.isPayoffPossible).toBe(false);
   });
+
+  describe("avalanche vs snowball ordering", () => {
+    it("avalanche's extra payment targets the highest-rate debt; snowball's targets the smallest balance", () => {
+      // Small balance / low rate vs large balance / high rate - the two
+      // strategies must disagree on which one the extra payment hits first.
+      const mixed: PayoffDebtInput[] = [
+        { id: "H", balance: 200, rate: 5, minPayment: 10 },
+        { id: "L", balance: 1000, rate: 30, minPayment: 10 },
+      ];
+      // Capped at 1 month so only the first extra-payment allocation shows
+      // through debtsClearedInFirstYear (the only per-debt signal the public
+      // API exposes - simulatePayoffPlan never returns per-debt balances).
+      const avalanche = simulatePayoffPlan(mixed, "avalanche", 200, 1);
+      const snowball = simulatePayoffPlan(mixed, "snowball", 200, 1);
+      // Snowball's extra fully retires the small-balance debt (H, $200)
+      // within that one capped month.
+      expect(snowball.debtsClearedInFirstYear).toBe(1);
+      // Avalanche instead routes the extra into the high-rate debt (L),
+      // so nothing clears yet even though H's balance is smaller.
+      expect(avalanche.debtsClearedInFirstYear).toBe(0);
+    });
+
+    it("avalanche accrues less total interest than snowball on a mixed rate/balance debt set", () => {
+      const debts: PayoffDebtInput[] = [
+        { id: "X", balance: 3000, rate: 24, minPayment: 60 },
+        { id: "Y", balance: 500, rate: 5, minPayment: 20 },
+        { id: "Z", balance: 1500, rate: 12, minPayment: 40 },
+      ];
+      const avalanche = simulatePayoffPlan(debts, "avalanche", 300);
+      const snowball = simulatePayoffPlan(debts, "snowball", 300);
+      expect(avalanche.isPayoffPossible).toBe(true);
+      expect(snowball.isPayoffPossible).toBe(true);
+      // Paying down the highest-rate balance first is mathematically
+      // optimal for total interest - snowball's balance-first order costs
+      // more here (and clears the debts slower, since less interest
+      // accrual is offset by the same extra dollars).
+      expect(avalanche.totalInterestPaid).toBeLessThan(snowball.totalInterestPaid);
+      expect(avalanche.monthsToPayoff).toBeLessThanOrEqual(snowball.monthsToPayoff);
+    });
+  });
+});
+
+describe("generatePayoffSchedule with non-zero interest", () => {
+  // $1000 balance, 12% APR (1%/mo), $100/mo payment. Verified independently
+  // month-by-month (interest = balance * 0.01, principal = min(100 - interest,
+  // balance)) outside this codebase - not derived by calling the function
+  // under test:
+  //   mo 1: interest 10.000000, principal 90.000000, balance 910.000000
+  //   mo 10: interest 1.568325, principal 98.431675, balance 58.400871
+  //   mo 11: interest 0.584009, principal 58.400871, balance 0.000000
+  //   total interest across all 11 months: 58.984880
+  it("matches a hand-computed 12% APR / $100 payment amortization", () => {
+    const schedule = generatePayoffSchedule(1000, 12, 100);
+    expect(schedule).toHaveLength(11);
+
+    expect(schedule[0]).toEqual({
+      month: 1,
+      interestPaid: 10,
+      principalPaid: 90,
+      balance: 910,
+    });
+
+    // Final month's principal payment is reduced to just the remaining
+    // balance, not the full $100 - the same fix calcTotalInterest's own
+    // doc comment describes (treating it as a full payment overstated
+    // interest badly).
+    const last = schedule[schedule.length - 1];
+    expect(last.month).toBe(11);
+    expect(last.balance).toBe(0);
+    expect(last.principalPaid).toBeCloseTo(58.400871, 5);
+    expect(last.interestPaid).toBeCloseTo(0.584009, 5);
+
+    const totalInterest = schedule.reduce((sum, m) => sum + m.interestPaid, 0);
+    expect(totalInterest).toBeCloseTo(58.98488, 4);
+
+    // Cross-check: calcTotalInterest computes the same figure via
+    // calcMonthsToPayoff's closed-form month count rather than by walking
+    // generatePayoffSchedule's array, so agreement confirms both paths.
+    expect(calcTotalInterest(1000, 12, 100)).toBeCloseTo(totalInterest, 5);
+  });
 });

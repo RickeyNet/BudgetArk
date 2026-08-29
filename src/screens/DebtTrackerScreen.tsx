@@ -108,6 +108,14 @@ import DebtPaymentCelebrationModal from "../components/DebtPaymentCelebrationMod
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import { simulatePayoffPlan } from "../utils/calculations";
+import {
+  computeMilestoneProgress,
+  shouldPromoteSecuredDebts,
+  sortDebtsForPayoff,
+  summarizeDebtTotals,
+  type ComputedMilestone,
+  type PayoffStrategy,
+} from "../utils/debtTrackerMath";
 import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -127,19 +135,7 @@ const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
 
 
-type PayoffStrategy = "custom" | "avalanche" | "snowball";
 type DebtOwnerFilter = "all" | DebtOwner;
-
-type ComputedMilestone = {
-  key: DebtMilestoneKey;
-  title: string;
-  description: string;
-  isCompleted: boolean;
-  targetAmount?: number;
-  progress: number;
-  metricLabel: string;
-  nextAction: string;
-};
 
 const ESSENTIAL_CATEGORIES = [
   "Housing",
@@ -151,32 +147,6 @@ const ESSENTIAL_CATEGORIES = [
 ] as const;
 
 const KEEL_MAX_TARGET = 2000;
-
-/**
- * Tier ordering for the debt list. Lower tier = listed first.
- *
- * Default: credit cards / personal loans first, then car loans, then house.
- *
- * Promotion gate: car and mortgage only move to the top of the list once
- * (a) the Hull milestone is marked complete and (b) every credit /
- * personal-loan debt has a zero balance. Both checks are required - Hull
- * being marked complete while credit still carries a balance shouldn't
- * bury those entries behind the mortgage. When the gate opens, car comes
- * before house (smaller balance, naturally tackled first).
- */
-const getDebtTier = (
-  debt: Debt,
-  promoteSecured: boolean
-): number => {
-  if (promoteSecured) {
-    if (debt.debtClass === "car") return 0;
-    if (debt.debtClass === "house") return 1;
-    return 2; // personal_credit (paid off in this state, but ordered last)
-  }
-  if (debt.debtClass === "personal_credit") return 0;
-  if (debt.debtClass === "car") return 1;
-  return 2; // house
-};
 
 const formatPayoffMonths = (months: number): string => {
   if (!Number.isFinite(months)) return "Not solvable";
@@ -538,10 +508,10 @@ const DebtTrackerScreen: React.FC = () => {
   }, [debts, ownerFilter]);
 
   /** Derived summary values */
-  const totalDebt = filteredDebts.reduce((sum, d) => sum + d.balance, 0);
-  const totalOriginal = filteredDebts.reduce((sum, d) => sum + d.originalBalance, 0);
-  const totalPaid = totalOriginal - totalDebt;
-  const overallPercent = totalOriginal > 0 ? Math.round((totalPaid / totalOriginal) * 100) : 0;
+  const { totalDebt, totalPaid, overallPercent } = React.useMemo(
+    () => summarizeDebtTotals(filteredDebts),
+    [filteredDebts]
+  );
   const totalMine = debts
     .filter((debt) => debt.owner === "mine")
     .reduce((sum, debt) => sum + debt.balance, 0);
@@ -551,26 +521,6 @@ const DebtTrackerScreen: React.FC = () => {
   const totalJoint = debts
     .filter((debt) => debt.owner === "joint")
     .reduce((sum, debt) => sum + debt.balance, 0);
-
-  // Hull (Build Your Ark step "Clear Non-Mortgage Debt") covers credit cards,
-  // personal loans, and car loans - anything that isn't the mortgage.
-  const nonMortgageDebts = debts.filter((debt) => debt.debtClass !== "house");
-  const nonMortgageRemaining = nonMortgageDebts.reduce(
-    (sum, debt) => sum + debt.balance,
-    0
-  );
-  const nonMortgageOriginal = nonMortgageDebts.reduce(
-    (sum, debt) => sum + debt.originalBalance,
-    0
-  );
-
-  // Moorings (pay down the house) is keyed only on house debts.
-  const mortgageDebts = debts.filter((debt) => debt.debtClass === "house");
-  const mortgageRemaining = mortgageDebts.reduce((sum, debt) => sum + debt.balance, 0);
-  const mortgageOriginal = mortgageDebts.reduce(
-    (sum, debt) => sum + debt.originalBalance,
-    0
-  );
 
   // EF-designated savings accounts (Bridge account editor). When any exist,
   // Keel and Deck track the flagged accounts' combined balance - the same
@@ -582,116 +532,27 @@ const DebtTrackerScreen: React.FC = () => {
   );
   const effectiveReserve = efSource.linked ? efSource.linkedAmount : savingsReserve;
 
-  const computedMilestones = React.useMemo<ComputedMilestone[]>(() => {
-    if (!milestonePlan) return [];
-
-    return milestonePlan.steps.map((step) => {
-      if (step.key === "keel") {
-        const target = step.targetAmount || 1200;
-        const progress = target > 0 ? Math.min(effectiveReserve / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(effectiveReserve)} / ${formatCurrency(target)}`,
-          nextAction: "Set aside your first cushion target before pushing harder elsewhere.",
-        };
-      }
-
-      if (step.key === "hull") {
-        const progress =
-          nonMortgageOriginal > 0
-            ? Math.min((nonMortgageOriginal - nonMortgageRemaining) / nonMortgageOriginal, 1)
-            : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(nonMortgageRemaining)} remaining`,
-          nextAction: "Apply your next extra payment to the first debt in your chosen payoff order.",
-        };
-      }
-
-      if (step.key === "deck") {
-        const target = step.targetAmount || monthlyEssentialsEstimate * 3;
-        const progress = target > 0 ? Math.min(effectiveReserve / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(effectiveReserve)} / ${formatCurrency(target)}`,
-          nextAction: "Grow your reserves toward 3-6 months of essentials for stability.",
-        };
-      }
-
-      if (step.key === "supplies") {
-        const target = step.targetAmount || 500;
-        const progress = target > 0 ? Math.min(retirementInvestingMonthly / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(retirementInvestingMonthly)} / ${formatCurrency(target)} /mo`,
-          nextAction: "Increase retirement contributions toward 15% of household income.",
-        };
-      }
-
-      if (step.key === "gather_animals") {
-        const educationGoals = savingsGoals.filter((g) => g.category === "education");
-        const totalSaved = educationGoals.reduce((sum, g) => sum + g.currentAmount, 0);
-        const totalGoalTarget = educationGoals.reduce((sum, g) => sum + g.targetAmount, 0);
-        const target = step.targetAmount || totalGoalTarget || 10000;
-        const progress = target > 0 ? Math.min(totalSaved / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: educationGoals.length > 0
-            ? `${formatCurrency(totalSaved)} / ${formatCurrency(target)}`
-            : "Add an education savings goal to track",
-          nextAction: "Open or contribute to a 529 plan or education savings account.",
-        };
-      }
-
-      if (step.key === "moorings") {
-        const progress =
-          mortgageOriginal > 0
-            ? Math.min((mortgageOriginal - mortgageRemaining) / mortgageOriginal, 1)
-            : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: mortgageRemaining > 0
-            ? `${formatCurrency(mortgageRemaining)} remaining`
-            : "No mortgage debt tracked",
-          nextAction: "Make extra principal payments on your mortgage when possible.",
-        };
-      }
-
-      if (step.key === "sail") {
-        const target = step.targetAmount || 1000;
-        return {
-          ...step,
-          progress: step.isCompleted ? 1 : 0,
-          metricLabel: step.isCompleted ? "Completed" : `Target: ${formatCurrency(target)} /mo`,
-          nextAction: "Live generously, invest beyond retirement, and build lasting wealth.",
-        };
-      }
-
-      return {
-        ...step,
-        progress: step.isCompleted ? 1 : 0,
-        metricLabel: step.isCompleted ? "Completed" : "Not started",
-        nextAction: "",
-      };
-    });
-  }, [
-    effectiveReserve,
-    formatCurrency,
-    milestonePlan,
-    monthlyEssentialsEstimate,
-    nonMortgageOriginal,
-    nonMortgageRemaining,
-    retirementInvestingMonthly,
-    savingsGoals,
-    mortgageOriginal,
-    mortgageRemaining,
-  ]);
+  const computedMilestones = React.useMemo<ComputedMilestone[]>(
+    () =>
+      computeMilestoneProgress({
+        plan: milestonePlan,
+        debts,
+        savingsGoals,
+        effectiveReserve,
+        monthlyEssentialsEstimate,
+        retirementInvestingMonthly,
+        formatCurrency,
+      }),
+    [
+      debts,
+      effectiveReserve,
+      formatCurrency,
+      milestonePlan,
+      monthlyEssentialsEstimate,
+      retirementInvestingMonthly,
+      savingsGoals,
+    ]
+  );
 
   const currentMilestone =
     computedMilestones.find((step) => step.key === milestonePlan?.currentStepKey) ||
@@ -1152,25 +1013,15 @@ const DebtTrackerScreen: React.FC = () => {
    * credit / personal-loan debt has a zero balance. Within each tier the
    * chosen strategy decides ordering: avalanche by APR desc, snowball by
    * balance asc, custom by creation order. */
-  const hullCompleted =
-    milestonePlan?.steps.find((step) => step.key === "hull")?.isCompleted === true;
-  const allCreditCleared = !debts.some(
-    (debt) => debt.debtClass === "personal_credit" && debt.balance > 0
+  const promoteSecured = React.useMemo(
+    () => shouldPromoteSecuredDebts(debts, milestonePlan),
+    [debts, milestonePlan]
   );
-  const promoteSecured = hullCompleted && allCreditCleared;
 
-  const sortedDebts = React.useMemo(() => {
-    const active = filteredDebts.filter((d) => d.balance > 0);
-    const paidOff = filteredDebts.filter((d) => d.balance <= 0);
-    active.sort((a, b) => {
-      const tierDiff = getDebtTier(a, promoteSecured) - getDebtTier(b, promoteSecured);
-      if (tierDiff !== 0) return tierDiff;
-      if (strategy === "avalanche") return b.rate - a.rate;
-      if (strategy === "snowball") return a.balance - b.balance;
-      return 0;
-    });
-    return [...active, ...paidOff];
-  }, [filteredDebts, strategy, promoteSecured]);
+  const sortedDebts = React.useMemo(
+    () => sortDebtsForPayoff(filteredDebts, strategy, promoteSecured),
+    [filteredDebts, strategy, promoteSecured]
+  );
 
   const handleChangeStrategy = useCallback(async (nextStrategy: PayoffStrategy) => {
     setStrategy(nextStrategy);

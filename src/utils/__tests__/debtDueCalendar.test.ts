@@ -9,25 +9,22 @@ import {
   debtsDueOrOverdueNeedingPrompt,
 } from "../debtDueCalendar";
 import { getMonthKey } from "../budgetMonths";
+import { makeDebt, makePayment } from "../../__tests__/fixtures";
+import type { Debt, Payment } from "../../types";
 
-// ts-jest runs transpile-only, so light `as any` casts keep fixtures concise.
-const debt = (over: Record<string, unknown> = {}): any => ({
-  id: "d1",
-  name: "Visa",
-  balance: 1000,
-  minPayment: 50,
-  ...over,
-});
+const debt = (over: Partial<Debt> = {}): Debt =>
+  makeDebt({ id: "d1", name: "Visa", balance: 1000, minPayment: 50, ...over });
 
 // Payments are bucketed by LOCAL month; noon-UTC timestamps stay in the same
 // calendar month regardless of the test runner's timezone.
-const payment = (over: Record<string, unknown> = {}): any => ({
-  id: "p1",
-  debtId: "d1",
-  amount: 50,
-  date: "2026-06-15T12:00:00.000Z",
-  ...over,
-});
+const payment = (over: Partial<Payment> = {}): Payment =>
+  makePayment({
+    id: "p1",
+    debtId: "d1",
+    amount: 50,
+    date: "2026-06-15T12:00:00.000Z",
+    ...over,
+  });
 
 describe("getEffectivePaymentDueDay", () => {
   it("returns the stored due day when valid", () => {
@@ -43,7 +40,11 @@ describe("getEffectivePaymentDueDay", () => {
     expect(getEffectivePaymentDueDay(debt({}))).toBe(DEFAULT_DEBT_PAYMENT_DUE_DAY);
     expect(getEffectivePaymentDueDay(debt({ paymentDueDay: 0 }))).toBe(DEFAULT_DEBT_PAYMENT_DUE_DAY);
     expect(getEffectivePaymentDueDay(debt({ paymentDueDay: 32 }))).toBe(DEFAULT_DEBT_PAYMENT_DUE_DAY);
-    expect(getEffectivePaymentDueDay(debt({ paymentDueDay: "15" }))).toBe(DEFAULT_DEBT_PAYMENT_DUE_DAY);
+    // Deliberately malformed input (e.g. from an untyped import/sync payload) -
+    // the runtime guard must fall back, so the cast is the point of the test.
+    expect(
+      getEffectivePaymentDueDay(debt({ paymentDueDay: "15" as unknown as number }))
+    ).toBe(DEFAULT_DEBT_PAYMENT_DUE_DAY);
   });
 });
 

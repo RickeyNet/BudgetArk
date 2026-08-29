@@ -13,6 +13,12 @@ import {
   joinPairing,
 } from "../pairingService";
 
+// Real-timer async handshake flows; jest's 5s default is too tight under
+// coverage instrumentation + parallel load (they intermittently time out
+// even though the logic is fine). Was a project-wide 15s in jest.config.js;
+// now scoped to just the suites that need it.
+jest.setTimeout(15000);
+
 jest.mock("../../utils/uuid", () => ({ generateUUID: () => "uuid-fixed" }));
 jest.mock("react-native", () => ({
   Platform: { OS: "ios" },

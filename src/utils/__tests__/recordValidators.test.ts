@@ -7,7 +7,10 @@ import {
   normalizeImportCategory,
   isMonthKey,
   isDebtItem,
+  isPaymentItem,
   isBudgetEntryItem,
+  isBudgetLimitItem,
+  isCustomCategoryItem,
   isSavingsGoalItem,
   isAssetAccountItem,
   isHoldingItem,
@@ -15,6 +18,7 @@ import {
   isBusinessItem,
   isPersonItem,
   sanitizePayoffStrategy,
+  sanitizeDebtMilestones,
   explainBudgetEntryProblem,
   VALIDATOR_LIMITS,
 } from "../recordValidators";
@@ -813,5 +817,255 @@ describe("isNetWorthSnapshotItem", () => {
         netWorth: 800,
       })
     ).toBe(false);
+  });
+});
+
+describe("isPaymentItem", () => {
+  const valid = {
+    id: "p1",
+    debtId: "d1",
+    amount: 50,
+    date: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed payment", () => {
+    expect(isPaymentItem(valid)).toBe(true);
+  });
+
+  it("accepts a payment without updatedAt (older peers)", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isPaymentItem(rest)).toBe(true);
+  });
+
+  it("accepts a tombstoned payment", () => {
+    expect(isPaymentItem({ ...valid, deletedAt: "2026-06-03" })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isPaymentItem(null)).toBe(false);
+    expect(isPaymentItem("p1")).toBe(false);
+    expect(isPaymentItem([valid])).toBe(false);
+  });
+
+  it("rejects a missing id or debtId", () => {
+    const { id, ...noId } = valid;
+    void id;
+    expect(isPaymentItem(noId)).toBe(false);
+    const { debtId, ...noDebtId } = valid;
+    void debtId;
+    expect(isPaymentItem(noDebtId)).toBe(false);
+  });
+
+  it("rejects a zero, negative, or NaN amount", () => {
+    expect(isPaymentItem({ ...valid, amount: 0 })).toBe(false);
+    expect(isPaymentItem({ ...valid, amount: -50 })).toBe(false);
+    expect(isPaymentItem({ ...valid, amount: NaN })).toBe(false);
+  });
+
+  it("rejects a string amount", () => {
+    expect(isPaymentItem({ ...valid, amount: "50" })).toBe(false);
+  });
+
+  it("rejects an unparseable date", () => {
+    expect(isPaymentItem({ ...valid, date: "not-a-date" })).toBe(false);
+  });
+
+  it("rejects a garbage deletedAt or updatedAt (would break tombstone GC)", () => {
+    expect(isPaymentItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+    expect(isPaymentItem({ ...valid, updatedAt: "garbage" })).toBe(false);
+  });
+
+  it("rejects an oversized id/debtId (default isSafeText cap 120)", () => {
+    expect(isPaymentItem({ ...valid, id: "a".repeat(121) })).toBe(false);
+    expect(isPaymentItem({ ...valid, debtId: "a".repeat(121) })).toBe(false);
+  });
+
+  describe("appliedAmount (clamped minimum-due delta)", () => {
+    it("accepts an appliedAmount at or below the payment amount", () => {
+      expect(isPaymentItem({ ...valid, appliedAmount: 50 })).toBe(true);
+      expect(isPaymentItem({ ...valid, appliedAmount: 0 })).toBe(true);
+      expect(isPaymentItem({ ...valid, appliedAmount: 25 })).toBe(true);
+    });
+
+    it("rejects an appliedAmount that exceeds the payment amount", () => {
+      expect(isPaymentItem({ ...valid, appliedAmount: 50.01 })).toBe(false);
+    });
+
+    it("rejects a negative appliedAmount", () => {
+      expect(isPaymentItem({ ...valid, appliedAmount: -1 })).toBe(false);
+    });
+  });
+
+  it("does not choke on a prototype-pollution-style key alongside valid fields", () => {
+    // JSON.parse gives "__proto__" an ordinary own property (it does not
+    // reach the prototype chain), and the validator only reads named
+    // fields off the object - confirm neither trips it up.
+    const withProto = JSON.parse(
+      '{"id":"p1","debtId":"d1","amount":50,"date":"2026-06-01","__proto__":{"polluted":true}}'
+    );
+    expect(isPaymentItem(withProto)).toBe(true);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe("isBudgetLimitItem", () => {
+  const valid = {
+    category: "Grocery",
+    monthlyLimit: 400,
+    updatedAt: "2026-06-01",
+  };
+
+  it("accepts a well-formed limit", () => {
+    expect(isBudgetLimitItem(valid)).toBe(true);
+  });
+
+  it("accepts a limit without updatedAt", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isBudgetLimitItem(rest)).toBe(true);
+  });
+
+  it("accepts a tombstoned limit (removals ride sync as tombstones)", () => {
+    expect(isBudgetLimitItem({ ...valid, deletedAt: "2026-06-02" })).toBe(true);
+  });
+
+  it("accepts a safe custom category name", () => {
+    expect(isBudgetLimitItem({ ...valid, category: "Pets" })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isBudgetLimitItem(null)).toBe(false);
+    expect(isBudgetLimitItem("Grocery")).toBe(false);
+  });
+
+  it("rejects an invalid category (control chars or overlong custom name)", () => {
+    expect(isBudgetLimitItem({ ...valid, category: "evil\x00name" })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, category: "a".repeat(25) })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, category: 123 })).toBe(false);
+  });
+
+  it("rejects a zero, negative, or NaN monthlyLimit", () => {
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: 0 })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: -400 })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: NaN })).toBe(false);
+  });
+
+  it("rejects a monthlyLimit over the money cap", () => {
+    expect(
+      isBudgetLimitItem({ ...valid, monthlyLimit: VALIDATOR_LIMITS.MAX_MONEY + 1 })
+    ).toBe(false);
+  });
+
+  it("rejects a string monthlyLimit", () => {
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: "400" })).toBe(false);
+  });
+
+  it("rejects a garbage updatedAt or deletedAt", () => {
+    expect(isBudgetLimitItem({ ...valid, updatedAt: "garbage" })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+});
+
+describe("isCustomCategoryItem", () => {
+  const valid = {
+    id: "c1",
+    name: "Pets",
+    icon: "🐾",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed custom category", () => {
+    expect(isCustomCategoryItem(valid)).toBe(true);
+  });
+
+  it("accepts a category without updatedAt, and with a valid defaultBucket", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isCustomCategoryItem(rest)).toBe(true);
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "needs" })).toBe(true);
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "wants" })).toBe(true);
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "savings" })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isCustomCategoryItem(null)).toBe(false);
+    expect(isCustomCategoryItem("Pets")).toBe(false);
+  });
+
+  it("rejects a missing id", () => {
+    const { id, ...noId } = valid;
+    void id;
+    expect(isCustomCategoryItem(noId)).toBe(false);
+  });
+
+  it("rejects a name that shadows a built-in category", () => {
+    // Built-ins must stay reserved - a custom category named "Housing"
+    // would collide with the real one in every icon/bucket lookup.
+    expect(isCustomCategoryItem({ ...valid, name: "Housing" })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, name: "Savings" })).toBe(false);
+  });
+
+  it("rejects a name with control characters or over the custom-name cap", () => {
+    expect(isCustomCategoryItem({ ...valid, name: "evil\x00name" })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, name: "a".repeat(25) })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, name: 123 })).toBe(false);
+  });
+
+  it("rejects an empty, oversized, or non-string icon", () => {
+    expect(isCustomCategoryItem({ ...valid, icon: "" })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, icon: "a".repeat(9) })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, icon: 42 })).toBe(false);
+  });
+
+  it("rejects an unknown defaultBucket", () => {
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "lavish" })).toBe(false);
+  });
+
+  it("rejects a missing or garbage createdAt", () => {
+    const { createdAt, ...noCreated } = valid;
+    void createdAt;
+    expect(isCustomCategoryItem(noCreated)).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, createdAt: "garbage" })).toBe(false);
+  });
+
+  it("rejects a garbage updatedAt when present", () => {
+    expect(isCustomCategoryItem({ ...valid, updatedAt: "garbage" })).toBe(false);
+  });
+});
+
+describe("sanitizeDebtMilestones", () => {
+  it("returns the plan unchanged when steps is an array", () => {
+    const plan = { steps: [{ id: "x" }], updatedAt: "2026-06-01" };
+    expect(sanitizeDebtMilestones(plan)).toBe(plan);
+  });
+
+  it("accepts an empty steps array", () => {
+    const plan = { steps: [] };
+    expect(sanitizeDebtMilestones(plan)).toBe(plan);
+  });
+
+  it("returns undefined for a non-object", () => {
+    expect(sanitizeDebtMilestones(null)).toBeUndefined();
+    expect(sanitizeDebtMilestones("plan")).toBeUndefined();
+    expect(sanitizeDebtMilestones(42)).toBeUndefined();
+    // Arrays fail the isObject gate before `steps` is even inspected.
+    expect(sanitizeDebtMilestones([{ id: "x" }])).toBeUndefined();
+  });
+
+  it("returns undefined when steps is missing or not an array", () => {
+    expect(sanitizeDebtMilestones({})).toBeUndefined();
+    expect(sanitizeDebtMilestones({ steps: "not-an-array" })).toBeUndefined();
+    expect(sanitizeDebtMilestones({ steps: { id: "x" } })).toBeUndefined();
+    expect(sanitizeDebtMilestones({ steps: null })).toBeUndefined();
+  });
+
+  it("does NOT validate individual step contents (deliberately loose - storage re-derives on read)", () => {
+    // Documents current behavior per the source comment: this only checks
+    // the basic shape, so garbage step entries pass through untouched.
+    const plan = { steps: [null, 42, "garbage", { unexpected: true }] };
+    expect(sanitizeDebtMilestones(plan)).toBe(plan);
   });
 });

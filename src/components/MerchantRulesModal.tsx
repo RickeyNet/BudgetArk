@@ -50,6 +50,7 @@ import {
 } from "../services/connections/reviewInboxService";
 import { getCategoryIcon } from "../data/categoryIcons";
 import { triggerHaptic } from "../utils/haptics";
+import { buildMerchantRuleUpdate } from "../utils/merchantRuleUpdate";
 
 interface MerchantRulesModalProps {
   visible: boolean;
@@ -178,20 +179,22 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       setBusyId(rule.id);
       setActionError(null);
       try {
-        await changeMerchantRule({
-          ruleId: rule.id,
-          action: draftIgnore
-            ? "ignore"
-            : draftAutoApprove
-              ? "approve"
-              : "categorize",
-          category: draftIgnore ? undefined : draftCategory,
-          // Ignore rules never read rename/business - keep whatever was
-          // stored so flipping back to categorize restores it.
-          renameTo: draftIgnore ? undefined : draftRename,
-          businessId: draftIgnore ? undefined : draftBusinessId ?? null,
-          personId: draftIgnore ? undefined : draftPersonId ?? null,
-        });
+        // undefined = leave the stored value alone, null = clear it; the
+        // "always skip" branch preserves everything. See
+        // utils/merchantRuleUpdate.
+        await changeMerchantRule(
+          buildMerchantRuleUpdate(
+            {
+              ignore: draftIgnore,
+              autoApprove: draftAutoApprove,
+              category: draftCategory,
+              renameTo: draftRename,
+              businessId: draftBusinessId,
+              personId: draftPersonId,
+            },
+            rule,
+          ),
+        );
         await loadRules();
         await refresh();
         triggerHaptic("success");

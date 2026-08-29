@@ -58,7 +58,10 @@ import {
 } from "../services/connections/reviewInboxService";
 import { getLinks } from "../storage/externalAccountLinksStorage";
 import { triggerHaptic } from "../utils/haptics";
-import { formatDayLabel } from "../utils/dateFormat";
+import {
+  buildInboxSections,
+  type InboxSection,
+} from "../utils/reviewInboxSections";
 
 interface ReviewInboxModalProps {
   visible: boolean;
@@ -70,13 +73,6 @@ interface ReviewInboxModalProps {
   people: Person[];
   /** Called after approvals/dismissals so the Budget screen reloads entries. */
   onChanged: () => void | Promise<void>;
-}
-
-interface InboxSection {
-  title: string;
-  data: PendingTransaction[];
-  /** Show a "Skip all" action on the section header (heuristic sections). */
-  bulkSkippable?: boolean;
 }
 
 const DEFAULT_CATEGORY: CategoryName = "Other";
@@ -150,44 +146,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     [people],
   );
 
-  const sections = useMemo<InboxSection[]>(() => {
-    const regular = pendingTransactions.filter(
-      (item) => !item.transferLikely && !item.duplicateLikely,
-    );
-    const duplicates = pendingTransactions.filter(
-      (item) => item.duplicateLikely && !item.transferLikely,
-    );
-    const transfers = pendingTransactions.filter((item) => item.transferLikely);
-
-    const byDay = new Map<string, PendingTransaction[]>();
-    for (const item of regular) {
-      const day = item.postedAt.slice(0, 10);
-      const list = byDay.get(day) ?? [];
-      list.push(item);
-      byDay.set(day, list);
-    }
-    const result: InboxSection[] = Array.from(byDay.entries())
-      .sort(([a], [b]) => b.localeCompare(a))
-      .map(([day, data]) => ({
-        title: formatDayLabel(`${day}T12:00:00Z`, { weekday: true }),
-        data,
-      }));
-    if (duplicates.length > 0) {
-      result.push({
-        title: "Possibly already in your budget",
-        data: duplicates,
-        bulkSkippable: true,
-      });
-    }
-    if (transfers.length > 0) {
-      result.push({
-        title: "Likely transfers",
-        data: transfers,
-        bulkSkippable: true,
-      });
-    }
-    return result;
-  }, [pendingTransactions]);
+  // Dated day sections, then the two heuristic "Skip all" sections. An
+  // item flagged both duplicate- and transfer-likely appears only under
+  // "Likely transfers" - see utils/reviewInboxSections.
+  const sections = useMemo<InboxSection[]>(
+    () => buildInboxSections(pendingTransactions),
+    [pendingTransactions]
+  );
 
   const suggestedReadyCount = useMemo(
     () =>

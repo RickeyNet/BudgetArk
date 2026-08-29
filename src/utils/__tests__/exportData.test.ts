@@ -10,6 +10,7 @@
 import { buildExportMessage } from "../exportData";
 import { ENCRYPTED_EXPORT_PREFIX_V3 } from "../exportEncryption";
 import { importFromString, isEncryptedExport } from "../importData";
+import { makeDebt, makePayment, makeBudgetEntry } from "../../__tests__/fixtures";
 
 jest.mock("react-native", () => ({
   Share: { share: jest.fn(), sharedAction: "sharedAction" },
@@ -18,40 +19,34 @@ jest.mock("react-native", () => ({
 // --- exportData's data sources (return fixtures) ---
 const fixtures = {
   debts: [
-    {
+    makeDebt({
       id: "d1",
-      name: "Visa",
-      balance: 1000,
       originalBalance: 2000,
-      rate: 19.9,
-      minPayment: 50,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
-    },
+    }),
   ],
   payments: [
-    {
+    makePayment({
       id: "p1",
       debtId: "d1",
       amount: 75,
       date: "2026-02-01",
       updatedAt: "2026-02-01T00:00:00.000Z",
-    },
+    }),
   ],
   budgetEntries: [
-    {
+    makeBudgetEntry({
       id: "e1",
-      type: "expense",
       category: "Food",
       amount: 30,
       date: "2026-03-01",
       createdAt: "2026-03-01T00:00:00.000Z",
-    },
+    }),
     // A bank-imported entry: its provenance fields must survive the export
     // round-trip (externalTxId is the connections-sync dedup identity).
-    {
+    makeBudgetEntry({
       id: "e2",
-      type: "expense",
       category: "Grocery",
       amount: 82.14,
       description: "COSTCO WHSE #1234",
@@ -61,13 +56,12 @@ const fixtures = {
       source: "bank",
       externalTxId: "simplefin:ACT-1:TXN-99",
       merchant: "COSTCO WHSE",
-    },
+    }),
     // A business-tagged expense with a receipt photo: businessId and the
     // attachment METADATA must survive the round-trip; image bytes must not
     // exist anywhere in the export (files are device-local).
-    {
+    makeBudgetEntry({
       id: "e3",
-      type: "expense",
       category: "Tech",
       amount: 129.99,
       date: "2026-03-03",
@@ -82,7 +76,7 @@ const fixtures = {
           height: 1200,
         },
       ],
-    },
+    }),
   ],
   businesses: [
     {

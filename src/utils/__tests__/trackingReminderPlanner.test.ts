@@ -8,19 +8,20 @@ import {
   planTrackingReminders,
   type TrackingReminderSettings,
 } from "../trackingReminderPlanner";
+import { makeBudgetEntry } from "../../__tests__/fixtures";
+import type { BudgetEntry } from "../../types";
 
 // Dates use explicit local times (no Z) so getDate()/getHours() return the
 // intended values regardless of the test runner's timezone.
-const entry = (over: Record<string, unknown> = {}): any => ({
-  id: "e1",
-  type: "expense",
-  category: "Grocery",
-  amount: 42,
-  date: "2026-06-01T12:00:00",
-  createdAt: "2026-06-01T12:00:00",
-  updatedAt: "2026-06-01T12:00:00",
-  ...over,
-});
+const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({
+    id: "e1",
+    amount: 42,
+    date: "2026-06-01T12:00:00",
+    createdAt: "2026-06-01T12:00:00",
+    updatedAt: "2026-06-01T12:00:00",
+    ...over,
+  });
 
 const settings = (
   over: Partial<TrackingReminderSettings> = {}

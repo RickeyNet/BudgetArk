@@ -9,6 +9,12 @@
  */
 import { syncNow } from "../syncOrchestrator";
 
+// Real-timer async handshake flows; jest's 5s default is too tight under
+// coverage instrumentation + parallel load (they intermittently time out
+// even though the logic is fine). Was a project-wide 15s in jest.config.js;
+// now scoped to just the suites that need it.
+jest.setTimeout(15000);
+
 jest.mock("../../storage/userStorage", () => ({ getOrCreateUser: jest.fn() }));
 jest.mock("../pairingStorage", () => ({
   getPairingState: jest.fn(),

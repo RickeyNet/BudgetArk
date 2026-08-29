@@ -1,7 +1,9 @@
 import { calculateNetWorthTotals } from "../netWorth";
 
-// ts-jest runs with isolatedModules (transpile-only), so light `as any` casts
-// keep these fixtures concise without dragging in the full record shapes.
+// `npm run typecheck` (tsc) covers this file even though ts-jest itself is
+// transpile-only, but these fixtures deliberately stay partial-shape (only
+// the fields calculateNetWorthTotals reads), so `as any` is the accurate
+// escape hatch rather than a shared full-record builder.
 const entry = (over: Record<string, unknown>): any => ({
   id: "e",
   type: "expense",

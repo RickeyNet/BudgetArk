@@ -37,7 +37,6 @@ import {
   AssetAccountCategory,
   ASSET_ACCOUNT_CATEGORIES,
   ASSET_ACCOUNT_CATEGORY_LABELS,
-  HOLDINGS_CATEGORIES,
   categorySupportsHoldings,
   categoryIsPureHoldings,
   CachedQuote,
@@ -90,22 +89,26 @@ import {
   normalizeSymbol,
   accountHoldingsValue,
   isQuoteRefreshDue,
-  QUOTE_REFRESH_INTERVAL_MS,
 } from "../utils/holdingsMath";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { getAccountValueHistory } from "../storage/accountValueSnapshotStorage";
 import {
   ACCOUNT_CHANGE_PERIODS,
-  changeSince,
   combineChanges,
-  computeAccountValues,
-  getDayKey,
-  shiftDayKey,
-  type AccountChange,
   type AccountChangePeriodKey,
   type AccountValueHistory,
   type CombinedChange,
 } from "../utils/accountValueHistory";
+import {
+  buildAccountBreakdown,
+  buildAccountChanges,
+  buildAccountDonutSlices,
+  buildHoldingsCategoryData,
+  buildTrailingCashFlow,
+  computeTrackedAccountsTotal,
+  formatNextQuoteRefresh,
+  hasAnyAccountChange,
+} from "../utils/bridgeMath";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
@@ -121,7 +124,6 @@ import {
   resolveEmergencyFundGoal,
   sumSavingsReserve,
 } from "../utils/emergencyFund";
-import { isEntryActiveInMonth } from "../utils/recurrence";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import {
@@ -456,29 +458,24 @@ const BridgeScreen: React.FC = () => {
    * against the recorded daily history. Null = nothing recorded before today
    * yet. Category headers sum these via combineChanges.
    */
-  const accountChanges = useMemo(() => {
-    const period =
-      ACCOUNT_CHANGE_PERIODS.find((p) => p.key === changePeriod) ??
-      ACCOUNT_CHANGE_PERIODS[2];
-    const today = getDayKey(new Date());
-    const cutoff = shiftDayKey(today, -period.days);
-    const values = computeAccountValues(assetAccounts, holdings, quotes, holdingValueOpts);
-    const changes = new Map<string, AccountChange | null>();
-    for (const account of assetAccounts) {
-      changes.set(
-        account.id,
-        changeSince(accountValueHistory[account.id], values[account.id], cutoff, today)
-      );
-    }
-    return changes;
-  }, [assetAccounts, holdings, quotes, holdingValueOpts, accountValueHistory, changePeriod]);
+  const accountChanges = useMemo(
+    () =>
+      buildAccountChanges({
+        assetAccounts,
+        holdings,
+        quotes,
+        history: accountValueHistory,
+        periodKey: changePeriod,
+        now: new Date(),
+        holdingValueOpts,
+      }),
+    [assetAccounts, holdings, quotes, holdingValueOpts, accountValueHistory, changePeriod]
+  );
 
-  const hasAnyChangeData = useMemo(() => {
-    for (const change of accountChanges.values()) {
-      if (change !== null) return true;
-    }
-    return false;
-  }, [accountChanges]);
+  const hasAnyChangeData = useMemo(
+    () => hasAnyAccountChange(accountChanges),
+    [accountChanges]
+  );
 
   /**
    * One rise/drop line: "▲ +$120.50 (2.1%)" in success green, "▼ -$45.00
@@ -543,43 +540,36 @@ const BridgeScreen: React.FC = () => {
    * providers) and its section total. Pure-holdings categories total their
    * tickers only; HSA adds each account's cash balance to its holdings value.
    */
-  const holdingsCategoryData = useMemo(() => {
-    return HOLDINGS_CATEGORIES.map((category) => {
-      const accounts = assetAccounts.filter((a) => a.category === category);
-      // hasCash drives whether the cash balance is shown/editable (HSA only).
-      // The stored balance is always counted in totals regardless, so any
-      // legacy cash on a pure-holdings account stays consistent with net worth.
-      const hasCash = !categoryIsPureHoldings(category);
-      const total = accounts.reduce((sum, account) => {
-        const positions = accountHoldingsValue(account.id, holdings, quotes, holdingValueOpts);
-        return sum + positions + account.balance;
-      }, 0);
-      return { category, accounts, hasCash, total };
-    });
-  }, [assetAccounts, holdings, quotes, holdingValueOpts]);
+  const holdingsCategoryData = useMemo(
+    () => buildHoldingsCategoryData(assetAccounts, holdings, quotes, holdingValueOpts),
+    [assetAccounts, holdings, quotes, holdingValueOpts]
+  );
 
-  /** Whether a manual price refresh is allowed yet (daily window). */
-  // eslint-disable-next-line react-hooks/purity -- reading the clock during render is intentional; the daily-window check only needs re-render-level freshness
-  const priceRefreshDue = isQuoteRefreshDue(quotesLastFetchedAt, Date.now());
+  /**
+   * Whether a manual price refresh is allowed yet (daily window). Reading the
+   * clock during render is deliberate - the gate only needs re-render-level
+   * freshness, and the comparison itself lives in pure holdingsMath.
+   */
+  const priceRefreshDue = isQuoteRefreshDue(
+    quotesLastFetchedAt,
+    new Date().getTime()
+  );
   /**
    * Whether anything is actually priceable. A portfolio of only manual-value
    * funds has no tickers to fetch, so the update button would be a no-op -
    * hide it rather than let it silently do nothing.
    */
   const hasFetchableSymbols = useMemo(() => collectSymbols(holdings).length > 0, [holdings]);
-  /** Human label for how long until the next refresh is allowed (interval-aware). */
-  const nextRefreshLabel = useMemo(() => {
-    if (!quotesLastFetchedAt) return "";
-    const last = new Date(quotesLastFetchedAt).getTime();
-    if (!Number.isFinite(last)) return "";
-    // eslint-disable-next-line react-hooks/purity -- reading the clock during render is intentional; the countdown label only needs re-render-level freshness
-    const msLeft = last + QUOTE_REFRESH_INTERVAL_MS - Date.now();
-    if (msLeft <= 0) return "";
-    const hours = Math.ceil(msLeft / (60 * 60 * 1000));
-    if (hours < 24) return `Next update in ${hours}h`;
-    const days = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
-    return `Next update in ${days}d`;
-  }, [quotesLastFetchedAt]);
+  /**
+   * Human label for how long until the next refresh is allowed
+   * (interval-aware). The clock is read inside the memo - deliberately NOT a
+   * dependency - so the countdown re-derives when the fetch timestamp moves
+   * rather than on every render.
+   */
+  const nextRefreshLabel = useMemo(
+    () => formatNextQuoteRefresh(quotesLastFetchedAt, new Date().getTime()),
+    [quotesLastFetchedAt]
+  );
 
   /** Most recent price timestamp across cached quotes, for the "as of" label. */
   const quotesAsOf = useMemo(() => {
@@ -600,10 +590,12 @@ const BridgeScreen: React.FC = () => {
   // add holdings value in explicitly to get the true tracked total. A linked
   // emergency fund is already inside totalAssetBalance (it IS designated
   // accounts) - only a goal-tracked EF is added on top.
-  const trackedAccountsTotal =
-    totalAssetBalance +
-    holdingsValue +
-    (efSource.linked ? 0 : emergencyFundGoal?.currentAmount ?? 0);
+  const trackedAccountsTotal = computeTrackedAccountsTotal({
+    totalAssetBalance,
+    holdingsValue,
+    emergencyFundLinked: efSource.linked,
+    emergencyFundAmount: emergencyFundGoal?.currentAmount,
+  });
 
   /**
    * Per-category color palette for the asset donut + category headers.
@@ -627,39 +619,20 @@ const BridgeScreen: React.FC = () => {
    * Iteration order follows ASSET_ACCOUNT_CATEGORIES so the UI stays stable
    * regardless of insertion order.
    */
-  const accountsByCategory = useMemo(() => {
-    // Holdings categories (Investment/Retirement/HSA) render in their own
-    // broker-style sections, so exclude them from the plain balance list.
-    return ASSET_ACCOUNT_CATEGORIES.filter((category) => !categorySupportsHoldings(category))
-      .map((category) => {
-        const accounts = assetAccounts.filter((a) => a.category === category);
-        const total = accounts.reduce((sum, a) => sum + a.balance, 0);
-        return { category, accounts, total };
-      })
-      .filter((group) => group.accounts.length > 0);
-  }, [assetAccounts]);
+  // Holdings categories (Investment/Retirement/HSA) render in their own
+  // broker-style sections, so they're excluded from the plain balance list.
+  const accountsByCategory = useMemo(
+    () => buildAccountBreakdown(assetAccounts),
+    [assetAccounts]
+  );
 
-  const accountDonutSlices = useMemo<DonutSlice[]>(() => {
-    const slices: DonutSlice[] = accountsByCategory
-      .filter((group) => group.total > 0)
-      .map((group) => ({
-        label: group.category,
-        value: group.total,
-        color: assetCategoryColors[group.category],
-      }));
-    // Each holdings category shows as one slice valued by its section total
-    // (tickers, plus cash for HSA).
-    for (const data of holdingsCategoryData) {
-      if (data.total > 0) {
-        slices.push({
-          label: data.category,
-          value: data.total,
-          color: assetCategoryColors[data.category],
-        });
-      }
-    }
-    return slices;
-  }, [accountsByCategory, assetCategoryColors, holdingsCategoryData]);
+  // Each holdings category shows as one slice valued by its section total
+  // (tickers, plus cash for HSA).
+  const accountDonutSlices = useMemo<DonutSlice[]>(
+    () =>
+      buildAccountDonutSlices(accountsByCategory, holdingsCategoryData, assetCategoryColors),
+    [accountsByCategory, assetCategoryColors, holdingsCategoryData]
+  );
 
   const toggleAccountCategory = useCallback((category: AssetAccountCategory) => {
     setCollapsedAccountCategories((prev) => {
@@ -673,27 +646,10 @@ const BridgeScreen: React.FC = () => {
   // Trailing 6 months of income vs expense, oldest → newest, for the cash
   // flow panel. Recurring entries are counted in every month from their
   // start onward (mirrors how the Budget screen rolls them forward).
-  const cashFlow = useMemo<CashFlowPoint[]>(() => {
-    const now = new Date();
-    const buckets: CashFlowPoint[] = [];
-    for (let offset = 5; offset >= 0; offset--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      let income = 0;
-      let expense = 0;
-      for (const entry of entries) {
-        if (!isEntryActiveInMonth(entry, monthKey)) continue;
-        if (entry.type === "income") income += entry.amount;
-        else expense += entry.amount;
-      }
-      buckets.push({
-        label: d.toLocaleDateString(undefined, { month: "short" }),
-        income,
-        expense,
-      });
-    }
-    return buckets;
-  }, [entries]);
+  const cashFlow = useMemo<CashFlowPoint[]>(
+    () => buildTrailingCashFlow(entries, new Date()),
+    [entries]
+  );
 
   const hasCashFlow = cashFlow.some((m) => m.income > 0 || m.expense > 0);
 

@@ -12,33 +12,34 @@ import {
   minimumDuePaymentId,
   MINIMUM_DUE_PAYMENT_ID_PREFIX,
 } from "../debtPaymentDedupe";
+import { makeDebt, makePayment } from "../../__tests__/fixtures";
+import type { Debt, Payment } from "../../types";
 
 const NOW = "2026-07-11T12:00:00.000Z";
 const JUL_5 = "2026-07-05T10:00:00.000Z";
 const JUL_8 = "2026-07-08T10:00:00.000Z";
 const JUN_5 = "2026-06-05T10:00:00.000Z";
 
-const debt = (over: Record<string, unknown> = {}): any => ({
-  id: "d1",
-  name: "Visa",
-  balance: 950,
-  originalBalance: 1000,
-  rate: 19.9,
-  minPayment: 50,
-  createdAt: JUN_5,
-  updatedAt: JUL_8,
-  ...over,
-});
+const debt = (over: Partial<Debt> = {}): Debt =>
+  makeDebt({
+    id: "d1",
+    balance: 950,
+    originalBalance: 1000,
+    createdAt: JUN_5,
+    updatedAt: JUL_8,
+    ...over,
+  });
 
-const payment = (over: Record<string, unknown> = {}): any => ({
-  id: "p1",
-  debtId: "d1",
-  amount: 50,
-  appliedAmount: 50,
-  date: JUL_5,
-  updatedAt: JUL_5,
-  ...over,
-});
+const payment = (over: Partial<Payment> = {}): Payment =>
+  makePayment({
+    id: "p1",
+    debtId: "d1",
+    amount: 50,
+    appliedAmount: 50,
+    date: JUL_5,
+    updatedAt: JUL_5,
+    ...over,
+  });
 
 describe("minimumDuePaymentId", () => {
   it("derives the same id from the same debt and month", () => {

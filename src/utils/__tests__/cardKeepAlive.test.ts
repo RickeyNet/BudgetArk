@@ -10,30 +10,39 @@ import {
   parseKeepAliveDate,
   planKeepAliveStamps,
 } from "../cardKeepAlive";
+import { makeDebt, makeExternalAccountLink } from "../../__tests__/fixtures";
+import type { Debt, ExternalAccountLink } from "../../types";
+import type { NormalizedTransaction } from "../../services/connections/types";
 
-// ts-jest runs transpile-only, so light `as any` casts keep fixtures concise.
-const debt = (over: Record<string, unknown> = {}): any => ({
-  id: "d1",
-  name: "Chase Visa",
-  balance: 0,
-  debtClass: "personal_credit",
-  keepAliveEnabled: true,
-  keepAliveLastUsedAt: "2026-01-15T12:00:00.000Z",
-  ...over,
-});
+const debt = (over: Partial<Debt> = {}): Debt =>
+  makeDebt({
+    id: "d1",
+    name: "Chase Visa",
+    balance: 0,
+    debtClass: "personal_credit",
+    keepAliveEnabled: true,
+    keepAliveLastUsedAt: "2026-01-15T12:00:00.000Z",
+    ...over,
+  });
 
-const link = (over: Record<string, unknown> = {}): any => ({
-  id: "l1",
-  connectionId: "c1",
-  externalAccountId: "acct-1",
-  debtId: "d1",
-  ...over,
-});
+const link = (over: Partial<ExternalAccountLink> = {}): ExternalAccountLink =>
+  makeExternalAccountLink({
+    id: "l1",
+    connectionId: "c1",
+    externalAccountId: "acct-1",
+    debtId: "d1",
+    ...over,
+  });
 
-const tx = (over: Record<string, unknown> = {}): any => ({
+// NormalizedTransaction (services/connections/types) isn't one of the shared
+// record builders - it's the provider-fetch shape, not a storage record - so
+// this stays a small fully-typed local factory.
+const tx = (over: Partial<NormalizedTransaction> = {}): NormalizedTransaction => ({
+  providerTxId: "tx-1",
   externalAccountId: "acct-1",
   postedAt: "2026-07-10",
   amount: -12.5,
+  description: "",
   pending: false,
   ...over,
 });

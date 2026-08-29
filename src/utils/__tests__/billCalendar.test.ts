@@ -5,19 +5,20 @@ import {
   upcomingBillsWithin,
   splitPaidVsRemaining,
 } from "../billCalendar";
+import { makeBudgetEntry } from "../../__tests__/fixtures";
+import type { BudgetEntry } from "../../types";
 
 // Dates use explicit local noon ("...T12:00:00", no Z) so getDate() returns
 // the intended day-of-month regardless of the test runner's timezone.
-const entry = (over: Record<string, unknown> = {}): any => ({
-  id: "e1",
-  type: "expense",
-  category: "Utilities",
-  amount: 100,
-  date: "2026-06-10T12:00:00",
-  recurring: true,
-  recurrenceInterval: 1,
-  ...over,
-});
+const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({
+    id: "e1",
+    category: "Utilities",
+    date: "2026-06-10T12:00:00",
+    recurring: true,
+    recurrenceInterval: 1,
+    ...over,
+  });
 
 describe("getDayOfMonth", () => {
   it("returns the stored day of month", () => {
@@ -56,7 +57,7 @@ describe("groupBillsByDay", () => {
     ];
     const { byDay, monthTotal } = groupBillsByDay(entries, "2026-06");
     expect(monthTotal).toBe(100); // only the recurring expense
-    expect([...byDay.values()].flat().map((e: any) => e.id)).toEqual(["rec"]);
+    expect([...byDay.values()].flat().map((e) => e.id)).toEqual(["rec"]);
   });
 
   it("includes one-off and income when asked", () => {

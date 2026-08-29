@@ -16,7 +16,7 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DonutChart, { type DonutSlice } from "./DonutChart";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { getCategoryIcon } from "../data/categoryIcons";
-import type { CategoryName, RecurrenceInterval } from "../types";
+import type { CategoryName } from "../types";
 import { useBusinesses, usePeople } from "../people/PeopleProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -24,27 +24,15 @@ import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { getRecurrenceTag } from "../utils/recurrence";
+import type { ExpenseCategoryRow } from "../utils/expenseCategoryRows";
 
-export type ExpenseCategoryEntry = {
-  id: string;
-  amount: number;
-  description?: string;
-  date: string;
-  recurring?: boolean;
-  recurrenceInterval?: RecurrenceInterval;
-  businessId?: string;
-  personId?: string;
-  attachmentCount?: number;
-  isPrivate?: boolean;
-};
-
-export type ExpenseCategoryRow = {
-  category: CategoryName;
-  spent: number;
-  limit: number | null;
-  ratio: number | null;
-  entries: ExpenseCategoryEntry[];
-};
+// The row shapes live with the builder (utils/expenseCategoryRows) so the
+// pure logic is testable off-device; re-exported here because this card is
+// where consumers already import them from.
+export type {
+  ExpenseCategoryEntry,
+  ExpenseCategoryRow,
+} from "../utils/expenseCategoryRows";
 
 // How many entries an expanded category renders before the "Show all"
 // button. The screen's content is one giant ListHeaderComponent (nothing is

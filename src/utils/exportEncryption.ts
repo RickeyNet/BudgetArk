@@ -46,6 +46,28 @@ export const ENCRYPTED_EXPORT_PREFIX_V3 = "__BUDGETARK_ENC3__:";
 /** Matches v2 and the storage layer; changing it would need a new version. */
 export const EXPORT_KDF_ITERATIONS = 250_000;
 
+/**
+ * Test-only PBKDF2 iteration override. `deriveKeys` reads this instead of
+ * `EXPORT_KDF_ITERATIONS` when set - it lets the envelope-framing/tamper/
+ * fail-closed tests run at a trivial iteration count instead of paying the
+ * real 250k cost on every assertion. Guarded so it can never affect a real
+ * export/import: it's a no-op outside `NODE_ENV === "test"` (set
+ * automatically by Jest), so a production build always derives at the real
+ * count no matter what calls this.
+ */
+let testIterationsOverride: number | null = null;
+
+/** Test-only: override PBKDF2 iterations, or pass null to restore the real count. */
+export const __setPbkdf2IterationsForTests = (iterations: number | null): void => {
+  if (process.env.NODE_ENV !== "test") return;
+  testIterationsOverride = iterations;
+};
+
+const activeIterations = (): number =>
+  process.env.NODE_ENV === "test" && testIterationsOverride !== null
+    ? testIterationsOverride
+    : EXPORT_KDF_ITERATIONS;
+
 const SALT_BYTES = 16;
 const IV_BYTES = 16;
 const AES_KEY_BYTES = 32;
@@ -69,7 +91,7 @@ const deriveKeys = async (
   const derived = await pbkdf2Sha256(
     password,
     hexToBytes(saltHex),
-    EXPORT_KDF_ITERATIONS,
+    activeIterations(),
     AES_KEY_BYTES + MAC_KEY_BYTES
   );
   return {

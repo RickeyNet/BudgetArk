@@ -4,18 +4,20 @@ import {
   MAX_SCHEDULED_KEEP_ALIVE_REMINDERS,
   planKeepAliveReminders,
 } from "../cardKeepAlivePlanner";
+import { makeDebt } from "../../__tests__/fixtures";
+import type { Debt } from "../../types";
 
-// ts-jest runs transpile-only, so light `as any` casts keep fixtures concise.
-const debt = (over: Record<string, unknown> = {}): any => ({
-  id: "d1",
-  name: "Chase Sapphire Reserve",
-  balance: 0,
-  debtClass: "personal_credit",
-  keepAliveEnabled: true,
-  // Deadline = Jul 15 2026 with the default 6-month window.
-  keepAliveLastUsedAt: "2026-01-15T12:00:00.000Z",
-  ...over,
-});
+const debt = (over: Partial<Debt> = {}): Debt =>
+  makeDebt({
+    id: "d1",
+    name: "Chase Sapphire Reserve",
+    balance: 0,
+    debtClass: "personal_credit",
+    keepAliveEnabled: true,
+    // Deadline = Jul 15 2026 with the default 6-month window.
+    keepAliveLastUsedAt: "2026-01-15T12:00:00.000Z",
+    ...over,
+  });
 
 describe("planKeepAliveReminders", () => {
   it("plans lead-day, week-before, and deadline nudges inside the window", () => {

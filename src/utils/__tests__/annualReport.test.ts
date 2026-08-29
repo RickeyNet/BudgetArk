@@ -4,38 +4,37 @@ import {
   formatAnnualReportShareText,
   type AnnualReportInputs,
 } from "../annualReport";
+import {
+  makeBudgetEntry,
+  makePayment,
+  makeNetWorthSnapshot,
+} from "../../__tests__/fixtures";
+import type { BudgetEntry, Payment, NetWorthSnapshot } from "../../types";
 
 // All scenarios use a PAST calendar year (2025) so every month is counted and
 // the report is deterministic regardless of when the suite runs. (For the
 // current year the aggregator stops at the current month.)
 const YEAR = 2025;
 
-// ts-jest is transpile-only; light `as any` casts keep fixtures concise.
-const entry = (over: Record<string, unknown> = {}): any => ({
-  id: "e",
-  type: "expense",
-  category: "Food",
-  amount: 100,
-  date: "2025-03-15T12:00:00",
-  recurring: false,
-  ...over,
-});
+const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({
+    id: "e",
+    date: "2025-03-15T12:00:00",
+    recurring: false,
+    ...over,
+  });
 
-const payment = (over: Record<string, unknown> = {}): any => ({
-  id: "p",
-  debtId: "d1",
-  amount: 100,
-  date: "2025-02-10T12:00:00",
-  ...over,
-});
+const payment = (over: Partial<Payment> = {}): Payment =>
+  makePayment({ id: "p", debtId: "d1", date: "2025-02-10T12:00:00", ...over });
 
-const snapshot = (dayKey: string, netWorth: number): any => ({
-  dayKey,
-  capturedAt: `${dayKey}T12:00:00.000Z`,
-  totalAssets: netWorth,
-  totalDebt: 0,
-  netWorth,
-});
+const snapshot = (dayKey: string, netWorth: number): NetWorthSnapshot =>
+  makeNetWorthSnapshot({
+    dayKey,
+    capturedAt: `${dayKey}T12:00:00.000Z`,
+    totalAssets: netWorth,
+    totalDebt: 0,
+    netWorth,
+  });
 
 const baseInputs = (): AnnualReportInputs => ({
   entries: [
@@ -56,8 +55,8 @@ const baseInputs = (): AnnualReportInputs => ({
     snapshot("2025-11-01", 4000),
   ],
   limitsByMonth: {
-    "2025-03": [{ category: "Food", monthlyLimit: 2000, updatedAt: "x" } as any], // 1000 <= 2000 -> under
-    "2025-07": [{ category: "Food", monthlyLimit: 100, updatedAt: "x" } as any], // 500 > 100 -> over
+    "2025-03": [{ category: "Food", monthlyLimit: 2000, updatedAt: "x" }], // 1000 <= 2000 -> under
+    "2025-07": [{ category: "Food", monthlyLimit: 100, updatedAt: "x" }], // 500 > 100 -> over
   },
 });
 
@@ -163,18 +162,26 @@ describe("buildAnnualReport", () => {
 
 describe("listReportYears", () => {
   it("always includes the current year and sorts newest first", () => {
-    const years = listReportYears({
-      entries: [entry({ date: "2023-05-01T12:00:00" })],
-      payments: [payment({ date: "2021-01-01T12:00:00" })],
-      snapshots: [snapshot("2022-06-01", 0)],
-    });
-    const currentYear = new Date().getFullYear();
-    expect(years).toContain(currentYear);
-    expect(years).toContain(2023);
-    expect(years).toContain(2022);
-    expect(years).toContain(2021);
-    // sorted descending
-    expect([...years].sort((a, b) => b - a)).toEqual(years);
+    // Freeze the clock so the "current year" assertion checks a real,
+    // independently-known expected value instead of recomputing
+    // `new Date().getFullYear()` the same way the source does (which would
+    // pass even if the source's current-year logic were broken).
+    jest.useFakeTimers().setSystemTime(new Date(2026, 5, 1));
+    try {
+      const years = listReportYears({
+        entries: [entry({ date: "2023-05-01T12:00:00" })],
+        payments: [payment({ date: "2021-01-01T12:00:00" })],
+        snapshots: [snapshot("2022-06-01", 0)],
+      });
+      expect(years).toContain(2026);
+      expect(years).toContain(2023);
+      expect(years).toContain(2022);
+      expect(years).toContain(2021);
+      // sorted descending
+      expect([...years].sort((a, b) => b - a)).toEqual(years);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

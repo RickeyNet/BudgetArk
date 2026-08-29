@@ -21,6 +21,7 @@ import {
   getBudgetEntries,
   getCategoryBudgetLimits,
   mergeLimitHistoryFromSync,
+  restoreBudgetEntries,
   restoreBudgetEntry,
   saveBudgetEntries,
   saveCategoryBudgetLimits,
@@ -137,6 +138,46 @@ describe("delete / restore", () => {
     expect(ids(live)).toEqual(["e2"]);
     expect(stored().filter((e) => e.deletedAt).map((e) => e.id).sort()).toEqual(["e1", "e3"]);
   });
+
+  it("bulk delete stamps deletedAt/updatedAt to the same fresh timestamp and leaves an already-tombstoned entry's stamp alone", async () => {
+    seed([entry({ id: "e1" }), entry({ id: "already-gone", deletedAt: T0, updatedAt: T0 })]);
+    await deleteBudgetEntries(["e1", "already-gone"]);
+    const all = stored();
+    const e1 = all.find((e) => e.id === "e1")!;
+    expect(e1.deletedAt).toBe(e1.updatedAt);
+    expect(new Date(e1.updatedAt).getTime()).toBeGreaterThan(new Date(T0).getTime());
+    // Already tombstoned entries are untouched (deleteBudgetEntries guards
+    // with `!entry.deletedAt`) - no updatedAt churn on a repeat delete.
+    const already = all.find((e) => e.id === "already-gone")!;
+    expect(already.deletedAt).toBe(T0);
+    expect(already.updatedAt).toBe(T0);
+  });
+
+  it("bulk restore clears tombstones for the given ids, stamps updatedAt, and ignores unknown/live ids", async () => {
+    seed([
+      entry({ id: "e1", deletedAt: T0, updatedAt: T0 }),
+      entry({ id: "e2", deletedAt: T0, updatedAt: T0 }),
+      entry({ id: "e3" }), // already live - restore should leave it alone
+    ]);
+    const live = await restoreBudgetEntries(["e1", "e2", "e3", "missing"]);
+    expect(ids(live)).toEqual(["e1", "e2", "e3"]);
+    const all = stored();
+    const e1 = all.find((e) => e.id === "e1")!;
+    const e2 = all.find((e) => e.id === "e2")!;
+    expect(e1.deletedAt).toBeUndefined();
+    expect(e2.deletedAt).toBeUndefined();
+    expect(new Date(e1.updatedAt).getTime()).toBeGreaterThan(new Date(T0).getTime());
+    // e3 was never a tombstone, so restore's `entry.deletedAt` guard is a
+    // no-op for it - updatedAt is untouched.
+    expect(all.find((e) => e.id === "e3")?.updatedAt).toBe(T0);
+  });
+
+  it("bulk restore on an empty id list is a no-op", async () => {
+    seed([entry({ id: "e1", deletedAt: T0, updatedAt: T0 })]);
+    const before = mockStore.get(KEY);
+    await restoreBudgetEntries([]);
+    expect(mockStore.get(KEY)).toBe(before);
+  });
 });
 
 describe("setBudgetEntryCategories", () => {
@@ -220,5 +261,71 @@ describe("saveBudgetEntries (whole-array save, sync/migration use only)", () => 
     await saveBudgetEntries([entry({ id: "e1" })]);
     expect(ids(stored())).toEqual(["e1", "gone"]);
     expect(ids(await getBudgetEntries())).toEqual(["e1"]);
+  });
+
+  it("an id present in the incoming array always wins, even reviving a stored tombstone", async () => {
+    // mergePreservingTombstones only carries over stored tombstones ABSENT
+    // from incoming - an explicit live record for the same id in the
+    // caller's array is an explicit untombstone.
+    seed([entry({ id: "e1", deletedAt: T0, updatedAt: T0 })]);
+    await saveBudgetEntries([entry({ id: "e1", amount: 55 })]);
+    const all = stored();
+    expect(all).toHaveLength(1);
+    expect(all[0].deletedAt).toBeUndefined();
+    expect(all[0].amount).toBe(55);
+  });
+
+  it("merges stored tombstones on top of an empty incoming array", async () => {
+    seed([entry({ id: "gone-1", deletedAt: T0 }), entry({ id: "gone-2", deletedAt: T0 })]);
+    await saveBudgetEntries([]);
+    expect(ids(stored())).toEqual(["gone-1", "gone-2"]);
+    expect(await getBudgetEntries()).toEqual([]);
+  });
+
+  it("starts from empty when storage is missing or corrupt", async () => {
+    await saveBudgetEntries([entry({ id: "e1" })]);
+    expect(ids(stored())).toEqual(["e1"]);
+
+    mockStore.set(KEY, "{not json");
+    await saveBudgetEntries([entry({ id: "e2" })]);
+    expect(ids(stored())).toEqual(["e2"]);
+  });
+});
+
+describe("category limit history pruning", () => {
+  const LIMITS_KEY = BUDGET_STORAGE_KEYS.LIMITS_BY_MONTH;
+  const storedHistory = (): Record<string, CategoryBudgetLimit[]> =>
+    JSON.parse(mockStore.get(LIMITS_KEY) ?? "{}");
+  const limit = (category: string, monthlyLimit: number, updatedAt = T0) =>
+    ({ category, monthlyLimit, updatedAt }) as CategoryBudgetLimit;
+
+  it("keeps only the newest 13 months, dropping the oldest first", async () => {
+    // 14 consecutive months (sortable "period-NN" keys), saved oldest to
+    // newest, one save per month like real usage.
+    const months = Array.from(
+      { length: 14 },
+      (_, i) => `period-${String(i + 1).padStart(2, "0")}`
+    );
+    for (const monthKey of months) {
+      await saveCategoryBudgetLimits([limit("Food", 400)], monthKey);
+    }
+    const keys = Object.keys(storedHistory()).sort();
+    expect(keys).toHaveLength(13);
+    // Oldest month (period-01) was pruned; the newest 13 remain.
+    expect(keys).not.toContain("period-01");
+    expect(keys[0]).toBe("period-02");
+    expect(keys[keys.length - 1]).toBe("period-14");
+  });
+
+  it("mergeLimitHistoryFromSync also prunes on the way out", async () => {
+    const bigHistory: Record<string, CategoryBudgetLimit[]> = {};
+    for (let i = 1; i <= 15; i++) {
+      bigHistory[`period-${String(i).padStart(2, "0")}`] = [limit("Food", 400)];
+    }
+    await mergeLimitHistoryFromSync(() => bigHistory);
+    const keys = Object.keys(storedHistory()).sort();
+    expect(keys).toHaveLength(13);
+    expect(keys[0]).toBe("period-03");
+    expect(keys[keys.length - 1]).toBe("period-15");
   });
 });

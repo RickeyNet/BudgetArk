@@ -29,10 +29,11 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import BudgetBucketCard from "../components/BudgetBucketCard";
 import SpendingCard, {
-  type ExpenseCategoryEntry,
   type ExpenseCategoryRow,
   isAutoEntryId,
 } from "../components/SpendingCard";
+import { buildExpenseCategoryRows } from "../utils/expenseCategoryRows";
+import { resolveCategoryBuckets } from "../utils/categoryBucketResolve";
 import FoodSplitModal, { type FoodSplitCategory } from "../components/FoodSplitModal";
 import BudgetEntryModal from "../components/BudgetEntryModal";
 import ReviewInboxModal from "../components/ReviewInboxModal";
@@ -560,44 +561,22 @@ const BudgetScreen: React.FC = () => {
     return map;
   }, [businessOnly, expensesByCategory, monthlyEntries]);
 
-  const bucketByCategory = useMemo(() => {
-    const map: Record<string, BudgetBucket> = {};
-    for (const [category, amount] of Object.entries(expensesByCategory)) {
-      if (amount <= 0) continue;
-      map[category] =
-        bucketOverrides[category] ??
-        getDefaultBucketForCategory(category, customCategories) ??
-        DEFAULT_CUSTOM_CATEGORY_BUCKET;
-    }
-    return map;
-  }, [bucketOverrides, customCategories, expensesByCategory]);
+  // Override > built-in/custom default, then the per-bucket lists the
+  // bucket card renders. See utils/categoryBucketResolve.
+  const { bucketByCategory, categoriesByBucket } = useMemo(
+    () =>
+      resolveCategoryBuckets({
+        expensesByCategory,
+        bucketOverrides,
+        customCategories,
+      }),
+    [bucketOverrides, customCategories, expensesByCategory]
+  );
 
   const bucketTotals = useMemo(
     () => totalsByBucket(expensesByCategory, bucketByCategory),
     [bucketByCategory, expensesByCategory]
   );
-
-  const categoriesByBucket = useMemo(() => {
-    const grouped: Record<BudgetBucket, { category: string; amount: number; hasOverride: boolean }[]> = {
-      needs: [],
-      wants: [],
-      savings: [],
-    };
-    for (const [category, amount] of Object.entries(expensesByCategory)) {
-      if (amount <= 0) continue;
-      const bucket = bucketByCategory[category];
-      if (!bucket) continue;
-      grouped[bucket].push({
-        category,
-        amount,
-        hasOverride: bucketOverrides[category] != null,
-      });
-    }
-    (Object.keys(grouped) as BudgetBucket[]).forEach((bucket) => {
-      grouped[bucket].sort((a, b) => b.amount - a.amount);
-    });
-    return grouped;
-  }, [bucketByCategory, bucketOverrides, expensesByCategory]);
 
 
   const incomeEntries = useMemo(
@@ -616,108 +595,29 @@ const BudgetScreen: React.FC = () => {
     [monthlyEntries]
   );
 
-  const expenseRows = useMemo<ExpenseCategoryRow[]>(() => {
-    const categoriesInPlay = new Set<CategoryName>();
-
-    const allCategories: CategoryName[] = [
-      ...BUDGET_CATEGORIES,
-      ...customCategoryNames,
-    ];
-    allCategories.forEach((category) => {
-      // Filtered view: only categories with business spend - a limit alone
-      // shouldn't surface an empty row there.
-      if (
-        (spendingByCategory[category] ?? 0) > 0 ||
-        (!businessOnly && limitByCategory[category] != null)
-      ) {
-        categoriesInPlay.add(category);
-      }
-    });
-
-    return Array.from(categoriesInPlay)
-      .map((category) => {
-        const spent = spendingByCategory[category] ?? 0;
-        // Limits compare the WHOLE category against its budget; a business-
-        // only slice against the full limit would understate usage, so the
-        // filtered view drops limits and bars scale relatively instead.
-        const limit = businessOnly ? null : (limitByCategory[category] ?? null);
-        const ratio = limit ? spent / limit : null;
-        const entries: ExpenseCategoryEntry[] = monthlyEntries
-          .filter(
-            (e) =>
-              e.type === "expense" &&
-              e.category === category &&
-              (!businessOnly || e.businessId)
-          )
-          .map((e) => ({
-            id: e.id,
-            amount: e.amount,
-            description: e.description,
-            date: e.date,
-            recurring: e.recurring,
-            recurrenceInterval: e.recurrenceInterval,
-            businessId: e.businessId,
-            personId: e.personId,
-            attachmentCount: e.attachments?.length,
-            isPrivate: e.isPrivate,
-          }))
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        if (category === "Debt Payments" && !businessOnly) {
-          const paymentsByDebt = new Map<string, Payment[]>();
-          for (const payment of recordedDebtPaymentsForMonth) {
-            const list = paymentsByDebt.get(payment.debtId);
-            if (list) list.push(payment);
-            else paymentsByDebt.set(payment.debtId, [payment]);
-          }
-
-          for (const { debt, paid, amount } of debtPaymentPlanForMonth) {
-            const debtPayments = paymentsByDebt.get(debt.id) ?? [];
-            if (debtPayments.length > 0) {
-              for (const payment of debtPayments) {
-                entries.push({
-                  id: `payment-${payment.id}`,
-                  amount: payment.amount,
-                  description: `${debt.name} payment`,
-                  date: payment.date,
-                });
-              }
-              // Planned shortfall on top of logged payments. `amount` only
-              // exceeds `paid` for current/future months (past months carry
-              // no minimum floor), so closed months never grow a phantom
-              // "(planned)" row next to what was actually paid.
-              if (amount > paid) {
-                entries.push({
-                  id: `debt-min-topup-${debt.id}`,
-                  amount: amount - paid,
-                  description: `${debt.name} minimum (planned)`,
-                  date: selectedMonthDate.toISOString(),
-                });
-              }
-            } else {
-              entries.push({
-                id: `auto-debt-${debt.id}`,
-                amount,
-                description: `${debt.name} minimum payment (planned)`,
-                date: selectedMonthDate.toISOString(),
-              });
-            }
-          }
-        }
-
-        return { category, spent, limit, ratio, entries };
-      })
-      .sort((a, b) => b.spent - a.spent);
-  }, [
-    businessOnly,
-    customCategoryNames,
-    debtPaymentPlanForMonth,
-    limitByCategory,
-    monthlyEntries,
-    recordedDebtPaymentsForMonth,
-    selectedMonthDate,
-    spendingByCategory,
-  ]);
+  const expenseRows = useMemo<ExpenseCategoryRow[]>(
+    () =>
+      buildExpenseCategoryRows({
+        monthlyEntries,
+        customCategoryNames,
+        spendingByCategory,
+        limitByCategory,
+        businessOnly,
+        debtPaymentPlanForMonth,
+        recordedDebtPaymentsForMonth,
+        selectedMonthDate,
+      }),
+    [
+      businessOnly,
+      customCategoryNames,
+      debtPaymentPlanForMonth,
+      limitByCategory,
+      monthlyEntries,
+      recordedDebtPaymentsForMonth,
+      selectedMonthDate,
+      spendingByCategory,
+    ]
+  );
 
   const categoryChartColors = useMemo(() => {
     const palette = [

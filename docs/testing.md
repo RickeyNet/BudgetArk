@@ -2,90 +2,216 @@
 
 BudgetArk has a unit-test suite for its **pure business logic** — the math and
 validation that power debt payoff, investing projections, net worth, currency
-conversion, recurrence, and import/sync safety. Use it as a regression net:
-run it before and after a change to confirm you didn't break an existing feature.
+conversion, recurrence, storage repair, bank-sync ingest, and import/sync
+safety. Use it as a regression net: run it before and after a change to confirm
+you didn't break an existing feature.
 
 ## Running
 
 ```bash
-npm test            # run the whole suite once
-npm run test:watch  # re-run affected tests as you edit
-npm run test:coverage
+npm test               # run the whole suite once
+npm run test:watch     # re-run affected tests as you edit
+npm run test:coverage  # with the coverage ratchet (jest.config.js thresholds)
+npx jest src/utils/__tests__/cashFlow.test.ts   # one suite
 ```
+
+Also run `npm run typecheck` — `tsc` covers the test files too (ts-jest alone
+only transpiles), which is what makes the typed fixtures below worth having.
+
+## Shared fixtures
+
+`src/__tests__/fixtures.ts` exports typed `Partial<T> => T` builders
+(`makeDebt`, `makePayment`, `makeBudgetEntry`, `makeSavingsGoal`,
+`makeAssetAccount`, `makeBudgetLimit`, `makeMonthStartBalance`, `makePerson`,
+`makeBusiness`, `makeCustomCategory`, `makeHolding`, `makeMerchantRule`,
+`makeBankConnection`, `makeExternalAccountLink`, `makePendingTransaction`,
+`makeNetWorthSnapshot`, plus `FIXTURE_TIME`). Use them instead of `as any`
+literals — a fixture that drifts from the real type fails typecheck instead of
+silently testing a shape the app never produces. Reserve `as any` for
+deliberately malformed input aimed at a runtime validator.
 
 ## What's covered
 
-Tests live next to the code under `__tests__/` folders (`src/utils/`,
-`src/sync/`, `src/data/`, `src/services/connections/`):
+Tests live next to the code under `__tests__/` folders: `src/utils/`,
+`src/data/`, `src/sync/`, `src/storage/`, `src/crypto/`, `src/hooks/`,
+`src/notifications/`, `src/services/connections/`, `src/services/attachments/`,
+`src/services/autoBackup/`.
+
+### Money math & planning (`src/utils`)
 
 | Suite | Module under test | Feature it guards |
 | --- | --- | --- |
-| `calculations.test.ts` | `calculations.ts` | Debt payoff timelines, total interest, investment growth, goal-date payments, currency formatting, multi-debt avalanche/snowball simulation |
-| `currencyConversion.test.ts` | `currencyConversion.ts` | USD conversion table, milestone target localization, "convert my amounts" math |
-| `currencyMigration.test.ts` | `currencyMigration.ts` | "Convert my amounts" migration: scales every stored money field across all collections, bumps `updatedAt`, counts converted records |
-| `netWorth.test.ts` | `netWorth.ts` | Net worth totals, reserve-category counting, linked-account double-count guard |
-| `accountValueHistory.test.ts` | `accountValueHistory.ts` | Per-account rise/drop tracker: daily value upsert/retention/pruning, baseline selection per window, category roll-up, fail-closed sanitizer |
-| `recurrence.test.ts` | `recurrence.ts` | Recurring-entry cadence, occurrence counting, spreadsheet month projection |
+| `calculations.test.ts` | `calculations.ts` | Debt payoff timelines, total interest, investment growth, goal-date payments, currency formatting, avalanche vs snowball simulation (targeting + total-interest comparison), non-zero-interest amortization |
+| `chartCalculators.test.ts` | `chartCalculators.ts` | Charts-tab tool math: loan/mortgage schedules, refinance break-even, emergency-fund timeline |
+| `debtTrackerMath.test.ts` | `debtTrackerMath.ts` | Debts tab derivations: summary totals (0-original guard), Build-Your-Ark milestone progress (mortgage-only `hull` guard), payoff ordering with tier promotion |
+| `debtPaymentPlan.test.ts` | `debtPaymentPlan.ts` | Per-month debt payment plan: minimum floors in the current month, logged payments in past months, payment month bucketing |
+| `debtPaymentDedupe.test.ts` | `debtPaymentDedupe.ts` | Deterministic minimum-due payment ids and the double-count repair |
+| `debtFreeCountdown.test.ts` | `debtFreeCountdown.ts` | Debt-free date countdown |
+| `debtDueCalendar.test.ts` | `debtDueCalendar.ts` | Debt reminders: due-day month clamping, payment-in-month detection, upcoming-due window, "due today needing a prompt" |
+| `billCalendar.test.ts` | `billCalendar.ts` | Bill calendar: end-of-month clamping, grouping by day, next-bill lookup, paid-vs-remaining split |
+| `cashFlow.test.ts` | `cashFlow.ts` | Month-start cash flow: projection, reconciliation delta (recurring entries + debt plan, deleted-debt payments excluded), fail-closed balance-map parsing |
+| `budgetMonths.test.ts` | `budgetMonths.ts` | The single local month-key helper set (offsets, history window, labels) |
 | `budgetBucketMath.test.ts` | `budgetBucketMath.ts` | 50/30/20 bucket totals, targets, variance, percentages |
-| `recordValidators.test.ts` | `recordValidators.ts` | Import / LAN-sync trust-boundary validation of every record type |
-| `paymentUrl.test.ts` | `paymentUrl.ts` | Payment-URL normalization and scheme rejection (security) |
+| `categoryBucketResolve.test.ts` | `categoryBucketResolve.ts` | Which bucket each spend category lands in: override > custom default > built-in default |
+| `expenseCategoryRows.test.ts` | `expenseCategoryRows.ts` | Budget Spending rows: per-category totals/limits/ratios, synthetic debt-payment rows, business-only filter, sort |
+| `budgetInsights.test.ts` | `budgetInsights.ts` | Monthly Review: month summaries, month-over-month changes, 3-month comparisons, streaks (frozen clock) |
+| `whatIfSpending.test.ts` | `whatIfSpending.ts` | "What if I stopped spending on X": category averages, redirect impact on payoff and savings |
+| `purchasePlanner.test.ts` | `purchasePlanner.ts` | Plan-a-Purchase sinking funds: monthly need, Ark-step guidance |
+| `emergencyFund.test.ts` | `emergencyFund.ts` | EF goal resolution (explicit goal > Keel synthetic > linked savings accounts), savings reserve sum |
+| `savingsGoals.test.ts` | `savingsGoals.ts` | EF contribution application, EF source selection |
+| `paycheckMath.test.ts` | `paycheckMath.ts` | W-2 / 1099 rollups: tax set-aside, 401(k) contributions, monthly summary |
+| `taxCalc.test.ts` | `taxCalc.ts` | Take-home pay: 2026 federal brackets, state tables, FICA, filing statuses |
+| `netWorth.test.ts` | `netWorth.ts` | Net worth totals, reserve-category counting, linked-account double-count guard |
+| `bridgeMath.test.ts` | `bridgeMath.ts` | Bridge tab derivations: trailing cash flow (January/February year boundary), account changes/breakdown, holdings-by-category sections, donut slices, next-quote-refresh label |
+| `holdingsMath.test.ts` | `holdingsMath.ts` | Holding valuation: shares × price, proxy anchors, manual values, cost basis gain/loss |
+| `accountValueHistory.test.ts` | `accountValueHistory.ts` | Per-account rise/drop tracker: daily upsert/retention, baseline per window, category roll-up, fail-closed sanitizer |
+| `assetBalanceDeltas.test.ts` | `assetBalanceDeltas.ts` | Applying budget-entry deltas to linked asset balances |
+| `linkedAccountRecurring.test.ts` | `linkedAccountRecurring.ts` | Linked-account catch-up: missed recurring months credited, orphan-account skip, marker advancement |
+| `linkedAccountRecurringApply.test.ts` | `linkedAccountRecurringApply.ts` | The side-effecting shell: save order that prevents double-credit |
+| `recurrence.test.ts` | `recurrence.ts` | Recurring-entry cadence, occurrence counting, month projection |
+| `annualReport.test.ts` | `annualReport.ts` | Year-in-review aggregation, months-under-budget, sparkline, PII-free share text (frozen clock) |
+| `businessReport.test.ts` / `personReport.test.ts` | `businessReport.ts` / `personReport.ts` | Business / person spending reports and CSV rows |
+| `receiptExport.test.ts` | `receiptExport.ts` | Receipt zip export planning (no filesystem) |
+| `cardKeepAlive.test.ts` / `cardKeepAlivePlanner.test.ts` | `cardKeepAlive.ts` / `cardKeepAlivePlanner.ts` | Card inactivity deadlines, banner state, reminder planning |
+| `trackingReminderPlanner.test.ts` | `trackingReminderPlanner.ts` | Check-in reminder scheduling plan |
+| `achievements.test.ts` | `achievements.ts` | Achievement evaluator: unlock-once, revoke rules, first-run gating |
+
+### Currency, money input & formatting
+
+| Suite | Module under test | Feature it guards |
+| --- | --- | --- |
+| `currencyConversion.test.ts` | `currencyConversion.ts` | USD conversion table, milestone localization |
+| `currencyMigration.test.ts` | `currencyMigration.ts` | "Convert my amounts": scales every stored money field, bumps `updatedAt` |
+| `currencyPreferences.test.ts` | `currencyPreferences.ts` | Currency-preference validation + option lookup (prototype-key safe) |
+| `exchangeRates.test.ts` | `exchangeRates.ts` | Live FX: response validation, cache reuse/refresh, offline fallback |
+| `exchangeCalculator.test.ts` | `exchangeCalculator.ts` | Converter math + amount parsing |
+| `parseMoneyInput.test.ts` | `parseMoneyInput.ts` | The one money-input parser (comma rule, negatives, caps, never -0) |
+| `money.test.ts` | `money.ts` | Cents rounding, bank-balance formatting |
+| `dateFormat.test.ts` / `entryDate.test.ts` | `dateFormat.ts` / `entryDate.ts` | Month/day labels; local year-month for entries |
+
+### Import, export & backups
+
+| Suite | Module under test | Feature it guards |
+| --- | --- | --- |
+| `importData.test.ts` | `importData.ts` | JSON import: validation, merge vs replace, last-write-wins, stale-age, encrypted-payload gating, learning progress |
+| `importData.merge.test.ts` | `importData.ts` | Replace-mode `keysToRemove` never touches unrelated keys (past data-loss bug), legacy flat `budgetLimits` wrap, snapshot / custom-category / singleton merges |
+| `exportData.test.ts` | `exportData.ts` | Export payload shape, no connection-secret keys, encrypt→decrypt round-trip |
+| `exportEncryption.test.ts` | `exportEncryption.ts` | v3 encrypt-then-MAC envelope: tamper evidence, wrong password, golden fixture at production PBKDF2 cost (fast cases use the test-only iteration override) |
+| `spreadsheetImport.test.ts` | `spreadsheetImport.ts` | .xlsx/.csv import: amount/date parsing, row mapping, artifact filtering, skipped-row reporting |
+| `spreadsheetImport.rows.test.ts` | `spreadsheetImport.ts` | Limit / payment / savings-goal row mappers, Excel serial dates, 5 MB and 5000-row caps |
+| `spreadsheetExport.test.ts` | `spreadsheetExport.ts` | Sheet structure, totals, partial-export flagging |
+| `spreadsheetExport.csv.test.ts` | `spreadsheetExport.ts` | CSV formula-cell neutralization (CWE-1236), recurring projection at 3/6/12-month intervals with day-31 clamping |
+| `spreadsheetRoundTrip.test.ts` | export + import | Schema-alignment guard: real export → re-import |
+| `demoDataGenerator.test.ts` / `demoDataStartupSmoke.test.ts` | `scripts/generate-demo-data.mjs` + import | Screenshot fixture generates, imports, and satisfies every startup read (structural invariants, not exact counts) |
+| `shareTempFile.test.ts` | `shareTempFile.ts` | Plaintext export files are deleted after the share sheet, success or failure |
+
+### Security & trust boundaries
+
+| Suite | Module under test | Feature it guards |
+| --- | --- | --- |
+| `recordValidators.test.ts` | `recordValidators.ts` | Import / sync validation of every record type, including explicit reject cases |
 | `sanitize.test.ts` | `sanitize.ts` | Control-character stripping on text input |
-| `debtDueCalendar.test.ts` | `debtDueCalendar.ts` | Debt reminders: due-day month clamping, payment-in-month detection, upcoming-due window + sorting, "due today needing a prompt" |
-| `billCalendar.test.ts` | `billCalendar.ts` | Bill calendar: end-of-month day clamping, grouping by day, next-bill lookup, upcoming window + sorting, paid-vs-remaining split |
-| `budgetInsights.test.ts` | `budgetInsights.ts` | Monthly Review: month summaries, month-over-month category changes, 3-month comparisons, streaks (net/under-budget/spending trend) |
-| `linkedAccountRecurring.test.ts` | `linkedAccountRecurring.ts` | Linked-account catch-up: credits asset balances for missed recurring months, orphan-account skip, marker advancement, no input mutation |
-| `annualReport.test.ts` | `annualReport.ts` | Year-in-review aggregation: income/expense/net totals, reserve vs spending split, debt paid, net-worth baseline, months-under-budget, sparkline, recurring projection, PII-free share text |
-| `versionGuard.test.ts` | `versionGuard.ts` | OTA downgrade guard: semver compare (numeric, padded, non-numeric), fail-closed on missing incoming / fail-open on missing current |
-| `currencyPreferences.test.ts` | `currencyPreferences.ts` | Currency-preference id validation + option lookup with default fallback (incl. prototype-key safety) |
-| `exchangeRates.test.ts` | `exchangeRates.ts` | Live FX rates: response validation (USD base, all codes positive), fresh-cache reuse, stale refresh + write-back, forceRefresh, offline fallback to cache then static table, corrupt/invalid-cache handling |
-| `achievements.test.ts` | `achievements.ts` | Achievement evaluator: unlock-once, revoke only revocable, first-run silent + persist gating, progress filtering, throwing check/progress swallowed |
-| `updateReleaseNotes.test.ts` | `updateReleaseNotes.ts` | OTA update info: version normalization, release-note lookup, inline-JSON-message parsing + override, current-version inference, default-message fallback |
-| `haptics.test.ts` | `haptics.ts` | Haptic wrapper: enabled-pref caching, in-memory override, disabled/error no-op, moment→expo-haptics mapping, native error swallowed |
-| `iosNativeShare.test.ts` | `iosNativeShare.ts` | Native share: unavailable error, file+options passthrough, iOS screen-guard suspend/restore (incl. on failure), Android skip path |
-| `uuid.test.ts` | `uuid.ts` | UUID generator delegates to `uuid.v4` (package is ESM-only, so mocked) |
-| `diffEngine.test.ts` | `sync/diffEngine.ts` | LAN-sync trust boundary: outgoing diff filtering/backlog, incoming validation gate (rejects bad records, no writes), last-write-wins merge, tombstone resurrection guard, per-category limit + snapshot + custom-category merges, milestone/strategy LWW |
-| `transportService.test.ts` | `sync/transportService.ts` | Wire-level security: full-envelope HMAC auth (rejects tampered/wrong-key/wrong-sender frames), protocol-version gate + mismatch flag, message age + nonce replay protection, length-prefixed frame buffering/splitting, server port allocation & close-before-connect |
-| `pairingService.test.ts` | `sync/pairingService.ts` | Pairing handshake: Crockford code generation/normalization (confusable folding), deterministic fingerprint, initiator/joiner flows (offer→accept, manual address, discovery-miss, non-ACCEPT ignore, bad payload, timeouts, server-start failure) |
-| `syncOrchestrator.test.ts` | `sync/syncOrchestrator.ts` | End-to-end sync coordination: client vs server role selection, the SYNC_REQUEST→SYNC_RESPONSE→SYNC_ACK message dance, record-count reporting, server→client switch on the retry scan, timeouts, protocol-mismatch error mapping, and finally-block cleanup |
-| `autoSyncManager.test.ts` | `sync/autoSyncManager.ts` | Auto-sync gating: Android location-permission flow, SSID read, NetInfo/AppState listener wiring (idempotent start, teardown), and every trigger gate (foreground, paired, enabled, home-SSID match, cooldown, in-flight guard, silent-failure recovery) |
-| `discoveryService.test.ts` | `sync/discoveryService.ts` | mDNS publish/browse: service-name + TXT advertisement, partner matching (pairing accepts any service, sync matches a specific userId, host/port required), timeout/error→null, browse-instance reuse without tearing down the publish channel, stop() unpublish + idempotence |
-| `linkPreferences.test.ts` | `services/connections/linkPreferences.ts` | Editing a bank-account link after setup: no-op detection, `updateBalance` follows the chosen target, backfill only when import turns on, balance seeding only with a known provider balance (clamped at 0) |
-| `achievementDefs.test.ts` | `data/achievementDefs.ts` | Ship's Log badge rules: presence badges, debt-payoff ratios (mortgage excluded), savings/net-worth thresholds, milestone completion, savings streak, under-budget consecutive runs, chapter-completion against real lesson data |
-| `importData.test.ts` | `importData.ts` | JSON import: validation, merge vs replace, last-write-wins, stale-age, encrypted-payload gating |
-| `exportData.test.ts` | `exportData.ts` | JSON export payload shape + a real encrypt→decrypt round-trip back through the importer |
-| `spreadsheetImport.test.ts` | `spreadsheetImport.ts` | .xlsx/.csv import: amount/date parsing, row mapping, Total-row & artifact filtering, skipped-row reporting |
-| `spreadsheetExport.test.ts` | `spreadsheetExport.ts` | .xlsx/.csv export: sheet structure, totals, partial-export flagging, backup stamping |
-| `spreadsheetRoundTrip.test.ts` | export + import together | Schema-alignment guard: real export → re-import; entities survive, recurring projections are dropped |
+| `paymentUrl.test.ts` | `paymentUrl.ts` | Payment-URL normalization and scheme rejection |
+| `quickAddLink.test.ts` | `quickAddLink.ts` | Widget deep-link builder + fail-closed parser (category names only) |
+| `appLock.test.ts` | `appLock.ts` | PIN validation, record parsing, escalating lockout, clock-tamper clamp |
+| `versionGuard.test.ts` / `updateReleaseNotes.test.ts` | `versionGuard.ts` / `updateReleaseNotes.ts` | OTA downgrade guard; release-note message parsing |
+| `searchFilter.test.ts` / `guideSearch.test.ts` | `searchFilter.ts` / `guideSearch.ts` | Global search + advanced filters; guide search |
+| `recordTimestamps.test.ts` | `recordTimestamps.ts` | `ensureUpdatedAt` normalizer, NaN-safe timestamp compare |
+| `errorMessage.test.ts` / `haptics.test.ts` / `iosNativeShare.test.ts` / `uuid.test.ts` | matching modules | Error text, haptic wrapper, native share + screen-guard, UUID delegation |
 
-### Import / export tests use mocks for the I/O edges
+### Storage layer (`src/storage`, `src/crypto`)
 
-The pure-math suites above import nothing native. The import/export suites do
-touch React Native, Expo native modules, the storage layer, and crypto — so
-those edges are mocked per-file while the **real** logic (parsing, validation,
-merge, SheetJS workbook build, crypto-js) runs:
+Storage suites mock `encryptedStorage` with an in-memory `Map` (including a
+faithful `updateItem` read-modify-write) and run the real store logic.
 
-- `../storage/encryptedStorage` → an in-memory `Map` (inspect/seed it directly).
-- `expo-file-system` / `expo-document-picker` → return test-controlled content.
-- `react-native` (`Share`, `Platform`) and the per-feature storage getters →
-  lightweight stubs returning fixtures.
-- `crypto-js` and `xlsx` are **not** mocked — encryption and spreadsheet
-  parsing are exercised for real. (The PBKDF2 key derivation is intentionally
-  slow, so the encrypted-export round-trip is the bulk of the suite's runtime.)
+| Suite | Module under test | Feature it guards |
+| --- | --- | --- |
+| `encryptedStorage.test.ts` | `encryptedStorage.ts` | V1/V2/V3 golden byte-compat fixtures, secret writes never degrade to plaintext (`requireEncryption`) |
+| `encryptedStorage.multi.test.ts` | `encryptedStorage.ts` | `multiSet` / `multiRemove` queue ordering, duplicate-key throw, fail-closed decrypt, migration stale-write guard |
+| `nativeCrypto.test.ts` | `crypto/nativeCrypto.ts` | quick-crypto vs crypto-js cross-implementation compatibility |
+| `budgetStorage.test.ts` | `budgetStorage.ts` | Atomic entry CRUD, bulk delete/restore, `saveBudgetEntries` merge-back, limit tombstones + 13-month history pruning |
+| `debtStorage.test.ts` / `debtStorage.crud.test.ts` | `debtStorage.ts` | Deterministic-id payments, duplicate repair; debt CRUD/tombstones, `restorePayment` with `appliedAmount`, legacy `car_house` split, payoff-strategy envelope migration |
+| `assetAccountStorage.test.ts` | `assetAccountStorage.ts` | Atomic account CRUD + balance adjustments |
+| `tombstones.test.ts` | `tombstones.ts` | Shared soft-delete primitives: merge preserving tombstones, untombstone, TTL purge with NaN-age guard |
+| `collectionRepair.test.ts` / `referentialCleanup.test.ts` | `collectionRepair.ts` / person+business stores | Atomic read-repair; person/business deletion cascades to merchant rules and links |
+| `customCategoriesStorage.test.ts` | `customCategoriesStorage.ts` | Name validation, icon normalization, cap, collision rules, fail-closed reads |
+| `monthlyBalanceStorage.test.ts` / `netWorthSnapshotStorage.test.ts` | matching modules | Month-start balances + prompt tracking; daily net-worth history retention/repair |
+| `reviewInboxStorage.test.ts` | `reviewInboxStorage.ts` | Ingest-ledger TTL pruning, 500-item inbox cap ordering |
+| `connectionSecretsStorage.test.ts` | `connectionSecretsStorage.ts` | Rule 2: `EncryptionUnavailableError` propagates, provider-mismatch refusal |
+| `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
+
+### Bank connections (`src/services/connections`)
+
+| Suite | Module under test | Feature it guards |
+| --- | --- | --- |
+| `simplefinParser.test.ts` / `tellerParser.test.ts` | provider parsers | Fail-closed parsing of bank responses (https enforced for SimpleFIN) |
+| `http1.test.ts` / `tellerMtlsClient.test.ts` | transport | Minimal HTTP/1 client; Teller mTLS peer-identity verification |
+| `ingest.test.ts` / `merchant.test.ts` | `ingest.ts` / `merchant.ts` | Transaction ingest planning (dedupe, twins, pending→posted), merchant normalization |
+| `syncGate.test.ts` / `linkPreferences.test.ts` | `syncGate.ts` / `linkPreferences.ts` | Sync gating; account-link edit rules |
+| `reviewInboxService.test.ts` | `reviewInboxService.ts` | Approve/skip/bulk flows, merchant-rule creation and edits, crash-safe write order |
+| `connectionsSyncService.test.ts` | `connectionsSyncService.ts` | Per-connection orchestration: gates, provider routing, balance clamping, keep-alive stamping, failure isolation, secrets never written to non-secret keys |
+
+### Partner sync (`src/sync`)
+
+| Suite | Module under test | Feature it guards |
+| --- | --- | --- |
+| `diffEngine.test.ts` / `diffEngine.collections.test.ts` | `diffEngine.ts` | The LAN-sync trust boundary: outgoing filtering, incoming validation, last-write-wins + tombstones for every collection, limit-history first-sync split, bucket-override merge |
+| `transportService.test.ts` | `transportService.ts` | Full-envelope HMAC, protocol-version gate, age + nonce replay protection (fake timers), frame buffering |
+| `pairingService.test.ts` / `pairingStorage.test.ts` | `pairingService.ts` / `pairingStorage.ts` | Pairing handshake flows and codes; sync watermark reset after import |
+| `syncOrchestrator.test.ts` / `autoSyncManager.test.ts` / `discoveryService.test.ts` | matching modules | End-to-end sync coordination; auto-sync gates; mDNS publish/browse |
+
+### Data, hooks & notifications
+
+| Suite | Module under test | Feature it guards |
+| --- | --- | --- |
+| `releaseNotes.test.ts` | `data/releaseNotes.ts` | Versions valid, strictly descending, unique; `RELEASE_NOTES[0]` matches `app.json` |
+| `achievementDefs.test.ts` / `featureSpotlights.test.ts` / `coachmarkContent.test.ts` / `connectionGuides.test.ts` / `lessonIndex.test.ts` | `src/data/*` | Badge rules, spotlight gating, coachmark/guide content integrity, lesson topic index |
+| `useSliderValueEditor.test.ts` | `hooks/useSliderValueEditor.ts` | Tap-to-type slider helpers: text sanitizing per field type, commit rounding/snapping, below-min rejection |
+| `trackingReminders.test.ts` / `cardKeepAliveReminders.test.ts` | `notifications/*` | Rule 11: scheduled notification content is a fixed string that never carries amounts, balances, or account/card names |
+| `attachmentStore.test.ts` / `attachmentSweep.test.ts` | `services/attachments/*` | Encrypted receipt files, half-pair cleanup, orphan sweep |
+| `autoBackupPlan.test.ts` / `autoBackupStore.test.ts` | `services/autoBackup/*` | Weekly backup decision rules; encrypted writes, prune-after-write, fail-closed reads |
+
+### Mocks at the I/O edges
+
+The pure-math suites import nothing native. Suites that touch React Native,
+Expo modules, storage, or crypto mock those edges per file while the **real**
+logic runs:
+
+- `../storage/encryptedStorage` → an in-memory `Map` (seed / inspect it directly).
+- `expo-file-system`, `expo-document-picker`, `expo-image-manipulator`,
+  `expo-notifications` → test-controlled fakes (capture the calls).
+- `react-native` (`Share`, `Platform`, `AppState`) → lightweight stubs.
+- `react-native-quick-crypto` → Node's `crypto` via `src/crypto/quickCryptoNodeShim.js`
+  (mapped in `jest.config.js`), so the real OpenSSL math runs.
+- `crypto-js` and `xlsx` are **not** mocked. PBKDF2 is intentionally slow;
+  `exportEncryption` exposes `__setPbkdf2IterationsForTests`, a no-op outside
+  `NODE_ENV === "test"`, so most envelope tests run at a low iteration count
+  while the golden fixture still runs at the production 250k.
+- `uuid` is ESM-only and is mocked wherever a module pulls it in.
 
 ## Setup notes
 
-- Runner: **Jest + ts-jest** on a Node environment (`jest.config.js`).
-- These modules are plain TypeScript with **no React Native imports**, so the
-  suite does **not** use `jest-expo` — it runs fast and offline with no native
-  mocks. If you later add tests for components or hooks that import React Native,
-  add a separate `jest-expo`-based Jest project rather than changing this one.
-- `isolatedModules: true` (in `tsconfig.json`) makes ts-jest transpile each file
-  on its own — quick, but it does **not** type-check. Run `tsc --noEmit`
-  separately if you want full type checking.
+- Runner: **Jest + ts-jest** on a Node environment (`jest.config.js`), default
+  5 s per-test timeout; the two real-timer handshake suites
+  (`pairingService`, `syncOrchestrator`) set `jest.setTimeout(15000)` themselves.
+- These modules have **no React Native imports**, so the suite does **not** use
+  `jest-expo`. If you ever need component tests, add a separate
+  `jest-expo`-based Jest project rather than changing this one.
+- `isolatedModules: true` (in `tsconfig.json`) makes ts-jest transpile each
+  file on its own — quick, but it does **not** type-check. `npm run typecheck`
+  does, tests included.
+- Coverage is a **ratchet** (`coverageThreshold` in `jest.config.js`): set just
+  below the measured numbers, raised as coverage grows, never lowered to green
+  a build. Scope: `src/{utils,data,sync,storage,crypto,services,hooks,notifications}`.
+- Prefer deterministic clocks: `jest.useFakeTimers().setSystemTime(...)` or a
+  `now` parameter. Never assert against two live `Date` reads.
 
 ## Adding tests
 
-Drop a `*.test.ts` file under `src/utils/__tests__/` (or any `__tests__/`
-folder beneath `src/`). Prefer testing pure functions — given inputs, assert
-outputs. When a module pulls in React Native or storage, extract the pure logic
-into a helper and test that, keeping the side-effecting shell thin.
+Drop a `*.test.ts` file under the nearest `__tests__/` folder beneath `src/`,
+start it with a doc comment saying what it guards, and build records with the
+shared fixtures. Prefer testing pure functions — given inputs, assert outputs.
+When a module pulls in React Native or storage, extract the pure logic into a
+helper and test that, keeping the side-effecting shell thin (see
+`utils/bridgeMath.ts`, `utils/debtTrackerMath.ts`, `utils/expenseCategoryRows.ts`
+for the pattern).

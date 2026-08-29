@@ -218,6 +218,20 @@ describe("protocol version gate", () => {
 });
 
 describe("age and replay protection", () => {
+  // These two cases straddle MAX_MESSAGE_AGE_MS (5 min) by only a 60s
+  // margin; on the real clock that's deterministic in practice but still a
+  // clock read outside the test's control. Pin the clock so both the
+  // message timestamp and transportService's own `Date.now()` check are
+  // computed from the same fixed instant.
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("drops a stale message", async () => {
     const { socket, received } = await newClient();
     socket.feed(validFrame({ timestamp: new Date(Date.now() - 6 * 60 * 1000).toISOString() }));

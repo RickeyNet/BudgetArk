@@ -8,7 +8,10 @@ import { CHAPTERS } from "../lessonChapters";
 import { hasLessonBody } from "../lessonIndex";
 
 // Pure check/progress rules - no mocks. Build a minimal context and override
-// per test. `as any` keeps fixtures concise (ts-jest is transpile-only).
+// per test. `npm run typecheck` (tsc) covers this file too, but these
+// fixtures deliberately stay partial-shape (only the fields each achievement
+// check reads), so the scattered `as any` casts are the accurate escape
+// hatch rather than full-record shared builders.
 const ctx = (over: Partial<AchievementContext> = {}): AchievementContext =>
   ({
     debts: [],

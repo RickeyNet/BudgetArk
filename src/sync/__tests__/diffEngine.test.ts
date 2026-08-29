@@ -11,6 +11,28 @@ import {
   markBackfillSyncDone,
 } from "../diffEngine";
 import type { SyncDiff } from "../types";
+import {
+  makeDebt,
+  makePayment,
+  makeBudgetEntry,
+  makeNetWorthSnapshot,
+  makeCustomCategory,
+  makeHolding,
+  makeBusiness,
+  makePerson,
+  makeMonthStartBalance,
+} from "../../__tests__/fixtures";
+import type {
+  Debt,
+  Payment,
+  BudgetEntry,
+  NetWorthSnapshot,
+  CustomCategory,
+  Holding,
+  Business,
+  Person,
+  MonthStartBalance,
+} from "../../types";
 
 let mockState: any;
 
@@ -123,82 +145,39 @@ const MID = "2026-03-01T00:00:00.000Z";
 const NEW = "2026-06-01T00:00:00.000Z";
 
 // ── Valid fixtures (must pass the real recordValidators) ──
-const debt = (over: Record<string, unknown> = {}): any => ({
-  id: "d1",
-  name: "Visa",
-  balance: 1000,
-  originalBalance: 2000,
-  rate: 19.9,
-  minPayment: 50,
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const payment = (over: Record<string, unknown> = {}): any => ({
-  id: "p1",
-  debtId: "d1",
-  amount: 50,
-  date: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const snapshot = (over: Record<string, unknown> = {}): any => ({
-  dayKey: "2026-06-01",
-  capturedAt: NEW,
-  totalAssets: 1000,
-  totalDebt: 200,
-  netWorth: 800,
-  ...over,
-});
-const customCat = (over: Record<string, unknown> = {}): any => ({
-  id: "c1",
-  name: "Kayaking",
-  icon: "🛶",
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const holding = (over: Record<string, unknown> = {}): any => ({
-  id: "h1",
-  symbol: "AAPL",
-  shares: 10,
-  costBasis: 1500,
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const business = (over: Record<string, unknown> = {}): any => ({
-  id: "b1",
-  name: "Acme Consulting LLC",
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const person = (over: Record<string, unknown> = {}): any => ({
-  id: "per1",
-  name: "Sam",
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
+const debt = (over: Partial<Debt> = {}): Debt =>
+  makeDebt({ id: "d1", originalBalance: 2000, createdAt: OLD, updatedAt: NEW, ...over });
+const payment = (over: Partial<Payment> = {}): Payment =>
+  makePayment({ id: "p1", debtId: "d1", date: OLD, updatedAt: NEW, ...over });
+const snapshot = (over: Partial<NetWorthSnapshot> = {}): NetWorthSnapshot =>
+  makeNetWorthSnapshot({
+    capturedAt: NEW,
+    totalAssets: 1000,
+    totalDebt: 200,
+    netWorth: 800,
+    ...over,
+  });
+const customCat = (over: Partial<CustomCategory> = {}): CustomCategory =>
+  makeCustomCategory({
+    id: "c1",
+    name: "Kayaking",
+    icon: "🛶",
+    createdAt: OLD,
+    updatedAt: NEW,
+    ...over,
+  });
+const holding = (over: Partial<Holding> = {}): Holding =>
+  makeHolding({ id: "h1", symbol: "AAPL", costBasis: 1500, createdAt: OLD, updatedAt: NEW, ...over });
+const business = (over: Partial<Business> = {}): Business =>
+  makeBusiness({ id: "b1", name: "Acme Consulting LLC", createdAt: OLD, updatedAt: NEW, ...over });
+const person = (over: Partial<Person> = {}): Person =>
+  makePerson({ id: "per1", name: "Sam", createdAt: OLD, updatedAt: NEW, ...over });
 
-const monthBalance = (over: Record<string, unknown> = {}): any => ({
-  balance: 3200,
-  capturedAt: NEW,
-  updatedAt: NEW,
-  ...over,
-});
+const monthBalance = (over: Partial<MonthStartBalance> = {}): MonthStartBalance =>
+  makeMonthStartBalance({ balance: 3200, capturedAt: NEW, updatedAt: NEW, ...over });
 
-const budgetEntry = (over: Record<string, unknown> = {}): any => ({
-  id: "e1",
-  type: "expense",
-  category: "Grocery",
-  amount: 42.5,
-  date: OLD,
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
+const budgetEntry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({ id: "e1", amount: 42.5, date: OLD, createdAt: OLD, updatedAt: NEW, ...over });
 
 const emptyDiff = (over: Partial<SyncDiff> = {}): SyncDiff =>
   ({
@@ -432,7 +411,9 @@ describe("applyIncomingDiff - validation gate", () => {
   it("rejects a budget entry whose isPrivate is not a boolean", async () => {
     const bad = emptyDiff({
       budgetEntries: [
-        { action: "upsert", record: budgetEntry({ isPrivate: "yes" }) },
+        // Deliberately malformed - stands in for an untyped wire payload;
+        // the point of the test is the runtime validator catching it.
+        { action: "upsert", record: budgetEntry({ isPrivate: "yes" as unknown as boolean }) },
       ],
     });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/budget entry/);
@@ -829,7 +810,7 @@ describe("budget limits - removals propagate as tombstones", () => {
       applyIncomingDiff(
         emptyDiff({
           budgetLimits: [
-            { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: "soon" } as any] },
+            { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: "soon" }] },
           ],
         })
       )
@@ -931,7 +912,9 @@ describe("month-start balances sync", () => {
     await expect(
       applyIncomingDiff(
         emptyDiff({
-          monthStartBalances: { "2026-07": monthBalance({ balance: "3200" }) },
+          // Deliberately malformed - the runtime validator, not the type
+          // system, is what's under test here.
+          monthStartBalances: { "2026-07": monthBalance({ balance: "3200" as unknown as number }) },
         })
       )
     ).rejects.toThrow(/invalid month-start balance/i);
