@@ -17,7 +17,10 @@
 
 import { entryPersonIds, personShare } from "./entryPeople";
 import type { BudgetEntry, Person } from "../types";
-import { listOccurrenceMonths } from "./recurrence";
+import {
+  fulfilledMonthsByBill,
+  listUnfulfilledOccurrenceMonths,
+} from "./billFulfillment";
 import { currentMonthKey } from "./businessReport";
 
 /** One expense occurrence assigned to a person within the report year. */
@@ -99,13 +102,21 @@ export const computePersonReport = (
 
   const personById = new Map(people.map((p) => [p.id, p]));
   const groups = new Map<string, PersonReportGroup>();
+  // Same fulfilment rule as the business report: a bill's actual charge
+  // replaces its projection in that month, never doubles it.
+  const fulfilledMonths = fulfilledMonthsByBill(entries);
 
   if (windowEnd >= windowStart) {
     for (const entry of entries) {
       if (entry.type !== "expense" || entry.deletedAt) continue;
       const assignees = entryPersonIds(entry);
       if (assignees.length === 0) continue;
-      const months = listOccurrenceMonths(entry, windowStart, windowEnd);
+      const months = listUnfulfilledOccurrenceMonths(
+        entry,
+        fulfilledMonths,
+        windowStart,
+        windowEnd
+      );
       if (months.length === 0) continue;
       // Shared spending splits evenly (see entryPeople.personShare) so the
       // grand total still equals what was actually spent.

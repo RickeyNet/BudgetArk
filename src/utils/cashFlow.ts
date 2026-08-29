@@ -18,7 +18,7 @@
 
 import type { BudgetEntry, Debt, MonthStartBalance, Payment } from "../types";
 import { isMonthKey, isMonthStartBalanceRecord } from "./recordValidators";
-import { isEntryActiveInMonth } from "./recurrence";
+import { entriesForMonth } from "./billFulfillment";
 import { paymentMonthKey } from "./debtDueCalendar";
 import { buildDebtPaymentPlanForMonth } from "./debtPaymentPlan";
 
@@ -116,7 +116,7 @@ export const computeMonthReconciliationDelta = (input: {
   const previous = input.monthBalances[prevKey];
   if (!current || !previous) return null;
 
-  const prevEntries = input.entries.filter((e) => isEntryActiveInMonth(e, prevKey));
+  const prevEntries = entriesForMonth(input.entries, prevKey);
   const prevIncome = prevEntries
     .filter((e) => e.type === "income")
     .reduce((sum, e) => sum + e.amount, 0);

@@ -19,7 +19,7 @@ import {
   NetWorthSnapshot,
   Payment,
 } from "../types";
-import { isEntryActiveInMonth } from "./recurrence";
+import { entriesForMonth } from "./billFulfillment";
 
 /**
  * Categories that represent money moved *into* savings rather than spending.
@@ -93,14 +93,6 @@ interface MonthAgg {
   byCategory: Record<string, number>;
 }
 
-/**
- * Recurring entries repeat at their configured interval from the start month
- * onward; one-offs count only in their own month. Evaluated against an
- * explicit `monthKey` so we can build a report for any past calendar year.
- */
-const entryAppliesToMonth = (entry: BudgetEntry, monthKey: string): boolean =>
-  isEntryActiveInMonth(entry, monthKey);
-
 const buildMonthAggregates = (
   entries: BudgetEntry[],
   year: number
@@ -118,11 +110,14 @@ const buildMonthAggregates = (
   const lastMonthIndex =
     year === now.getFullYear() ? now.getMonth() : year > now.getFullYear() ? -1 : 11;
 
-  for (const entry of entries) {
-    if (!Number.isFinite(entry.amount) || entry.amount <= 0) continue;
-    for (let m = 0; m <= lastMonthIndex; m++) {
-      const key = monthKeyFor(year, m);
-      if (!entryAppliesToMonth(entry, key)) continue;
+  // Recurring entries repeat at their configured interval from the start
+  // month onward; one-offs count only in their own month; a bill's actual
+  // charge replaces its estimate for that month (utils/billFulfillment).
+  // Evaluated per explicit month key so any past calendar year works.
+  for (let m = 0; m <= lastMonthIndex; m++) {
+    const key = monthKeyFor(year, m);
+    for (const entry of entriesForMonth(entries, key)) {
+      if (!Number.isFinite(entry.amount) || entry.amount <= 0) continue;
       const agg = aggs[key];
       if (entry.type === "income") {
         agg.income += entry.amount;

@@ -28,7 +28,7 @@
  */
 
 import { entryPersonIds, personAssignmentFields } from "../utils/entryPeople";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   InteractionManager,
   Modal,
@@ -59,6 +59,11 @@ import {
   EntryAttachment,
 } from "../types";
 import { getRecurrenceInterval } from "../utils/recurrence";
+import {
+  rankBillCandidates,
+  suggestEstimateFromActuals,
+} from "../utils/billFulfillment";
+import TagPillPicker from "./TagPillPicker";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import CategoryPillPicker from "./CategoryPillPicker";
@@ -121,6 +126,19 @@ interface BudgetEntryModalProps {
   customCategories?: CustomCategory[];
   businesses?: Business[];
   people?: Person[];
+  /**
+   * Every live entry, so a one-off expense can be filed as the actual
+   * charge for one of the month's recurring bills ("Applies to bill", see
+   * utils/billFulfillment) and a bill being edited can show what its recent
+   * actual charges averaged.
+   */
+  entries?: BudgetEntry[];
+  /**
+   * add mode: open prefilled as the actual charge for this bill in the given
+   * month (the Spending card's "Log actual" action). Applied on the
+   * closed -> open edge only, like initialCategory.
+   */
+  initialBill?: { bill: BudgetEntry; yearMonth: string };
 }
 
 let nextLineId = 0;
@@ -164,6 +182,8 @@ interface EntryFormState {
   taxSetAsideRate: string;
   attachments: EntryAttachment[];
   isPrivate: boolean;
+  /** Bill this one-off is the actual charge for - see BudgetEntry.fulfillsRecurringId. */
+  fulfillsRecurringId: string | undefined;
 }
 
 const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
@@ -199,6 +219,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
       : String(DEFAULT_TAX_SET_ASIDE_RATE),
   attachments: entry?.attachments ?? [],
   isPrivate: !!entry?.isPrivate,
+  fulfillsRecurringId: entry?.fulfillsRecurringId,
 });
 
 const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
@@ -214,6 +235,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   customCategories = [],
   businesses = [],
   people = [],
+  entries = [],
+  initialBill,
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -255,6 +278,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     initialForm.taxSetAsideRate
   );
   const [isPrivate, setIsPrivate] = useState(initialForm.isPrivate);
+  const [fulfillsRecurringId, setFulfillsRecurringId] = useState<string | undefined>(
+    initialForm.fulfillsRecurringId
+  );
   // See the header comment for the attachment lifecycle. Files are written
   // at pick time; newlyStagedIds tracks which ones a cancel may delete.
   const [attachments, setAttachments] = useState<EntryAttachment[]>(
@@ -295,6 +321,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setTaxSetAsideRate(next.taxSetAsideRate);
       setAttachments(next.attachments);
       setIsPrivate(next.isPrivate);
+      setFulfillsRecurringId(next.fulfillsRecurringId);
     }
     setNewlyStagedIds(new Set());
     setStagingSession((s) => s + 1);
@@ -302,17 +329,55 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setShowMonthPicker(false);
   }
 
-  // Apply the widget-provided category on the closed -> open edge only.
-  const wasVisible = useRef(false);
-  useEffect(() => {
-    if (visible && !wasVisible.current && initialCategory) {
+  // Apply the widget-provided category / "Log actual" bill on the
+  // closed -> open edge only. Render-time state adjustment (the same
+  // pattern as the `entry` sync above) rather than an effect, so the
+  // prefilled form paints in one pass with no setState inside an effect.
+  if (useValueChanged(visible) && visible) {
+    if (initialCategory) {
       setType("expense");
       setCategory(initialCategory);
     }
-    wasVisible.current = visible;
-  }, [visible, initialCategory]);
+    if (initialBill) {
+      setType("expense");
+      setCategory(initialBill.bill.category);
+      setYearMonth(initialBill.yearMonth);
+      setRecurring(false);
+      setFulfillsRecurringId(initialBill.bill.id);
+      setLines([
+        { ...createEmptyLine(), description: initialBill.bill.description ?? "" },
+      ]);
+    }
+  }
 
   const showDayPicker = recurring && type === "expense";
+
+  // Bills this one-off could be the actual charge for, in the chosen month.
+  // Recurring entries can't fulfil another bill, and only expenses can.
+  const billCandidates = useMemo(() => {
+    if (type !== "expense" || recurring) return [];
+    const amountNum = parseFloat(lines[0]?.amount ?? "");
+    return rankBillCandidates(entries, yearMonth, {
+      category,
+      amount: amountNum > 0 ? amountNum : undefined,
+      excludeId: entry?.id,
+      keepId: fulfillsRecurringId,
+    });
+  }, [category, entries, entry?.id, fulfillsRecurringId, lines, recurring, type, yearMonth]);
+  const showBillPicker = billCandidates.length > 0;
+  // Only a bill still offered for this month can be saved - a pick left
+  // over from a month change or a type flip is dropped at submit.
+  const effectiveFulfillsRecurringId =
+    showBillPicker && billCandidates.some((bill) => bill.id === fulfillsRecurringId)
+      ? fulfillsRecurringId
+      : undefined;
+
+  // "Your last 3 actual charges averaged $X" - only when editing a bill.
+  // Nothing changes unless the user taps (see suggestEstimateFromActuals).
+  const estimateSuggestion = useMemo(
+    () => (isEdit && entry ? suggestEstimateFromActuals(entry, entries) : null),
+    [entries, entry, isEdit]
+  );
 
   const showAccountPicker =
     LINKABLE_CATEGORIES.has(category) && assetAccounts.length > 0;
@@ -402,6 +467,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setRetirementContribution(next.retirementContribution);
     setTaxSetAsideRate(next.taxSetAsideRate);
     setIsPrivate(next.isPrivate);
+    setFulfillsRecurringId(next.fulfillsRecurringId);
     // Deliberately does NOT delete staged photo files - submit commits them
     // to the saved entry, so only the cancel path (handleCancel) deletes.
     setAttachments([]);
@@ -449,6 +515,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         incomeType: entryIncomeType,
         taxSetAsideRate: entryTaxSetAsideRate,
         isPrivate: isPrivate || undefined,
+        fulfillsRecurringId: effectiveFulfillsRecurringId,
         // Photos land on the FIRST valid line (the UI hints at this when
         // multiple lines are open).
         attachments: undefined,
@@ -472,6 +539,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     attachments,
     businessId,
     category,
+    effectiveFulfillsRecurringId,
     incomeType,
     isPrivate,
     lines,
@@ -534,6 +602,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
       isPrivate: isPrivate || undefined,
+      fulfillsRecurringId: effectiveFulfillsRecurringId,
       updatedAt: new Date().toISOString(),
     });
 
@@ -548,6 +617,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     attachments,
     businessId,
     category,
+    effectiveFulfillsRecurringId,
     entry,
     incomeType,
     isPrivate,
@@ -788,6 +858,32 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               maxLength={100}
             />
           </View>
+          {estimateSuggestion && (
+            <View style={styles.estimateHintRow}>
+              <Text style={styles.linesHint}>
+                Your last {estimateSuggestion.count} actual charges averaged{" "}
+                {formatCurrency(estimateSuggestion.average)}. The estimate only
+                changes if you tap.
+              </Text>
+              <TouchableOpacity
+                style={styles.estimateHintButton}
+                onPress={() =>
+                  lines[0] &&
+                  updateLine(lines[0].id, {
+                    amount: String(estimateSuggestion.average),
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`Update estimate to ${formatCurrency(
+                  estimateSuggestion.average
+                )}`}
+              >
+                <Text style={styles.estimateHintButtonText}>
+                  Use {formatCurrency(estimateSuggestion.average)}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </>
       ) : (
         <View style={styles.field}>
@@ -854,6 +950,29 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           </Text>
         </TouchableOpacity>
       </View>
+
+      {showBillPicker && (
+        <View style={styles.field}>
+          <Text style={styles.label}>APPLIES TO BILL</Text>
+          <TagPillPicker
+            options={billCandidates.map((bill) => ({
+              id: bill.id,
+              name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
+                bill.amount
+              )}`,
+            }))}
+            value={fulfillsRecurringId}
+            onChange={setFulfillsRecurringId}
+            noneLabel="None"
+            glyph="🧾"
+          />
+          <Text style={styles.linesHint}>
+            This is the real charge for one of this month's recurring bills.
+            Pick it and the bill's estimate steps aside for the month, so it
+            isn't counted twice.
+          </Text>
+        </View>
+      )}
 
       <TouchableOpacity
         style={styles.recurringRow}
@@ -1359,6 +1478,23 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "700",
       lineHeight: 20,
       marginTop: -1,
+    },
+    estimateHintRow: {
+      marginTop: 8,
+      gap: 8,
+    },
+    estimateHintButton: {
+      alignSelf: "flex-start",
+      borderWidth: 1,
+      borderColor: colors.accent,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    estimateHintButtonText: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "600",
     },
     linesHint: {
       color: colors.textMuted,

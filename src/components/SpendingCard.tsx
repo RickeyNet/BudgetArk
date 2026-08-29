@@ -73,6 +73,11 @@ interface SpendingCardProps {
   onToggleSelect: (entryId: string) => void;
   onEnterSelection: (entryId: string) => void;
   onEditEntry: (entryId: string) => void;
+  /**
+   * "Log actual" on a projected recurring bill row: open the add sheet
+   * prefilled as that bill's real charge for the month.
+   */
+  onLogActual?: (entryId: string) => void;
 }
 
 const SpendingCard: React.FC<SpendingCardProps> = ({
@@ -91,6 +96,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
   onToggleSelect,
   onEnterSelection,
   onEditEntry,
+  onLogActual,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
@@ -407,11 +413,38 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                             👤 {formatPersonNames(entryPersonIds(entry), personNameById)}
                           </Text>
                         )}
+                        {entry.fulfillsRecurringId && (
+                          <Text
+                            style={[styles.entryEditHint, { color: colors.accent }]}
+                            numberOfLines={1}
+                          >
+                            🧾 {entry.billLabel ?? "Bill"}
+                            {entry.billEstimate != null
+                              ? ` · est. ${formatCurrency(entry.billEstimate)}`
+                              : ""}
+                          </Text>
+                        )}
                         {entry.recurring && (
                           <Text style={[styles.entryEditHint, { color: colors.accent }]}>
                             {getRecurrenceTag(entry)}
                           </Text>
                         )}
+                        {entry.recurring &&
+                          !isAutoDebtRow &&
+                          !selectionMode &&
+                          onLogActual && (
+                            <TouchableOpacity
+                              style={styles.logActualChip}
+                              onPress={() => onLogActual(entry.id)}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Log the actual charge for ${
+                                entry.description || item.category
+                              }`}
+                            >
+                              <Text style={styles.logActualText}>Log actual</Text>
+                            </TouchableOpacity>
+                          )}
                         {isAutoDebtRow && !isLoggedPayment ? (
                           <Text style={styles.entryEditHint}>Auto</Text>
                         ) : (
@@ -676,6 +709,19 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       flex: 1,
       color: colors.textDim,
       fontSize: 12,
+    },
+    logActualChip: {
+      borderWidth: 1,
+      borderColor: colors.accent,
+      borderRadius: tokens.radiusPill,
+      paddingHorizontal: tokens.padSm,
+      paddingVertical: 2,
+      marginLeft: 6,
+    },
+    logActualText: {
+      color: colors.accent,
+      fontSize: Math.round(11 * tokens.fontScale),
+      fontWeight: "600",
     },
     entryEditHint: {
       color: colors.accent,

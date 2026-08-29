@@ -515,6 +515,14 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
   // private. Same truthy-cell parsing as Recurring.
   const isPrivate = parseBoolean(get(row, "Private")) || undefined;
 
+  // Bill fulfilment link. Must round-trip: a restore that dropped it would
+  // show the bill's estimate next to the actual charge and double-count it.
+  // Only meaningful on one-off expenses; anything else is dropped so the
+  // stored shape matches what the app itself writes.
+  const fulfillsBillRaw = parseString(get(row, "FulfillsBillId", "Fulfills Bill Id"), 120);
+  const fulfillsRecurringId =
+    fulfillsBillRaw && type === "expense" && !recurring ? fulfillsBillRaw : undefined;
+
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
   // they're missing or unparseable, fall back to `now` - but prefer carrying
@@ -554,6 +562,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     retirementContribution,
     taxSetAsideRate,
     isPrivate,
+    fulfillsRecurringId,
   });
 };
 

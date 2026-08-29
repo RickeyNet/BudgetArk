@@ -21,7 +21,7 @@ import {
   calcPaymentForGoalDate,
   generatePayoffSchedule,
 } from "./calculations";
-import { isEntryActiveInMonth } from "./recurrence";
+import { entriesForMonth } from "./billFulfillment";
 
 /* ── Loan schedule CSV export ── */
 
@@ -350,9 +350,8 @@ export const calcAvgMonthlyExpenses = (
   // where the user paid $0 in expenses but logged income still says "I
   // was tracking, my expenses really were zero," and dropping it from
   // the denominator made historical EF targets larger than necessary.
-  for (const entry of entries) {
-    for (const mk of Object.keys(monthTotals)) {
-      if (!isEntryActiveInMonth(entry, mk)) continue;
+  for (const mk of Object.keys(monthTotals)) {
+    for (const entry of entriesForMonth(entries, mk)) {
       monthsTracked.add(mk);
       if (entry.type === "expense") monthTotals[mk] += entry.amount;
     }

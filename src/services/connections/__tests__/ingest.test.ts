@@ -588,6 +588,29 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedPersonId).toBe("per-1");
   });
 
+  it("suggests the rule's recurring bill on outflows only", () => {
+    const rule: MerchantRule = {
+      id: "r-bill",
+      merchantKey: "COSTCO WHSE",
+      category: "Utilities",
+      type: "expense",
+      recurringEntryId: "electric",
+      useCount: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const outflow = planIngest(baseInputs({ rules: [rule] }));
+    expect(outflow.newInboxItems[0].suggestedRecurringId).toBe("electric");
+
+    const inflow = planIngest(
+      baseInputs({
+        rules: [rule],
+        fetched: [{ ...baseInputs().fetched[0], amount: 25 }],
+      })
+    );
+    expect(inflow.newInboxItems[0].suggestedRecurringId).toBeUndefined();
+  });
+
   it("never suggests a business or person on an inflow", () => {
     const rules: MerchantRule[] = [
       {

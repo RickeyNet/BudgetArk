@@ -21,7 +21,7 @@ import type {
   PayoffMethod,
   PayoffSimulationResult,
 } from "./calculations";
-import { isEntryActiveInMonth } from "./recurrence";
+import { entriesForMonth } from "./billFulfillment";
 
 /* ── Category spend averages (from budget history) ── */
 
@@ -59,9 +59,8 @@ export const buildCategorySpendOptions = (
   const monthsTracked = new Set<string>();
   const totals: Record<string, number> = {};
 
-  for (const entry of entries) {
-    for (const monthKey of monthKeys) {
-      if (!isEntryActiveInMonth(entry, monthKey)) continue;
+  for (const monthKey of monthKeys) {
+    for (const entry of entriesForMonth(entries, monthKey)) {
       monthsTracked.add(monthKey);
       if (entry.type !== "expense" || entry.category === "Debt Payments") {
         continue;

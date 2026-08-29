@@ -35,6 +35,7 @@ import {
 } from "../utils/billCalendar";
 import { getCategoryIcon } from "../data/categoryIcons";
 import { getRecurrenceTag } from "../utils/recurrence";
+import { isFulfillingEntry } from "../utils/billFulfillment";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 
 interface BillCalendarModalProps {
@@ -338,6 +339,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
                         <Text style={styles.dayItemSub}>
                           {entry.category}
                           {entry.recurring ? ` · ${getRecurrenceTag(entry)}` : ""}
+                          {isFulfillingEntry(entry) ? " · ✓ Paid (actual)" : ""}
                         </Text>
                       </View>
                     </View>

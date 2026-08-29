@@ -20,7 +20,9 @@ import type {
   MerchantRule,
   PendingTransaction,
 } from "../../types";
-import { addBudgetEntry } from "../../storage/budgetStorage";
+import { addBudgetEntry, getBudgetEntries } from "../../storage/budgetStorage";
+import { entryMonthKey, isBillCandidate } from "../../utils/billFulfillment";
+import { isEntryActiveInMonth } from "../../utils/recurrence";
 import { getLinks } from "../../storage/externalAccountLinksStorage";
 import {
   getPendingTransactions,
@@ -69,6 +71,14 @@ export interface ApproveOptions {
    */
   personId?: string | null;
   /**
+   * Recurring bill this transaction is the actual charge for (expenses
+   * only; see BudgetEntry.fulfillsRecurringId). `null` = explicitly none;
+   * undefined = fall back to the item's rule-suggested bill. Always
+   * re-validated against the live entries: a bill that is gone, no longer
+   * recurring, or off-cycle in the transaction's month yields a plain entry.
+   */
+  fulfillsRecurringId?: string | null;
+  /**
    * Save an auto-approve merchant rule: future fetches turn matching
    * transactions straight into entries with this category - plus the
    * entered name (when it differs from the bank's text), business, and
@@ -92,6 +102,24 @@ const ledgerEntryFor = (
     ? pendingFingerprintFor(item.externalAccountId, item.amount, item.postedAt)
     : undefined,
 });
+
+/**
+ * The bill id an approval may stand in for, or undefined when the requested
+ * bill can't be fulfilled in the transaction's month. Reads the live entries
+ * so a stale rule (bill deleted, made one-off, linked to an account) never
+ * produces a dangling link that hides nothing and confuses the badge.
+ */
+const resolveFulfillment = async (
+  billId: string | undefined,
+  postedAt: string,
+): Promise<string | undefined> => {
+  if (!billId) return undefined;
+  const entries = await getBudgetEntries();
+  const bill = entries.find((entry) => entry.id === billId);
+  if (!bill || !isBillCandidate(bill)) return undefined;
+  if (!isEntryActiveInMonth(bill, entryMonthKey(postedAt))) return undefined;
+  return billId;
+};
 
 /**
  * Turn one inbox item into a BudgetEntry. Returns the created entry, or null
@@ -123,6 +151,15 @@ export const approvePendingTransaction = async (
           ? undefined
           : opts.personId ?? item.suggestedPersonId)
       : undefined;
+  const fulfillsRecurringId =
+    type === "expense"
+      ? await resolveFulfillment(
+          opts.fulfillsRecurringId === null
+            ? undefined
+            : opts.fulfillsRecurringId ?? item.suggestedRecurringId,
+          item.postedAt,
+        )
+      : undefined;
   const entry: BudgetEntry = {
     id: generateUUID(),
     type,
@@ -138,6 +175,7 @@ export const approvePendingTransaction = async (
     merchant: item.merchant || undefined,
     businessId,
     personId,
+    fulfillsRecurringId,
   };
 
   await addBudgetEntry(entry);
@@ -164,6 +202,8 @@ export const approvePendingTransaction = async (
       renameTo,
       businessId,
       personId,
+      // Remember the bill too, so next month's charge fulfils it hands-free.
+      recurringEntryId: fulfillsRecurringId,
       useCount: 1,
       lastUsedAt: now,
       createdAt: now,
@@ -259,6 +299,7 @@ export const autoApproveInboxByRules = async (): Promise<number> => {
       // per-item suggestion from an older rule version.
       businessId: rule.businessId ?? null,
       personId: rule.personId ?? null,
+      fulfillsRecurringId: rule.recurringEntryId ?? null,
     });
     if (entry) {
       await touchRuleUsage(rule.id);
@@ -342,6 +383,11 @@ export interface ChangeRuleOptions {
    * as businessId.
    */
   personId?: string | null;
+  /**
+   * Recurring bill future approved expenses fulfil (see
+   * MerchantRule.recurringEntryId). Same null/omit contract as businessId.
+   */
+  recurringEntryId?: string | null;
 }
 
 /**
@@ -373,6 +419,10 @@ export const changeMerchantRule = async (
       : opts.businessId ?? undefined;
   const personId =
     opts.personId === undefined ? rule.personId : opts.personId ?? undefined;
+  const recurringEntryId =
+    opts.recurringEntryId === undefined
+      ? rule.recurringEntryId
+      : opts.recurringEntryId ?? undefined;
   await updateMerchantRule(opts.ruleId, {
     action: opts.action,
     category:
@@ -383,6 +433,7 @@ export const changeMerchantRule = async (
     renameTo,
     businessId,
     personId,
+    recurringEntryId,
   });
   return applyRulesToInbox();
 };

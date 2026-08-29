@@ -226,6 +226,8 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
         suggestedType === "expense"
           ? (rule?.personId ?? personIdByAccount.get(externalAccountId))
           : undefined,
+      suggestedRecurringId:
+        suggestedType === "expense" ? rule?.recurringEntryId : undefined,
     };
   };
 

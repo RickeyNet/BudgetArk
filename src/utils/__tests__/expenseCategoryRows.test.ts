@@ -258,3 +258,60 @@ describe("buildExpenseCategoryRows", () => {
     });
   });
 });
+
+describe("buildExpenseCategoryRows - bill fulfilment badges", () => {
+  const bill = makeBudgetEntry({
+    id: "electric",
+    category: "Utilities",
+    description: "Electric",
+    amount: 120,
+    date: "2026-03-15T12:00:00",
+    recurring: true,
+    recurrenceInterval: 1,
+  });
+  const actual = makeBudgetEntry({
+    id: "actual",
+    category: "Utilities",
+    description: "CITY POWER",
+    amount: 137.42,
+    date: "2026-06-03T12:00:00",
+    fulfillsRecurringId: "electric",
+  });
+
+  it("names the bill and its estimate on the actual charge", () => {
+    const rows = buildExpenseCategoryRows(
+      buildInput({
+        monthlyEntries: [actual],
+        spendingByCategory: { Utilities: 137.42 },
+        entriesById: new Map([
+          [bill.id, bill],
+          [actual.id, actual],
+        ]),
+      })
+    );
+    expect(rows[0].entries[0]).toMatchObject({
+      id: "actual",
+      fulfillsRecurringId: "electric",
+      billLabel: "Electric",
+      billEstimate: 120,
+    });
+  });
+
+  it("carries the id but no label when the bill is unknown or the map is absent", () => {
+    const withoutMap = buildExpenseCategoryRows(
+      buildInput({ monthlyEntries: [actual], spendingByCategory: { Utilities: 137.42 } })
+    );
+    expect(withoutMap[0].entries[0]).toMatchObject({ fulfillsRecurringId: "electric" });
+    expect(withoutMap[0].entries[0].billLabel).toBeUndefined();
+
+    const dangling = buildExpenseCategoryRows(
+      buildInput({
+        monthlyEntries: [actual],
+        spendingByCategory: { Utilities: 137.42 },
+        entriesById: new Map([[actual.id, actual]]),
+      })
+    );
+    expect(dangling[0].entries[0].billLabel).toBeUndefined();
+    expect(dangling[0].entries[0].billEstimate).toBeUndefined();
+  });
+});

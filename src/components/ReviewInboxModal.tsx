@@ -34,6 +34,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
+  BudgetEntry,
   Business,
   CategoryName,
   CustomCategory,
@@ -59,6 +60,11 @@ import {
 import { getLinks } from "../storage/externalAccountLinksStorage";
 import { triggerHaptic } from "../utils/haptics";
 import {
+  entryMonthKey,
+  isBillCandidate,
+  rankBillCandidates,
+} from "../utils/billFulfillment";
+import {
   buildInboxSections,
   type InboxSection,
 } from "../utils/reviewInboxSections";
@@ -71,6 +77,11 @@ interface ReviewInboxModalProps {
   businesses: Business[];
   /** Live people, for assigning who spent it. Empty = picker hidden. */
   people: Person[];
+  /**
+   * Live budget entries, so an expense can be approved as the actual charge
+   * for one of the month's recurring bills (utils/billFulfillment).
+   */
+  entries: BudgetEntry[];
   /** Called after approvals/dismissals so the Budget screen reloads entries. */
   onChanged: () => void | Promise<void>;
 }
@@ -84,6 +95,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   customCategories,
   businesses,
   people,
+  entries,
   onChanged,
 }) => {
   const { colors } = useTheme();
@@ -106,6 +118,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     undefined,
   );
   const [draftPersonId, setDraftPersonId] = useState<string | undefined>(
+    undefined,
+  );
+  const [draftRecurringId, setDraftRecurringId] = useState<string | undefined>(
     undefined,
   );
   const [rememberRule, setRememberRule] = useState(false);
@@ -135,6 +150,16 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     }
     return map;
   }, [links]);
+
+  const billNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of entries) {
+      if (isBillCandidate(entry)) {
+        map.set(entry.id, entry.description?.trim() || entry.category);
+      }
+    }
+    return map;
+  }, [entries]);
 
   const businessNameById = useMemo(
     () => new Map(businesses.map((b) => [b.id, b.name])),
@@ -174,6 +199,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setDraftPersonId(
         item.suggestedType === "expense" ? item.suggestedPersonId : undefined,
       );
+      setDraftRecurringId(
+        item.suggestedType === "expense" ? item.suggestedRecurringId : undefined,
+      );
       setRememberRule(false);
       return item.id;
     });
@@ -187,6 +215,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       name: string,
       businessId: string | undefined,
       personId: string | undefined,
+      recurringId: string | undefined,
     ) => {
       setBusyId(item.id);
       setActionError(null);
@@ -195,10 +224,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           pendingId: item.id,
           category,
           description: name,
-          // null = explicitly personal/unassigned; never fall back to the
-          // suggestion the user just cleared.
+          // null = explicitly personal/unassigned/not a bill; never fall
+          // back to the suggestion the user just cleared.
           businessId: businessId ?? null,
           personId: personId ?? null,
+          fulfillsRecurringId: recurringId ?? null,
           rememberRule: remember,
         });
         // "Always" just created an auto-approve rule - sweep the rest of
@@ -299,6 +329,16 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     const busy = busyId === item.id;
     const isExpense = item.amount < 0;
     const accountName = accountNameById.get(item.externalAccountId);
+    // Bills this charge could stand in for, in the month it posted - best
+    // guess first (same category, closest estimate).
+    const billCandidates =
+      expanded && item.suggestedType === "expense"
+        ? rankBillCandidates(entries, entryMonthKey(item.postedAt), {
+            category: draftCategory,
+            amount: Math.abs(item.amount),
+            keepId: draftRecurringId,
+          })
+        : [];
     return (
       <View style={styles.itemCard}>
         <TouchableOpacity
@@ -331,6 +371,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       personNameById.get(item.suggestedPersonId) ??
                       "(deleted person)"
                     }`
+                  : null,
+                item.suggestedRecurringId &&
+                billNameById.has(item.suggestedRecurringId)
+                  ? `🧾 ${billNameById.get(item.suggestedRecurringId)}`
                   : null,
               ]
                 .filter(Boolean)
@@ -366,6 +410,23 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               onChange={setDraftCategory}
               customCategories={customCategories}
             />
+            {billCandidates.length > 0 ? (
+              <>
+                <Text style={styles.label}>APPLIES TO BILL</Text>
+                <TagPillPicker
+                  options={billCandidates.map((bill) => ({
+                    id: bill.id,
+                    name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
+                      bill.amount,
+                    )}`,
+                  }))}
+                  value={draftRecurringId}
+                  onChange={setDraftRecurringId}
+                  noneLabel="Not a bill"
+                  glyph="🧾"
+                />
+              </>
+            ) : null}
             {item.suggestedType === "expense" &&
             (businesses.length > 0 || draftBusinessId) ? (
               <>
@@ -433,6 +494,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     draftName,
                     draftBusinessId,
                     draftPersonId,
+                    draftRecurringId,
                   )
                 }
                 disabled={busy}
@@ -582,6 +644,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         customCategories={customCategories}
         businesses={businesses}
         people={people}
+        entries={entries}
       />
     </Modal>
   );

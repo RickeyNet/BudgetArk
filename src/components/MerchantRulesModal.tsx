@@ -28,6 +28,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
+  BudgetEntry,
   Business,
   CategoryName,
   CustomCategory,
@@ -38,6 +39,8 @@ import { describeError } from "../utils/errorMessage";
 import TagPillPicker from "./TagPillPicker";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
+import { useCurrency } from "../currency/CurrencyProvider";
+import { isBillCandidate } from "../utils/billFulfillment";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { useConnections } from "../connections/ConnectionsProvider";
@@ -60,6 +63,8 @@ interface MerchantRulesModalProps {
   businesses: Business[];
   /** Live people, for the expense person assignment. Empty = pills hidden. */
   people: Person[];
+  /** Live budget entries - the recurring bills a rule can fulfil. */
+  entries: BudgetEntry[];
 }
 
 type RuleStyles = ReturnType<typeof makeStyles>;
@@ -111,9 +116,11 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   customCategories,
   businesses,
   people,
+  entries,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
+  const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const insets = useSafeAreaInsets();
   const { refresh } = useConnections();
@@ -130,12 +137,28 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const [draftPersonId, setDraftPersonId] = useState<string | undefined>(
     undefined,
   );
+  const [draftRecurringId, setDraftRecurringId] = useState<string | undefined>(
+    undefined,
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
     null,
   );
   /** Last failed load/save/delete, shown under the header until the next action. */
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Every live recurring bill, whatever its cadence - a rule is ongoing, so
+  // it isn't limited to the bills on cycle this month.
+  const billOptions = useMemo(
+    () =>
+      entries.filter(isBillCandidate).map((bill) => ({
+        id: bill.id,
+        name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
+          bill.amount,
+        )}`,
+      })),
+    [entries, formatCurrency],
+  );
 
   const loadRules = useCallback(
     () =>
@@ -170,6 +193,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       setDraftRename(rule.renameTo ?? "");
       setDraftBusinessId(rule.businessId);
       setDraftPersonId(rule.personId);
+      setDraftRecurringId(rule.recurringEntryId);
       return rule.id;
     });
   }, []);
@@ -191,6 +215,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               renameTo: draftRename,
               businessId: draftBusinessId,
               personId: draftPersonId,
+              recurringEntryId: draftRecurringId,
             },
             rule,
           ),
@@ -212,6 +237,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       draftCategory,
       draftIgnore,
       draftPersonId,
+      draftRecurringId,
       draftRename,
       loadRules,
       refresh,
@@ -253,6 +279,11 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     if (rule.personId) {
       parts.push(
         `👤 ${people.find((p) => p.id === rule.personId)?.name ?? "(deleted person)"}`,
+      );
+    }
+    if (rule.recurringEntryId) {
+      parts.push(
+        `🧾 ${billOptions.find((b) => b.id === rule.recurringEntryId)?.name ?? "(deleted bill)"}`,
       );
     }
     return parts.join(" ");
@@ -355,6 +386,21 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                     noneLabel="Unassigned"
                     glyph="👤"
                     deletedLabel="(deleted person)"
+                  />
+              </>
+            ) : null}
+            {!draftIgnore &&
+            rule.type === "expense" &&
+            (billOptions.length > 0 || draftRecurringId) ? (
+              <>
+                <Text style={styles.label}>APPLIES TO BILL</Text>
+                <TagPillPicker
+                    options={billOptions}
+                    value={draftRecurringId}
+                    onChange={setDraftRecurringId}
+                    noneLabel="Not a bill"
+                    glyph="🧾"
+                    deletedLabel="(deleted bill)"
                   />
               </>
             ) : null}

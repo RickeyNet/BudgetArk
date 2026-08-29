@@ -61,6 +61,15 @@ export type FeatureSpotlight = {
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   {
+    id: "bill-fulfillment",
+    sinceVersion: "1.10.0",
+    icon: "🧾",
+    title: "Bills that settle themselves",
+    blurb:
+      "Set a bill up once with your best estimate. When the real electric or water charge arrives - from your bank or typed in - file it against the bill and the actual replaces the estimate for that month, everywhere. No double counting, no editing the plan.",
+    cta: { label: "Log a bill's actual charge", kind: "budget-add-entry" },
+  },
+  {
     id: "bank-card-balances",
     sinceVersion: "1.10.0",
     icon: "💳",

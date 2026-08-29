@@ -19,8 +19,9 @@
  * merchantRulesStorage, externalAccountLinksStorage) runs for real.
  */
 
-import type { IngestLedger, MerchantRule, PendingTransaction } from "../../../types";
+import type { BudgetEntry, IngestLedger, MerchantRule, PendingTransaction } from "../../../types";
 import {
+  makeBudgetEntry,
   makeExternalAccountLink,
   makeMerchantRule,
   makePendingTransaction,
@@ -622,5 +623,143 @@ describe("removeMerchantRule", () => {
     expect(rulesNow().map((r) => r.id)).toEqual(["r-general"]);
     expect(entriesNow()[0].category).toBe("Grocery");
     expect(inboxNow()).toHaveLength(0);
+  });
+});
+
+describe("bill fulfilment (BudgetEntry.fulfillsRecurringId)", () => {
+  const electric = (over: Partial<BudgetEntry> = {}) =>
+    makeBudgetEntry({
+      id: "electric",
+      category: "Utilities",
+      description: "Electric",
+      amount: 120,
+      date: "2026-03-15T12:00:00",
+      recurring: true,
+      recurrenceInterval: 1,
+      ...over,
+    });
+  const powerTx = (over: Partial<PendingTransaction> = {}) =>
+    makePendingTransaction({
+      id: "tx-power",
+      merchant: "CITY POWER",
+      description: "CITY POWER 06/03",
+      amount: -137.42,
+      postedAt: "2026-06-03T12:00:00.000Z",
+      ...over,
+    });
+
+  it("links the approved entry to a live, on-cycle bill and remembers it on the rule", async () => {
+    seed(ENTRIES_KEY, [electric()]);
+    seed(INBOX_KEY, [powerTx()]);
+
+    const entry = await approvePendingTransaction({
+      pendingId: "tx-power",
+      category: "Utilities",
+      fulfillsRecurringId: "electric",
+      rememberRule: true,
+    });
+
+    expect(entry?.fulfillsRecurringId).toBe("electric");
+    expect(entriesNow().find((e: any) => e.id === "uuid-1")?.fulfillsRecurringId).toBe("electric");
+    expect(rulesNow()[0]).toMatchObject({ merchantKey: "CITY POWER", recurringEntryId: "electric" });
+  });
+
+  it("falls back to the item's rule suggestion; null clears it", async () => {
+    seed(ENTRIES_KEY, [electric()]);
+    seed(INBOX_KEY, [
+      powerTx({ id: "tx-a", suggestedRecurringId: "electric" }),
+      powerTx({ id: "tx-b", suggestedRecurringId: "electric" }),
+    ]);
+
+    const fromSuggestion = await approvePendingTransaction({ pendingId: "tx-a", category: "Utilities" });
+    expect(fromSuggestion?.fulfillsRecurringId).toBe("electric");
+
+    const cleared = await approvePendingTransaction({
+      pendingId: "tx-b",
+      category: "Utilities",
+      fulfillsRecurringId: null,
+    });
+    expect(cleared?.fulfillsRecurringId).toBeUndefined();
+    expect(rulesNow()).toHaveLength(0);
+  });
+
+  it("drops the link when the bill is missing, not a bill, off-cycle, or the entry is income", async () => {
+    // Missing bill.
+    seed(ENTRIES_KEY, []);
+    seed(INBOX_KEY, [powerTx({ id: "tx-missing" })]);
+    expect(
+      (await approvePendingTransaction({ pendingId: "tx-missing", category: "Utilities", fulfillsRecurringId: "electric" }))
+        ?.fulfillsRecurringId
+    ).toBeUndefined();
+
+    // A one-off, and a contribution linked to an account, are not bills.
+    seed(ENTRIES_KEY, [
+      electric({ id: "oneoff", recurring: false }),
+      electric({ id: "linked", linkedAccountId: "acct-1" }),
+    ]);
+    seed(INBOX_KEY, [powerTx({ id: "tx-oneoff" }), powerTx({ id: "tx-linked" })]);
+    expect(
+      (await approvePendingTransaction({ pendingId: "tx-oneoff", category: "Utilities", fulfillsRecurringId: "oneoff" }))
+        ?.fulfillsRecurringId
+    ).toBeUndefined();
+    expect(
+      (await approvePendingTransaction({ pendingId: "tx-linked", category: "Utilities", fulfillsRecurringId: "linked" }))
+        ?.fulfillsRecurringId
+    ).toBeUndefined();
+
+    // Quarterly bill (Mar, Jun, Sep...): a May charge can't fulfil it, a June one can.
+    seed(ENTRIES_KEY, [electric({ recurrenceInterval: 3 })]);
+    seed(INBOX_KEY, [
+      powerTx({ id: "tx-may", postedAt: "2026-05-04T12:00:00.000Z" }),
+      powerTx({ id: "tx-jun" }),
+      powerTx({ id: "tx-income", amount: 137.42, suggestedType: "income" }),
+    ]);
+    expect(
+      (await approvePendingTransaction({ pendingId: "tx-may", category: "Utilities", fulfillsRecurringId: "electric" }))
+        ?.fulfillsRecurringId
+    ).toBeUndefined();
+    expect(
+      (await approvePendingTransaction({ pendingId: "tx-jun", category: "Utilities", fulfillsRecurringId: "electric" }))
+        ?.fulfillsRecurringId
+    ).toBe("electric");
+    expect(
+      (await approvePendingTransaction({ pendingId: "tx-income", category: "Other", fulfillsRecurringId: "electric" }))
+        ?.fulfillsRecurringId
+    ).toBeUndefined();
+  });
+
+  it("auto-approve applies the rule's bill through the same validation", async () => {
+    seed(ENTRIES_KEY, [electric()]);
+    seed(RULES_KEY, [
+      makeMerchantRule({
+        id: "rule-power",
+        merchantKey: "CITY POWER",
+        action: "approve",
+        category: "Utilities",
+        recurringEntryId: "electric",
+      }),
+    ]);
+    seed(INBOX_KEY, [powerTx({ id: "tx-auto" }), powerTx({ id: "tx-auto-may", postedAt: "2026-05-04T12:00:00.000Z" })]);
+
+    expect(await autoApproveInboxByRules()).toBe(2);
+    const approved = entriesNow().filter((e: any) => e.source === "bank");
+    expect(approved.map((e: any) => e.fulfillsRecurringId).sort()).toEqual(["electric", "electric"]);
+  });
+
+  it("changeMerchantRule keeps, replaces and clears the bill with the same tri-state as businessId", async () => {
+    seed(INBOX_KEY, []);
+    seed(ENTRIES_KEY, []);
+    seed(RULES_KEY, [
+      makeMerchantRule({ id: "rule-power", merchantKey: "CITY POWER", action: "categorize", category: "Utilities", recurringEntryId: "electric" }),
+    ]);
+
+    await changeMerchantRule({ ruleId: "rule-power", action: "approve", category: "Utilities" });
+    expect(rulesNow()[0].recurringEntryId).toBe("electric");
+
+    await changeMerchantRule({ ruleId: "rule-power", action: "approve", category: "Utilities", recurringEntryId: "water" });
+    expect(rulesNow()[0].recurringEntryId).toBe("water");
+
+    await changeMerchantRule({ ruleId: "rule-power", action: "approve", category: "Utilities", recurringEntryId: null });
+    expect(rulesNow()[0].recurringEntryId).toBeUndefined();
   });
 });

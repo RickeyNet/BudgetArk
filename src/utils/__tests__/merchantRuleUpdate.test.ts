@@ -125,6 +125,7 @@ describe("buildMerchantRuleUpdate", () => {
       "businessId",
       "category",
       "personId",
+      "recurringEntryId",
       "renameTo",
       "ruleId",
     ]);

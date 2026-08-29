@@ -21,6 +21,7 @@ import {
   type RecurrenceInterval,
 } from "../types";
 import type { DebtPaymentPlanLine } from "./debtPaymentPlan";
+import { describeFulfillment } from "./billFulfillment";
 
 /** One expandable line under a category row. */
 export type ExpenseCategoryEntry = {
@@ -35,6 +36,12 @@ export type ExpenseCategoryEntry = {
   personIds?: string[];
   attachmentCount?: number;
   isPrivate?: boolean;
+  /** Bill this entry is the actual charge for (BudgetEntry.fulfillsRecurringId). */
+  fulfillsRecurringId?: string;
+  /** The bill's name, when `fulfillsRecurringId` resolves to a live bill. */
+  billLabel?: string;
+  /** The bill's estimate, for the "est. $120 (+$17.42)" badge. */
+  billEstimate?: number;
 };
 
 export type ExpenseCategoryRow = {
@@ -62,6 +69,12 @@ export interface ExpenseCategoryRowsInput {
   recordedDebtPaymentsForMonth: readonly Payment[];
   /** Anchor date for synthetic planned rows (the selected month). */
   selectedMonthDate: Date;
+  /**
+   * Every live entry by id, so an actual charge can name the bill it stands
+   * in for. Optional: without it entries still carry `fulfillsRecurringId`
+   * but no label/estimate.
+   */
+  entriesById?: ReadonlyMap<string, BudgetEntry>;
 }
 
 export const buildExpenseCategoryRows = ({
@@ -73,6 +86,7 @@ export const buildExpenseCategoryRows = ({
   debtPaymentPlanForMonth,
   recordedDebtPaymentsForMonth,
   selectedMonthDate,
+  entriesById,
 }: ExpenseCategoryRowsInput): ExpenseCategoryRow[] => {
   const categoriesInPlay = new Set<CategoryName>();
 
@@ -106,19 +120,25 @@ export const buildExpenseCategoryRows = ({
             e.category === category &&
             (!businessOnly || e.businessId)
         )
-        .map((e) => ({
-          id: e.id,
-          amount: e.amount,
-          description: e.description,
-          date: e.date,
-          recurring: e.recurring,
-          recurrenceInterval: e.recurrenceInterval,
-          businessId: e.businessId,
-          personId: e.personId,
-          personIds: e.personIds,
-          attachmentCount: e.attachments?.length,
-          isPrivate: e.isPrivate,
-        }))
+        .map((e) => {
+          const bill = entriesById ? describeFulfillment(e, entriesById) : null;
+          return {
+            id: e.id,
+            amount: e.amount,
+            description: e.description,
+            date: e.date,
+            recurring: e.recurring,
+            recurrenceInterval: e.recurrenceInterval,
+            businessId: e.businessId,
+            personId: e.personId,
+            personIds: e.personIds,
+            attachmentCount: e.attachments?.length,
+            isPrivate: e.isPrivate,
+            fulfillsRecurringId: e.fulfillsRecurringId,
+            billLabel: bill?.billLabel,
+            billEstimate: bill?.estimate,
+          };
+        })
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       if (category === "Debt Payments" && !businessOnly) {

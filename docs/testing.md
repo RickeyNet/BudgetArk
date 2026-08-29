@@ -48,7 +48,8 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `debtPaymentDedupe.test.ts` | `debtPaymentDedupe.ts` | Deterministic minimum-due payment ids and the double-count repair |
 | `debtFreeCountdown.test.ts` | `debtFreeCountdown.ts` | Debt-free date countdown |
 | `debtDueCalendar.test.ts` | `debtDueCalendar.ts` | Debt reminders: due-day month clamping, payment-in-month detection, upcoming-due window, "due today needing a prompt" |
-| `billCalendar.test.ts` | `billCalendar.ts` | Bill calendar: end-of-month clamping, grouping by day, next-bill lookup, paid-vs-remaining split |
+| `billCalendar.test.ts` | `billCalendar.ts` | Bill calendar: end-of-month clamping, grouping by day, next-bill lookup, paid-vs-remaining split, fulfilled bills shown as their actual charge |
+| `billFulfillment.test.ts` | `billFulfillment.ts` | Bill fulfilment: `entriesForMonth` (actual replaces the estimate), candidate ranking, fulfilled-month maps for reports, estimate-from-actuals hint |
 | `cashFlow.test.ts` | `cashFlow.ts` | Month-start cash flow: projection, reconciliation delta (recurring entries + debt plan, deleted-debt payments excluded), fail-closed balance-map parsing |
 | `budgetMonths.test.ts` | `budgetMonths.ts` | The single local month-key helper set (offsets, history window, labels) |
 | `budgetBucketMath.test.ts` | `budgetBucketMath.ts` | 50/30/20 bucket totals, targets, variance, percentages |

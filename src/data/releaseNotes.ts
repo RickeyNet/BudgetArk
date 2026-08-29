@@ -11,6 +11,11 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     title: "Sturdier Sync, Safer Data",
     releasedAt: "2026-08-28",
     highlights: [
+      "Bills that change every month, like electric and water, now settle themselves. Set the bill up once as a recurring expense with your best estimate. When the real charge shows up in the Review Inbox, pick the bill under 'Applies to bill' and approve: for that month the actual replaces the estimate everywhere - the Budget tab, cash flow, the bill calendar (marked paid), insights and reports. Nothing is counted twice, and deleting the actual simply brings the estimate back.",
+      "It works without a bank link too. Every projected bill row on the Budget tab has a 'Log actual' button that opens the entry form prefilled for that bill, and the same 'Applies to bill' picker sits in the Add/Edit Entry form for any one-off expense in a month the bill is due.",
+      "Tick 'Always do this' when you approve and the merchant rule remembers the bill, so next month's charge is filed against it automatically - auto-approve rules included. Change or clear it any time from the inbox's Rules screen.",
+      "When a bill's real charges drift from your estimate, editing the bill shows what the last three actuals averaged, with a one-tap 'Use $X'. The estimate never changes on its own.",
+      "The bill link syncs with the entry, rides your backups, and round-trips through spreadsheets (new FulfillsBillId column). Older app versions simply ignore it.",
       "Credit cards on the Debts tab can now follow your bank. Edit a card, pick the connected account that IS that card under 'Connected bank account', and its balance updates after every bank sync - no more typing in what the statement says. The card shows where its balance comes from and when the bank last reported it.",
       "This is the same link that powers the card keep-alive watch: one pick per card, and your purchases stamp its last-used date while the balance keeps itself current. The two work independently - link a card you use every day just for the balance, or keep the watch on a card you rarely touch.",
       "You stay in control. A 'Balance from bank' switch on each linked card turns mirroring off (the balance field becomes editable again) while the keep-alive stamping keeps running. Recording a payment still works as before - the next sync simply confirms it with the bank's number.",
@@ -30,7 +35,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Switching display currency explains up front that BudgetArk fetches public exchange rates (never your amounts) and asks before the first fetch.",
       "When something can't be saved - full storage, an unavailable keystore, a failed bank action - you now see a message where it happened instead of nothing. App Lock's lockout countdown can no longer run for days after a device clock change.",
       "Plaintext export files are deleted the moment the share sheet closes; nothing lingers in the app's cache.",
-      "Under the hood: about 500 new automated checks (1,883 in all) now cover storage, partner sync, bank import, and every calculator's math, and the Charts and Budget tabs were rebuilt from smaller pieces. No visual changes are intended - tell us if you spot one.",
+      "Under the hood: about 570 new automated checks (1,951 in all) now cover storage, partner sync, bank import, and every calculator's math, and the Charts and Budget tabs were rebuilt from smaller pieces. No visual changes are intended - tell us if you spot one.",
     ],
   },
   {

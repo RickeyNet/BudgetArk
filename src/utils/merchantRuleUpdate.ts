@@ -29,6 +29,8 @@ export interface MerchantRuleEditForm {
   businessId?: string;
   /** Undefined = "Unassigned". */
   personId?: string;
+  /** Undefined = no bill - approved expenses are plain entries. */
+  recurringEntryId?: string;
 }
 
 /**
@@ -42,6 +44,7 @@ export interface MerchantRuleUpdate {
   renameTo?: string;
   businessId?: string | null;
   personId?: string | null;
+  recurringEntryId?: string | null;
 }
 
 export const buildMerchantRuleUpdate = (
@@ -56,4 +59,5 @@ export const buildMerchantRuleUpdate = (
   renameTo: form.ignore ? undefined : form.renameTo,
   businessId: form.ignore ? undefined : form.businessId ?? null,
   personId: form.ignore ? undefined : form.personId ?? null,
+  recurringEntryId: form.ignore ? undefined : form.recurringEntryId ?? null,
 });

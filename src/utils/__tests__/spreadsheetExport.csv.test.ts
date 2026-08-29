@@ -228,6 +228,23 @@ describe("exportSpreadsheet - expandRecurringRows", () => {
     ];
   });
 
+  it("skips the projected copy for a month an actual charge already covers", async () => {
+    entryFixturesRef.push({
+      id: "actual_mar",
+      type: "expense",
+      category: "Utilities",
+      amount: 63.2,
+      date: "2026-03-04",
+      fulfillsRecurringId: "rec_clamp",
+      createdAt: "2026-03-04T00:00:00.000Z",
+    });
+    await exportSpreadsheet("xlsx");
+    expect(rowById(`${DERIVED_RECURRING_PREFIX}rec_clamp:2026-02`)).toBeDefined();
+    expect(rowById(`${DERIVED_RECURRING_PREFIX}rec_clamp:2026-03`)).toBeUndefined();
+    expect(rowById(`${DERIVED_RECURRING_PREFIX}rec_clamp:2026-04`)).toBeDefined();
+    expect(rowById("actual_mar")?.FulfillsBillId).toBe("rec_clamp");
+  });
+
   it("clamps the 31st of January to February's last valid day, not a March rollover", async () => {
     await exportSpreadsheet("xlsx");
     const feb = rowById(`${DERIVED_RECURRING_PREFIX}rec_clamp:2026-02`);

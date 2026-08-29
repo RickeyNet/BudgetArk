@@ -334,6 +334,18 @@ export interface BudgetEntry {
    * `PAYMENT_URL_MAX_LENGTH` chars and stripped of control chars.
    */
   paymentUrl?: string;
+  /**
+   * Id of the recurring bill (a `recurring: true` expense) this entry is the
+   * ACTUAL charge for, in the month of this entry's `date`. While such an
+   * entry exists, the bill's projection is hidden for that month everywhere
+   * recurring entries are rolled forward (see utils/billFulfillment
+   * `entriesForMonth`), so a $137 electric charge replaces the $120 estimate
+   * instead of stacking on top of it. Lives on the actual, not the bill:
+   * deleting the actual restores the projection with no cleanup, and paired
+   * devices never contend over one shared recurring record. Optional and
+   * ignored by older peers/importers. Set only on non-recurring expenses.
+   */
+  fulfillsRecurringId?: string;
   /** Asset account ID this savings entry contributes to */
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
@@ -807,6 +819,13 @@ export interface PendingTransaction {
    */
   suggestedPersonId?: string;
   /**
+   * From a matched MerchantRule's `recurringEntryId`: the recurring bill
+   * this transaction is expected to be the actual charge for (see
+   * BudgetEntry.fulfillsRecurringId). Expenses only. Validated against the
+   * live entries at approval time, never trusted blindly.
+   */
+  suggestedRecurringId?: string;
+  /**
    * Heuristic: a manually-entered budget entry with the same amount and
    * direction exists within a few days - approving would double count.
    * Flag only, like transferLikely - never dropped automatically.
@@ -857,6 +876,14 @@ export interface MerchantRule {
    * Same dangling-id and ignore-action semantics as `businessId`.
    */
   personId?: string;
+  /**
+   * Recurring bill future approved expenses from this merchant fulfil (see
+   * BudgetEntry.fulfillsRecurringId) - "CITY POWER" is always the electric
+   * bill. Checked against the live entries on every approval: a bill that
+   * was deleted, stopped recurring, or isn't on its cycle that month simply
+   * yields a plain entry. Unread while action is "ignore".
+   */
+  recurringEntryId?: string;
   useCount: number;
   lastUsedAt?: string;
   createdAt: string;

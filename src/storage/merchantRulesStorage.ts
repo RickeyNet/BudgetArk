@@ -65,7 +65,13 @@ export const updateMerchantRule = async (
   ruleId: string,
   patch: Pick<
     MerchantRule,
-    "action" | "category" | "type" | "renameTo" | "businessId" | "personId"
+    | "action"
+    | "category"
+    | "type"
+    | "renameTo"
+    | "businessId"
+    | "personId"
+    | "recurringEntryId"
   >,
 ): Promise<MerchantRule[]> => {
   const rules = await getMerchantRules();

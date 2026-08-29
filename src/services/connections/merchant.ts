@@ -154,11 +154,14 @@ export const replanInboxForRules = (
       item.suggestedType === "expense"
         ? (rule?.personId ?? personIdByAccount?.get(item.externalAccountId))
         : undefined;
+    const suggestedRecurringId =
+      item.suggestedType === "expense" ? rule?.recurringEntryId : undefined;
     if (
       suggestedCategory !== item.suggestedCategory ||
       suggestedName !== item.suggestedName ||
       suggestedBusinessId !== item.suggestedBusinessId ||
-      suggestedPersonId !== item.suggestedPersonId
+      suggestedPersonId !== item.suggestedPersonId ||
+      suggestedRecurringId !== item.suggestedRecurringId
     ) {
       updatedItems.push({
         ...item,
@@ -166,6 +169,7 @@ export const replanInboxForRules = (
         suggestedName,
         suggestedBusinessId,
         suggestedPersonId,
+        suggestedRecurringId,
         updatedAt: now,
       });
     }

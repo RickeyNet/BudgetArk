@@ -268,6 +268,13 @@ export const isBudgetEntryItem = (
   // everywhere the flag is read, so shape-gate it like every other field.
   const isPrivateValid =
     item.isPrivate === undefined || typeof item.isPrivate === "boolean";
+  // Bill fulfilment link (BudgetEntry.fulfillsRecurringId): an entry id
+  // under the same cap as the other id references. A dangling id is
+  // harmless downstream (the entry just reads as an ordinary expense), so
+  // only the shape is gated here.
+  const fulfillsRecurringIdValid =
+    item.fulfillsRecurringId === undefined ||
+    isSafeText(item.fulfillsRecurringId, 120);
 
   return (
     isSafeText(item.id) &&
@@ -287,6 +294,7 @@ export const isBudgetEntryItem = (
     taxSetAsideRateValid &&
     attachmentsValid &&
     isPrivateValid &&
+    fulfillsRecurringIdValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
@@ -384,6 +392,12 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   }
   if (item.isPrivate !== undefined && typeof item.isPrivate !== "boolean") {
     return '"isPrivate" must be true or false when present';
+  }
+  if (
+    item.fulfillsRecurringId !== undefined &&
+    !isSafeText(item.fulfillsRecurringId, 120)
+  ) {
+    return '"fulfillsRecurringId" must be a non-empty string of at most 120 characters when present';
   }
   if (!isValidDateValue(item.date)) {
     return '"date" must be a parseable date string (e.g. "2026-06-12")';

@@ -13,7 +13,7 @@
 
 import type { BudgetEntry, DebtMilestoneKey, DebtMilestonePlan } from "../types";
 import { getMonthKey } from "./budgetMonths";
-import { isEntryActiveInMonth } from "./recurrence";
+import { entriesForMonth } from "./billFulfillment";
 
 /* ── Monthly cash flow (from budget history) ── */
 
@@ -54,9 +54,8 @@ export const calcMonthlyCashFlow = (
   let incomeTotal = 0;
   let expenseTotal = 0;
 
-  for (const entry of entries) {
-    for (const monthKey of monthKeys) {
-      if (!isEntryActiveInMonth(entry, monthKey)) continue;
+  for (const monthKey of monthKeys) {
+    for (const entry of entriesForMonth(entries, monthKey)) {
       monthsTracked.add(monthKey);
       if (entry.type === "income") incomeTotal += entry.amount;
       else if (entry.type === "expense") expenseTotal += entry.amount;

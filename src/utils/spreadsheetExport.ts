@@ -71,8 +71,13 @@ export type SpreadsheetFormat = "csv" | "xlsx";
  * v7: Budget Entries gained PersonIds (";"-joined, round-trip) - every person
  * a shared expense is assigned to; PersonId stays the FIRST of them so v5/v6
  * importers still see one assignee, and Person lists every name.
+ * v8: Budget Entries gained FulfillsBillId (round-trip) - the recurring bill
+ * an actual charge stands in for. Stripping it on a backup/restore cycle
+ * would put the estimate back next to the actual and double-count the bill,
+ * so it must round-trip. Projected recurring copies are also omitted for
+ * months an actual covers, matching what the app shows.
  */
-export const SPREADSHEET_SCHEMA_VERSION = 7;
+export const SPREADSHEET_SCHEMA_VERSION = 8;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -157,6 +162,10 @@ const BUDGET_ENTRY_COLUMNS = [
   // Round-tripped as a privacy requirement - if a backup/restore cycle
   // stripped it, the entry would silently start syncing again.
   "Private",
+  // Recurring bill this one-off is the actual charge for (see
+  // BudgetEntry.fulfillsRecurringId). Round-tripped: without it a restore
+  // would count both the estimate and the actual in that month.
+  "FulfillsBillId",
   // ISO timestamp the entry was created. Round-tripped so re-importing an
   // exported file doesn't reset history.
   "CreatedAt",
@@ -363,6 +372,7 @@ const budgetEntryToRow = (
   Retirement401k: entry.retirementContribution ?? "",
   TaxSetAsideRate: entry.taxSetAsideRate ?? "",
   Private: entry.isPrivate ? "yes" : "",
+  FulfillsBillId: entry.fulfillsRecurringId ?? "",
   CreatedAt: entry.createdAt ?? "",
   UpdatedAt: entry.updatedAt ?? "",
 });
@@ -550,6 +560,19 @@ const expandRecurringRows = (
     return new Date(Number(yStr), Number(mStr), 0).getDate();
   };
 
+  // Months an actual charge already covers, per bill id: the projected copy
+  // for those months is skipped so the sheet matches the app (estimate OR
+  // actual, never both).
+  const fulfilledMonths = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const billId = String(row.FulfillsBillId ?? "");
+    const dateStr = String(row.Date ?? "");
+    if (!billId || row.Recurring === "yes" || !/^\d{4}-\d{2}/.test(dateStr)) continue;
+    const months = fulfilledMonths.get(billId) ?? new Set<string>();
+    months.add(dateStr.slice(0, 7));
+    fulfilledMonths.set(billId, months);
+  }
+
   const out: Record<string, unknown>[] = [];
   for (const row of rows) {
     out.push(row);
@@ -566,14 +589,17 @@ const expandRecurringRows = (
       rawInterval === 3 || rawInterval === 6 || rawInterval === 12 ? rawInterval : 1;
 
     const baseId = String(row.ID ?? "");
+    const covered = fulfilledMonths.get(baseId);
     let m = addMonths(startMonth, interval);
     while (m <= endMonth) {
-      const dd = String(Math.min(day, lastDayOfMonth(m))).padStart(2, "0");
-      out.push({
-        ...row,
-        ID: `${DERIVED_RECURRING_PREFIX}${baseId}:${m}`,
-        Date: `${m}-${dd}`,
-      });
+      if (!covered?.has(m)) {
+        const dd = String(Math.min(day, lastDayOfMonth(m))).padStart(2, "0");
+        out.push({
+          ...row,
+          ID: `${DERIVED_RECURRING_PREFIX}${baseId}:${m}`,
+          Date: `${m}-${dd}`,
+        });
+      }
       m = addMonths(m, interval);
     }
   }

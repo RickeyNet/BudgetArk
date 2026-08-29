@@ -13,7 +13,10 @@
 
 import type { BudgetEntry, Business } from "../types";
 import { getMonthKey } from "./budgetMonths";
-import { listOccurrenceMonths } from "./recurrence";
+import {
+  fulfilledMonthsByBill,
+  listUnfulfilledOccurrenceMonths,
+} from "./billFulfillment";
 
 /** One expense occurrence attributed to a business within the report year. */
 export interface BusinessReportLine {
@@ -100,13 +103,21 @@ export const computeBusinessReport = (
 
   const businessById = new Map(businesses.map((b) => [b.id, b]));
   const groups = new Map<string, BusinessReportGroup>();
+  // Months where a bill's actual charge stands in for its projection - the
+  // projection is skipped there so the bill isn't reported twice.
+  const fulfilledMonths = fulfilledMonthsByBill(entries);
 
   if (windowEnd >= windowStart) {
     for (const entry of entries) {
       if (entry.type !== "expense" || !entry.businessId || entry.deletedAt) {
         continue;
       }
-      const months = listOccurrenceMonths(entry, windowStart, windowEnd);
+      const months = listUnfulfilledOccurrenceMonths(
+        entry,
+        fulfilledMonths,
+        windowStart,
+        windowEnd
+      );
       if (months.length === 0) continue;
 
       let group = groups.get(entry.businessId);

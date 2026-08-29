@@ -40,7 +40,7 @@ import {
   QUOTE_REFRESH_INTERVAL_MS,
   type HoldingValueOptions,
 } from "./holdingsMath";
-import { isEntryActiveInMonth } from "./recurrence";
+import { entriesForMonth } from "./billFulfillment";
 
 /** How many trailing months the Bridge cash-flow panel shows by default. */
 export const TRAILING_CASH_FLOW_MONTHS = 6;
@@ -61,7 +61,8 @@ export interface TrailingCashFlowPoint {
  * Trailing `months` of income vs expense, oldest → newest, ending with the
  * month `now` falls in. Recurring entries count in every month from their
  * start onward (mirrors how the Budget screen rolls them forward), which is
- * why membership goes through isEntryActiveInMonth rather than a date range.
+ * why membership goes through entriesForMonth rather than a date range - and
+ * a bill's actual charge replaces its estimate for that month, same as there.
  *
  * Month stepping uses `new Date(year, month - offset, 1)`, so a January or
  * February `now` rolls correctly back into the previous year.
@@ -77,8 +78,7 @@ export const buildTrailingCashFlow = (
     const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     let income = 0;
     let expense = 0;
-    for (const entry of entries) {
-      if (!isEntryActiveInMonth(entry, monthKey)) continue;
+    for (const entry of entriesForMonth(entries, monthKey)) {
       if (entry.type === "income") income += entry.amount;
       else expense += entry.amount;
     }

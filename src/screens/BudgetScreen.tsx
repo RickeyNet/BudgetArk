@@ -122,10 +122,8 @@ import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout
 import { useUndo } from "../undo/UndoProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
-import {
-  getRecurrenceTag,
-  isEntryActiveInMonth,
-} from "../utils/recurrence";
+import { getRecurrenceTag } from "../utils/recurrence";
+import { entriesForMonth } from "../utils/billFulfillment";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
 import { applyEmergencyFundContribution } from "../utils/savingsGoals";
 import { formatMonthKeyLabel, getBudgetMonthKeys, getMonthDateFromKey, getMonthKey } from "../utils/budgetMonths";
@@ -229,6 +227,10 @@ const BudgetScreen: React.FC = () => {
   /** Category preselected by the Quick Entry widget's deep link, if any. */
   const [quickAddCategory, setQuickAddCategory] = useState<CategoryName | undefined>(undefined);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
+  /** "Log actual" target: the add sheet opens prefilled as this bill's charge. */
+  const [logActualBill, setLogActualBill] = useState<
+    { bill: BudgetEntry; yearMonth: string } | undefined
+  >(undefined);
   const [showBillCalendar, setShowBillCalendar] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   /** Reference time for search date presets - stamped when the sheet opens,
@@ -396,9 +398,16 @@ const BudgetScreen: React.FC = () => {
     [selectedMonthKey]
   );
 
+  // Recurring-aware AND fulfilment-aware: a bill whose actual charge landed
+  // this month shows the actual, not the estimate (utils/billFulfillment).
   const monthlyEntries = useMemo(
-    () => entries.filter((entry) => isEntryActiveInMonth(entry, selectedMonthKey)),
+    () => entriesForMonth(entries, selectedMonthKey),
     [entries, selectedMonthKey]
+  );
+
+  const entriesById = useMemo(
+    () => new Map(entries.map((entry) => [entry.id, entry])),
+    [entries]
   );
 
   const monthlyIncome = useMemo(
@@ -606,11 +615,13 @@ const BudgetScreen: React.FC = () => {
         debtPaymentPlanForMonth,
         recordedDebtPaymentsForMonth,
         selectedMonthDate,
+        entriesById,
       }),
     [
       businessOnly,
       customCategoryNames,
       debtPaymentPlanForMonth,
+      entriesById,
       limitByCategory,
       monthlyEntries,
       recordedDebtPaymentsForMonth,
@@ -699,6 +710,7 @@ const BudgetScreen: React.FC = () => {
     ]);
     setShowAddModal(false);
     setQuickAddCategory(undefined);
+    setLogActualBill(undefined);
     triggerHaptic("success");
     void notifyAchievementCheck();
   }, [applyAssetDeltas, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
@@ -816,6 +828,16 @@ const BudgetScreen: React.FC = () => {
     const found = entries.find((e) => e.id === entryId) ?? null;
     setEditingEntry(found);
   }, [entries]);
+
+  // "Log actual" on a projected bill row: open the add sheet prefilled as
+  // the real charge for that bill in the selected month. A direct user tap,
+  // not a navigation-triggered present, so no InteractionManager deferral.
+  const handleLogActual = useCallback((entryId: string) => {
+    const bill = entries.find((e) => e.id === entryId);
+    if (!bill) return;
+    setLogActualBill({ bill, yearMonth: selectedMonthKey });
+    setShowAddModal(true);
+  }, [entries, selectedMonthKey]);
 
   const handleSaveEntry = useCallback(async (updated: BudgetEntry) => {
     const original = entries.find((e) => e.id === updated.id);
@@ -1380,6 +1402,7 @@ const BudgetScreen: React.FC = () => {
         onToggleSelect={toggleSelectEntry}
         onEnterSelection={enterSelectionWith}
         onEditEntry={handleEditEntry}
+        onLogActual={handleLogActual}
       />
 
       <BudgetBucketCard
@@ -1626,9 +1649,12 @@ const BudgetScreen: React.FC = () => {
         onClose={() => {
           setShowAddModal(false);
           setQuickAddCategory(undefined);
+          setLogActualBill(undefined);
         }}
         onAdd={handleAddEntry}
         initialCategory={quickAddCategory}
+        initialBill={logActualBill}
+        entries={entries}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
         businesses={businesses}
@@ -1641,6 +1667,7 @@ const BudgetScreen: React.FC = () => {
         onClose={() => setEditingEntry(null)}
         onSave={handleSaveEntry}
         onDelete={handleDeleteEntry}
+        entries={entries}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
         businesses={businesses}
@@ -1653,6 +1680,7 @@ const BudgetScreen: React.FC = () => {
         customCategories={customCategories}
         businesses={businesses}
         people={people}
+        entries={entries}
         onChanged={reloadAfterInboxChange}
       />
 

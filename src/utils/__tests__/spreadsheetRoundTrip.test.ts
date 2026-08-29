@@ -97,6 +97,9 @@ const entryFixtures = [
   // Private entry: the Private flag must round-trip - stripping it on a
   // backup/restore cycle would silently start syncing the entry to a partner.
   { id: "e8", type: "expense", category: "Shopping", amount: 75, date: "2026-06-07", createdAt: "2026-06-07T00:00:00.000Z", isPrivate: true },
+  // Actual charge standing in for the recurring e3 bill in June: the
+  // FulfillsBillId link must round-trip, or a restore double-counts June.
+  { id: "e10", type: "expense", category: "Housing", amount: 1237.5, date: "2026-06-08", createdAt: "2026-06-08T00:00:00.000Z", fulfillsRecurringId: "e3" },
 ];
 const businessFixtures = [
   { id: "b1", name: "Acme Consulting LLC", createdAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-02-01T00:00:00.000Z" },
@@ -191,10 +194,13 @@ describe("xlsx round-trip", () => {
 
     // Entries: e1-e8 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
     expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
     expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
     expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
+    // The bill link survives; without it June would count e3's estimate AND e10.
+    expect(byId.e10.fulfillsRecurringId).toBe("e3");
+    expect(byId.e2.fulfillsRecurringId).toBeUndefined();
     // Bank provenance columns round-trip intact.
     expect(byId.e4).toMatchObject({
       source: "bank",
@@ -339,7 +345,7 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
     expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
     // Paycheck fields survive the single-sheet CSV path too.
     expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });

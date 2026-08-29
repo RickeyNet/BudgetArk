@@ -25,7 +25,7 @@ import type {
   LearningProgress,
   NetWorthSnapshot,
 } from "../types";
-import { isEntryActiveInMonth } from "../utils/recurrence";
+import { entriesForMonth } from "../utils/billFulfillment";
 import { resolveEmergencyFundAmount } from "../utils/emergencyFund";
 import { CHAPTERS } from "./lessonChapters";
 import { hasLessonBody } from "./lessonIndex";
@@ -121,7 +121,7 @@ const consecutiveSavingsMonths = (ctx: AchievementContext): number => {
   // Walk backwards from this month while some Savings entry is active.
   while (count < 1200) {
     const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
-    if (!savingsEntries.some((entry) => isEntryActiveInMonth(entry, key))) break;
+    if (entriesForMonth(savingsEntries, key).length === 0) break;
     count += 1;
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
   }
@@ -148,10 +148,9 @@ const underBudgetMonths = (ctx: AchievementContext): string[] => {
     if (!limits || limits.length === 0) continue;
 
     const spend: Partial<Record<string, number>> = {};
-    for (const e of ctx.budgetEntries) {
+    for (const e of entriesForMonth(ctx.budgetEntries, monthKey)) {
       if (e.type !== "expense") continue;
       if (!Number.isFinite(e.amount) || e.amount <= 0) continue;
-      if (!isEntryActiveInMonth(e, monthKey)) continue;
       spend[e.category] = (spend[e.category] ?? 0) + e.amount;
     }
 

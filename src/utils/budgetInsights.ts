@@ -1,6 +1,6 @@
 import { BudgetCategory, BudgetEntry, CategoryBudgetLimit, Person } from "../types";
 import { entryPersonIds, personShare } from "./entryPeople";
-import { isEntryActiveInMonth } from "./recurrence";
+import { entriesForMonth } from "./billFulfillment";
 import { getMonthKeyOffset } from "./budgetMonths";
 
 
@@ -67,11 +67,12 @@ export interface MonthlyReviewData {
 
 /* ─── Core computation ─── */
 
+// Recurring projections roll forward; a bill's actual charge replaces its
+// projection for that month (utils/billFulfillment).
 const getEntriesForMonth = (
   entries: BudgetEntry[],
   monthKey: string
-): BudgetEntry[] =>
-  entries.filter((entry) => isEntryActiveInMonth(entry, monthKey));
+): BudgetEntry[] => entriesForMonth(entries, monthKey);
 
 const buildMonthSummary = (
   entries: BudgetEntry[],
@@ -385,11 +386,10 @@ export const computePersonMonthSpending = (
     { spending: PersonMonthSpending; catTotals: Map<string, number> }
   >();
 
-  for (const entry of entries) {
+  for (const entry of getEntriesForMonth(entries, monthKey)) {
     if (entry.type !== "expense") continue;
     const assignees = entryPersonIds(entry);
     if (assignees.length === 0) continue;
-    if (!isEntryActiveInMonth(entry, monthKey)) continue;
     // Shared spending splits evenly so per-person totals still add up to
     // what was actually spent (see entryPeople.personShare).
     const share = personShare(entry.amount, assignees.length);
