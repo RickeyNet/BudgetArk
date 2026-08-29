@@ -27,6 +27,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Expenses can now be assigned to more than one person. The People pills in the Add/Edit Entry form are multi-select - tap everyone a purchase was for, like the whole family for groceries - and the Budget list badge shows every name. Shared spending splits evenly in the monthly review's Spending by Person card and the Person Spending Report, so per-person totals still add up to what was actually spent. Syncs, backs up, and round-trips through spreadsheets (new PersonIds column) like everything else.",
       "New installs now open with the mission statement - why BudgetArk exists, and that it's free, private, and offline - before a single setup choice is asked. It's the same text as the Profile tab's mission card, one step ahead of the theme picker.",
       "The mission statement also gained an open invitation, in both places: BudgetArk should feel like yours, so if you have an idea for the app - a feature, a fix, even a new theme - send it through Send Feedback on the Profile tab. Every message gets read.",
+      "Now and then, after a win - a debt payment, a payoff, a bill settled against its budget line - a small Tip Jar note appears: what BudgetArk is (free, ad-free, everything on your phone) and that a tip is optional and unlocks nothing. It's occasional by design, roughly one in a handful of wins and never more than once a week, and Profile > Tip Jar has a switch to turn it off.",
       "Also in this version: a deep pass over how BudgetArk stores, syncs, and restores your data. Nothing else looks different - it's the version that makes what you already have more trustworthy.",
       "Fixed: saving on the Budget or Bridge tab could quietly undo records a partner sync or bank sync had just written behind the screen. Every save now merges into what is actually stored, and the tabs refresh on their own after a sync or restore instead of waiting for you to switch away and back.",
       "Fixed: removing a category budget limit never reached your partner's phone - the old limit came straight back on the next sync. Removals now travel like every other change.",
@@ -37,7 +38,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Switching display currency explains up front that BudgetArk fetches public exchange rates (never your amounts) and asks before the first fetch.",
       "When something can't be saved - full storage, an unavailable keystore, a failed bank action - you now see a message where it happened instead of nothing. App Lock's lockout countdown can no longer run for days after a device clock change.",
       "Plaintext export files are deleted the moment the share sheet closes; nothing lingers in the app's cache.",
-      "Under the hood: about 570 new automated checks (1,951 in all) now cover storage, partner sync, bank import, and every calculator's math, and the Charts and Budget tabs were rebuilt from smaller pieces. No visual changes are intended - tell us if you spot one.",
+      "Under the hood: about 600 new automated checks (1,978 in all) now cover storage, partner sync, bank import, and every calculator's math, and the Charts and Budget tabs were rebuilt from smaller pieces. No visual changes are intended - tell us if you spot one.",
     ],
   },
   {

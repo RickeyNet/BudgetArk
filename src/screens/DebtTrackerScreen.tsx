@@ -109,6 +109,8 @@ import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal
 import DebtPaymentCelebrationModal from "../components/DebtPaymentCelebrationModal";
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
+import { useTipJar } from "../tipjar/TipJarProvider";
+import type { TipNudgeCopy } from "../utils/tipJarNudge";
 import { simulatePayoffPlan } from "../utils/calculations";
 import {
   computeMilestoneProgress,
@@ -238,11 +240,14 @@ const DebtTrackerScreen: React.FC = () => {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [savingsDraft, setSavingsDraft] = useState("");
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
+  // The occasional Tip Jar note riding the payoff celebration (null = none).
+  const [celebrationNudge, setCelebrationNudge] = useState<TipNudgeCopy | null>(null);
   // Lighter "payment logged" confetti for a confirmed reminder payment that
   // didn't clear the debt (a full payoff uses celebrationDebt instead).
   const [paymentCelebration, setPaymentCelebration] = useState<{
     debt: Debt;
     amount: number;
+    nudge: TipNudgeCopy | null;
   } | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   /* "Now" for the Debt-Free Countdown. Stamped when the focus-effect load
@@ -290,6 +295,7 @@ const DebtTrackerScreen: React.FC = () => {
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const presentAfterDismiss = usePresentAfterDismiss();
+  const { noteWin, showNudgeToast, openTipJar } = useTipJar();
 
   const primeMilestonesModal = useCallback((plan: DebtMilestonePlan) => {
     setTargetDraftByStep((prev) => {
@@ -741,19 +747,30 @@ const DebtTrackerScreen: React.FC = () => {
     setDebts(result.debts);
     const freshPayments = await getPayments();
     setPayments(freshPayments);
+    // Every payment counts as a win; only the occasional one (utils/
+    // tipJarNudge cadence) comes back with Tip Jar copy to show.
+    const nudge = await noteWin(
+      paidOffDebt ? { kind: "debt-payoff", label: paidOffDebt.name } : { kind: "debt-payment" }
+    );
     if (paidOffDebt) {
       // Callers with their own Modal open (the due prompt) suppress this
       // and present the celebration themselves after their dismiss
       // animation - presenting while another Modal is dismissing leaves
       // one of the two hidden on iOS.
-      if (!opts?.suppressCelebration) setCelebrationDebt(paidOffDebt);
+      if (!opts?.suppressCelebration) {
+        setCelebrationNudge(nudge);
+        setCelebrationDebt(paidOffDebt);
+      }
     } else {
       triggerHaptic("success");
+      // The card's inline pay field has no sheet open, so the note floats
+      // up above the tab bar; a suppressed caller shows it in its own sheet.
+      if (nudge && !opts?.suppressCelebration) showNudgeToast(nudge);
     }
     await syncNetWorthSnapshot(paymentNow);
     void notifyAchievementCheck();
-    return { debts: result.debts, payments: freshPayments, paidOffDebt };
-  }, [debts, notifyAchievementCheck]);
+    return { debts: result.debts, payments: freshPayments, paidOffDebt, nudge };
+  }, [debts, noteWin, notifyAchievementCheck, showNudgeToast]);
 
   const duePromptSubmittingRef = useRef(false);
   const handleDuePromptLogPayment = useCallback(
@@ -774,13 +791,18 @@ const DebtTrackerScreen: React.FC = () => {
           // presents. Any remaining due debts re-prompt on next focus -
           // advancing now would pop the prompt over the celebration.
           const paidOff = result.paidOffDebt;
-          presentAfterDismiss(() => setCelebrationDebt(paidOff));
+          presentAfterDismiss(() => {
+            setCelebrationNudge(result.nudge);
+            setCelebrationDebt(paidOff);
+          });
         } else {
           // Celebrate the logged payment, then advance to the next due debt
           // once that confetti is dismissed (see the modal's onClose below).
           const updatedDebt = result.debts.find((d) => d.id === debtId) ?? null;
           if (updatedDebt) {
-            presentAfterDismiss(() => setPaymentCelebration({ debt: updatedDebt, amount }));
+            presentAfterDismiss(() =>
+              setPaymentCelebration({ debt: updatedDebt, amount, nudge: result.nudge })
+            );
           } else {
             advanceDuePrompt(result.debts, result.payments, dueDismissals, debtId);
           }
@@ -1456,13 +1478,24 @@ const DebtTrackerScreen: React.FC = () => {
       <DebtPayoffCelebrationModal
         visible={celebrationDebt !== null}
         debt={celebrationDebt}
-        onClose={() => setCelebrationDebt(null)}
+        onClose={() => {
+          setCelebrationDebt(null);
+          setCelebrationNudge(null);
+        }}
         onViewHistory={() => {
           // Wait for the celebration Modal close animation before presenting
           // the history Modal - iOS doesn't reliably handle dismiss-then-
           // present in the same frame and one of the two ends up hidden.
           setCelebrationDebt(null);
+          setCelebrationNudge(null);
           presentAfterDismiss(() => setShowHistory(true));
+        }}
+        tipNudge={celebrationNudge}
+        onTipJar={() => {
+          // The provider waits out this dismiss before presenting the jar.
+          setCelebrationDebt(null);
+          setCelebrationNudge(null);
+          openTipJar();
         }}
       />
 
@@ -1483,6 +1516,13 @@ const DebtTrackerScreen: React.FC = () => {
           // Advance to the next due debt after the confetti dismisses; reads
           // current state so it reflects the payment just recorded.
           presentAfterDismiss(() => advanceDuePrompt(debts, payments, dueDismissals));
+        }}
+        tipNudge={paymentCelebration?.nudge ?? null}
+        onTipJar={() => {
+          // No due-prompt advance on this path: it would stack over the Tip
+          // Jar. Remaining due debts re-prompt on the next focus as usual.
+          setPaymentCelebration(null);
+          openTipJar();
         }}
       />
 

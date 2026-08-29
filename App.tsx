@@ -45,6 +45,7 @@ import { CustomCategoriesProvider } from "./src/categories/CustomCategoriesProvi
 import { PeopleProvider } from "./src/people/PeopleProvider";
 import { ConnectionsProvider } from "./src/connections/ConnectionsProvider";
 import { UndoProvider } from "./src/undo/UndoProvider";
+import { TipJarProvider } from "./src/tipjar/TipJarProvider";
 import { getOrCreateUser } from "./src/storage/userStorage";
 import { repairDuplicateMinimumDuePayments } from "./src/storage/debtStorage";
 import { runAttachmentSweepIfDue } from "./src/services/attachments/attachmentSweepRunner";
@@ -707,7 +708,12 @@ export default function App(): React.JSX.Element {
                           <PeopleProvider>
                           <ConnectionsProvider>
                             <UndoProvider>
-                              <AppContent />
+                              {/* Tip Jar sheet + the occasional post-win nudge;
+                                  innermost so its toast paints over the tabs
+                                  like the undo snackbar does. */}
+                              <TipJarProvider>
+                                <AppContent />
+                              </TipJarProvider>
                             </UndoProvider>
                           </ConnectionsProvider>
                           </PeopleProvider>

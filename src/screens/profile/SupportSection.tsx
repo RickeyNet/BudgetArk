@@ -7,7 +7,7 @@
  * spotlight deep link (openSection: "tipJar") has to open it from there.
  */
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import FeedbackModal from "../../components/FeedbackModal";
 import TipJarModal from "../../components/TipJarModal";
@@ -15,6 +15,11 @@ import NewFeatureBadge from "../../components/NewFeatureBadge";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
+import {
+  getTipJarNudgeState,
+  setTipJarNudgeEnabled,
+} from "../../storage/tipJarNudgeStorage";
+import { triggerHaptic } from "../../utils/haptics";
 
 type SupportSectionProps = {
   newFeatureIds: ReadonlySet<string>;
@@ -38,6 +43,33 @@ const SupportSection: React.FC<SupportSectionProps> = ({
   const styles = useProfileStyles(tokens, colors);
 
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
+  /** The occasional post-win Tip Jar note (utils/tipJarNudge). Default on. */
+  const [nudgesEnabled, setNudgesEnabled] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    getTipJarNudgeState()
+      .then((state) => {
+        if (!cancelled) setNudgesEnabled(state.enabled);
+      })
+      .catch(() => {
+        /* Unreadable preference reads as the default (on). */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleNudges = useCallback(async () => {
+    const next = !nudgesEnabled;
+    setNudgesEnabled(next);
+    triggerHaptic("selection");
+    try {
+      await setTipJarNudgeEnabled(next);
+    } catch {
+      setNudgesEnabled(!next);
+    }
+  }, [nudgesEnabled]);
 
   return (
     <>
@@ -97,6 +129,36 @@ const SupportSection: React.FC<SupportSectionProps> = ({
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
               →
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => void toggleNudges()}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: nudgesEnabled }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                Mention the Tip Jar after wins
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                {nudgesEnabled
+                  ? "A quiet note now and then after a payment, payoff, or settled bill - never every time"
+                  : "Never mentioned after wins"}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {nudgesEnabled ? "On" : "Off"}
             </Text>
           </TouchableOpacity>
         </View>

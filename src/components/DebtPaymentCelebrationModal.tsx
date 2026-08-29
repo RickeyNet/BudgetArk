@@ -16,7 +16,9 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import { triggerHaptic } from "../utils/haptics";
+import type { TipNudgeCopy } from "../utils/tipJarNudge";
 import ConfettiBurst from "./ConfettiBurst";
+import TipJarNudgeCard from "./TipJarNudgeCard";
 
 interface DebtPaymentCelebrationModalProps {
   visible: boolean;
@@ -24,6 +26,13 @@ interface DebtPaymentCelebrationModalProps {
   /** Amount just logged, for the confirmation line. */
   amount: number;
   onClose: () => void;
+  /**
+   * The occasional Tip Jar note (utils/tipJarNudge decides which wins get
+   * one). Rendered inside this sheet rather than as a second Modal.
+   */
+  tipNudge?: TipNudgeCopy | null;
+  /** Host closes this sheet, then opens the Tip Jar after the dismiss settles. */
+  onTipJar?: () => void;
 }
 
 /**
@@ -37,6 +46,8 @@ const DebtPaymentCelebrationModal: React.FC<DebtPaymentCelebrationModalProps> = 
   debt,
   amount,
   onClose,
+  tipNudge = null,
+  onTipJar,
 }) => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -65,6 +76,10 @@ const DebtPaymentCelebrationModal: React.FC<DebtPaymentCelebrationModalProps> = 
             <Text style={styles.balanceLabel}>BALANCE NOW</Text>
             <Text style={styles.balanceValue}>{formatCurrency(debt.balance)}</Text>
           </View>
+
+          {tipNudge && onTipJar ? (
+            <TipJarNudgeCard copy={tipNudge} onTip={onTipJar} style={styles.nudge} />
+          ) : null}
 
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.accent }]}
@@ -144,6 +159,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "800",
       color: colors.text,
       fontVariant: ["tabular-nums"],
+    },
+    nudge: {
+      marginBottom: 16,
     },
     button: {
       width: "100%",

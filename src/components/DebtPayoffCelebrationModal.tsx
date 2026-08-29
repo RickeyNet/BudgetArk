@@ -23,13 +23,22 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import { triggerHaptic } from "../utils/haptics";
+import type { TipNudgeCopy } from "../utils/tipJarNudge";
 import ConfettiBurst from "./ConfettiBurst";
+import TipJarNudgeCard from "./TipJarNudgeCard";
 
 interface DebtPayoffCelebrationModalProps {
   visible: boolean;
   debt: Debt | null;
   onClose: () => void;
   onViewHistory?: () => void;
+  /**
+   * The occasional Tip Jar note (utils/tipJarNudge decides which wins get
+   * one). Rendered inside this screen rather than as a second Modal.
+   */
+  tipNudge?: TipNudgeCopy | null;
+  /** Host closes this screen, then opens the Tip Jar after the dismiss settles. */
+  onTipJar?: () => void;
 }
 
 const getOwnerHeadline = (owner: Debt["owner"]): string => {
@@ -43,6 +52,8 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
   debt,
   onClose,
   onViewHistory,
+  tipNudge = null,
+  onTipJar,
 }) => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -121,6 +132,10 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
               Redirect at least {formatCurrency(debt.minPayment)} each month to next debt for snowball effect.
             </Text>
           </View>
+
+          {tipNudge && onTipJar ? (
+            <TipJarNudgeCard copy={tipNudge} onTip={onTipJar} style={styles.nudge} />
+          ) : null}
 
           <View style={styles.actions}>
             {onViewHistory ? (
@@ -233,6 +248,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 14,
       lineHeight: 20,
       color: colors.textDim,
+    },
+    nudge: {
+      marginBottom: 22,
     },
     actions: {
       width: "100%",

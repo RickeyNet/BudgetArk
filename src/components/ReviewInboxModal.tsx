@@ -59,6 +59,10 @@ import {
 } from "../services/connections/reviewInboxService";
 import { getLinks } from "../storage/externalAccountLinksStorage";
 import { triggerHaptic } from "../utils/haptics";
+import { useTipJar } from "../tipjar/TipJarProvider";
+import { useValueChanged } from "../hooks/useValueChanged";
+import type { TipNudgeCopy } from "../utils/tipJarNudge";
+import TipJarNudgeCard from "./TipJarNudgeCard";
 import {
   entryMonthKey,
   isBillCandidate,
@@ -129,6 +133,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [showRules, setShowRules] = useState(false);
   /** Last failed load/approve/skip, shown under the header until the next action. */
   const [actionError, setActionError] = useState<string | null>(null);
+  /**
+   * The occasional Tip Jar note after a charge is filed against a bill.
+   * Rendered inline (this sheet stays open across approvals) and dropped
+   * when the sheet closes - render-time reset, not an effect.
+   */
+  const [inboxNudge, setInboxNudge] = useState<TipNudgeCopy | null>(null);
+  const { noteWin, openTipJar } = useTipJar();
+  if (useValueChanged(visible) && !visible && inboxNudge) setInboxNudge(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -240,6 +252,15 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         await onChanged();
         triggerHaptic("success");
         setExpandedId(null);
+        // Filing a real charge against its bill is a win; only the
+        // occasional one (utils/tipJarNudge cadence) returns copy to show.
+        if (recurringId) {
+          const nudge = await noteWin({
+            kind: "bill-paid",
+            label: billNameById.get(recurringId),
+          });
+          if (nudge) setInboxNudge(nudge);
+        }
       } catch (error) {
         triggerHaptic("error");
         setActionError(describeError(error, "Couldn't approve this transaction."));
@@ -247,7 +268,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         setBusyId(null);
       }
     },
-    [onChanged, refresh],
+    [billNameById, noteWin, onChanged, refresh],
   );
 
   const handleSkip = useCallback(
@@ -559,6 +580,21 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             <Text style={styles.errorText}>{actionError}</Text>
           ) : null}
 
+          {inboxNudge ? (
+            <TipJarNudgeCard
+              copy={inboxNudge}
+              onTip={() => {
+                // Close this sheet first; the provider presents the Tip Jar
+                // after the dismiss settles (iOS never stacks two Modals).
+                setInboxNudge(null);
+                onClose();
+                openTipJar();
+              }}
+              onDismiss={() => setInboxNudge(null)}
+              style={styles.nudgeCard}
+            />
+          ) : null}
+
           {suggestedReadyCount > 0 ? (
             <TouchableOpacity
               style={[styles.bulkBar, bulkBusy && styles.buttonDisabled]}
@@ -690,6 +726,10 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.danger,
       paddingHorizontal: 20,
       paddingBottom: 8,
+    },
+    nudgeCard: {
+      marginHorizontal: 24,
+      marginBottom: 8,
     },
     syncButton: {
       borderWidth: 1,

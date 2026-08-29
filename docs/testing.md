@@ -57,6 +57,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `expenseCategoryRows.test.ts` | `expenseCategoryRows.ts` | Budget Spending rows: per-category totals/limits/ratios, synthetic debt-payment rows, business-only filter, sort |
 | `budgetInsights.test.ts` | `budgetInsights.ts` | Monthly Review: month summaries, month-over-month changes, 3-month comparisons, streaks (frozen clock) |
 | `budgetPacing.test.ts` | `budgetPacing.ts` | Spending pace: current-month clock, day-weighted expected spend, over/ahead/on-track with early-month guard, alert ordering, ordinal days |
+| `tipJarNudge.test.ts` | `tipJarNudge.ts` | Post-win Tip Jar cadence: Nth-win + minimum-days gating, disabled still counts, clock rollback, fail-closed state parse, per-win copy |
 | `whatIfSpending.test.ts` | `whatIfSpending.ts` | "What if I stopped spending on X": category averages, redirect impact on payoff and savings |
 | `purchasePlanner.test.ts` | `purchasePlanner.ts` | Plan-a-Purchase sinking funds: monthly need, Ark-step guidance |
 | `emergencyFund.test.ts` | `emergencyFund.ts` | EF goal resolution (explicit goal > Keel synthetic > linked savings accounts), savings reserve sum |
@@ -142,6 +143,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `reviewInboxStorage.test.ts` | `reviewInboxStorage.ts` | Ingest-ledger TTL pruning, 500-item inbox cap ordering |
 | `connectionSecretsStorage.test.ts` | `connectionSecretsStorage.ts` | Rule 2: `EncryptionUnavailableError` propagates, provider-mismatch refusal |
 | `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
+| `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, switch round-trip, corrupt record recovery |
 
 ### Bank connections (`src/services/connections`)
 

@@ -111,6 +111,7 @@ import {
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
+import { useTipJar } from "../tipjar/TipJarProvider";
 import { recordMonthlyReviewOpen } from "../storage/achievementStatsStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -185,6 +186,12 @@ const CATEGORY_CHART_PALETTE = [
   "#7B6D8D",
 ] as const;
 
+/** Display name of the bill an actual was filed against, for the nudge copy. */
+const billLabelIn = (all: BudgetEntry[], billId: string | undefined): string | undefined => {
+  const bill = billId ? all.find((entry) => entry.id === billId) : undefined;
+  return bill ? bill.description?.trim() || bill.category : undefined;
+};
+
 const BudgetScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const route = useRoute<RouteProp<RootTabParamList, "Budget">>();
@@ -192,6 +199,7 @@ const BudgetScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
+  const { noteWin, showNudgeToast } = useTipJar();
   const insets = useSafeAreaInsets();
   const { pushUndo } = useUndo();
   const coachmark = useTabCoachmark("Budget");
@@ -731,7 +739,17 @@ const BudgetScreen: React.FC = () => {
     setLogActualBill(undefined);
     triggerHaptic("success");
     void notifyAchievementCheck();
-  }, [applyAssetDeltas, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
+    // A charge filed against its bill ("Log actual" or the picker) is a
+    // win; the sheet is closed by now, so the occasional note floats up.
+    const billed = newEntries.find((entry) => entry.fulfillsRecurringId);
+    if (billed) {
+      const nudge = await noteWin({
+        kind: "bill-paid",
+        label: billLabelIn(nextEntries, billed.fulfillsRecurringId),
+      });
+      if (nudge) showNudgeToast(nudge);
+    }
+  }, [applyAssetDeltas, noteWin, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast]);
 
   /**
    * Reload entries after Review Inbox approvals - they're written by
@@ -884,6 +902,15 @@ const BudgetScreen: React.FC = () => {
     setEditingEntry(null);
     triggerHaptic("success");
     void notifyAchievementCheck();
+    // Newly linking an existing expense to its bill is the same win as
+    // logging the actual; re-saving an already-linked one is not.
+    if (updated.fulfillsRecurringId && updated.fulfillsRecurringId !== original.fulfillsRecurringId) {
+      const nudge = await noteWin({
+        kind: "bill-paid",
+        label: billLabelIn(nextEntries, updated.fulfillsRecurringId),
+      });
+      if (nudge) showNudgeToast(nudge);
+    }
     // Inverse of the linked-account deltas this edit applied, so undo
     // also unwinds any asset-balance side effect.
     const inverseDeltas = deltas.map((d) => ({ ...d, amount: -d.amount }));
@@ -900,7 +927,7 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [applyAssetDeltas, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
+  }, [applyAssetDeltas, entries, noteWin, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
