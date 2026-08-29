@@ -148,7 +148,7 @@ Work through phases in order: finish the features first, then handle store prep 
   - Audited fixed-height styles across all screens: every `height:` literal is on decorative non-text elements (dividers, progress bars, dots, square icon/avatar chips, donut wrap). Text rows already use `paddingVertical` + `alignItems:"center"` + flex, so they grow with larger type instead of clipping. No row conversions were needed.
 
   Residual: fixed-size circular icon/avatar chips (e.g. `accountIcon` 34x34, `avatar` 44x44) hold an emoji/initial that scales with the in-app Text Size axis; at Extra Large the glyph can crowd its fixed box. Low impact, cosmetic - revisit if reported. Remaining: a systematic pass of `accessibilityLabel`/`accessibilityRole`/`accessibilityState` across all screens (only the new Text Size controls got labels so far).
-- [ ] Onboarding quick-start templates (single, couple, debt-heavy, zero-based)
+- [x] Onboarding quick-start templates (single, couple, debt-heavy, zero-based) - DONE 2026-08-29: `data/quickStartTemplates.ts` (allocations as % of take-home) + pure `utils/quickStart.ts` (`buildQuickStartSeed` -> current-month category limits + recurring income/housing lines from two optional inputs; zero-based totals pay exactly) + onboarding step 4 of 6. Device testing pending.
 - [ ] First-launch coachmark walkthrough + always-on How-To reference page
 
   Purpose: new users currently land on Bridge with no idea what each tab does. Replace cold-start with a guided tour, and keep an always-available reference for users who skip or forget.

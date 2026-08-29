@@ -41,6 +41,16 @@ import { completeOnboarding } from "../storage/userStorage";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { DEFAULT_TRACKING_REMINDER_SETTINGS } from "../utils/trackingReminderPlanner";
 import {
+  QUICK_START_TEMPLATES,
+  quickStartTemplateById,
+  type QuickStartTemplateId,
+} from "../data/quickStartTemplates";
+import { buildQuickStartSeed, parseQuickStartAmount } from "../utils/quickStart";
+import { addBudgetEntries, saveCategoryBudgetLimits } from "../storage/budgetStorage";
+import { generateUUID } from "../utils/uuid";
+import { localYearMonth } from "../utils/entryDate";
+import type { BudgetEntry } from "../types";
+import {
   markTrackingReminderOfferDismissed,
   setTrackingReminderSettings,
 } from "../storage/trackingReminderSettingsStorage";
@@ -57,7 +67,7 @@ type OnboardingStyles = ReturnType<typeof makeStyles>;
  * exists and what it promises (free, private, offline) - the same copy as
  * the Profile mission card, so the two never drift.
  */
-type OnboardingStep = "mission" | "theme" | "welcome" | "reminders" | "name";
+type OnboardingStep = "mission" | "theme" | "welcome" | "template" | "reminders" | "name";
 
 interface OnboardingScreenProps {
   /** Callback when onboarding is complete */
@@ -148,6 +158,10 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const [displayName, setDisplayName] = useState("");
   /** Guards the reminders step's button through the OS permission prompt. */
   const [remindersBusy, setRemindersBusy] = useState(false);
+  /** Quick-start template (data/quickStartTemplates); null = start empty. */
+  const [templateId, setTemplateId] = useState<QuickStartTemplateId | null>(null);
+  const [incomeInput, setIncomeInput] = useState("");
+  const [housingInput, setHousingInput] = useState("");
 
   /** Memoized styles based on current theme */
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -171,6 +185,8 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     } else if (step === "theme") {
       setStep("welcome");
     } else if (step === "welcome") {
+      setStep("template");
+    } else if (step === "template") {
       setStep("reminders");
     } else if (step === "reminders") {
       setStep("name");
@@ -186,12 +202,46 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       setStep("mission");
     } else if (step === "welcome") {
       setStep("theme");
-    } else if (step === "reminders") {
+    } else if (step === "template") {
       setStep("welcome");
+    } else if (step === "reminders") {
+      setStep("template");
     } else if (step === "name") {
       setStep("reminders");
     }
   }, [step]);
+
+  /**
+   * Apply the chosen quick-start template (utils/quickStart): category
+   * limits for this month sized from take-home pay, plus recurring income
+   * and housing lines when those were typed. Runs after the onboarding
+   * flag is saved so a seed failure can never re-run onboarding; the
+   * caller reports it and the user simply starts empty.
+   */
+  const seedQuickStart = useCallback(async () => {
+    const template = quickStartTemplateById(templateId);
+    if (!template) return;
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const seed = buildQuickStartSeed(template, {
+      monthKey: localYearMonth(now),
+      now: nowIso,
+      income: parseQuickStartAmount(incomeInput),
+      housing: parseQuickStartAmount(housingInput),
+    });
+    if (seed.entries.length > 0) {
+      const entries: BudgetEntry[] = seed.entries.map((input) => ({
+        ...input,
+        id: generateUUID(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      }));
+      await addBudgetEntries(entries);
+    }
+    if (seed.limits.length > 0) {
+      await saveCategoryBudgetLimits(seed.limits, localYearMonth(now));
+    }
+  }, [housingInput, incomeInput, templateId]);
 
   /**
    * "Turn on reminders": ask the OS (this is the only place a first-run
@@ -273,11 +323,21 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           );
           return;
         }
+        try {
+          await seedQuickStart();
+        } catch (error) {
+          if (__DEV__) console.warn("Quick-start template failed:", error);
+          Alert.alert(
+            "Template not applied",
+            "Your setup is saved, but the starter limits couldn't be written. " +
+              "You can set limits any time from the Budget tab's Limits sheet."
+          );
+        }
         onComplete(options);
       };
       await attempt();
     },
-    [onComplete]
+    [onComplete, seedQuickStart]
   );
 
   /**
@@ -297,7 +357,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render the mission step - why BudgetArk exists, before any setup. */
   const renderMissionStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 1 OF 5</Text>
+      <Text style={styles.stepNumber}>STEP 1 OF 6</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.missionEyebrow}>{MISSION_STATEMENT.eyebrow}</Text>
       <Text style={styles.stepTitle}>{MISSION_STATEMENT.title}</Text>
@@ -338,7 +398,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render theme selection step */
   const renderThemeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 2 OF 5</Text>
+      <Text style={styles.stepNumber}>STEP 2 OF 6</Text>
       <Text style={styles.heroEmoji}>🎨</Text>
       <Text style={styles.stepTitle}>Choose Your Theme</Text>
       <Text style={styles.stepSubtitle}>
@@ -381,7 +441,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render welcome step */
   const renderWelcomeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 3 OF 5</Text>
+      <Text style={styles.stepNumber}>STEP 3 OF 6</Text>
       <Text style={styles.heroEmoji}>💸</Text>
       <Text style={styles.stepTitle}>Welcome to BudgetArk</Text>
       <Text style={styles.stepSubtitle}>
@@ -483,6 +543,135 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   );
 
   /**
+   * Render the quick-start step: pick a template (or none) and optionally
+   * the two numbers it is sized from. Nothing is written until the flow
+   * finishes (seedQuickStart), so Back and Skip cost nothing.
+   */
+  const renderTemplateStep = () => {
+    const selected = quickStartTemplateById(templateId);
+    return (
+      <View style={styles.stepContainer}>
+        <Text style={styles.stepNumber}>STEP 4 OF 6</Text>
+        <Text style={styles.heroEmoji}>🗺️</Text>
+        <Text style={styles.stepTitle}>Start from a template?</Text>
+        <Text style={styles.stepSubtitle}>
+          Pick the closest fit and BudgetArk sets category limits and your two
+          biggest recurring lines for you. Every number stays editable - it's a
+          first draft, not a lock.
+        </Text>
+
+        <View style={styles.templateList}>
+          {QUICK_START_TEMPLATES.map((template) => {
+            const isSelected = templateId === template.id;
+            return (
+              <TouchableOpacity
+                key={template.id}
+                style={[
+                  styles.templateCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: isSelected ? colors.accent : colors.cardBorder,
+                  },
+                ]}
+                onPress={() => setTemplateId(isSelected ? null : template.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: isSelected }}
+              >
+                <Text style={styles.templateEmoji}>{template.emoji}</Text>
+                <View style={styles.featureContent}>
+                  <Text style={styles.featureTitle}>{template.title}</Text>
+                  <Text style={styles.templateTagline}>{template.tagline}</Text>
+                  {isSelected ? (
+                    <Text style={styles.featureDesc}>{template.description}</Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity
+            style={[
+              styles.templateCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: templateId === null ? colors.accent : colors.cardBorder,
+              },
+            ]}
+            onPress={() => setTemplateId(null)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: templateId === null }}
+          >
+            <Text style={styles.templateEmoji}>📄</Text>
+            <View style={styles.featureContent}>
+              <Text style={styles.featureTitle}>Start empty</Text>
+              <Text style={styles.templateTagline}>
+                No limits or lines - build it as you go
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {selected ? (
+          <View style={styles.templateInputs}>
+            <Text style={styles.templateLabel}>MONTHLY TAKE-HOME PAY (HOUSEHOLD)</Text>
+            <TextInput
+              style={[
+                styles.nameInput,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.cardBorder,
+                  color: colors.text,
+                },
+              ]}
+              placeholder="e.g. 4200"
+              placeholderTextColor={colors.textMuted}
+              value={incomeInput}
+              onChangeText={setIncomeInput}
+              keyboardType="decimal-pad"
+              maxLength={12}
+            />
+            <Text style={styles.templateLabel}>RENT OR MORTGAGE</Text>
+            <TextInput
+              style={[
+                styles.nameInput,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.cardBorder,
+                  color: colors.text,
+                },
+              ]}
+              placeholder="e.g. 1400"
+              placeholderTextColor={colors.textMuted}
+              value={housingInput}
+              onChangeText={setHousingInput}
+              keyboardType="decimal-pad"
+              maxLength={12}
+            />
+            <Text style={styles.nameHint}>
+              Both optional. Limits are set as a share of take-home pay; leave
+              it blank and you can fill them in later from the Budget tab's
+              Limits sheet. Stored only on this phone.
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
+            <Text style={styles.skipBtnText}>← Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.nextBtn, { backgroundColor: colors.accent }]}
+            onPress={handleNext}
+          >
+            <Text style={[styles.nextBtnText, { color: colors.white }]}>
+              {selected ? "Next →" : "Start empty →"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  /**
    * Render the reminders step. Tracking reminders are opt-in per device
    * (see trackingReminderSettingsStorage); this is where a new install is
    * asked, instead of leaving the feature to be discovered in Profile.
@@ -491,7 +680,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    */
   const renderRemindersStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 4 OF 5</Text>
+      <Text style={styles.stepNumber}>STEP 5 OF 6</Text>
       <Text style={styles.heroEmoji}>🔔</Text>
       <Text style={styles.stepTitle}>Want a nudge to keep tracking?</Text>
       <Text style={styles.stepSubtitle}>
@@ -570,7 +759,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render display name step */
   const renderNameStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 5 OF 5</Text>
+      <Text style={styles.stepNumber}>STEP 6 OF 6</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.stepTitle}>What should we call you?</Text>
       <Text style={styles.stepSubtitle}>
@@ -661,6 +850,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         {step === "mission" && renderMissionStep()}
         {step === "theme" && renderThemeStep()}
         {step === "welcome" && renderWelcomeStep()}
+        {step === "template" && renderTemplateStep()}
         {step === "reminders" && renderRemindersStep()}
         {step === "name" && renderNameStep()}
       </ScrollView>
@@ -863,6 +1053,40 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
       padding: tokens.padLg,
       marginBottom: 32,
       width: "100%",
+    },
+    /* Template step */
+    templateList: {
+      width: "100%",
+      gap: 10,
+      marginBottom: 20,
+    },
+    templateCard: {
+      flexDirection: "row",
+      gap: 14,
+      alignItems: "flex-start",
+      borderWidth: 2,
+      borderRadius: tokens.radiusSm,
+      padding: tokens.pad,
+    },
+    templateEmoji: {
+      fontSize: 28,
+    },
+    templateTagline: {
+      fontSize: scale(13),
+      color: colors.textDim,
+      marginTop: 2,
+      marginBottom: 4,
+    },
+    templateInputs: {
+      width: "100%",
+      marginBottom: 20,
+    },
+    templateLabel: {
+      fontSize: scale(11),
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.textMuted,
+      marginBottom: 6,
     },
     /* Reminders step */
     reminderList: {
