@@ -417,7 +417,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                       {link.importTransactions ? "Imports transactions" : "Import off"}
                       {link.assetAccountId
                         ? ` · updates ${target?.name ?? "balance"}`
-                        : " · balance not tracked"}
+                        : link.debtId
+                          ? " · updates a card on Debts"
+                          : " · balance not tracked"}
                       {typeof link.lastExternalBalance === "number"
                         ? ` · ${formatBankBalance(link.lastExternalBalance, link.currency)}`
                         : ""}

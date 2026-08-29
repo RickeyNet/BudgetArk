@@ -61,6 +61,15 @@ export type FeatureSpotlight = {
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   {
+    id: "bank-card-balances",
+    sinceVersion: "1.10.0",
+    icon: "💳",
+    title: "Credit cards that track themselves",
+    blurb:
+      "Link a card on the Debts tab to the bank account behind it and its balance updates after every sync - the same link that stamps the card's last use for the keep-alive watch. One pick per card, and debt tracking mostly runs itself.",
+    cta: { label: "Link a card", kind: "debt-tracker" },
+  },
+  {
     id: "cash-flow-budget",
     sinceVersion: "1.9.0",
     icon: "💵",

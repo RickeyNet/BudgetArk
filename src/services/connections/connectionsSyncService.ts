@@ -14,10 +14,14 @@
  *    negatives on the sync receive path); the raw value lands on the link
  *    for display. Unchanged balances skip the write to avoid updatedAt churn
  *    that would spam P2P sync diffs.
+ *  - A link with a `debtId` is a credit card on the Debts tab: its provider
+ *    balance mirrors onto the Debt (services/connections/debtBalances) and
+ *    its outflows stamp the card keep-alive watch, in ONE debt write per
+ *    card per pass.
  */
 
 import { AppState, AppStateStatus } from "react-native";
-import type { BankConnection, ExternalAccountLink } from "../../types";
+import type { BankConnection, Debt, ExternalAccountLink } from "../../types";
 import { categoryIsPureHoldings } from "../../types";
 import {
   getConnections,
@@ -46,6 +50,7 @@ import {
   latestOutflowByAccount,
   planKeepAliveStamps,
 } from "../../utils/cardKeepAlive";
+import { planDebtBalanceUpdates } from "./debtBalances";
 import { rescheduleCardKeepAliveReminders } from "../../notifications/cardKeepAliveReminders";
 import { fetchSimplefinAccounts } from "./simplefinClient";
 import { fetchTellerData } from "./tellerClient";
@@ -72,6 +77,7 @@ export interface ConnectionSyncResult {
   outcome: ConnectionSyncOutcome;
   newPendingCount: number;
   updatedPendingCount: number;
+  /** AssetAccount balances + credit-card (debt) balances that changed. */
   balancesUpdated: number;
   errorMessage?: string;
 }
@@ -100,24 +106,40 @@ const fetchForConnection = async (
 };
 
 /**
- * Card keep-alive auto-stamping: a fetched outflow on a debt-linked account
- * proves the card was used, so advance that debt's `keepAliveLastUsedAt`.
- * Runs off the RAW fetched transactions (not the Review Inbox plan) on
- * purpose - activity counts whether or not the user imports transactions
- * from that account. The which-debts-to-stamp decision is pure
- * (planKeepAliveStamps: enabled + live debts only, strictly-newer only,
- * future dates clamped), keeping updatedAt churn on P2P diffs to at most
- * one write per new-activity day. Stale links (debt deleted) are lazily
- * nulled here. Best-effort: must never fail the sync pass.
+ * Debt-linked accounts (ExternalAccountLink.debtId = "this account IS this
+ * credit card"), two effects in one pass:
+ *
+ *  1. Balance mirroring - the provider balance replaces the debt's balance
+ *     (planDebtBalanceUpdates: live debts, mirroring on, changed values
+ *     only, originalBalance raised as a high-water mark).
+ *  2. Card keep-alive auto-stamping - a fetched outflow proves the card was
+ *     used, so advance `keepAliveLastUsedAt`. Runs off the RAW fetched
+ *     transactions (not the Review Inbox plan) on purpose - activity counts
+ *     whether or not the user imports transactions from that account.
+ *     planKeepAliveStamps is pure: enabled + live debts only, strictly-newer
+ *     only, future dates clamped.
+ *
+ * Both plans merge into at most one updateDebt per card, keeping updatedAt
+ * churn on P2P diffs to one write per sync that actually changed something.
+ * Stale links (debt deleted) are lazily nulled here. Best-effort: must never
+ * fail the sync pass. Returns how many debt balances changed.
  */
-const applyKeepAliveStamps = async (
+const applyDebtLinks = async (
   links: ExternalAccountLink[],
+  accounts: readonly NormalizedAccount[],
   transactions: readonly NormalizedTransaction[],
   nowMs: number,
-): Promise<void> => {
-  if (!links.some((l) => l.debtId)) return;
+): Promise<number> => {
+  if (!links.some((l) => l.debtId)) return 0;
   try {
     const debts = await getDebts();
+    const updates = new Map<string, Partial<Debt>>();
+
+    const balanceUpdates = planDebtBalanceUpdates({ links, debts, accounts });
+    for (const { debtId, ...fields } of balanceUpdates) {
+      updates.set(debtId, fields);
+    }
+
     const stamps = planKeepAliveStamps({
       links,
       debts,
@@ -125,7 +147,14 @@ const applyKeepAliveStamps = async (
       nowISO: new Date(nowMs).toISOString(),
     });
     for (const stamp of stamps) {
-      await updateDebt(stamp.debtId, { keepAliveLastUsedAt: stamp.lastUsedAt });
+      updates.set(stamp.debtId, {
+        ...updates.get(stamp.debtId),
+        keepAliveLastUsedAt: stamp.lastUsedAt,
+      });
+    }
+
+    for (const [debtId, fields] of updates) {
+      await updateDebt(debtId, fields);
     }
     for (const link of links) {
       if (link.debtId && !debts.some((d) => d.id === link.debtId)) {
@@ -133,8 +162,10 @@ const applyKeepAliveStamps = async (
       }
     }
     if (stamps.length > 0) void rescheduleCardKeepAliveReminders();
+    return balanceUpdates.length;
   } catch (error) {
-    if (__DEV__) console.error("Keep-alive stamping failed:", error);
+    if (__DEV__) console.error("Debt-linked account update failed:", error);
+    return 0;
   }
 };
 
@@ -286,8 +317,14 @@ const syncOneConnection = async (
     if (__DEV__) console.error("Auto-approve sweep failed:", error);
   }
 
-  const balancesUpdated = await applyBalances(links, result.accounts);
-  await applyKeepAliveStamps(links, result.transactions, opts.nowMs);
+  const balancesUpdated =
+    (await applyBalances(links, result.accounts)) +
+    (await applyDebtLinks(
+      links,
+      result.accounts,
+      result.transactions,
+      opts.nowMs,
+    ));
 
   await updateConnection(connection.id, {
     lastSyncedAt: new Date(opts.nowMs).toISOString(),

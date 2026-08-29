@@ -57,6 +57,14 @@ interface DebtCardProps {
   onKeepAliveUse?: (debtId: string) => void;
 
   /**
+   * Set when a connected bank account mirrors its balance onto this card
+   * (ExternalAccountLink.debtId on this device); shows where the balance
+   * comes from and when the bank last reported it. Per-device: a partner
+   * sees the balance move but not this line.
+   */
+  bankSync?: { accountName: string; asOf?: string } | null;
+
+  /**
    * Fired when the inline pay input gains focus so the parent list can
    * scroll this card above the keyboard. Needed on Android, where nothing
    * auto-scrolls a FlatList to a focused input (iOS is covered by the
@@ -69,7 +77,7 @@ interface DebtCardProps {
 }
 
 /* ─── Component ─── */
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, onPayInputFocus, isFocusDebt = false }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, onPayInputFocus, bankSync = null, isFocusDebt = false }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -140,6 +148,17 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   }, [keepAlive]);
 
   /** Goal date calculations */
+  /** "Balance from <bank account> · as of <date>" - see the bankSync prop. */
+  const bankSyncLine = React.useMemo(() => {
+    if (!bankSync) return "";
+    const asOf = bankSync.asOf ? new Date(bankSync.asOf) : null;
+    const when =
+      asOf && !Number.isNaN(asOf.getTime())
+        ? ` · as of ${asOf.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+        : "";
+    return `Balance from ${bankSync.accountName}${when}`;
+  }, [bankSync]);
+
   const goalInfo = React.useMemo(() => {
     if (!debt.goalDate || debt.balance <= 0) return null;
     const monthsUntilGoal = calcMonthsUntilDate(debt.goalDate);
@@ -290,6 +309,13 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
           ]}
         />
       </View>
+
+      {/* ── Bank-mirrored balance source ── */}
+      {bankSyncLine ? (
+        <Text style={styles.bankSyncText} numberOfLines={2}>
+          🏦 {bankSyncLine}
+        </Text>
+      ) : null}
 
       {/* ── Goal Date Info ── */}
       {goalInfo && (
@@ -566,6 +592,11 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     /* Keep-alive */
+    bankSyncText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 8,
+    },
     keepAliveDot: {
       width: 8,
       height: 8,

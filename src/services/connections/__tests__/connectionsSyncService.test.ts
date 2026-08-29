@@ -7,8 +7,9 @@
  * lastAttemptAt stamp and BEFORE any provider fetch; a failed fetch maps to
  * the right outcome and error bookkeeping; balances applied to an
  * AssetAccount are clamped at >= 0 and skipped for pure-holdings accounts
- * and unchanged values; card keep-alive stamping and the auto-approve sweep
- * are both best-effort (their failure must not fail the sync pass); one
+ * and unchanged values; a debt-linked card mirrors the provider balance in
+ * the same write as its keep-alive stamp; keep-alive stamping and the
+ * auto-approve sweep are both best-effort (their failure must not fail the sync pass); one
  * connection's unexpected failure doesn't abort the rest of the batch; and
  * connection secrets (access URLs, Teller PEMs/tokens) never appear in any
  * argument passed to a non-secret storage write.
@@ -435,6 +436,112 @@ describe("card keep-alive auto-stamping", () => {
 
     const [result] = await syncConnections({ now: NOW, manual: true });
     expect(result.outcome).toBe("updated");
+  });
+});
+
+describe("credit-card balance mirroring (debt-linked accounts)", () => {
+  it("writes the provider balance's magnitude onto the linked debt and counts it", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", debtId: "debt-1", assetAccountId: null }),
+    ]);
+    mockGetDebts.mockResolvedValue([makeDebt({ id: "debt-1", balance: 100, originalBalance: 1000 })]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ accounts: [account({ balance: -420.5 })] }));
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(mockUpdateDebt).toHaveBeenCalledTimes(1);
+    expect(mockUpdateDebt).toHaveBeenCalledWith("debt-1", { balance: 420.5 });
+    expect(mockUpdateAssetAccount).not.toHaveBeenCalled();
+    expect(result.balancesUpdated).toBe(1);
+  });
+
+  it("merges the balance and the keep-alive stamp into ONE debt write", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", debtId: "debt-1", assetAccountId: null }),
+    ]);
+    mockGetDebts.mockResolvedValue([
+      makeDebt({ id: "debt-1", balance: 100, originalBalance: 1000, keepAliveEnabled: true }),
+    ]);
+    mockFetchSimplefin.mockResolvedValue(
+      okFetch({
+        accounts: [account({ balance: -50 })],
+        transactions: [tx({ amount: -10, postedAt: "2026-06-25T00:00:00.000Z" })],
+      }),
+    );
+
+    await syncConnections({ now: NOW, manual: true });
+    expect(mockUpdateDebt).toHaveBeenCalledTimes(1);
+    expect(mockUpdateDebt).toHaveBeenCalledWith("debt-1", {
+      balance: 50,
+      keepAliveLastUsedAt: "2026-06-25T00:00:00.000Z",
+    });
+    expect(mockReschedule).toHaveBeenCalled();
+  });
+
+  it("still stamps keep-alive when balance mirroring is switched off for the link", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({
+        externalAccountId: "ACT-1",
+        debtId: "debt-1",
+        assetAccountId: null,
+        updateDebtBalance: false,
+      }),
+    ]);
+    mockGetDebts.mockResolvedValue([
+      makeDebt({ id: "debt-1", balance: 100, originalBalance: 1000, keepAliveEnabled: true }),
+    ]);
+    mockFetchSimplefin.mockResolvedValue(
+      okFetch({
+        accounts: [account({ balance: -50 })],
+        transactions: [tx({ amount: -10, postedAt: "2026-06-25T00:00:00.000Z" })],
+      }),
+    );
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(mockUpdateDebt).toHaveBeenCalledWith("debt-1", {
+      keepAliveLastUsedAt: "2026-06-25T00:00:00.000Z",
+    });
+    expect(result.balancesUpdated).toBe(0);
+  });
+
+  it("skips the write (and the count) when the debt balance is already current", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", debtId: "debt-1", assetAccountId: null }),
+    ]);
+    mockGetDebts.mockResolvedValue([makeDebt({ id: "debt-1", balance: 100, originalBalance: 1000 })]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ accounts: [account({ balance: -100 })] }));
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(mockUpdateDebt).not.toHaveBeenCalled();
+    expect(result.balancesUpdated).toBe(0);
+  });
+
+  it("raises originalBalance as a high-water mark when new charges exceed it", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", debtId: "debt-1", assetAccountId: null }),
+    ]);
+    mockGetDebts.mockResolvedValue([makeDebt({ id: "debt-1", balance: 0, originalBalance: 0.01 })]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ accounts: [account({ balance: -300 })] }));
+
+    await syncConnections({ now: NOW, manual: true });
+    expect(mockUpdateDebt).toHaveBeenCalledWith("debt-1", { balance: 300, originalBalance: 300 });
+  });
+
+  it("nulls a link whose debt no longer exists instead of writing anything", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ id: "link-9", externalAccountId: "ACT-1", debtId: "gone", assetAccountId: null }),
+    ]);
+    mockGetDebts.mockResolvedValue([]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ accounts: [account({ balance: -300 })] }));
+
+    await syncConnections({ now: NOW, manual: true });
+    expect(mockUpdateDebt).not.toHaveBeenCalled();
+    expect(mockUpdateLink).toHaveBeenCalledWith("link-9", { debtId: null });
   });
 });
 

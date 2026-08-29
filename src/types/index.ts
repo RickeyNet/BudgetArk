@@ -727,12 +727,22 @@ export interface ExternalAccountLink {
   lastExternalBalance?: number;
   lastExternalBalanceAt?: string;
   /**
-   * Card keep-alive activity source: when set, each sync stamps this debt's
-   * `keepAliveLastUsedAt` from the account's newest outflow. Per-device like
-   * the rest of the link - never synced or exported. Lazily nulled when the
-   * debt no longer exists.
+   * "This provider account IS this credit card": the Debt-tab record the
+   * account feeds. Each sync (a) pushes the provider balance into the debt's
+   * `balance` unless `updateDebtBalance` is false, and (b) stamps the debt's
+   * `keepAliveLastUsedAt` from the account's newest outflow when its
+   * keep-alive watch is on. Per-device like the rest of the link - never
+   * synced or exported (the partner just sees the debt's balance move).
+   * Lazily nulled when the debt no longer exists.
    */
   debtId?: string | null;
+  /**
+   * Per-card toggle for the balance half of `debtId`. Undefined counts as
+   * ON - mirroring the card's balance is the point of linking it; the
+   * keep-alive stamp is the free extra - so a link made before this field
+   * existed starts tracking without a re-save.
+   */
+  updateDebtBalance?: boolean;
   /**
    * "Whose card is this" - expenses imported from this account default their
    * person suggestion to this Person when no merchant rule names one (rules

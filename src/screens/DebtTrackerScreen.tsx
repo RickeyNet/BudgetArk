@@ -50,6 +50,7 @@ import {
   Payment,
   RootTabParamList,
   SavingsGoal,
+  ExternalAccountLink,
 } from "../types";
 import {
   getDebts,
@@ -99,8 +100,9 @@ import DebtCard from "../components/DebtCard";
 import SheetKeyboardAvoider from "../components/SheetKeyboardAvoider";
 import DebtFreeCountdownCard from "../components/DebtFreeCountdownCard";
 import GlobalSearchModal from "../components/GlobalSearchModal";
-import AddDebtModal, { type DebtKeepAliveExtras } from "../components/AddDebtModal";
+import AddDebtModal, { type DebtBankLinkExtras } from "../components/AddDebtModal";
 import { getLinks, updateLink } from "../storage/externalAccountLinksStorage";
+import { linkUpdatesDebtBalance } from "../services/connections/debtBalances";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
 import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal";
@@ -258,6 +260,13 @@ const DebtTrackerScreen: React.FC = () => {
   const [duePromptDebt, setDuePromptDebt] = useState<Debt | null>(null);
   const [keepAliveDismissals, setKeepAliveDismissals] =
     useState<CardKeepAliveDismissals>({});
+  /**
+   * Per-device bank-account links (ExternalAccountLink.debtId): which card
+   * gets its balance from which connected account. Drives the "Balance from
+   * <account>" line on DebtCard; the balance itself arrives via bank sync
+   * and the dataChangeNotifier reload.
+   */
+  const [bankLinks, setBankLinks] = useState<ExternalAccountLink[]>([]);
 
   const navigation =
     useNavigation<BottomTabNavigationProp<RootTabParamList>>();
@@ -334,6 +343,7 @@ const DebtTrackerScreen: React.FC = () => {
             shouldOpenArkSetup,
             storedKeepAliveDismissals,
             storedAssetAccounts,
+            storedLinks,
           ] = await Promise.all([
             getDebts(),
             getPayments(),
@@ -345,6 +355,8 @@ const DebtTrackerScreen: React.FC = () => {
             consumeArkSetupPromptRequest(),
             getCardKeepAliveDismissals(),
             getAssetAccounts(),
+            // Display-only: a link-store hiccup must not block the debts.
+            getLinks().catch((): ExternalAccountLink[] => []),
           ]);
           if (cancelled) return;
           // Filter out any corrupted entries from earlier sessions
@@ -367,6 +379,7 @@ const DebtTrackerScreen: React.FC = () => {
           setCountdownNow(new Date());
           setDueDismissals(storedDismissals);
           setKeepAliveDismissals(storedKeepAliveDismissals);
+          setBankLinks(storedLinks);
           // The "minimum due today" prompt is now opened on app launch by the
           // app-root DebtDueReminderHost (so it fires regardless of the active
           // tab). Auto-opening it here too would stack a second copy when the
@@ -630,35 +643,47 @@ const DebtTrackerScreen: React.FC = () => {
     return "Tie - both methods cost the same interest.";
   }, [avalancheWhatIf, snowballWhatIf]);
 
-  /** Add a new debt */
   /**
-   * Points the chosen connected-account link at this debt (keep-alive
-   * auto-stamping source) and clears any other link that fed it - one
-   * account per card. Best-effort: the debt save must not fail on a link
-   * hiccup. No-op when extras are undefined (not a credit card).
+   * Points the chosen connected-account link at this debt ("this bank
+   * account IS this card": balance mirroring + keep-alive auto-stamping,
+   * see ExternalAccountLink.debtId) and clears any other link that fed it -
+   * one account per card. The balance itself is not seeded here: the modal
+   * already submitted the bank's last-known balance as the debt's balance
+   * when mirroring is on. Best-effort: the debt save must not fail on a
+   * link hiccup. No-op when extras are undefined (not a credit card).
    */
-  const applyKeepAliveLink = useCallback(
-    async (debtId: string, extras?: DebtKeepAliveExtras) => {
+  const applyBankLink = useCallback(
+    async (debtId: string, extras?: DebtBankLinkExtras) => {
       if (!extras) return;
       try {
-        const links = await getLinks();
+        let links = await getLinks();
         for (const link of links) {
           if (link.id === extras.linkId) {
-            if (link.debtId !== debtId) await updateLink(link.id, { debtId });
+            if (
+              link.debtId !== debtId ||
+              (link.updateDebtBalance !== false) !== extras.updateBalance
+            ) {
+              links = await updateLink(link.id, {
+                debtId,
+                updateDebtBalance: extras.updateBalance,
+              });
+            }
           } else if (link.debtId === debtId) {
-            await updateLink(link.id, { debtId: null });
+            links = await updateLink(link.id, { debtId: null });
           }
         }
+        setBankLinks(links);
       } catch (error) {
-        if (__DEV__) console.error("Keep-alive link update failed:", error);
+        if (__DEV__) console.error("Bank link update failed:", error);
       }
     },
     []
   );
 
+  /** Add a new debt */
   const handleAddDebt = useCallback(async (
     input: NewDebtInput,
-    keepAlive?: DebtKeepAliveExtras
+    bankLink?: DebtBankLinkExtras
   ) => {
     const now = new Date().toISOString();
     const newDebt: Debt = {
@@ -670,12 +695,12 @@ const DebtTrackerScreen: React.FC = () => {
     const updated = [...debts, newDebt];
     setDebts(updated);
     await saveDebts(updated);
-    await applyKeepAliveLink(newDebt.id, keepAlive);
+    await applyBankLink(newDebt.id, bankLink);
     void rescheduleCardKeepAliveReminders();
     await syncNetWorthSnapshot();
     setShowModal(false);
     void notifyAchievementCheck();
-  }, [applyKeepAliveLink, debts, notifyAchievementCheck]);
+  }, [applyBankLink, debts, notifyAchievementCheck]);
 
   const advanceDuePrompt = useCallback(
     (
@@ -795,7 +820,7 @@ const DebtTrackerScreen: React.FC = () => {
   const handleSaveEdit = useCallback(async (
     debtId: string,
     updates: Partial<Debt>,
-    keepAlive?: DebtKeepAliveExtras
+    bankLink?: DebtBankLinkExtras
   ) => {
     // Snapshot the full prior record so undo can write every field back,
     // not just the keys this edit touched.
@@ -803,7 +828,7 @@ const DebtTrackerScreen: React.FC = () => {
     const updated = await updateDebt(debtId, updates);
     const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
     setDebts(updated);
-    await applyKeepAliveLink(debtId, keepAlive);
+    await applyBankLink(debtId, bankLink);
     void rescheduleCardKeepAliveReminders();
     await syncNetWorthSnapshot();
     setShowModal(false);
@@ -828,7 +853,7 @@ const DebtTrackerScreen: React.FC = () => {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
-  }, [applyKeepAliveLink, debts, notifyAchievementCheck, presentAfterDismiss, pushUndo]);
+  }, [applyBankLink, debts, notifyAchievementCheck, presentAfterDismiss, pushUndo]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -1094,10 +1119,24 @@ const DebtTrackerScreen: React.FC = () => {
     return () => sub.remove();
   }, [scrollPayInputIntoView]);
 
+  /** debtId -> "Balance from <account>" info for cards a bank link feeds. */
+  const bankSyncByDebt = React.useMemo(() => {
+    const map = new Map<string, { accountName: string; asOf?: string }>();
+    for (const link of bankLinks) {
+      if (!link.debtId || !linkUpdatesDebtBalance(link)) continue;
+      map.set(link.debtId, {
+        accountName: link.externalName,
+        asOf: link.lastExternalBalanceAt,
+      });
+    }
+    return map;
+  }, [bankLinks]);
+
   const renderDebtCard = useCallback(
     ({ item }: { item: Debt }) => (
       <DebtCard
         debt={item}
+        bankSync={bankSyncByDebt.get(item.id) ?? null}
         onPayment={handlePayment}
         onDelete={handleDelete}
         onEdit={handleEdit}
@@ -1106,7 +1145,7 @@ const DebtTrackerScreen: React.FC = () => {
         isFocusDebt={item.id === focusDebtId}
       />
     ),
-    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, focusDebtId]
+    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankSyncByDebt, focusDebtId]
   );
 
   /** Summary + section header rendered above the debt list */

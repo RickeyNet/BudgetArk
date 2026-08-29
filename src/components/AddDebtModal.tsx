@@ -49,6 +49,7 @@ import {
   getEffectiveKeepAliveWindowMonths,
 } from "../utils/cardKeepAlive";
 import { getLinks } from "../storage/externalAccountLinksStorage";
+import { debtBalanceFromProvider } from "../services/connections/debtBalances";
 import { ensureCardKeepAlivePermissions } from "../notifications/cardKeepAliveReminders";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -61,15 +62,26 @@ import MonthYearPicker from "./MonthYearPicker";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 /**
- * Keep-alive side effects the parent screen owns: the link row lives in
+ * Bank-link side effects the parent screen owns: the link row lives in
  * externalAccountLinksStorage (per-device), not on the Debt, and on add the
- * screen is the one that knows the new debt's id. `linkId` null = manual
- * tracking only (clear any link pointing at this debt). Undefined extras =
- * not a personal-credit card, leave links untouched.
+ * screen is the one that knows the new debt's id. `linkId` null = not
+ * connected (clear any link pointing at this debt); `updateBalance` is the
+ * link's balance-mirroring toggle (keep-alive stamping rides the same link
+ * whenever the watch is on). Undefined extras = not a personal-credit card,
+ * leave links untouched.
  */
-export interface DebtKeepAliveExtras {
+export interface DebtBankLinkExtras {
   linkId: string | null;
+  updateBalance: boolean;
 }
+
+/** " · as of Jun 25" for a link's lastExternalBalanceAt, or "" when unknown. */
+const formatBankAsOf = (iso: string | undefined): string => {
+  if (!iso) return "";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return ` · as of ${parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+};
 
 /* ─── Props Interface ─── */
 interface AddDebtModalProps {
@@ -80,7 +92,7 @@ interface AddDebtModalProps {
   onClose: () => void;
 
   /** Callback when user submits a valid debt - receives the form data */
-  onAdd: (debt: NewDebtInput, keepAlive?: DebtKeepAliveExtras) => void;
+  onAdd: (debt: NewDebtInput, keepAlive?: DebtBankLinkExtras) => void;
 
   /** Optional existing debt to edit - when set, modal acts as an editor */
   editDebt?: Debt | null;
@@ -89,7 +101,7 @@ interface AddDebtModalProps {
   onEdit?: (
     debtId: string,
     updates: Partial<Debt>,
-    keepAlive?: DebtKeepAliveExtras
+    keepAlive?: DebtBankLinkExtras
   ) => void;
 }
 
@@ -188,11 +200,14 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const [keepAliveLeadDays, setKeepAliveLeadDays] = useState(
     initialForm.keepAliveLeadDays
   );
-  // Connected-account links, for the "stamp usage automatically" picker.
-  // Loaded per open; selection is seeded from whichever link already points
-  // at the debt being edited. null = manual tracking only.
+  // Connected-account links, for the "this bank account is this card"
+  // picker. Loaded per open; selection is seeded from whichever link already
+  // points at the debt being edited. null = not connected.
   const [accountLinks, setAccountLinks] = useState<ExternalAccountLink[]>([]);
-  const [keepAliveLinkId, setKeepAliveLinkId] = useState<string | null>(null);
+  const [bankLinkId, setBankLinkId] = useState<string | null>(null);
+  // Balance half of the link (ExternalAccountLink.updateDebtBalance): on by
+  // default, and undefined on a stored link counts as on.
+  const [bankUpdateBalance, setBankUpdateBalance] = useState(true);
   // MonthYearPicker (confirm mode) owns the year/tentative-month state and
   // seeds it from goalMonth on each open, so cancelling leaves the saved
   // goal untouched.
@@ -230,11 +245,11 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
       .then((links) => {
         if (cancelled) return;
         setAccountLinks(links);
-        setKeepAliveLinkId(
-          editDebt
-            ? (links.find((l) => l.debtId === editDebt.id)?.id ?? null)
-            : null
-        );
+        const linked = editDebt
+          ? links.find((l) => l.debtId === editDebt.id)
+          : undefined;
+        setBankLinkId(linked?.id ?? null);
+        setBankUpdateBalance(linked ? linked.updateDebtBalance !== false : true);
       })
       .catch(() => {
         if (!cancelled) setAccountLinks([]);
@@ -244,17 +259,44 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     };
   }, [visible, editDebt]);
 
+  const isCreditCard = debtClass === "personal_credit";
+
+  /**
+   * The connected account chosen for this card and, when its balance half
+   * is on and the bank has reported a balance, the amount owed the bank
+   * last saw. Non-null means the balance field is read-only: the bank owns
+   * it from here (and re-owns it on every sync), so a typed number the next
+   * sync would overwrite is not offered.
+   */
+  const bankLink = React.useMemo(
+    () =>
+      isCreditCard
+        ? (accountLinks.find((l) => l.id === bankLinkId) ?? null)
+        : null,
+    [isCreditCard, accountLinks, bankLinkId]
+  );
+  const bankBalance = React.useMemo(
+    () =>
+      bankLink &&
+      bankUpdateBalance &&
+      typeof bankLink.lastExternalBalance === "number" &&
+      Number.isFinite(bankLink.lastExternalBalance)
+        ? debtBalanceFromProvider(bankLink.lastExternalBalance)
+        : null,
+    [bankLink, bankUpdateBalance]
+  );
+
   /** Calculate required payment for goal date */
   const goalPaymentInfo = React.useMemo(() => {
     if (!goalMonth) return null;
-    const balanceNum = parseFloat(balance);
+    const balanceNum = bankBalance ?? parseFloat(balance);
     const rateNum = parseFloat(rate);
     if (isNaN(balanceNum) || balanceNum <= 0 || isNaN(rateNum) || rateNum < 0) return null;
     const months = calcMonthsUntilDate(`${goalMonth}-01`);
     if (months <= 0) return null;
     const required = calcPaymentForGoalDate(balanceNum, rateNum, months);
     return { months, required };
-  }, [goalMonth, balance, rate]);
+  }, [goalMonth, balance, bankBalance, rate]);
 
   /**
    * Keep-alive toggle. Turning it on asks for notification permission (the
@@ -280,15 +322,13 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     });
   }, [keepAliveEnabled]);
 
-  const isCreditCard = debtClass === "personal_credit";
-
   /**
    * Validates and submits the form.
    * Parses string inputs to numbers, checks all are valid,
    * then calls onAdd/onEdit and resets the form.
    */
   const handleSubmit = useCallback(() => {
-    const balanceNum = parseFloat(balance);
+    const balanceNum = bankBalance ?? parseFloat(balance);
     const rateNum = parseFloat(rate);
     const paymentNum = parseFloat(minPayment);
 
@@ -324,9 +364,15 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
             : {}),
         }
       : {};
-    const keepAliveExtras: DebtKeepAliveExtras | undefined = isCreditCard
-      ? { linkId: keepAliveEnabled ? keepAliveLinkId : null }
+    const bankLinkExtras: DebtBankLinkExtras | undefined = isCreditCard
+      ? { linkId: bankLinkId, updateBalance: bankUpdateBalance }
       : undefined;
+    // Bank-owned balance: originalBalance is a high-water mark so the payoff
+    // ring can't go negative after new charges (same rule as the sync path).
+    const bankOriginalBalance: Partial<Debt> =
+      bankBalance !== null && editDebt && bankBalance > editDebt.originalBalance
+        ? { originalBalance: bankBalance }
+        : {};
 
     if (isEditing && onEdit && editDebt) {
       onEdit(
@@ -342,8 +388,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
           debtClassSource: "manual",
           paymentDueDay: paymentDueDayValue,
           ...keepAliveFields,
+          ...bankOriginalBalance,
         },
-        keepAliveExtras
+        bankLinkExtras
       );
     } else {
       onAdd(
@@ -363,7 +410,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
           paymentDueDay: paymentDueDayValue,
           ...keepAliveFields,
         },
-        keepAliveExtras
+        bankLinkExtras
       );
     }
 
@@ -379,7 +426,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     setKeepAliveEnabled(false);
     setKeepAliveWindowMonths(KEEP_ALIVE_DEFAULT_WINDOW_MONTHS);
     setKeepAliveLeadDays(KEEP_ALIVE_DEFAULT_LEAD_DAYS);
-    setKeepAliveLinkId(null);
+    setBankLinkId(null);
+    setBankUpdateBalance(true);
   }, [
     name,
     balance,
@@ -393,7 +441,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     keepAliveEnabled,
     keepAliveWindowMonths,
     keepAliveLeadDays,
-    keepAliveLinkId,
+    bankLinkId,
+    bankUpdateBalance,
+    bankBalance,
     isCreditCard,
     isEditing,
     onEdit,
@@ -404,10 +454,13 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const balanceParsed = parseFloat(balance);
   const rateParsed = parseFloat(rate);
   const minPaymentParsed = parseFloat(minPayment);
+  const balanceValid =
+    bankBalance !== null ||
+    (Number.isFinite(balanceParsed) &&
+      (isCreditCard ? balanceParsed >= 0 : balanceParsed > 0));
   const isValid =
     name.trim().length > 0 &&
-    Number.isFinite(balanceParsed) &&
-    (isCreditCard ? balanceParsed >= 0 : balanceParsed > 0) &&
+    balanceValid &&
     Number.isFinite(rateParsed) && rateParsed >= 0 &&
     Number.isFinite(minPaymentParsed) &&
     (isCreditCard ? minPaymentParsed >= 0 : minPaymentParsed > 0);
@@ -454,17 +507,33 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 />
               </View>
 
-              {/* Total Balance */}
+              {/* Total Balance - read-only while a connected account owns it */}
               <View style={styles.field}>
                 <Text style={styles.label}>TOTAL BALANCE</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textMuted}
-                  value={balance}
-                  onChangeText={setBalance}
-                  keyboardType="decimal-pad"
-                />
+                {bankBalance !== null && bankLink ? (
+                  <>
+                    <View style={[styles.input, styles.bankBalanceBox]}>
+                      <Text style={styles.bankBalanceValue}>
+                        {formatCurrency(bankBalance)}
+                      </Text>
+                    </View>
+                    <Text style={styles.dueDayHint}>
+                      From {bankLink.externalName}
+                      {formatBankAsOf(bankLink.lastExternalBalanceAt)}. Updates
+                      after every bank sync - switch "Balance from bank" off
+                      below to type it yourself.
+                    </Text>
+                  </>
+                ) : (
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textMuted}
+                    value={balance}
+                    onChangeText={setBalance}
+                    keyboardType="decimal-pad"
+                  />
+                )}
               </View>
 
               <View style={styles.field}>
@@ -653,6 +722,97 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 )}
               </View>
 
+              {/* ── Connected bank account (credit cards only) ── */}
+              {isCreditCard && (
+                <View style={styles.field}>
+                  <Text style={styles.label}>CONNECTED BANK ACCOUNT (OPTIONAL)</Text>
+                  {accountLinks.length === 0 ? (
+                    <Text style={styles.dueDayHint}>
+                      Connect your bank (Profile → Bank Connections) and this
+                      card can keep its own balance current - and, with the
+                      keep-alive watch on, stamp its last use from your
+                      purchases.
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={styles.dueDayHint}>
+                        Pick the bank account that is this card. Its balance
+                        lands here after every sync, and with the keep-alive
+                        watch on, purchases stamp the last-used date for you.
+                      </Text>
+                      <View style={styles.keepAliveLinkList}>
+                        <TouchableOpacity
+                          style={[
+                            styles.dueDayModeBtn,
+                            bankLinkId === null && styles.dueDayModeBtnActive,
+                          ]}
+                          onPress={() => setBankLinkId(null)}
+                        >
+                          <Text
+                            style={[
+                              styles.dueDayModeBtnText,
+                              bankLinkId === null &&
+                                styles.dueDayModeBtnTextActive,
+                            ]}
+                          >
+                            Not connected
+                          </Text>
+                        </TouchableOpacity>
+                        {accountLinks.map((link) => {
+                          const selected = bankLinkId === link.id;
+                          return (
+                            <TouchableOpacity
+                              key={link.id}
+                              style={[
+                                styles.dueDayModeBtn,
+                                selected && styles.dueDayModeBtnActive,
+                              ]}
+                              onPress={() => setBankLinkId(link.id)}
+                            >
+                              <Text
+                                style={[
+                                  styles.dueDayModeBtnText,
+                                  selected && styles.dueDayModeBtnTextActive,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {link.externalName}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      {bankLink && (
+                        <>
+                          <Text style={styles.keepAliveSubLabel}>
+                            BALANCE UPDATES
+                          </Text>
+                          <TouchableOpacity
+                            style={[
+                              styles.dueDayModeBtn,
+                              bankUpdateBalance && styles.dueDayModeBtnActive,
+                            ]}
+                            onPress={() => setBankUpdateBalance((v) => !v)}
+                          >
+                            <Text
+                              style={[
+                                styles.dueDayModeBtnText,
+                                bankUpdateBalance &&
+                                  styles.dueDayModeBtnTextActive,
+                              ]}
+                            >
+                              {bankUpdateBalance
+                                ? "Balance from bank: On"
+                                : "Balance from bank: Off"}
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </>
+                  )}
+                </View>
+              )}
+
               {/* ── Card Keep-Alive (credit cards only) ── */}
               {isCreditCard && (
                 <View style={styles.field}>
@@ -742,57 +902,13 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                       <Text style={styles.keepAliveSubLabel}>
                         LAST-USED TRACKING
                       </Text>
-                      {accountLinks.length === 0 ? (
-                        <Text style={styles.dueDayHint}>
-                          Tap "I used it" on the card after a purchase. Set up
-                          a bank connection (Profile → Bank Connections) and
-                          the date stamps itself from your transactions.
-                        </Text>
-                      ) : (
-                        <View style={styles.keepAliveLinkList}>
-                          <TouchableOpacity
-                            style={[
-                              styles.dueDayModeBtn,
-                              keepAliveLinkId === null &&
-                                styles.dueDayModeBtnActive,
-                            ]}
-                            onPress={() => setKeepAliveLinkId(null)}
-                          >
-                            <Text
-                              style={[
-                                styles.dueDayModeBtnText,
-                                keepAliveLinkId === null &&
-                                  styles.dueDayModeBtnTextActive,
-                              ]}
-                            >
-                              Manual only
-                            </Text>
-                          </TouchableOpacity>
-                          {accountLinks.map((link) => {
-                            const selected = keepAliveLinkId === link.id;
-                            return (
-                              <TouchableOpacity
-                                key={link.id}
-                                style={[
-                                  styles.dueDayModeBtn,
-                                  selected && styles.dueDayModeBtnActive,
-                                ]}
-                                onPress={() => setKeepAliveLinkId(link.id)}
-                              >
-                                <Text
-                                  style={[
-                                    styles.dueDayModeBtnText,
-                                    selected && styles.dueDayModeBtnTextActive,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {link.externalName}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      )}
+                      <Text style={styles.dueDayHint}>
+                        {bankLink
+                          ? `Stamps itself from ${bankLink.externalName} purchases. Tap "I used it" on the card anytime to stamp by hand.`
+                          : accountLinks.length > 0
+                            ? 'Tap "I used it" on the card after a purchase - or pick a connected account above and it stamps itself.'
+                            : 'Tap "I used it" on the card after a purchase. Set up a bank connection (Profile → Bank Connections) and the date stamps itself from your transactions.'}
+                      </Text>
                     </>
                   )}
                 </View>
@@ -1003,6 +1119,14 @@ const makeStyles = (colors: ThemeColors) =>
     },
     keepAliveLinkList: {
       gap: 8,
+    },
+    bankBalanceBox: {
+      justifyContent: "center",
+    },
+    bankBalanceValue: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.text,
     },
 
     /* Buttons - outside ScrollView so they stay above keyboard */
