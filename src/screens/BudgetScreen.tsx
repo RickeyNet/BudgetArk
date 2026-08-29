@@ -44,6 +44,7 @@ import GlobalSearchModal from "../components/GlobalSearchModal";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
+import TrackingReminderOfferCard from "../components/TrackingReminderOfferCard";
 import {
   getDebtDueDismissals,
   type DebtDueDismissals,
@@ -1421,6 +1422,10 @@ const BudgetScreen: React.FC = () => {
         onOpen={() => setShowBillCalendar(true)}
         style={styles.reminderBanner}
       />
+
+      {/* One-time "want reminders?" offer for phones that never answered it
+          (self-retiring; see the component header). */}
+      <TrackingReminderOfferCard style={styles.reminderBanner} />
 
       <DebtDueReminderBanner
         debts={debts}

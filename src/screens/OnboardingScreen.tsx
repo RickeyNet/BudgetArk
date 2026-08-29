@@ -40,7 +40,10 @@ import { completeOnboarding } from "../storage/userStorage";
  */
 import { sanitizeTextInput } from "../utils/sanitize";
 import { DEFAULT_TRACKING_REMINDER_SETTINGS } from "../utils/trackingReminderPlanner";
-import { setTrackingReminderSettings } from "../storage/trackingReminderSettingsStorage";
+import {
+  markTrackingReminderOfferDismissed,
+  setTrackingReminderSettings,
+} from "../storage/trackingReminderSettingsStorage";
 import {
   ensureTrackingReminderPermissions,
   rescheduleTrackingReminders,
@@ -222,10 +225,19 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     } catch (error) {
       if (__DEV__) console.warn("Failed to enable tracking reminders:", error);
     } finally {
+      // Either answer counts as decided: the Budget tab's one-time offer
+      // card (for installs that never saw this step) must not re-ask.
+      void markTrackingReminderOfferDismissed().catch(() => {});
       setRemindersBusy(false);
       setStep("name");
     }
   }, [remindersBusy]);
+
+  /** "Not now" on the reminders step: leave them off, never re-ask. */
+  const handleDeclineReminders = useCallback(() => {
+    void markTrackingReminderOfferDismissed().catch(() => {});
+    setStep("name");
+  }, []);
 
   /**
    * Persist the onboarding-complete flag, then leave the flow.
@@ -541,7 +553,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           styles.quietBtn,
           { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 10 },
         ]}
-        onPress={handleNext}
+        onPress={handleDeclineReminders}
         disabled={remindersBusy}
       >
         <Text style={[styles.completeBtnText, { color: colors.text }]}>

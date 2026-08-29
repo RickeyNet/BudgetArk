@@ -58,6 +58,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `budgetInsights.test.ts` | `budgetInsights.ts` | Monthly Review: month summaries, month-over-month changes, 3-month comparisons, streaks (frozen clock) |
 | `budgetPacing.test.ts` | `budgetPacing.ts` | Spending pace: current-month clock, day-weighted expected spend, over/ahead/on-track with early-month guard, alert ordering, ordinal days |
 | `tipJarNudge.test.ts` | `tipJarNudge.ts` | Post-win Tip Jar cadence: Nth-win + minimum-days gating, disabled still counts, clock rollback, fail-closed state parse, per-win copy |
+| `trackingReminderOffer.test.ts` | `trackingReminderOffer.ts` | One-time reminders offer shows only to a phone that never decided (enabled / sheet visited / dismissed all retire it) |
 | `whatIfSpending.test.ts` | `whatIfSpending.ts` | "What if I stopped spending on X": category averages, redirect impact on payoff and savings |
 | `purchasePlanner.test.ts` | `purchasePlanner.ts` | Plan-a-Purchase sinking funds: monthly need, Ark-step guidance |
 | `emergencyFund.test.ts` | `emergencyFund.ts` | EF goal resolution (explicit goal > Keel synthetic > linked savings accounts), savings reserve sum |

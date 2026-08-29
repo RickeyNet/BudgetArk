@@ -7,6 +7,8 @@ import {
 } from "../utils/trackingReminderPlanner";
 
 const SETTINGS_KEY = "@budgetark_tracking_reminder_settings" as const;
+/** Set once the one-time offer (onboarding step / Budget-tab card) is answered. */
+const OFFER_KEY = "@budgetark_tracking_reminder_offer" as const;
 
 const VALID_CADENCES: readonly ReminderCadenceDays[] = [1, 3, 7];
 const VALID_HOURS: readonly ReminderHour[] = [9, 13, 19];
@@ -51,4 +53,23 @@ export const setTrackingReminderSettings = async (
   const clean = sanitize(settings);
   await EncryptedStorage.setItem(SETTINGS_KEY, JSON.stringify(clean));
   return clean;
+};
+
+/**
+ * Whether a settings record exists at all - i.e. the user has been through
+ * the Profile sheet (it persists on every toggle). The one-time offer
+ * treats that as "already decided" (utils/trackingReminderOffer).
+ */
+export const hasStoredTrackingReminderSettings = async (): Promise<boolean> =>
+  (await EncryptedStorage.getItem(SETTINGS_KEY)) !== null;
+
+export const getTrackingReminderOfferDismissed = async (): Promise<boolean> =>
+  (await EncryptedStorage.getItem(OFFER_KEY)) !== null;
+
+/** Any answer to the offer - on, off, or "no thanks" - retires it for good. */
+export const markTrackingReminderOfferDismissed = async (): Promise<void> => {
+  await EncryptedStorage.setItem(
+    OFFER_KEY,
+    JSON.stringify({ decidedAt: new Date().toISOString() })
+  );
 };
