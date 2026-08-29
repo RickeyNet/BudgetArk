@@ -1,7 +1,7 @@
 # quotes-proxy
 
 Cloudflare Worker that fetches stock prices for BudgetArk's "Live Stock Holdings"
-feature. It exists so the **Twelve Data API key stays off-device** — the app
+feature. It exists so the **Twelve Data API key stays off-device** - the app
 calls this Worker, the Worker calls Twelve Data.
 
 It stores no portfolio data: the price cache is keyed by symbol, and the abuse
@@ -45,7 +45,7 @@ npx wrangler deploy
 
 The Worker URL and the shared app key both live as plain constants in
 `src/config/quotesConfig.ts` (`QUOTES_PROXY_URL`, `QUOTES_APP_KEY`). Neither is a
-real secret — they ship in the bundle by necessity. The only true secret is the
+real secret - they ship in the bundle by necessity. The only true secret is the
 Twelve Data key, which stays a Cloudflare secret and never leaves the Worker.
 
 `APP_SHARED_KEY` is **optional**: leave it unset and the Worker skips the check,
@@ -82,12 +82,12 @@ negative-cache for 24h (`miss:<ver>:<sym>`) so they can't drain the budget.
 ## Tuning
 
 In `src/index.ts`:
-- `QUOTE_TTL_SECONDS` — how long a price is cached (default 1 day).
-- `THROTTLE_TTL_SECONDS` — per-device cooldown (default 1 day).
-- `MAX_SYMBOLS` — request batch cap (Twelve Data accepts 120 per call).
-- `UPSTREAM_MINUTE_BATCH_LIMIT` — max symbols fetched upstream per call/cron
+- `QUOTE_TTL_SECONDS` - how long a price is cached (default 1 day).
+- `THROTTLE_TTL_SECONDS` - per-device cooldown (default 1 day).
+- `MAX_SYMBOLS` - request batch cap (Twelve Data accepts 120 per call).
+- `UPSTREAM_MINUTE_BATCH_LIMIT` - max symbols fetched upstream per call/cron
   pass (free tier: 8 credits/minute).
-- `REGISTRY_MAX_SYMBOLS` / `REGISTRY_RETENTION_MS` — warmer registry bounds.
+- `REGISTRY_MAX_SYMBOLS` / `REGISTRY_RETENTION_MS` - warmer registry bounds.
 
 ## Useful commands
 

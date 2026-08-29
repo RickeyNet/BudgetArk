@@ -43,9 +43,20 @@ const MissionCard: React.FC = () => {
         {MISSION_STATEMENT.title}
       </Text>
       {missionExpanded && (
-        <Text style={[styles.missionBody, { color: colors.textDim }]}>
-          {MISSION_STATEMENT.body}
-        </Text>
+        <>
+          <Text style={[styles.missionBody, { color: colors.textDim }]}>
+            {MISSION_STATEMENT.body}
+          </Text>
+          <Text
+            style={[
+              styles.missionBody,
+              styles.missionInvite,
+              { color: colors.textDim },
+            ]}
+          >
+            {MISSION_STATEMENT.invite}
+          </Text>
+        </>
       )}
       <Text style={[styles.missionChevron, { color: colors.textMuted }]}>
         {missionExpanded ? "▴" : "▾"}

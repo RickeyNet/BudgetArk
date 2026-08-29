@@ -1,6 +1,6 @@
 # Testing
 
-BudgetArk has a unit-test suite for its **pure business logic** — the math and
+BudgetArk has a unit-test suite for its **pure business logic** - the math and
 validation that power debt payoff, investing projections, net worth, currency
 conversion, recurrence, storage repair, bank-sync ingest, and import/sync
 safety. Use it as a regression net: run it before and after a change to confirm
@@ -15,7 +15,7 @@ npm run test:coverage  # with the coverage ratchet (jest.config.js thresholds)
 npx jest src/utils/__tests__/cashFlow.test.ts   # one suite
 ```
 
-Also run `npm run typecheck` — `tsc` covers the test files too (ts-jest alone
+Also run `npm run typecheck` - `tsc` covers the test files too (ts-jest alone
 only transpiles), which is what makes the typed fixtures below worth having.
 
 ## Shared fixtures
@@ -26,7 +26,7 @@ only transpiles), which is what makes the typed fixtures below worth having.
 `makeBusiness`, `makeCustomCategory`, `makeHolding`, `makeMerchantRule`,
 `makeBankConnection`, `makeExternalAccountLink`, `makePendingTransaction`,
 `makeNetWorthSnapshot`, plus `FIXTURE_TIME`). Use them instead of `as any`
-literals — a fixture that drifts from the real type fails typecheck instead of
+literals - a fixture that drifts from the real type fails typecheck instead of
 silently testing a shape the app never produces. Reserve `as any` for
 deliberately malformed input aimed at a runtime validator.
 
@@ -200,7 +200,7 @@ logic runs:
   `jest-expo`. If you ever need component tests, add a separate
   `jest-expo`-based Jest project rather than changing this one.
 - `isolatedModules: true` (in `tsconfig.json`) makes ts-jest transpile each
-  file on its own — quick, but it does **not** type-check. `npm run typecheck`
+  file on its own - quick, but it does **not** type-check. `npm run typecheck`
   does, tests included.
 - Coverage is a **ratchet** (`coverageThreshold` in `jest.config.js`): set just
   below the measured numbers, raised as coverage grows, never lowered to green
@@ -212,7 +212,7 @@ logic runs:
 
 Drop a `*.test.ts` file under the nearest `__tests__/` folder beneath `src/`,
 start it with a doc comment saying what it guards, and build records with the
-shared fixtures. Prefer testing pure functions — given inputs, assert outputs.
+shared fixtures. Prefer testing pure functions - given inputs, assert outputs.
 When a module pulls in React Native or storage, extract the pure logic into a
 helper and test that, keeping the side-effecting shell thin (see
 `utils/bridgeMath.ts`, `utils/debtTrackerMath.ts`, `utils/expenseCategoryRows.ts`

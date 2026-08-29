@@ -21,7 +21,7 @@ compatibility_date = "2026-06-01"
 # and redeploy. Don't ship the app against workers.dev again - the custom domain
 # is the public endpoint now.
 workers_dev = false
-# No per-version preview URLs — this is a single public endpoint, so keep the
+# No per-version preview URLs - this is a single public endpoint, so keep the
 # surface minimal and silence the deploy warning.
 preview_urls = false
 

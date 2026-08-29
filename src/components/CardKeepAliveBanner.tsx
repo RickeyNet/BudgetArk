@@ -65,7 +65,7 @@ const CardKeepAliveBanner: React.FC<CardKeepAliveBannerProps> = ({
     if (!top) return "";
     const when = formatDeadline(top.deadline);
     if (top.status === "overdue") {
-      return `${top.debt.name} · deadline passed (${when}) — use it soon`;
+      return `${top.debt.name} · deadline passed (${when}) - use it soon`;
     }
     const days =
       top.daysUntil === 0

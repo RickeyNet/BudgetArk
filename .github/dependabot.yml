@@ -8,7 +8,7 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     # The Expo SDK manages versions for `expo`, every `expo-*` module, React
-    # Native, and the SDK-aligned native libraries as a coordinated set — their
+    # Native, and the SDK-aligned native libraries as a coordinated set - their
     # versions must move together via `npx expo install` / `expo install --fix`
     # during a deliberate SDK upgrade. A piecemeal Dependabot bump (e.g. an
     # SDK-56 module against an SDK-55 core) produces an unsupported combination
@@ -48,7 +48,7 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
-    # Single grouped PR across all action updates (major included — actions
+    # Single grouped PR across all action updates (major included - actions
     # majors are low-risk and few).
     groups:
       actions:

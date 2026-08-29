@@ -63,16 +63,16 @@ Imported limits land in the current month's limit set.
 | `Name`            | Yes      | Max 80 chars.                                 |
 | `Balance`         | Yes      | Number, ≥ 0.                                  |
 | `OriginalBalance` | Yes      | Number, ≥ 0.01.                               |
-| `Rate`            | Yes      | APR as a percentage, 0–200.                   |
+| `Rate`            | Yes      | APR as a percentage, 0-200.                   |
 | `MinPayment`      | Yes      | Number, ≥ 0.                                  |
 | `Owner`           | No       | `mine` / `partner` / `joint`. Default `mine`. |
 | `DebtClass`       | No       | `personal_credit` / `car` / `house`. Legacy `car_house` is accepted on import and split to `house` when the name mentions mortgage/house/home, otherwise `car`. |
 | `DebtClassSource` | No       | `manual` / `inferred`.                        |
 | `GoalDate`        | No       | Optional payoff target date.                  |
-| `PaymentDueDay`   | No       | Day of month (1–31) the payment is due.       |
+| `PaymentDueDay`   | No       | Day of month (1-31) the payment is due.       |
 | `KeepAlive`       | No       | Card keep-alive watch: `yes` / `no`. Blank leaves the watch unset. Round-trips, so re-importing a workbook doesn't switch the watch off. |
-| `KeepAliveWindowMonths` | No | Issuer inactivity window in whole months, 1–60. |
-| `KeepAliveLeadDays` | No     | Days before the deadline reminders begin, 1–180. |
+| `KeepAliveWindowMonths` | No | Issuer inactivity window in whole months, 1-60. |
+| `KeepAliveLeadDays` | No     | Days before the deadline reminders begin, 1-180. |
 | `KeepAliveLastUsedAt` | No   | When the card was last used (ISO timestamp or date). |
 | `CreatedAt`       | No       | ISO timestamp; defaults to now.               |
 | `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
@@ -84,7 +84,7 @@ Imported limits land in the current month's limit set.
 | `ID`            | No       | Auto-generated if missing.       |
 | `DebtID`        | Yes      | Must match a debt's `ID`.        |
 | `Amount`        | Yes      | Positive number, ≥ 0.01.         |
-| `AppliedAmount` | No       | The part of `Amount` that actually reduced the balance (an overpayment is clamped at zero). 0 – `Amount`. Blank means the whole amount. Round-trips so deleting the payment later adds back the right delta. |
+| `AppliedAmount` | No       | The part of `Amount` that actually reduced the balance (an overpayment is clamped at zero). 0 - `Amount`. Blank means the whole amount. Round-trips so deleting the payment later adds back the right delta. |
 | `Date`          | Yes      | ISO date or US `M/D/YYYY` style. |
 | `UpdatedAt`     | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness. |
 

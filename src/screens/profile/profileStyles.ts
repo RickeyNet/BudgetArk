@@ -68,6 +68,9 @@ export const makeProfileStyles = (tokens: DensityTokens, colors: ThemeColors) =>
       lineHeight: scale(21),
       textAlign: "center",
     },
+    missionInvite: {
+      marginTop: 10,
+    },
     missionChevron: {
       fontSize: scale(14),
       textAlign: "center",

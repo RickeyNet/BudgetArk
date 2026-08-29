@@ -90,7 +90,7 @@ jobs:
         run: npm ci
 
       # Catches what tsc/jest can't: Metro resolution failures, bad asset
-      # references, babel/metro config breakage — the class of error that
+      # references, babel/metro config breakage - the class of error that
       # previously shipped as a broken OTA bundle (see b34958f).
       - name: Export JS bundles
         run: npx expo export --platform ios --platform android

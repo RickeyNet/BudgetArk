@@ -188,7 +188,7 @@ export const getChapterProgress = (
  * Chapter progress restricted to lessons tagged with `topic` (powers the
  * Topics chip filter on the Charts screen). Chapters with no matching
  * lessons are dropped, and each surviving row carries a shallow chapter
- * copy whose `lessons` — and completed/total counts — cover only the
+ * copy whose `lessons` - and completed/total counts - cover only the
  * matching subset. CHAPTERS itself is never mutated.
  */
 export const getTopicChapterProgress = (

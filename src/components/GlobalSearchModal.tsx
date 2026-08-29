@@ -350,7 +350,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     keyboardType="decimal-pad"
                     accessibilityLabel="Minimum amount"
                   />
-                  <Text style={styles.amountDash}>–</Text>
+                  <Text style={styles.amountDash}>-</Text>
                   <TextInput
                     style={styles.amountInput}
                     placeholder="Max"

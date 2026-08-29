@@ -886,7 +886,7 @@ Possible feature design (v1):
 
   Refresh strategy (privacy-friendly default):
   - Auto-refresh once per day on first app open of the calendar day.
-  - Manual "Refresh prices" button with 1-hour cooldown. Disabled outside US market hours (9:30am–4:00pm ET, weekdays) with copy "Markets closed - prices update at next open."
+  - Manual "Refresh prices" button with 1-hour cooldown. Disabled outside US market hours (9:30am-4:00pm ET, weekdays) with copy "Markets closed - prices update at next open."
   - Manual override on cooldown shows "Last updated 12 min ago" rather than firing the call.
   - Per-day cap means free API tiers are viable. Per-user fetch volume stays under 25 calls/day worst case.
 

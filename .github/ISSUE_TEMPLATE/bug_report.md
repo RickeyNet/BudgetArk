@@ -31,5 +31,5 @@ If applicable, add screenshots to help explain your problem.
 **Additional context**
 Add any other context about the problem here. If the bug involves
 import/export, please paste the exact error message and (if you can) a
-small sample of the file that fails — with any private amounts or
+small sample of the file that fails - with any private amounts or
 descriptions removed.

@@ -18,6 +18,7 @@
  * - Skip option for users who want default settings
  */
 
+import { MISSION_STATEMENT } from "../data/missionStatement";
 import React, { useState, useCallback, useMemo } from "react";
 import {
   Alert,
@@ -41,8 +42,13 @@ import { sanitizeTextInput } from "../utils/sanitize";
 
 type OnboardingStyles = ReturnType<typeof makeStyles>;
 
-/** Onboarding step enum for type safety */
-type OnboardingStep = "theme" | "welcome" | "name";
+/**
+ * Onboarding step enum for type safety. "mission" comes first on purpose:
+ * before a single choice is asked of them, the user hears why the app
+ * exists and what it promises (free, private, offline) - the same copy as
+ * the Profile mission card, so the two never drift.
+ */
+type OnboardingStep = "mission" | "theme" | "welcome" | "name";
 
 interface OnboardingScreenProps {
   /** Callback when onboarding is complete */
@@ -129,7 +135,7 @@ ThemePreviewCard.displayName = "ThemePreviewCard";
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { colors, presets, themeId, setThemeId } = useTheme();
   const { tokens } = useDensity();
-  const [step, setStep] = useState<OnboardingStep>("theme");
+  const [step, setStep] = useState<OnboardingStep>("mission");
   const [displayName, setDisplayName] = useState("");
 
   /** Memoized styles based on current theme */
@@ -149,7 +155,9 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    * Advance to next step
    */
   const handleNext = useCallback(() => {
-    if (step === "theme") {
+    if (step === "mission") {
+      setStep("theme");
+    } else if (step === "theme") {
       setStep("welcome");
     } else if (step === "welcome") {
       setStep("name");
@@ -161,7 +169,9 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    * back button)
    */
   const handleBack = useCallback(() => {
-    if (step === "welcome") {
+    if (step === "theme") {
+      setStep("mission");
+    } else if (step === "welcome") {
       setStep("theme");
     } else if (step === "name") {
       setStep("welcome");
@@ -223,10 +233,51 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    */
   const handleSkip = useCallback(() => finishOnboarding(), [finishOnboarding]);
 
+  /** Render the mission step - why BudgetArk exists, before any setup. */
+  const renderMissionStep = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepNumber}>STEP 1 OF 4</Text>
+      <Text style={styles.heroEmoji}>⚓</Text>
+      <Text style={styles.missionEyebrow}>{MISSION_STATEMENT.eyebrow}</Text>
+      <Text style={styles.stepTitle}>{MISSION_STATEMENT.title}</Text>
+
+      <ScrollView
+        style={styles.featureScroll}
+        contentContainerStyle={styles.missionScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.missionCard}>
+          <Text style={styles.missionBody}>{MISSION_STATEMENT.body}</Text>
+          <Text style={[styles.missionBody, styles.missionInvite]}>
+            {MISSION_STATEMENT.invite}
+          </Text>
+        </View>
+        <Text style={styles.missionFootnote}>
+          Free, no ads, no account, and your data never leaves your phone.
+          You can reread this anytime at the top of the Profile tab.
+        </Text>
+      </ScrollView>
+
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
+          <Text style={styles.skipBtnText}>Skip Setup</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.nextBtn, { backgroundColor: colors.accent }]}
+          onPress={handleNext}
+        >
+          <Text style={[styles.nextBtnText, { color: colors.white }]}>
+            Next →
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   /** Render theme selection step */
   const renderThemeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 1 OF 3</Text>
+      <Text style={styles.stepNumber}>STEP 2 OF 4</Text>
       <Text style={styles.heroEmoji}>🎨</Text>
       <Text style={styles.stepTitle}>Choose Your Theme</Text>
       <Text style={styles.stepSubtitle}>
@@ -269,7 +320,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render welcome step */
   const renderWelcomeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 2 OF 3</Text>
+      <Text style={styles.stepNumber}>STEP 3 OF 4</Text>
       <Text style={styles.heroEmoji}>💸</Text>
       <Text style={styles.stepTitle}>Welcome to BudgetArk</Text>
       <Text style={styles.stepSubtitle}>
@@ -373,7 +424,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render display name step */
   const renderNameStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 3 OF 3</Text>
+      <Text style={styles.stepNumber}>STEP 4 OF 4</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.stepTitle}>What should we call you?</Text>
       <Text style={styles.stepSubtitle}>
@@ -461,6 +512,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {step === "mission" && renderMissionStep()}
         {step === "theme" && renderThemeStep()}
         {step === "welcome" && renderWelcomeStep()}
         {step === "name" && renderNameStep()}
@@ -513,6 +565,42 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
     heroEmoji: {
       fontSize: scale(64),
       marginBottom: 16,
+    },
+
+    /* Mission step */
+    missionEyebrow: {
+      fontSize: scale(11),
+      fontWeight: "700",
+      color: colors.accent,
+      letterSpacing: 1.5,
+      marginBottom: 6,
+    },
+    missionScrollContent: {
+      paddingBottom: 20,
+      gap: tokens.gap,
+    },
+    missionCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      padding: tokens.padLg,
+      width: "100%",
+    },
+    missionBody: {
+      fontSize: scale(16),
+      lineHeight: scale(25),
+      color: colors.text,
+    },
+    missionInvite: {
+      marginTop: 14,
+    },
+    missionFootnote: {
+      fontSize: scale(13),
+      lineHeight: scale(19),
+      color: colors.textDim,
+      textAlign: "center",
+      paddingHorizontal: tokens.pad,
     },
 
     /* Theme selection */

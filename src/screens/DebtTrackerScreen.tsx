@@ -1493,7 +1493,7 @@ const DebtTrackerScreen: React.FC = () => {
         onRequestClose={() => setShowMilestonesModal(false)}
       >
         {/* Keyboard strategy per SheetKeyboardAvoider: Android KAV lifts the
-            sheet, iOS relies on automaticallyAdjustKeyboardInsets below —
+            sheet, iOS relies on automaticallyAdjustKeyboardInsets below -
             without it the last step's ("Sail") target input hides behind the
             keyboard. */}
         <SheetKeyboardAvoider style={styles.msFullOverlay}>
