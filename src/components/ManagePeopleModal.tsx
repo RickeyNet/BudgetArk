@@ -13,6 +13,7 @@
  * "(deleted person)" on badges and pickers.
  */
 
+import { entryPersonIds } from "../utils/entryPeople";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -64,8 +65,8 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
         if (cancelled) return;
         const counts: Record<string, number> = {};
         for (const entry of entries) {
-          if (entry.personId) {
-            counts[entry.personId] = (counts[entry.personId] ?? 0) + 1;
+          for (const personId of entryPersonIds(entry)) {
+            counts[personId] = (counts[personId] ?? 0) + 1;
           }
         }
         setEntryCounts(counts);

@@ -15,6 +15,7 @@
  * view.
  */
 
+import { entryPersonIds, personShare } from "./entryPeople";
 import type { BudgetEntry, Person } from "../types";
 import { listOccurrenceMonths } from "./recurrence";
 import { currentMonthKey } from "./businessReport";
@@ -101,47 +102,51 @@ export const computePersonReport = (
 
   if (windowEnd >= windowStart) {
     for (const entry of entries) {
-      if (entry.type !== "expense" || !entry.personId || entry.deletedAt) {
-        continue;
-      }
+      if (entry.type !== "expense" || entry.deletedAt) continue;
+      const assignees = entryPersonIds(entry);
+      if (assignees.length === 0) continue;
       const months = listOccurrenceMonths(entry, windowStart, windowEnd);
       if (months.length === 0) continue;
-
-      let group = groups.get(entry.personId);
-      if (!group) {
-        const person = personById.get(entry.personId);
-        group = {
-          personId: entry.personId,
-          name: person?.name ?? UNKNOWN_PERSON_NAME,
-          deleted: !person || !!person.deletedAt,
-          total: 0,
-          entryCount: 0,
-          byCategory: [],
-          byMonth: Array.from({ length: 12 }, () => 0),
-          lines: [],
-        };
-        groups.set(entry.personId, group);
-      }
-
+      // Shared spending splits evenly (see entryPeople.personShare) so the
+      // grand total still equals what was actually spent.
+      const share = personShare(entry.amount, assignees.length);
       const originMonth = monthKeyFromISO(entry.date);
       const day = dayFromISO(entry.date);
 
-      for (const monthKey of months) {
-        const clampedDay = Math.min(Number(day), lastDayOfMonth(monthKey));
-        group.total += entry.amount;
-        group.entryCount += 1;
-        const monthIdx = Number(monthKey.split("-")[1]) - 1;
-        group.byMonth[monthIdx] += entry.amount;
-        group.lines.push({
-          entryId: entry.id,
-          monthKey,
-          date: `${monthKey}-${String(clampedDay).padStart(2, "0")}`,
-          category: String(entry.category),
-          description: entry.description,
-          amount: entry.amount,
-          recurring: !!entry.recurring,
-          projected: monthKey !== originMonth,
-        });
+      for (const personId of assignees) {
+        let group = groups.get(personId);
+        if (!group) {
+          const person = personById.get(personId);
+          group = {
+            personId,
+            name: person?.name ?? UNKNOWN_PERSON_NAME,
+            deleted: !person || !!person.deletedAt,
+            total: 0,
+            entryCount: 0,
+            byCategory: [],
+            byMonth: Array.from({ length: 12 }, () => 0),
+            lines: [],
+          };
+          groups.set(personId, group);
+        }
+
+        for (const monthKey of months) {
+          const clampedDay = Math.min(Number(day), lastDayOfMonth(monthKey));
+          group.total += share;
+          group.entryCount += 1;
+          const monthIdx = Number(monthKey.split("-")[1]) - 1;
+          group.byMonth[monthIdx] += share;
+          group.lines.push({
+            entryId: entry.id,
+            monthKey,
+            date: `${monthKey}-${String(clampedDay).padStart(2, "0")}`,
+            category: String(entry.category),
+            description: entry.description,
+            amount: share,
+            recurring: !!entry.recurring,
+            projected: monthKey !== originMonth,
+          });
+        }
       }
     }
   }

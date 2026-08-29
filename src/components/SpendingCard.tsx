@@ -11,6 +11,7 @@
  * only owns what is expanded. Extracted from BudgetScreen.
  */
 
+import { entryPersonIds, formatPersonNames } from "../utils/entryPeople";
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DonutChart, { type DonutSlice } from "./DonutChart";
@@ -403,7 +404,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                             style={[styles.entryEditHint, { color: colors.accent }]}
                             numberOfLines={1}
                           >
-                            👤 {personNameById.get(entry.personId) ?? "(deleted)"}
+                            👤 {formatPersonNames(entryPersonIds(entry), personNameById)}
                           </Text>
                         )}
                         {entry.recurring && (

@@ -8,7 +8,7 @@
  * persistent storage, so they share the same gate.
  */
 
-import { ASSET_ACCOUNT_CATEGORIES, BUDGET_CATEGORIES } from "../types";
+import { MAX_PEOPLE, ASSET_ACCOUNT_CATEGORIES, BUDGET_CATEGORIES } from "../types";
 import { sanitizeTextInput } from "./sanitize";
 import { isAcceptablePaymentUrl } from "./paymentUrl";
 import {
@@ -241,6 +241,14 @@ export const isBudgetEntryItem = (
   // Same contract as businessId, for the person assignment.
   const personIdValid =
     item.personId === undefined || isSafeText(item.personId, 120);
+  // Multi-person assignment (BudgetEntry.personIds): each id under the same
+  // cap as personId, and the array bounded by MAX_PEOPLE so a hostile peer
+  // can't ship a 100k-element list.
+  const personIdsValid =
+    item.personIds === undefined ||
+    (Array.isArray(item.personIds) &&
+      item.personIds.length <= MAX_PEOPLE &&
+      item.personIds.every((id) => isSafeText(id, 120)));
   // W-2 / 1099 paycheck fields (all optional; see BudgetEntry docs). The
   // rate is bounded 0-100 - a hostile peer's 10_000% rate would otherwise
   // render an absurd "set aside" figure on the summary card.
@@ -273,6 +281,7 @@ export const isBudgetEntryItem = (
     merchantValid &&
     businessIdValid &&
     personIdValid &&
+    personIdsValid &&
     incomeTypeValid &&
     retirementContributionValid &&
     taxSetAsideRateValid &&
@@ -340,6 +349,16 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
   }
   if (item.personId !== undefined && !isSafeText(item.personId, 120)) {
     return '"personId" must be a non-empty string of at most 120 characters when present';
+  }
+  if (
+    item.personIds !== undefined &&
+    !(
+      Array.isArray(item.personIds) &&
+      item.personIds.length <= MAX_PEOPLE &&
+      item.personIds.every((id) => isSafeText(id, 120))
+    )
+  ) {
+    return `"personIds" must be an array of at most ${MAX_PEOPLE} non-empty strings of at most 120 characters when present`;
   }
   if (
     item.incomeType !== undefined &&

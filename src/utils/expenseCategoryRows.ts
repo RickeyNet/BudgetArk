@@ -32,6 +32,7 @@ export type ExpenseCategoryEntry = {
   recurrenceInterval?: RecurrenceInterval;
   businessId?: string;
   personId?: string;
+  personIds?: string[];
   attachmentCount?: number;
   isPrivate?: boolean;
 };
@@ -114,6 +115,7 @@ export const buildExpenseCategoryRows = ({
           recurrenceInterval: e.recurrenceInterval,
           businessId: e.businessId,
           personId: e.personId,
+          personIds: e.personIds,
           attachmentCount: e.attachments?.length,
           isPrivate: e.isPrivate,
         }))

@@ -13,6 +13,7 @@
  * schema version in both files.
  */
 
+import { entryPersonIds, formatPersonNames } from "./entryPeople";
 import * as XLSX from "xlsx";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { Platform } from "react-native";
@@ -67,8 +68,11 @@ export type SpreadsheetFormat = "csv" | "xlsx";
  * backup/restore cycle would silently flip the fund back to manual goal
  * tracking, so it must round-trip.
  * Older files still import - the new columns are simply absent.
+ * v7: Budget Entries gained PersonIds (";"-joined, round-trip) - every person
+ * a shared expense is assigned to; PersonId stays the FIRST of them so v5/v6
+ * importers still see one assignee, and Person lists every name.
  */
-export const SPREADSHEET_SCHEMA_VERSION = 6;
+export const SPREADSHEET_SCHEMA_VERSION = 7;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -134,9 +138,12 @@ const BUDGET_ENTRY_COLUMNS = [
   // time and is IGNORED on import - renames must not fork identities.
   "BusinessId",
   "Business",
-  // Person the spending is assigned to. Same contract as Business above:
-  // PersonId round-trips, Person is the readable name and IGNORED on import.
+  // People the spending is assigned to. Same contract as Business above:
+  // PersonId round-trips, Person is the readable name(s) and IGNORED on
+  // import. PersonIds (v7) carries EVERY assignee of a shared expense,
+  // ";"-joined; PersonId stays the first so older importers see one person.
   "PersonId",
+  "PersonIds",
   "Person",
   // W-2 / 1099 paycheck fields. IncomeType is "w2" or "1099" (blank for
   // expenses and plain income). Retirement401k is the 401(k) dollars
@@ -346,9 +353,11 @@ const budgetEntryToRow = (
     ? businessNameById?.get(entry.businessId) ?? "(deleted)"
     : "",
   PersonId: entry.personId ?? "",
-  // Readable name, export-only - same "(deleted)" convention as Business.
+  PersonIds:
+    entryPersonIds(entry).length > 1 ? entryPersonIds(entry).join(";") : "",
+  // Readable names, export-only - same "(deleted)" convention as Business.
   Person: entry.personId
-    ? personNameById?.get(entry.personId) ?? "(deleted)"
+    ? formatPersonNames(entryPersonIds(entry), personNameById ?? new Map())
     : "",
   IncomeType: entry.incomeType ?? "",
   Retirement401k: entry.retirementContribution ?? "",

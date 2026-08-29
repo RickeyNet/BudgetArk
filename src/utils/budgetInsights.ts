@@ -1,4 +1,5 @@
 import { BudgetCategory, BudgetEntry, CategoryBudgetLimit, Person } from "../types";
+import { entryPersonIds, personShare } from "./entryPeople";
 import { isEntryActiveInMonth } from "./recurrence";
 import { getMonthKeyOffset } from "./budgetMonths";
 
@@ -368,7 +369,8 @@ const UNKNOWN_PERSON_NAME = "(deleted person)";
 
 /**
  * Groups one month's person-assigned expenses per person, with a
- * per-category breakdown. Entries assigned to an id missing from `people`
+ * per-category breakdown. An expense shared by several people counts once
+ * for each of them at an even split of the amount. Entries assigned to an id missing from `people`
  * (deleted, or not yet synced) still report under a placeholder name so
  * their spend never silently vanishes from the review.
  */
@@ -384,32 +386,39 @@ export const computePersonMonthSpending = (
   >();
 
   for (const entry of entries) {
-    if (entry.type !== "expense" || !entry.personId) continue;
+    if (entry.type !== "expense") continue;
+    const assignees = entryPersonIds(entry);
+    if (assignees.length === 0) continue;
     if (!isEntryActiveInMonth(entry, monthKey)) continue;
+    // Shared spending splits evenly so per-person totals still add up to
+    // what was actually spent (see entryPeople.personShare).
+    const share = personShare(entry.amount, assignees.length);
 
-    let group = groups.get(entry.personId);
-    if (!group) {
-      const person = personById.get(entry.personId);
-      group = {
-        spending: {
-          personId: entry.personId,
-          name: person?.name ?? UNKNOWN_PERSON_NAME,
-          deleted: !person || !!person.deletedAt,
-          total: 0,
-          entryCount: 0,
-          byCategory: [],
-        },
-        catTotals: new Map(),
-      };
-      groups.set(entry.personId, group);
+    for (const personId of assignees) {
+      let group = groups.get(personId);
+      if (!group) {
+        const person = personById.get(personId);
+        group = {
+          spending: {
+            personId,
+            name: person?.name ?? UNKNOWN_PERSON_NAME,
+            deleted: !person || !!person.deletedAt,
+            total: 0,
+            entryCount: 0,
+            byCategory: [],
+          },
+          catTotals: new Map(),
+        };
+        groups.set(personId, group);
+      }
+
+      group.spending.total += share;
+      group.spending.entryCount += 1;
+      group.catTotals.set(
+        entry.category,
+        (group.catTotals.get(entry.category) ?? 0) + share
+      );
     }
-
-    group.spending.total += entry.amount;
-    group.spending.entryCount += 1;
-    group.catTotals.set(
-      entry.category,
-      (group.catTotals.get(entry.category) ?? 0) + entry.amount
-    );
   }
 
   const result: PersonMonthSpending[] = [];

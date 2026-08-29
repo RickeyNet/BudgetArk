@@ -466,6 +466,23 @@ describe("isBudgetEntryItem", () => {
       expect(isBudgetEntryItem({ ...valid, personId: longId })).toBe(true);
     });
   });
+
+  describe("personIds", () => {
+    it("accepts a bounded array of safe ids", () => {
+      expect(isBudgetEntryItem({ ...valid, personId: "a", personIds: ["a", "b"] })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, personIds: [] })).toBe(true);
+    });
+
+    it("rejects non-arrays, oversized arrays, and unsafe members", () => {
+      expect(isBudgetEntryItem({ ...valid, personIds: "a" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personIds: ["a", ""] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personIds: ["a", 42] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personIds: ["a".repeat(121)] })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, personIds: Array.from({ length: 21 }, (_, i) => `p${i}`) })
+      ).toBe(false);
+    });
+  });
 });
 
 describe("isBusinessItem", () => {

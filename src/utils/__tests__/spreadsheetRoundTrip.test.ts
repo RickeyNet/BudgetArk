@@ -88,6 +88,8 @@ const entryFixtures = [
   // round-trip; the readable Business/Person name columns are export-only
   // and ignored on import.
   { id: "e5", type: "expense", category: "Tech", amount: 199, date: "2026-06-04", createdAt: "2026-06-04T00:00:00.000Z", businessId: "b1", personId: "per1" },
+  // Shared (multi-person) expense: PersonIds must round-trip next to PersonId.
+  { id: "e9", type: "expense", category: "Grocery", amount: 90, date: "2026-06-09", createdAt: "2026-06-09T00:00:00.000Z", personId: "per1", personIds: ["per1", "per2"] },
   // W-2 paycheck: incomeType + retirementContribution must round-trip.
   { id: "e6", type: "income", category: "Salary", amount: 2500, date: "2026-06-05", createdAt: "2026-06-05T00:00:00.000Z", incomeType: "w2", retirementContribution: 150 },
   // 1099 payment: incomeType + taxSetAsideRate must round-trip.
@@ -189,7 +191,7 @@ describe("xlsx round-trip", () => {
 
     // Entries: e1-e8 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
     expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
     expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
     expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
@@ -213,6 +215,11 @@ describe("xlsx round-trip", () => {
     expect(byId.e5.personId).toBe("per1");
     expect(byId.e1.personId).toBeUndefined();
     expect(byId.e5.Person).toBeUndefined();
+    // A shared expense keeps everyone: PersonIds round-trips, PersonId first,
+    // and a single-person entry never grows the multi field.
+    expect(byId.e9.personId).toBe("per1");
+    expect(byId.e9.personIds).toEqual(["per1", "per2"]);
+    expect(byId.e5.personIds).toBeUndefined();
 
     // W-2 / 1099 paycheck fields round-trip; plain income never grows them.
     expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });
@@ -332,7 +339,7 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
     expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
     // Paycheck fields survive the single-sheet CSV path too.
     expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });
@@ -348,6 +355,7 @@ describe("csv round-trip", () => {
     // Businesses and People sheets are xlsx-only.
     expect(byId.e5.businessId).toBe("b1");
     expect(byId.e5.personId).toBe("per1");
+    expect(byId.e9.personIds).toEqual(["per1", "per2"]);
     expect(result?.skippedRows).toBe(0);
   });
 });

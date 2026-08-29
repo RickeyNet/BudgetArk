@@ -228,6 +228,20 @@ describe("computePersonMonthSpending", () => {
     ]);
   });
 
+  it("splits a shared expense evenly across everyone it's assigned to", () => {
+    const shared: any[] = [
+      { id: "s1", type: "expense", category: "Food", amount: 90, date: "2026-06-05T12:00:00", personId: "p1", personIds: ["p1", "p2"] },
+      { id: "s2", type: "expense", category: "Gas", amount: 10, date: "2026-06-06T12:00:00", personId: "p2" },
+    ];
+    const spending = computePersonMonthSpending(shared, people, "2026-06");
+    expect(spending[0]).toMatchObject({ personId: "p2", total: 55, entryCount: 2 });
+    expect(spending[1]).toMatchObject({ personId: "p1", total: 45, entryCount: 1 });
+    expect(spending[0].byCategory).toEqual([
+      { category: "Food", total: 45 },
+      { category: "Gas", total: 10 },
+    ]);
+  });
+
   it("counts a recurring assigned expense in later months too", () => {
     const recurring: any[] = [
       { id: "r1", type: "expense", category: "Streaming", amount: 15, date: "2026-01-03T12:00:00", recurring: true, recurrenceInterval: 1, personId: "p1" },

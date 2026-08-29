@@ -27,6 +27,7 @@
  * newly staged on cancel" is exactly the old delete-all-staged behavior.
  */
 
+import { entryPersonIds, personAssignmentFields } from "../utils/entryPeople";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   InteractionManager,
@@ -156,7 +157,8 @@ interface EntryFormState {
   paymentUrl: string;
   linkedAccountId: string | undefined;
   businessId: string | undefined;
-  personId: string | undefined;
+  /** Everyone the expense was for - see utils/entryPeople. [] = unassigned. */
+  personIds: string[];
   incomeType: IncomeType | undefined;
   retirementContribution: string;
   taxSetAsideRate: string;
@@ -185,7 +187,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
   paymentUrl: entry?.paymentUrl ?? "",
   linkedAccountId: entry?.linkedAccountId,
   businessId: entry?.businessId,
-  personId: entry?.personId,
+  personIds: entry ? entryPersonIds(entry) : [],
   incomeType: entry?.incomeType,
   retirementContribution:
     entry?.retirementContribution !== undefined
@@ -242,9 +244,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const [businessId, setBusinessId] = useState<string | undefined>(
     initialForm.businessId
   );
-  const [personId, setPersonId] = useState<string | undefined>(
-    initialForm.personId
-  );
+  const [personIds, setPersonIds] = useState<string[]>(initialForm.personIds);
   const [incomeType, setIncomeType] = useState<IncomeType | undefined>(
     initialForm.incomeType
   );
@@ -289,7 +289,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setPaymentUrl(next.paymentUrl);
       setLinkedAccountId(next.linkedAccountId);
       setBusinessId(next.businessId);
-      setPersonId(next.personId);
+      setPersonIds(next.personIds);
       setIncomeType(next.incomeType);
       setRetirementContribution(next.retirementContribution);
       setTaxSetAsideRate(next.taxSetAsideRate);
@@ -326,12 +326,22 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const taggedBusinessMissing =
     !!businessId && !businesses.some((b) => b.id === businessId);
 
-  // Person assignment mirrors the business picker exactly (expense-only,
-  // appears once a person exists, must allow untagging a deleted person).
+  // People assignment mirrors the business picker (expense-only, appears
+  // once a person exists, must allow untagging a deleted person) except
+  // that it's MULTI-select: a grocery run is the whole family's.
   const showPersonPicker =
-    type === "expense" && (people.length > 0 || !!personId);
-  const assignedPersonMissing =
-    !!personId && !people.some((p) => p.id === personId);
+    type === "expense" && (people.length > 0 || personIds.length > 0);
+  // Ids that no longer resolve (person deleted): each gets its own
+  // "(deleted person)" pill so it stays visible and can be untagged.
+  const missingPersonIds = useMemo(
+    () => personIds.filter((id) => !people.some((p) => p.id === id)),
+    [personIds, people]
+  );
+  const togglePerson = useCallback((id: string) => {
+    setPersonIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
 
   const validLineCount = useMemo(
     () => lines.filter((line) => parseFloat(line.amount) > 0).length,
@@ -387,7 +397,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setPaymentUrl(next.paymentUrl);
     setLinkedAccountId(next.linkedAccountId);
     setBusinessId(next.businessId);
-    setPersonId(next.personId);
+    setPersonIds(next.personIds);
     setIncomeType(next.incomeType);
     setRetirementContribution(next.retirementContribution);
     setTaxSetAsideRate(next.taxSetAsideRate);
@@ -435,7 +445,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         paymentUrl: normalizedPaymentUrl,
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
         businessId: showBusinessPicker ? businessId : undefined,
-        personId: showPersonPicker ? personId : undefined,
+        ...personAssignmentFields(showPersonPicker ? personIds : []),
         incomeType: entryIncomeType,
         taxSetAsideRate: entryTaxSetAsideRate,
         isPrivate: isPrivate || undefined,
@@ -468,7 +478,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     linkedAccountId,
     onAdd,
     paymentUrl,
-    personId,
+    personIds,
     recurring,
     recurrenceDay,
     recurrenceInterval,
@@ -510,7 +520,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       // Cleared when the type flips to income (mirrors linkedAccountId).
       businessId: type === "expense" ? businessId : undefined,
-      personId: type === "expense" ? personId : undefined,
+      ...personAssignmentFields(type === "expense" ? personIds : []),
       // Cleared when the type flips to expense or the income type changes
       // (mirrors businessId in the other direction).
       incomeType: entryIncomeType,
@@ -546,7 +556,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     linkedAccountId,
     onSave,
     paymentUrl,
-    personId,
+    personIds,
     recurring,
     recurrenceDay,
     recurrenceInterval,
@@ -1078,53 +1088,59 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showPersonPicker && (
         <View style={styles.field}>
-          <Text style={styles.label}>PERSON (OPTIONAL)</Text>
+          <Text style={styles.label}>PEOPLE (OPTIONAL)</Text>
           <Text style={styles.accountPickerHint}>
-            Assign this spending to someone so it's clear who spent it.
+            Who was this for? Pick one person, or everyone it was shared by
+            - the whole family for groceries. Shared spending splits evenly
+            in per-person reports.
           </Text>
           <View style={styles.categoryWrap}>
             <TouchableOpacity
-              style={[styles.categoryPill, !personId && styles.categoryPillActive]}
-              onPress={() => setPersonId(undefined)}
+              style={[
+                styles.categoryPill,
+                personIds.length === 0 && styles.categoryPillActive,
+              ]}
+              onPress={() => setPersonIds([])}
             >
               <Text
                 style={[
                   styles.categoryPillText,
-                  !personId && styles.categoryPillTextActive,
+                  personIds.length === 0 && styles.categoryPillTextActive,
                 ]}
               >
                 Unassigned
               </Text>
             </TouchableOpacity>
-            {people.map((person) => (
-              <TouchableOpacity
-                key={person.id}
-                style={[
-                  styles.categoryPill,
-                  personId === person.id && styles.categoryPillActive,
-                ]}
-                onPress={() => setPersonId(person.id)}
-              >
-                <Text
-                  style={[
-                    styles.categoryPillText,
-                    personId === person.id && styles.categoryPillTextActive,
-                  ]}
+            {people.map((person) => {
+              const active = personIds.includes(person.id);
+              return (
+                <TouchableOpacity
+                  key={person.id}
+                  style={[styles.categoryPill, active && styles.categoryPillActive]}
+                  onPress={() => togglePerson(person.id)}
                 >
-                  👤 {person.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {assignedPersonMissing && (
+                  <Text
+                    style={[
+                      styles.categoryPillText,
+                      active && styles.categoryPillTextActive,
+                    ]}
+                  >
+                    {active ? "✓ " : ""}👤 {person.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            {missingPersonIds.map((id) => (
               <TouchableOpacity
+                key={id}
                 style={[styles.categoryPill, styles.categoryPillActive]}
-                onPress={() => setPersonId(undefined)}
+                onPress={() => togglePerson(id)}
               >
                 <Text style={[styles.categoryPillText, styles.categoryPillTextActive]}>
                   👤 (deleted person)
                 </Text>
               </TouchableOpacity>
-            )}
+            ))}
           </View>
         </View>
       )}

@@ -372,6 +372,15 @@ export interface BudgetEntry {
    */
   personId?: string;
   /**
+   * Everyone this spending was for, when it's more than one person (a
+   * grocery run for the whole family). `personId` is always the FIRST of
+   * these so older peers/imports that only know the single field still see
+   * one assignee; readers reconcile via `utils/entryPeople.entryPersonIds`
+   * (the single field wins when this list no longer contains it - an older
+   * peer edited the assignment). Never stored with fewer than two ids.
+   */
+  personIds?: string[];
+  /**
    * How this income was earned (W-2 paycheck vs 1099 contractor pay).
    * Income only - the UI never sets it on expenses and clears it (plus the
    * two companion fields below) when an entry's type flips to expense.

@@ -137,6 +137,22 @@ describe("computePersonReport", () => {
   });
 });
 
+describe("computePersonReport - shared expenses", () => {
+  it("splits a shared expense evenly so the grand total stays what was spent", () => {
+    const report = computePersonReport(
+      [entry({ id: "e1", amount: 90, personId: "per1", personIds: ["per1", "per2"] })],
+      [person(), person({ id: "per2", name: "Alex" })],
+      2026,
+      "2026-12"
+    );
+    const byId = Object.fromEntries(report.perPerson.map((g) => [g.personId, g]));
+    expect(byId.per1.total).toBe(45);
+    expect(byId.per2.total).toBe(45);
+    expect(byId.per2.lines[0].amount).toBe(45);
+    expect(report.grandTotal).toBe(90);
+  });
+});
+
 describe("buildPersonReportCsv", () => {
   it("emits header + rows with proper escaping", () => {
     const report = computePersonReport(

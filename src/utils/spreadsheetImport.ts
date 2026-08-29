@@ -26,6 +26,7 @@
  * src/utils/recordValidators.ts (VALIDATOR_LIMITS).
  */
 
+import { entryPersonIds, personAssignmentFields } from "./entryPeople";
 import { File as ExpoFile } from "expo-file-system";
 import * as XLSX from "xlsx";
 import {
@@ -45,7 +46,7 @@ import {
   KEEP_ALIVE_MAX_WINDOW_MONTHS,
 } from "./cardKeepAlive";
 import { normalizePaymentUrl } from "./paymentUrl";
-import {
+import { MAX_PEOPLE,
   ASSET_ACCOUNT_CATEGORIES,
   PAYMENT_URL_MAX_LENGTH,
   type AssetAccountCategory,
@@ -456,9 +457,23 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
   // deliberately IGNORED - matching by name would fork identities on rename.
   const businessId =
     parseString(get(row, "BusinessId", "Business Id"), 80) || undefined;
-  // Same contract for PersonId / the ignored "Person" name column.
-  const personId =
-    parseString(get(row, "PersonId", "Person Id"), 80) || undefined;
+  // Same contract for PersonId / the ignored "Person" name column. PersonIds
+  // (v7) lists every assignee of a shared expense, ";"-joined; it's honoured
+  // only when it still contains PersonId (entryPersonIds' rule), so a
+  // hand-edited PersonId wins, and the pair is re-normalized on the way in.
+  const personIdsRaw = parseString(get(row, "PersonIds", "Person Ids"), 2000);
+  const { personId, personIds } = personAssignmentFields(
+    entryPersonIds({
+      personId: parseString(get(row, "PersonId", "Person Id"), 80) || undefined,
+      personIds: personIdsRaw
+        ? personIdsRaw
+            .split(";")
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0 && id.length <= 80)
+            .slice(0, MAX_PEOPLE)
+        : undefined,
+    }),
+  );
 
   // W-2 / 1099 paycheck fields - income rows only, mirroring the UI
   // invariant (the modals clear them when an entry flips to expense).
@@ -534,6 +549,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     merchant,
     businessId,
     personId,
+    personIds,
     incomeType,
     retirementContribution,
     taxSetAsideRate,

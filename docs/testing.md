@@ -73,6 +73,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `businessReport.test.ts` / `personReport.test.ts` | `businessReport.ts` / `personReport.ts` | Business / person spending reports and CSV rows |
 | `receiptExport.test.ts` | `receiptExport.ts` | Receipt zip export planning (no filesystem) |
 | `cardKeepAlive.test.ts` / `cardKeepAlivePlanner.test.ts` | `cardKeepAlive.ts` / `cardKeepAlivePlanner.ts` | Card inactivity deadlines, banner state, reminder planning |
+| `entryPeople.test.ts` | `entryPeople.ts` | Multi-person assignment: `personId`/`personIds` reconciliation, write normalization, even shares |
 | `trackingReminderPlanner.test.ts` | `trackingReminderPlanner.ts` | Check-in reminder scheduling plan |
 | `achievements.test.ts` | `achievements.ts` | Achievement evaluator: unlock-once, revoke rules, first-run gating |
 

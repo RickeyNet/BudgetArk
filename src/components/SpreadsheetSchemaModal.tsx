@@ -57,8 +57,9 @@ const SHEETS: SheetSpec[] = [
       { name: "LinkedAccountId", required: false, notes: "Asset account UUID for savings entries." },
       { name: "BusinessId", required: false, notes: "UUID from the Businesses sheet for business-tagged expenses. Round-trips." },
       { name: "Business", required: false, notes: "Readable business name. Export-only - ignored on import." },
-      { name: "PersonId", required: false, notes: "UUID from the People sheet for expenses assigned to a person. Round-trips." },
-      { name: "Person", required: false, notes: "Readable person name. Export-only - ignored on import." },
+      { name: "PersonId", required: false, notes: "UUID from the People sheet for expenses assigned to a person (the first of them when shared). Round-trips." },
+      { name: "PersonIds", required: false, notes: "Every person a shared expense is assigned to, as ;-separated UUIDs. Round-trips." },
+      { name: "Person", required: false, notes: "Readable person name(s). Export-only - ignored on import." },
       { name: "Private", required: false, notes: "yes marks a private entry that never syncs to your partner. Round-trips." },
     ],
     footer:
