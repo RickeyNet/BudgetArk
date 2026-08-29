@@ -39,6 +39,12 @@ import { completeOnboarding } from "../storage/userStorage";
  * Main onboarding screen component
  */
 import { sanitizeTextInput } from "../utils/sanitize";
+import { DEFAULT_TRACKING_REMINDER_SETTINGS } from "../utils/trackingReminderPlanner";
+import { setTrackingReminderSettings } from "../storage/trackingReminderSettingsStorage";
+import {
+  ensureTrackingReminderPermissions,
+  rescheduleTrackingReminders,
+} from "../notifications/trackingReminders";
 
 type OnboardingStyles = ReturnType<typeof makeStyles>;
 
@@ -48,7 +54,7 @@ type OnboardingStyles = ReturnType<typeof makeStyles>;
  * exists and what it promises (free, private, offline) - the same copy as
  * the Profile mission card, so the two never drift.
  */
-type OnboardingStep = "mission" | "theme" | "welcome" | "name";
+type OnboardingStep = "mission" | "theme" | "welcome" | "reminders" | "name";
 
 interface OnboardingScreenProps {
   /** Callback when onboarding is complete */
@@ -137,6 +143,8 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { tokens } = useDensity();
   const [step, setStep] = useState<OnboardingStep>("mission");
   const [displayName, setDisplayName] = useState("");
+  /** Guards the reminders step's button through the OS permission prompt. */
+  const [remindersBusy, setRemindersBusy] = useState(false);
 
   /** Memoized styles based on current theme */
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -160,6 +168,8 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     } else if (step === "theme") {
       setStep("welcome");
     } else if (step === "welcome") {
+      setStep("reminders");
+    } else if (step === "reminders") {
       setStep("name");
     }
   }, [step]);
@@ -173,10 +183,49 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       setStep("mission");
     } else if (step === "welcome") {
       setStep("theme");
-    } else if (step === "name") {
+    } else if (step === "reminders") {
       setStep("welcome");
+    } else if (step === "name") {
+      setStep("reminders");
     }
   }, [step]);
+
+  /**
+   * "Turn on reminders": ask the OS (this is the only place a first-run
+   * install shows the notification permission prompt), persist the default
+   * schedule when granted, and move on either way. Reminders stay opt-in
+   * in storage - nothing is switched on behind the user's back, so a
+   * declined prompt leaves the setting off and Profile > Tracking
+   * Reminders remains the way back in.
+   */
+  const handleEnableReminders = useCallback(async () => {
+    if (remindersBusy) return;
+    setRemindersBusy(true);
+    try {
+      const permitted = await ensureTrackingReminderPermissions();
+      if (permitted) {
+        await setTrackingReminderSettings({
+          ...DEFAULT_TRACKING_REMINDER_SETTINGS,
+          enabled: true,
+        });
+        // The root host also reschedules on mount; this just means the
+        // first check-in is booked even if that mount is delayed.
+        void rescheduleTrackingReminders();
+      } else {
+        Alert.alert(
+          "Notifications are off",
+          "Reminders stay off until notifications are allowed for BudgetArk " +
+            "in your phone's Settings. You can turn them on any time from " +
+            "Profile → Tracking Reminders."
+        );
+      }
+    } catch (error) {
+      if (__DEV__) console.warn("Failed to enable tracking reminders:", error);
+    } finally {
+      setRemindersBusy(false);
+      setStep("name");
+    }
+  }, [remindersBusy]);
 
   /**
    * Persist the onboarding-complete flag, then leave the flow.
@@ -236,7 +285,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render the mission step - why BudgetArk exists, before any setup. */
   const renderMissionStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 1 OF 4</Text>
+      <Text style={styles.stepNumber}>STEP 1 OF 5</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.missionEyebrow}>{MISSION_STATEMENT.eyebrow}</Text>
       <Text style={styles.stepTitle}>{MISSION_STATEMENT.title}</Text>
@@ -277,7 +326,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render theme selection step */
   const renderThemeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 2 OF 4</Text>
+      <Text style={styles.stepNumber}>STEP 2 OF 5</Text>
       <Text style={styles.heroEmoji}>🎨</Text>
       <Text style={styles.stepTitle}>Choose Your Theme</Text>
       <Text style={styles.stepSubtitle}>
@@ -320,7 +369,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render welcome step */
   const renderWelcomeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 3 OF 4</Text>
+      <Text style={styles.stepNumber}>STEP 3 OF 5</Text>
       <Text style={styles.heroEmoji}>💸</Text>
       <Text style={styles.stepTitle}>Welcome to BudgetArk</Text>
       <Text style={styles.stepSubtitle}>
@@ -421,10 +470,95 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     </View>
   );
 
+  /**
+   * Render the reminders step. Tracking reminders are opt-in per device
+   * (see trackingReminderSettingsStorage); this is where a new install is
+   * asked, instead of leaving the feature to be discovered in Profile.
+   * The copy has to be exact about what a notification can contain: never
+   * an amount, a balance, or a bill - see CLAUDE.md rule 11.
+   */
+  const renderRemindersStep = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepNumber}>STEP 4 OF 5</Text>
+      <Text style={styles.heroEmoji}>🔔</Text>
+      <Text style={styles.stepTitle}>Want a nudge to keep tracking?</Text>
+      <Text style={styles.stepSubtitle}>
+        Budgets work when the logging habit sticks. BudgetArk can send two
+        kinds of gentle reminders - and nothing else.
+      </Text>
+
+      <View style={styles.reminderList}>
+        <View style={styles.featureItem}>
+          <Text style={styles.featureIcon}>📝</Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>Check-ins when you go quiet</Text>
+            <Text style={styles.featureDesc}>
+              A short "how's the week going?" if a few days pass without an
+              entry. Log regularly and you never hear from it.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.featureItem}>
+          <Text style={styles.featureIcon}>📅</Text>
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>A heads-up on the 1st</Text>
+            <Text style={styles.featureDesc}>
+              One note at the start of each month to set goals and glance at
+              last month.
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={[styles.privacyCard, { backgroundColor: colors.card }]}>
+        <Text style={styles.privacyTitle}>🔒 Nothing about your money</Text>
+        <Text style={styles.privacyText}>
+          Reminders never include an amount, a balance, an account, or a bill
+          - just a nudge to open the app. No payment-due alerts; your bank
+          does those. Change the time and cadence, or turn them off, any time
+          in Profile → Tracking Reminders.
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={[
+          styles.completeBtn,
+          { backgroundColor: colors.accent },
+          remindersBusy && styles.btnDisabled,
+        ]}
+        onPress={() => void handleEnableReminders()}
+        disabled={remindersBusy}
+      >
+        <Text style={[styles.completeBtnText, { color: colors.accentButtonText }]}>
+          {remindersBusy ? "Asking your phone..." : "Turn on reminders"}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[
+          styles.completeBtn,
+          styles.quietBtn,
+          { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 10 },
+        ]}
+        onPress={handleNext}
+        disabled={remindersBusy}
+      >
+        <Text style={[styles.completeBtnText, { color: colors.text }]}>
+          Not now
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.backBtnFull} onPress={handleBack} disabled={remindersBusy}>
+        <Text style={styles.skipBtnText}>← Back</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   /** Render display name step */
   const renderNameStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 4 OF 4</Text>
+      <Text style={styles.stepNumber}>STEP 5 OF 5</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.stepTitle}>What should we call you?</Text>
       <Text style={styles.stepSubtitle}>
@@ -515,6 +649,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         {step === "mission" && renderMissionStep()}
         {step === "theme" && renderThemeStep()}
         {step === "welcome" && renderWelcomeStep()}
+        {step === "reminders" && renderRemindersStep()}
         {step === "name" && renderNameStep()}
       </ScrollView>
     </View>
@@ -716,6 +851,18 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
       padding: tokens.padLg,
       marginBottom: 32,
       width: "100%",
+    },
+    /* Reminders step */
+    reminderList: {
+      width: "100%",
+      gap: 14,
+      marginBottom: 24,
+    },
+    quietBtn: {
+      borderWidth: 1,
+    },
+    btnDisabled: {
+      opacity: 0.6,
     },
     privacyTitle: {
       fontSize: 16,
