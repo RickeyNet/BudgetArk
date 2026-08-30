@@ -39,6 +39,20 @@ import {
 
 let mockStore: Map<string, string>;
 
+// Pin the tombstone clock. The fixtures stamp deletions at FIXTURE_TIME
+// (2026-06-01) and getDebts purges tombstones older than TOMBSTONE_TTL_MS
+// (90 days) against Date.now() - so from 2026-08-30 on, unpinned, every
+// "tombstone is still on disk" assertion here silently failed. Only
+// Date.now is pinned; new Date() stamps (updatedAt bumps) stay real.
+const PINNED_NOW = Date.parse("2026-06-02T12:00:00.000Z");
+let nowSpy: jest.SpyInstance<number, []>;
+beforeAll(() => {
+  nowSpy = jest.spyOn(Date, "now").mockReturnValue(PINNED_NOW);
+});
+afterAll(() => {
+  nowSpy.mockRestore();
+});
+
 jest.mock("../encryptedStorage", () => ({
   getItem: jest.fn(async (k: string) => (mockStore.has(k) ? mockStore.get(k)! : null)),
   setItem: jest.fn(async (k: string, v: string) => {

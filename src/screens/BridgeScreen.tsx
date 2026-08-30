@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { generateUUID } from "../utils/uuid";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
+import TrackingStripCard from "../components/TrackingStripCard";
 import CashFlowChart, { type CashFlowPoint } from "../components/CashFlowChart";
 import Medal from "../components/Medal";
 import AchievementsScreen from "./AchievementsScreen";
@@ -1146,6 +1147,17 @@ const BridgeScreen: React.FC = () => {
         dismissals={keepAliveDismissals}
         onOpen={() => navigation.navigate("DebtTracker", { openKeepAlive: true })}
         onDismiss={handleKeepAliveDismiss}
+        style={{ marginBottom: tokens.gap }}
+      />
+
+      {/* The budget's pulse on the home tab: month-to-date spend, days since
+          the last entry, the last three entries, and Add. Hands off to the
+          Budget tab's own modals via its route params. */}
+      <TrackingStripCard
+        entries={entries}
+        onAdd={() => navigation.navigate("Budget", { quickAdd: {} })}
+        onOpenEntry={(entryId) => navigation.navigate("Budget", { searchEntryId: entryId })}
+        onOpenBudget={() => navigation.navigate("Budget")}
         style={{ marginBottom: tokens.gap }}
       />
 
