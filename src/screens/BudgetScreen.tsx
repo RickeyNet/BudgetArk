@@ -217,7 +217,7 @@ const BudgetScreen: React.FC = () => {
   const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const presentAfterDismiss = usePresentAfterDismiss();
-  const { customCategories } = useCustomCategories();
+  const { customCategories, visibleBuiltIns } = useCustomCategories();
   const customCategoryNames = useMemo(
     () => customCategories.map((c) => c.name),
     [customCategories]
@@ -1018,13 +1018,12 @@ const BudgetScreen: React.FC = () => {
     []
   );
 
-  // Same category set the Add/Edit pickers offer, plus the user's customs.
-  const bulkCategoryOptions = useMemo<CategoryName[]>(() => {
-    const expenseBuiltins = BUDGET_CATEGORIES.filter(
-      (c) => c !== "Freelance" && c !== "Debt Payments" && c !== "Food"
-    ) as CategoryName[];
-    return [...expenseBuiltins, ...customCategories.map((c) => c.name)];
-  }, [customCategories]);
+  // Same category set the Add/Edit pickers offer (visible built-ins, see
+  // utils/categoryVisibility), plus the user's customs.
+  const bulkCategoryOptions = useMemo<CategoryName[]>(
+    () => [...visibleBuiltIns, ...customCategories.map((c) => c.name)],
+    [customCategories, visibleBuiltIns]
+  );
 
   const handleBulkDelete = useCallback(async () => {
     const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntryId(id));

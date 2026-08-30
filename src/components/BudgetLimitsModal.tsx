@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { BudgetEntry, CategoryBudgetLimit, CustomCategory, CategoryName } from "../types";
 import SheetModal, { useSheetStyles } from "./SheetModal";
-import { SELECTABLE_BUDGET_CATEGORIES } from "./CategoryPillPicker";
+import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -63,9 +63,13 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { formatCurrency } = useCurrency();
 
+  // Hidden built-ins stay off the sheet unless they still carry a limit
+  // (see the loader): a save rebuilds the month from the listed drafts, so
+  // an unlisted limit would be dropped silently.
+  const { visibleBuiltIns, hiddenBuiltIns } = useCustomCategories();
   const categories = useMemo<CategoryName[]>(
-    () => [...SELECTABLE_BUDGET_CATEGORIES, ...customCategories.map((c) => c.name)],
-    [customCategories]
+    () => [...visibleBuiltIns, ...customCategories.map((c) => c.name)],
+    [customCategories, visibleBuiltIns]
   );
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -85,7 +89,17 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
     getAllLimitsByMonth()
       .then((history) => {
         if (cancelled) return;
-        const rows = buildLimitSheetRows({ categories, monthKey, history, entries });
+        // A hidden built-in that still has a limit keeps its row (dimmed
+        // by name), otherwise saving the sheet would silently remove it.
+        const withLimits = resolveLimitsForMonth(history, monthKey)
+          .map((l) => l.category)
+          .filter((c) => hiddenBuiltIns.has(c) && !categories.includes(c));
+        const rows = buildLimitSheetRows({
+          categories: [...categories, ...withLimits],
+          monthKey,
+          history,
+          entries,
+        });
         setDrafts(Object.fromEntries(rows.map((r) => [r.category, draftFor(r.current)])));
         setLoaded({ history, rows });
       })
@@ -95,7 +109,7 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [visible, loaded, categories, monthKey, entries]);
+  }, [visible, loaded, categories, hiddenBuiltIns, monthKey, entries]);
 
   const setDraft = useCallback((category: string, value: string) => {
     setDrafts((prev) => ({ ...prev, [category]: value }));

@@ -61,6 +61,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `entryMemory.test.ts` | `entryMemory.ts` | Add-form memory: description dedupe/recency/category re-filing, chip suggestions (category recents vs typed prefix/substring across categories), exact-match category lookup |
 | `recurringBillDetection.test.ts` | `recurringBillDetection.ts` | "Looks like a monthly bill": once-a-month-for-N-months rule, store exclusion, existing-bill/linked/deleted exclusions, average + median day, month-key shifting |
 | `limitsSheet.test.ts` | `limitsSheet.ts` | Limits sheet rows: month fallback resolution, lookback average over months with data, average-to-limit rounding, drafts -> limit list with LWW timestamps |
+| `categoryVisibility.test.ts` | `categoryVisibility.ts` | Selectable built-in list, protected fallback, fail-closed hidden-list parse, visible list ordering |
 | `trackingStrip.test.ts` | `trackingStrip.ts` | Bridge tracking strip: month-to-date spend with bill fulfilment, live-limit total, days-since-last-logged ignoring projections, newest-N logged rows with bill labels |
 | `quickStart.test.ts` | `quickStart.ts` / `data/quickStartTemplates.ts` | Onboarding templates: allocation sanity, lenient amount parse, seed = tidy limits + income/housing lines, zero-based totals pay exactly, nothing sized without income |
 | `trackingReminderOffer.test.ts` | `trackingReminderOffer.ts` | One-time reminders offer shows only to a phone that never decided (enabled / sheet visited / dismissed all retire it) |
@@ -150,6 +151,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `connectionSecretsStorage.test.ts` | `connectionSecretsStorage.ts` | Rule 2: `EncryptionUnavailableError` propagates, provider-mismatch refusal |
 | `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
 | `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, switch round-trip, corrupt record recovery |
+| `hiddenCategoriesStorage.test.ts` | `hiddenCategoriesStorage.ts` | Hidden built-ins: hide/restore round-trip, idempotent, protected/unknown names ignored, corrupt record reads empty |
 
 ### Bank connections (`src/services/connections`)
 

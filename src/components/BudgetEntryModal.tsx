@@ -870,6 +870,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           onChange={setCategory}
           customCategories={customCategories}
           pinCurrentValue={isEdit}
+          allowCreate
         />
       </View>
 

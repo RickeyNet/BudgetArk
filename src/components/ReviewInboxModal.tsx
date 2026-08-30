@@ -493,6 +493,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               value={draftCategory}
               onChange={setDraftCategory}
               customCategories={customCategories}
+              allowCreate
             />
             {billSuggestion ? (
               <View style={styles.billSuggestCard}>

@@ -3,8 +3,11 @@
  * File: src/components/ManageCategoriesModal.tsx
  *
  * Modal-as-sub-screen (visible/onClose) for adding and deleting user-defined
- * budget categories. v1 is additive only - built-in categories are fixed and
- * not listed here. Reads/writes via useCustomCategories().
+ * budget categories, and for hiding built-in ones. The built-in list itself
+ * is fixed (a wire/validation contract - see utils/categoryVisibility), so
+ * "deleting" a built-in hides it from every picker while entries already
+ * filed under it keep working; Restore brings it back. Reads/writes via
+ * useCustomCategories().
  */
 
 import React, { useCallback, useMemo, useState } from "react";
@@ -28,8 +31,16 @@ import {
   DEFAULT_CUSTOM_CATEGORY_BUCKET,
 } from "../data/categoryBuckets";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
-import { EMOJI_CHOICES, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
+import {
+  EMOJI_CHOICES,
+  DEFAULT_CATEGORY_ICON,
+  getCategoryIcon,
+} from "../data/categoryIcons";
 import { MAX_CATEGORY_NAME_LENGTH } from "../storage/customCategoriesStorage";
+import {
+  PROTECTED_BUILT_IN_CATEGORIES,
+  SELECTABLE_BUILT_IN_CATEGORIES,
+} from "../utils/categoryVisibility";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import type { BudgetBucket } from "../types";
 
@@ -45,7 +56,8 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const { customCategories, add, remove } = useCustomCategories();
+  const { customCategories, add, remove, hiddenBuiltIns, setBuiltInHidden } =
+    useCustomCategories();
 
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<string>(DEFAULT_CATEGORY_ICON);
@@ -97,6 +109,26 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
       );
     },
     [remove],
+  );
+
+  const handleHideBuiltIn = useCallback(
+    (label: string) => {
+      Alert.alert(
+        "Hide category?",
+        `"${label}" leaves the pickers, the Limits sheet and the bulk tools on this phone. Entries already filed under it keep it and still show wherever they have spending. Restore it here any time.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Hide",
+            style: "destructive",
+            onPress: () => {
+              void setBuiltInHidden(label, true);
+            },
+          },
+        ],
+      );
+    },
+    [setBuiltInHidden],
   );
 
   const canAdd = name.trim().length > 0 && !saving;
@@ -230,6 +262,50 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
                 </View>
               ))
             )}
+
+            {/* ── Built-in list: hide / restore ── */}
+            <Text style={[styles.label, styles.listHeader]}>
+              BUILT-IN CATEGORIES
+            </Text>
+            <Text style={styles.emptyText}>
+              Hide the ones you never use. Hidden categories leave the pickers
+              on this phone; existing entries keep them.
+            </Text>
+            {SELECTABLE_BUILT_IN_CATEGORIES.map((cat) => {
+              const hidden = hiddenBuiltIns.has(cat);
+              const protectedName = (
+                PROTECTED_BUILT_IN_CATEGORIES as readonly string[]
+              ).includes(cat);
+              return (
+                <View key={cat} style={[styles.row, hidden && styles.rowHidden]}>
+                  <Text style={styles.rowIcon}>{getCategoryIcon(cat)}</Text>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {cat}
+                  </Text>
+                  {protectedName ? (
+                    <Text style={styles.rowBucket}>Always shown</Text>
+                  ) : hidden ? (
+                    <TouchableOpacity
+                      onPress={() => void setBuiltInHidden(cat, false)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Restore ${cat}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.rowRestore}>Restore</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => handleHideBuiltIn(cat)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Hide ${cat}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.rowDelete}>Hide</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </ScrollView>
 
           <View
@@ -378,6 +454,12 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textMuted,
       fontSize: 12,
       marginRight: 8,
+    },
+    rowHidden: { opacity: 0.45 },
+    rowRestore: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "700",
     },
     rowDelete: {
       color: colors.danger,
