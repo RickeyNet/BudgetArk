@@ -48,7 +48,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "runtimeVersion": "1.9.0",
+    "runtimeVersion": "1.10.0",
     "updates": {
       "checkAutomatically": "ON_ERROR_RECOVERY",
       "url": "https://u.expo.dev/08046ba8-b8f4-46ef-b98b-c31fe698c65b"

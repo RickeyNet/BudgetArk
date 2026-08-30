@@ -11,6 +11,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     title: "Sturdier Sync, Safer Data",
     releasedAt: "2026-08-28",
     highlights: [
+      "BudgetArk has a new icon: the ark under a sunburst, drawn in the same parchment-and-ink style as The Ark theme. You'll see it on your home screen and launch screen once this version is installed from the store.",
       "Bills that change every month, like electric and water, now settle themselves. Set the bill up once as a recurring expense with your best estimate. When the real charge shows up in the Review Inbox, pick the bill under 'Applies to bill' and approve: for that month the actual replaces the estimate everywhere - the Budget tab, cash flow, the bill calendar (marked paid), insights and reports. Nothing is counted twice, and deleting the actual simply brings the estimate back.",
       "It works without a bank link too. Every projected bill row on the Budget tab has a 'Log actual' button that opens the entry form prefilled for that bill, and the same 'Applies to bill' picker sits in the Add/Edit Entry form for any one-off expense in a month the bill is due.",
       "Tick 'Always do this' when you approve and the merchant rule remembers the bill, so next month's charge is filed against it automatically - auto-approve rules included. Change or clear it any time from the inbox's Rules screen.",
