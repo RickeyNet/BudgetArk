@@ -232,6 +232,35 @@ describe("replanInboxForRules", () => {
     expect(deletedPlan.updatedItems[0].suggestedPersonId).toBe("per-card");
   });
 
+  it("suggests every person on a multi-person rule and clears a stale second person", () => {
+    const family: MerchantRule = {
+      ...rule("COSTCO WHSE", "Grocery"),
+      personId: "per-a",
+      personIds: ["per-a", "per-b"],
+    };
+    const plan = replanInboxForRules([item("a", "COSTCO WHSE", "Grocery")], [family], NOW);
+    expect(plan.updatedItems).toHaveLength(1);
+    expect(plan.updatedItems[0].suggestedPersonId).toBe("per-a");
+    expect(plan.updatedItems[0].suggestedPersonIds).toEqual(["per-a", "per-b"]);
+
+    // Already carrying exactly those people: no rewrite.
+    const applied: PendingTransaction = {
+      ...item("b", "COSTCO WHSE", "Grocery"),
+      suggestedPersonId: "per-a",
+      suggestedPersonIds: ["per-a", "per-b"],
+    };
+    expect(replanInboxForRules([applied], [family], NOW).updatedItems).toEqual([]);
+
+    // Rule trimmed to one person: the second is dropped from the item too.
+    const solo = replanInboxForRules(
+      [applied],
+      [{ ...rule("COSTCO WHSE", "Grocery"), personId: "per-a" }],
+      NOW,
+    );
+    expect(solo.updatedItems[0].suggestedPersonId).toBe("per-a");
+    expect(solo.updatedItems[0].suggestedPersonIds).toBeUndefined();
+  });
+
   it("never applies the account person fallback to income", () => {
     const income: PendingTransaction = {
       ...item("a", "PAYROLL"),

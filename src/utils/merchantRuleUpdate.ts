@@ -27,8 +27,8 @@ export interface MerchantRuleEditForm {
   renameTo: string;
   /** Undefined = "Personal" / no business. */
   businessId?: string;
-  /** Undefined = "Unassigned". */
-  personId?: string;
+  /** Everyone picked, in pill order; [] = "Unassigned". */
+  personIds: readonly string[];
   /** Undefined = no bill - approved expenses are plain entries. */
   recurringEntryId?: string;
 }
@@ -43,7 +43,7 @@ export interface MerchantRuleUpdate {
   category?: CategoryName;
   renameTo?: string;
   businessId?: string | null;
-  personId?: string | null;
+  personIds?: readonly string[] | null;
   recurringEntryId?: string | null;
 }
 
@@ -58,6 +58,10 @@ export const buildMerchantRuleUpdate = (
   // stored so flipping back to categorize restores it.
   renameTo: form.ignore ? undefined : form.renameTo,
   businessId: form.ignore ? undefined : form.businessId ?? null,
-  personId: form.ignore ? undefined : form.personId ?? null,
+  personIds: form.ignore
+    ? undefined
+    : form.personIds.length > 0
+      ? form.personIds
+      : null,
   recurringEntryId: form.ignore ? undefined : form.recurringEntryId ?? null,
 });

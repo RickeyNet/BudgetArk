@@ -43,7 +43,8 @@ import type {
   Person,
 } from "../types";
 import { describeError } from "../utils/errorMessage";
-import TagPillPicker from "./TagPillPicker";
+import TagPillPicker, { MultiTagPillPicker } from "./TagPillPicker";
+import { entryPersonIds, formatPersonNames } from "../utils/entryPeople";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -129,9 +130,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
     undefined,
   );
-  const [draftPersonId, setDraftPersonId] = useState<string | undefined>(
-    undefined,
-  );
+  // Multi-select, like the entry form: a grocery run is the whole family's.
+  const [draftPersonIds, setDraftPersonIds] = useState<string[]>([]);
   const [draftRecurringId, setDraftRecurringId] = useState<string | undefined>(
     undefined,
   );
@@ -218,8 +218,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setDraftBusinessId(
         item.suggestedType === "expense" ? item.suggestedBusinessId : undefined,
       );
-      setDraftPersonId(
-        item.suggestedType === "expense" ? item.suggestedPersonId : undefined,
+      setDraftPersonIds(
+        item.suggestedType === "expense"
+          ? entryPersonIds({
+              personId: item.suggestedPersonId,
+              personIds: item.suggestedPersonIds,
+            })
+          : [],
       );
       setDraftRecurringId(
         item.suggestedType === "expense" ? item.suggestedRecurringId : undefined,
@@ -236,7 +241,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       remember: boolean,
       name: string,
       businessId: string | undefined,
-      personId: string | undefined,
+      personIds: string[],
       recurringId: string | undefined,
     ) => {
       setBusyId(item.id);
@@ -249,7 +254,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           // null = explicitly personal/unassigned/not a bill; never fall
           // back to the suggestion the user just cleared.
           businessId: businessId ?? null,
-          personId: personId ?? null,
+          personIds: personIds.length > 0 ? personIds : null,
           fulfillsRecurringId: recurringId ?? null,
           rememberRule: remember,
         });
@@ -451,10 +456,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     }`
                   : null,
                 item.suggestedPersonId
-                  ? `👤 ${
-                      personNameById.get(item.suggestedPersonId) ??
-                      "(deleted person)"
-                    }`
+                  ? `👤 ${formatPersonNames(
+                      entryPersonIds({
+                        personId: item.suggestedPersonId,
+                        personIds: item.suggestedPersonIds,
+                      }),
+                      personNameById,
+                      "(deleted person)",
+                    )}`
                   : null,
                 item.suggestedRecurringId &&
                 billNameById.has(item.suggestedRecurringId)
@@ -555,13 +564,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               </>
             ) : null}
             {item.suggestedType === "expense" &&
-            (people.length > 0 || draftPersonId) ? (
+            (people.length > 0 || draftPersonIds.length > 0) ? (
               <>
-                <Text style={styles.label}>PERSON</Text>
-                <TagPillPicker
+                <Text style={styles.label}>PEOPLE</Text>
+                <MultiTagPillPicker
                     options={people}
-                    value={draftPersonId}
-                    onChange={setDraftPersonId}
+                    values={draftPersonIds}
+                    onChange={setDraftPersonIds}
                     noneLabel="Unassigned"
                     glyph="👤"
                     deletedLabel="(deleted person)"
@@ -606,7 +615,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     rememberRule,
                     draftName,
                     draftBusinessId,
-                    draftPersonId,
+                    draftPersonIds,
                     draftRecurringId,
                   )
                 }
@@ -743,7 +752,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 draftCategory,
                 draftName,
                 draftBusinessId,
-                draftPersonId,
+                draftPersonIds,
                 rememberRule,
                 busyId,
                 bulkBusy,

@@ -40,6 +40,7 @@ import {
 } from "../../storage/merchantRulesStorage";
 import { generateUUID } from "../../utils/uuid";
 import { sanitizeTextInput } from "../../utils/sanitize";
+import { entryPersonIds, personAssignmentFields } from "../../utils/entryPeople";
 import { pendingFingerprintFor } from "./ingest";
 import {
   matchMerchantRule,
@@ -66,10 +67,11 @@ export interface ApproveOptions {
    */
   businessId?: string | null;
   /**
-   * Person to assign the entry to (expenses only). Same null/undefined
-   * contract as businessId.
+   * People to assign the entry to (expenses only) - one or many, see
+   * utils/entryPeople. `null` (or `[]`) = explicitly nobody; undefined =
+   * fall back to the item's rule/card-suggested people.
    */
-  personId?: string | null;
+  personIds?: readonly string[] | null;
   /**
    * Recurring bill this transaction is the actual charge for (expenses
    * only; see BudgetEntry.fulfillsRecurringId). `null` = explicitly none;
@@ -145,12 +147,17 @@ export const approvePendingTransaction = async (
           ? undefined
           : opts.businessId ?? item.suggestedBusinessId)
       : undefined;
-  const personId =
+  const people = personAssignmentFields(
     type === "expense"
-      ? (opts.personId === null
-          ? undefined
-          : opts.personId ?? item.suggestedPersonId)
-      : undefined;
+      ? (opts.personIds === null
+          ? []
+          : opts.personIds ??
+            entryPersonIds({
+              personId: item.suggestedPersonId,
+              personIds: item.suggestedPersonIds,
+            }))
+      : [],
+  );
   const fulfillsRecurringId =
     type === "expense"
       ? await resolveFulfillment(
@@ -174,7 +181,7 @@ export const approvePendingTransaction = async (
     externalTxId: item.id,
     merchant: item.merchant || undefined,
     businessId,
-    personId,
+    ...people,
     fulfillsRecurringId,
   };
 
@@ -201,7 +208,8 @@ export const approvePendingTransaction = async (
       type,
       renameTo,
       businessId,
-      personId,
+      // Everyone picked, not just the first - see MerchantRule.personIds.
+      ...people,
       // Remember the bill too, so next month's charge fulfils it hands-free.
       recurringEntryId: fulfillsRecurringId,
       useCount: 1,
@@ -298,7 +306,7 @@ export const autoApproveInboxByRules = async (): Promise<number> => {
       // null = explicitly what the rule says (or nothing), never a stale
       // per-item suggestion from an older rule version.
       businessId: rule.businessId ?? null,
-      personId: rule.personId ?? null,
+      personIds: entryPersonIds(rule),
       fulfillsRecurringId: rule.recurringEntryId ?? null,
     });
     if (entry) {
@@ -379,10 +387,10 @@ export interface ChangeRuleOptions {
    */
   businessId?: string | null;
   /**
-   * Person to assign future approved expenses to. Same null/omit contract
-   * as businessId.
+   * People to assign future approved expenses to (one or many). `null` or
+   * `[]` clears them; omit to keep the rule's current people.
    */
-  personId?: string | null;
+  personIds?: readonly string[] | null;
   /**
    * Recurring bill future approved expenses fulfil (see
    * MerchantRule.recurringEntryId). Same null/omit contract as businessId.
@@ -417,8 +425,10 @@ export const changeMerchantRule = async (
     opts.businessId === undefined
       ? rule.businessId
       : opts.businessId ?? undefined;
-  const personId =
-    opts.personId === undefined ? rule.personId : opts.personId ?? undefined;
+  const people =
+    opts.personIds === undefined
+      ? { personId: rule.personId, personIds: rule.personIds }
+      : personAssignmentFields(opts.personIds ?? []);
   const recurringEntryId =
     opts.recurringEntryId === undefined
       ? rule.recurringEntryId
@@ -432,7 +442,7 @@ export const changeMerchantRule = async (
     type: rule.type,
     renameTo,
     businessId,
-    personId,
+    ...people,
     recurringEntryId,
   });
   return applyRulesToInbox();

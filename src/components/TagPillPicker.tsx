@@ -11,6 +11,11 @@
  *
  * `value` may be undefined OR null (ExternalAccountLink.personId is
  * nullable); `onChange(undefined)` always means "none".
+ *
+ * `MultiTagPillPicker` is the same row for a MULTI-select field ("who was
+ * this for" can be the whole family - see utils/entryPeople): the "none"
+ * pill clears everything, each option toggles, and every dangling id gets
+ * its own "(deleted ...)" pill so it stays visible and can be untagged.
  */
 
 import React, { memo, useMemo } from "react";
@@ -92,6 +97,83 @@ const TagPillPicker: React.FC<TagPillPickerProps> = ({
     </View>
   );
 };
+
+interface MultiTagPillPickerProps {
+  options: readonly TagPillOption[];
+  /** Selected ids in pick order; [] = none. */
+  values: readonly string[];
+  onChange: (ids: string[]) => void;
+  /** Label of the "none" pill: "Unassigned", "No one". */
+  noneLabel: string;
+  glyph?: string;
+  /** Shown as an active pill for each selected id that matches no option. */
+  deletedLabel?: string;
+}
+
+const MultiTagPillPickerBase: React.FC<MultiTagPillPickerProps> = ({
+  options,
+  values,
+  onChange,
+  noneLabel,
+  glyph,
+  deletedLabel,
+}) => {
+  const { colors } = useTheme();
+  const { tokens } = useDensity();
+  const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const prefix = glyph ? `${glyph} ` : "";
+  const toggle = (id: string) =>
+    onChange(
+      values.includes(id) ? values.filter((x) => x !== id) : [...values, id],
+    );
+  const orphaned = values.filter(
+    (id) => !options.some((option) => option.id === id),
+  );
+  const none = values.length === 0;
+
+  return (
+    <View style={styles.wrap}>
+      <TouchableOpacity
+        style={[styles.pill, none && styles.pillActive]}
+        onPress={() => onChange([])}
+      >
+        <Text style={[styles.text, none && styles.textActive]}>{noneLabel}</Text>
+      </TouchableOpacity>
+      {options.map((option) => {
+        const active = values.includes(option.id);
+        return (
+          <TouchableOpacity
+            key={option.id}
+            style={[styles.pill, active && styles.pillActive]}
+            onPress={() => toggle(option.id)}
+          >
+            <Text numberOfLines={1} style={[styles.text, active && styles.textActive]}>
+              {active ? "✓ " : ""}
+              {prefix}
+              {option.name}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+      {deletedLabel
+        ? orphaned.map((id) => (
+            <TouchableOpacity
+              key={id}
+              style={[styles.pill, styles.pillActive]}
+              onPress={() => toggle(id)}
+            >
+              <Text style={[styles.text, styles.textActive]}>
+                {prefix}
+                {deletedLabel}
+              </Text>
+            </TouchableOpacity>
+          ))
+        : null}
+    </View>
+  );
+};
+
+export const MultiTagPillPicker = memo(MultiTagPillPickerBase);
 
 const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);

@@ -660,6 +660,33 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedPersonId).toBe("per-rule");
   });
 
+  it("suggests every person on a multi-person rule, over the link's person", () => {
+    const rules: MerchantRule[] = [
+      {
+        id: "r1",
+        merchantKey: "COSTCO WHSE",
+        category: "Grocery",
+        type: "expense",
+        personId: "per-a",
+        personIds: ["per-a", "per-b"],
+        useCount: 3,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const plan = planIngest(
+      baseInputs({ rules, links: [link("ACT-1", { personId: "per-card" })] }),
+    );
+    expect(plan.newInboxItems[0].suggestedPersonId).toBe("per-a");
+    expect(plan.newInboxItems[0].suggestedPersonIds).toEqual(["per-a", "per-b"]);
+
+    // Card-only fallback is a single person: no personIds.
+    const cardOnly = planIngest(
+      baseInputs({ links: [link("ACT-1", { personId: "per-card" })] }),
+    );
+    expect(cardOnly.newInboxItems[0].suggestedPersonIds).toBeUndefined();
+  });
+
   it("never applies the link's person to an inflow", () => {
     const plan = planIngest(
       baseInputs({

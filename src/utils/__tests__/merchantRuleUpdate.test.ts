@@ -20,7 +20,7 @@ const buildForm = (
   category: "Restaurant",
   renameTo: "",
   businessId: undefined,
-  personId: undefined,
+  personIds: [],
   ...over,
 });
 
@@ -73,7 +73,7 @@ describe("buildMerchantRuleUpdate", () => {
         category: "Grocery",
         renameTo: "Something else",
         businessId: "business-2",
-        personId: "person-2",
+        personIds: ["person-2"],
       }),
       rule
     );
@@ -84,7 +84,7 @@ describe("buildMerchantRuleUpdate", () => {
       category: undefined,
       renameTo: undefined,
       businessId: undefined,
-      personId: undefined,
+      personIds: undefined,
     });
   });
 
@@ -92,17 +92,17 @@ describe("buildMerchantRuleUpdate", () => {
     const update = buildMerchantRuleUpdate(buildForm(), rule);
 
     expect(update.businessId).toBeNull();
-    expect(update.personId).toBeNull();
+    expect(update.personIds).toBeNull();
   });
 
-  it("sends the picked business and person ids as-is", () => {
+  it("sends the picked business and people ids as-is", () => {
     const update = buildMerchantRuleUpdate(
-      buildForm({ businessId: "business-9", personId: "person-9" }),
+      buildForm({ businessId: "business-9", personIds: ["person-9", "person-3"] }),
       rule
     );
 
     expect(update.businessId).toBe("business-9");
-    expect(update.personId).toBe("person-9");
+    expect(update.personIds).toEqual(["person-9", "person-3"]);
   });
 
   it("passes the rename field through verbatim, empty string included", () => {
@@ -124,7 +124,7 @@ describe("buildMerchantRuleUpdate", () => {
       "action",
       "businessId",
       "category",
-      "personId",
+      "personIds",
       "recurringEntryId",
       "renameTo",
       "ruleId",

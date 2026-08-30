@@ -189,7 +189,7 @@ describe("approvePendingTransaction", () => {
       pendingId: item.id,
       category: "Grocery",
       businessId: null,
-      personId: null,
+      personIds: null,
     });
     expect(cleared?.businessId).toBeUndefined();
     expect(cleared?.personId).toBeUndefined();
@@ -199,10 +199,46 @@ describe("approvePendingTransaction", () => {
       pendingId: item.id,
       category: "Grocery",
       businessId: "biz-explicit",
-      personId: "per-explicit",
+      personIds: ["per-explicit"],
     });
     expect(overridden?.businessId).toBe("biz-explicit");
     expect(overridden?.personId).toBe("per-explicit");
+    expect(overridden?.personIds).toBeUndefined(); // one person = single field only
+  });
+
+  it("assigns several people at once (personId = first, personIds = everyone) and falls back to a multi-person suggestion", async () => {
+    const item = makePendingTransaction({ id: "p-family" });
+    seed(INBOX_KEY, [item]);
+    const shared = await approvePendingTransaction({
+      pendingId: item.id,
+      category: "Grocery",
+      personIds: ["per-a", "per-b"],
+    });
+    expect(shared?.personId).toBe("per-a");
+    expect(shared?.personIds).toEqual(["per-a", "per-b"]);
+
+    // Rule/card suggestion carrying two people is honoured when opts omit people.
+    const suggested = makePendingTransaction({
+      id: "p-family-suggested",
+      suggestedPersonId: "per-a",
+      suggestedPersonIds: ["per-a", "per-b"],
+    });
+    seed(INBOX_KEY, [suggested]);
+    const fromSuggestion = await approvePendingTransaction({
+      pendingId: suggested.id,
+      category: "Grocery",
+    });
+    expect(fromSuggestion?.personIds).toEqual(["per-a", "per-b"]);
+
+    // An empty list is the same as null: explicitly nobody.
+    seed(INBOX_KEY, [suggested]);
+    const nobody = await approvePendingTransaction({
+      pendingId: suggested.id,
+      category: "Grocery",
+      personIds: [],
+    });
+    expect(nobody?.personId).toBeUndefined();
+    expect(nobody?.personIds).toBeUndefined();
   });
 
   it("never sets business/person on an income entry even if opts provide them", async () => {
@@ -216,10 +252,11 @@ describe("approvePendingTransaction", () => {
       pendingId: item.id,
       category: "Salary",
       businessId: "biz-1",
-      personId: "per-1",
+      personIds: ["per-1", "per-2"],
     });
     expect(entry?.businessId).toBeUndefined();
     expect(entry?.personId).toBeUndefined();
+    expect(entry?.personIds).toBeUndefined();
   });
 
   it("records the pending fingerprint on the ledger entry only while the item is still pending", async () => {
@@ -242,7 +279,7 @@ describe("approvePendingTransaction", () => {
         pendingId: item.id,
         category: "Grocery",
         businessId: "biz-1",
-        personId: "per-1",
+        personIds: ["per-1"],
         rememberRule: true,
       });
       const rules = rulesNow();
@@ -256,6 +293,31 @@ describe("approvePendingTransaction", () => {
         personId: "per-1",
         useCount: 1,
       });
+      expect(rules[0].personIds).toBeUndefined();
+    });
+
+    it("remembers everyone picked, not just the first, and the auto-approve sweep applies them all", async () => {
+      const item = makePendingTransaction({ id: "p-remember-family", merchant: "COSTCO WHSE" });
+      seed(INBOX_KEY, [item]);
+      await approvePendingTransaction({
+        pendingId: item.id,
+        category: "Grocery",
+        personIds: ["per-1", "per-2"],
+        rememberRule: true,
+      });
+      expect(rulesNow()[0]).toMatchObject({
+        personId: "per-1",
+        personIds: ["per-1", "per-2"],
+      });
+
+      // A later import from the same merchant is auto-approved for both.
+      mockGenerateUUID.mockReturnValue("entry-family-2");
+      const next = makePendingTransaction({ id: "p-family-next", merchant: "COSTCO WHSE" });
+      seed(INBOX_KEY, [next]);
+      await autoApproveInboxByRules();
+      const entry = entriesNow().find((e) => e.externalTxId === "p-family-next");
+      expect(entry?.personId).toBe("per-1");
+      expect(entry?.personIds).toEqual(["per-1", "per-2"]);
     });
 
     it("only remembers a rename when the saved name differs from the bank's sanitized text", async () => {
@@ -567,7 +629,7 @@ describe("changeMerchantRule", () => {
       personId: "per-1",
     });
     seed(RULES_KEY, [rule]);
-    await changeMerchantRule({ ruleId: "rule-1", action: "categorize", businessId: null, personId: null });
+    await changeMerchantRule({ ruleId: "rule-1", action: "categorize", businessId: null, personIds: null });
     expect(rulesNow()[0].businessId).toBeUndefined();
     expect(rulesNow()[0].personId).toBeUndefined();
 
@@ -575,6 +637,22 @@ describe("changeMerchantRule", () => {
     await changeMerchantRule({ ruleId: "rule-1", action: "categorize" });
     expect(rulesNow()[0].businessId).toBe("biz-1");
     expect(rulesNow()[0].personId).toBe("per-1");
+  });
+
+  it("stores several people on a rule and collapses back to one field when a single person is left", async () => {
+    const rule = makeMerchantRule({ id: "rule-1", merchantKey: "COSTCO WHSE" });
+    seed(RULES_KEY, [rule]);
+    await changeMerchantRule({ ruleId: "rule-1", action: "categorize", personIds: ["per-1", "per-2"] });
+    expect(rulesNow()[0].personId).toBe("per-1");
+    expect(rulesNow()[0].personIds).toEqual(["per-1", "per-2"]);
+
+    // Omitting people keeps both fields as they were.
+    await changeMerchantRule({ ruleId: "rule-1", action: "approve" });
+    expect(rulesNow()[0].personIds).toEqual(["per-1", "per-2"]);
+
+    await changeMerchantRule({ ruleId: "rule-1", action: "categorize", personIds: ["per-2"] });
+    expect(rulesNow()[0].personId).toBe("per-2");
+    expect(rulesNow()[0].personIds).toBeUndefined();
   });
 
   it("ignores the category param when switching to 'ignore' (keeps the rule's current category as a placeholder)", async () => {

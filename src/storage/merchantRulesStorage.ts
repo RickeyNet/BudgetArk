@@ -11,6 +11,7 @@
 import * as EncryptedStorage from "./encryptedStorage";
 import type { MerchantRule } from "../types";
 import { mutateCollectionInPlace } from "./collectionRepair";
+import { entryPersonIds, personAssignmentFields } from "../utils/entryPeople";
 
 const STORAGE_KEY = "@budgetark_merchant_rules" as const;
 
@@ -71,6 +72,7 @@ export const updateMerchantRule = async (
     | "renameTo"
     | "businessId"
     | "personId"
+    | "personIds"
     | "recurringEntryId"
   >,
 ): Promise<MerchantRule[]> => {
@@ -126,18 +128,24 @@ export const clearAssigneesFromMerchantRules = async (ids: {
     const now = new Date().toISOString();
     let changed = false;
     const next = stored.map((rule) => {
-      const dropPerson = rule.personId !== undefined && personIds.has(rule.personId);
+      // A multi-person rule just loses the deleted member and keeps the
+      // rest (personId re-pointed at the new first; personIds dropped once
+      // only one remains).
+      const rulePeople = entryPersonIds(rule);
+      const keptPeople = rulePeople.filter((id) => !personIds.has(id));
+      const dropPerson = keptPeople.length !== rulePeople.length;
       const dropBusiness =
         rule.businessId !== undefined && businessIds.has(rule.businessId);
       if (!dropPerson && !dropBusiness) return rule;
       changed = true;
-      const { personId, businessId, ...rest } = rule;
-      return {
-        ...rest,
-        ...(dropPerson ? {} : personId !== undefined ? { personId } : {}),
-        ...(dropBusiness ? {} : businessId !== undefined ? { businessId } : {}),
-        updatedAt: now,
-      };
+      const people = personAssignmentFields(keptPeople);
+      const rewritten: MerchantRule = { ...rule, updatedAt: now };
+      delete rewritten.personId;
+      delete rewritten.personIds;
+      if (people.personId !== undefined) rewritten.personId = people.personId;
+      if (people.personIds !== undefined) rewritten.personIds = people.personIds;
+      if (dropBusiness) delete rewritten.businessId;
+      return rewritten;
     });
     return changed ? next : stored;
   });

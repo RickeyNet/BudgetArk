@@ -31,7 +31,8 @@ import type {
   PendingTransaction,
 } from "../../types";
 import type { NormalizedTransaction } from "./types";
-import { matchMerchantRule, normalizeMerchant } from "./merchant";
+import { matchMerchantRule, normalizeMerchant, suggestedPeopleFor } from "./merchant";
+import { personAssignmentFields } from "../../utils/entryPeople";
 import CryptoJS from "crypto-js";
 
 /** Max provider-id length embedded verbatim in an identity key. */
@@ -216,16 +217,21 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     externalAccountId: string,
   ) => {
     const rule = matchMerchantRule(merchant, input.rules);
+    // A rule's people (one or many) win; otherwise the card's person.
+    const { personId: suggestedPersonId, personIds: suggestedPersonIds } =
+      personAssignmentFields(
+        suggestedType === "expense"
+          ? suggestedPeopleFor(rule, personIdByAccount.get(externalAccountId))
+          : [],
+      );
     return {
       rule,
       suggestedCategory: rule?.category,
       suggestedName: rule?.renameTo,
       suggestedBusinessId:
         suggestedType === "expense" ? rule?.businessId : undefined,
-      suggestedPersonId:
-        suggestedType === "expense"
-          ? (rule?.personId ?? personIdByAccount.get(externalAccountId))
-          : undefined,
+      suggestedPersonId,
+      suggestedPersonIds,
       suggestedRecurringId:
         suggestedType === "expense" ? rule?.recurringEntryId : undefined,
     };

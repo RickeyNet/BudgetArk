@@ -114,6 +114,37 @@ describe("deletePerson cascade", () => {
   });
 });
 
+describe("deletePerson cascade - multi-person rules", () => {
+  it("drops only the deleted member and re-points personId at the next one", async () => {
+    seedPeople([person({ id: "per1" }), person({ id: "per2", name: "Alex" }), person({ id: "per3", name: "Sam" })]);
+    mockStore.set(
+      RULES_KEY,
+      JSON.stringify([
+        rule({ id: "r-three", personId: "per1", personIds: ["per1", "per2", "per3"] }),
+        rule({ id: "r-two", merchantKey: "TARGET", personId: "per2", personIds: ["per2", "per1"] }),
+        rule({ id: "r-other", merchantKey: "SHELL", personId: "per2", personIds: ["per2", "per3"] }),
+      ])
+    );
+
+    await deletePerson("per1");
+
+    const rules = await getMerchantRules();
+    const three = rules.find((r) => r.id === "r-three")!;
+    expect(three.personId).toBe("per2");
+    expect(three.personIds).toEqual(["per2", "per3"]);
+
+    // Two people minus one collapses back to the single field.
+    const two = rules.find((r) => r.id === "r-two")!;
+    expect(two.personId).toBe("per2");
+    expect(two.personIds).toBeUndefined();
+
+    // Untouched rule keeps everything, including its timestamp.
+    const other = rules.find((r) => r.id === "r-other")!;
+    expect(other.personIds).toEqual(["per2", "per3"]);
+    expect(other.updatedAt).toBe(T0);
+  });
+});
+
 describe("mergePeopleFromSync", () => {
   it("cascades only for people the merge newly tombstoned", async () => {
     seedPeople([person({ id: "per1" }), person({ id: "gone", deletedAt: T0 })]);

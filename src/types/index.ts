@@ -819,6 +819,13 @@ export interface PendingTransaction {
    */
   suggestedPersonId?: string;
   /**
+   * Everyone the rule (or card) suggests when it's more than one person -
+   * same pairing as BudgetEntry.personId/personIds: `suggestedPersonId`
+   * is always the first of these, readers reconcile through
+   * utils/entryPeople.entryPersonIds, absent for zero or one person.
+   */
+  suggestedPersonIds?: string[];
+  /**
    * From a matched MerchantRule's `recurringEntryId`: the recurring bill
    * this transaction is expected to be the actual charge for (see
    * BudgetEntry.fulfillsRecurringId). Expenses only. Validated against the
@@ -876,6 +883,13 @@ export interface MerchantRule {
    * Same dangling-id and ignore-action semantics as `businessId`.
    */
   personId?: string;
+  /**
+   * Everyone future approved expenses are for when it's more than one
+   * person (the family grocery store). Mirrors BudgetEntry.personIds:
+   * `personId` is always the first, readers go through
+   * utils/entryPeople.entryPersonIds, absent for zero or one person.
+   */
+  personIds?: string[];
   /**
    * Recurring bill future approved expenses from this merchant fulfil (see
    * BudgetEntry.fulfillsRecurringId) - "CITY POWER" is always the electric

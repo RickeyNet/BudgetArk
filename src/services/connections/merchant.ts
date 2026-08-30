@@ -10,6 +10,25 @@
 
 import type { MerchantRule, PendingTransaction } from "../../types";
 import { sanitizeTextInput } from "../../utils/sanitize";
+import { entryPersonIds, personAssignmentFields } from "../../utils/entryPeople";
+
+/**
+ * The people an expense from this merchant should be assigned to: the
+ * matched rule's (one or many), else the account-level "whose card is
+ * this" person, else nobody. Shared by ingest and replanInboxForRules so a
+ * rule edit re-derives exactly what a fresh ingest would.
+ */
+export const suggestedPeopleFor = (
+  rule: MerchantRule | undefined,
+  cardPersonId: string | undefined,
+): string[] => {
+  const fromRule = rule ? entryPersonIds(rule) : [];
+  if (fromRule.length > 0) return fromRule;
+  return cardPersonId ? [cardPersonId] : [];
+};
+
+const sameIds = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((id, i) => id === b[i]);
 
 export const MERCHANT_KEY_MAX_LENGTH = 40;
 
@@ -150,17 +169,23 @@ export const replanInboxForRules = (
     const suggestedName = rule?.renameTo;
     const suggestedBusinessId =
       item.suggestedType === "expense" ? rule?.businessId : undefined;
-    const suggestedPersonId =
+    const people =
       item.suggestedType === "expense"
-        ? (rule?.personId ?? personIdByAccount?.get(item.externalAccountId))
-        : undefined;
+        ? suggestedPeopleFor(rule, personIdByAccount?.get(item.externalAccountId))
+        : [];
+    const { personId: suggestedPersonId, personIds: suggestedPersonIds } =
+      personAssignmentFields(people);
+    const currentPeople = entryPersonIds({
+      personId: item.suggestedPersonId,
+      personIds: item.suggestedPersonIds,
+    });
     const suggestedRecurringId =
       item.suggestedType === "expense" ? rule?.recurringEntryId : undefined;
     if (
       suggestedCategory !== item.suggestedCategory ||
       suggestedName !== item.suggestedName ||
       suggestedBusinessId !== item.suggestedBusinessId ||
-      suggestedPersonId !== item.suggestedPersonId ||
+      !sameIds(people, currentPeople) ||
       suggestedRecurringId !== item.suggestedRecurringId
     ) {
       updatedItems.push({
@@ -169,6 +194,7 @@ export const replanInboxForRules = (
         suggestedName,
         suggestedBusinessId,
         suggestedPersonId,
+        suggestedPersonIds,
         suggestedRecurringId,
         updatedAt: now,
       });

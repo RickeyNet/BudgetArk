@@ -36,7 +36,8 @@ import type {
   Person,
 } from "../types";
 import { describeError } from "../utils/errorMessage";
-import TagPillPicker from "./TagPillPicker";
+import TagPillPicker, { MultiTagPillPicker } from "./TagPillPicker";
+import { entryPersonIds } from "../utils/entryPeople";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -134,9 +135,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const [draftBusinessId, setDraftBusinessId] = useState<string | undefined>(
     undefined,
   );
-  const [draftPersonId, setDraftPersonId] = useState<string | undefined>(
-    undefined,
-  );
+  // Multi-select, like the entry form and the inbox: one rule can assign
+  // the family grocery store to everyone.
+  const [draftPersonIds, setDraftPersonIds] = useState<string[]>([]);
   const [draftRecurringId, setDraftRecurringId] = useState<string | undefined>(
     undefined,
   );
@@ -192,7 +193,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       setDraftCategory(rule.category);
       setDraftRename(rule.renameTo ?? "");
       setDraftBusinessId(rule.businessId);
-      setDraftPersonId(rule.personId);
+      setDraftPersonIds(entryPersonIds(rule));
       setDraftRecurringId(rule.recurringEntryId);
       return rule.id;
     });
@@ -214,7 +215,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               category: draftCategory,
               renameTo: draftRename,
               businessId: draftBusinessId,
-              personId: draftPersonId,
+              personIds: draftPersonIds,
               recurringEntryId: draftRecurringId,
             },
             rule,
@@ -236,7 +237,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       draftBusinessId,
       draftCategory,
       draftIgnore,
-      draftPersonId,
+      draftPersonIds,
       draftRecurringId,
       draftRename,
       loadRules,
@@ -276,9 +277,12 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         `💼 ${businesses.find((b) => b.id === rule.businessId)?.name ?? "(deleted business)"}`,
       );
     }
-    if (rule.personId) {
+    const rulePeople = entryPersonIds(rule);
+    if (rulePeople.length > 0) {
       parts.push(
-        `👤 ${people.find((p) => p.id === rule.personId)?.name ?? "(deleted person)"}`,
+        `👤 ${rulePeople
+          .map((id) => people.find((p) => p.id === id)?.name ?? "(deleted person)")
+          .join(", ")}`,
       );
     }
     if (rule.recurringEntryId) {
@@ -376,13 +380,13 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             ) : null}
             {!draftIgnore &&
             rule.type === "expense" &&
-            (people.length > 0 || draftPersonId) ? (
+            (people.length > 0 || draftPersonIds.length > 0) ? (
               <>
-                <Text style={styles.label}>PERSON</Text>
-                <TagPillPicker
+                <Text style={styles.label}>PEOPLE</Text>
+                <MultiTagPillPicker
                     options={people}
-                    value={draftPersonId}
-                    onChange={setDraftPersonId}
+                    values={draftPersonIds}
+                    onChange={setDraftPersonIds}
                     noneLabel="Unassigned"
                     glyph="👤"
                     deletedLabel="(deleted person)"
@@ -472,7 +476,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               draftCategory,
               draftRename,
               draftBusinessId,
-              draftPersonId,
+              draftPersonIds,
               busyId,
             ]}
           />
