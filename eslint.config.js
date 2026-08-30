@@ -6,7 +6,10 @@ const globals = require('globals');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['node_modules/**', 'coverage/**', 'dist/**', '.expo/**', 'screenshots/**'],
+    // worker/ is a separate project (own package.json, vitest, tsconfig) and is
+    // excluded from the app's typecheck too. Root CI never installs its
+    // node_modules, so linting it from here fails on unresolved imports.
+    ignores: ['node_modules/**', 'coverage/**', 'dist/**', '.expo/**', 'screenshots/**', 'worker/**'],
   },
   {
     rules: {
