@@ -28,7 +28,7 @@
       "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F2E6D0"
+        "backgroundColor": "#FFF1DC"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -70,7 +70,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#F2E6D0"
+          "backgroundColor": "#FFF1DC"
         }
       ],
       "expo-iap",
