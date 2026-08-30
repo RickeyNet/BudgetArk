@@ -1,19 +1,41 @@
 /**
  * JSON export tests (buildExportMessage) plus an encrypt -> decrypt round-trip
- * back through the real importFromString.
+ * back through the real importFromString, and the file-based share step
+ * (shareExportMessage).
  *
- * exportData is the REAL module here (crypto-js runs for real). Its storage
- * getters and react-native's Share are mocked; the in-memory encryptedStorage
- * mock receives whatever the round-trip import writes.
+ * exportData is the REAL module here (crypto runs for real). Its storage
+ * getters, expo-file-system and the share helper are mocked; the in-memory
+ * encryptedStorage mock receives whatever the round-trip import writes.
  */
 
-import { buildExportMessage } from "../exportData";
+import {
+  buildExportFilename,
+  buildExportMessage,
+  shareExportMessage,
+} from "../exportData";
 import { ENCRYPTED_EXPORT_PREFIX_V3 } from "../exportEncryption";
 import { importFromString, isEncryptedExport } from "../importData";
 import { makeDebt, makePayment, makeBudgetEntry } from "../../__tests__/fixtures";
 
-jest.mock("react-native", () => ({
-  Share: { share: jest.fn(), sharedAction: "sharedAction" },
+// No `Share` here on purpose: the export must never go out as
+// `Share.share({ message })` text (Android's ~1MB Intent ceiling silently
+// swallowed large backups). If exportData ever imports it again, this mock
+// makes the import undefined and the share tests below fail loudly.
+jest.mock("react-native", () => ({ Platform: { OS: "android" } }));
+
+/** Records every temp file the export writes so tests can inspect/assert deletion. */
+type MockFileRecord = {
+  uri: string;
+  content?: string;
+  encoding?: string;
+  exists: boolean;
+  deleted: boolean;
+};
+const mockFiles: MockFileRecord[] = [];
+const mockShareLocalFile = jest.fn(async (_uri: string, _opts: unknown) => {});
+jest.mock("../iosNativeShare", () => ({
+  shareLocalFile: (uri: string, opts: unknown) => mockShareLocalFile(uri, opts),
+  waitForIosModalTeardown: jest.fn(async () => {}),
 }));
 
 // --- exportData's data sources (return fixtures) ---
@@ -228,7 +250,32 @@ jest.mock("../../storage/encryptedStorage", () => {
   };
 });
 jest.mock("expo-document-picker", () => ({}));
-jest.mock("expo-file-system", () => ({ File: class {} }));
+jest.mock("expo-file-system", () => ({
+  Paths: { document: "doc", cache: "cache" },
+  File: class {
+    uri: string;
+    exists = false;
+    private rec: MockFileRecord;
+    constructor(dir: string, name: string) {
+      this.uri = `${dir}/${name}`;
+      this.rec = { uri: this.uri, exists: false, deleted: false };
+      mockFiles.push(this.rec);
+    }
+    create() {
+      this.exists = true;
+      this.rec.exists = true;
+    }
+    write(content: string, opts: { encoding: string }) {
+      this.rec.content = content;
+      this.rec.encoding = opts?.encoding;
+    }
+    delete() {
+      this.exists = false;
+      this.rec.exists = false;
+      this.rec.deleted = true;
+    }
+  },
+}));
 jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 
 // `fixturesRef` lets the jest.mock factories (hoisted above imports) reach the
@@ -239,7 +286,17 @@ const storageMock = require("../../storage/encryptedStorage") as {
   __store: Map<string, string>;
 };
 
-beforeEach(() => storageMock.__store.clear());
+const backupReminderMock = require("../../storage/backupReminderStorage") as {
+  recordBackup: jest.Mock;
+};
+
+beforeEach(() => {
+  storageMock.__store.clear();
+  mockFiles.length = 0;
+  mockShareLocalFile.mockClear();
+  mockShareLocalFile.mockImplementation(async () => {});
+  backupReminderMock.recordBackup.mockClear();
+});
 
 describe("buildExportMessage - plain JSON", () => {
   it("produces a complete, parseable export payload", async () => {
@@ -467,5 +524,75 @@ describe("buildExportMessage - encrypted", () => {
     await expect(importFromString(encrypted, "replace")).rejects.toThrow(
       /password-encrypted/i
     );
+  });
+});
+
+describe("shareExportMessage - file-based share", () => {
+  const plain = JSON.stringify({ exportedAt: "2026-08-30T00:00:00.000Z", debts: [] });
+  const encrypted = `${ENCRYPTED_EXPORT_PREFIX_V3}aa.bb.cc.dd`;
+
+  it("writes the payload to a temp file and shares the file, never message text", async () => {
+    await shareExportMessage(plain);
+
+    expect(mockFiles).toHaveLength(1);
+    const [file] = mockFiles;
+    expect(file.uri).toMatch(/^cache\/budgetark-backup-\d{8}-\d{4}\.json$/);
+    expect(file.content).toBe(plain);
+    expect(file.encoding).toBe("utf8");
+    expect(mockShareLocalFile).toHaveBeenCalledTimes(1);
+    expect(mockShareLocalFile).toHaveBeenCalledWith(
+      file.uri,
+      expect.objectContaining({ mimeType: "application/json", UTI: "public.json" })
+    );
+    // The share helper receives a file URI, not the payload itself.
+    expect(mockShareLocalFile.mock.calls[0][0]).not.toContain("exportedAt");
+  });
+
+  it("labels an encrypted envelope as plain text (it isn't JSON)", async () => {
+    await shareExportMessage(encrypted);
+
+    expect(mockFiles[0].uri).toMatch(/\.txt$/);
+    expect(mockFiles[0].content).toBe(encrypted);
+    expect(mockShareLocalFile).toHaveBeenCalledWith(
+      mockFiles[0].uri,
+      expect.objectContaining({ mimeType: "text/plain", UTI: "public.plain-text" })
+    );
+  });
+
+  it("deletes the temp file after the share sheet closes and stamps the backup", async () => {
+    await shareExportMessage(plain);
+
+    expect(mockFiles[0].deleted).toBe(true);
+    expect(mockFiles[0].exists).toBe(false);
+    expect(backupReminderMock.recordBackup).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes the temp file even when sharing throws, and does not stamp the backup", async () => {
+    mockShareLocalFile.mockImplementation(async () => {
+      throw new Error("Sharing is not available on this device.");
+    });
+
+    await expect(shareExportMessage(plain)).rejects.toThrow(/not available/);
+    expect(mockFiles[0].deleted).toBe(true);
+    expect(backupReminderMock.recordBackup).not.toHaveBeenCalled();
+  });
+
+  it("has no size ceiling: a multi-megabyte export is written and shared as-is", async () => {
+    // ~3MB - comfortably past Android's ~1MB Binder transaction limit that
+    // killed the old Share.share({ message }) path.
+    const big = JSON.stringify({ blob: "x".repeat(3_000_000) });
+
+    await shareExportMessage(big);
+
+    expect(mockFiles[0].content).toHaveLength(big.length);
+    expect(mockShareLocalFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("buildExportFilename", () => {
+  it("stamps the date/time and picks the extension by encryption", () => {
+    const at = new Date(2026, 7, 30, 9, 5); // 2026-08-30 09:05 local
+    expect(buildExportFilename(false, at)).toBe("budgetark-backup-20260830-0905.json");
+    expect(buildExportFilename(true, at)).toBe("budgetark-backup-20260830-0905.txt");
   });
 });

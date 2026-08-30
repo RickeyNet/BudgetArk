@@ -2,13 +2,23 @@
  * BudgetArk - Data Export Utility
  * File: src/utils/exportData.ts
  *
- * Collects all user data from AsyncStorage and exports it
- * via the native share sheet using React Native's built-in Share API.
- * Supports optional password-based encryption for secure exports.
+ * Collects all user data from encrypted storage and exports it as a
+ * backup FILE handed to the native share sheet (expo-sharing). Supports
+ * optional password-based encryption for secure exports.
+ *
+ * The export deliberately goes out as a file, never as `Share.share({
+ * message })` text: on Android the message rides an Intent extra through a
+ * Binder transaction capped at ~1MB (`TransactionTooLargeException`), and a
+ * multi-year backup with bank-synced entries blew past it. The chooser then
+ * silently never appeared while React Native still resolved the share as
+ * "shared" - so the app stamped a backup that never happened. Files have no
+ * such ceiling (the spreadsheet export never had this problem).
  */
 
-import { Share } from "react-native";
+import { Platform } from "react-native";
+import { File as ExpoFile, Paths } from "expo-file-system";
 import { encryptExportEnvelopeV3 } from "./exportEncryption";
+import { deleteLocalFileQuietly, shareLocalFileThenDelete } from "./shareTempFile";
 import {
   getDebtsIncludingDeleted,
   getPaymentsIncludingDeleted,
@@ -200,22 +210,62 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
   return password ? encryptExportEnvelopeV3(json, password) : json;
 };
 
+/** Detects the prefixed (v1/v2/v3) encrypted envelope vs plain JSON. */
+const isEncryptedMessage = (message: string): boolean =>
+  message.startsWith("__BUDGETARK_ENC");
+
 /**
- * Opens the native share sheet with a pre-built message. Caller is
- * responsible for dismissing any blocking modals first (see the note on
- * `buildExportMessage` re: iOS share-sheet presentation).
+ * Builds the temp filename for an export: `budgetark-backup-<stamp>.json`
+ * for plain JSON, `.txt` for the encrypted envelope (which is a prefixed
+ * text blob, not JSON - labelling it `.json` would just make receiving apps
+ * and the user's file manager choke on it). Both extensions/MIME types are
+ * on the import picker's accept list (`application/json`, `text/plain`).
+ */
+export const buildExportFilename = (
+  encrypted: boolean,
+  now: Date = new Date()
+): string => {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(
+    now.getDate()
+  )}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  return `budgetark-backup-${stamp}.${encrypted ? "txt" : "json"}`;
+};
+
+/**
+ * Writes the pre-built export to a temp file and opens the native share
+ * sheet for it, deleting the file once the sheet closes (or if sharing
+ * throws). Caller is responsible for dismissing any blocking modals first
+ * (see the note on `buildExportMessage` re: iOS share-sheet presentation;
+ * `shareLocalFile` adds its own iOS teardown wait + ScreenGuard handling).
  */
 export const shareExportMessage = async (message: string): Promise<void> => {
-  const result = await Share.share({
-    title: "BudgetArk Data Export",
-    message,
+  const encrypted = isEncryptedMessage(message);
+  // iOS share sheet reads more reliably from the document directory than
+  // cache (same choice as spreadsheetExport).
+  const fileDir = Platform.OS === "ios" ? Paths.document : Paths.cache;
+  const file = new ExpoFile(fileDir, buildExportFilename(encrypted));
+
+  try {
+    file.create({ overwrite: true });
+    file.write(message, { encoding: "utf8" });
+  } catch (error) {
+    // A partial plaintext export must not linger on disk.
+    deleteLocalFileQuietly(file);
+    throw error;
+  }
+
+  await shareLocalFileThenDelete(file, {
+    mimeType: encrypted ? "text/plain" : "application/json",
+    dialogTitle: "BudgetArk Data Export",
+    UTI: encrypted ? "public.plain-text" : "public.json",
   });
 
-  // Stamp the backup version only when the user actually completed the
-  // share sheet - dismissing without sharing leaves the reminder visible.
-  if (result.action === Share.sharedAction) {
-    await recordBackup(CURRENT_APP_VERSION);
-  }
+  // expo-sharing resolves once the sheet is dismissed and can't tell
+  // "shared" from "cancelled" (neither could the old Android Share path,
+  // which always reported sharedAction). Stamping here matches the
+  // spreadsheet export's behaviour; the user who cancels can re-export.
+  await recordBackup(CURRENT_APP_VERSION);
 };
 
 /**

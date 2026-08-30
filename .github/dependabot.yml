@@ -26,6 +26,15 @@ updates:
       - dependency-name: "react-native-*"
       - dependency-name: "@react-native-async-storage/*"
       - dependency-name: "@react-native-community/*"
+      # Known-broken majors (minor/patch still flow). Revisit when the
+      # blocker clears - otherwise the grouped npm-major PR re-opens weekly:
+      #   eslint 10   - eslint-plugin-react (via eslint-config-expo) caps its
+      #                 peer at ^9.7 and crashes on v10.
+      #   typescript 7 - ts-jest peer is <7 and Expo tooling wants ^5.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     # Group everything into at most two PRs so a first run can't flood the repo:
     # one low-risk PR (minor/patch, safe to merge in bulk) and one major-bump PR
     # (review-and-merge deliberately). `patterns: ["*"]` makes each group catch

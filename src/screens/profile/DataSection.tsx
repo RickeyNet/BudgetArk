@@ -211,8 +211,11 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           message = await buildExportMessage(exportPassword);
           // Dismiss the overlay *before* opening the share sheet. On iOS,
           // UIActivityViewController presented over a still-visible RN <Modal>
-          // can fail to fire its completion callback, leaving Share.share
-          // pending forever - which is what stranded users on the spinner.
+          // can fail to fire its completion callback, leaving the share
+          // promise pending forever - which is what stranded users on the
+          // spinner. (shareExportMessage now writes a temp file and shares
+          // it via expo-sharing - same path as the spreadsheet export - so
+          // large backups no longer hit Android's Intent size ceiling.)
           setIsExporting(false);
           if (Platform.OS === "ios") {
             await new Promise((resolve) => setTimeout(resolve, 350));
