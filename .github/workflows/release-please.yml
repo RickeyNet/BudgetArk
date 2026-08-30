@@ -17,6 +17,9 @@ name: Release Please
 on:
   push:
     branches: [master]
+  # Manual re-run: a run that fails at startup (e.g. blocked by the repo's
+  # Actions policy) cannot be retried from the UI/API, so allow dispatching.
+  workflow_dispatch:
 
 permissions:
   contents: write # create tags + releases, update the release PR branch

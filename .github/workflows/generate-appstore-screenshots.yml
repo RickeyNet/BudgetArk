@@ -33,7 +33,7 @@ jobs:
       - name: Check for source screenshots
         id: sources
         run: |
-          if find screenshots/raw -type f ( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' ) | grep -q .; then
+          if git ls-files screenshots/raw | grep -iE '\.(png|jpe?g)$' | grep -q .; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
