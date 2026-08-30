@@ -2,7 +2,12 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    // TypeScript 6 no longer infers rootDir; ts-jest needs it set explicitly.
+    "rootDir": ".",
+    // TypeScript 6 no longer auto-loads every @types package as globals;
+    // jest's describe/it/expect must be included explicitly.
+    "types": ["jest"]
   },
   // The quote-proxy Worker is a separate project with its own package.json,
   // tsconfig, and @cloudflare/workers-types. The app is bundled by Babel and

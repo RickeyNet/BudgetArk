@@ -44,6 +44,11 @@ import {
   saveNetWorthSnapshots,
 } from "../storage/netWorthSnapshotStorage";
 import {
+  getAccountValueHistory,
+  saveAccountValueHistory,
+} from "../storage/accountValueSnapshotStorage";
+import type { AccountValueHistory } from "./accountValueHistory";
+import {
   getDebtMilestonePlan,
   saveDebtMilestonePlan,
 } from "../storage/debtMilestoneStorage";
@@ -56,6 +61,8 @@ export interface CurrencyMigrationResult {
   savingsGoals: number;
   assetAccounts: number;
   netWorthSnapshots: number;
+  /** Accounts whose daily value history (rise/drop baselines) was rescaled. */
+  accountValueHistories: number;
   milestoneSteps: number;
 }
 
@@ -67,6 +74,7 @@ const emptyResult = (): CurrencyMigrationResult => ({
   savingsGoals: 0,
   assetAccounts: 0,
   netWorthSnapshots: 0,
+  accountValueHistories: 0,
   milestoneSteps: 0,
 });
 
@@ -182,6 +190,22 @@ export const convertAllStoredData = async (
       }))
     );
     result.netWorthSnapshots = snapshots.length;
+  }
+
+  /* Per-account value history (rise/drop baselines) - scale each day's value
+     so tomorrow's deltas aren't computed against last-currency numbers. */
+  const accountHistory = await getAccountValueHistory();
+  const historyIds = Object.keys(accountHistory);
+  if (historyIds.length > 0) {
+    const converted: AccountValueHistory = {};
+    for (const accountId of historyIds) {
+      converted[accountId] = accountHistory[accountId].map((snap) => ({
+        ...snap,
+        value: conv(snap.value),
+      }));
+    }
+    await saveAccountValueHistory(converted);
+    result.accountValueHistories = historyIds.length;
   }
 
   /* Milestone targets - saveDebtMilestonePlan stamps its own updatedAt. */

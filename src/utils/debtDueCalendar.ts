@@ -1,4 +1,5 @@
 import type { Debt, Payment } from "../types";
+import { getMonthKey } from "./budgetMonths";
 
 export const DEFAULT_DEBT_PAYMENT_DUE_DAY = 15;
 
@@ -25,12 +26,6 @@ export const clampDueDayToMonth = (
   monthIndex: number,
   day: number
 ): number => Math.min(Math.max(1, day), lastDayOfMonth(year, monthIndex));
-
-export const getMonthKey = (date: Date = new Date()): string => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-};
 
 export const dismissalKey = (debtId: string, monthKey: string): string =>
   `${debtId}:${monthKey}`;
@@ -94,7 +89,6 @@ export const upcomingDebtDuesWithin = (
     fromDate.getMonth(),
     fromDate.getDate()
   );
-  const monthKey = getMonthKey(start);
   const active = debts.filter((d) => d.balance > 0);
   const upcoming: UpcomingDebtDue[] = [];
 

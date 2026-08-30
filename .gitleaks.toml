@@ -1,0 +1,26 @@
+# BudgetArk - gitleaks config
+#
+# Picked up automatically by the Secret Scan job (.github/workflows/security.yml)
+# because it sits at the repo root. Extends the default ruleset; the allowlist
+# below only covers values that are public by design. Real secrets (provider API
+# keys, Cloudflare tokens, bank credentials) must never be allowlisted here -
+# see CLAUDE.md "Security invariants".
+
+title = "BudgetArk gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Values that are intentionally non-secret"
+# Match against the whole source line (default is the extracted secret, which is
+# useless for allowlisting a fixture by its surrounding shape).
+regexTarget = "line"
+regexes = [
+  # Placeholder PEM fixtures in tests ("-----BEGIN PRIVATE KEY-----\nxyz\n..."):
+  # a single short token between the markers, never a real key body.
+  '''-----BEGIN [A-Z ]*PRIVATE KEY-----\\n[A-Za-z0-9]{1,16}\\n-----END''',
+  # QUOTES_APP_KEY is the bundle-shipped x-app-key bot deterrent, documented in
+  # src/config/quotesConfig.ts and CLAUDE.md rule 8 as public, not authentication.
+  '''QUOTES_APP_KEY = "[0-9a-f]+"''',
+]

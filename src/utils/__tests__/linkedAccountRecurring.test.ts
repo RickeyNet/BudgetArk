@@ -1,26 +1,27 @@
 import { applyMissedRecurringLinkedAccountContributions as applyMissed } from "../linkedAccountRecurring";
+import { makeBudgetEntry, makeAssetAccount } from "../../__tests__/fixtures";
+import type { BudgetEntry, AssetAccount } from "../../types";
 
-// ts-jest is transpile-only; light `as any` casts keep fixtures concise.
-const entry = (over: Record<string, unknown> = {}): any => ({
-  id: "e1",
-  type: "expense",
-  category: "Savings",
-  amount: 100,
-  date: "2026-01-15",
-  recurring: true,
-  recurrenceInterval: 1,
-  linkedAccountId: "a1",
-  ...over,
-});
+const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({
+    id: "e1",
+    category: "Savings",
+    date: "2026-01-15",
+    recurring: true,
+    recurrenceInterval: 1,
+    linkedAccountId: "a1",
+    ...over,
+  });
 
-const account = (over: Record<string, unknown> = {}): any => ({
-  id: "a1",
-  name: "Brokerage",
-  category: "investment",
-  balance: 500,
-  updatedAt: "2020-01-01T00:00:00.000Z",
-  ...over,
-});
+const account = (over: Partial<AssetAccount> = {}): AssetAccount =>
+  makeAssetAccount({
+    id: "a1",
+    name: "Brokerage",
+    category: "investment",
+    balance: 500,
+    updatedAt: "2020-01-01T00:00:00.000Z",
+    ...over,
+  });
 
 // April 2026, in UTC (the module buckets months by UTC).
 const APRIL = new Date(Date.UTC(2026, 3, 10));
@@ -40,7 +41,7 @@ describe("applyMissedRecurringLinkedAccountContributions", () => {
   it("stamps updatedAt on a credited account", () => {
     const result = applyMissed([entry()], [account()], APRIL);
     expect(result.assetAccounts[0].updatedAt).not.toBe("2020-01-01T00:00:00.000Z");
-    expect(Date.parse(result.assetAccounts[0].updatedAt as string)).not.toBeNaN();
+    expect(Date.parse(result.assetAccounts[0].updatedAt)).not.toBeNaN();
   });
 
   it("does not mutate the input entries or accounts", () => {

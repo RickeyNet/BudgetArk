@@ -1,5 +1,6 @@
 import * as EncryptedStorage from "./encryptedStorage";
-import { dismissalKey, getMonthKey } from "../utils/debtDueCalendar";
+import { dismissalKey } from "../utils/debtDueCalendar";
+import { getMonthKey } from "../utils/budgetMonths";
 
 const DEBT_DUE_DISMISSALS_KEY = "@budgetark_debt_due_dismissals" as const;
 

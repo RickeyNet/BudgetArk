@@ -1,4 +1,17 @@
+/**
+ * BudgetArk - Debt Due Reminder Host
+ * File: src/components/DebtDueReminderHost.tsx
+ *
+ * App-root controller that decides when to present the due-day payment
+ * prompt and the payment / payoff celebrations. Re-checks on foreground
+ * (AppState) and defers presentation past interactions - presenting a
+ * Modal mid-navigation is the iOS silent-present failure this codebase
+ * keeps hitting. Records the payment and refreshes the net-worth snapshot
+ * when the user confirms.
+ */
+
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { usePresentAfterDismiss } from "../hooks/usePresentAfterDismiss";
 import { AppState, InteractionManager } from "react-native";
 import type { Debt, Payment } from "../types";
 import DebtDuePaymentPromptModal from "./DebtDuePaymentPromptModal";
@@ -11,8 +24,11 @@ import {
   type DebtDueDismissals,
 } from "../storage/debtDueReminderStorage";
 import { debtsDueOrOverdueNeedingPrompt } from "../utils/debtDueCalendar";
+import { getMonthKey } from "../utils/budgetMonths";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
-import { generateUUID } from "../utils/uuid";
+import { minimumDuePaymentId } from "../utils/debtPaymentDedupe";
+import { useTipJar } from "../tipjar/TipJarProvider";
+import type { TipNudgeCopy } from "../utils/tipJarNudge";
 
 interface DebtDueReminderHostProps {
   /**
@@ -44,16 +60,22 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
   // Set when a logged minimum clears the last of a balance, so the payoff
   // confetti presents after the prompt finishes dismissing.
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
+  // The occasional Tip Jar note riding the payoff celebration (null = none).
+  const [celebrationNudge, setCelebrationNudge] = useState<TipNudgeCopy | null>(null);
   // Set after any other confirmed payment, for the lighter "payment logged"
-  // confetti. Carries the updated debt (for its new balance) and the amount.
+  // confetti. Carries the updated debt (for its new balance), the amount,
+  // and whether this win drew the occasional Tip Jar note.
   const [paymentCelebration, setPaymentCelebration] = useState<{
     debt: Debt;
     amount: number;
+    nudge: TipNudgeCopy | null;
   } | null>(null);
+  const { noteWin, openTipJar } = useTipJar();
   // Guards the record/dismiss handlers against a double-tap recording the
   // payment twice, and stops a foreground re-eval from swapping the prompt
   // mid-submit.
   const submittingRef = useRef(false);
+  const presentAfterDismiss = usePresentAfterDismiss();
   // Latest data backing the queue, so the dismiss handler can advance without
   // re-reading debts/payments it already has in hand.
   const dataRef = useRef<{
@@ -118,8 +140,12 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
       submittingRef.current = true;
       try {
         const now = new Date().toISOString();
+        // Deterministic id (debt + month): if the partner's phone logs the
+        // same month's minimum too, sync merges the two records into one
+        // instead of double-counting the payment. recordPayment no-ops if
+        // this id is already live locally.
         const result = await recordPayment({
-          id: generateUUID(),
+          id: minimumDuePaymentId(debtId, getMonthKey()),
           debtId,
           amount,
           date: now,
@@ -137,18 +163,25 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
         // cleared it.
         const paidOff =
           result.debts.find((d) => d.id === debtId && d.balance <= 0) ?? null;
+        // Count the win; most of the time this is null and the celebration
+        // shows exactly as before.
+        const nudge = await noteWin(
+          paidOff ? { kind: "debt-payoff", label: paidOff.name } : { kind: "debt-payment" }
+        );
         setDebt(null);
         // Let the prompt's dismiss animation finish before a celebration
         // presents - iOS drops one of two modals swapped in the same frame.
         // The queue advances once the celebration is dismissed.
         if (paidOff) {
-          setTimeout(() => setCelebrationDebt(paidOff), 250);
+          presentAfterDismiss(() => {
+            setCelebrationNudge(nudge);
+            setCelebrationDebt(paidOff);
+          });
         } else {
           const updatedDebt = result.debts.find((d) => d.id === debtId) ?? null;
           if (updatedDebt) {
-            setTimeout(
-              () => setPaymentCelebration({ debt: updatedDebt, amount }),
-              250
+            presentAfterDismiss(() =>
+              setPaymentCelebration({ debt: updatedDebt, amount, nudge })
             );
           } else {
             advance(result.debts, result.payments, dismissals, debtId);
@@ -158,7 +191,7 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
         submittingRef.current = false;
       }
     },
-    [advance]
+    [advance, noteWin, presentAfterDismiss]
   );
 
   const handleDismissForMonth = useCallback(
@@ -176,16 +209,32 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
 
   const handleCelebrationClose = useCallback(() => {
     setCelebrationDebt(null);
+    setCelebrationNudge(null);
     // Surface the next still-due debt, if any, once the confetti dismisses.
     const { debts, payments, dismissals } = dataRef.current;
-    setTimeout(() => advance(debts, payments, dismissals), 250);
-  }, [advance]);
+    presentAfterDismiss(() => advance(debts, payments, dismissals));
+  }, [advance, presentAfterDismiss]);
 
   const handlePaymentCelebrationClose = useCallback(() => {
     setPaymentCelebration(null);
     const { debts, payments, dismissals } = dataRef.current;
-    setTimeout(() => advance(debts, payments, dismissals), 250);
-  }, [advance]);
+    presentAfterDismiss(() => advance(debts, payments, dismissals));
+  }, [advance, presentAfterDismiss]);
+
+  // "Leave a tip" from either celebration: close it and let the provider
+  // present the Tip Jar after the dismiss settles. The due queue is NOT
+  // advanced here - a prompt would stack over the Tip Jar; any remaining
+  // due debt re-prompts on the next foreground like it always has.
+  const handleCelebrationTip = useCallback(() => {
+    setCelebrationDebt(null);
+    setCelebrationNudge(null);
+    openTipJar();
+  }, [openTipJar]);
+
+  const handlePaymentCelebrationTip = useCallback(() => {
+    setPaymentCelebration(null);
+    openTipJar();
+  }, [openTipJar]);
 
   return (
     <>
@@ -200,12 +249,16 @@ const DebtDueReminderHost: React.FC<DebtDueReminderHostProps> = ({ paused = fals
         visible={!paused && celebrationDebt !== null}
         debt={celebrationDebt}
         onClose={handleCelebrationClose}
+        tipNudge={celebrationNudge}
+        onTipJar={handleCelebrationTip}
       />
       <DebtPaymentCelebrationModal
         visible={!paused && paymentCelebration !== null}
         debt={paymentCelebration?.debt ?? null}
         amount={paymentCelebration?.amount ?? 0}
         onClose={handlePaymentCelebrationClose}
+        tipNudge={paymentCelebration?.nudge ?? null}
+        onTipJar={handlePaymentCelebrationTip}
       />
     </>
   );

@@ -1,3 +1,14 @@
+/**
+ * BudgetArk - Debt Due Payment Prompt
+ * File: src/components/DebtDuePaymentPromptModal.tsx
+ *
+ * In-app prompt on a debt's due day: "did you pay this?" with a one-tap
+ * log of the minimum payment, or "Later" (muted for the month via
+ * debtDueReminderStorage). Presented by DebtDueReminderHost; this is the
+ * in-app substitute for the push bill reminders the app deliberately
+ * doesn't send.
+ */
+
 import React, { useMemo } from "react";
 import {
   Modal,
@@ -96,7 +107,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.75)",
+      backgroundColor: colors.overlay,
       justifyContent: "flex-end",
       paddingHorizontal: 20,
     },

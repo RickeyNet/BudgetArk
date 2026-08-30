@@ -15,8 +15,11 @@ import type {
   AssetAccount,
   CustomCategory,
   BudgetBucket,
+  MonthStartBalance,
   NetWorthSnapshot,
   Holding,
+  Business,
+  Person,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -92,9 +95,25 @@ export interface BudgetLimitDiff {
   limits: CategoryBudgetLimit[];
 }
 
+/**
+ * Bank-connection data is DELIBERATELY absent from SyncDiff (v1):
+ * connections, credentials/secrets, external-account links, the Review
+ * Inbox, and the ingest ledger are per-device - connection ids mean nothing
+ * on a partner device and everything in that set is credential-adjacent.
+ * Cross-device transaction dedup rides on BudgetEntry.externalTxId, which
+ * syncs inside `budgetEntries` like any other entry field. Merchant rules
+ * (no credentials, tiny) are the one candidate for a future optional
+ * `merchantRules?: DiffEntry<MerchantRule>[]` field - they'd need a
+ * tombstone added first.
+ */
 export interface SyncDiff {
   debts: DiffEntry<Debt>[];
   payments: DiffEntry<Payment>[];
+  /**
+   * Entries with `isPrivate` are excluded at diff-build time (live and
+   * tombstoned) - see computeOutgoingDiff. No wire change: receivers treat
+   * a private entry's absence like any other unchanged record.
+   */
   budgetEntries: DiffEntry<BudgetEntry>[];
   budgetLimits: BudgetLimitDiff[];
   savingsGoals: DiffEntry<SavingsGoal>[];
@@ -116,6 +135,21 @@ export interface SyncDiff {
    */
   customCategories?: DiffEntry<CustomCategory>[];
   /**
+   * Businesses expense entries are tagged with (`BudgetEntry.businessId`).
+   * Tombstone-aware with the same LWW merge as the other collections -
+   * entries reference businesses by id, so deletes must propagate or a
+   * partner would resurrect a deleted client list. Optional so a diff from
+   * an older peer that predates this field still applies. Brand-new
+   * feature, so no backfill flag needed (same as holdings).
+   */
+  businesses?: DiffEntry<Business>[];
+  /**
+   * People spending is assigned to (`BudgetEntry.personId`). Same
+   * tombstone-aware LWW contract and older-peer optionality as
+   * `businesses`; brand-new feature, so no backfill flag needed.
+   */
+  people?: DiffEntry<Person>[];
+  /**
    * Per-category 50/30/20 bucket overrides. The store has no per-key
    * timestamps, so the whole map is sent and merged key-wise on receipt.
    * Optional for the same older-peer reason as customCategories.
@@ -131,6 +165,15 @@ export interface SyncDiff {
    * Optional for older-peer tolerance like the fields above.
    */
   netWorthSnapshots?: NetWorthSnapshot[];
+  /**
+   * Month-start checking balances behind the cash-flow projection
+   * (`monthKey → record`). The whole map is sent whenever non-empty (tiny -
+   * one record per month) and merged per-month by LWW on `updatedAt`, so
+   * re-broadcasting each sync is idempotent. No tombstones: balances are
+   * only ever overwritten, never deleted. Optional so a diff from an older
+   * peer that predates this field still applies cleanly.
+   */
+  monthStartBalances?: Record<string, MonthStartBalance>;
   debtMilestonePlan?: DebtMilestonePlan;
   payoffStrategy?: PayoffStrategyPreference;
   /**
@@ -147,10 +190,22 @@ export interface SyncDiff {
 /* ─── Sync State ─── */
 
 export interface SyncMetadata {
-  /** ISO timestamp of last successful sync */
+  /**
+   * Outgoing-diff watermark: only records with `updatedAt` after this are
+   * sent (null = first sync, send everything). Reset to null by
+   * `resetSyncWatermark` after an import/restore, because restored records
+   * keep their original `updatedAt` and would otherwise never be sent.
+   */
   lastSyncTimestamp: string | null;
   /** Number of syncs completed */
   syncCount: number;
+  /**
+   * ISO timestamp of the last successful sync, for display only. Unlike
+   * `lastSyncTimestamp` it survives a watermark reset, so Profile keeps
+   * showing "Last synced ..." after a restore. Optional: absent on
+   * metadata written before it existed (fall back to lastSyncTimestamp).
+   */
+  lastSyncCompletedAt?: string;
 }
 
 export type SyncStatus =

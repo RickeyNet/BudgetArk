@@ -21,7 +21,7 @@ compatibility_date = "2026-06-01"
 # and redeploy. Don't ship the app against workers.dev again - the custom domain
 # is the public endpoint now.
 workers_dev = false
-# No per-version preview URLs — this is a single public endpoint, so keep the
+# No per-version preview URLs - this is a single public endpoint, so keep the
 # surface minimal and silence the deploy warning.
 preview_urls = false
 
@@ -57,15 +57,32 @@ type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 5, period = 60 }
 
+# Observability WITHOUT invocation logs. Workers Logs' per-request invocation
+# events capture the request URL - which for this Worker carries the caller's
+# full symbol list (?symbols=AAPL,VTI,...) next to connection metadata,
+# retained on Cloudflare. That would break the core privacy promise (see the
+# header comment in src/index.ts: nothing may associate a requester with
+# symbols). Keep error/exception visibility; drop the per-request records.
 [observability]
 enabled = true
 
-# Cache warmer: every 5 minutes the scheduled handler re-fetches up to 8
+[observability.logs]
+enabled = true
+invocation_logs = false
+
+# Cache warmer: every 10 minutes the scheduled handler re-fetches up to 8
 # registered-but-stale symbols (Twelve Data free tier = 8 credits/minute).
 # This is what lets a portfolio hold more than 8 tickers: user requests are
 # served from the warm KV cache instead of one oversized upstream batch that
 # the provider would reject. Cost: at most one fetch per symbol per day
 # (quotes live 24h, failures negative-cache for 24h), bounded by
 # DAILY_UPSTREAM_SYMBOL_BUDGET.
+#
+# Cadence is */10, NOT */5: each pass costs ~2 KV reads per registered symbol
+# (quote + miss check), so at the 200-symbol registry cap a 5-min cadence is
+# ~115k KV reads/day - over the 100k/day free-tier read quota, after which KV
+# reads fail for the rest of the UTC day and take the serving path down too.
+# At */10 the worst case is ~58k/day, leaving headroom for user requests. A
+# 10-minute warm delay is irrelevant against the 24h quote TTL.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/10 * * * *"]

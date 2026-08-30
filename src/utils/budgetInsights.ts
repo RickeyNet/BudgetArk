@@ -1,21 +1,7 @@
-import { BudgetCategory, BudgetEntry, CategoryBudgetLimit } from "../types";
-import { isEntryActiveInMonth } from "./recurrence";
-
-/* ─── Month-key helpers (same logic as BudgetScreen) ─── */
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
-
-const getMonthKeyOffset = (
-  offset: number,
-  fromDate: Date = new Date()
-): string => {
-  const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-  cursor.setMonth(cursor.getMonth() + offset);
-  return getMonthKey(cursor);
-};
+import { BudgetCategory, BudgetEntry, CategoryBudgetLimit, Person } from "../types";
+import { entryPersonIds, personShare } from "./entryPeople";
+import { entriesForMonth } from "./billFulfillment";
+import { getMonthKeyOffset } from "./budgetMonths";
 
 
 /* ─── Types ─── */
@@ -51,6 +37,22 @@ export interface CategorySpendingComparison {
   monthsAveraged: number;
 }
 
+export interface PersonCategorySpend {
+  category: string;
+  total: number;
+}
+
+export interface PersonMonthSpending {
+  personId: string;
+  name: string;
+  /** True when the entry references a person id that no longer exists. */
+  deleted: boolean;
+  total: number;
+  entryCount: number;
+  /** Sorted by total descending. */
+  byCategory: PersonCategorySpend[];
+}
+
 export interface MonthlyReviewData {
   summaries: MonthSummary[];
   categoryChanges: CategoryChange[];
@@ -59,15 +61,18 @@ export interface MonthlyReviewData {
   avgMonthlySpending: number;
   currentMonthSpending: number;
   spendingVsAvgPercent: number | null;
+  /** Current-month expenses grouped by assigned person; sorted by total descending. */
+  personSpending: PersonMonthSpending[];
 }
 
 /* ─── Core computation ─── */
 
+// Recurring projections roll forward; a bill's actual charge replaces its
+// projection for that month (utils/billFulfillment).
 const getEntriesForMonth = (
   entries: BudgetEntry[],
   monthKey: string
-): BudgetEntry[] =>
-  entries.filter((entry) => isEntryActiveInMonth(entry, monthKey));
+): BudgetEntry[] => entriesForMonth(entries, monthKey);
 
 const buildMonthSummary = (
   entries: BudgetEntry[],
@@ -359,12 +364,82 @@ export const computeStreaks = (
   return streaks;
 };
 
+/* ─── Per-person spending (who spent what this month) ─── */
+
+const UNKNOWN_PERSON_NAME = "(deleted person)";
+
+/**
+ * Groups one month's person-assigned expenses per person, with a
+ * per-category breakdown. An expense shared by several people counts once
+ * for each of them at an even split of the amount. Entries assigned to an id missing from `people`
+ * (deleted, or not yet synced) still report under a placeholder name so
+ * their spend never silently vanishes from the review.
+ */
+export const computePersonMonthSpending = (
+  entries: BudgetEntry[],
+  people: readonly Person[],
+  monthKey: string
+): PersonMonthSpending[] => {
+  const personById = new Map(people.map((p) => [p.id, p]));
+  const groups = new Map<
+    string,
+    { spending: PersonMonthSpending; catTotals: Map<string, number> }
+  >();
+
+  for (const entry of getEntriesForMonth(entries, monthKey)) {
+    if (entry.type !== "expense") continue;
+    const assignees = entryPersonIds(entry);
+    if (assignees.length === 0) continue;
+    // Shared spending splits evenly so per-person totals still add up to
+    // what was actually spent (see entryPeople.personShare).
+    const share = personShare(entry.amount, assignees.length);
+
+    for (const personId of assignees) {
+      let group = groups.get(personId);
+      if (!group) {
+        const person = personById.get(personId);
+        group = {
+          spending: {
+            personId,
+            name: person?.name ?? UNKNOWN_PERSON_NAME,
+            deleted: !person || !!person.deletedAt,
+            total: 0,
+            entryCount: 0,
+            byCategory: [],
+          },
+          catTotals: new Map(),
+        };
+        groups.set(personId, group);
+      }
+
+      group.spending.total += share;
+      group.spending.entryCount += 1;
+      group.catTotals.set(
+        entry.category,
+        (group.catTotals.get(entry.category) ?? 0) + share
+      );
+    }
+  }
+
+  const result: PersonMonthSpending[] = [];
+  for (const { spending, catTotals } of groups.values()) {
+    spending.byCategory = Array.from(catTotals, ([category, total]) => ({
+      category,
+      total,
+    })).sort((a, b) => b.total - a.total);
+    result.push(spending);
+  }
+  result.sort((a, b) => b.total - a.total);
+  return result;
+};
+
 /* ─── Full review builder ─── */
 
 export const buildMonthlyReview = (
   entries: BudgetEntry[],
   limitsByMonth: Record<string, CategoryBudgetLimit[]>,
-  months: number = 6
+  months: number = 6,
+  people: readonly Person[] = []
 ): MonthlyReviewData => {
   const summaries = buildMonthSummaries(entries, months);
   const categoryChanges = computeCategoryChanges(summaries);
@@ -382,6 +457,14 @@ export const buildMonthlyReview = (
   const currentMonthSpending =
     summaries[summaries.length - 1]?.totalExpenses ?? 0;
 
+  const currentMonthKey =
+    summaries[summaries.length - 1]?.monthKey ?? getMonthKeyOffset(0);
+  const personSpending = computePersonMonthSpending(
+    entries,
+    people,
+    currentMonthKey
+  );
+
   const spendingVsAvgPercent =
     avgMonthlySpending > 0
       ? ((currentMonthSpending - avgMonthlySpending) / avgMonthlySpending) * 100
@@ -395,5 +478,6 @@ export const buildMonthlyReview = (
     avgMonthlySpending,
     currentMonthSpending,
     spendingVsAvgPercent,
+    personSpending,
   };
 };

@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Budget Bucket Card (Needs / Wants / Savings)
+ * File: src/components/BudgetBucketCard.tsx
+ *
+ * The 50/30/20-style card on the Budget tab: groups this month's spending
+ * into needs/wants/savings buckets (built-in mapping + the user's
+ * per-category overrides) and shows each bucket against its target share.
+ */
+
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
@@ -244,7 +253,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       borderWidth: 1,
       borderColor: `${colors.accent}55`,
       backgroundColor: `${colors.accent}1f`,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingHorizontal: 8,
       paddingVertical: 2,
     },
@@ -277,13 +286,13 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     },
     progressTrack: {
       height: 8,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
       backgroundColor: `${colors.textMuted}33`,
     },
     progressFill: {
       height: "100%",
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       minWidth: 2,
     },
     variance: {

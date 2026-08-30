@@ -1,5 +1,6 @@
 import { BudgetEntry } from "../types";
 import { isEntryActiveInMonth } from "./recurrence";
+import { fulfillmentsForMonth, isFulfillingEntry } from "./billFulfillment";
 
 export interface BillsByDay {
   /** Day-of-month (1-31) → entries that hit on that day for this month. */
@@ -45,19 +46,45 @@ export const getDayOfMonth = (
  * land on in the given month. Non-active entries (a quarterly bill not on its
  * cycle this month, a one-off from a different month) are filtered out via
  * `isEntryActiveInMonth`.
+ *
+ * A bill whose actual charge landed this month (utils/billFulfillment) is
+ * represented by that actual - on the day it really posted, at the real
+ * amount - and its projection is dropped. `includeFulfilled: false` omits
+ * the actual too, for callers asking "what is still coming" (the reminder
+ * banner, "next bill") rather than "what did this month look like".
  */
 export const groupBillsByDay = (
   entries: BudgetEntry[],
   monthKey: string,
-  options: { includeOneOff?: boolean; includeIncome?: boolean } = {}
+  options: {
+    includeOneOff?: boolean;
+    includeIncome?: boolean;
+    includeFulfilled?: boolean;
+  } = {}
 ): BillsByDay => {
-  const { includeOneOff = false, includeIncome = false } = options;
+  const {
+    includeOneOff = false,
+    includeIncome = false,
+    includeFulfilled = true,
+  } = options;
   const byDay = new Map<number, BudgetEntry[]>();
   let monthTotal = 0;
 
+  const fulfilled = fulfillmentsForMonth(entries, monthKey);
+  const standInIds = new Set<string>();
+  for (const actuals of fulfilled.values()) {
+    for (const actual of actuals) standInIds.add(actual.id);
+  }
+
   for (const entry of entries) {
     if (!includeIncome && entry.type !== "expense") continue;
-    if (!includeOneOff && !entry.recurring) continue;
+    // The projection is replaced by its actual this month.
+    if (entry.recurring && fulfilled.has(entry.id)) continue;
+    if (standInIds.has(entry.id)) {
+      if (!includeFulfilled) continue;
+    } else if (!includeOneOff && !entry.recurring) {
+      continue;
+    }
     if (!isEntryActiveInMonth(entry, monthKey)) continue;
 
     const day = getDayOfMonth(entry, monthKey);
@@ -87,7 +114,8 @@ export const nextBillFrom = (
     const cursorYear = fromYear + Math.floor((fromMonth + offset) / 12);
     const cursorMonth = (fromMonth + offset + 12) % 12;
     const monthKey = `${cursorYear}-${String(cursorMonth + 1).padStart(2, "0")}`;
-    const { byDay } = groupBillsByDay(entries, monthKey);
+    // A bill already covered by its actual charge isn't "next" - skip it.
+    const { byDay } = groupBillsByDay(entries, monthKey, { includeFulfilled: false });
     if (byDay.size === 0) continue;
 
     const sortedDays = Array.from(byDay.keys()).sort((a, b) => a - b);
@@ -139,7 +167,10 @@ export const upcomingBillsWithin = (
     );
     const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
     const day = cursor.getDate();
-    const monthBills = billsByMonth.get(monthKey) ?? groupBillsByDay(entries, monthKey);
+    const monthBills =
+      billsByMonth.get(monthKey) ??
+      // Fulfilled bills are paid - the banner must not nag about them.
+      groupBillsByDay(entries, monthKey, { includeFulfilled: false });
     billsByMonth.set(monthKey, monthBills);
     const dayEntries = monthBills.byDay.get(day) ?? [];
 
@@ -162,7 +193,8 @@ export const upcomingBillsWithin = (
  * Sum of bills already due (day ≤ today) and remaining (day > today) for the
  * given month, useful for the calendar's top stats strip. When the requested
  * month isn't the current calendar month, "paid" covers everything (past
- * month) or nothing (future month).
+ * month) or nothing (future month). An actual charge standing in for a bill
+ * (BudgetEntry.fulfillsRecurringId) is paid by definition, whatever its day.
  */
 export const splitPaidVsRemaining = (
   bills: BillsByDay,
@@ -177,9 +209,10 @@ export const splitPaidVsRemaining = (
   let paid = 0;
   let remaining = 0;
   for (const [day, list] of bills.byDay) {
-    const sum = list.reduce((s, e) => s + e.amount, 0);
-    if (day <= today) paid += sum;
-    else remaining += sum;
+    for (const e of list) {
+      if (day <= today || isFulfillingEntry(e)) paid += e.amount;
+      else remaining += e.amount;
+    }
   }
   return { paid, remaining };
 };

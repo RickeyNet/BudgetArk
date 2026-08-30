@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Gate on high/critical only — moderate/low advisories in transitive
+      # Gate on high/critical only - moderate/low advisories in transitive
       # build tooling are often unactionable and would block every PR.
       # Run `npm audit` locally to triage the full list.
       - name: Audit dependencies (high+)

@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Net Worth Histogram
+ * File: src/components/NetWorthHistogram.tsx
+ *
+ * Three-bar assets / debt / net-worth comparison for the Bridge tab. Pure
+ * presentational: takes the totals and the theme colors as props so the
+ * screen owns all the math.
+ */
+
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { ThemeColors } from "../theme/themes";

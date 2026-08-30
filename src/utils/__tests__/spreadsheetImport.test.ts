@@ -12,7 +12,6 @@
 import * as XLSX from "xlsx";
 
 const DERIVED_RECURRING_PREFIX = "__projected_recurring__:";
-const DERIVED_EMERGENCY_FUND_ID = "__derived_emergency_fund__";
 
 // Test-controlled file + picker state (mock-prefixed so jest.mock factories
 // may close over them).
@@ -43,7 +42,6 @@ jest.mock("../spreadsheetExport", () => ({
 }));
 jest.mock("expo-file-system", () => ({
   File: class {
-    constructor(_uri: string) {}
     async text() {
       return mockFileContent.text;
     }
@@ -54,6 +52,7 @@ jest.mock("expo-file-system", () => ({
 }));
 jest.mock("../uuid", () => ({ generateUUID: () => "gen-uuid" }));
 
+// eslint-disable-next-line import/first -- must require after the jest.mock factories' captured consts initialize (ts-jest emits CJS, so import position is require order)
 import { importSpreadsheet } from "../spreadsheetImport";
 
 /** Build an xlsx workbook (base64) from a map of sheetName -> row objects. */
@@ -152,6 +151,54 @@ describe("importSpreadsheet - CSV", () => {
     expect(entries.find((e: any) => e.id === "e1").amount).toBeCloseTo(1234.56, 2);
     expect(entries.find((e: any) => e.id === "e2").amount).toBeCloseTo(-50, 2);
   });
+
+  it("anchors date-only cells at noon UTC so the month never shifts", async () => {
+    // Regression: date-only strings used to parse at local midnight, so any
+    // user east of UTC importing "2026-06-01" got an ISO date on May 31 -
+    // month attribution slices YYYY-MM, silently moving the entry (and its
+    // budget totals) into the previous month.
+    useCsv([
+      entryRow({ ID: "e1", Date: "2026-06-01" }),
+      entryRow({ ID: "e2", Date: "6/1/2026" }),
+    ]);
+    await importSpreadsheet();
+    const entries = lastPayload().budgetEntries;
+    expect(entries.find((e: any) => e.id === "e1").date).toBe(
+      "2026-06-01T12:00:00.000Z"
+    );
+    expect(entries.find((e: any) => e.id === "e2").date).toBe(
+      "2026-06-01T12:00:00.000Z"
+    );
+  });
+
+  it("rejects rollover dates instead of guessing a month", async () => {
+    useCsv([entryRow({ ID: "e1" }), entryRow({ ID: "e2", Date: "2/30/2026" })]);
+    const result = await importSpreadsheet();
+    const entries = lastPayload().budgetEntries;
+    expect(entries.map((e: any) => e.id)).toEqual(["e1"]);
+    expect(result?.skippedRows).toBe(1);
+  });
+
+  it("parses decimal-comma amounts instead of mangling them", async () => {
+    // Regression: commas used to be stripped blindly, importing "1.234,56"
+    // as 1.23456 and "1,50" as 150 - silently wrong by 100-1000x.
+    useCsv([
+      entryRow({ ID: "e1", Amount: "1.234,56" }),
+      entryRow({ ID: "e2", Amount: "1,50" }),
+      entryRow({ ID: "e3", Amount: "1.234.567,89" }),
+      entryRow({ ID: "e4", Amount: "€1.234,56" }),
+      // US grouping still parses as before
+      entryRow({ ID: "e5", Amount: "1,234" }),
+    ]);
+    await importSpreadsheet();
+    const entries = lastPayload().budgetEntries;
+    const amountOf = (id: string) => entries.find((e: any) => e.id === id).amount;
+    expect(amountOf("e1")).toBeCloseTo(1234.56, 2);
+    expect(amountOf("e2")).toBeCloseTo(1.5, 2);
+    expect(amountOf("e3")).toBeCloseTo(1234567.89, 2);
+    expect(amountOf("e4")).toBeCloseTo(1234.56, 2);
+    expect(amountOf("e5")).toBeCloseTo(1234, 2);
+  });
 });
 
 describe("importSpreadsheet - XLSX multi-sheet", () => {
@@ -202,6 +249,77 @@ describe("importSpreadsheet - XLSX multi-sheet", () => {
     expect(payload.holdings[1].costBasis).toBeUndefined();
     expect(result?.skippedRows).toBe(1);
     expect(result?.skippedRowDetails[0]).toMatchObject({ sheet: "Holdings" });
+  });
+});
+
+describe("importSpreadsheet - holding shapes", () => {
+  it("imports proxy-tracked and manual-value funds, and skips an unpriced proxy", async () => {
+    useXlsx({
+      "Budget Entries": [entryRow()],
+      Holdings: [
+        { ID: "h1", Symbol: "voo", Name: "Spartan 500", AnchorValue: 12000, AnchorPrice: 480.5, AccountId: "a3" },
+        { ID: "h2", Name: "Stable Value", ManualValue: 5000, AccountId: "a3" },
+        // Proxy without an anchor price can't satisfy the validator - skipped
+        // with a reason, not silently turned into another kind.
+        { ID: "h3", Symbol: "VTI", Name: "Unpriced", AnchorValue: 100 },
+        // Manual fund needs a name.
+        { ID: "h4", ManualValue: 10 },
+      ],
+    });
+    const result = await importSpreadsheet("merge");
+    const payload = lastPayload();
+    expect(payload.holdings.map((h: any) => h.id)).toEqual(["h1", "h2"]);
+    expect(payload.holdings[0]).toMatchObject({
+      symbol: "VOO", name: "Spartan 500", anchorValue: 12000, anchorPrice: 480.5, accountId: "a3", shares: 0,
+    });
+    expect(payload.holdings[1]).toMatchObject({
+      symbol: "", name: "Stable Value", manualValue: 5000, accountId: "a3",
+    });
+    expect(result?.skippedRows).toBe(2);
+    expect(result?.skippedRowDetails.map((d) => d.reason)).toEqual([
+      expect.stringContaining("AnchorPrice"),
+      expect.stringContaining("Name"),
+    ]);
+  });
+});
+
+describe("importSpreadsheet - debt keep-alive and payment applied amount", () => {
+  it("round-trips keep-alive fields and drops out-of-range values without skipping the debt", async () => {
+    useXlsx({
+      "Budget Entries": [entryRow()],
+      Debts: [
+        { ID: "d1", Name: "Visa", Balance: 100, OriginalBalance: 500, Rate: 19.9, MinPayment: 25, KeepAlive: "yes", KeepAliveWindowMonths: 6, KeepAliveLeadDays: 30, KeepAliveLastUsedAt: "2026-05-20" },
+        { ID: "d2", Name: "Amex", Balance: 100, OriginalBalance: 500, Rate: 19.9, MinPayment: 25, KeepAlive: "no", KeepAliveWindowMonths: 999, KeepAliveLeadDays: 0 },
+        { ID: "d3", Name: "Old export", Balance: 100, OriginalBalance: 500, Rate: 19.9, MinPayment: 25 },
+      ],
+    });
+    const result = await importSpreadsheet("merge");
+    const [d1, d2, d3] = lastPayload().debts;
+    expect(d1).toMatchObject({ keepAliveEnabled: true, keepAliveWindowMonths: 6, keepAliveLeadDays: 30 });
+    expect(d1.keepAliveLastUsedAt).toMatch(/^2026-05-20/);
+    // Explicit "no" survives; the two out-of-range numbers are dropped, not fatal.
+    expect(d2.keepAliveEnabled).toBe(false);
+    expect(d2.keepAliveWindowMonths).toBeUndefined();
+    expect(d2.keepAliveLeadDays).toBeUndefined();
+    // A workbook from before the columns existed leaves the watch unset.
+    expect(d3.keepAliveEnabled).toBeUndefined();
+    expect(result?.skippedRows).toBe(0);
+  });
+
+  it("keeps AppliedAmount when it is within [0, Amount] and drops it otherwise", async () => {
+    useXlsx({
+      "Budget Entries": [entryRow()],
+      Payments: [
+        { ID: "p1", DebtID: "d1", Amount: 300, AppliedAmount: 250, Date: "2026-06-10" },
+        { ID: "p2", DebtID: "d1", Amount: 300, AppliedAmount: 999, Date: "2026-06-11" },
+        { ID: "p3", DebtID: "d1", Amount: 300, Date: "2026-06-12" },
+      ],
+    });
+    await importSpreadsheet("merge");
+    const [p1, p2, p3] = lastPayload().payments;
+    expect(p1.appliedAmount).toBe(250);
+    expect(p2.appliedAmount).toBeUndefined();
+    expect(p3.appliedAmount).toBeUndefined();
   });
 });
 

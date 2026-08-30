@@ -16,6 +16,8 @@
  * Keys are ISO currency codes matching CURRENCY_PREFERENCE_OPTIONS[].currencyCode.
  */
 
+import { roundToCents } from "./money";
+
 /** Fallback units of each currency per 1 USD. Last reviewed: 2026-06. */
 export const USD_EXCHANGE_RATES: Readonly<Record<string, number>> = {
   USD: 1,
@@ -83,5 +85,5 @@ export const convertAmount = (
   const fromRate = rates[fromCode] ?? 1;
   const toRate = rates[toCode] ?? 1;
   const converted = (value / fromRate) * toRate;
-  return Math.round(converted * 100) / 100;
+  return roundToCents(converted);
 };

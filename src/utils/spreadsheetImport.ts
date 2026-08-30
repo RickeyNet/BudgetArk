@@ -26,6 +26,7 @@
  * src/utils/recordValidators.ts (VALIDATOR_LIMITS).
  */
 
+import { entryPersonIds, personAssignmentFields } from "./entryPeople";
 import { File as ExpoFile } from "expo-file-system";
 import * as XLSX from "xlsx";
 import {
@@ -40,8 +41,12 @@ import {
 import { generateUUID } from "./uuid";
 import { normalizeImportCategory, VALIDATOR_LIMITS } from "./recordValidators";
 import { isValidSymbol, normalizeSymbol } from "./holdingsMath";
-import { normalizePaymentUrl } from "./paymentUrl";
 import {
+  KEEP_ALIVE_MAX_LEAD_DAYS,
+  KEEP_ALIVE_MAX_WINDOW_MONTHS,
+} from "./cardKeepAlive";
+import { normalizePaymentUrl } from "./paymentUrl";
+import { MAX_PEOPLE,
   ASSET_ACCOUNT_CATEGORIES,
   PAYMENT_URL_MAX_LENGTH,
   type AssetAccountCategory,
@@ -89,9 +94,17 @@ const VALID_DEBT_CLASS_SOURCES = new Set(["manual", "inferred"]);
  *
  * Handles:
  *   - Plain numbers (Excel returns numbers natively)
- *   - "$1,234.56", "1.234,56" (some locales), " 42 "
+ *   - "$1,234.56" / "1,234.56" (US convention)
+ *   - "1.234,56" / "1,50" / "1.234.567,89" (decimal-comma locales)
  *   - Parenthesized negatives like "(50.00)"
  *   - Leading/trailing whitespace
+ *
+ * Separator convention is detected per value: when both "." and "," appear,
+ * the rightmost one is the decimal separator and the other is grouping. A
+ * lone comma followed by 1-2 trailing digits is a decimal comma ("1,50");
+ * otherwise commas are grouping. This used to strip ALL commas blindly, so
+ * "1.234,56" imported as 1.23456 and "1,50" as 150 - silently wrong money
+ * that passed every downstream bounds check.
  *
  * Returns NaN if not parseable.
  */
@@ -109,15 +122,47 @@ const parseAmount = (raw: unknown): number => {
     s = s.slice(1, -1).trim();
   }
 
-  // Strip currency symbols and thousands separators (US convention)
-  s = s.replace(/[$£€¥₹]/g, "");
-  s = s.replace(/,/g, "");
+  // Strip currency symbols
+  s = s.replace(/[$£€¥₹]/g, "").trim();
+
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      // Decimal comma: "1.234,56" - dots are grouping. A second comma
+      // survives into Number() and yields NaN (fail closed, not a guess).
+      s = s.replace(/\./g, "").replace(/,/g, ".");
+    } else {
+      // Decimal dot: "1,234.56" - commas are grouping.
+      s = s.replace(/,/g, "");
+    }
+  } else if (lastComma >= 0) {
+    const commaCount = s.split(",").length - 1;
+    const digitsAfter = s.length - lastComma - 1;
+    if (commaCount === 1 && digitsAfter >= 1 && digitsAfter <= 2) {
+      // "1,50" - decimal comma. (A single comma with exactly 3 trailing
+      // digits, "1,234", stays grouping per the US-format default.)
+      s = s.replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (lastDot >= 0 && s.indexOf(".") !== lastDot) {
+    // Multiple dots with no comma: "1.234.567" - grouping in decimal-comma
+    // locales; never a valid US decimal.
+    s = s.replace(/\./g, "");
+  }
   s = s.trim();
 
   const n = Number(s);
   if (!Number.isFinite(n)) return NaN;
   return negative ? -n : n;
 };
+
+/** Formats calendar parts as noon-UTC ISO (the canonical entry-date anchor). */
+const dateOnlyToNoonUtcIso = (y: number, m: number, d: number): string =>
+  `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(
+    d
+  ).padStart(2, "0")}T12:00:00.000Z`;
 
 /**
  * Normalizes a date cell into ISO 8601.
@@ -128,36 +173,84 @@ const parseAmount = (raw: unknown): number => {
  *   - ISO strings ("2026-04-30", "2026-04-30T12:00:00Z")
  *   - US-format strings ("4/30/2026", "04/30/2026")
  *
+ * Date-only inputs are anchored at NOON UTC, matching how the app stores
+ * entry dates (see utils/entryDate.ts). Month attribution app-wide slices
+ * the YYYY-MM prefix, so a date-only cell parsed at local midnight (the old
+ * behavior) landed on the previous UTC day for any user east of UTC -
+ * first-of-month entries silently moved into the prior month's budget.
+ *
  * Returns "" if unparseable.
  */
 const parseDate = (raw: unknown): string => {
   if (raw instanceof Date) {
     if (Number.isNaN(raw.getTime())) return "";
-    return raw.toISOString();
+    // SheetJS (cellDates:true) reconstructs date cells as local wall-clock
+    // Dates, so the LOCAL calendar parts carry the day the sheet displays;
+    // raw.toISOString() would shift that day for users east of UTC. Export
+    // anchors cells at noon, so local parts are stable in every offset.
+    return dateOnlyToNoonUtcIso(
+      raw.getFullYear(),
+      raw.getMonth() + 1,
+      raw.getDate()
+    );
   }
   if (typeof raw === "number") {
-    // Excel serial date (days since 1899-12-30)
+    // Excel serial date (days since 1899-12-30) - UTC arithmetic, so the
+    // UTC parts carry the intended calendar day.
     if (!Number.isFinite(raw)) return "";
     const ms = Math.round((raw - 25569) * 86400 * 1000);
     const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+    if (Number.isNaN(d.getTime())) return "";
+    return dateOnlyToNoonUtcIso(
+      d.getUTCFullYear(),
+      d.getUTCMonth() + 1,
+      d.getUTCDate()
+    );
   }
   if (typeof raw !== "string") return "";
 
   const s = raw.trim();
   if (!s) return "";
 
-  // Direct parse first (handles ISO + many native formats)
-  const direct = Date.parse(s);
-  if (!Number.isNaN(direct)) return new Date(direct).toISOString();
+  // Date-only ISO: anchor at noon UTC directly.
+  const isoDay = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDay) {
+    return dateOnlyToNoonUtcIso(
+      Number(isoDay[1]),
+      Number(isoDay[2]),
+      Number(isoDay[3])
+    );
+  }
 
-  // Try US-style M/D/YYYY
+  // US-style M/D/YYYY. Built via Date.UTC with a rollover check so 13/40/26
+  // is rejected instead of silently rolling into a different month.
   const usMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (usMatch) {
     const [, m, d, yRaw] = usMatch;
     const y = yRaw.length === 2 ? 2000 + Number(yRaw) : Number(yRaw);
-    const dt = new Date(y, Number(m) - 1, Number(d));
-    if (!Number.isNaN(dt.getTime())) return dt.toISOString();
+    const dt = new Date(Date.UTC(y, Number(m) - 1, Number(d), 12));
+    if (
+      Number.isNaN(dt.getTime()) ||
+      dt.getUTCMonth() !== Number(m) - 1 ||
+      dt.getUTCDate() !== Number(d)
+    ) {
+      return "";
+    }
+    return dt.toISOString();
+  }
+
+  // Everything else goes through the engine parser. Strings carrying an
+  // explicit time keep it; date-only formats ("June 1, 2026") parse at
+  // local midnight, so the local parts carry the intended day.
+  const direct = Date.parse(s);
+  if (!Number.isNaN(direct)) {
+    const dt = new Date(direct);
+    if (/\d:\d/.test(s)) return dt.toISOString();
+    return dateOnlyToNoonUtcIso(
+      dt.getFullYear(),
+      dt.getMonth() + 1,
+      dt.getDate()
+    );
   }
 
   return "";
@@ -168,7 +261,7 @@ const parseString = (raw: unknown, maxLen = 220): string => {
   const s = String(raw).trim();
   if (s.length > maxLen) return s.slice(0, maxLen);
   // Strip control chars + null bytes (mirrors validation in importData)
-  // eslint-disable-next-line no-control-regex
+   
   return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 };
 
@@ -351,6 +444,85 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     ? lastAppliedRaw
     : undefined;
 
+  // Bank-connection provenance. ExternalTxId is the dedup identity of a
+  // bank-imported transaction: dropping it on a backup/restore cycle makes
+  // the next connections sync re-offer already-approved transactions, so it
+  // is round-tripped like LastAppliedMonth. Bounds mirror isBudgetEntryItem.
+  const sourceRaw = parseString(get(row, "Source"), 10).toLowerCase();
+  const source = sourceRaw === "bank" ? ("bank" as const) : undefined;
+  const externalTxId =
+    parseString(get(row, "ExternalTxId", "External Tx Id"), 200) || undefined;
+  const merchant = parseString(get(row, "Merchant"), 120) || undefined;
+  // BusinessId round-trips; the readable "Business" name column is
+  // deliberately IGNORED - matching by name would fork identities on rename.
+  const businessId =
+    parseString(get(row, "BusinessId", "Business Id"), 80) || undefined;
+  // Same contract for PersonId / the ignored "Person" name column. PersonIds
+  // (v7) lists every assignee of a shared expense, ";"-joined; it's honoured
+  // only when it still contains PersonId (entryPersonIds' rule), so a
+  // hand-edited PersonId wins, and the pair is re-normalized on the way in.
+  const personIdsRaw = parseString(get(row, "PersonIds", "Person Ids"), 2000);
+  const { personId, personIds } = personAssignmentFields(
+    entryPersonIds({
+      personId: parseString(get(row, "PersonId", "Person Id"), 80) || undefined,
+      personIds: personIdsRaw
+        ? personIdsRaw
+            .split(";")
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0 && id.length <= 80)
+            .slice(0, MAX_PEOPLE)
+        : undefined,
+    }),
+  );
+
+  // W-2 / 1099 paycheck fields - income rows only, mirroring the UI
+  // invariant (the modals clear them when an entry flips to expense).
+  // Tolerant of hand-edited variants ("W-2", "W2"); anything else drops the
+  // whole trio so a corrupt cell can't smuggle a bogus rate past the
+  // downstream validator. Bounds mirror isBudgetEntryItem.
+  const incomeTypeRaw = parseString(get(row, "IncomeType", "Income Type"), 12)
+    .toLowerCase()
+    .replace(/-/g, "");
+  const incomeType =
+    type === "income" && incomeTypeRaw === "w2"
+      ? ("w2" as const)
+      : type === "income" && incomeTypeRaw === "1099"
+      ? ("1099" as const)
+      : undefined;
+  const retirement401k = parseAmount(
+    get(row, "Retirement401k", "Retirement 401k")
+  );
+  const retirementContribution =
+    incomeType === "w2" &&
+    Number.isFinite(retirement401k) &&
+    retirement401k > 0 &&
+    retirement401k <= VALIDATOR_LIMITS.MAX_MONEY
+      ? retirement401k
+      : undefined;
+  const setAsideRaw = parseAmount(
+    get(row, "TaxSetAsideRate", "Tax Set Aside Rate")
+  );
+  const taxSetAsideRate =
+    incomeType === "1099" &&
+    Number.isFinite(setAsideRaw) &&
+    setAsideRaw >= 0 &&
+    setAsideRaw <= 100
+      ? setAsideRaw
+      : undefined;
+
+  // Partner-sync privacy flag. Must round-trip: a backup/restore cycle
+  // that stripped it would silently start syncing an entry the user marked
+  // private. Same truthy-cell parsing as Recurring.
+  const isPrivate = parseBoolean(get(row, "Private")) || undefined;
+
+  // Bill fulfilment link. Must round-trip: a restore that dropped it would
+  // show the bill's estimate next to the actual charge and double-count it.
+  // Only meaningful on one-off expenses; anything else is dropped so the
+  // stored shape matches what the app itself writes.
+  const fulfillsBillRaw = parseString(get(row, "FulfillsBillId", "Fulfills Bill Id"), 120);
+  const fulfillsRecurringId =
+    fulfillsBillRaw && type === "expense" && !recurring ? fulfillsBillRaw : undefined;
+
   const now = new Date().toISOString();
   // Preserve original timestamps when round-tripping through xlsx/csv. If
   // they're missing or unparseable, fall back to `now` - but prefer carrying
@@ -380,6 +552,17 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     paymentUrl,
     linkedAccountId: linkedAccountId || undefined,
     lastAppliedMonth,
+    source,
+    externalTxId,
+    merchant,
+    businessId,
+    personId,
+    personIds,
+    incomeType,
+    retirementContribution,
+    taxSetAsideRate,
+    isPrivate,
+    fulfillsRecurringId,
   });
 };
 
@@ -480,6 +663,33 @@ const rowToDebt = (row: Record<string, unknown>): RowResult<Record<string, unkno
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   const now = new Date().toISOString();
 
+  // Card keep-alive watch. All optional; an out-of-range value drops just
+  // that field (mirroring isDebtItem's bounds) rather than skipping the
+  // whole debt - the watch is a convenience, the debt is the data. Blank
+  // KeepAlive stays undefined so a workbook from before the column existed
+  // doesn't flip every card to an explicit "off".
+  const keepAliveRaw = parseString(get(row, "KeepAlive", "Keep Alive")).toLowerCase();
+  const keepAliveEnabled = keepAliveRaw
+    ? parseBoolean(keepAliveRaw)
+    : undefined;
+  const optionalInt = (raw: unknown, min: number, max: number): number | undefined => {
+    if (raw === undefined || raw === null || String(raw).trim() === "") return undefined;
+    const n = parseAmount(raw);
+    return Number.isInteger(n) && n >= min && n <= max ? n : undefined;
+  };
+  const keepAliveWindowMonths = optionalInt(
+    get(row, "KeepAliveWindowMonths", "Keep Alive Window Months"),
+    1,
+    KEEP_ALIVE_MAX_WINDOW_MONTHS
+  );
+  const keepAliveLeadDays = optionalInt(
+    get(row, "KeepAliveLeadDays", "Keep Alive Lead Days"),
+    1,
+    KEEP_ALIVE_MAX_LEAD_DAYS
+  );
+  const keepAliveLastUsedAt =
+    parseDate(get(row, "KeepAliveLastUsedAt", "Keep Alive Last Used At")) || undefined;
+
   // Preserve `updatedAt` so a paired sync doesn't treat every imported row
   // as "freshly edited" and clobber the partner's data. Falls back to
   // CreatedAt (the row pre-existed but the export was older than the
@@ -496,6 +706,10 @@ const rowToDebt = (row: Record<string, unknown>): RowResult<Record<string, unkno
     debtClassSource,
     goalDate: goalDate || undefined,
     paymentDueDay,
+    ...(keepAliveEnabled !== undefined ? { keepAliveEnabled } : {}),
+    ...(keepAliveWindowMonths !== undefined ? { keepAliveWindowMonths } : {}),
+    ...(keepAliveLeadDays !== undefined ? { keepAliveLeadDays } : {}),
+    ...(keepAliveLastUsedAt ? { keepAliveLastUsedAt } : {}),
     createdAt: createdAtIso || now,
     updatedAt: updatedAtIso || createdAtIso || now,
   });
@@ -519,11 +733,29 @@ const rowToPayment = (row: Record<string, unknown>): RowResult<Record<string, un
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // AppliedAmount: the slice of Amount that actually hit the balance
+  // (overpayments are clamped). Optional; blank keeps the legacy "absent =
+  // whole amount" meaning, and a nonsense value (negative, > Amount) is
+  // dropped rather than skipping the payment - it only affects what a later
+  // delete adds back.
+  const appliedRaw = get(row, "AppliedAmount", "Applied Amount");
+  const appliedParsed =
+    appliedRaw === undefined || appliedRaw === null || String(appliedRaw).trim() === ""
+      ? undefined
+      : parseAmount(appliedRaw);
+  const appliedAmount =
+    appliedParsed !== undefined &&
+    Number.isFinite(appliedParsed) &&
+    appliedParsed >= 0 &&
+    appliedParsed <= amount
+      ? appliedParsed
+      : undefined;
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return okRow({
     id,
     debtId,
     amount,
+    ...(appliedAmount !== undefined ? { appliedAmount } : {}),
     date: dateIso,
     updatedAt: updatedAtIso || dateIso || new Date().toISOString(),
   });
@@ -606,45 +838,84 @@ const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<strin
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Emergency-fund designation. Must round-trip (see ASSET_ACCOUNT_COLUMNS):
+  // dropping it would silently flip the fund back to manual goal tracking.
+  // Same truthy-cell parsing as Recurring; stored as `true`/absent, never
+  // `false`, matching how the Bridge account editor writes it.
+  const isEmergencyFund =
+    parseBoolean(get(row, "EmergencyFund", "Emergency Fund")) || undefined;
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return okRow({
     id,
     name,
     category,
     balance,
+    ...(isEmergencyFund ? { isEmergencyFund } : {}),
     createdAt,
     updatedAt: updatedAtIso || createdAt,
   });
 };
 
+/** Blank-aware optional money cell: undefined when empty, else parsed. */
+const optionalMoney = (raw: unknown): number | undefined =>
+  raw === undefined || raw === null || String(raw).trim() === ""
+    ? undefined
+    : parseAmount(raw);
+
+const isMoneyInRange = (n: number, min = 0): boolean =>
+  Number.isFinite(n) && n >= min && n <= VALIDATOR_LIMITS.MAX_MONEY;
+
+/**
+ * Three holding shapes share the sheet (see HOLDING_COLUMNS in the
+ * exporter): a plain ticker, a proxy-tracked fund (Symbol is the proxy
+ * ticker; value = AnchorValue × price / AnchorPrice), and a manual
+ * fixed-value fund (no Symbol at all). Bounds mirror isHoldingItem's three
+ * branches; a row that fits none is skipped with a reason so the strict
+ * downstream sanitizer can't abort the whole import.
+ */
 const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
   const symbolRaw = parseString(get(row, "Symbol", "Ticker"), 12);
   const symbol = normalizeSymbol(symbolRaw);
-  const shares = parseAmount(get(row, "Shares"));
-  const costBasisRaw = get(row, "CostBasis", "Cost Basis");
-  const hasCostBasis =
-    costBasisRaw !== undefined &&
-    costBasisRaw !== null &&
-    String(costBasisRaw).trim() !== "";
-  const costBasis = hasCostBasis ? parseAmount(costBasisRaw) : undefined;
+  const sharesCell = get(row, "Shares");
+  const shares = optionalMoney(sharesCell) ?? 0;
+  const costBasis = optionalMoney(get(row, "CostBasis", "Cost Basis"));
+  const name = parseString(get(row, "Name"), 80) || undefined;
+  const manualValue = optionalMoney(get(row, "ManualValue", "Manual Value"));
+  const anchorValue = optionalMoney(get(row, "AnchorValue", "Anchor Value"));
+  const anchorPrice = optionalMoney(get(row, "AnchorPrice", "Anchor Price"));
+  const accountId = parseString(get(row, "AccountId", "Account ID", "Account Id"), 80) || undefined;
 
-  // Bounds mirror isHoldingItem: symbol matches the ticker pattern, shares in
-  // (0, MAX_MONEY], optional costBasis in [0, MAX_MONEY]. Out-of-range rows are
-  // skipped so the strict downstream sanitizer can't abort the whole import.
-  if (!symbolRaw) {
-    return skipRow("Symbol is missing");
+  if (costBasis !== undefined && !isMoneyInRange(costBasis)) {
+    return skipRow("Cost basis must be a number of 0 or more");
   }
-  if (!isValidSymbol(symbol)) {
+  if (symbolRaw && !isValidSymbol(symbol)) {
     return skipRow(`Symbol "${symbolRaw}" is not a valid ticker`);
   }
-  if (!Number.isFinite(shares) || shares <= 0 || shares > VALIDATOR_LIMITS.MAX_MONEY) {
-    return skipRow("Shares must be a positive number");
-  }
-  if (
-    costBasis !== undefined &&
-    (!Number.isFinite(costBasis) || costBasis < 0 || costBasis > VALIDATOR_LIMITS.MAX_MONEY)
-  ) {
-    return skipRow("Cost basis must be a number of 0 or more");
+
+  let shape: Record<string, unknown>;
+  if (anchorValue !== undefined) {
+    // Proxy-tracked. isHoldingItem requires the anchor price too; a proxy
+    // that was never priced can't be represented, so the row is skipped
+    // rather than guessed into a different kind.
+    if (!symbolRaw) return skipRow("Proxy holding needs a Symbol (the proxy ticker)");
+    if (!name) return skipRow("Proxy holding needs a Name");
+    if (!isMoneyInRange(anchorValue)) return skipRow("Anchor value must be a number of 0 or more");
+    if (anchorPrice === undefined || !isMoneyInRange(anchorPrice) || anchorPrice <= 0) {
+      return skipRow("Proxy holding needs a positive AnchorPrice");
+    }
+    shape = { symbol, shares: isMoneyInRange(shares) ? shares : 0, name, anchorValue, anchorPrice };
+  } else if (manualValue !== undefined) {
+    // Manual fixed value: a named position with no ticker.
+    if (!name) return skipRow("Manual-value holding needs a Name");
+    if (!isMoneyInRange(manualValue)) return skipRow("Manual value must be a number of 0 or more");
+    shape = { symbol: "", shares: isMoneyInRange(shares) ? shares : 0, name, manualValue };
+  } else {
+    // Plain ticker (the legacy shape).
+    if (!symbolRaw) return skipRow("Symbol is missing");
+    if (!isMoneyInRange(shares) || shares <= 0) {
+      return skipRow("Shares must be a positive number");
+    }
+    shape = { symbol, shares, ...(name ? { name } : {}) };
   }
 
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
@@ -653,9 +924,46 @@ const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, un
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return okRow({
     id,
-    symbol,
-    shares,
+    ...shape,
     costBasis,
+    ...(accountId ? { accountId } : {}),
+    createdAt,
+    updatedAt: updatedAtIso || createdAt,
+  });
+};
+
+const rowToBusiness = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
+  // Cap mirrors MAX_BUSINESS_NAME_LENGTH / isBusinessItem (40).
+  const name = parseString(get(row, "Name"), 40);
+  if (!name) {
+    return skipRow("Name is missing");
+  }
+  const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
+  const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Preserve `updatedAt` so the LWW merge in importData / paired sync can
+  // order this row against local edits instead of treating it as fresh.
+  return okRow({
+    id,
+    name,
+    createdAt,
+    updatedAt: updatedAtIso || createdAt,
+  });
+};
+
+const rowToPerson = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {
+  // Cap mirrors MAX_PERSON_NAME_LENGTH / isPersonItem (40).
+  const name = parseString(get(row, "Name"), 40);
+  if (!name) {
+    return skipRow("Name is missing");
+  }
+  const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
+  const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
+  const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
+  // Same LWW-preserving rationale as rowToBusiness above.
+  return okRow({
+    id,
+    name,
     createdAt,
     updatedAt: updatedAtIso || createdAt,
   });
@@ -768,12 +1076,18 @@ export const importSpreadsheet = async (
   try {
     if (isCsv) {
       const csvText = await new ExpoFile(file.uri).text();
-      workbook = XLSX.read(csvText, { type: "string", cellDates: true });
+      // raw:true disables SheetJS's CSV type inference so every cell reaches
+      // the row mappers as the string the user actually wrote. Inference is
+      // lossy in exactly the ways the mappers guard against: fuzzynum strips
+      // commas ("1.234,56" -> 1.23456, silently wrong money) and fuzzydate
+      // rolls invalid dates over ("2/30/2026" -> March 2) before parseAmount
+      // / parseDate can fail closed.
+      workbook = XLSX.read(csvText, { type: "string", cellDates: true, raw: true });
     } else {
       const base64 = await new ExpoFile(file.uri).base64();
       workbook = XLSX.read(base64, { type: "base64", cellDates: true });
     }
-  } catch (err) {
+  } catch {
     throw new Error(
       "Could not read the spreadsheet. The file may be corrupt or in an unsupported format."
     );
@@ -793,6 +1107,8 @@ export const importSpreadsheet = async (
   const savingsGoalsSheet = isCsv ? undefined : findSheet(workbook, "Savings Goals");
   const assetAccountsSheet = isCsv ? undefined : findSheet(workbook, "Asset Accounts");
   const holdingsSheet = isCsv ? undefined : findSheet(workbook, "Holdings");
+  const businessesSheet = isCsv ? undefined : findSheet(workbook, "Businesses");
+  const peopleSheet = isCsv ? undefined : findSheet(workbook, "People");
 
   // Drop the exporter's own round-trip artifacts (projected recurring copies,
   // synthetic Emergency Fund) up front so they count toward neither the valid
@@ -808,6 +1124,8 @@ export const importSpreadsheet = async (
   );
   const accountRows = sheetToRows(assetAccountsSheet);
   const holdingRows = sheetToRows(holdingsSheet);
+  const businessRows = sheetToRows(businessesSheet);
+  const peopleRows = sheetToRows(peopleSheet);
 
   if (
     entryRows.length === 0 &&
@@ -816,7 +1134,9 @@ export const importSpreadsheet = async (
     paymentRows.length === 0 &&
     savingsRows.length === 0 &&
     accountRows.length === 0 &&
-    holdingRows.length === 0
+    holdingRows.length === 0 &&
+    businessRows.length === 0 &&
+    peopleRows.length === 0
   ) {
     throw new Error(
       'No recognized sheets found. Expected a "Budget Entries" sheet (or one of: Budget Limits, Debts, Payments, Savings Goals, Asset Accounts, Holdings).'
@@ -830,6 +1150,8 @@ export const importSpreadsheet = async (
   const savingsResult = processSheet("Savings Goals", savingsRows, rowToSavingsGoal);
   const accountResult = processSheet("Asset Accounts", accountRows, rowToAssetAccount);
   const holdingResult = processSheet("Holdings", holdingRows, rowToHolding);
+  const businessResult = processSheet("Businesses", businessRows, rowToBusiness);
+  const peopleResult = processSheet("People", peopleRows, rowToPerson);
 
   const budgetEntries = entryResult.valid;
   const budgetLimits = limitResult.valid;
@@ -838,6 +1160,8 @@ export const importSpreadsheet = async (
   const savingsGoals = savingsResult.valid;
   const assetAccounts = accountResult.valid;
   const holdings = holdingResult.valid;
+  const businesses = businessResult.valid;
+  const people = peopleResult.valid;
 
   // Each skipped row is genuinely invalid (derived artifacts were filtered
   // out above), so the count and the detail list line up exactly.
@@ -849,6 +1173,8 @@ export const importSpreadsheet = async (
     ...savingsResult.skipped,
     ...accountResult.skipped,
     ...holdingResult.skipped,
+    ...businessResult.skipped,
+    ...peopleResult.skipped,
   ];
   const skippedRows = skippedRowDetails.length;
 
@@ -859,7 +1185,9 @@ export const importSpreadsheet = async (
     payments.length +
     savingsGoals.length +
     assetAccounts.length +
-    holdings.length;
+    holdings.length +
+    businesses.length +
+    people.length;
 
   if (totalEntitiesValid === 0) {
     throw new Error(
@@ -878,6 +1206,8 @@ export const importSpreadsheet = async (
     savingsGoals,
     assetAccounts,
     holdings,
+    businesses,
+    people,
   };
 
   const result = await importFromString(JSON.stringify(payload), mode);

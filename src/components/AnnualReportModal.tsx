@@ -459,7 +459,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     yearChip: {
       borderWidth: 1,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingHorizontal: 16,
       paddingVertical: 6,
     },

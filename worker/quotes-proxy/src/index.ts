@@ -99,7 +99,7 @@ const readRegistry = async (env: Env): Promise<SymbolRegistry> => {
 };
 
 /** Drop idle symbols, then oldest-first down to the cap. Pure; returns a new map. */
-const pruneRegistry = (registry: SymbolRegistry, now: number): SymbolRegistry => {
+export const pruneRegistry = (registry: SymbolRegistry, now: number): SymbolRegistry => {
   const alive = Object.entries(registry).filter(([, ts]) => {
     const t = new Date(ts).getTime();
     return Number.isFinite(t) && now - t < REGISTRY_RETENTION_MS;
@@ -147,6 +147,24 @@ const updateSymbolRegistry = async (
  */
 const DAILY_UPSTREAM_SYMBOL_BUDGET = 700;
 const DAILY_COUNTER_TTL_SECONDS = 2 * 24 * 60 * 60; // yesterday's counter auto-expires
+
+/**
+ * Splits the stale list into the batch to fetch now (bounded by both the
+ * remaining daily budget and the provider's per-minute credit allowance)
+ * and the tail to report as `pending`. Shared by the request path and the
+ * cron warmer so the two can't drift.
+ */
+export const sliceUpstreamBatch = (
+  stale: string[],
+  usedToday: number
+): { toFetch: string[]; pending: string[] } => {
+  const remaining = DAILY_UPSTREAM_SYMBOL_BUDGET - usedToday;
+  const toFetch =
+    remaining > 0
+      ? stale.slice(0, Math.min(remaining, UPSTREAM_MINUTE_BATCH_LIMIT))
+      : [];
+  return { toFetch, pending: stale.slice(toFetch.length) };
+};
 
 /**
  * Edge-cache window for an identical (normalized) symbol set. Repeat requests
@@ -265,12 +283,9 @@ export default {
     if (stale.length > 0) {
       const dayKey = `upstream:${today}`;
       const usedToday = Number(await env.QUOTES.get(dayKey)) || 0;
-      const remaining = DAILY_UPSTREAM_SYMBOL_BUDGET - usedToday;
-      const toFetch =
-        remaining > 0
-          ? stale.slice(0, Math.min(remaining, UPSTREAM_MINUTE_BATCH_LIMIT))
-          : [];
-      pending = stale.slice(toFetch.length);
+      const sliced = sliceUpstreamBatch(stale, usedToday);
+      const toFetch = sliced.toFetch;
+      pending = sliced.pending;
 
       if (toFetch.length > 0) {
         try {
@@ -292,7 +307,7 @@ export default {
           await env.QUOTES.put(dayKey, String(usedToday + toFetch.length), {
             expirationTtl: DAILY_COUNTER_TTL_SECONDS,
           });
-        } catch (err) {
+        } catch {
           // If the provider is down we still return whatever was cached.
           if (Object.keys(quotes).length === 0) {
             return json({ error: "upstream_unavailable" }, 502);
@@ -367,8 +382,12 @@ async function warmQuoteCache(env: Env): Promise<void> {
   if (symbols.length === 0) return;
 
   // A symbol needs warming when it has neither a live quote nor a recent
-  // failed attempt. KV reads per pass stay ~2x registry size, comfortably
-  // inside the free-tier read quota at the registry cap and 5-min cadence.
+  // failed attempt. KV reads per pass are ~2x registry size + 1: at the
+  // 200-symbol cap that's ~401 reads x 144 passes (10-min cadence) ≈ 58k
+  // reads/day, inside the 100k/day KV free tier with headroom for the
+  // request path. (At the old 5-min cadence the same math was ~115k/day -
+  // OVER the free tier; once the read quota is exhausted, KV fails for the
+  // rest of the UTC day and takes the serving path down with it.)
   const stale: string[] = [];
   await Promise.all(
     symbols.map(async (symbol) => {
@@ -382,11 +401,7 @@ async function warmQuoteCache(env: Env): Promise<void> {
   const today = new Date(now).toISOString().slice(0, 10);
   const dayKey = `upstream:${today}`;
   const usedToday = Number(await env.QUOTES.get(dayKey)) || 0;
-  const remaining = DAILY_UPSTREAM_SYMBOL_BUDGET - usedToday;
-  const toFetch =
-    remaining > 0
-      ? stale.slice(0, Math.min(remaining, UPSTREAM_MINUTE_BATCH_LIMIT))
-      : [];
+  const { toFetch } = sliceUpstreamBatch(stale, usedToday);
   if (toFetch.length === 0) return;
 
   try {
@@ -418,7 +433,7 @@ interface CachedQuote {
   asOf: string;
 }
 
-function parseSymbols(raw: string | null): string[] {
+export function parseSymbols(raw: string | null): string[] {
   if (!raw) return [];
   const seen = new Set<string>();
   for (const part of raw.toUpperCase().split(",")) {
@@ -432,11 +447,58 @@ function parseSymbols(raw: string | null): string[] {
 }
 
 /**
+ * Twelve Data reports many failures in the RESPONSE BODY with HTTP 200 -
+ * credit exhaustion looks like {"code":429,"status":"error","message":...}.
+ * Treating such a body as "no prices" used to poison the 24h miss cache for
+ * every symbol in the batch, consume the device throttle, and edge-cache the
+ * gap - all for a response that priced nothing.
+ *
+ * The ONE body-level error that must NOT throw: a single-symbol request for
+ * an unknown ticker also answers {"code":400,"status":"error"}. That's a
+ * fact about the symbol, not the service - returning "unpriced" lets the
+ * warmer negative-cache it, which is exactly the miss cache's job (throwing
+ * would make the warmer retry the dead ticker every pass forever).
+ */
+export function mapTwelveDataResponse(
+  symbols: string[],
+  data: unknown
+): Record<string, number> {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("twelvedata malformed body");
+  }
+  const body = data as Record<string, unknown> & { status?: unknown; code?: unknown };
+
+  if (body.status === "error") {
+    if (symbols.length === 1 && body.code === 400) {
+      return {}; // unknown symbol - unpriced, eligible for the miss cache
+    }
+    throw new Error(`twelvedata body error ${String(body.code ?? "unknown")}`);
+  }
+
+  const out: Record<string, number> = {};
+  if (symbols.length === 1) {
+    const price = Number((body as { price?: string }).price);
+    if (Number.isFinite(price)) out[symbols[0]] = price;
+    return out;
+  }
+  for (const symbol of symbols) {
+    // Per-symbol error nodes ({"code":400,...}) have no price and stay
+    // absent - a dead ticker in a batch is a miss, not a batch failure.
+    const node = body[symbol] as { price?: string } | undefined;
+    const price = Number(node?.price);
+    if (Number.isFinite(price)) out[symbol] = price;
+  }
+  return out;
+}
+
+/**
  * Calls Twelve Data's /price endpoint. The response shape differs for one vs
  * many symbols:
  *   one  -> { "price": "192.31" }
  *   many -> { "AAPL": { "price": "192.31" }, "VTI": { "price": "..." } }
  * Returns a flat { SYMBOL: number } map; bad/failed symbols are simply absent.
+ * Throws on transport errors AND batch-level error bodies (see
+ * mapTwelveDataResponse).
  */
 async function fetchFromTwelveData(
   symbols: string[],
@@ -448,20 +510,7 @@ async function fetchFromTwelveData(
 
   const res = await fetch(endpoint);
   if (!res.ok) throw new Error(`twelvedata ${res.status}`);
-  const data = (await res.json()) as Record<string, unknown>;
-
-  const out: Record<string, number> = {};
-  if (symbols.length === 1) {
-    const price = Number((data as { price?: string }).price);
-    if (Number.isFinite(price)) out[symbols[0]] = price;
-    return out;
-  }
-  for (const symbol of symbols) {
-    const node = data[symbol] as { price?: string } | undefined;
-    const price = Number(node?.price);
-    if (Number.isFinite(price)) out[symbol] = price;
-  }
-  return out;
+  return mapTwelveDataResponse(symbols, await res.json());
 }
 
 async function sha256Hex(input: string): Promise<string> {

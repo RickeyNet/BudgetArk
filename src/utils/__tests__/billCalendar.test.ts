@@ -5,19 +5,20 @@ import {
   upcomingBillsWithin,
   splitPaidVsRemaining,
 } from "../billCalendar";
+import { makeBudgetEntry } from "../../__tests__/fixtures";
+import type { BudgetEntry } from "../../types";
 
 // Dates use explicit local noon ("...T12:00:00", no Z) so getDate() returns
 // the intended day-of-month regardless of the test runner's timezone.
-const entry = (over: Record<string, unknown> = {}): any => ({
-  id: "e1",
-  type: "expense",
-  category: "Utilities",
-  amount: 100,
-  date: "2026-06-10T12:00:00",
-  recurring: true,
-  recurrenceInterval: 1,
-  ...over,
-});
+const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({
+    id: "e1",
+    category: "Utilities",
+    date: "2026-06-10T12:00:00",
+    recurring: true,
+    recurrenceInterval: 1,
+    ...over,
+  });
 
 describe("getDayOfMonth", () => {
   it("returns the stored day of month", () => {
@@ -56,7 +57,7 @@ describe("groupBillsByDay", () => {
     ];
     const { byDay, monthTotal } = groupBillsByDay(entries, "2026-06");
     expect(monthTotal).toBe(100); // only the recurring expense
-    expect([...byDay.values()].flat().map((e: any) => e.id)).toEqual(["rec"]);
+    expect([...byDay.values()].flat().map((e) => e.id)).toEqual(["rec"]);
   });
 
   it("includes one-off and income when asked", () => {
@@ -136,6 +137,56 @@ describe("upcomingBillsWithin", () => {
       "today-small",
       "tomorrow",
     ]);
+  });
+});
+
+describe("bill fulfilment", () => {
+  const electric = () =>
+    entry({ id: "electric", description: "Electric", amount: 120, date: "2026-03-25T12:00:00" });
+  const actual = () =>
+    entry({
+      id: "actual",
+      recurring: false,
+      recurrenceInterval: undefined,
+      amount: 137.42,
+      date: "2026-06-03T12:00:00",
+      fulfillsRecurringId: "electric",
+    });
+
+  it("shows the actual charge on its own day instead of the projection", () => {
+    const { byDay, monthTotal } = groupBillsByDay([electric(), actual()], "2026-06");
+    expect(byDay.get(25)).toBeUndefined();
+    expect(byDay.get(3)?.map((e) => e.id)).toEqual(["actual"]);
+    expect(monthTotal).toBeCloseTo(137.42);
+    // Other months still project the estimate.
+    expect(groupBillsByDay([electric(), actual()], "2026-05").byDay.get(25)).toHaveLength(1);
+  });
+
+  it("does not double-list the actual when one-offs are included", () => {
+    const { byDay } = groupBillsByDay([electric(), actual()], "2026-06", { includeOneOff: true });
+    expect([...byDay.values()].flat().map((e) => e.id)).toEqual(["actual"]);
+  });
+
+  it("omits fulfilled bills from 'next' and the upcoming window", () => {
+    const water = entry({ id: "water", amount: 45, date: "2026-03-28T12:00:00" });
+    const entries = [electric(), actual(), water];
+    expect(nextBillFrom(entries, new Date(2026, 5, 1))!.entry.id).toBe("water");
+    expect(
+      upcomingBillsWithin(entries, 30, new Date(2026, 5, 1)).map((b) => b.entry.id)
+    ).toEqual(["water"]);
+    expect(
+      groupBillsByDay(entries, "2026-06", { includeFulfilled: false }).byDay.get(3)
+    ).toBeUndefined();
+  });
+
+  it("counts a fulfilled bill as paid regardless of the day", () => {
+    const late = entry({ id: "late", amount: 60, date: "2026-06-25T12:00:00" });
+    const bills = groupBillsByDay([electric(), actual(), late], "2026-06");
+    // 'now' = 1 June: nothing is due by day yet, but the actual is paid.
+    expect(splitPaidVsRemaining(bills, "2026-06", new Date(2026, 5, 1))).toEqual({
+      paid: 137.42,
+      remaining: 60,
+    });
   });
 });
 

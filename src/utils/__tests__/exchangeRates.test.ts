@@ -1,5 +1,6 @@
 import {
   fetchLiveRates,
+  getConverterRates,
   getCurrentRates,
   getStoredRates,
   type RatesSnapshot,
@@ -18,6 +19,7 @@ jest.mock("../../storage/encryptedStorage", () => ({
 }));
 
 const CACHE_KEY = "@budgetark_fx_rates";
+const CONVERTER_CACHE_KEY = "@budgetark_fx_converter_rates";
 
 /** A complete, trusted rates table (USD === 1, every supported code present). */
 const validRates = (over: Record<string, number> = {}): Record<string, number> => ({
@@ -35,16 +37,20 @@ const fetchResponse = (body: unknown, init: { ok?: boolean; status?: number } = 
 const okFetch = (rates = validRates()) =>
   jest.fn().mockResolvedValue(fetchResponse({ result: "success", rates }));
 
-/** Seed the cache with a snapshot whose age we control via `ageMs`. */
-const seedCache = (ageMs: number, rates = validRates()) => {
+/** Seed a cache key with a snapshot whose age we control via `ageMs`. */
+const seedCacheKey = (key: string, ageMs: number, rates = validRates()) => {
   const snap: RatesSnapshot = {
     base: "USD",
     rates,
     fetchedAt: new Date(Date.now() - ageMs).toISOString(),
     source: "live",
   };
-  mockStore.set(CACHE_KEY, JSON.stringify(snap));
+  mockStore.set(key, JSON.stringify(snap));
 };
+
+/** Seed the pinned display cache (the one getCurrentRates/getStoredRates use). */
+const seedCache = (ageMs: number, rates = validRates()) =>
+  seedCacheKey(CACHE_KEY, ageMs, rates);
 
 const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
@@ -202,5 +208,76 @@ describe("getCurrentRates", () => {
     // Fresh-but-invalid cache is dropped, fetch fails -> static fallback.
     const snap = await getCurrentRates();
     expect(snap.source).toBe("static");
+  });
+});
+
+describe("getConverterRates", () => {
+  it("caches under its own key and NEVER writes the pinned display key", async () => {
+    (global as any).fetch = okFetch(validRates({ EUR: 0.88 }));
+
+    const snap = await getConverterRates();
+    expect(snap.source).toBe("live");
+
+    // The converter cache was written...
+    const cached = JSON.parse(mockStore.get(CONVERTER_CACHE_KEY)!) as RatesSnapshot;
+    expect(cached.rates.EUR).toBe(0.88);
+    // ...and the pinned display snapshot was left alone (the rate-pinning
+    // policy: only a currency change may move what balances display at).
+    expect(mockStore.has(CACHE_KEY)).toBe(false);
+  });
+
+  it("a converter refresh does not disturb an existing pinned snapshot", async () => {
+    seedCache(0, validRates({ EUR: 0.5 })); // the pin the app displays with
+    (global as any).fetch = okFetch(validRates({ EUR: 0.88 }));
+
+    await getConverterRates({ forceRefresh: true });
+
+    const pinned = JSON.parse(mockStore.get(CACHE_KEY)!) as RatesSnapshot;
+    expect(pinned.rates.EUR).toBe(0.5);
+  });
+
+  it("returns a fresh converter cache without hitting the network", async () => {
+    seedCacheKey(CONVERTER_CACHE_KEY, 60_000);
+    const fetchMock = okFetch();
+    (global as any).fetch = fetchMock;
+
+    const snap = await getConverterRates();
+    expect(snap.source).toBe("cache");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("forceRefresh fetches live even when the converter cache is fresh", async () => {
+    seedCacheKey(CONVERTER_CACHE_KEY, 60_000);
+    const fetchMock = okFetch(validRates({ GBP: 0.8 }));
+    (global as any).fetch = fetchMock;
+
+    const snap = await getConverterRates({ forceRefresh: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(snap.rates.GBP).toBe(0.8);
+  });
+
+  it("falls back to a stale converter cache when the fetch fails", async () => {
+    seedCacheKey(CONVERTER_CACHE_KEY, TWELVE_HOURS + 60_000, validRates({ JPY: 149 }));
+    (global as any).fetch = jest.fn().mockRejectedValue(new Error("offline"));
+
+    const snap = await getConverterRates();
+    expect(snap.source).toBe("cache");
+    expect(snap.rates.JPY).toBe(149);
+  });
+
+  it("falls back to the pinned snapshot when offline with no converter cache", async () => {
+    seedCache(0, validRates({ EUR: 0.5 }));
+    (global as any).fetch = jest.fn().mockRejectedValue(new Error("offline"));
+
+    const snap = await getConverterRates();
+    expect(snap.source).toBe("cache");
+    expect(snap.rates.EUR).toBe(0.5);
+  });
+
+  it("falls back to the static table when offline with no cache at all", async () => {
+    (global as any).fetch = jest.fn().mockRejectedValue(new Error("offline"));
+    const snap = await getConverterRates();
+    expect(snap.source).toBe("static");
+    expect(snap.rates).toMatchObject(USD_EXCHANGE_RATES);
   });
 });

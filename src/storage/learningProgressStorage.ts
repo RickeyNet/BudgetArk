@@ -8,7 +8,9 @@
  * shape is forward-compatible.
  *
  * Deliberately NOT synced to a paired partner: each device's learning state
- * is independent. The lesson catalog itself lives in src/data/.
+ * is independent. It IS included in backups (utils/exportData) so a device
+ * migration keeps the user's completed lessons; import merges by keeping the
+ * earliest completion per lesson. The lesson catalog itself lives in src/data/.
  */
 
 import * as EncryptedStorage from "./encryptedStorage";

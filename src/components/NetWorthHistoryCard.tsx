@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Net Worth History Card
+ * File: src/components/NetWorthHistoryCard.tsx
+ *
+ * Bridge-tab card that plots the monthly net-worth snapshots
+ * (netWorthSnapshotStorage) as an SVG line with a selectable range, so the
+ * user sees the trend rather than just today's number.
+ */
+
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import Svg, {
@@ -12,6 +21,7 @@ import type { NetWorthSnapshot } from "../types";
 import type { ThemeColors } from "../theme/themes";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
+import { formatDayLabel } from "../utils/dateFormat";
 
 type NetWorthHistoryCardProps = {
   snapshots: NetWorthSnapshot[];
@@ -44,11 +54,6 @@ const PAD_T = 12;
 const PAD_B = 28;
 const CHART_H = H - PAD_T - PAD_B;
 
-const formatDayLabel = (value: string): string =>
-  new Date(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 
 const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
   snapshots,
@@ -378,7 +383,7 @@ const makeStyles = (tokens: DensityTokens) => {
     },
     rangeChip: {
       borderWidth: 1,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingHorizontal: 10,
       paddingVertical: 6,
     },

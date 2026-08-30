@@ -7,12 +7,18 @@ import {
   normalizeImportCategory,
   isMonthKey,
   isDebtItem,
+  isPaymentItem,
   isBudgetEntryItem,
+  isBudgetLimitItem,
+  isCustomCategoryItem,
   isSavingsGoalItem,
   isAssetAccountItem,
   isHoldingItem,
   isNetWorthSnapshotItem,
+  isBusinessItem,
+  isPersonItem,
   sanitizePayoffStrategy,
+  sanitizeDebtMilestones,
   explainBudgetEntryProblem,
   VALIDATOR_LIMITS,
 } from "../recordValidators";
@@ -37,6 +43,24 @@ describe("primitive guards", () => {
     expect(isSafeText("   ")).toBe(false);
     expect(isSafeText("a".repeat(200))).toBe(false);
     expect(isSafeText("ab", 1)).toBe(false);
+  });
+
+  it("isSafeText rejects control characters and null bytes", () => {
+    // Import and LAN-sync free text must equal its sanitized form; the
+    // spreadsheet path already stripped these, the JSON/sync gate did not.
+    expect(isSafeText("evil\x00name")).toBe(false);
+    expect(isSafeText("bell\x07")).toBe(false);
+    expect(isSafeText("del\x7F")).toBe(false);
+  });
+
+  it("isSafeText keeps accepting real-world text (golden)", () => {
+    // Normal whitespace survives sanitizeTextInput - multi-line and tabbed
+    // text written by older app versions must keep validating.
+    expect(isSafeText("line one\nline two")).toBe(true);
+    expect(isSafeText("col1\tcol2")).toBe(true);
+    expect(isSafeText("Grocery run 🛒 café")).toBe(true);
+    // RTL text carries bidi characters; they are deliberately allowed.
+    expect(isSafeText("دفعة الإيجار")).toBe(true);
   });
 
   it("isSafeNumber enforces finite range bounds", () => {
@@ -133,6 +157,35 @@ describe("isDebtItem", () => {
   it("rejects a garbage deletedAt tombstone", () => {
     expect(isDebtItem({ ...valid, deletedAt: "garbage" })).toBe(false);
   });
+
+  it("accepts records with valid keep-alive fields", () => {
+    expect(
+      isDebtItem({
+        ...valid,
+        keepAliveEnabled: true,
+        keepAliveWindowMonths: 6,
+        keepAliveLeadDays: 30,
+        keepAliveLastUsedAt: "2026-07-10",
+      })
+    ).toBe(true);
+    expect(isDebtItem({ ...valid, keepAliveEnabled: false })).toBe(true);
+  });
+
+  it("keeps accepting records without keep-alive fields (older peers)", () => {
+    expect(isDebtItem(valid)).toBe(true);
+  });
+
+  it("rejects out-of-range or malformed keep-alive fields", () => {
+    expect(isDebtItem({ ...valid, keepAliveEnabled: "yes" })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveWindowMonths: 0 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveWindowMonths: 61 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveWindowMonths: 6.5 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveLeadDays: 0 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveLeadDays: 181 })).toBe(false);
+    expect(isDebtItem({ ...valid, keepAliveLastUsedAt: "garbage" })).toBe(
+      false
+    );
+  });
 });
 
 describe("isBudgetEntryItem", () => {
@@ -167,10 +220,355 @@ describe("isBudgetEntryItem", () => {
     expect(isBudgetEntryItem({ ...valid, amount: "12.5" })).toBe(false);
   });
 
+  it("rejects a description containing control characters, keeps multi-line", () => {
+    expect(
+      isBudgetEntryItem({ ...valid, description: "sneaky\x00bytes" })
+    ).toBe(false);
+    expect(
+      isBudgetEntryItem({ ...valid, description: "first line\nsecond line" })
+    ).toBe(true);
+    expect(isBudgetEntryItem({ ...valid, description: "" })).toBe(true);
+  });
+
   it("rejects a too-long description", () => {
     expect(
       isBudgetEntryItem({ ...valid, description: "a".repeat(221) })
     ).toBe(false);
+  });
+
+  describe("bank-connection provenance fields", () => {
+    it("accepts a bank-sourced entry with externalTxId and merchant", () => {
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          source: "bank",
+          externalTxId: "simplefin:ACT-123:TXN-456",
+          merchant: "COSTCO WHOLESALE",
+        })
+      ).toBe(true);
+    });
+
+    it("accepts entries without any provenance fields (manual entries)", () => {
+      expect(isBudgetEntryItem(valid)).toBe(true);
+    });
+
+    it("rejects an unknown source value", () => {
+      expect(isBudgetEntryItem({ ...valid, source: "plaid" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, source: 1 })).toBe(false);
+    });
+
+    it("rejects an empty or oversized externalTxId", () => {
+      expect(isBudgetEntryItem({ ...valid, externalTxId: "" })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, externalTxId: "a".repeat(201) })
+      ).toBe(false);
+    });
+
+    it("rejects an empty or oversized merchant", () => {
+      expect(isBudgetEntryItem({ ...valid, merchant: "   " })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, merchant: "a".repeat(121) })
+      ).toBe(false);
+    });
+  });
+
+  describe("income-type paycheck fields", () => {
+    const income = { ...valid, type: "income", category: "Income" };
+
+    it("accepts a W-2 entry with a retirement contribution", () => {
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "w2", retirementContribution: 150 })
+      ).toBe(true);
+    });
+
+    it("accepts a 1099 entry with a set-aside rate", () => {
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "1099", taxSetAsideRate: 25 })
+      ).toBe(true);
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "1099", taxSetAsideRate: 0 })
+      ).toBe(true);
+      expect(
+        isBudgetEntryItem({ ...income, incomeType: "1099", taxSetAsideRate: 100 })
+      ).toBe(true);
+    });
+
+    it("rejects an unknown incomeType", () => {
+      expect(isBudgetEntryItem({ ...income, incomeType: "W2" })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, incomeType: "contractor" })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, incomeType: 1099 })).toBe(false);
+    });
+
+    it("rejects an out-of-range or non-numeric retirementContribution", () => {
+      expect(
+        isBudgetEntryItem({ ...income, retirementContribution: -1 })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...income, retirementContribution: "150" })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...income, retirementContribution: NaN })
+      ).toBe(false);
+    });
+
+    it("rejects an out-of-range taxSetAsideRate", () => {
+      expect(isBudgetEntryItem({ ...income, taxSetAsideRate: -5 })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, taxSetAsideRate: 101 })).toBe(false);
+      expect(isBudgetEntryItem({ ...income, taxSetAsideRate: "25" })).toBe(false);
+    });
+
+    it("explains each failing paycheck field", () => {
+      expect(
+        explainBudgetEntryProblem({ ...income, incomeType: "contractor" })
+      ).toContain('"incomeType"');
+      expect(
+        explainBudgetEntryProblem({ ...income, retirementContribution: -1 })
+      ).toContain('"retirementContribution"');
+      expect(
+        explainBudgetEntryProblem({ ...income, taxSetAsideRate: 101 })
+      ).toContain('"taxSetAsideRate"');
+    });
+  });
+
+  describe("isPrivate partner-sync flag", () => {
+    it("accepts absent, true, and false", () => {
+      expect(isBudgetEntryItem(valid)).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: true })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: false })).toBe(true);
+    });
+
+    it("rejects non-boolean values and explains them", () => {
+      expect(isBudgetEntryItem({ ...valid, isPrivate: "yes" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: 1 })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, isPrivate: null })).toBe(false);
+      expect(explainBudgetEntryProblem({ ...valid, isPrivate: "yes" })).toContain(
+        '"isPrivate"'
+      );
+    });
+  });
+
+  describe("attachments (receipt-photo metadata)", () => {
+    const attachment = (over: Record<string, unknown> = {}) => ({
+      id: "a1",
+      createdAt: "2026-06-01T12:00:00.000Z",
+      width: 1600,
+      height: 1200,
+      ...over,
+    });
+
+    it("accepts an entry with valid attachments", () => {
+      expect(
+        isBudgetEntryItem({ ...valid, attachments: [attachment()] })
+      ).toBe(true);
+    });
+
+    it("accepts attachments without dimensions and an empty array", () => {
+      const { width, height, ...bare } = attachment();
+      void width;
+      void height;
+      expect(isBudgetEntryItem({ ...valid, attachments: [bare] })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, attachments: [] })).toBe(true);
+    });
+
+    it("rejects more than 10 items (blob-smuggling boundary, UI caps at 3)", () => {
+      const eleven = Array.from({ length: 11 }, (_, i) =>
+        attachment({ id: `a${i}` })
+      );
+      expect(isBudgetEntryItem({ ...valid, attachments: eleven })).toBe(false);
+      const ten = eleven.slice(0, 10);
+      expect(isBudgetEntryItem({ ...valid, attachments: ten })).toBe(true);
+    });
+
+    it("rejects non-array, non-object items, and unsafe ids", () => {
+      expect(isBudgetEntryItem({ ...valid, attachments: "a1" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, attachments: ["a1"] })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, attachments: [attachment({ id: "" })] })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ id: "a".repeat(81) })],
+        })
+      ).toBe(false);
+    });
+
+    it("rejects garbage createdAt and out-of-range dimensions", () => {
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ createdAt: "garbage" })],
+        })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ width: 0 })],
+        })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ height: 20_001 })],
+        })
+      ).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          attachments: [attachment({ width: Infinity })],
+        })
+      ).toBe(false);
+    });
+  });
+
+  describe("businessId", () => {
+    it("accepts an entry with a businessId", () => {
+      expect(isBudgetEntryItem({ ...valid, businessId: "b1" })).toBe(true);
+    });
+
+    it("accepts an entry without a businessId", () => {
+      expect(isBudgetEntryItem(valid)).toBe(true);
+    });
+
+    it("rejects an empty, oversized, or non-string businessId", () => {
+      expect(isBudgetEntryItem({ ...valid, businessId: "" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, businessId: "   " })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, businessId: "a".repeat(121) })
+      ).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, businessId: 42 })).toBe(false);
+    });
+
+    it("accepts any id isBusinessItem accepts (cap 120) - a tagged entry must not brick a diff its business passed", () => {
+      const longId = "a".repeat(120);
+      expect(isBusinessItem({ id: longId, name: "Acme", createdAt: "2026-06-01" })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, businessId: longId })).toBe(true);
+    });
+  });
+
+  describe("personId", () => {
+    it("accepts an entry with or without a personId", () => {
+      expect(isBudgetEntryItem({ ...valid, personId: "per1" })).toBe(true);
+      expect(isBudgetEntryItem(valid)).toBe(true);
+    });
+
+    it("rejects an empty, oversized, or non-string personId", () => {
+      expect(isBudgetEntryItem({ ...valid, personId: "" })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, personId: "a".repeat(121) })
+      ).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personId: 42 })).toBe(false);
+    });
+
+    it("accepts any id isPersonItem accepts (cap 120) - an assigned entry must not brick a diff its person passed", () => {
+      const longId = "a".repeat(120);
+      expect(isPersonItem({ id: longId, name: "Sam", createdAt: "2026-06-01" })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, personId: longId })).toBe(true);
+    });
+  });
+
+  describe("personIds", () => {
+    it("accepts a bounded array of safe ids", () => {
+      expect(isBudgetEntryItem({ ...valid, personId: "a", personIds: ["a", "b"] })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, personIds: [] })).toBe(true);
+    });
+
+    it("rejects non-arrays, oversized arrays, and unsafe members", () => {
+      expect(isBudgetEntryItem({ ...valid, personIds: "a" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personIds: ["a", ""] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personIds: ["a", 42] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, personIds: ["a".repeat(121)] })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, personIds: Array.from({ length: 21 }, (_, i) => `p${i}`) })
+      ).toBe(false);
+    });
+  });
+});
+
+describe("isBusinessItem", () => {
+  const valid = {
+    id: "b1",
+    name: "Acme Consulting LLC",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed business", () => {
+    expect(isBusinessItem(valid)).toBe(true);
+  });
+
+  it("accepts a tombstoned business (deletes must ride sync)", () => {
+    expect(isBusinessItem({ ...valid, deletedAt: "2026-06-03" })).toBe(true);
+  });
+
+  it("accepts a business without updatedAt", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isBusinessItem(rest)).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isBusinessItem(null)).toBe(false);
+    expect(isBusinessItem("Acme")).toBe(false);
+  });
+
+  it("rejects an empty or oversized name (cap 40)", () => {
+    expect(isBusinessItem({ ...valid, name: "  " })).toBe(false);
+    expect(isBusinessItem({ ...valid, name: "a".repeat(41) })).toBe(false);
+    expect(isBusinessItem({ ...valid, name: "a".repeat(40) })).toBe(true);
+  });
+
+  it("rejects a missing id or createdAt", () => {
+    const { id, ...noId } = valid;
+    void id;
+    expect(isBusinessItem(noId)).toBe(false);
+    const { createdAt, ...noCreated } = valid;
+    void createdAt;
+    expect(isBusinessItem(noCreated)).toBe(false);
+  });
+
+  it("rejects a garbage deletedAt tombstone (would break tombstone GC)", () => {
+    expect(isBusinessItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+
+  it("does NOT reject duplicate names (one bad record would kill a whole sync diff)", () => {
+    expect(isBusinessItem(valid)).toBe(true);
+    expect(isBusinessItem({ ...valid, id: "b2" })).toBe(true);
+  });
+});
+
+describe("isPersonItem", () => {
+  const valid = {
+    id: "per1",
+    name: "Sam",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed person, with or without updatedAt", () => {
+    expect(isPersonItem(valid)).toBe(true);
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isPersonItem(rest)).toBe(true);
+  });
+
+  it("accepts a tombstoned person (deletes must ride sync)", () => {
+    expect(isPersonItem({ ...valid, deletedAt: "2026-06-03" })).toBe(true);
+  });
+
+  it("rejects a non-object, missing id/createdAt, or bad name (cap 40)", () => {
+    expect(isPersonItem(null)).toBe(false);
+    expect(isPersonItem("Sam")).toBe(false);
+    const { id, ...noId } = valid;
+    void id;
+    expect(isPersonItem(noId)).toBe(false);
+    expect(isPersonItem({ ...valid, name: "  " })).toBe(false);
+    expect(isPersonItem({ ...valid, name: "a".repeat(41) })).toBe(false);
+    expect(isPersonItem({ ...valid, name: "a".repeat(40) })).toBe(true);
+  });
+
+  it("rejects a garbage deletedAt tombstone (would break tombstone GC)", () => {
+    expect(isPersonItem({ ...valid, deletedAt: "garbage" })).toBe(false);
   });
 });
 
@@ -187,6 +585,69 @@ describe("explainBudgetEntryProblem", () => {
       amount: "12.5",
     });
     expect(msg).toContain("quoted string");
+  });
+
+  it("explains bad bank-provenance fields (lockstep with isBudgetEntryItem)", () => {
+    const base = {
+      id: "e1",
+      type: "expense",
+      category: "Food",
+      amount: 12.5,
+      date: "2026-06-01",
+      createdAt: "2026-06-01",
+    };
+    expect(explainBudgetEntryProblem({ ...base, source: "plaid" })).toContain(
+      '"source"'
+    );
+    expect(
+      explainBudgetEntryProblem({ ...base, externalTxId: "a".repeat(201) })
+    ).toContain('"externalTxId"');
+    expect(explainBudgetEntryProblem({ ...base, merchant: "" })).toContain(
+      '"merchant"'
+    );
+  });
+
+  it("explains a bad businessId (lockstep with isBudgetEntryItem)", () => {
+    const base = {
+      id: "e1",
+      type: "expense",
+      category: "Food",
+      amount: 12.5,
+      date: "2026-06-01",
+      createdAt: "2026-06-01",
+    };
+    expect(
+      explainBudgetEntryProblem({ ...base, businessId: "a".repeat(121) })
+    ).toContain('"businessId"');
+    expect(explainBudgetEntryProblem({ ...base, businessId: "" })).toContain(
+      '"businessId"'
+    );
+    expect(
+      explainBudgetEntryProblem({ ...base, personId: "a".repeat(121) })
+    ).toContain('"personId"');
+    expect(explainBudgetEntryProblem({ ...base, personId: "" })).toContain(
+      '"personId"'
+    );
+  });
+
+  it("explains bad attachments (lockstep with isBudgetEntryItem)", () => {
+    const base = {
+      id: "e1",
+      type: "expense",
+      category: "Food",
+      amount: 12.5,
+      date: "2026-06-01",
+      createdAt: "2026-06-01",
+    };
+    expect(
+      explainBudgetEntryProblem({ ...base, attachments: "not-an-array" })
+    ).toContain('"attachments"');
+    expect(
+      explainBudgetEntryProblem({
+        ...base,
+        attachments: [{ id: "a1", createdAt: "garbage" }],
+      })
+    ).toContain('"attachments"');
   });
 });
 
@@ -228,6 +689,22 @@ describe("isAssetAccountItem", () => {
         createdAt: "2026-06-01",
       })
     ).toBe(false);
+  });
+
+  it("accepts a boolean isEmergencyFund and rejects truthy non-booleans", () => {
+    const valid = {
+      id: "a1",
+      name: "HYSA",
+      category: "savings",
+      balance: 100,
+      createdAt: "2026-06-01",
+    };
+    expect(isAssetAccountItem(valid)).toBe(true);
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: true })).toBe(true);
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: false })).toBe(true);
+    // A smuggled truthy value would behave like `true` downstream.
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: "yes" })).toBe(false);
+    expect(isAssetAccountItem({ ...valid, isEmergencyFund: 1 })).toBe(false);
   });
 });
 
@@ -357,5 +834,255 @@ describe("isNetWorthSnapshotItem", () => {
         netWorth: 800,
       })
     ).toBe(false);
+  });
+});
+
+describe("isPaymentItem", () => {
+  const valid = {
+    id: "p1",
+    debtId: "d1",
+    amount: 50,
+    date: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed payment", () => {
+    expect(isPaymentItem(valid)).toBe(true);
+  });
+
+  it("accepts a payment without updatedAt (older peers)", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isPaymentItem(rest)).toBe(true);
+  });
+
+  it("accepts a tombstoned payment", () => {
+    expect(isPaymentItem({ ...valid, deletedAt: "2026-06-03" })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isPaymentItem(null)).toBe(false);
+    expect(isPaymentItem("p1")).toBe(false);
+    expect(isPaymentItem([valid])).toBe(false);
+  });
+
+  it("rejects a missing id or debtId", () => {
+    const { id, ...noId } = valid;
+    void id;
+    expect(isPaymentItem(noId)).toBe(false);
+    const { debtId, ...noDebtId } = valid;
+    void debtId;
+    expect(isPaymentItem(noDebtId)).toBe(false);
+  });
+
+  it("rejects a zero, negative, or NaN amount", () => {
+    expect(isPaymentItem({ ...valid, amount: 0 })).toBe(false);
+    expect(isPaymentItem({ ...valid, amount: -50 })).toBe(false);
+    expect(isPaymentItem({ ...valid, amount: NaN })).toBe(false);
+  });
+
+  it("rejects a string amount", () => {
+    expect(isPaymentItem({ ...valid, amount: "50" })).toBe(false);
+  });
+
+  it("rejects an unparseable date", () => {
+    expect(isPaymentItem({ ...valid, date: "not-a-date" })).toBe(false);
+  });
+
+  it("rejects a garbage deletedAt or updatedAt (would break tombstone GC)", () => {
+    expect(isPaymentItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+    expect(isPaymentItem({ ...valid, updatedAt: "garbage" })).toBe(false);
+  });
+
+  it("rejects an oversized id/debtId (default isSafeText cap 120)", () => {
+    expect(isPaymentItem({ ...valid, id: "a".repeat(121) })).toBe(false);
+    expect(isPaymentItem({ ...valid, debtId: "a".repeat(121) })).toBe(false);
+  });
+
+  describe("appliedAmount (clamped minimum-due delta)", () => {
+    it("accepts an appliedAmount at or below the payment amount", () => {
+      expect(isPaymentItem({ ...valid, appliedAmount: 50 })).toBe(true);
+      expect(isPaymentItem({ ...valid, appliedAmount: 0 })).toBe(true);
+      expect(isPaymentItem({ ...valid, appliedAmount: 25 })).toBe(true);
+    });
+
+    it("rejects an appliedAmount that exceeds the payment amount", () => {
+      expect(isPaymentItem({ ...valid, appliedAmount: 50.01 })).toBe(false);
+    });
+
+    it("rejects a negative appliedAmount", () => {
+      expect(isPaymentItem({ ...valid, appliedAmount: -1 })).toBe(false);
+    });
+  });
+
+  it("does not choke on a prototype-pollution-style key alongside valid fields", () => {
+    // JSON.parse gives "__proto__" an ordinary own property (it does not
+    // reach the prototype chain), and the validator only reads named
+    // fields off the object - confirm neither trips it up.
+    const withProto = JSON.parse(
+      '{"id":"p1","debtId":"d1","amount":50,"date":"2026-06-01","__proto__":{"polluted":true}}'
+    );
+    expect(isPaymentItem(withProto)).toBe(true);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+describe("isBudgetLimitItem", () => {
+  const valid = {
+    category: "Grocery",
+    monthlyLimit: 400,
+    updatedAt: "2026-06-01",
+  };
+
+  it("accepts a well-formed limit", () => {
+    expect(isBudgetLimitItem(valid)).toBe(true);
+  });
+
+  it("accepts a limit without updatedAt", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isBudgetLimitItem(rest)).toBe(true);
+  });
+
+  it("accepts a tombstoned limit (removals ride sync as tombstones)", () => {
+    expect(isBudgetLimitItem({ ...valid, deletedAt: "2026-06-02" })).toBe(true);
+  });
+
+  it("accepts a safe custom category name", () => {
+    expect(isBudgetLimitItem({ ...valid, category: "Pets" })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isBudgetLimitItem(null)).toBe(false);
+    expect(isBudgetLimitItem("Grocery")).toBe(false);
+  });
+
+  it("rejects an invalid category (control chars or overlong custom name)", () => {
+    expect(isBudgetLimitItem({ ...valid, category: "evil\x00name" })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, category: "a".repeat(25) })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, category: 123 })).toBe(false);
+  });
+
+  it("rejects a zero, negative, or NaN monthlyLimit", () => {
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: 0 })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: -400 })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: NaN })).toBe(false);
+  });
+
+  it("rejects a monthlyLimit over the money cap", () => {
+    expect(
+      isBudgetLimitItem({ ...valid, monthlyLimit: VALIDATOR_LIMITS.MAX_MONEY + 1 })
+    ).toBe(false);
+  });
+
+  it("rejects a string monthlyLimit", () => {
+    expect(isBudgetLimitItem({ ...valid, monthlyLimit: "400" })).toBe(false);
+  });
+
+  it("rejects a garbage updatedAt or deletedAt", () => {
+    expect(isBudgetLimitItem({ ...valid, updatedAt: "garbage" })).toBe(false);
+    expect(isBudgetLimitItem({ ...valid, deletedAt: "garbage" })).toBe(false);
+  });
+});
+
+describe("isCustomCategoryItem", () => {
+  const valid = {
+    id: "c1",
+    name: "Pets",
+    icon: "🐾",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-02",
+  };
+
+  it("accepts a well-formed custom category", () => {
+    expect(isCustomCategoryItem(valid)).toBe(true);
+  });
+
+  it("accepts a category without updatedAt, and with a valid defaultBucket", () => {
+    const { updatedAt, ...rest } = valid;
+    void updatedAt;
+    expect(isCustomCategoryItem(rest)).toBe(true);
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "needs" })).toBe(true);
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "wants" })).toBe(true);
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "savings" })).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(isCustomCategoryItem(null)).toBe(false);
+    expect(isCustomCategoryItem("Pets")).toBe(false);
+  });
+
+  it("rejects a missing id", () => {
+    const { id, ...noId } = valid;
+    void id;
+    expect(isCustomCategoryItem(noId)).toBe(false);
+  });
+
+  it("rejects a name that shadows a built-in category", () => {
+    // Built-ins must stay reserved - a custom category named "Housing"
+    // would collide with the real one in every icon/bucket lookup.
+    expect(isCustomCategoryItem({ ...valid, name: "Housing" })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, name: "Savings" })).toBe(false);
+  });
+
+  it("rejects a name with control characters or over the custom-name cap", () => {
+    expect(isCustomCategoryItem({ ...valid, name: "evil\x00name" })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, name: "a".repeat(25) })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, name: 123 })).toBe(false);
+  });
+
+  it("rejects an empty, oversized, or non-string icon", () => {
+    expect(isCustomCategoryItem({ ...valid, icon: "" })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, icon: "a".repeat(9) })).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, icon: 42 })).toBe(false);
+  });
+
+  it("rejects an unknown defaultBucket", () => {
+    expect(isCustomCategoryItem({ ...valid, defaultBucket: "lavish" })).toBe(false);
+  });
+
+  it("rejects a missing or garbage createdAt", () => {
+    const { createdAt, ...noCreated } = valid;
+    void createdAt;
+    expect(isCustomCategoryItem(noCreated)).toBe(false);
+    expect(isCustomCategoryItem({ ...valid, createdAt: "garbage" })).toBe(false);
+  });
+
+  it("rejects a garbage updatedAt when present", () => {
+    expect(isCustomCategoryItem({ ...valid, updatedAt: "garbage" })).toBe(false);
+  });
+});
+
+describe("sanitizeDebtMilestones", () => {
+  it("returns the plan unchanged when steps is an array", () => {
+    const plan = { steps: [{ id: "x" }], updatedAt: "2026-06-01" };
+    expect(sanitizeDebtMilestones(plan)).toBe(plan);
+  });
+
+  it("accepts an empty steps array", () => {
+    const plan = { steps: [] };
+    expect(sanitizeDebtMilestones(plan)).toBe(plan);
+  });
+
+  it("returns undefined for a non-object", () => {
+    expect(sanitizeDebtMilestones(null)).toBeUndefined();
+    expect(sanitizeDebtMilestones("plan")).toBeUndefined();
+    expect(sanitizeDebtMilestones(42)).toBeUndefined();
+    // Arrays fail the isObject gate before `steps` is even inspected.
+    expect(sanitizeDebtMilestones([{ id: "x" }])).toBeUndefined();
+  });
+
+  it("returns undefined when steps is missing or not an array", () => {
+    expect(sanitizeDebtMilestones({})).toBeUndefined();
+    expect(sanitizeDebtMilestones({ steps: "not-an-array" })).toBeUndefined();
+    expect(sanitizeDebtMilestones({ steps: { id: "x" } })).toBeUndefined();
+    expect(sanitizeDebtMilestones({ steps: null })).toBeUndefined();
+  });
+
+  it("does NOT validate individual step contents (deliberately loose - storage re-derives on read)", () => {
+    // Documents current behavior per the source comment: this only checks
+    // the basic shape, so garbage step entries pass through untouched.
+    const plan = { steps: [null, 42, "garbage", { unexpected: true }] };
+    expect(sanitizeDebtMilestones(plan)).toBe(plan);
   });
 });

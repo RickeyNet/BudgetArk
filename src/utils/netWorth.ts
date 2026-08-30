@@ -7,6 +7,7 @@ import type {
   SavingsGoal,
 } from "../types";
 import { holdingsTotalValue } from "./holdingsMath";
+import { getEmergencyFundSource } from "./emergencyFund";
 
 export type NetWorthTotals = {
   totalAssets: number;
@@ -65,7 +66,17 @@ export const calculateNetWorthTotals = ({
   displayCurrency,
   rates,
 }: NetWorthInput): NetWorthTotals => {
-  const goalSavings = savingsGoals.reduce((sum, goal) => sum + goal.currentAmount, 0);
+  // When the emergency fund is linked to designated savings accounts, its
+  // money already lives in those accounts' balances (summed below) - counting
+  // the emergency_fund goal's stored amount too would double-count the fund.
+  const efLinked = getEmergencyFundSource(assetAccounts).linked;
+  const goalSavings = savingsGoals.reduce(
+    (sum, goal) =>
+      efLinked && goal.category === "emergency_fund"
+        ? sum
+        : sum + goal.currentAmount,
+    0,
+  );
   // Reserve-category expense entries flow money INTO savings. Entries that
   // are linkedAccountId-tagged have already credited an asset account (see
   // applyMissedRecurringLinkedAccountContributions + the Add/Edit handlers in

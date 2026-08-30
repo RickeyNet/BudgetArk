@@ -14,36 +14,43 @@
  * - Uses useCallback extensively to prevent unnecessary child re-renders
  */
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { usePresentAfterDismiss } from "../hooks/usePresentAfterDismiss";
 import {
   View,
   Text,
   FlatList,
+  Keyboard,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
   TouchableOpacity,
   StatusBar,
   StyleSheet,
+  InteractionManager,
   Modal,
   ScrollView,
   TextInput,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { useUndo } from "../undo/UndoProvider";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
 import {
-  DEBT_CLASS_OPTIONS,
-  DEBT_OWNER_OPTIONS,
+  AssetAccount,
   Debt,
-  DebtClass,
   DebtMilestoneKey,
   DebtMilestonePlan,
   DebtOwner,
   BudgetEntry,
   NewDebtInput,
   Payment,
+  RootTabParamList,
   SavingsGoal,
+  ExternalAccountLink,
 } from "../types";
 import {
   getDebts,
@@ -56,6 +63,8 @@ import {
   getPayoffStrategyPreference,
   savePayoffStrategyPreference,
 } from "../storage/debtStorage";
+import { subscribeDataChanged } from "../storage/dataChangeNotifier";
+import { buildEntryDateISO, localYearMonth } from "../utils/entryDate";
 import {
   dismissDebtDueForMonth,
   getDebtDueDismissals,
@@ -65,14 +74,20 @@ import {
   debtsDueOrOverdueNeedingPrompt,
   upcomingDebtDuesWithin,
 } from "../utils/debtDueCalendar";
+import { getMonthKey } from "../utils/budgetMonths";
+import { minimumDuePaymentId } from "../utils/debtPaymentDedupe";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
 import DebtDuePaymentPromptModal from "../components/DebtDuePaymentPromptModal";
+import CardKeepAliveBanner from "../components/CardKeepAliveBanner";
 import {
-  getSavingsGoals,
-  saveSavingsGoals,
-  deleteSavingsGoal,
-  restoreSavingsGoal,
-} from "../storage/savingsGoalStorage";
+  dismissCardKeepAliveForMonth,
+  getCardKeepAliveDismissals,
+  type CardKeepAliveDismissals,
+} from "../storage/cardKeepAliveDismissalStorage";
+import { rescheduleCardKeepAliveReminders } from "../notifications/cardKeepAliveReminders";
+import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { getAssetAccounts } from "../storage/assetAccountStorage";
+import { getEmergencyFundSource, sumSavingsReserve } from "../utils/emergencyFund";
 import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
@@ -82,19 +97,37 @@ import {
 } from "../storage/debtMilestoneStorage";
 import { consumeArkSetupPromptRequest } from "../storage/arkSetupStorage";
 import DebtCard from "../components/DebtCard";
-import AddDebtModal from "../components/AddDebtModal";
+import SheetKeyboardAvoider from "../components/SheetKeyboardAvoider";
+import DebtFreeCountdownCard from "../components/DebtFreeCountdownCard";
+import GlobalSearchModal from "../components/GlobalSearchModal";
+import AddDebtModal, { type DebtBankLinkExtras } from "../components/AddDebtModal";
+import { getLinks, updateLink } from "../storage/externalAccountLinksStorage";
+import { linkUpdatesDebtBalance } from "../services/connections/debtBalances";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
 import DebtPayoffCelebrationModal from "../components/DebtPayoffCelebrationModal";
 import DebtPaymentCelebrationModal from "../components/DebtPaymentCelebrationModal";
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
+import { useTipJar } from "../tipjar/TipJarProvider";
+import type { TipNudgeCopy } from "../utils/tipJarNudge";
 import { simulatePayoffPlan } from "../utils/calculations";
+import {
+  computeMilestoneProgress,
+  shouldPromoteSecuredDebts,
+  sortDebtsForPayoff,
+  summarizeDebtTotals,
+  type ComputedMilestone,
+  type PayoffStrategy,
+} from "../utils/debtTrackerMath";
+import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
+import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
 
 /**
  * FAB layout constants. The vertical offset derives from the live bottom
@@ -104,23 +137,9 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
  */
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
-import type { ThemeColors } from "../theme/themes";
-import type { DensityTokens } from "../theme/density";
 
 
-type PayoffStrategy = "custom" | "avalanche" | "snowball";
 type DebtOwnerFilter = "all" | DebtOwner;
-
-type ComputedMilestone = {
-  key: DebtMilestoneKey;
-  title: string;
-  description: string;
-  isCompleted: boolean;
-  targetAmount?: number;
-  progress: number;
-  metricLabel: string;
-  nextAction: string;
-};
 
 const ESSENTIAL_CATEGORIES = [
   "Housing",
@@ -132,32 +151,6 @@ const ESSENTIAL_CATEGORIES = [
 ] as const;
 
 const KEEL_MAX_TARGET = 2000;
-
-/**
- * Tier ordering for the debt list. Lower tier = listed first.
- *
- * Default: credit cards / personal loans first, then car loans, then house.
- *
- * Promotion gate: car and mortgage only move to the top of the list once
- * (a) the Hull milestone is marked complete and (b) every credit /
- * personal-loan debt has a zero balance. Both checks are required - Hull
- * being marked complete while credit still carries a balance shouldn't
- * bury those entries behind the mortgage. When the gate opens, car comes
- * before house (smaller balance, naturally tackled first).
- */
-const getDebtTier = (
-  debt: Debt,
-  promoteSecured: boolean
-): number => {
-  if (promoteSecured) {
-    if (debt.debtClass === "car") return 0;
-    if (debt.debtClass === "house") return 1;
-    return 2; // personal_credit (paid off in this state, but ordered last)
-  }
-  if (debt.debtClass === "personal_credit") return 0;
-  if (debt.debtClass === "car") return 1;
-  return 2; // house
-};
 
 const formatPayoffMonths = (months: number): string => {
   if (!Number.isFinite(months)) return "Not solvable";
@@ -210,17 +203,18 @@ const DebtTrackerScreen: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [pendingDeleteDebt, setPendingDeleteDebt] = useState<Debt | null>(null);
   const [strategy, setStrategy] = useState<PayoffStrategy>("custom");
   const [showHistory, setShowHistory] = useState(false);
   const [hullExtraDraft, setHullExtraDraft] = useState("100");
   const [ownerFilter, setOwnerFilter] = useState<DebtOwnerFilter>("all");
-  const [showClassifyModal, setShowClassifyModal] = useState(false);
-  const [classDraftByDebtId, setClassDraftByDebtId] = useState<Record<string, DebtClass>>({});
   const [milestonePlan, setMilestonePlan] = useState<DebtMilestonePlan | null>(null);
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const [savingsReserve, setSavingsReserve] = useState(0);
+  // Live asset accounts, for the EF-designated-accounts resolution: when any
+  // savings account is flagged as the emergency fund, Keel/Deck progress
+  // tracks the flagged accounts' combined balance instead of Savings entries.
+  const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
   const [retirementInvestingMonthly, setRetirementInvestingMonthly] = useState(0);
   const [monthlyEssentialsEstimate, setMonthlyEssentialsEstimate] = useState(3000);
   const [expandedMilestones, setExpandedMilestones] = useState<
@@ -246,15 +240,42 @@ const DebtTrackerScreen: React.FC = () => {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [savingsDraft, setSavingsDraft] = useState("");
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
+  // The occasional Tip Jar note riding the payoff celebration (null = none).
+  const [celebrationNudge, setCelebrationNudge] = useState<TipNudgeCopy | null>(null);
   // Lighter "payment logged" confetti for a confirmed reminder payment that
   // didn't clear the debt (a full payoff uses celebrationDebt instead).
   const [paymentCelebration, setPaymentCelebration] = useState<{
     debt: Debt;
     amount: number;
+    nudge: TipNudgeCopy | null;
   } | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  /* "Now" for the Debt-Free Countdown. Stamped when the focus-effect load
+   * lands (render must stay pure, so no new Date() during render); each
+   * focus re-stamps it, which is all the freshness day-granularity needs. */
+  const [countdownNow, setCountdownNow] = useState<Date | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  /** Reference time for search date presets - stamped when the sheet opens,
+   * never in render (react-hooks/purity). */
+  const [searchNow, setSearchNow] = useState<Date | null>(null);
+  /** Budget entries are loaded for milestone math anyway; kept in state so
+   * the global search sheet can search them from this tab too. */
+  const [entriesForSearch, setEntriesForSearch] = useState<BudgetEntry[]>([]);
   const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [duePromptDebt, setDuePromptDebt] = useState<Debt | null>(null);
+  const [keepAliveDismissals, setKeepAliveDismissals] =
+    useState<CardKeepAliveDismissals>({});
+  /**
+   * Per-device bank-account links (ExternalAccountLink.debtId): which card
+   * gets its balance from which connected account. Drives the "Balance from
+   * <account>" line on DebtCard; the balance itself arrives via bank sync
+   * and the dataChangeNotifier reload.
+   */
+  const [bankLinks, setBankLinks] = useState<ExternalAccountLink[]>([]);
+
+  const navigation =
+    useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+  const route = useRoute<RouteProp<RootTabParamList, "DebtTracker">>();
 
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
@@ -273,6 +294,8 @@ const DebtTrackerScreen: React.FC = () => {
   const anchorDebtsFab = useCoachmarkAnchor("debts-fab");
 
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const presentAfterDismiss = usePresentAfterDismiss();
+  const { noteWin, showNudgeToast, openTipJar } = useTipJar();
 
   const primeMilestonesModal = useCallback((plan: DebtMilestonePlan) => {
     setTargetDraftByStep((prev) => {
@@ -298,6 +321,15 @@ const DebtTrackerScreen: React.FC = () => {
     });
   }, []);
 
+  // Bumped when partner sync / bank sync / an import writes storage while
+  // this tab is mounted; a dep of the focus loader below so it re-runs and
+  // the screen shows the merged debts/payments instead of a stale snapshot.
+  const [reloadTick, setReloadTick] = useState(0);
+  useEffect(
+    () => subscribeDataChanged(() => setReloadTick((tick) => tick + 1)),
+    []
+  );
+
   /** Load debts from device storage whenever this tab is focused */
   useFocusEffect(
     useCallback(() => {
@@ -315,6 +347,9 @@ const DebtTrackerScreen: React.FC = () => {
             savedStrategy,
             storedGoals,
             shouldOpenArkSetup,
+            storedKeepAliveDismissals,
+            storedAssetAccounts,
+            storedLinks,
           ] = await Promise.all([
             getDebts(),
             getPayments(),
@@ -324,6 +359,10 @@ const DebtTrackerScreen: React.FC = () => {
             getPayoffStrategyPreference(),
             getSavingsGoals(),
             consumeArkSetupPromptRequest(),
+            getCardKeepAliveDismissals(),
+            getAssetAccounts(),
+            // Display-only: a link-store hiccup must not block the debts.
+            getLinks().catch((): ExternalAccountLink[] => []),
           ]);
           if (cancelled) return;
           // Filter out any corrupted entries from earlier sessions
@@ -342,7 +381,11 @@ const DebtTrackerScreen: React.FC = () => {
           if (cancelled) return;
           setDebts(valid);
           setPayments(storedPayments);
+          setEntriesForSearch(budgetEntries);
+          setCountdownNow(new Date());
           setDueDismissals(storedDismissals);
+          setKeepAliveDismissals(storedKeepAliveDismissals);
+          setBankLinks(storedLinks);
           // The "minimum due today" prompt is now opened on app launch by the
           // app-root DebtDueReminderHost (so it fires regardless of the active
           // tab). Auto-opening it here too would stack a second copy when the
@@ -357,18 +400,13 @@ const DebtTrackerScreen: React.FC = () => {
             setStrategy(savedStrategy);
           }
           setSavingsGoals(storedGoals);
+          setAssetAccounts(storedAssetAccounts);
 
           // Emergency-fund / keel reserve. Only the "Savings" category
           // counts here - Retirement and Investing flow into the
           // gather_animals milestone via retirementInvestingMonthly below
           // because those funds aren't liquid emergency money.
-          const savings = budgetEntries
-            .filter(
-              (entry) =>
-                entry.type === "expense" && entry.category === "Savings"
-            )
-            .reduce((sum, entry) => sum + entry.amount, 0);
-          setSavingsReserve(savings);
+          setSavingsReserve(sumSavingsReserve(budgetEntries));
 
           const monthTotals = budgetEntries.reduce<Record<string, number>>((acc, entry) => {
             if (
@@ -415,14 +453,72 @@ const DebtTrackerScreen: React.FC = () => {
           if (__DEV__) console.error("Failed to load debts:", error);
           setDebts([]);
         }
-        if (!cancelled) setIsLoading(false);
       };
       loadDebts();
       return () => {
         cancelled = true;
       };
-    }, [primeMilestonesModal])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
+    }, [primeMilestonesModal, reloadTick])
   );
+
+  // A keep-alive notification tap (or the Bridge banner) navigates here with
+  // openKeepAlive set. The banner sits at the top of the list, so the only
+  // action is scrolling it into view. Deferred past the tab-switch
+  // transition, matching the openInbox pattern on BudgetScreen.
+  React.useEffect(() => {
+    if (!route.params?.openKeepAlive) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      navigation.setParams({ openKeepAlive: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.openKeepAlive]);
+
+  // A payment result tap in the Budget tab's search sheet navigates here
+  // with openHistory set. Deferred past the tab-switch transition -
+  // presenting a Modal mid-navigation is the iOS silent-present failure
+  // this codebase keeps hitting.
+  React.useEffect(() => {
+    if (!route.params?.openHistory) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setShowHistory(true);
+      navigation.setParams({ openHistory: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.openHistory]);
+
+  /** "I used it" on a card's keep-alive tracker: stamp now, replan nudges. */
+  const handleKeepAliveUse = useCallback(async (debtId: string) => {
+    try {
+      const updated = await updateDebt(debtId, {
+        keepAliveLastUsedAt: new Date().toISOString(),
+      });
+      setDebts(updated);
+      void rescheduleCardKeepAliveReminders();
+      triggerHaptic("success");
+    } catch (error) {
+      triggerHaptic("error");
+      Alert.alert(
+        "Couldn't save",
+        describeError(error, "The card's last-used date wasn't updated. Please try again."),
+      );
+    }
+  }, []);
+
+  /** "Later" on the keep-alive banner: mute that card for this month. */
+  const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
+    try {
+      await dismissCardKeepAliveForMonth(debt.id);
+      setKeepAliveDismissals(await getCardKeepAliveDismissals());
+    } catch (error) {
+      triggerHaptic("error");
+      Alert.alert(
+        "Couldn't save",
+        describeError(error, "The reminder wasn't muted. Please try again."),
+      );
+    }
+  }, []);
 
   const filteredDebts = React.useMemo(() => {
     return ownerFilter === "all"
@@ -431,10 +527,10 @@ const DebtTrackerScreen: React.FC = () => {
   }, [debts, ownerFilter]);
 
   /** Derived summary values */
-  const totalDebt = filteredDebts.reduce((sum, d) => sum + d.balance, 0);
-  const totalOriginal = filteredDebts.reduce((sum, d) => sum + d.originalBalance, 0);
-  const totalPaid = totalOriginal - totalDebt;
-  const overallPercent = totalOriginal > 0 ? Math.round((totalPaid / totalOriginal) * 100) : 0;
+  const { totalDebt, totalPaid, overallPercent } = React.useMemo(
+    () => summarizeDebtTotals(filteredDebts),
+    [filteredDebts]
+  );
   const totalMine = debts
     .filter((debt) => debt.owner === "mine")
     .reduce((sum, debt) => sum + debt.balance, 0);
@@ -445,136 +541,37 @@ const DebtTrackerScreen: React.FC = () => {
     .filter((debt) => debt.owner === "joint")
     .reduce((sum, debt) => sum + debt.balance, 0);
 
-  // Hull (Build Your Ark step "Clear Non-Mortgage Debt") covers credit cards,
-  // personal loans, and car loans - anything that isn't the mortgage.
-  const nonMortgageDebts = debts.filter((debt) => debt.debtClass !== "house");
-  const nonMortgageRemaining = nonMortgageDebts.reduce(
-    (sum, debt) => sum + debt.balance,
-    0
+  // EF-designated savings accounts (Bridge account editor). When any exist,
+  // Keel and Deck track the flagged accounts' combined balance - the same
+  // value the Bridge/Budget emergency-fund cards show - instead of the
+  // Savings-entry reserve, and the manual "Set Savings" editor is hidden.
+  const efSource = React.useMemo(
+    () => getEmergencyFundSource(assetAccounts),
+    [assetAccounts]
   );
-  const nonMortgageOriginal = nonMortgageDebts.reduce(
-    (sum, debt) => sum + debt.originalBalance,
-    0
+  const effectiveReserve = efSource.linked ? efSource.linkedAmount : savingsReserve;
+
+  const computedMilestones = React.useMemo<ComputedMilestone[]>(
+    () =>
+      computeMilestoneProgress({
+        plan: milestonePlan,
+        debts,
+        savingsGoals,
+        effectiveReserve,
+        monthlyEssentialsEstimate,
+        retirementInvestingMonthly,
+        formatCurrency,
+      }),
+    [
+      debts,
+      effectiveReserve,
+      formatCurrency,
+      milestonePlan,
+      monthlyEssentialsEstimate,
+      retirementInvestingMonthly,
+      savingsGoals,
+    ]
   );
-
-  // Moorings (pay down the house) is keyed only on house debts.
-  const mortgageDebts = debts.filter((debt) => debt.debtClass === "house");
-  const mortgageRemaining = mortgageDebts.reduce((sum, debt) => sum + debt.balance, 0);
-  const mortgageOriginal = mortgageDebts.reduce(
-    (sum, debt) => sum + debt.originalBalance,
-    0
-  );
-
-  const computedMilestones = React.useMemo<ComputedMilestone[]>(() => {
-    if (!milestonePlan) return [];
-
-    return milestonePlan.steps.map((step) => {
-      if (step.key === "keel") {
-        const target = step.targetAmount || 1200;
-        const progress = target > 0 ? Math.min(savingsReserve / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(savingsReserve)} / ${formatCurrency(target)}`,
-          nextAction: "Set aside your first cushion target before pushing harder elsewhere.",
-        };
-      }
-
-      if (step.key === "hull") {
-        const progress =
-          nonMortgageOriginal > 0
-            ? Math.min((nonMortgageOriginal - nonMortgageRemaining) / nonMortgageOriginal, 1)
-            : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(nonMortgageRemaining)} remaining`,
-          nextAction: "Apply your next extra payment to the first debt in your chosen payoff order.",
-        };
-      }
-
-      if (step.key === "deck") {
-        const target = step.targetAmount || monthlyEssentialsEstimate * 3;
-        const progress = target > 0 ? Math.min(savingsReserve / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(savingsReserve)} / ${formatCurrency(target)}`,
-          nextAction: "Grow your reserves toward 3-6 months of essentials for stability.",
-        };
-      }
-
-      if (step.key === "supplies") {
-        const target = step.targetAmount || 500;
-        const progress = target > 0 ? Math.min(retirementInvestingMonthly / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: `${formatCurrency(retirementInvestingMonthly)} / ${formatCurrency(target)} /mo`,
-          nextAction: "Increase retirement contributions toward 15% of household income.",
-        };
-      }
-
-      if (step.key === "gather_animals") {
-        const educationGoals = savingsGoals.filter((g) => g.category === "education");
-        const totalSaved = educationGoals.reduce((sum, g) => sum + g.currentAmount, 0);
-        const totalGoalTarget = educationGoals.reduce((sum, g) => sum + g.targetAmount, 0);
-        const target = step.targetAmount || totalGoalTarget || 10000;
-        const progress = target > 0 ? Math.min(totalSaved / target, 1) : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: educationGoals.length > 0
-            ? `${formatCurrency(totalSaved)} / ${formatCurrency(target)}`
-            : "Add an education savings goal to track",
-          nextAction: "Open or contribute to a 529 plan or education savings account.",
-        };
-      }
-
-      if (step.key === "moorings") {
-        const progress =
-          mortgageOriginal > 0
-            ? Math.min((mortgageOriginal - mortgageRemaining) / mortgageOriginal, 1)
-            : 0;
-        return {
-          ...step,
-          progress,
-          metricLabel: mortgageRemaining > 0
-            ? `${formatCurrency(mortgageRemaining)} remaining`
-            : "No mortgage debt tracked",
-          nextAction: "Make extra principal payments on your mortgage when possible.",
-        };
-      }
-
-      if (step.key === "sail") {
-        const target = step.targetAmount || 1000;
-        return {
-          ...step,
-          progress: step.isCompleted ? 1 : 0,
-          metricLabel: step.isCompleted ? "Completed" : `Target: ${formatCurrency(target)} /mo`,
-          nextAction: "Live generously, invest beyond retirement, and build lasting wealth.",
-        };
-      }
-
-      return {
-        ...step,
-        progress: step.isCompleted ? 1 : 0,
-        metricLabel: step.isCompleted ? "Completed" : "Not started",
-        nextAction: "",
-      };
-    });
-  }, [
-    formatCurrency,
-    milestonePlan,
-    monthlyEssentialsEstimate,
-    nonMortgageOriginal,
-    nonMortgageRemaining,
-    retirementInvestingMonthly,
-    savingsGoals,
-    savingsReserve,
-    mortgageOriginal,
-    mortgageRemaining,
-  ]);
 
   const currentMilestone =
     computedMilestones.find((step) => step.key === milestonePlan?.currentStepKey) ||
@@ -591,7 +588,7 @@ const DebtTrackerScreen: React.FC = () => {
     : 0;
   const allMilestonesCompleted =
     computedMilestones.length > 0 && computedMilestones.every((step) => step.isCompleted);
-  const runwayMonths = monthlyEssentialsEstimate > 0 ? savingsReserve / monthlyEssentialsEstimate : 0;
+  const runwayMonths = monthlyEssentialsEstimate > 0 ? effectiveReserve / monthlyEssentialsEstimate : 0;
   const activeSavingsGoal = React.useMemo(() => {
     const openGoals = savingsGoals.filter((goal) => goal.currentAmount < goal.targetAmount);
     if (openGoals.length === 0) return null;
@@ -652,8 +649,48 @@ const DebtTrackerScreen: React.FC = () => {
     return "Tie - both methods cost the same interest.";
   }, [avalancheWhatIf, snowballWhatIf]);
 
+  /**
+   * Points the chosen connected-account link at this debt ("this bank
+   * account IS this card": balance mirroring + keep-alive auto-stamping,
+   * see ExternalAccountLink.debtId) and clears any other link that fed it -
+   * one account per card. The balance itself is not seeded here: the modal
+   * already submitted the bank's last-known balance as the debt's balance
+   * when mirroring is on. Best-effort: the debt save must not fail on a
+   * link hiccup. No-op when extras are undefined (not a credit card).
+   */
+  const applyBankLink = useCallback(
+    async (debtId: string, extras?: DebtBankLinkExtras) => {
+      if (!extras) return;
+      try {
+        let links = await getLinks();
+        for (const link of links) {
+          if (link.id === extras.linkId) {
+            if (
+              link.debtId !== debtId ||
+              (link.updateDebtBalance !== false) !== extras.updateBalance
+            ) {
+              links = await updateLink(link.id, {
+                debtId,
+                updateDebtBalance: extras.updateBalance,
+              });
+            }
+          } else if (link.debtId === debtId) {
+            links = await updateLink(link.id, { debtId: null });
+          }
+        }
+        setBankLinks(links);
+      } catch (error) {
+        if (__DEV__) console.error("Bank link update failed:", error);
+      }
+    },
+    []
+  );
+
   /** Add a new debt */
-  const handleAddDebt = useCallback(async (input: NewDebtInput) => {
+  const handleAddDebt = useCallback(async (
+    input: NewDebtInput,
+    bankLink?: DebtBankLinkExtras
+  ) => {
     const now = new Date().toISOString();
     const newDebt: Debt = {
       ...input,
@@ -664,10 +701,12 @@ const DebtTrackerScreen: React.FC = () => {
     const updated = [...debts, newDebt];
     setDebts(updated);
     await saveDebts(updated);
+    await applyBankLink(newDebt.id, bankLink);
+    void rescheduleCardKeepAliveReminders();
     await syncNetWorthSnapshot();
     setShowModal(false);
     void notifyAchievementCheck();
-  }, [debts, notifyAchievementCheck]);
+  }, [applyBankLink, debts, notifyAchievementCheck]);
 
   const advanceDuePrompt = useCallback(
     (
@@ -691,11 +730,14 @@ const DebtTrackerScreen: React.FC = () => {
   const handlePayment = useCallback(async (
     debtId: string,
     amount: number,
-    opts?: { suppressCelebration?: boolean }
+    opts?: { suppressCelebration?: boolean; paymentId?: string }
   ) => {
     const paymentNow = new Date().toISOString();
+    // Manual payments get a random id; the due prompt passes a
+    // deterministic one so the same month's minimum logged on both paired
+    // phones merges to a single record instead of double-counting.
     const result = await recordPayment({
-      id: generateUUID(),
+      id: opts?.paymentId ?? generateUUID(),
       debtId,
       amount,
       date: paymentNow,
@@ -705,19 +747,30 @@ const DebtTrackerScreen: React.FC = () => {
     setDebts(result.debts);
     const freshPayments = await getPayments();
     setPayments(freshPayments);
+    // Every payment counts as a win; only the occasional one (utils/
+    // tipJarNudge cadence) comes back with Tip Jar copy to show.
+    const nudge = await noteWin(
+      paidOffDebt ? { kind: "debt-payoff", label: paidOffDebt.name } : { kind: "debt-payment" }
+    );
     if (paidOffDebt) {
       // Callers with their own Modal open (the due prompt) suppress this
       // and present the celebration themselves after their dismiss
       // animation - presenting while another Modal is dismissing leaves
       // one of the two hidden on iOS.
-      if (!opts?.suppressCelebration) setCelebrationDebt(paidOffDebt);
+      if (!opts?.suppressCelebration) {
+        setCelebrationNudge(nudge);
+        setCelebrationDebt(paidOffDebt);
+      }
     } else {
       triggerHaptic("success");
+      // The card's inline pay field has no sheet open, so the note floats
+      // up above the tab bar; a suppressed caller shows it in its own sheet.
+      if (nudge && !opts?.suppressCelebration) showNudgeToast(nudge);
     }
     await syncNetWorthSnapshot(paymentNow);
     void notifyAchievementCheck();
-    return { debts: result.debts, payments: freshPayments, paidOffDebt };
-  }, [debts, notifyAchievementCheck]);
+    return { debts: result.debts, payments: freshPayments, paidOffDebt, nudge };
+  }, [debts, noteWin, notifyAchievementCheck, showNudgeToast]);
 
   const duePromptSubmittingRef = useRef(false);
   const handleDuePromptLogPayment = useCallback(
@@ -730,6 +783,7 @@ const DebtTrackerScreen: React.FC = () => {
       try {
         const result = await handlePayment(debtId, amount, {
           suppressCelebration: true,
+          paymentId: minimumDuePaymentId(debtId, getMonthKey()),
         });
         setDuePromptDebt(null);
         if (result.paidOffDebt) {
@@ -737,15 +791,17 @@ const DebtTrackerScreen: React.FC = () => {
           // presents. Any remaining due debts re-prompt on next focus -
           // advancing now would pop the prompt over the celebration.
           const paidOff = result.paidOffDebt;
-          setTimeout(() => setCelebrationDebt(paidOff), 250);
+          presentAfterDismiss(() => {
+            setCelebrationNudge(result.nudge);
+            setCelebrationDebt(paidOff);
+          });
         } else {
           // Celebrate the logged payment, then advance to the next due debt
           // once that confetti is dismissed (see the modal's onClose below).
           const updatedDebt = result.debts.find((d) => d.id === debtId) ?? null;
           if (updatedDebt) {
-            setTimeout(
-              () => setPaymentCelebration({ debt: updatedDebt, amount }),
-              250
+            presentAfterDismiss(() =>
+              setPaymentCelebration({ debt: updatedDebt, amount, nudge: result.nudge })
             );
           } else {
             advanceDuePrompt(result.debts, result.payments, dueDismissals, debtId);
@@ -755,7 +811,7 @@ const DebtTrackerScreen: React.FC = () => {
         duePromptSubmittingRef.current = false;
       }
     },
-    [advanceDuePrompt, dueDismissals, handlePayment]
+    [advanceDuePrompt, dueDismissals, handlePayment, presentAfterDismiss]
   );
 
   const handleDuePromptDismissMonth = useCallback(
@@ -775,14 +831,27 @@ const DebtTrackerScreen: React.FC = () => {
     setShowModal(true);
   }, []);
 
+  /** Open the global search sheet, stamping its date-preset reference. */
+  const openSearch = useCallback(() => {
+    triggerHaptic("selection");
+    setSearchNow(new Date());
+    setShowSearch(true);
+  }, []);
+
   /** Save edits to an existing debt */
-  const handleSaveEdit = useCallback(async (debtId: string, updates: Partial<Debt>) => {
+  const handleSaveEdit = useCallback(async (
+    debtId: string,
+    updates: Partial<Debt>,
+    bankLink?: DebtBankLinkExtras
+  ) => {
     // Snapshot the full prior record so undo can write every field back,
     // not just the keys this edit touched.
     const prior = debts.find((d) => d.id === debtId) ?? null;
     const updated = await updateDebt(debtId, updates);
     const paidOffDebt = getNewlyPaidOffDebt(debts, updated);
     setDebts(updated);
+    await applyBankLink(debtId, bankLink);
+    void rescheduleCardKeepAliveReminders();
     await syncNetWorthSnapshot();
     setShowModal(false);
     setEditingDebt(null);
@@ -801,12 +870,12 @@ const DebtTrackerScreen: React.FC = () => {
       // Defer the celebration Modal so the edit Modal's close animation
       // finishes first - RN can't stack two Modal presentations in the
       // same frame on iOS without one being queued or visually clipped.
-      setTimeout(() => setCelebrationDebt(paidOffDebt), 250);
+      presentAfterDismiss(() => setCelebrationDebt(paidOffDebt));
     } else {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
-  }, [debts, notifyAchievementCheck, pushUndo]);
+  }, [applyBankLink, debts, notifyAchievementCheck, presentAfterDismiss, pushUndo]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -856,30 +925,6 @@ const DebtTrackerScreen: React.FC = () => {
     await syncNetWorthSnapshot();
     void notifyAchievementCheck();
   }, [notifyAchievementCheck]);
-
-  const openClassifyModal = useCallback(() => {
-    const nextDraft: Record<string, DebtClass> = {};
-    debts.forEach((debt) => {
-      nextDraft[debt.id] = debt.debtClass;
-    });
-    setClassDraftByDebtId(nextDraft);
-    setShowClassifyModal(true);
-  }, [debts]);
-
-  const setDebtClassDraft = useCallback((debtId: string, debtClass: DebtClass) => {
-    setClassDraftByDebtId((current) => ({ ...current, [debtId]: debtClass }));
-  }, []);
-
-  const saveClassifications = useCallback(async () => {
-    const updatedDebts = debts.map((debt) => ({
-      ...debt,
-      debtClass: classDraftByDebtId[debt.id] || debt.debtClass,
-      debtClassSource: "manual" as const,
-    }));
-    setDebts(updatedDebts);
-    await saveDebts(updatedDebts);
-    setShowClassifyModal(false);
-  }, [classDraftByDebtId, debts]);
 
   const handleToggleMilestoneComplete = useCallback(
     async (step: ComputedMilestone) => {
@@ -979,6 +1024,10 @@ const DebtTrackerScreen: React.FC = () => {
 
   const handleSetSavingsReserve = useCallback(
     async (targetAmount: number) => {
+      // Linked emergency fund: the milestones track the designated accounts'
+      // balances, so logging a Savings-entry correction wouldn't move them -
+      // the editor is hidden in that mode; this guard keeps the invariant.
+      if (efSource.linked) return;
       if (!Number.isFinite(targetAmount) || targetAmount < 0) return;
       const delta = targetAmount - savingsReserve;
       if (delta === 0) { setSavingsDraft(""); return; }
@@ -989,7 +1038,9 @@ const DebtTrackerScreen: React.FC = () => {
         category: "Savings",
         amount: delta,
         description: delta > 0 ? "Logged from Build Your Ark" : "Correction from Build Your Ark",
-        date: now.toISOString().slice(0, 10),
+        // Local calendar day in the canonical noon-UTC form (the UTC day
+        // from toISOString() filed evening entries into the wrong month).
+        date: buildEntryDateISO(localYearMonth(now), now.getDate()),
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
@@ -999,7 +1050,7 @@ const DebtTrackerScreen: React.FC = () => {
       setSavingsDraft("");
       void notifyAchievementCheck();
     },
-    [notifyAchievementCheck, savingsReserve]
+    [efSource.linked, notifyAchievementCheck, savingsReserve]
   );
 
   /** Sort debts based on payoff strategy.
@@ -1009,25 +1060,15 @@ const DebtTrackerScreen: React.FC = () => {
    * credit / personal-loan debt has a zero balance. Within each tier the
    * chosen strategy decides ordering: avalanche by APR desc, snowball by
    * balance asc, custom by creation order. */
-  const hullCompleted =
-    milestonePlan?.steps.find((step) => step.key === "hull")?.isCompleted === true;
-  const allCreditCleared = !debts.some(
-    (debt) => debt.debtClass === "personal_credit" && debt.balance > 0
+  const promoteSecured = React.useMemo(
+    () => shouldPromoteSecuredDebts(debts, milestonePlan),
+    [debts, milestonePlan]
   );
-  const promoteSecured = hullCompleted && allCreditCleared;
 
-  const sortedDebts = React.useMemo(() => {
-    const active = filteredDebts.filter((d) => d.balance > 0);
-    const paidOff = filteredDebts.filter((d) => d.balance <= 0);
-    active.sort((a, b) => {
-      const tierDiff = getDebtTier(a, promoteSecured) - getDebtTier(b, promoteSecured);
-      if (tierDiff !== 0) return tierDiff;
-      if (strategy === "avalanche") return b.rate - a.rate;
-      if (strategy === "snowball") return a.balance - b.balance;
-      return 0;
-    });
-    return [...active, ...paidOff];
-  }, [filteredDebts, strategy, promoteSecured]);
+  const sortedDebts = React.useMemo(
+    () => sortDebtsForPayoff(filteredDebts, strategy, promoteSecured),
+    [filteredDebts, strategy, promoteSecured]
+  );
 
   const handleChangeStrategy = useCallback(async (nextStrategy: PayoffStrategy) => {
     setStrategy(nextStrategy);
@@ -1035,76 +1076,98 @@ const DebtTrackerScreen: React.FC = () => {
   }, []);
 
 
-  const handleAddSavingsGoal = useCallback(
-    async (goal: SavingsGoal) => {
-      const updated = [...savingsGoals, goal];
-      setSavingsGoals(updated);
-      await saveSavingsGoals(updated);
-      await syncNetWorthSnapshot();
-      void notifyAchievementCheck();
-    },
-    [notifyAchievementCheck, savingsGoals]
-  );
-
-  const handleUpdateSavingsGoal = useCallback(
-    async (goalId: string, updates: Partial<SavingsGoal>) => {
-      const updated = savingsGoals.map((goal) =>
-        goal.id === goalId
-          ? {
-              ...goal,
-              ...updates,
-              updatedAt: new Date().toISOString(),
-            }
-          : goal
-      );
-      setSavingsGoals(updated);
-      await saveSavingsGoals(updated);
-      await syncNetWorthSnapshot();
-      void notifyAchievementCheck();
-    },
-    [notifyAchievementCheck, savingsGoals]
-  );
-
-  const handleDeleteSavingsGoal = useCallback(
-    async (goalId: string) => {
-      const prior = savingsGoals.find((g) => g.id === goalId) ?? null;
-      // Soft-delete so the partner sees the deletion on next sync.
-      const updated = await deleteSavingsGoal(goalId);
-      setSavingsGoals(updated);
-      await syncNetWorthSnapshot();
-      pushUndo({
-        message: prior ? `Deleted "${prior.name}"` : "Deleted savings goal",
-        onUndo: async () => {
-          const restored = await restoreSavingsGoal(goalId);
-          setSavingsGoals(restored);
-          await syncNetWorthSnapshot();
-          void notifyAchievementCheck();
-        },
-      });
-    },
-    [savingsGoals, pushUndo, notifyAchievementCheck]
-  );
-
-  const handleUpdateEssentialsEstimate = useCallback((value: number) => {
-    setMonthlyEssentialsEstimate(value);
-  }, []);
-
   const keyExtractor = useCallback((item: Debt) => item.id, []);
 
   /** The first active debt in sortedDebts is the priority payoff target */
   const focusDebtId = sortedDebts.find((d) => d.balance > 0)?.id ?? null;
 
+  /**
+   * Android keyboard handling for the inline pay input. iOS is covered by
+   * automaticallyAdjustKeyboardInsets on the FlatList (the app-wide iOS
+   * strategy - it also scrolls the focused field into view), so this stays
+   * Android-only; running both would double-scroll. Android never
+   * auto-scrolls a list to a focused input, so on focus we scroll the card
+   * to the bottom of the keyboard-shrunken viewport ourselves - once the
+   * keyboard has actually opened, since the viewport height is wrong
+   * before that.
+   */
+  const pendingPayScrollId = useRef<string | null>(null);
+  // Mirror of sortedDebts for the scroll handlers, updated post-commit so
+  // handlePayInputFocus stays referentially stable (it feeds every
+  // memoized DebtCard via renderDebtCard).
+  const sortedDebtsRef = useRef(sortedDebts);
+  React.useEffect(() => {
+    sortedDebtsRef.current = sortedDebts;
+  }, [sortedDebts]);
+
+  const scrollPayInputIntoView = useCallback((debtId: string) => {
+    const index = sortedDebtsRef.current.findIndex((d) => d.id === debtId);
+    if (index < 0) return;
+    // viewPosition 1 puts the card's bottom edge (the pay input row) at the
+    // viewport bottom; the negative viewOffset lifts it a further 12px so
+    // the input isn't flush against the keyboard.
+    listRef.current?.scrollToIndex({
+      index,
+      viewPosition: 1,
+      viewOffset: -12,
+      animated: true,
+    });
+  }, []);
+
+  const handlePayInputFocus = useCallback(
+    (debtId: string) => {
+      if (Platform.OS !== "android") return;
+      if (Keyboard.isVisible()) {
+        // Keyboard already open (focus hopped from another input) - the
+        // viewport is already its final size, scroll immediately.
+        scrollPayInputIntoView(debtId);
+      } else {
+        pendingPayScrollId.current = debtId;
+      }
+    },
+    [scrollPayInputIntoView]
+  );
+
+  React.useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = Keyboard.addListener("keyboardDidShow", () => {
+      const debtId = pendingPayScrollId.current;
+      pendingPayScrollId.current = null;
+      if (!debtId) return;
+      // One frame so the KeyboardAvoidingView's shrunken layout lands
+      // before the scroll target is computed.
+      requestAnimationFrame(() => scrollPayInputIntoView(debtId));
+    });
+    return () => sub.remove();
+  }, [scrollPayInputIntoView]);
+
+  /** debtId -> "Balance from <account>" info for cards a bank link feeds. */
+  const bankSyncByDebt = React.useMemo(() => {
+    const map = new Map<string, { accountName: string; asOf?: string }>();
+    for (const link of bankLinks) {
+      if (!link.debtId || !linkUpdatesDebtBalance(link)) continue;
+      map.set(link.debtId, {
+        accountName: link.externalName,
+        asOf: link.lastExternalBalanceAt,
+      });
+    }
+    return map;
+  }, [bankLinks]);
+
   const renderDebtCard = useCallback(
     ({ item }: { item: Debt }) => (
       <DebtCard
         debt={item}
+        bankSync={bankSyncByDebt.get(item.id) ?? null}
         onPayment={handlePayment}
         onDelete={handleDelete}
         onEdit={handleEdit}
+        onKeepAliveUse={handleKeepAliveUse}
+        onPayInputFocus={handlePayInputFocus}
         isFocusDebt={item.id === focusDebtId}
       />
     ),
-    [handlePayment, handleDelete, handleEdit, focusDebtId]
+    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankSyncByDebt, focusDebtId]
   );
 
   /** Summary + section header rendered above the debt list */
@@ -1116,6 +1179,14 @@ const DebtTrackerScreen: React.FC = () => {
         <Text style={styles.screenSubtitle}>
           Track your progress. Crush your debt.
         </Text>
+        <TouchableOpacity
+          style={styles.searchIconBtn}
+          onPress={openSearch}
+          activeOpacity={0.7}
+          accessibilityLabel="Search debts, payments, and budget entries"
+        >
+          <Text style={styles.searchIconGlyph}>🔍</Text>
+        </TouchableOpacity>
       </View>
 
       <View ref={anchorSummary} collapsable={false} style={styles.summaryCard}>
@@ -1209,6 +1280,17 @@ const DebtTrackerScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {countdownNow !== null && debts.length > 0 && (
+        <View style={{ marginBottom: tokens.gap }}>
+          <DebtFreeCountdownCard
+            debts={debts}
+            payments={payments}
+            strategy={strategy}
+            now={countdownNow}
+          />
+        </View>
+      )}
+
       <View style={{ marginBottom: tokens.gap }}>
         <DebtDueReminderBanner
           debts={debts}
@@ -1236,6 +1318,18 @@ const DebtTrackerScreen: React.FC = () => {
             }
           }}
           daysAhead={7}
+        />
+      </View>
+
+      <View style={{ marginBottom: tokens.gap }}>
+        <CardKeepAliveBanner
+          debts={debts}
+          dismissals={keepAliveDismissals}
+          onOpen={(debt) => {
+            setEditingDebt(debt);
+            setShowModal(true);
+          }}
+          onDismiss={handleKeepAliveDismiss}
         />
       </View>
 
@@ -1278,19 +1372,39 @@ const DebtTrackerScreen: React.FC = () => {
       ]}
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
-      <FlatList
-        ref={listRef}
-        data={sortedDebts}
-        keyExtractor={keyExtractor}
-        renderItem={renderDebtCard}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={emptyState}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      />
+      {/* Keyboard strategy for the inline pay input (see handlePayInputFocus):
+          iOS scrolls via automaticallyAdjustKeyboardInsets; Android needs the
+          KAV to shrink the list above the keyboard, then an explicit
+          scrollToIndex. keyboardShouldPersistTaps lets the ✓ confirm button
+          work in one tap while the keyboard is up. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "android" ? "padding" : undefined}
+        style={styles.keyboardAvoider}
+      >
+        <FlatList
+          ref={listRef}
+          data={sortedDebts}
+          keyExtractor={keyExtractor}
+          renderItem={renderDebtCard}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={emptyState}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: TAB_BAR_BASE_HEIGHT + insets.bottom + 24 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          onScrollToIndexFailed={(info) => {
+            // Only reachable if the target card was virtualized out between
+            // focus and scroll; land near it instead of crashing.
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }}
+        />
+      </KeyboardAvoidingView>
       {/* Phantom anchor for the coachmark spotlight. Rendered at the FAB's
           exact layout position (same styles, invisible and non-interactive)
           so measureInWindow returns the real on-screen rect regardless of
@@ -1328,25 +1442,60 @@ const DebtTrackerScreen: React.FC = () => {
           setShowHistory(false);
           // Deleting this month's payment can re-arm today's due prompt;
           // present it only after the sheet's dismiss animation finishes.
-          setTimeout(
-            () => advanceDuePrompt(debts, payments, dueDismissals),
-            250
-          );
+          presentAfterDismiss(() => advanceDuePrompt(debts, payments, dueDismissals));
         }}
         debts={debts}
         onPaymentsChanged={handlePaymentsChanged}
       />
 
+      {showSearch && searchNow !== null && (
+        <GlobalSearchModal
+          onClose={() => setShowSearch(false)}
+          debts={debts}
+          payments={payments}
+          entries={entriesForSearch}
+          now={searchNow}
+          onSelectDebt={(debt) => {
+            // Wait for the search sheet's dismiss animation before
+            // presenting the edit Modal - iOS doesn't reliably handle
+            // dismiss-then-present in the same frame.
+            setShowSearch(false);
+            presentAfterDismiss(() => handleEdit(debt));
+          }}
+          onSelectPayment={() => {
+            setShowSearch(false);
+            presentAfterDismiss(() => setShowHistory(true));
+          }}
+          onSelectEntry={(entry) => {
+            // Cross-tab hop: BudgetScreen consumes searchEntryId on focus
+            // (deferred there past the tab transition).
+            setShowSearch(false);
+            presentAfterDismiss(() => navigation.navigate("Budget", { searchEntryId: entry.id }));
+          }}
+        />
+      )}
+
       <DebtPayoffCelebrationModal
         visible={celebrationDebt !== null}
         debt={celebrationDebt}
-        onClose={() => setCelebrationDebt(null)}
+        onClose={() => {
+          setCelebrationDebt(null);
+          setCelebrationNudge(null);
+        }}
         onViewHistory={() => {
           // Wait for the celebration Modal close animation before presenting
           // the history Modal - iOS doesn't reliably handle dismiss-then-
           // present in the same frame and one of the two ends up hidden.
           setCelebrationDebt(null);
-          setTimeout(() => setShowHistory(true), 250);
+          setCelebrationNudge(null);
+          presentAfterDismiss(() => setShowHistory(true));
+        }}
+        tipNudge={celebrationNudge}
+        onTipJar={() => {
+          // The provider waits out this dismiss before presenting the jar.
+          setCelebrationDebt(null);
+          setCelebrationNudge(null);
+          openTipJar();
         }}
       />
 
@@ -1366,10 +1515,14 @@ const DebtTrackerScreen: React.FC = () => {
           setPaymentCelebration(null);
           // Advance to the next due debt after the confetti dismisses; reads
           // current state so it reflects the payment just recorded.
-          setTimeout(
-            () => advanceDuePrompt(debts, payments, dueDismissals),
-            250
-          );
+          presentAfterDismiss(() => advanceDuePrompt(debts, payments, dueDismissals));
+        }}
+        tipNudge={paymentCelebration?.nudge ?? null}
+        onTipJar={() => {
+          // No due-prompt advance on this path: it would stack over the Tip
+          // Jar. Remaining due debts re-prompt on the next focus as usual.
+          setPaymentCelebration(null);
+          openTipJar();
         }}
       />
 
@@ -1379,13 +1532,22 @@ const DebtTrackerScreen: React.FC = () => {
         transparent={false}
         onRequestClose={() => setShowMilestonesModal(false)}
       >
-        <View style={styles.msFullOverlay}>
+        {/* Keyboard strategy per SheetKeyboardAvoider: Android KAV lifts the
+            sheet, iOS relies on automaticallyAdjustKeyboardInsets below -
+            without it the last step's ("Sail") target input hides behind the
+            keyboard. */}
+        <SheetKeyboardAvoider style={styles.msFullOverlay}>
           <View style={[styles.msFullBox, { paddingTop: Math.max(insets.top, 20) + 12, paddingBottom: Math.max(insets.bottom, 12) }]}>
             <Text style={styles.msFullTitle}>Build Your Ark Milestones</Text>
             <Text style={styles.msFullMessage}>
               Keel to Hull to Deck to Supplies to Sail. Follow each stage at your pace.
             </Text>
-            <ScrollView style={styles.msFullList} contentContainerStyle={styles.msFullListContent}>
+            <ScrollView
+              style={styles.msFullList}
+              contentContainerStyle={styles.msFullListContent}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+            >
               {orderedMilestones.map((step) => {
                 const isCurrent = milestonePlan?.currentStepKey === step.key;
                 const isExpanded = step.isCompleted
@@ -1589,7 +1751,26 @@ const DebtTrackerScreen: React.FC = () => {
                         </View>
                       </View>
                     ) : null}
-                    {(step.key === "keel" || step.key === "deck") && !step.isCompleted ? (
+                    {/* Linked emergency fund: the reserve IS the designated
+                        accounts' combined balance, so the manual editor
+                        (which logs Savings budget entries) would no longer
+                        move these milestones - point at the Bridge instead. */}
+                    {(step.key === "keel" || step.key === "deck") &&
+                    !step.isCompleted &&
+                    efSource.linked ? (
+                      <Text style={[styles.msPayoffMetricLabel, { marginBottom: 4 }]}>
+                        🛡️ Tracked from your{" "}
+                        {efSource.accounts.length === 1
+                          ? "designated emergency-fund savings account"
+                          : `${efSource.accounts.length} designated emergency-fund savings accounts`}{" "}
+                        ({formatCurrency(effectiveReserve)}). Update those
+                        balances on the Bridge - bank syncing keeps them
+                        current automatically.
+                      </Text>
+                    ) : null}
+                    {(step.key === "keel" || step.key === "deck") &&
+                    !step.isCompleted &&
+                    !efSource.linked ? (
                       <View style={styles.msSavingsLogSection}>
                         <Text style={styles.msSavingsLogLabel}>Set Savings</Text>
                         <Text style={[styles.msPayoffMetricLabel, { marginBottom: 4 }]}>
@@ -1684,81 +1865,7 @@ const DebtTrackerScreen: React.FC = () => {
               <Text style={styles.msFullDoneText}>Done</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showClassifyModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowClassifyModal(false)}
-      >
-        <View style={styles.dialogOverlay}>
-          <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Debt Type Classification</Text>
-            <Text style={styles.dialogMessage}>
-              Choose whether each debt should be treated as Credit/Personal or Car/House for Snowball ordering.
-            </Text>
-            <ScrollView style={styles.classifyList} contentContainerStyle={styles.classifyListContent}>
-              {debts.map((debt) => {
-                const selectedClass = classDraftByDebtId[debt.id] || debt.debtClass;
-                return (
-                  <View key={debt.id} style={[styles.classifyRow, { borderColor: colors.cardBorder }]}>
-                    <View style={styles.classifyHeaderRow}>
-                      <Text style={styles.classifyDebtName}>{debt.name}</Text>
-                      {debt.debtClassSource !== "manual" && (
-                        <View style={[styles.classifyInferredBadge, { backgroundColor: colors.warningDim || `${colors.warning || colors.accent}20` }]}>
-                          <Text style={[styles.classifyInferredText, { color: colors.warning || colors.accent }]}>Inferred</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.classifyOptionRow}>
-                      {DEBT_CLASS_OPTIONS.map((option) => {
-                        const selected = selectedClass === option.id;
-                        return (
-                          <TouchableOpacity
-                            key={option.id}
-                            style={[
-                              styles.classifyOptionBtn,
-                              {
-                                borderColor: selected ? colors.accent : colors.cardBorder,
-                                backgroundColor: selected ? `${colors.accent}20` : colors.bg,
-                              },
-                            ]}
-                            onPress={() => setDebtClassDraft(debt.id, option.id)}
-                          >
-                            <Text
-                              style={[
-                                styles.classifyOptionText,
-                                { color: selected ? colors.accent : colors.textDim },
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              })}
-            </ScrollView>
-            <View style={styles.dialogActions}>
-              <TouchableOpacity
-                style={[styles.dialogButton, styles.dialogCancelButton]}
-                onPress={() => setShowClassifyModal(false)}
-              >
-                <Text style={styles.dialogCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.dialogButton, { backgroundColor: colors.accent }]}
-                onPress={saveClassifications}
-              >
-                <Text style={styles.dialogDeleteText}>Save Types</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        </SheetKeyboardAvoider>
       </Modal>
 
       <Modal
@@ -1799,9 +1906,24 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bg },
+    keyboardAvoider: { flex: 1 },
     listContent: { paddingHorizontal: tokens.pad },
 
-    titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const },
+    titleSection: { paddingTop: 56, paddingBottom: tokens.gap, alignItems: "center" as const, position: "relative" as const },
+    searchIconBtn: {
+      position: "absolute" as const,
+      top: 56,
+      right: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+    },
+    searchIconGlyph: { fontSize: 20 },
     appLabel: { fontSize: scale(12), color: colors.textDim, letterSpacing: 2, marginBottom: 4, textAlign: "center" as const },
     screenTitle: { fontSize: scale(28), fontWeight: "700" as const, color: colors.text, marginBottom: 4, textAlign: "center" as const },
     screenSubtitle: { fontSize: scale(14), color: colors.textMuted, textAlign: "center" as const },
@@ -1822,7 +1944,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   summaryRingWrap: { alignItems: "center", justifyContent: "center" },
   summaryRingInner: { width: 80, height: 80, justifyContent: "center", alignItems: "center" },
   summaryRingLabel: { position: "absolute", fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  summaryRingHint: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  summaryRingHint: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: tokens.radiusPill },
   summaryRingHintText: { fontSize: scale(10), fontWeight: "700", letterSpacing: 0.2 },
 
    badgeRow: { flexDirection: "row", gap: 8, marginTop: 14 },
@@ -1962,7 +2084,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   strategyPlannerBtn: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 10,
     paddingVertical: 5,
     backgroundColor: colors.card,
@@ -2047,7 +2169,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   targetQuickBtn: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 10,
     paddingVertical: 5,
     backgroundColor: colors.bg,
@@ -2060,12 +2182,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   progressTrack: {
     height: 8,
     backgroundColor: colors.cardBorder,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     minWidth: 2,
   },
 
@@ -2133,7 +2255,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     flexShrink: 1,
   },
   msStepBadge: {
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
@@ -2193,7 +2315,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   msTargetQuickBtn: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 14,
     paddingVertical: 7,
     backgroundColor: colors.bg,
@@ -2206,12 +2328,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   msProgressTrack: {
     height: 10,
     backgroundColor: colors.cardBorder,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     overflow: "hidden",
   },
   msProgressFill: {
     height: "100%",
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     minWidth: 2,
   },
   msNextAction: {
@@ -2325,7 +2447,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   },
   msPayoffChip: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: tokens.radiusPill,
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: colors.bg,
@@ -2414,7 +2536,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
 
   dialogOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    backgroundColor: colors.overlayStrong,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 28,
@@ -2448,56 +2570,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
-  },
-  classifyList: {
-    maxHeight: 320,
-    marginBottom: 14,
-  },
-  classifyListContent: {
-    gap: 10,
-  },
-  classifyRow: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    gap: 8,
-    backgroundColor: colors.bg,
-  },
-  classifyDebtName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  classifyHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  classifyInferredBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  classifyInferredText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  classifyOptionRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  classifyOptionBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  classifyOptionText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.textDim,
   },
   dialogCancelButton: {
     backgroundColor: colors.bg,

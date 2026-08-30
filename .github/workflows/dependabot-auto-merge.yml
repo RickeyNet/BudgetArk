@@ -34,7 +34,7 @@ jobs:
       #
       # Best-effort: `gh pr merge --auto` errors if "Allow auto-merge" isn't
       # enabled in repo settings yet. continue-on-error keeps that from adding
-      # a red check while the one-time settings are still being configured —
+      # a red check while the one-time settings are still being configured -
       # once enabled, it queues the merge; until then you just merge manually.
       - name: Enable auto-merge (non-major)
         if: steps.meta.outputs.update-type != 'version-update:semver-major'

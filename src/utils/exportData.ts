@@ -8,7 +8,7 @@
  */
 
 import { Share } from "react-native";
-import CryptoJS from "crypto-js";
+import { encryptExportEnvelopeV3 } from "./exportEncryption";
 import {
   getDebtsIncludingDeleted,
   getPaymentsIncludingDeleted,
@@ -16,7 +16,7 @@ import {
 } from "../storage/debtStorage";
 import {
   getBudgetEntriesIncludingDeleted,
-  getAllLimitsByMonth,
+  getAllLimitsByMonthIncludingDeleted,
   getCategoryBudgetLimits,
 } from "../storage/budgetStorage";
 import { getOrCreateUser } from "../storage/userStorage";
@@ -26,10 +26,15 @@ import { getHoldingsIncludingDeleted } from "../storage/holdingsStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
 import { getCustomCategories } from "../storage/customCategoriesStorage";
+import { getBusinessesIncludingDeleted } from "../storage/businessStorage";
+import { getPeopleIncludingDeleted } from "../storage/personStorage";
 import { getCategoryBucketOverrides } from "../storage/categoryBucketOverridesStorage";
 import { getUnlockedAchievements } from "../storage/achievementsStorage";
 import { getAchievementStats } from "../storage/achievementStatsStorage";
+import { getMonthStartBalances } from "../storage/monthlyBalanceStorage";
 import { getDebtDueDismissals } from "../storage/debtDueReminderStorage";
+import { getCardKeepAliveDismissals } from "../storage/cardKeepAliveDismissalStorage";
+import { getLearningProgress } from "../storage/learningProgressStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import { recordBackup } from "../storage/backupReminderStorage";
 
@@ -42,23 +47,13 @@ import { recordBackup } from "../storage/backupReminderStorage";
 export const ENCRYPTED_EXPORT_PREFIX = "__BUDGETARK_ENC__:";
 
 /**
- * Current v2 prefix. Format after the prefix:
- *   <salt-hex (32 chars)> "." <iv-hex (32 chars)> "." <ciphertext-base64>
- *
- * Salt: 16 random bytes per export (so the KDF produces a different key
- * even for the same password). IV: 16 random bytes (AES-256-CBC needs a
- * fresh IV per ciphertext or two exports with the same password leak the
- * XOR of their first plaintext blocks). KDF: PBKDF2-SHA256 with 250k
- * iterations - slow enough that a 4-char password takes hours instead of
- * seconds to brute-force, while still keeping a single export decrypt
- * under ~200ms on a low-end device.
+ * Legacy v2 prefix - PBKDF2-SHA256 (250k) + AES-256-CBC with explicit
+ * salt/iv, but NO integrity tag: a bit-flipped ciphertext decrypted to
+ * silently corrupted data, and a wrong password was indistinguishable from
+ * a damaged file. Still readable on import; the export path now produces
+ * v3 (encrypt-then-MAC, see utils/exportEncryption.ts) only.
  */
 export const ENCRYPTED_EXPORT_PREFIX_V2 = "__BUDGETARK_ENC2__:";
-
-const PBKDF2_ITERATIONS = 250_000;
-const PBKDF2_KEY_SIZE_WORDS = 256 / 32; // 256-bit key
-const SALT_BYTES = 16;
-const IV_BYTES = 16;
 
 /**
  * Builds the export message string (plain JSON or v2-encrypted envelope).
@@ -84,10 +79,15 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     payoffStrategyEnvelope,
     netWorthSnapshots,
     customCategories,
+    businesses,
+    people,
     categoryBucketOverrides,
     achievements,
     achievementStats,
+    monthStartBalances,
     debtDueDismissals,
+    cardKeepAliveDismissals,
+    learningProgress,
   ] = await Promise.all([
     // Tombstoned records are intentionally included so a `replace`-mode
     // restore on this device, or another paired device, doesn't accidentally
@@ -97,7 +97,9 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getPaymentsIncludingDeleted(),
     getBudgetEntriesIncludingDeleted(),
     getCategoryBudgetLimits(),
-    getAllLimitsByMonth(),
+    // Removed limits ride along as tombstones for the same reason as the
+    // other collections above.
+    getAllLimitsByMonthIncludingDeleted(),
     getOrCreateUser(),
     getSavingsGoalsIncludingDeleted(),
     getAssetAccountsIncludingDeleted(),
@@ -114,6 +116,11 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     getPayoffStrategyEnvelope(),
     getNetWorthSnapshots(),
     getCustomCategories(),
+    // Tombstones included so a restore doesn't resurrect a deleted business
+    // whose id entries may still reference (see note above).
+    getBusinessesIncludingDeleted(),
+    // Same tombstone rationale for people (BudgetEntry.personId).
+    getPeopleIncludingDeleted(),
     getCategoryBucketOverrides(),
     // Achievements + their backing stats are NOT derivable from financial
     // data (export taps, Monthly Review opens, app-open streak), so leaving
@@ -121,12 +128,28 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     // stat-based badges to zero.
     getUnlockedAchievements(),
     getAchievementStats(),
+    // Month-start checking balances: real financial history (the cash-flow
+    // projection's anchor), so it must survive a device migration.
+    getMonthStartBalances(),
     // Due-day dismissals are "<debtId>:<YYYY-MM>" facts; without them every
     // debt with a payment due day re-prompts for the current month right
     // after a restore.
     getDebtDueDismissals(),
+    // Same shape/rationale for card keep-alive banner dismissals.
+    getCardKeepAliveDismissals(),
+    // Lesson completions + the Resume pointer are not derivable from any
+    // other data, so a device migration silently reset the learning hub.
+    // Still deliberately NOT partner-synced (see learningProgressStorage).
+    getLearningProgress(),
   ]);
 
+  // Bank-connection data (connections, credentials/secrets, account links,
+  // the review inbox, the ingest ledger, merchant rules) is INTENTIONALLY
+  // excluded from exports: it's per-device and credential-adjacent. The
+  // BudgetEntry provenance fields (source/externalTxId/merchant) ride along
+  // inside `budgetEntries` - that's the only bank-related data that leaves
+  // the device. A regression test in __tests__/exportData.test.ts enforces
+  // this.
   const exportPayload = {
     exportedAt: new Date().toISOString(),
     appVersion: CURRENT_APP_VERSION,
@@ -153,10 +176,15 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
     payoffStrategyUpdatedAt: payoffStrategyEnvelope?.updatedAt,
     netWorthSnapshots,
     customCategories,
+    businesses,
+    people,
     categoryBucketOverrides,
     achievements,
     achievementStats,
+    monthStartBalances,
     debtDueDismissals,
+    cardKeepAliveDismissals,
+    learningProgress,
   };
 
   // Compact, not pretty-printed: indentation tripled the file size, and
@@ -165,33 +193,11 @@ export const buildExportMessage = async (password?: string): Promise<string> => 
   // migration) the user needed them.
   const json = JSON.stringify(exportPayload);
 
-  let message: string;
-  if (password) {
-    // v2 envelope: salt | iv | ciphertext, all base16/base64. PBKDF2 derives
-    // the AES key so a short password isn't a few seconds of offline brute
-    // force. v1 path (insecure default KDF) is still decryptable on import
-    // for legacy backups but no longer produced here.
-    const salt = CryptoJS.lib.WordArray.random(SALT_BYTES);
-    const iv = CryptoJS.lib.WordArray.random(IV_BYTES);
-    const key = CryptoJS.PBKDF2(password, salt, {
-      keySize: PBKDF2_KEY_SIZE_WORDS,
-      iterations: PBKDF2_ITERATIONS,
-      hasher: CryptoJS.algo.SHA256,
-    });
-    const cipherParams = CryptoJS.AES.encrypt(json, key, {
-      iv,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7,
-    });
-    const saltHex = salt.toString(CryptoJS.enc.Hex);
-    const ivHex = iv.toString(CryptoJS.enc.Hex);
-    const ctB64 = cipherParams.ciphertext.toString(CryptoJS.enc.Base64);
-    message = `${ENCRYPTED_EXPORT_PREFIX_V2}${saltHex}.${ivHex}.${ctB64}`;
-  } else {
-    message = json;
-  }
-
-  return message;
+  // v3 envelope: PBKDF2-derived AES + MAC keys, encrypt-then-MAC so an
+  // import can verify the file is intact and untampered before parsing.
+  // v1/v2 remain decryptable on import for older backups but are no longer
+  // produced. See utils/exportEncryption.ts for the format contract.
+  return password ? encryptExportEnvelopeV3(json, password) : json;
 };
 
 /**

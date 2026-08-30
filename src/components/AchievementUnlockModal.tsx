@@ -7,7 +7,7 @@
  * queue takes the stage. When the queue is empty, the modal hides itself.
  */
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Animated,
   Easing,
@@ -16,6 +16,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useAnimatedValue,
 } from "react-native";
 import Medal from "./Medal";
 import ConfettiBurst from "./ConfettiBurst";
@@ -40,7 +41,9 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const pulse = useRef(new Animated.Value(0)).current;
+  // useAnimatedValue instead of useRef(new Animated.Value()).current so no
+  // ref is read during render (react-hooks/refs).
+  const pulse = useAnimatedValue(0);
 
   const visible = achievement !== null;
   const achievementId = achievement?.id ?? null;

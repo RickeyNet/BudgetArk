@@ -13,6 +13,12 @@ import {
   joinPairing,
 } from "../pairingService";
 
+// Real-timer async handshake flows; jest's 5s default is too tight under
+// coverage instrumentation + parallel load (they intermittently time out
+// even though the logic is fine). Was a project-wide 15s in jest.config.js;
+// now scoped to just the suites that need it.
+jest.setTimeout(15000);
+
 jest.mock("../../utils/uuid", () => ({ generateUUID: () => "uuid-fixed" }));
 jest.mock("react-native", () => ({
   Platform: { OS: "ios" },
@@ -174,7 +180,7 @@ describe("handshake flows", () => {
         "",
         expect.any(String)
       );
-      conn.emit({ type: "PAIR_ACCEPT" }, JSON.stringify({ userId: "x", displayName: "X" }));
+      conn.emit({ type: "PAIR_ACCEPT" }, JSON.stringify({ userId: "x", displayName: "X", confirmed: true }));
       await p;
       await jest.advanceTimersByTimeAsync(600);
     });
@@ -193,7 +199,7 @@ describe("handshake flows", () => {
       await flush();
 
       conn.emit({ type: "SYNC_REQUEST" }, "{}"); // ignored
-      conn.emit({ type: "PAIR_ACCEPT" }, JSON.stringify({ userId: "partner", displayName: "P" }));
+      conn.emit({ type: "PAIR_ACCEPT" }, JSON.stringify({ userId: "partner", displayName: "P", confirmed: true }));
       const pending = await p;
       expect(pending.pairingState.partnerId).toBe("partner");
       await jest.advanceTimersByTimeAsync(600);
@@ -207,6 +213,18 @@ describe("handshake flows", () => {
       const p = joinPairing("ABCD-EFGH");
       await flush();
       conn.emit({ type: "PAIR_ACCEPT" }, "not-json");
+      await expect(p).rejects.toThrow(/Invalid pairing response/);
+      expect(conn.close).toHaveBeenCalled();
+    });
+
+    it("rejects a shape-invalid PAIR_ACCEPT (empty identity fields)", async () => {
+      Discovery.discoverPartner.mockResolvedValue({ host: "h", port: 1 });
+      const conn = makeConn();
+      Transport.connectToHost.mockResolvedValue(conn);
+
+      const p = joinPairing("ABCD-EFGH");
+      await flush();
+      conn.emit({ type: "PAIR_ACCEPT" }, JSON.stringify({ userId: "", displayName: "P" }));
       await expect(p).rejects.toThrow(/Invalid pairing response/);
       expect(conn.close).toHaveBeenCalled();
     });
@@ -237,6 +255,11 @@ describe("handshake flows", () => {
       return closeServer;
     };
 
+    // A well-formed 256-bit secret, as generateSharedSecret produces. The
+    // offer validator requires exactly this shape - shorter strings like the
+    // old "deadbeef" fixture are precisely what it must reject.
+    const SECRET = "ab".repeat(32);
+
     it("advertises, accepts a PAIR_OFFER, and resolves with the partner's secret", async () => {
       const conn = makeConn();
       const closeServer = wireServer(conn, 7000);
@@ -250,7 +273,7 @@ describe("handshake flows", () => {
 
       conn.emit(
         { type: "PAIR_OFFER" },
-        JSON.stringify({ userId: "joiner", displayName: "Joiner", sharedSecret: "deadbeef" })
+        JSON.stringify({ userId: "joiner", displayName: "Joiner", sharedSecret: SECRET })
       );
       const pending = await p;
 
@@ -260,12 +283,46 @@ describe("handshake flows", () => {
       );
       // The initiator adopts the joiner's sharedSecret.
       expect(pending.pairingState.partnerId).toBe("joiner");
-      expect(pending.pairingState.sharedSecret).toBe("deadbeef");
-      expect(pending.fingerprint).toBe(computeFingerprint("deadbeef"));
+      expect(pending.pairingState.sharedSecret).toBe(SECRET);
+      expect(pending.fingerprint).toBe(computeFingerprint(SECRET));
 
       await jest.advanceTimersByTimeAsync(600);
       expect(conn.close).toHaveBeenCalled();
       expect(Discovery.stop).toHaveBeenCalled();
+    });
+
+    it("drops malformed offers (bad secret, missing fields) and accepts a later valid one", async () => {
+      const conn = makeConn();
+      wireServer(conn);
+
+      const p = startPairingAsInitiator("ABCD-EFGH");
+      await flush();
+
+      // None of these may be persisted or answered - sharedSecret keys every
+      // future sync HMAC, so garbage here would brick the pairing.
+      conn.emit({ type: "PAIR_OFFER" }, JSON.stringify({ userId: "j", displayName: "J", sharedSecret: "deadbeef" }));
+      conn.emit({ type: "PAIR_OFFER" }, JSON.stringify({ userId: "j", displayName: "J", sharedSecret: "" }));
+      conn.emit({ type: "PAIR_OFFER" }, JSON.stringify({ userId: "j", displayName: "J", sharedSecret: 12345 }));
+      conn.emit({ type: "PAIR_OFFER" }, JSON.stringify({ userId: "", displayName: "J", sharedSecret: SECRET }));
+      conn.emit({ type: "PAIR_OFFER" }, JSON.stringify({ userId: "j", sharedSecret: SECRET }));
+      conn.emit({ type: "PAIR_OFFER" }, "not-json");
+      expect(conn.send).not.toHaveBeenCalled();
+
+      conn.emit(
+        { type: "PAIR_OFFER" },
+        JSON.stringify({ userId: "joiner", displayName: "Joiner", sharedSecret: SECRET })
+      );
+      const pending = await p;
+      expect(pending.pairingState.sharedSecret).toBe(SECRET);
+      await jest.advanceTimersByTimeAsync(600);
+    });
+
+    it("rejects instead of hanging when user lookup fails before the server starts", async () => {
+      // Regression: getOrCreateUser used to be awaited inside a
+      // `new Promise(async ...)` executor, so a throw was swallowed before
+      // the timeout was armed and the pairing UI spun forever.
+      userStorage.getOrCreateUser.mockRejectedValue(new Error("storage down"));
+      await expect(startPairingAsInitiator("ABCD-EFGH")).rejects.toThrow("storage down");
     });
 
     it("reports a null IP when not on WiFi", async () => {
@@ -278,7 +335,7 @@ describe("handshake flows", () => {
       await flush();
       expect(onReady).toHaveBeenCalledWith(null, 7000, expect.any(Function));
 
-      conn.emit({ type: "PAIR_OFFER" }, JSON.stringify({ userId: "j", displayName: "J", sharedSecret: "ab" }));
+      conn.emit({ type: "PAIR_OFFER" }, JSON.stringify({ userId: "j", displayName: "J", sharedSecret: SECRET }));
       await p;
       await jest.advanceTimersByTimeAsync(600);
     });

@@ -88,6 +88,12 @@ jest.mock("../../storage/holdingsStorage", () => ({
 jest.mock("../../storage/debtMilestoneStorage", () => ({
   getDebtMilestonePlan: jest.fn(async () => null),
 }));
+jest.mock("../../storage/businessStorage", () => ({
+  getBusinesses: jest.fn(async () => []),
+}));
+jest.mock("../../storage/personStorage", () => ({
+  getPeople: jest.fn(async () => []),
+}));
 const mockRecordBackup = jest.fn(async () => {});
 jest.mock("../../storage/backupReminderStorage", () => ({
   recordBackup: mockRecordBackup,
@@ -95,6 +101,7 @@ jest.mock("../../storage/backupReminderStorage", () => ({
 
 const entryFixturesRef = entryFixtures;
 
+// eslint-disable-next-line import/first -- must require after the jest.mock factories' captured consts initialize (ts-jest emits CJS, so import position is require order)
 import { exportSpreadsheet } from "../spreadsheetExport";
 
 // The exporter logs progress via console.info; keep test output clean.

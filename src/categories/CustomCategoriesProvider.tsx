@@ -2,9 +2,12 @@
  * BudgetArk - Custom Categories Provider
  * File: src/categories/CustomCategoriesProvider.tsx
  *
- * Global context owning the user's custom category list so pickers, the
+ * Global context owning the user's category customisation so pickers, the
  * Budget screen, and the manage modal all read one reactive source instead
- * of each re-reading storage. Mirrors AchievementsProvider's shape.
+ * of each re-reading storage: the custom category list, plus which
+ * built-in categories the user has hidden (utils/categoryVisibility -
+ * hiding is the only safe form of "deleting" a built-in). Mirrors
+ * AchievementsProvider's shape.
  */
 
 import React, {
@@ -15,7 +18,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { BudgetBucket, CustomCategory } from "../types";
+import { BudgetBucket, BudgetCategory, CustomCategory } from "../types";
 import {
   getCustomCategories,
   addCustomCategory,
@@ -24,9 +27,18 @@ import {
   restoreCustomCategory,
   type CategoryMutationResult,
 } from "../storage/customCategoriesStorage";
+import {
+  getHiddenBuiltInCategories,
+  setBuiltInCategoryHidden,
+} from "../storage/hiddenCategoriesStorage";
+import { visibleBuiltInCategories } from "../utils/categoryVisibility";
 
 interface CustomCategoriesContextValue {
   customCategories: CustomCategory[];
+  /** Built-ins the user hid from pickers (device-local). */
+  hiddenBuiltIns: ReadonlySet<string>;
+  /** The built-ins a picker should offer: selectable minus hidden, canonical order. */
+  visibleBuiltIns: BudgetCategory[];
   isReady: boolean;
   refresh: () => Promise<void>;
   add: (
@@ -40,6 +52,8 @@ interface CustomCategoriesContextValue {
   ) => Promise<CategoryMutationResult>;
   remove: (id: string) => Promise<void>;
   restore: (category: CustomCategory) => Promise<CategoryMutationResult>;
+  /** Hide (true) or restore (false) a built-in. Protected names are no-ops. */
+  setBuiltInHidden: (name: string, hidden: boolean) => Promise<void>;
 }
 
 const CustomCategoriesContext =
@@ -49,17 +63,30 @@ export const CustomCategoriesProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [hiddenList, setHiddenList] = useState<BudgetCategory[]>([]);
   const [isReady, setIsReady] = useState(false);
 
-  const refresh = useCallback(async () => {
-    try {
-      setCustomCategories(await getCustomCategories());
-    } catch (error) {
-      if (__DEV__) console.warn("Custom categories load failed:", error);
-    } finally {
-      setIsReady(true);
-    }
-  }, []);
+  // Promise-chain form purely to satisfy react-hooks/set-state-in-effect,
+  // whose syntactic analysis flags any setState-containing local function
+  // called from an effect - even when every setState sits behind an await
+  // (post-await code always runs in a microtask, never synchronously in the
+  // effect body). Callbacks passed to .then/.finally are recognized as
+  // async, so this shape lints clean. Behaviorally identical to async/await.
+  const refresh = useCallback(
+    (): Promise<void> =>
+      Promise.all([getCustomCategories(), getHiddenBuiltInCategories()])
+        .then(([categories, hidden]) => {
+          setCustomCategories(categories);
+          setHiddenList(hidden);
+        })
+        .catch((error) => {
+          if (__DEV__) console.warn("Custom categories load failed:", error);
+        })
+        .finally(() => {
+          setIsReady(true);
+        }),
+    []
+  );
 
   useEffect(() => {
     void refresh();
@@ -103,9 +130,38 @@ export const CustomCategoriesProvider: React.FC<{
     []
   );
 
+  const setBuiltInHidden = useCallback(async (name: string, hidden: boolean) => {
+    setHiddenList(await setBuiltInCategoryHidden(name, hidden));
+  }, []);
+
+  const hiddenBuiltIns = useMemo<ReadonlySet<string>>(() => new Set(hiddenList), [hiddenList]);
+  const visibleBuiltIns = useMemo(() => visibleBuiltInCategories(hiddenBuiltIns), [hiddenBuiltIns]);
+
   const value = useMemo<CustomCategoriesContextValue>(
-    () => ({ customCategories, isReady, refresh, add, update, remove, restore }),
-    [customCategories, isReady, refresh, add, update, remove, restore]
+    () => ({
+      customCategories,
+      hiddenBuiltIns,
+      visibleBuiltIns,
+      isReady,
+      refresh,
+      add,
+      update,
+      remove,
+      restore,
+      setBuiltInHidden,
+    }),
+    [
+      customCategories,
+      hiddenBuiltIns,
+      visibleBuiltIns,
+      isReady,
+      refresh,
+      add,
+      update,
+      remove,
+      restore,
+      setBuiltInHidden,
+    ]
   );
 
   return (

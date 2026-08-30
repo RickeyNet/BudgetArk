@@ -60,7 +60,13 @@ export const getOrCreateUser = async (): Promise<UserAccount> => {
     };
 
     if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      await EncryptedStorage.setItem(USER_KEY, JSON.stringify(normalized));
+      // Compare-and-set: only persist the repair if the stored value is
+      // still the one we read. A concurrent update (display name, currency)
+      // landing between the read above and this write is itself already
+      // normalized - overwriting it here would silently revert the edit.
+      await EncryptedStorage.updateItem(USER_KEY, (current) =>
+        current === raw ? JSON.stringify(normalized) : null
+      );
     }
 
     return normalized;
@@ -127,6 +133,21 @@ export const completeOnboarding = async (
     displayName: nextDisplayName ? nextDisplayName : user.displayName,
     onboardingComplete: true,
   };
+  await EncryptedStorage.setItem(USER_KEY, JSON.stringify(updated));
+  return updated;
+};
+
+/**
+ * Marks the onboarding flow as NOT complete so the first-launch experience
+ * shows again on the next gate check. Keeps every other account field -
+ * used by the Profile screen's "Redo onboarding" row, which must not touch
+ * the user's data or display name.
+ *
+ * @returns Promise<UserAccount> - the updated user
+ */
+export const resetOnboardingStatus = async (): Promise<UserAccount> => {
+  const user = await getOrCreateUser();
+  const updated = { ...user, onboardingComplete: false };
   await EncryptedStorage.setItem(USER_KEY, JSON.stringify(updated));
   return updated;
 };

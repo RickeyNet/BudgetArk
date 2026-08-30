@@ -8,7 +8,7 @@ import { evaluateAchievements } from "../achievements";
  * logic in isolation.
  */
 
-// Mutable defs array — tests reset and repopulate it. The imported
+// Mutable defs array - tests reset and repopulate it. The imported
 // ACHIEVEMENT_DEFS binding points at this same array, so in-place edits show up.
 const mockDefs: any[] = [];
 jest.mock("../../data/achievementDefs", () => ({
@@ -30,7 +30,7 @@ jest.mock("../../storage/achievementsStorage", () => ({
   saveUnlockedAchievements: (...args: any[]) => mockSave(...args),
 }));
 
-// Context-source storage — values are irrelevant because mocked defs ignore
+// Context-source storage - values are irrelevant because mocked defs ignore
 // the context; they just need to resolve.
 jest.mock("../../storage/debtStorage", () => ({
   getDebts: jest.fn(async () => []),
@@ -38,6 +38,9 @@ jest.mock("../../storage/debtStorage", () => ({
 }));
 jest.mock("../../storage/savingsGoalStorage", () => ({
   getSavingsGoals: jest.fn(async () => []),
+}));
+jest.mock("../../storage/assetAccountStorage", () => ({
+  getAssetAccounts: jest.fn(async () => []),
 }));
 jest.mock("../../storage/budgetStorage", () => ({
   getBudgetEntries: jest.fn(async () => []),

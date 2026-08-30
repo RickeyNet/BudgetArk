@@ -26,6 +26,7 @@ import { triggerHaptic } from "../utils/haptics";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 interface PaymentHistoryModalProps {
   visible: boolean;
@@ -179,19 +180,31 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     return map;
   }, [debts]);
 
-  /** Load payments when modal becomes visible; reset transient UI on close. */
-  useEffect(() => {
-    if (!visible) {
-      // Closing the sheet abandons any in-flight selection/undo so it
-      // doesn't reappear on next open.
-      clearUndoTimer();
+  /**
+   * Visibility transitions adjust state at render time (see useValueChanged)
+   * so no setState happens synchronously inside the load effect below.
+   * Closing the sheet abandons any in-flight selection/undo so it doesn't
+   * reappear on next open; opening re-arms the spinner for the fresh load.
+   */
+  if (useValueChanged(visible)) {
+    if (visible) {
+      setIsLoading(true);
+    } else {
       setUndoBatch(null);
       setSelectionMode(false);
       setSelectedIds(new Set());
+    }
+  }
+
+  /** Load payments when modal becomes visible; stop the undo timer on close. */
+  useEffect(() => {
+    if (!visible) {
+      // clearTimeout is a side effect, so it stays in the effect rather than
+      // the render-time transition block above.
+      clearUndoTimer();
       return;
     }
     let cancelled = false;
-    setIsLoading(true);
     getPayments()
       .then((payments) => {
         if (cancelled) return;
@@ -401,7 +414,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     container: {

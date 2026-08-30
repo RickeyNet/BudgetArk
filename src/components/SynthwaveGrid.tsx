@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Synthwave Grid Background
+ * File: src/components/SynthwaveGrid.tsx
+ *
+ * Ambient background for the Synthwave theme: a perspective floor grid
+ * drawn with react-native-svg. Rendered by AppNavigator's ambient switch
+ * (see AMBIENT_BACKGROUND_THEMES) and hidden when background effects are
+ * off.
+ */
+
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Line } from "react-native-svg";

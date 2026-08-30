@@ -1,10 +1,10 @@
 // The real `uuid` package is ESM-only (no CJS build), which Jest won't
 // transpile from node_modules. generateUUID is a thin pass-through, so we mock
 // the package and assert the delegation contract instead of re-testing uuid.
+import { generateUUID } from "../uuid";
+
 const mockV4 = jest.fn(() => "11111111-1111-4111-8111-111111111111");
 jest.mock("uuid", () => ({ v4: () => mockV4() }));
-
-import { generateUUID } from "../uuid";
 
 describe("generateUUID", () => {
   it("returns the value produced by uuid.v4", () => {

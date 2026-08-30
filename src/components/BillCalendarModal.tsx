@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Bill Calendar Modal
+ * File: src/components/BillCalendarModal.tsx
+ *
+ * Month-grid view of when recurring expenses and debt payments land, from
+ * utils/billCalendar + utils/debtDueCalendar. Read-only: it visualises
+ * timing so the user can see cash-flow pinch points, and links out to the
+ * device calendar for reminders (BudgetArk never pushes bill alerts).
+ */
+
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
@@ -12,6 +22,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { formatMonthKeyLabel } from "../utils/budgetMonths";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -24,6 +35,7 @@ import {
 } from "../utils/billCalendar";
 import { getCategoryIcon } from "../data/categoryIcons";
 import { getRecurrenceTag } from "../utils/recurrence";
+import { isFulfillingEntry } from "../utils/billFulfillment";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 
 interface BillCalendarModalProps {
@@ -37,11 +49,6 @@ interface BillCalendarModalProps {
 }
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
-
-const monthLabel = (monthKey: string): string => {
-  const d = new Date(`${monthKey}-01T00:00:00`);
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-};
 
 interface GridCell {
   day: number | null;
@@ -148,7 +155,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>Bill Calendar</Text>
-            <Text style={styles.subtitle}>{monthLabel(monthKey)}</Text>
+            <Text style={styles.subtitle}>{formatMonthKeyLabel(monthKey)}</Text>
           </View>
 
           <ScrollView
@@ -304,7 +311,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
           >
             <Text style={styles.dayCardTitle}>
               {selectedDay != null
-                ? `${monthLabel(monthKey).split(" ")[0]} ${selectedDay}`
+                ? `${formatMonthKeyLabel(monthKey).split(" ")[0]} ${selectedDay}`
                 : ""}
             </Text>
             <ScrollView style={styles.dayList}>
@@ -332,6 +339,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
                         <Text style={styles.dayItemSub}>
                           {entry.category}
                           {entry.recurring ? ` · ${getRecurrenceTag(entry)}` : ""}
+                          {isFulfillingEntry(entry) ? " · ✓ Paid (actual)" : ""}
                         </Text>
                       </View>
                     </View>
@@ -371,7 +379,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
     },
     sheet: {
       flex: 1,
@@ -575,7 +583,7 @@ const makeStyles = (colors: ThemeColors) =>
     /* Day-detail sheet */
     dayOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.7)",
+      backgroundColor: colors.overlay,
       justifyContent: "flex-end",
     },
     dayCard: {

@@ -11,13 +11,41 @@ import {
   markBackfillSyncDone,
 } from "../diffEngine";
 import type { SyncDiff } from "../types";
+import {
+  makeDebt,
+  makePayment,
+  makeBudgetEntry,
+  makeNetWorthSnapshot,
+  makeCustomCategory,
+  makeHolding,
+  makeBusiness,
+  makePerson,
+  makeMonthStartBalance,
+} from "../../__tests__/fixtures";
+import type {
+  Debt,
+  Payment,
+  BudgetEntry,
+  NetWorthSnapshot,
+  CustomCategory,
+  Holding,
+  Business,
+  Person,
+  MonthStartBalance,
+} from "../../types";
 
 let mockState: any;
 
 jest.mock("../../storage/debtStorage", () => ({
   getDebtsIncludingDeleted: jest.fn(async () => mockState.debts),
-  saveDebts: jest.fn(async (v: any) => {
-    mockState.debts = v;
+  // The atomic merge helpers hand the merge callback the stored array and
+  // persist its return value - the mocks do the same against mockState.
+  mergeDebtsFromSync: jest.fn(async (merge: any) => {
+    mockState.debts = merge(mockState.debts);
+  }),
+  mergePaymentsFromSync: jest.fn(async (merge: any) => {
+    mockState.payments = merge(mockState.payments);
+    mockState.encStore.set("@budgetark_payments", JSON.stringify(mockState.payments));
   }),
   getPaymentsIncludingDeleted: jest.fn(async () => mockState.payments),
   getPayoffStrategyEnvelope: jest.fn(async () => mockState.strategyEnvelope),
@@ -27,27 +55,34 @@ jest.mock("../../storage/debtStorage", () => ({
 }));
 jest.mock("../../storage/budgetStorage", () => ({
   getBudgetEntriesIncludingDeleted: jest.fn(async () => mockState.budgetEntries),
-  saveBudgetEntries: jest.fn(async (v: any) => {
-    mockState.budgetEntries = v;
+  mergeBudgetEntriesFromSync: jest.fn(async (merge: any) => {
+    mockState.budgetEntries = merge(mockState.budgetEntries);
   }),
-  getAllLimitsByMonth: jest.fn(async () => mockState.limitsByMonth),
+  getAllLimitsByMonthIncludingDeleted: jest.fn(async () => mockState.limitsByMonth),
+  mergeLimitHistoryFromSync: jest.fn(async (merge: any) => {
+    mockState.limitsByMonth = merge(mockState.limitsByMonth);
+    mockState.encStore.set(
+      "@budgetark_budget_limits_by_month",
+      JSON.stringify(mockState.limitsByMonth)
+    );
+  }),
 }));
 jest.mock("../../storage/savingsGoalStorage", () => ({
   getSavingsGoalsIncludingDeleted: jest.fn(async () => mockState.savingsGoals),
-  saveSavingsGoals: jest.fn(async (v: any) => {
-    mockState.savingsGoals = v;
+  mergeSavingsGoalsFromSync: jest.fn(async (merge: any) => {
+    mockState.savingsGoals = merge(mockState.savingsGoals);
   }),
 }));
 jest.mock("../../storage/assetAccountStorage", () => ({
   getAssetAccountsIncludingDeleted: jest.fn(async () => mockState.assetAccounts),
-  saveAssetAccounts: jest.fn(async (v: any) => {
-    mockState.assetAccounts = v;
+  mergeAssetAccountsFromSync: jest.fn(async (merge: any) => {
+    mockState.assetAccounts = merge(mockState.assetAccounts);
   }),
 }));
 jest.mock("../../storage/holdingsStorage", () => ({
   getHoldingsIncludingDeleted: jest.fn(async () => mockState.holdings),
-  saveHoldings: jest.fn(async (v: any) => {
-    mockState.holdings = v;
+  mergeHoldingsFromSync: jest.fn(async (merge: any) => {
+    mockState.holdings = merge(mockState.holdings);
   }),
 }));
 jest.mock("../../storage/debtMilestoneStorage", () => ({
@@ -62,6 +97,18 @@ jest.mock("../../storage/customCategoriesStorage", () => ({
     mockState.customCategories = v;
   }),
 }));
+jest.mock("../../storage/businessStorage", () => ({
+  getBusinessesIncludingDeleted: jest.fn(async () => mockState.businesses),
+  mergeBusinessesFromSync: jest.fn(async (merge: any) => {
+    mockState.businesses = merge(mockState.businesses);
+  }),
+}));
+jest.mock("../../storage/personStorage", () => ({
+  getPeopleIncludingDeleted: jest.fn(async () => mockState.people),
+  mergePeopleFromSync: jest.fn(async (merge: any) => {
+    mockState.people = merge(mockState.people);
+  }),
+}));
 jest.mock("../../storage/categoryBucketOverridesStorage", () => ({
   getCategoryBucketOverrides: jest.fn(async () => mockState.bucketOverrides),
   saveCategoryBucketOverridesFromSync: jest.fn(async (v: any) => {
@@ -74,6 +121,12 @@ jest.mock("../../storage/netWorthSnapshotStorage", () => ({
     mockState.snapshots = v;
   }),
 }));
+jest.mock("../../storage/monthlyBalanceStorage", () => ({
+  getMonthStartBalances: jest.fn(async () => mockState.monthBalances),
+  saveMonthStartBalancesFromSync: jest.fn(async (v: any) => {
+    mockState.monthBalances = v;
+  }),
+}));
 jest.mock("../../storage/encryptedStorage", () => ({
   getItem: jest.fn(async (k: string) =>
     mockState.encStore.has(k) ? mockState.encStore.get(k) : null
@@ -84,7 +137,6 @@ jest.mock("../../storage/encryptedStorage", () => ({
 }));
 
 const debtStorage = require("../../storage/debtStorage");
-const budgetStorage = require("../../storage/budgetStorage");
 const customCatStorage = require("../../storage/customCategoriesStorage");
 const snapshotStorage = require("../../storage/netWorthSnapshotStorage");
 
@@ -93,50 +145,39 @@ const MID = "2026-03-01T00:00:00.000Z";
 const NEW = "2026-06-01T00:00:00.000Z";
 
 // ── Valid fixtures (must pass the real recordValidators) ──
-const debt = (over: Record<string, unknown> = {}): any => ({
-  id: "d1",
-  name: "Visa",
-  balance: 1000,
-  originalBalance: 2000,
-  rate: 19.9,
-  minPayment: 50,
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const payment = (over: Record<string, unknown> = {}): any => ({
-  id: "p1",
-  debtId: "d1",
-  amount: 50,
-  date: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const snapshot = (over: Record<string, unknown> = {}): any => ({
-  dayKey: "2026-06-01",
-  capturedAt: NEW,
-  totalAssets: 1000,
-  totalDebt: 200,
-  netWorth: 800,
-  ...over,
-});
-const customCat = (over: Record<string, unknown> = {}): any => ({
-  id: "c1",
-  name: "Kayaking",
-  icon: "🛶",
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
-const holding = (over: Record<string, unknown> = {}): any => ({
-  id: "h1",
-  symbol: "AAPL",
-  shares: 10,
-  costBasis: 1500,
-  createdAt: OLD,
-  updatedAt: NEW,
-  ...over,
-});
+const debt = (over: Partial<Debt> = {}): Debt =>
+  makeDebt({ id: "d1", originalBalance: 2000, createdAt: OLD, updatedAt: NEW, ...over });
+const payment = (over: Partial<Payment> = {}): Payment =>
+  makePayment({ id: "p1", debtId: "d1", date: OLD, updatedAt: NEW, ...over });
+const snapshot = (over: Partial<NetWorthSnapshot> = {}): NetWorthSnapshot =>
+  makeNetWorthSnapshot({
+    capturedAt: NEW,
+    totalAssets: 1000,
+    totalDebt: 200,
+    netWorth: 800,
+    ...over,
+  });
+const customCat = (over: Partial<CustomCategory> = {}): CustomCategory =>
+  makeCustomCategory({
+    id: "c1",
+    name: "Kayaking",
+    icon: "🛶",
+    createdAt: OLD,
+    updatedAt: NEW,
+    ...over,
+  });
+const holding = (over: Partial<Holding> = {}): Holding =>
+  makeHolding({ id: "h1", symbol: "AAPL", costBasis: 1500, createdAt: OLD, updatedAt: NEW, ...over });
+const business = (over: Partial<Business> = {}): Business =>
+  makeBusiness({ id: "b1", name: "Acme Consulting LLC", createdAt: OLD, updatedAt: NEW, ...over });
+const person = (over: Partial<Person> = {}): Person =>
+  makePerson({ id: "per1", name: "Sam", createdAt: OLD, updatedAt: NEW, ...over });
+
+const monthBalance = (over: Partial<MonthStartBalance> = {}): MonthStartBalance =>
+  makeMonthStartBalance({ balance: 3200, capturedAt: NEW, updatedAt: NEW, ...over });
+
+const budgetEntry = (over: Partial<BudgetEntry> = {}): BudgetEntry =>
+  makeBudgetEntry({ id: "e1", amount: 42.5, date: OLD, createdAt: OLD, updatedAt: NEW, ...over });
 
 const emptyDiff = (over: Partial<SyncDiff> = {}): SyncDiff =>
   ({
@@ -161,8 +202,11 @@ const freshState = () => ({
   milestonePlan: { steps: [], updatedAt: OLD },
   strategyEnvelope: null,
   customCategories: [],
+  businesses: [],
+  people: [],
   bucketOverrides: {},
   snapshots: [],
+  monthBalances: {},
   limitsByMonth: {},
   encStore: new Map<string, string>(),
 });
@@ -186,6 +230,22 @@ describe("computeOutgoingDiff", () => {
     ];
     const diff = await computeOutgoingDiff(MID);
     expect(diff.debts.map((e) => e.record.id)).toEqual(["fresh"]);
+  });
+
+  it("still sends a record lacking updatedAt on the first sync, and as epoch afterwards", async () => {
+    // Regression: `NaN > since` is always false, so such a record was
+    // excluded from every diff forever - including the first one.
+    const legacy = debt({ id: "legacy" });
+    delete (legacy as any).updatedAt;
+    mockState.debts = [legacy, debt({ id: "fresh", updatedAt: NEW })];
+
+    const first = await computeOutgoingDiff(null);
+    expect(first.debts.map((e) => e.record.id).sort()).toEqual(["fresh", "legacy"]);
+
+    // After a sync the epoch mapping keeps it out of incremental diffs
+    // (the storage getters persist a real stamp on read anyway).
+    const later = await computeOutgoingDiff(OLD);
+    expect(later.debts.map((e) => e.record.id)).toEqual(["fresh"]);
   });
 
   it("marks a tombstoned record as a delete action", async () => {
@@ -216,9 +276,35 @@ describe("computeOutgoingDiff", () => {
     await markBackfillSyncDone();
     expect(mockState.encStore.get("@budgetark_sync_backfill_done_v1")).toBe("true");
   });
+
+  it("never sends private budget entries - live or tombstoned", async () => {
+    mockState.budgetEntries = [
+      budgetEntry({ id: "public", updatedAt: NEW }),
+      budgetEntry({ id: "secret", isPrivate: true, updatedAt: NEW }),
+      budgetEntry({
+        id: "secret-deleted",
+        isPrivate: true,
+        deletedAt: NEW,
+        updatedAt: NEW,
+      }),
+    ];
+    // Both first sync (send-everything) and incremental must exclude them.
+    const first = await computeOutgoingDiff(null);
+    expect(first.budgetEntries.map((e) => e.record.id)).toEqual(["public"]);
+    const incremental = await computeOutgoingDiff(MID);
+    expect(incremental.budgetEntries.map((e) => e.record.id)).toEqual(["public"]);
+  });
+
+  it("sends an entry again after the private flag is cleared", async () => {
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", isPrivate: undefined, updatedAt: NEW }),
+    ];
+    const diff = await computeOutgoingDiff(MID);
+    expect(diff.budgetEntries.map((e) => e.record.id)).toEqual(["e1"]);
+  });
 });
 
-describe("applyIncomingDiff – validation gate", () => {
+describe("applyIncomingDiff - validation gate", () => {
   it("rejects the whole diff if any record is invalid, writing nothing", async () => {
     const bad = emptyDiff({
       debts: [
@@ -227,7 +313,7 @@ describe("applyIncomingDiff – validation gate", () => {
       ],
     });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/Sync rejected/);
-    expect(debtStorage.saveDebts).not.toHaveBeenCalled();
+    expect(debtStorage.mergeDebtsFromSync).not.toHaveBeenCalled();
   });
 
   it("rejects a malformed diff entry (bad action)", async () => {
@@ -237,9 +323,107 @@ describe("applyIncomingDiff – validation gate", () => {
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/malformed debt/);
   });
 
+  it("rejects a diff missing a required collection with a labeled error", async () => {
+    // Regression: a missing/non-array collection used to sail past
+    // validation (`if (!entries) return`) and crash applyIncomingDiff with
+    // a raw TypeError instead of the "Sync rejected" message.
+    const missing = emptyDiff();
+    delete (missing as any).debts;
+    await expect(applyIncomingDiff(missing)).rejects.toThrow(/missing debt collection/);
+    expect(debtStorage.mergeDebtsFromSync).not.toHaveBeenCalled();
+
+    const noLimits = emptyDiff();
+    delete (noLimits as any).budgetLimits;
+    await expect(applyIncomingDiff(noLimits)).rejects.toThrow(/budget limits/);
+  });
+
+  it("rejects a non-array collection (required or optional)", async () => {
+    await expect(
+      applyIncomingDiff(emptyDiff({ payments: {} as any }))
+    ).rejects.toThrow(/malformed payment collection/);
+    await expect(
+      applyIncomingDiff(emptyDiff({ businesses: "nope" as any }))
+    ).rejects.toThrow(/malformed business collection/);
+  });
+
+  it("tolerates absent optional collections (older peers)", async () => {
+    const oldPeer = emptyDiff();
+    delete (oldPeer as any).holdings;
+    delete (oldPeer as any).assetAccounts; // post-launch addition
+    await expect(applyIncomingDiff(oldPeer)).resolves.toBe(0);
+  });
+
   it("rejects an invalid category bucket override", async () => {
     const bad = emptyDiff({ categoryBucketOverrides: { Food: "lavish" as any } });
     await expect(applyIncomingDiff(bad)).rejects.toThrow(/bucket override/);
+  });
+
+  it("re-stamps isPrivate when a partner's newer edit wins LWW (no clawback)", async () => {
+    // The partner still holds the pre-privacy public copy; their later edit
+    // wins on updatedAt. Content must merge, but the flag must survive -
+    // otherwise the entry silently resumes syncing out.
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", amount: 42.5, isPrivate: true, updatedAt: MID }),
+    ];
+    const incoming = emptyDiff({
+      budgetEntries: [
+        { action: "upsert", record: budgetEntry({ id: "e1", amount: 99, updatedAt: NEW }) },
+      ],
+    });
+    await applyIncomingDiff(incoming);
+    const stored = mockState.budgetEntries.find((e: any) => e.id === "e1");
+    expect(stored.amount).toBe(99); // partner's content won...
+    expect(stored.isPrivate).toBe(true); // ...but privacy sticks
+    // And the re-privatized entry still never leaves the device.
+    const outgoing = await computeOutgoingDiff(null);
+    expect(outgoing.budgetEntries.map((e) => e.record.id)).toEqual([]);
+  });
+
+  it("keeps a tombstone private when a stale partner delete wins", async () => {
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", isPrivate: true, updatedAt: MID }),
+    ];
+    const incoming = emptyDiff({
+      budgetEntries: [
+        {
+          action: "delete",
+          record: budgetEntry({ id: "e1", deletedAt: NEW, updatedAt: NEW }),
+        },
+      ],
+    });
+    await applyIncomingDiff(incoming);
+    const stored = mockState.budgetEntries.find((e: any) => e.id === "e1");
+    expect(stored.deletedAt).toBe(NEW);
+    expect(stored.isPrivate).toBe(true);
+  });
+
+  it("does not invent privacy for entries that were never private", async () => {
+    mockState.budgetEntries = [budgetEntry({ id: "e1", updatedAt: MID })];
+    const incoming = emptyDiff({
+      budgetEntries: [
+        { action: "upsert", record: budgetEntry({ id: "e1", amount: 7, updatedAt: NEW }) },
+      ],
+    });
+    await applyIncomingDiff(incoming);
+    expect(mockState.budgetEntries[0].isPrivate).toBeUndefined();
+  });
+
+  it("rejects a budget entry whose isPrivate is not a boolean", async () => {
+    const bad = emptyDiff({
+      budgetEntries: [
+        // Deliberately malformed - stands in for an untyped wire payload;
+        // the point of the test is the runtime validator catching it.
+        { action: "upsert", record: budgetEntry({ isPrivate: "yes" as unknown as boolean }) },
+      ],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/budget entry/);
+    // A boolean (however unexpected from a well-behaved peer) is accepted.
+    const ok = emptyDiff({
+      budgetEntries: [
+        { action: "upsert", record: budgetEntry({ isPrivate: true }) },
+      ],
+    });
+    await expect(applyIncomingDiff(ok)).resolves.toBeGreaterThan(0);
   });
 
   it("rejects an out-of-range net-worth snapshot", async () => {
@@ -269,7 +453,7 @@ describe("applyIncomingDiff – validation gate", () => {
   });
 });
 
-describe("applyIncomingDiff – last-write-wins merge", () => {
+describe("applyIncomingDiff - last-write-wins merge", () => {
   it("applies an incoming record that is newer than local", async () => {
     mockState.debts = [debt({ id: "d1", balance: 100, updatedAt: OLD })];
     await applyIncomingDiff(
@@ -305,6 +489,28 @@ describe("applyIncomingDiff – last-write-wins merge", () => {
     expect(mockState.debts.find((d: any) => d.id === "d1").deletedAt).toBe(NEW);
   });
 
+  it("lets a stamped incoming record overwrite a local one that has no updatedAt", async () => {
+    // Regression: `x >= NaN` is false, so a legacy local record without
+    // updatedAt could never be overwritten - while changedCount still
+    // counted the incoming record as applied.
+    const legacy = debt({ id: "d1", balance: 100 });
+    delete (legacy as any).updatedAt;
+    mockState.debts = [legacy];
+    const applied = await applyIncomingDiff(
+      emptyDiff({ debts: [{ action: "upsert", record: debt({ id: "d1", balance: 999, updatedAt: OLD }) }] })
+    );
+    expect(mockState.debts.find((d: any) => d.id === "d1").balance).toBe(999);
+    expect(applied).toBe(1);
+  });
+
+  it("treats an incoming record without updatedAt as epoch, so any stamped local wins", async () => {
+    mockState.debts = [debt({ id: "d1", balance: 100, updatedAt: OLD })];
+    const incoming = debt({ id: "d1", balance: 999 });
+    delete (incoming as any).updatedAt;
+    await applyIncomingDiff(emptyDiff({ debts: [{ action: "upsert", record: incoming }] }));
+    expect(mockState.debts.find((d: any) => d.id === "d1").balance).toBe(100);
+  });
+
   it("adds a brand-new incoming record", async () => {
     await applyIncomingDiff(
       emptyDiff({ debts: [{ action: "upsert", record: debt({ id: "new" }) }] })
@@ -319,6 +525,65 @@ describe("applyIncomingDiff – last-write-wins merge", () => {
     );
     const saved = JSON.parse(mockState.encStore.get("@budgetark_payments"));
     expect(saved.find((p: any) => p.id === "p1").amount).toBe(75);
+  });
+});
+
+describe("applyIncomingDiff - duplicate minimum-due payments", () => {
+  // An old-version partner logs its "minimum due" confirmation under a
+  // random id, so the same real-world payment arrives as a second record.
+  // The post-merge dedupe must tombstone it - the balance only reflects one
+  // decrement (LWW on the debt record) - without touching genuine data.
+  const dupDebt = () =>
+    debt({ balance: 1950, originalBalance: 2000, minPayment: 50, updatedAt: NEW });
+  const minPaid = (over: Record<string, unknown> = {}) =>
+    payment({ amount: 50, appliedAmount: 50, ...over });
+
+  // Noon-UTC dates so both rows land in the same LOCAL calendar month
+  // (paymentMonthKey buckets by local month) whatever timezone runs the tests.
+  const JAN_5 = "2026-01-05T12:00:00.000Z";
+  const JAN_8 = "2026-01-08T12:00:00.000Z";
+
+  it("tombstones a partner's random-id duplicate of the same month's minimum", async () => {
+    mockState.debts = [dupDebt()];
+    mockState.payments = [
+      minPaid({ id: "duemin:d1:2026-01", date: JAN_5, updatedAt: JAN_5 }),
+    ];
+    await applyIncomingDiff(
+      emptyDiff({
+        payments: [
+          {
+            action: "upsert",
+            record: minPaid({ id: "partner-uuid", date: JAN_8, updatedAt: MID }),
+          },
+        ],
+      })
+    );
+    const saved = JSON.parse(mockState.encStore.get("@budgetark_payments"));
+    const live = saved.filter((p: any) => !p.deletedAt);
+    expect(live.map((p: any) => p.id)).toEqual(["duemin:d1:2026-01"]);
+    // Tombstoned, not dropped - the delete must flow back to the partner.
+    const dup = saved.find((p: any) => p.id === "partner-uuid");
+    expect(dup.deletedAt).toBeTruthy();
+  });
+
+  it("keeps both rows when the balance shows both payments really applied", async () => {
+    // Balance 1900 = both $50 decrements applied -> a genuine double payment.
+    mockState.debts = [debt({ balance: 1900, originalBalance: 2000, minPayment: 50, updatedAt: NEW })];
+    mockState.payments = [
+      minPaid({ id: "local-uuid", date: JAN_5, updatedAt: JAN_5 }),
+    ];
+    await applyIncomingDiff(
+      emptyDiff({
+        payments: [
+          {
+            action: "upsert",
+            record: minPaid({ id: "partner-uuid", date: JAN_8, updatedAt: MID }),
+          },
+        ],
+      })
+    );
+    const saved = JSON.parse(mockState.encStore.get("@budgetark_payments"));
+    expect(saved.filter((p: any) => !p.deletedAt)).toHaveLength(2);
   });
 });
 
@@ -357,7 +622,203 @@ describe("holdings sync", () => {
   });
 });
 
-describe("applyIncomingDiff – budget limits", () => {
+describe("businesses sync", () => {
+  it("includes changed businesses in the outgoing diff (upsert + delete)", async () => {
+    mockState.businesses = [
+      business({ id: "live", updatedAt: NEW }),
+      business({ id: "gone", deletedAt: NEW, updatedAt: NEW }),
+      business({ id: "stale", updatedAt: OLD }),
+    ];
+    const diff = await computeOutgoingDiff(MID);
+    const byId = Object.fromEntries(
+      (diff.businesses ?? []).map((e) => [e.record.id, e.action])
+    );
+    expect(byId).toEqual({ live: "upsert", gone: "delete" });
+  });
+
+  it("merges an incoming business with last-write-wins", async () => {
+    mockState.businesses = [business({ id: "b1", name: "Old Name", updatedAt: OLD })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [
+          { action: "upsert", record: business({ id: "b1", name: "New Name", updatedAt: NEW }) },
+        ],
+      })
+    );
+    expect(mockState.businesses.find((b: any) => b.id === "b1").name).toBe("New Name");
+  });
+
+  it("does not resurrect a business deleted locally with a newer tombstone", async () => {
+    mockState.businesses = [business({ id: "b1", deletedAt: NEW, updatedAt: NEW })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [{ action: "upsert", record: business({ id: "b1", updatedAt: OLD }) }],
+      })
+    );
+    expect(mockState.businesses.find((b: any) => b.id === "b1").deletedAt).toBe(NEW);
+  });
+
+  it("applies an incoming business delete that is newer than the live local record", async () => {
+    mockState.businesses = [business({ id: "b1", updatedAt: OLD })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [
+          { action: "delete", record: business({ id: "b1", deletedAt: NEW, updatedAt: NEW }) },
+        ],
+      })
+    );
+    expect(mockState.businesses.find((b: any) => b.id === "b1").deletedAt).toBe(NEW);
+  });
+
+  it("accepts duplicate business names (no dedupe on receive - would brick the merge)", async () => {
+    mockState.businesses = [business({ id: "b1", name: "Acme" })];
+    await applyIncomingDiff(
+      emptyDiff({
+        businesses: [{ action: "upsert", record: business({ id: "b2", name: "Acme" }) }],
+      })
+    );
+    expect(mockState.businesses).toHaveLength(2);
+  });
+
+  it("rejects the whole diff on an invalid business record, writing nothing", async () => {
+    const businessStorage = require("../../storage/businessStorage");
+    const bad = emptyDiff({
+      businesses: [
+        { action: "upsert", record: business({ id: "ok" }) },
+        { action: "upsert", record: business({ id: "bad", name: "a".repeat(41) }) },
+      ],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/invalid business/);
+    expect(businessStorage.mergeBusinessesFromSync).not.toHaveBeenCalled();
+  });
+
+  it("applies cleanly when an older peer's diff omits the businesses field", async () => {
+    mockState.businesses = [business({ id: "b1" })];
+    const diff = emptyDiff({});
+    delete (diff as any).businesses;
+    await expect(applyIncomingDiff(diff)).resolves.toBe(0);
+    expect(mockState.businesses).toHaveLength(1);
+  });
+});
+
+describe("people sync", () => {
+  it("includes changed people in the outgoing diff (upsert + delete)", async () => {
+    mockState.people = [
+      person({ id: "live", updatedAt: NEW }),
+      person({ id: "gone", deletedAt: NEW, updatedAt: NEW }),
+      person({ id: "stale", updatedAt: OLD }),
+    ];
+    const diff = await computeOutgoingDiff(MID);
+    const byId = Object.fromEntries(
+      (diff.people ?? []).map((e) => [e.record.id, e.action])
+    );
+    expect(byId).toEqual({ live: "upsert", gone: "delete" });
+  });
+
+  it("merges an incoming person with last-write-wins", async () => {
+    mockState.people = [person({ id: "per1", name: "Old Name", updatedAt: OLD })];
+    await applyIncomingDiff(
+      emptyDiff({
+        people: [
+          { action: "upsert", record: person({ id: "per1", name: "New Name", updatedAt: NEW }) },
+        ],
+      })
+    );
+    expect(mockState.people.find((p: any) => p.id === "per1").name).toBe("New Name");
+  });
+
+  it("does not resurrect a person deleted locally with a newer tombstone", async () => {
+    mockState.people = [person({ id: "per1", deletedAt: NEW, updatedAt: NEW })];
+    await applyIncomingDiff(
+      emptyDiff({
+        people: [{ action: "upsert", record: person({ id: "per1", updatedAt: OLD }) }],
+      })
+    );
+    expect(mockState.people.find((p: any) => p.id === "per1").deletedAt).toBe(NEW);
+  });
+
+  it("rejects the whole diff on an invalid person record, writing nothing", async () => {
+    const personStorage = require("../../storage/personStorage");
+    const bad = emptyDiff({
+      people: [
+        { action: "upsert", record: person({ id: "ok" }) },
+        { action: "upsert", record: person({ id: "bad", name: "a".repeat(41) }) },
+      ],
+    });
+    await expect(applyIncomingDiff(bad)).rejects.toThrow(/invalid person/);
+    expect(personStorage.mergePeopleFromSync).not.toHaveBeenCalled();
+  });
+
+  it("applies cleanly when an older peer's diff omits the people field", async () => {
+    mockState.people = [person({ id: "per1" })];
+    const diff = emptyDiff({});
+    delete (diff as any).people;
+    await expect(applyIncomingDiff(diff)).resolves.toBe(0);
+    expect(mockState.people).toHaveLength(1);
+  });
+});
+
+describe("budget limits - removals propagate as tombstones", () => {
+  it("sends a removed limit's tombstone in the outgoing diff", async () => {
+    mockState.limitsByMonth = {
+      "2026-06": [
+        { category: "Food", monthlyLimit: 400, updatedAt: OLD },
+        { category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }, // removed after last sync
+      ],
+    };
+    const diff = await computeOutgoingDiff(MID);
+    expect(diff.budgetLimits).toEqual([
+      {
+        monthKey: "2026-06",
+        limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }],
+      },
+    ]);
+  });
+
+  it("an incoming newer tombstone retires the local live limit (kept as a tombstone)", async () => {
+    mockState.limitsByMonth = {
+      "2026-06": [{ category: "Gas", monthlyLimit: 60, updatedAt: OLD }],
+    };
+    await applyIncomingDiff(
+      emptyDiff({
+        budgetLimits: [
+          { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }] },
+        ],
+      })
+    );
+    const gas = mockState.limitsByMonth["2026-06"].find((l: any) => l.category === "Gas");
+    expect(gas.deletedAt).toBe(NEW);
+  });
+
+  it("a local newer tombstone beats the partner's stale live copy (no resurrection)", async () => {
+    mockState.limitsByMonth = {
+      "2026-06": [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: NEW }],
+    };
+    await applyIncomingDiff(
+      emptyDiff({
+        budgetLimits: [
+          { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: OLD }] },
+        ],
+      })
+    );
+    const gas = mockState.limitsByMonth["2026-06"].find((l: any) => l.category === "Gas");
+    expect(gas.deletedAt).toBe(NEW);
+  });
+
+  it("rejects a limit whose deletedAt is not a timestamp", async () => {
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({
+          budgetLimits: [
+            { monthKey: "2026-06", limits: [{ category: "Gas", monthlyLimit: 60, updatedAt: NEW, deletedAt: "soon" }] },
+          ],
+        })
+      )
+    ).rejects.toThrow();
+  });
+});
+
+describe("applyIncomingDiff - budget limits", () => {
   it("merges per-category limits with last-write-wins", async () => {
     mockState.limitsByMonth = {
       "2026-06": [{ category: "Food", monthlyLimit: 100, updatedAt: OLD }],
@@ -385,7 +846,7 @@ describe("applyIncomingDiff – budget limits", () => {
   });
 });
 
-describe("applyIncomingDiff – custom category dedup", () => {
+describe("applyIncomingDiff - custom category dedup", () => {
   it("de-dupes duplicate names across devices, keeping the newest", async () => {
     mockState.customCategories = [customCat({ id: "c1", name: "Kayaking", updatedAt: OLD })];
     await applyIncomingDiff(
@@ -400,7 +861,7 @@ describe("applyIncomingDiff – custom category dedup", () => {
   });
 });
 
-describe("applyIncomingDiff – net-worth snapshots", () => {
+describe("applyIncomingDiff - net-worth snapshots", () => {
   it("unions by dayKey, newer capturedAt wins", async () => {
     mockState.snapshots = [
       snapshot({ dayKey: "2026-06-01", netWorth: 100, capturedAt: OLD }),
@@ -429,7 +890,74 @@ describe("applyIncomingDiff – net-worth snapshots", () => {
   });
 });
 
-describe("applyIncomingDiff – milestone plan & payoff strategy LWW", () => {
+describe("month-start balances sync", () => {
+  const balanceStorage = require("../../storage/monthlyBalanceStorage");
+
+  it("sends the whole map when non-empty, omits the field when empty", async () => {
+    mockState.monthBalances = { "2026-07": monthBalance() };
+    const diff = await computeOutgoingDiff(MID);
+    expect(diff.monthStartBalances).toEqual({ "2026-07": monthBalance() });
+
+    mockState.monthBalances = {};
+    const diff2 = await computeOutgoingDiff(MID);
+    expect(diff2.monthStartBalances).toBeUndefined();
+  });
+
+  it("rejects invalid month keys and malformed records outright", async () => {
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({ monthStartBalances: { "2026-13": monthBalance() } })
+      )
+    ).rejects.toThrow(/invalid month-start balance/i);
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({
+          // Deliberately malformed - the runtime validator, not the type
+          // system, is what's under test here.
+          monthStartBalances: { "2026-07": monthBalance({ balance: "3200" as unknown as number }) },
+        })
+      )
+    ).rejects.toThrow(/invalid month-start balance/i);
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({ monthStartBalances: "corrupt" as any })
+      )
+    ).rejects.toThrow(/malformed month-start balances/i);
+    expect(mockState.monthBalances).toEqual({}); // nothing was written
+  });
+
+  it("merges per month: strictly-newer updatedAt wins, local-only months survive", async () => {
+    mockState.monthBalances = {
+      "2026-06": monthBalance({ balance: 100, updatedAt: NEW }),
+      "2026-05": monthBalance({ balance: 50, updatedAt: OLD }),
+    };
+    const changed = await applyIncomingDiff(
+      emptyDiff({
+        monthStartBalances: {
+          "2026-06": monthBalance({ balance: 999, updatedAt: OLD }), // older - ignored
+          "2026-07": monthBalance({ balance: 700, updatedAt: NEW }), // new month - applied
+        },
+      })
+    );
+    expect(changed).toBe(1);
+    expect(mockState.monthBalances["2026-06"].balance).toBe(100);
+    expect(mockState.monthBalances["2026-05"].balance).toBe(50);
+    expect(mockState.monthBalances["2026-07"].balance).toBe(700);
+  });
+
+  it("ties keep local and skip the write (idempotent re-broadcast)", async () => {
+    mockState.monthBalances = { "2026-07": monthBalance({ balance: 100 }) };
+    await applyIncomingDiff(
+      emptyDiff({
+        monthStartBalances: { "2026-07": monthBalance({ balance: 999 }) }, // same updatedAt
+      })
+    );
+    expect(mockState.monthBalances["2026-07"].balance).toBe(100);
+    expect(balanceStorage.saveMonthStartBalancesFromSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("applyIncomingDiff - milestone plan & payoff strategy LWW", () => {
   it("applies a newer milestone plan and rejects an older one", async () => {
     mockState.milestonePlan = { steps: [{ id: "x" }], updatedAt: MID };
     await applyIncomingDiff(emptyDiff({ debtMilestonePlan: { steps: [], updatedAt: OLD } as any }));

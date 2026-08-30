@@ -23,6 +23,7 @@ import {
 } from "../storage/achievementsStorage";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getBudgetEntries, getAllLimitsByMonth } from "../storage/budgetStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { getNetWorthSnapshots } from "../storage/netWorthSnapshotStorage";
@@ -65,6 +66,7 @@ const loadContext = async (): Promise<AchievementContext> => {
     payments,
     savingsGoals,
     budgetEntries,
+    assetAccounts,
     milestonePlan,
     netWorthSnapshots,
     pairing,
@@ -76,6 +78,7 @@ const loadContext = async (): Promise<AchievementContext> => {
     getPayments(),
     getSavingsGoals(),
     getBudgetEntries(),
+    getAssetAccounts(),
     getDebtMilestonePlan(),
     getNetWorthSnapshots(),
     getPairingState(),
@@ -89,6 +92,7 @@ const loadContext = async (): Promise<AchievementContext> => {
     payments,
     savingsGoals,
     budgetEntries,
+    assetAccounts,
     milestonePlan,
     netWorthSnapshots,
     isPaired: pairing !== null,

@@ -2,17 +2,15 @@
   "expo": {
     "name": "BudgetArk",
     "slug": "BudgetArk",
-    "version": "1.8.3",
+    "version": "1.10.0",
+    "scheme": "budgetark",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#F2E6D0"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.budgetark.app",
+      "appleTeamId": "U8CU9DF92C",
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -30,7 +28,7 @@
       "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F2E6D0"
+        "backgroundColor": "#FFF1DC"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -50,7 +48,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "runtimeVersion": "1.4.14",
+    "runtimeVersion": "1.10.0",
     "updates": {
       "checkAutomatically": "ON_ERROR_RECOVERY",
       "url": "https://u.expo.dev/08046ba8-b8f4-46ef-b98b-c31fe698c65b"
@@ -64,7 +62,45 @@
     "plugins": [
       "expo-secure-store",
       "./plugins/withScreenGuard",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFF1DC"
+        }
+      ],
+      "expo-iap",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BudgetArk uses your photo library so you can attach receipt photos to expenses. Photos stay encrypted on your device.",
+          "cameraPermission": "BudgetArk uses the camera so you can photograph receipts for your expenses. Photos stay encrypted on your device."
+        }
+      ],
+      "@bacons/apple-targets",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "QuickEntry",
+              "label": "Quick Entry",
+              "description": "Log an expense in one tap - pick a category and BudgetArk opens straight to the amount.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 0
+            }
+          ]
+        }
+      ]
     ]
   }
 }

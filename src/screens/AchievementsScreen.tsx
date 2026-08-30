@@ -34,6 +34,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
+import { useValueChanged } from "../hooks/useValueChanged";
 
 interface AchievementsScreenProps {
   visible: boolean;
@@ -42,7 +43,7 @@ interface AchievementsScreenProps {
 
 type FilterId = "all" | "earned" | "locked";
 
-const FILTERS: ReadonlyArray<{ id: FilterId; label: string }> = [
+const FILTERS: readonly { id: FilterId; label: string }[] = [
   { id: "all", label: "All" },
   { id: "earned", label: "Earned" },
   { id: "locked", label: "Locked" },
@@ -79,10 +80,16 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
   const [selected, setSelected] = useState<AchievementDef | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Re-arm the loading state the moment the sheet opens - render-time
+  // adjustment (see useValueChanged) so the evaluate effect below never sets
+  // state synchronously.
+  if (useValueChanged(visible) && visible) {
+    setIsLoaded(false);
+  }
+
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    setIsLoaded(false);
     evaluateAchievements()
       .then((result) => {
         if (cancelled) return;
@@ -371,7 +378,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     closeButton: {
       paddingVertical: 8,
       paddingHorizontal: 14,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -390,7 +397,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     filterChip: {
       paddingHorizontal: 14,
       paddingVertical: 8,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -405,7 +412,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       fontWeight: "600",
     },
     filterChipTextActive: {
-      color: colors.white ?? "#fff",
+      color: colors.white,
     },
     gridContent: {
       paddingHorizontal: tokens.pad,
@@ -452,7 +459,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
     },
     detailOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.7)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       alignItems: "center",
       paddingHorizontal: 32,
@@ -507,7 +514,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) =>
       backgroundColor: colors.accent,
     },
     detailButtonText: {
-      color: colors.white ?? "#fff",
+      color: colors.white,
       fontWeight: "700",
       fontSize: 14,
     },

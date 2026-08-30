@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Forest Background
+ * File: src/components/ForestBackground.tsx
+ *
+ * Ambient background for the Forest theme: layered SVG canopy, mist and
+ * fireflies. Rendered by AppNavigator's ambient switch (see
+ * AMBIENT_BACKGROUND_THEMES) and hidden when background effects are off.
+ */
+
 import React, { useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import Svg, {

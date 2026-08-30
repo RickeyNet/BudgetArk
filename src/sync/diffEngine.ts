@@ -8,38 +8,47 @@
 
 import {
   getDebtsIncludingDeleted,
-  saveDebts,
+  mergeDebtsFromSync,
+  mergePaymentsFromSync,
   getPaymentsIncludingDeleted,
-} from "../storage/debtStorage";
+
+  getPayoffStrategyEnvelope,
+  savePayoffStrategyEnvelope} from "../storage/debtStorage";
 import {
   getBudgetEntriesIncludingDeleted,
-  saveBudgetEntries,
-  getAllLimitsByMonth,
+  mergeBudgetEntriesFromSync,
+  getAllLimitsByMonthIncludingDeleted,
+  mergeLimitHistoryFromSync,
 } from "../storage/budgetStorage";
 import {
   getSavingsGoalsIncludingDeleted,
-  saveSavingsGoals,
+  mergeSavingsGoalsFromSync,
 } from "../storage/savingsGoalStorage";
 import {
   getAssetAccountsIncludingDeleted,
-  saveAssetAccounts,
+  mergeAssetAccountsFromSync,
 } from "../storage/assetAccountStorage";
 import {
   getHoldingsIncludingDeleted,
-  saveHoldings,
+  mergeHoldingsFromSync,
 } from "../storage/holdingsStorage";
 import {
   getDebtMilestonePlan,
   saveDebtMilestonePlanFromSync,
 } from "../storage/debtMilestoneStorage";
-import {
-  getPayoffStrategyEnvelope,
-  savePayoffStrategyEnvelope,
-} from "../storage/debtStorage";
+
 import {
   getCustomCategories,
   saveCustomCategoriesFromSync,
 } from "../storage/customCategoriesStorage";
+import {
+  getBusinessesIncludingDeleted,
+  mergeBusinessesFromSync,
+} from "../storage/businessStorage";
+import {
+  getPeopleIncludingDeleted,
+  mergePeopleFromSync,
+} from "../storage/personStorage";
 import {
   getCategoryBucketOverrides,
   saveCategoryBucketOverridesFromSync,
@@ -48,24 +57,24 @@ import {
   getNetWorthSnapshots,
   saveNetWorthSnapshots,
 } from "../storage/netWorthSnapshotStorage";
+import {
+  getMonthStartBalances,
+  saveMonthStartBalancesFromSync,
+} from "../storage/monthlyBalanceStorage";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import { isBuiltInCategory } from "../data/categoryIcons";
 import { isBudgetBucket } from "../data/categoryBuckets";
 import type {
-  Debt,
-  Payment,
-  BudgetEntry,
-  SavingsGoal,
-  AssetAccount,
-  DebtMilestonePlan,
   CategoryBudgetLimit,
   CustomCategory,
   BudgetBucket,
+  MonthStartBalance,
   NetWorthSnapshot,
-  Holding,
 } from "../types";
-import type { PayoffStrategyPreference } from "../storage/debtStorage";
 import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
+import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
+import { notifyDataChanged } from "../storage/dataChangeNotifier";
+import { timestampMs } from "../utils/recordTimestamps";
 import {
   isObject,
   isDebtItem,
@@ -76,14 +85,15 @@ import {
   isAssetAccountItem,
   isHoldingItem,
   isCustomCategoryItem,
+  isBusinessItem,
+  isPersonItem,
+  isMonthStartBalanceRecord,
   isNetWorthSnapshotItem,
   isValidImportCategory,
   isMonthKey,
   sanitizeDebtMilestones,
   VALID_PAYOFF_STRATEGIES,
 } from "../utils/recordValidators";
-
-const BUDGET_LIMITS_KEY = "@budgetark_budget_limits_by_month";
 
 /**
  * One-time backfill marker. Net-worth snapshots (and custom categories)
@@ -114,6 +124,15 @@ export const markBackfillSyncDone = async (): Promise<void> => {
 export const computeOutgoingDiff = async (
   lastSyncTimestamp: string | null
 ): Promise<SyncDiff> => {
+  // Watermark captured BEFORE any collection is read. This value (returned
+  // as syncTimestamp) is what the orchestrator persists as the next
+  // lastSyncTimestamp. Stamping it after the sync instead would make any
+  // record edited while the sync was in flight (reads -> network round-trip
+  // -> apply) sort as "older than the last sync" and be excluded from every
+  // future diff - silently, forever. With the early watermark such records
+  // are simply re-sent next sync, which last-write-wins makes idempotent.
+  const computedAt = new Date().toISOString();
+
   const [
     debts,
     payments,
@@ -124,8 +143,11 @@ export const computeOutgoingDiff = async (
     milestonePlan,
     strategyEnvelope,
     customCategories,
+    businesses,
+    people,
     bucketOverrides,
     netWorthSnapshots,
+    monthStartBalances,
     backfillDone,
   ] = await Promise.all([
     getDebtsIncludingDeleted(),
@@ -137,8 +159,11 @@ export const computeOutgoingDiff = async (
     getDebtMilestonePlan(),
     getPayoffStrategyEnvelope(),
     getCustomCategories(),
+    getBusinessesIncludingDeleted(),
+    getPeopleIncludingDeleted(),
     getCategoryBucketOverrides(),
     getNetWorthSnapshots(),
+    getMonthStartBalances(),
     isBackfillSyncDone(),
   ]);
 
@@ -153,29 +178,37 @@ export const computeOutgoingDiff = async (
   // remove locally). Without the delete branch the partner would silently
   // resurrect any record we deleted - its next sync would upsert it back to
   // us, since we wouldn't even mention the deletion.
+  // NaN-safe: the getters normalize missing `updatedAt` on read, but a
+  // record that somehow still lacks one must not vanish from every diff
+  // forever (`NaN > since` is always false). It rides along on the first
+  // sync like everything else, and `timestampMs` maps it to the epoch after
+  // that so a stamped edit supersedes it.
   const filterChanged = <T extends { updatedAt: string; deletedAt?: string }>(
     items: T[]
   ): DiffEntry<T>[] => {
     return items
-      .filter((item) => new Date(item.updatedAt).getTime() > since)
+      .filter((item) => !lastSyncTimestamp || timestampMs(item.updatedAt) > since)
       .map((item) => ({
         action: item.deletedAt ? ("delete" as const) : ("upsert" as const),
         record: item,
       }));
   };
 
-  // Load full budget limits history. On first sync we send everything;
-  // otherwise filter per-category by updatedAt so unchanged limits don't
-  // get re-broadcast every sync. Storage normalizes missing updatedAt to
-  // the epoch - those still ride along on first sync, then get superseded
-  // by any fresh remote edit.
+  // Load full budget limits history, TOMBSTONES INCLUDED: a removed limit
+  // keeps its row with `deletedAt` and a fresh `updatedAt`, which is how the
+  // removal reaches the partner (the per-category merge on the other side
+  // is an LWW union - an omitted row would just be "no news"). On first
+  // sync we send everything; otherwise filter per-category by updatedAt so
+  // unchanged limits don't get re-broadcast every sync. Storage normalizes
+  // missing updatedAt to the epoch - those still ride along on first sync,
+  // then get superseded by any fresh remote edit.
   const budgetLimits: BudgetLimitDiff[] = [];
-  const history = await getAllLimitsByMonth();
+  const history = await getAllLimitsByMonthIncludingDeleted();
   const isFirstSync = !lastSyncTimestamp;
   for (const [monthKey, limits] of Object.entries(history)) {
     const changed = isFirstSync
       ? limits
-      : limits.filter((limit) => new Date(limit.updatedAt).getTime() > since);
+      : limits.filter((limit) => timestampMs(limit.updatedAt) > since);
     if (changed.length > 0) {
       budgetLimits.push({ monthKey, limits: changed });
     }
@@ -184,7 +217,18 @@ export const computeOutgoingDiff = async (
   return {
     debts: filterChanged(debts),
     payments: filterChanged(payments),
-    budgetEntries: filterChanged(budgetEntries),
+    // Private entries never leave the device - live or tombstoned. Filtered
+    // here (the single place outgoing diffs are built) rather than in
+    // storage so local reads are unaffected. Marking an entry private bumps
+    // its updatedAt, so if the partner ever re-broadcasts an old public
+    // copy (backlog/re-pair), LWW keeps the newer private version local.
+    // Known limitation: a copy the partner received BEFORE the entry was
+    // marked private stays on their device - we deliberately don't send a
+    // retraction tombstone, because it could echo back and LWW-delete the
+    // live local entry.
+    budgetEntries: filterChanged(
+      budgetEntries.filter((entry) => !entry.isPrivate)
+    ),
     savingsGoals: filterChanged(savingsGoals),
     assetAccounts: filterChanged(assetAccounts),
     // Holdings are tombstone-aware like assetAccounts. No backlog handling
@@ -206,6 +250,12 @@ export const computeOutgoingDiff = async (
           record,
         }))
       : filterChanged(customCategories),
+    // Businesses are tombstone-aware like holdings. No backlog handling
+    // needed: the feature is new, so no businesses predate this field for
+    // an already-paired couple to miss.
+    businesses: filterChanged(businesses),
+    // People mirror businesses exactly (same new-feature, no-backfill case).
+    people: filterChanged(people),
     // Snapshots have no updatedAt - capturedAt plays that role (a re-capture
     // during the day restamps it). Incremental syncs send only days captured
     // since the last sync; backlog mode sends the whole history (capped at
@@ -225,6 +275,12 @@ export const computeOutgoingDiff = async (
     // re-broadcasting it each sync is acceptable.
     categoryBucketOverrides:
       Object.keys(bucketOverrides).length > 0 ? bucketOverrides : undefined,
+    // Month-start balances: whole map whenever non-empty (one tiny record
+    // per month - even years of history is a few KB). The receiver's
+    // per-month LWW makes the re-broadcast idempotent, and skipping the
+    // incremental filter means no backfill flag is ever needed.
+    monthStartBalances:
+      Object.keys(monthStartBalances).length > 0 ? monthStartBalances : undefined,
     debtMilestonePlan:
       !lastSyncTimestamp ||
       new Date(milestonePlan.updatedAt).getTime() > since
@@ -232,7 +288,7 @@ export const computeOutgoingDiff = async (
         : undefined,
     payoffStrategy: strategyEnvelope?.value,
     payoffStrategyUpdatedAt: strategyEnvelope?.updatedAt,
-    syncTimestamp: new Date().toISOString(),
+    syncTimestamp: computedAt,
   };
 };
 
@@ -262,10 +318,11 @@ const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string
 
   for (const entry of incoming) {
     const localItem = localMap.get(entry.record.id);
-    const incomingTime = new Date(entry.record.updatedAt).getTime();
-    const localTime = localItem
-      ? new Date(localItem.updatedAt).getTime()
-      : -Infinity;
+    // NaN-safe (missing/garbage -> epoch): a local record without
+    // `updatedAt` used to be un-overwritable (`x >= NaN` is false) and an
+    // incoming one could never apply, while changedCount still counted it.
+    const incomingTime = timestampMs(entry.record.updatedAt);
+    const localTime = localItem ? timestampMs(localItem.updatedAt) : -Infinity;
 
     if (incomingTime >= localTime) {
       localMap.set(entry.record.id, entry.record);
@@ -292,9 +349,22 @@ const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string
 const validateDiffEntries = <T,>(
   entries: DiffEntry<T>[] | undefined,
   label: string,
-  validator: (item: unknown) => boolean
+  validator: (item: unknown) => boolean,
+  required = false
 ): void => {
-  if (!entries) return;
+  if (entries === undefined || entries === null) {
+    // Optional collections may be absent (older peers predate them);
+    // required ones have been in the wire contract since v1, so a missing
+    // one means a malformed diff, not an old app version.
+    if (required) throw new Error(`Sync rejected: missing ${label} collection`);
+    return;
+  }
+  // Must be a real array: `applyIncomingDiff` iterates and indexes these,
+  // so a non-array (e.g. `{}`) would surface as a raw TypeError mid-apply
+  // instead of the labeled rejection this gate exists to produce.
+  if (!Array.isArray(entries)) {
+    throw new Error(`Sync rejected: malformed ${label} collection`);
+  }
   for (const entry of entries) {
     if (!isObject(entry) || (entry.action !== "upsert" && entry.action !== "delete")) {
       throw new Error(`Sync rejected: malformed ${label} entry`);
@@ -310,13 +380,18 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     throw new Error("Sync rejected: diff is not an object");
   }
 
-  validateDiffEntries(diff.debts, "debt", isDebtItem);
-  validateDiffEntries(diff.payments, "payment", isPaymentItem);
-  validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem);
-  validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem);
+  validateDiffEntries(diff.debts, "debt", isDebtItem, true);
+  validateDiffEntries(diff.payments, "payment", isPaymentItem, true);
+  validateDiffEntries(diff.budgetEntries, "budget entry", isBudgetEntryItem, true);
+  validateDiffEntries(diff.savingsGoals, "savings goal", isSavingsGoalItem, true);
+  // Declared required in SyncDiff but added post-launch (countDiffEntries
+  // optional-chains it for the same reason) - tolerate absence, reject
+  // non-arrays.
   validateDiffEntries(diff.assetAccounts, "asset account", isAssetAccountItem);
   validateDiffEntries(diff.holdings, "holding", isHoldingItem);
   validateDiffEntries(diff.customCategories, "custom category", isCustomCategoryItem);
+  validateDiffEntries(diff.businesses, "business", isBusinessItem);
+  validateDiffEntries(diff.people, "person", isPersonItem);
 
   // Bucket overrides are a bare map, not DiffEntry records, so they get
   // their own gate: keys must pass the same bounded category-name check the
@@ -329,6 +404,21 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     for (const [category, bucket] of Object.entries(diff.categoryBucketOverrides)) {
       if (!isValidImportCategory(category) || !isBudgetBucket(bucket)) {
         throw new Error("Sync rejected: invalid category bucket override");
+      }
+    }
+  }
+
+  // Month-start balances: a bare `monthKey → record` map like bucket
+  // overrides. Keys gate on the month-key shape, values on the shared
+  // trust-boundary validator (finite bounded balance + parseable dates).
+  // Absent field = older peer, fine.
+  if (diff.monthStartBalances !== undefined) {
+    if (!isObject(diff.monthStartBalances)) {
+      throw new Error("Sync rejected: malformed month-start balances");
+    }
+    for (const [monthKey, record] of Object.entries(diff.monthStartBalances)) {
+      if (!isMonthKey(monthKey) || !isMonthStartBalanceRecord(record)) {
+        throw new Error("Sync rejected: invalid month-start balance");
       }
     }
   }
@@ -347,15 +437,19 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     }
   }
 
-  if (Array.isArray(diff.budgetLimits)) {
-    for (const bucket of diff.budgetLimits) {
-      if (!isObject(bucket) || !isMonthKey(bucket.monthKey) || !Array.isArray(bucket.limits)) {
-        throw new Error("Sync rejected: malformed budget limit bucket");
-      }
-      for (const limit of bucket.limits) {
-        if (!isBudgetLimitItem(limit)) {
-          throw new Error("Sync rejected: invalid budget limit record");
-        }
+  // In the wire contract since v1, so absence means malformed, not old peer.
+  // The old `if (Array.isArray(...))` guard silently skipped validation for
+  // non-arrays and let applyIncomingDiff crash on them instead.
+  if (!Array.isArray(diff.budgetLimits)) {
+    throw new Error("Sync rejected: missing budget limits collection");
+  }
+  for (const bucket of diff.budgetLimits) {
+    if (!isObject(bucket) || !isMonthKey(bucket.monthKey) || !Array.isArray(bucket.limits)) {
+      throw new Error("Sync rejected: malformed budget limit bucket");
+    }
+    for (const limit of bucket.limits) {
+      if (!isBudgetLimitItem(limit)) {
+        throw new Error("Sync rejected: invalid budget limit record");
       }
     }
   }
@@ -397,90 +491,140 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
 
   let changedCount = 0;
 
-  // Merge debts. Read+write via the tombstone-aware getters/setters so
-  // local tombstones survive the merge and stop a stale partner from
-  // resurrecting the deleted record.
+  // Every tombstoned collection below merges through its store's
+  // `merge*FromSync` helper: the LWW merge runs INSIDE encryptedStorage's
+  // per-key write queue against the array that is actually stored at that
+  // moment. The old getX -> mergeById -> saveX sequence had a read-to-write
+  // window in which a user tap (or bank auto-approval) could land and be
+  // silently reverted by the merge's write - sync runs in the foreground
+  // while the user is active, so the window was small but real.
+
+  // Merge debts. Tombstone-aware so local tombstones survive the merge and
+  // stop a stale partner from resurrecting the deleted record.
   if (diff.debts.length > 0) {
-    const localDebts = await getDebtsIncludingDeleted();
-    const merged = mergeById(localDebts, diff.debts);
-    await saveDebts(merged);
+    await mergeDebtsFromSync((localDebts) => mergeById(localDebts, diff.debts));
     changedCount += diff.debts.length;
   }
 
-  // Merge payments
+  // Merge payments. After the id-based merge, collapse duplicate
+  // minimum-due rows: a partner on an app version predating deterministic
+  // prompt-payment ids still logs its "minimum due" confirmation under a
+  // random id, so the same real-world payment can arrive as a second
+  // record. The dedupe tombstones the duplicate (balance untouched - it
+  // was only ever decremented once, see debtPaymentDedupe), and the
+  // tombstone flows back to the partner on the next sync. Runs against the
+  // just-merged debts (the debts block above writes before this reads).
   if (diff.payments.length > 0) {
-    const localPayments = await getPaymentsIncludingDeleted();
-    const merged = mergeById(localPayments, diff.payments);
-    await EncryptedStorage.setItem(
-      "@budgetark_payments",
-      JSON.stringify(merged)
-    );
+    const localDebts = await getDebtsIncludingDeleted();
+    const dedupeAt = new Date().toISOString();
+    await mergePaymentsFromSync((localPayments) => {
+      const merged = mergeById(localPayments, diff.payments);
+      return dedupeMinimumDuePayments(localDebts, merged, dedupeAt).payments;
+    });
     changedCount += diff.payments.length;
   }
 
-  // Merge budget entries
+  // Merge budget entries. After the LWW merge, re-stamp isPrivate on any
+  // entry that was private locally: a partner still holding the pre-privacy
+  // public copy can win LWW by editing it, and letting their record land
+  // verbatim would silently clear the flag - the entry would resume syncing
+  // out on the next diff. Privacy is device-side intent, so an incoming
+  // record (upsert OR tombstone) can never un-private an entry; content
+  // still merges normally, and un-privating stays a local UI action.
+  // importData's reconcileBudgetEntry applies the same rule on imports.
   if (diff.budgetEntries.length > 0) {
-    const localEntries = await getBudgetEntriesIncludingDeleted();
-    const merged = mergeById(localEntries, diff.budgetEntries);
-    await saveBudgetEntries(merged);
+    await mergeBudgetEntriesFromSync((localEntries) => {
+      const locallyPrivateIds = new Set(
+        localEntries.filter((entry) => entry.isPrivate).map((entry) => entry.id)
+      );
+      return mergeById(localEntries, diff.budgetEntries).map((entry) =>
+        locallyPrivateIds.has(entry.id) && !entry.isPrivate
+          ? { ...entry, isPrivate: true }
+          : entry
+      );
+    });
     changedCount += diff.budgetEntries.length;
   }
 
   // Merge savings goals
   if (diff.savingsGoals.length > 0) {
-    const localGoals = await getSavingsGoalsIncludingDeleted();
-    const merged = mergeById(localGoals, diff.savingsGoals);
-    await saveSavingsGoals(merged);
+    await mergeSavingsGoalsFromSync((localGoals) =>
+      mergeById(localGoals, diff.savingsGoals)
+    );
     changedCount += diff.savingsGoals.length;
   }
 
   // Merge asset accounts
   if (diff.assetAccounts && diff.assetAccounts.length > 0) {
-    const localAccounts = await getAssetAccountsIncludingDeleted();
-    const merged = mergeById(localAccounts, diff.assetAccounts);
-    await saveAssetAccounts(merged);
-    changedCount += diff.assetAccounts.length;
+    const incoming = diff.assetAccounts;
+    await mergeAssetAccountsFromSync((localAccounts) =>
+      mergeById(localAccounts, incoming)
+    );
+    changedCount += incoming.length;
   }
 
   // Merge holdings - same tombstone-aware LWW as asset accounts. Guarded
   // with `diff.holdings &&` because an older peer's diff omits the field.
   if (diff.holdings && diff.holdings.length > 0) {
-    const localHoldings = await getHoldingsIncludingDeleted();
-    const merged = mergeById(localHoldings, diff.holdings);
-    await saveHoldings(merged);
-    changedCount += diff.holdings.length;
+    const incoming = diff.holdings;
+    await mergeHoldingsFromSync((localHoldings) => mergeById(localHoldings, incoming));
+    changedCount += incoming.length;
+  }
+
+  // Merge businesses - same tombstone-aware LWW as holdings. Guarded with
+  // `diff.businesses &&` because an older peer's diff omits the field.
+  // The store's sync merge skips per-mutation name validation: the merge
+  // already carries every local tombstone, and re-running it would reject
+  // the very merge we just computed (dup names are cosmetic - entries
+  // reference by id). Businesses tombstoned by the merge cascade to
+  // merchant rules inside the helper.
+  if (diff.businesses && diff.businesses.length > 0) {
+    const incoming = diff.businesses;
+    await mergeBusinessesFromSync((localBusinesses) =>
+      mergeById(localBusinesses, incoming)
+    );
+    changedCount += incoming.length;
+  }
+
+  // Merge people - same rationale as businesses above; tombstoned people
+  // cascade to merchant rules and account links inside the helper.
+  if (diff.people && diff.people.length > 0) {
+    const incoming = diff.people;
+    await mergePeopleFromSync((localPeople) => mergeById(localPeople, incoming));
+    changedCount += incoming.length;
   }
 
   // Merge budget limits (union of months, per-category last-write-wins).
   // Use getAllLimitsByMonth so legacy local rows are normalized to the epoch
   // and lose to any incoming row carrying a real timestamp.
+  // Tombstone-aware: an incoming row with `deletedAt` that wins LWW retires
+  // the local limit (kept as a tombstone so it can flow onward); a local
+  // tombstone newer than the partner's live row keeps the removal. Merged
+  // atomically inside the store (see mergeLimitHistoryFromSync).
   if (diff.budgetLimits.length > 0) {
-    const localHistory = (await getAllLimitsByMonth()) as Record<
-      string,
-      CategoryBudgetLimit[]
-    >;
-    const merged: Record<string, CategoryBudgetLimit[]> = { ...localHistory };
+    const incomingLimits = diff.budgetLimits;
+    await mergeLimitHistoryFromSync((localHistory) => {
+      const merged: Record<string, CategoryBudgetLimit[]> = { ...localHistory };
+      const limitTime = (limit: CategoryBudgetLimit | undefined): number =>
+        limit ? timestampMs(limit.updatedAt) : -Infinity;
 
-    const limitTime = (limit: CategoryBudgetLimit | undefined): number =>
-      limit ? new Date(limit.updatedAt).getTime() : -Infinity;
-
-    for (const incoming of diff.budgetLimits) {
-      const localLimits = Array.isArray(merged[incoming.monthKey])
-        ? merged[incoming.monthKey]
-        : [];
-      const localCatMap = new Map<string, CategoryBudgetLimit>(
-        localLimits.map((l) => [l.category, l])
-      );
-      for (const remote of incoming.limits) {
-        const local = localCatMap.get(remote.category);
-        if (limitTime(remote) >= limitTime(local)) {
-          localCatMap.set(remote.category, remote);
+      for (const incoming of incomingLimits) {
+        const localLimits = Array.isArray(merged[incoming.monthKey])
+          ? merged[incoming.monthKey]
+          : [];
+        const localCatMap = new Map<string, CategoryBudgetLimit>(
+          localLimits.map((l) => [l.category, l])
+        );
+        for (const remote of incoming.limits) {
+          const local = localCatMap.get(remote.category);
+          if (limitTime(remote) >= limitTime(local)) {
+            localCatMap.set(remote.category, remote);
+          }
         }
+        merged[incoming.monthKey] = Array.from(localCatMap.values());
       }
-      merged[incoming.monthKey] = Array.from(localCatMap.values());
-    }
-
-    await EncryptedStorage.setItem(BUDGET_LIMITS_KEY, JSON.stringify(merged));
+      return merged;
+    });
     changedCount += diff.budgetLimits.length;
   }
 
@@ -490,11 +634,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
   if (diff.customCategories && diff.customCategories.length > 0) {
     // Older exports relayed through a peer may lack updatedAt (the
     // validator allows it); treat those as epoch so any stamped record wins.
-    const tsOf = (v: string | undefined): number => {
-      if (typeof v !== "string") return 0;
-      const t = Date.parse(v);
-      return Number.isFinite(t) ? t : 0;
-    };
+    const tsOf = timestampMs;
 
     const localCategories = await getCustomCategories();
     const byId = new Map<string, CustomCategory>(
@@ -550,6 +690,34 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     };
     await saveCategoryBucketOverridesFromSync(merged);
     changedCount += Object.keys(diff.categoryBucketOverrides).length;
+  }
+
+  // Merge month-start balances - union by monthKey, strictly-newer
+  // updatedAt wins (ties keep local, so the whole-map re-broadcast every
+  // sync is a no-op once devices converge). Only actually-applied months
+  // count toward changedCount, and a no-op diff skips the write.
+  if (
+    diff.monthStartBalances &&
+    Object.keys(diff.monthStartBalances).length > 0
+  ) {
+    const localBalances = await getMonthStartBalances();
+    const merged: Record<string, MonthStartBalance> = { ...localBalances };
+    let applied = 0;
+    for (const [monthKey, incoming] of Object.entries(diff.monthStartBalances)) {
+      const existing = merged[monthKey];
+      if (
+        !existing ||
+        new Date(incoming.updatedAt).getTime() >
+          new Date(existing.updatedAt).getTime()
+      ) {
+        merged[monthKey] = incoming;
+        applied++;
+      }
+    }
+    if (applied > 0) {
+      await saveMonthStartBalancesFromSync(merged);
+    }
+    changedCount += applied;
   }
 
   // Merge net-worth snapshots - union by dayKey, strictly-newer capturedAt
@@ -611,6 +779,10 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
       changedCount++;
     }
   }
+
+  // Mounted tabs re-run their focus loaders so the merged records show up
+  // now, not on the next tab switch (see dataChangeNotifier.ts).
+  if (changedCount > 0) notifyDataChanged("partner-sync");
 
   return changedCount;
 };

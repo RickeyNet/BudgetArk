@@ -1,3 +1,13 @@
+/**
+ * BudgetArk - Debt Payment Celebration
+ * File: src/components/DebtPaymentCelebrationModal.tsx
+ *
+ * Short confetti confirmation after a payment is logged from the due-day
+ * prompt that did NOT clear the debt: shows the amount, then hands back to
+ * the host. Kept separate from the payoff celebration, which is a bigger
+ * moment with its own animation.
+ */
+
 import React, { useEffect, useMemo } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -6,7 +16,9 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import { triggerHaptic } from "../utils/haptics";
+import type { TipNudgeCopy } from "../utils/tipJarNudge";
 import ConfettiBurst from "./ConfettiBurst";
+import TipJarNudgeCard from "./TipJarNudgeCard";
 
 interface DebtPaymentCelebrationModalProps {
   visible: boolean;
@@ -14,6 +26,13 @@ interface DebtPaymentCelebrationModalProps {
   /** Amount just logged, for the confirmation line. */
   amount: number;
   onClose: () => void;
+  /**
+   * The occasional Tip Jar note (utils/tipJarNudge decides which wins get
+   * one). Rendered inside this sheet rather than as a second Modal.
+   */
+  tipNudge?: TipNudgeCopy | null;
+  /** Host closes this sheet, then opens the Tip Jar after the dismiss settles. */
+  onTipJar?: () => void;
 }
 
 /**
@@ -27,6 +46,8 @@ const DebtPaymentCelebrationModal: React.FC<DebtPaymentCelebrationModalProps> = 
   debt,
   amount,
   onClose,
+  tipNudge = null,
+  onTipJar,
 }) => {
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -56,6 +77,10 @@ const DebtPaymentCelebrationModal: React.FC<DebtPaymentCelebrationModalProps> = 
             <Text style={styles.balanceValue}>{formatCurrency(debt.balance)}</Text>
           </View>
 
+          {tipNudge && onTipJar ? (
+            <TipJarNudgeCard copy={tipNudge} onTip={onTipJar} style={styles.nudge} />
+          ) : null}
+
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.accent }]}
             onPress={onClose}
@@ -75,7 +100,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.75)",
+      backgroundColor: colors.overlay,
       justifyContent: "flex-end",
       paddingHorizontal: 20,
     },
@@ -134,6 +159,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "800",
       color: colors.text,
       fontVariant: ["tabular-nums"],
+    },
+    nudge: {
+      marginBottom: 16,
     },
     button: {
       width: "100%",

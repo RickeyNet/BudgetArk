@@ -13,10 +13,13 @@
  * schema version in both files.
  */
 
+import { entryPersonIds, formatPersonNames } from "./entryPeople";
 import * as XLSX from "xlsx";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { Platform } from "react-native";
-import { shareLocalFile, waitForIosModalTeardown } from "./iosNativeShare";
+import { waitForIosModalTeardown } from "./iosNativeShare";
+import { deleteLocalFileQuietly, shareLocalFileThenDelete } from "./shareTempFile";
+import { roundToCents } from "./money";
 import { getDebts, getPayments } from "../storage/debtStorage";
 import {
   getBudgetEntries,
@@ -25,12 +28,16 @@ import {
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getHoldings } from "../storage/holdingsStorage";
+import { getBusinesses } from "../storage/businessStorage";
+import { getPeople } from "../storage/personStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import { recordBackup } from "../storage/backupReminderStorage";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
 import {
   AssetAccount,
   BudgetEntry,
+  Business,
+  Person,
   CategoryBudgetLimit,
   DebtMilestonePlan,
   Debt,
@@ -39,11 +46,38 @@ import {
   SavingsGoal,
 } from "../types";
 import { getRecurrenceInterval } from "./recurrence";
+import { getEmergencyFundSource } from "./emergencyFund";
 
 export type SpreadsheetFormat = "csv" | "xlsx";
 
-/** Schema version. Bump if column shape changes incompatibly. */
-export const SPREADSHEET_SCHEMA_VERSION = 1;
+/**
+ * Schema version. Bump if column shape changes incompatibly.
+ * v2 (1.10): Budget Entries gained BusinessId (round-trip) + Business
+ * (readable name, export-only); new Businesses sheet in xlsx workbooks.
+ * v3: Budget Entries gained IncomeType / Retirement401k / TaxSetAsideRate
+ * (all round-trip; blank for expenses and plain income).
+ * v4: Budget Entries gained Private ("yes"/blank, round-trip) - the
+ * partner-sync privacy flag. Stripping it on a backup/restore cycle would
+ * silently start syncing an entry the user marked private, so
+ * round-tripping it is a privacy requirement, not convenience.
+ * v5: Budget Entries gained PersonId (round-trip) + Person (readable name,
+ * export-only) - who the spending is assigned to; new People sheet in xlsx
+ * workbooks (same shape as Businesses).
+ * v6: Asset Accounts gained EmergencyFund ("yes"/blank, round-trip) - marks
+ * savings accounts designated as the emergency fund. Stripping it on a
+ * backup/restore cycle would silently flip the fund back to manual goal
+ * tracking, so it must round-trip.
+ * Older files still import - the new columns are simply absent.
+ * v7: Budget Entries gained PersonIds (";"-joined, round-trip) - every person
+ * a shared expense is assigned to; PersonId stays the FIRST of them so v5/v6
+ * importers still see one assignee, and Person lists every name.
+ * v8: Budget Entries gained FulfillsBillId (round-trip) - the recurring bill
+ * an actual charge stands in for. Stripping it on a backup/restore cycle
+ * would put the estimate back next to the actual and double-count the bill,
+ * so it must round-trip. Projected recurring copies are also omitted for
+ * months an actual covers, matching what the app shows.
+ */
+export const SPREADSHEET_SCHEMA_VERSION = 8;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -96,6 +130,42 @@ const BUDGET_ENTRY_COLUMNS = [
   // start and today. Round-tripping this column is therefore required for
   // data integrity, not just convenience.
   "LastAppliedMonth",
+  // Bank-connection provenance. ExternalTxId is the dedup identity of an
+  // imported bank transaction - if it's stripped on a backup/restore cycle,
+  // the next connections sync re-offers every transaction the user already
+  // approved. Round-tripping these three columns is data integrity, not
+  // convenience. Blank for manual entries.
+  "Source",
+  "ExternalTxId",
+  "Merchant",
+  // Business the expense is tagged with. BusinessId round-trips (it's the
+  // reference entries carry); Business is the human-readable name at export
+  // time and is IGNORED on import - renames must not fork identities.
+  "BusinessId",
+  "Business",
+  // People the spending is assigned to. Same contract as Business above:
+  // PersonId round-trips, Person is the readable name(s) and IGNORED on
+  // import. PersonIds (v7) carries EVERY assignee of a shared expense,
+  // ";"-joined; PersonId stays the first so older importers see one person.
+  "PersonId",
+  "PersonIds",
+  "Person",
+  // W-2 / 1099 paycheck fields. IncomeType is "w2" or "1099" (blank for
+  // expenses and plain income). Retirement401k is the 401(k) dollars
+  // withheld from a W-2 paycheck; TaxSetAsideRate is the percent of a 1099
+  // payment reserved for taxes. All three round-trip so a backup/restore
+  // cycle doesn't strip the user's paycheck tracking.
+  "IncomeType",
+  "Retirement401k",
+  "TaxSetAsideRate",
+  // Partner-sync privacy flag: "yes" = never sent to the paired partner.
+  // Round-tripped as a privacy requirement - if a backup/restore cycle
+  // stripped it, the entry would silently start syncing again.
+  "Private",
+  // Recurring bill this one-off is the actual charge for (see
+  // BudgetEntry.fulfillsRecurringId). Round-tripped: without it a restore
+  // would count both the estimate and the actual in that month.
+  "FulfillsBillId",
   // ISO timestamp the entry was created. Round-tripped so re-importing an
   // exported file doesn't reset history.
   "CreatedAt",
@@ -127,11 +197,30 @@ const DEBT_COLUMNS = [
   "DebtClassSource",
   "GoalDate",
   "PaymentDueDay",
+  // Card keep-alive watch (credit cards only). Must round-trip: on an
+  // updatedAt tie the importer's merge takes the incoming row, so a
+  // re-imported workbook without these columns silently switched the watch
+  // OFF for every card. "yes"/"no" so an explicit off survives too.
+  "KeepAlive",
+  "KeepAliveWindowMonths",
+  "KeepAliveLeadDays",
+  "KeepAliveLastUsedAt",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
 
-const PAYMENT_COLUMNS = ["ID", "DebtID", "Amount", "Date", "UpdatedAt"] as const;
+// AppliedAmount is the slice of Amount that actually reduced the balance
+// (an overpayment is clamped at zero). Deleting a payment adds back only
+// this delta; without the column a round-tripped payment restores the full
+// Amount and the balance can end up higher than was ever owed.
+const PAYMENT_COLUMNS = [
+  "ID",
+  "DebtID",
+  "Amount",
+  "AppliedAmount",
+  "Date",
+  "UpdatedAt",
+] as const;
 
 const SAVINGS_GOAL_COLUMNS = [
   "ID",
@@ -149,21 +238,43 @@ const ASSET_ACCOUNT_COLUMNS = [
   "Name",
   "Category",
   "Balance",
+  // "yes" marks a savings account designated as (part of) the emergency
+  // fund. Must round-trip: dropping it on a backup/restore cycle would
+  // silently flip the emergency fund back to manual goal tracking.
+  "EmergencyFund",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
 
-// Live prices are NOT exported - only the position itself (Symbol/Shares/
-// CostBasis). Prices live in a per-device cache and re-fetch on demand, so a
-// spreadsheet round-trips the holding without ever carrying a market value.
+// Live prices are NOT exported - only the position itself. Prices live in a
+// per-device cache and re-fetch on demand, so a spreadsheet round-trips the
+// holding without ever carrying a market value. Three shapes share the
+// sheet, told apart by which optional columns are filled:
+//   ticker  - Symbol + Shares (+ CostBasis)
+//   proxy   - Symbol (the proxy ticker) + Name + AnchorValue + AnchorPrice
+//   manual  - Name + ManualValue, no Symbol
+// AccountId links the position to its broker AssetAccount; dropping it on a
+// round-trip orphaned every holding from the Bridge's account grouping.
 const HOLDING_COLUMNS = [
   "ID",
   "Symbol",
   "Shares",
   "CostBasis",
+  "Name",
+  "ManualValue",
+  "AnchorValue",
+  "AnchorPrice",
+  "AccountId",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
+
+// Live businesses only - tombstones stay in the JSON backup (the lossless
+// path); a human-facing spreadsheet listing deleted clients is just noise.
+const BUSINESS_COLUMNS = ["ID", "Name", "CreatedAt", "UpdatedAt"] as const;
+
+// Same live-only rationale as businesses.
+const PERSON_COLUMNS = ["ID", "Name", "CreatedAt", "UpdatedAt"] as const;
 
 /* ── Row builders - convert app types to flat row objects ── */
 
@@ -225,7 +336,11 @@ const promoteStringDateCells = (
   }
 };
 
-const budgetEntryToRow = (entry: BudgetEntry) => ({
+const budgetEntryToRow = (
+  entry: BudgetEntry,
+  businessNameById?: Map<string, string>,
+  personNameById?: Map<string, string>
+) => ({
   ID: entry.id,
   Date: formatDateOnly(entry.date),
   Type: entry.type,
@@ -237,6 +352,27 @@ const budgetEntryToRow = (entry: BudgetEntry) => ({
   PaymentUrl: entry.paymentUrl ?? "",
   LinkedAccountId: entry.linkedAccountId ?? "",
   LastAppliedMonth: entry.lastAppliedMonth ?? "",
+  Source: entry.source ?? "",
+  ExternalTxId: entry.externalTxId ?? "",
+  Merchant: entry.merchant ?? "",
+  BusinessId: entry.businessId ?? "",
+  // Readable name, export-only. A dangling id (business deleted) shows
+  // "(deleted)" so tax-time filtering still groups those rows visibly.
+  Business: entry.businessId
+    ? businessNameById?.get(entry.businessId) ?? "(deleted)"
+    : "",
+  PersonId: entry.personId ?? "",
+  PersonIds:
+    entryPersonIds(entry).length > 1 ? entryPersonIds(entry).join(";") : "",
+  // Readable names, export-only - same "(deleted)" convention as Business.
+  Person: entry.personId
+    ? formatPersonNames(entryPersonIds(entry), personNameById ?? new Map())
+    : "",
+  IncomeType: entry.incomeType ?? "",
+  Retirement401k: entry.retirementContribution ?? "",
+  TaxSetAsideRate: entry.taxSetAsideRate ?? "",
+  Private: entry.isPrivate ? "yes" : "",
+  FulfillsBillId: entry.fulfillsRecurringId ?? "",
   CreatedAt: entry.createdAt ?? "",
   UpdatedAt: entry.updatedAt ?? "",
 });
@@ -259,6 +395,13 @@ const debtToRow = (debt: Debt) => ({
   DebtClassSource: debt.debtClassSource,
   GoalDate: debt.goalDate ? formatDateOnly(debt.goalDate) : "",
   PaymentDueDay: debt.paymentDueDay ?? "",
+  KeepAlive:
+    debt.keepAliveEnabled === undefined ? "" : debt.keepAliveEnabled ? "yes" : "no",
+  KeepAliveWindowMonths: debt.keepAliveWindowMonths ?? "",
+  KeepAliveLeadDays: debt.keepAliveLeadDays ?? "",
+  // Kept verbatim (full ISO or date-only) - not promoted to an Excel date
+  // cell, so the stamp's precision survives the trip.
+  KeepAliveLastUsedAt: debt.keepAliveLastUsedAt ?? "",
   CreatedAt: debt.createdAt,
   UpdatedAt: debt.updatedAt ?? "",
 });
@@ -267,6 +410,7 @@ const paymentToRow = (payment: Payment) => ({
   ID: payment.id,
   DebtID: payment.debtId,
   Amount: payment.amount,
+  AppliedAmount: payment.appliedAmount ?? "",
   Date: formatDateOnly(payment.date),
   UpdatedAt: payment.updatedAt ?? "",
 });
@@ -287,6 +431,7 @@ const assetAccountToRow = (account: AssetAccount) => ({
   Name: account.name,
   Category: account.category,
   Balance: account.balance,
+  EmergencyFund: account.isEmergencyFund === true ? "yes" : "",
   CreatedAt: account.createdAt,
   UpdatedAt: account.updatedAt ?? "",
 });
@@ -296,8 +441,27 @@ const holdingToRow = (holding: Holding) => ({
   Symbol: holding.symbol,
   Shares: holding.shares,
   CostBasis: holding.costBasis ?? "",
+  Name: holding.name ?? "",
+  ManualValue: holding.manualValue ?? "",
+  AnchorValue: holding.anchorValue ?? "",
+  AnchorPrice: holding.anchorPrice ?? "",
+  AccountId: holding.accountId ?? "",
   CreatedAt: holding.createdAt,
   UpdatedAt: holding.updatedAt ?? "",
+});
+
+const businessToRow = (business: Business) => ({
+  ID: business.id,
+  Name: business.name,
+  CreatedAt: business.createdAt,
+  UpdatedAt: business.updatedAt ?? "",
+});
+
+const personToRow = (person: Person) => ({
+  ID: person.id,
+  Name: person.name,
+  CreatedAt: person.createdAt,
+  UpdatedAt: person.updatedAt ?? "",
 });
 
 /* ── Total row ──
@@ -362,7 +526,7 @@ const SHEET_SUM_COLUMNS: Record<SheetName, readonly string[]> = {
  *     to that month's last valid day (Jan 31 → Feb 28 / Feb 29)
  */
 const expandRecurringRows = (
-  rows: ReadonlyArray<Record<string, unknown>>
+  rows: readonly Record<string, unknown>[]
 ): Record<string, unknown>[] => {
   if (rows.length === 0) return [];
 
@@ -396,6 +560,19 @@ const expandRecurringRows = (
     return new Date(Number(yStr), Number(mStr), 0).getDate();
   };
 
+  // Months an actual charge already covers, per bill id: the projected copy
+  // for those months is skipped so the sheet matches the app (estimate OR
+  // actual, never both).
+  const fulfilledMonths = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const billId = String(row.FulfillsBillId ?? "");
+    const dateStr = String(row.Date ?? "");
+    if (!billId || row.Recurring === "yes" || !/^\d{4}-\d{2}/.test(dateStr)) continue;
+    const months = fulfilledMonths.get(billId) ?? new Set<string>();
+    months.add(dateStr.slice(0, 7));
+    fulfilledMonths.set(billId, months);
+  }
+
   const out: Record<string, unknown>[] = [];
   for (const row of rows) {
     out.push(row);
@@ -412,14 +589,17 @@ const expandRecurringRows = (
       rawInterval === 3 || rawInterval === 6 || rawInterval === 12 ? rawInterval : 1;
 
     const baseId = String(row.ID ?? "");
+    const covered = fulfilledMonths.get(baseId);
     let m = addMonths(startMonth, interval);
     while (m <= endMonth) {
-      const dd = String(Math.min(day, lastDayOfMonth(m))).padStart(2, "0");
-      out.push({
-        ...row,
-        ID: `${DERIVED_RECURRING_PREFIX}${baseId}:${m}`,
-        Date: `${m}-${dd}`,
-      });
+      if (!covered?.has(m)) {
+        const dd = String(Math.min(day, lastDayOfMonth(m))).padStart(2, "0");
+        out.push({
+          ...row,
+          ID: `${DERIVED_RECURRING_PREFIX}${baseId}:${m}`,
+          Date: `${m}-${dd}`,
+        });
+      }
       m = addMonths(m, interval);
     }
   }
@@ -450,7 +630,7 @@ const expandRecurringRows = (
  * naturally excluded from the per-month and grand-total ranges they sit in.
  */
 const buildBudgetEntriesSheet = (
-  rows: ReadonlyArray<Record<string, unknown>>
+  rows: readonly Record<string, unknown>[]
 ): XLSX.WorkSheet => {
   const sheet: XLSX.WorkSheet = {};
 
@@ -516,7 +696,10 @@ const buildBudgetEntriesSheet = (
       t: "s",
       v: label,
     };
-    const cell: XLSX.CellObject = { t: "n", v: value };
+    // Round the CACHED value: it's what the CSV serializes and what Excel
+    // shows before recalculating, and the float accumulation upstream can
+    // carry binary artifacts (6180.049999999999) into the user's export.
+    const cell: XLSX.CellObject = { t: "n", v: roundToCents(value) };
     if (formula) cell.f = formula;
     sheet[XLSX.utils.encode_cell({ r: rowIdx, c: amountColIdx })] = cell;
   };
@@ -659,7 +842,7 @@ const buildBudgetEntriesSheet = (
 
 const appendTotalRow = (
   sheet: XLSX.WorkSheet,
-  rows: ReadonlyArray<Record<string, unknown>>,
+  rows: readonly Record<string, unknown>[],
   columns: readonly string[],
   sumColumns: readonly string[],
   options?: {
@@ -819,7 +1002,12 @@ export const exportSpreadsheet = async (
   options: SpreadsheetExportOptions = {}
 ): Promise<SpreadsheetExportResult> => {
   const runId = `${nowMs().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  // Dev-only timing/phase trace (no amounts, names or PII - see rule 14).
+  // `typeof` guard: this module also runs under Jest/Node, where the RN
+  // `__DEV__` global isn't defined.
+  const devLogging = typeof __DEV__ !== "undefined" && __DEV__;
   const log = (phase: string, detail?: string) => {
+    if (!devLogging) return;
     const suffix = detail ? ` ${detail}` : "";
     console.info(`[spreadsheetExport:${runId}] ${phase}${suffix}`);
   };
@@ -841,6 +1029,8 @@ export const exportSpreadsheet = async (
     assetAccountsResult,
     holdingsResult,
     milestonePlanResult,
+    businessesResult,
+    peopleResult,
   ] = await Promise.allSettled([
     withTimeout(
       getBudgetEntries(),
@@ -878,6 +1068,16 @@ export const exportSpreadsheet = async (
       DATA_LOAD_TIMEOUT_MS,
       "Timed out loading milestone plan for export."
     ),
+    withTimeout(
+      getBusinesses(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading businesses for export."
+    ),
+    withTimeout(
+      getPeople(),
+      DATA_LOAD_TIMEOUT_MS,
+      "Timed out loading people for export."
+    ),
   ]);
   log("data-loaded", `ms=${nowMs() - loadStartedAt}`);
 
@@ -911,6 +1111,16 @@ export const exportSpreadsheet = async (
       : (markMissingSection("Holdings"), [] as Holding[]);
   const milestonePlan: DebtMilestonePlan | null =
     milestonePlanResult.status === "fulfilled" ? milestonePlanResult.value : null;
+  const businesses =
+    businessesResult.status === "fulfilled"
+      ? businessesResult.value
+      : (markMissingSection("Businesses"), [] as Business[]);
+  const businessNameById = new Map(businesses.map((b) => [b.id, b.name]));
+  const people =
+    peopleResult.status === "fulfilled"
+      ? peopleResult.value
+      : (markMissingSection("People"), [] as Person[]);
+  const personNameById = new Map(people.map((p) => [p.id, p.name]));
 
   // Build the savings-goal list shown in the spreadsheet. If the user has no
   // explicit emergency_fund goal but is tracking one via the Keel milestone
@@ -922,8 +1132,12 @@ export const exportSpreadsheet = async (
   const hasExplicitEmergencyFund = savingsGoals.some(
     (goal) => goal.category === "emergency_fund"
   );
-  if (!hasExplicitEmergencyFund && milestonePlan) {
-    const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
+  // Savings accounts designated as the emergency fund (their rows carry
+  // EmergencyFund="yes" on the Asset Accounts sheet). When any exist, the
+  // app displays their combined balance as the fund - mirror that here.
+  const efSource = getEmergencyFundSource(assetAccounts);
+  if (!hasExplicitEmergencyFund && (milestonePlan || efSource.linked)) {
+    const keelStep = milestonePlan?.steps.find((step) => step.key === "keel");
     const keelTarget = keelStep?.targetAmount ?? 0;
     // Only the "Savings" category counts toward the derived emergency fund.
     // Retirement and Investing aren't liquid emergency money - they feed
@@ -935,7 +1149,11 @@ export const exportSpreadsheet = async (
           entry.type === "expense" && entry.category === "Savings"
       )
       .reduce((sum, entry) => sum + entry.amount, 0);
-    if (keelTarget > 0 || savingsReserve > 0) {
+    // Linked mode wins over the entry-derived reserve, matching the app UI.
+    const currentAmount = efSource.linked
+      ? efSource.linkedAmount
+      : savingsReserve;
+    if (keelTarget > 0 || currentAmount > 0) {
       goalsForSheet.push({
         id: DERIVED_EMERGENCY_FUND_ID,
         name: "Emergency Fund",
@@ -945,7 +1163,7 @@ export const exportSpreadsheet = async (
         // logged correction entries that exceed their tracked deposits;
         // showing a negative current amount would look like a bug, and
         // import-side validators would reject the row anyway.
-        currentAmount: Math.max(0, savingsReserve),
+        currentAmount: Math.max(0, currentAmount),
         createdAt: "",
         updatedAt: "",
       });
@@ -959,7 +1177,11 @@ export const exportSpreadsheet = async (
   // subtotals, and finish with a grand-total block. See buildBudgetEntriesSheet.
   let entrySheet: XLSX.WorkSheet;
   try {
-    const entryRows = expandRecurringRows(budgetEntries.map(budgetEntryToRow));
+    const entryRows = expandRecurringRows(
+      budgetEntries.map((entry) =>
+        budgetEntryToRow(entry, businessNameById, personNameById)
+      )
+    );
     entrySheet = buildBudgetEntriesSheet(entryRows);
   } catch {
     markMissingSection("Budget Entries");
@@ -1064,6 +1286,29 @@ export const exportSpreadsheet = async (
     } catch {
       markMissingSection("Holdings");
     }
+
+    // No Total row - nothing numeric to sum on a name list.
+    try {
+      const businessRows = businesses.map(businessToRow);
+      const businessesSheet = XLSX.utils.json_to_sheet(businessRows, {
+        header: [...BUSINESS_COLUMNS],
+      });
+      promoteStringDateCells(businessesSheet, BUSINESS_COLUMNS, ["CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, businessesSheet, "Businesses");
+    } catch {
+      markMissingSection("Businesses");
+    }
+
+    try {
+      const personRows = people.map(personToRow);
+      const peopleSheet = XLSX.utils.json_to_sheet(personRows, {
+        header: [...PERSON_COLUMNS],
+      });
+      promoteStringDateCells(peopleSheet, PERSON_COLUMNS, ["CreatedAt"]);
+      XLSX.utils.book_append_sheet(wb, peopleSheet, "People");
+    } catch {
+      markMissingSection("People");
+    }
   }
 
   const filename = sanitizeFilename(buildFilename(format));
@@ -1084,6 +1329,8 @@ export const exportSpreadsheet = async (
     }
   } catch (error) {
     log("file-write-failed");
+    // A partial file is still plaintext on disk - don't leave it behind.
+    deleteLocalFileQuietly(file);
     throw error;
   }
   log("file-written", `ms=${nowMs() - writeStartedAt}`);
@@ -1102,7 +1349,8 @@ export const exportSpreadsheet = async (
   }
 
   log("share-open");
-  await shareLocalFile(file.uri, {
+  // Deletes the plaintext file once the sheet closes (or if sharing throws).
+  await shareLocalFileThenDelete(file, {
     mimeType:
       format === "csv"
         ? "text/csv"

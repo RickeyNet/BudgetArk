@@ -34,33 +34,34 @@ const DonutChart: React.FC<DonutChartProps> = ({
 
   if (total === 0) return null;
 
+  // Precompute each arc's start offset in a plain loop so the JSX map below
+  // stays a pure function of its input (no closure mutation during render).
+  const arcs: { slice: DonutSlice; sliceLength: number; offset: number }[] = [];
   let cumulativeOffset = 0;
+  for (const slice of data) {
+    const sliceLength = (slice.value / total) * circumference;
+    arcs.push({ slice, sliceLength, offset: cumulativeOffset });
+    cumulativeOffset += sliceLength;
+  }
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       <Svg width={size} height={size}>
         <G rotation={-90} origin={`${center}, ${center}`}>
-          {data.map((slice) => {
-            const sliceLength = (slice.value / total) * circumference;
-            const gapLength = circumference - sliceLength;
-            const offset = cumulativeOffset;
-            cumulativeOffset += sliceLength;
-
-            return (
-              <Circle
-                key={slice.label}
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="none"
-                stroke={slice.color}
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${sliceLength} ${gapLength}`}
-                strokeDashoffset={-offset}
-                strokeLinecap="butt"
-              />
-            );
-          })}
+          {arcs.map(({ slice, sliceLength, offset }) => (
+            <Circle
+              key={slice.label}
+              cx={center}
+              cy={center}
+              r={radius}
+              fill="none"
+              stroke={slice.color}
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${sliceLength} ${circumference - sliceLength}`}
+              strokeDashoffset={-offset}
+              strokeLinecap="butt"
+            />
+          ))}
         </G>
       </Svg>
     </View>

@@ -31,6 +31,15 @@ import * as EncryptedStorage from "../storage/encryptedStorage";
 import { USD_EXCHANGE_RATES } from "./currencyConversion";
 
 const RATES_CACHE_KEY = "@budgetark_fx_rates" as const;
+/**
+ * Separate cache for the Currency Exchange calculator (Charts tab). The
+ * calculator wants reasonably-current rates and may refresh at any moment,
+ * while RATES_CACHE_KEY is the PINNED display snapshot that must only move
+ * when the user changes currency (see the rate-pinning policy above).
+ * Sharing a key would let an innocent converter refresh silently re-pin
+ * every displayed balance - keep them apart.
+ */
+const CONVERTER_CACHE_KEY = "@budgetark_fx_converter_rates" as const;
 const PROVIDER_URL = "https://open.er-api.com/v6/latest/USD" as const;
 const FETCH_TIMEOUT_MS = 8000;
 /** Cached rates younger than this are reused without hitting the network. */
@@ -97,9 +106,11 @@ export const fetchLiveRates = async (): Promise<Record<string, number>> => {
   }
 };
 
-const readCache = async (): Promise<RatesSnapshot | null> => {
+const readCache = async (
+  key: string = RATES_CACHE_KEY
+): Promise<RatesSnapshot | null> => {
   try {
-    const raw = await EncryptedStorage.getItem(RATES_CACHE_KEY);
+    const raw = await EncryptedStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as RatesSnapshot;
     if (parsed.base !== "USD" || !isValidRates(parsed.rates)) return null;
@@ -110,9 +121,12 @@ const readCache = async (): Promise<RatesSnapshot | null> => {
   }
 };
 
-const writeCache = async (snapshot: RatesSnapshot): Promise<void> => {
+const writeCache = async (
+  snapshot: RatesSnapshot,
+  key: string = RATES_CACHE_KEY
+): Promise<void> => {
   try {
-    await EncryptedStorage.setItem(RATES_CACHE_KEY, JSON.stringify(snapshot));
+    await EncryptedStorage.setItem(key, JSON.stringify(snapshot));
   } catch {
     // A failed cache write is non-fatal - we just refetch next time.
   }
@@ -164,5 +178,45 @@ export const getCurrentRates = async (opts?: {
   } catch {
     if (cache) return cache;
     return staticSnapshot();
+  }
+};
+
+/**
+ * Rates for the Currency Exchange calculator. Same live -> cache -> static
+ * shape as getCurrentRates, but against CONVERTER_CACHE_KEY so the
+ * calculator's refreshes can never move the pinned display snapshot (and a
+ * currency change never invalidates the converter's cache).
+ *
+ * - Default: reuse a fresh converter cache (< TTL); otherwise fetch live and
+ *   cache it. On failure fall back to any stale converter cache, then to the
+ *   pinned snapshot (which carries an honest fetchedAt), then static.
+ * - `forceRefresh`: always try live first ("Refresh rates" button).
+ *
+ * Never throws: the static table guarantees a usable result.
+ */
+export const getConverterRates = async (opts?: {
+  forceRefresh?: boolean;
+}): Promise<RatesSnapshot> => {
+  const cache = await readCache(CONVERTER_CACHE_KEY);
+  const cacheAgeMs = cache
+    ? Date.now() - new Date(cache.fetchedAt).getTime()
+    : Infinity;
+  const cacheFresh = cache !== null && cacheAgeMs < CACHE_TTL_MS;
+
+  if (!opts?.forceRefresh && cacheFresh) return cache as RatesSnapshot;
+
+  try {
+    const rates = await fetchLiveRates();
+    const snapshot: RatesSnapshot = {
+      base: "USD",
+      rates,
+      fetchedAt: new Date().toISOString(),
+      source: "live",
+    };
+    await writeCache(snapshot, CONVERTER_CACHE_KEY);
+    return snapshot;
+  } catch {
+    if (cache) return cache;
+    return getStoredRates();
   }
 };

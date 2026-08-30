@@ -1,3 +1,12 @@
+/**
+ * BudgetArk - Sparkline Chart
+ * File: src/components/SparklineChart.tsx
+ *
+ * Minimal SVG line chart (optional baseline, end-point dot, labels) shared
+ * by the Monthly Review and Annual Report modals. Pure presentational -
+ * callers pass already-computed points and colors.
+ */
+
 import React from "react";
 import { View } from "react-native";
 import Svg, { Polyline, Line, Circle, Rect, Text as SvgText } from "react-native-svg";

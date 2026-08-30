@@ -3,14 +3,16 @@
  * File: src/components/ManageCategoriesModal.tsx
  *
  * Modal-as-sub-screen (visible/onClose) for adding and deleting user-defined
- * budget categories. v1 is additive only - built-in categories are fixed and
- * not listed here. Reads/writes via useCustomCategories().
+ * budget categories, and for hiding built-in ones. The built-in list itself
+ * is fixed (a wire/validation contract - see utils/categoryVisibility), so
+ * "deleting" a built-in hides it from every picker while entries already
+ * filed under it keep working; Restore brings it back. Reads/writes via
+ * useCustomCategories().
  */
 
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -29,8 +31,17 @@ import {
   DEFAULT_CUSTOM_CATEGORY_BUCKET,
 } from "../data/categoryBuckets";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
-import { EMOJI_CHOICES, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
+import {
+  EMOJI_CHOICES,
+  DEFAULT_CATEGORY_ICON,
+  getCategoryIcon,
+} from "../data/categoryIcons";
 import { MAX_CATEGORY_NAME_LENGTH } from "../storage/customCategoriesStorage";
+import {
+  PROTECTED_BUILT_IN_CATEGORIES,
+  SELECTABLE_BUILT_IN_CATEGORIES,
+} from "../utils/categoryVisibility";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import type { BudgetBucket } from "../types";
 
 interface ManageCategoriesModalProps {
@@ -45,7 +56,8 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const { customCategories, add, remove } = useCustomCategories();
+  const { customCategories, add, remove, hiddenBuiltIns, setBuiltInHidden } =
+    useCustomCategories();
 
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<string>(DEFAULT_CATEGORY_ICON);
@@ -99,6 +111,26 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
     [remove],
   );
 
+  const handleHideBuiltIn = useCallback(
+    (label: string) => {
+      Alert.alert(
+        "Hide category?",
+        `"${label}" leaves the pickers, the Limits sheet and the bulk tools on this phone. Entries already filed under it keep it and still show wherever they have spending. Restore it here any time.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Hide",
+            style: "destructive",
+            onPress: () => {
+              void setBuiltInHidden(label, true);
+            },
+          },
+        ],
+      );
+    },
+    [setBuiltInHidden],
+  );
+
   const canAdd = name.trim().length > 0 && !saving;
 
   return (
@@ -108,15 +140,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
       transparent
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets, so KAV
-        // stays off. The RN Modal's Android window isn't auto-resized for the
-        // keyboard, so Android needs the KAV to lift the sheet - padding slides
-        // it up smoothly, while "height" re-lays-out the subtree each frame and
-        // glitches on dismiss.
-        behavior={Platform.OS === "android" ? "padding" : undefined}
-        style={styles.overlay}
-      >
+      <SheetKeyboardAvoider style={styles.overlay}>
         <View style={styles.modalSheet}>
           <ScrollView
             style={styles.scrollArea}
@@ -238,6 +262,50 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
                 </View>
               ))
             )}
+
+            {/* ── Built-in list: hide / restore ── */}
+            <Text style={[styles.label, styles.listHeader]}>
+              BUILT-IN CATEGORIES
+            </Text>
+            <Text style={styles.emptyText}>
+              Hide the ones you never use. Hidden categories leave the pickers
+              on this phone; existing entries keep them.
+            </Text>
+            {SELECTABLE_BUILT_IN_CATEGORIES.map((cat) => {
+              const hidden = hiddenBuiltIns.has(cat);
+              const protectedName = (
+                PROTECTED_BUILT_IN_CATEGORIES as readonly string[]
+              ).includes(cat);
+              return (
+                <View key={cat} style={[styles.row, hidden && styles.rowHidden]}>
+                  <Text style={styles.rowIcon}>{getCategoryIcon(cat)}</Text>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {cat}
+                  </Text>
+                  {protectedName ? (
+                    <Text style={styles.rowBucket}>Always shown</Text>
+                  ) : hidden ? (
+                    <TouchableOpacity
+                      onPress={() => void setBuiltInHidden(cat, false)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Restore ${cat}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.rowRestore}>Restore</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => handleHideBuiltIn(cat)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Hide ${cat}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.rowDelete}>Hide</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </ScrollView>
 
           <View
@@ -253,7 +321,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoider>
     </Modal>
   );
 };
@@ -262,7 +330,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     modalSheet: {
@@ -358,7 +426,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     addButtonDisabled: { opacity: 0.4 },
     addButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },
@@ -387,6 +455,12 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 12,
       marginRight: 8,
     },
+    rowHidden: { opacity: 0.45 },
+    rowRestore: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "700",
+    },
     rowDelete: {
       color: colors.danger,
       fontSize: 14,
@@ -409,7 +483,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     doneText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

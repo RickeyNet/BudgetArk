@@ -51,6 +51,7 @@ android/
 
 # App Store screenshot assets (generated / large files)
 screenshots/app-store/
+screenshots/demo-data.json
 screenshots/raw/**
 !screenshots/raw/
 !screenshots/raw/iphone/

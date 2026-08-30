@@ -28,6 +28,8 @@ import {
   TextSizePreset,
 } from "./textSize";
 import { DENSITY_KEY, TEXT_SIZE_KEY, getAppearanceBoot } from "./appearanceBoot";
+import { THEME_BY_ID } from "./themes";
+import { useTheme } from "./ThemeProvider";
 
 type DensityContextValue = Readonly<{
   densityId: DensityPreset["id"];
@@ -43,6 +45,9 @@ type DensityContextValue = Readonly<{
 const DensityContext = createContext<DensityContextValue | null>(null);
 
 export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  // DensityProvider deliberately nests inside ThemeProvider (App.tsx) so the
+  // radius tokens can follow square-corner themes like Classic.
+  const { themeId } = useTheme();
   const [densityId, setDensityIdState] = useState<DensityPreset["id"]>(DEFAULT_DENSITY_ID);
   const [textSizeId, setTextSizeIdState] = useState<TextSizePreset["id"]>(DEFAULT_TEXT_SIZE_ID);
   // Gate children on the same `ready` pattern as ThemeProvider so a user with
@@ -89,9 +94,16 @@ export const DensityProvider: React.FC<React.PropsWithChildren> = ({ children })
 
   // Fold Text Size into fontScale only. Spacing tokens are deliberately
   // untouched so enlarging text doesn't also balloon padding/margins.
+  // Square-corner themes (Classic) zero the radius tokens so every surface
+  // reading tokens.radius/radiusSm/radiusPill renders Win98-square.
+  const squareCorners = THEME_BY_ID[themeId]?.squareCorners === true;
   const tokens = useMemo<DensityTokens>(
-    () => ({ ...baseTokens, fontScale: baseTokens.fontScale * textMultiplier }),
-    [baseTokens, textMultiplier]
+    () => ({
+      ...baseTokens,
+      fontScale: baseTokens.fontScale * textMultiplier,
+      ...(squareCorners ? { radius: 0, radiusSm: 0, radiusPill: 0 } : {}),
+    }),
+    [baseTokens, textMultiplier, squareCorners]
   );
 
   const value = useMemo<DensityContextValue>(

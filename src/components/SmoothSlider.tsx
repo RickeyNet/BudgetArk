@@ -68,7 +68,7 @@ const SmoothSlider: React.FC<SmoothSliderProps> = React.memo(
      */
     React.useEffect(() => {
       progress.value = Math.max(0, Math.min(1, (value - min) / (max - min)));
-    }, [value, min, max]);
+    }, [progress, value, min, max]);
 
     /**
      * Snap a raw value to the configured step and clamp to [min, max].
@@ -154,6 +154,7 @@ const SmoothSlider: React.FC<SmoothSliderProps> = React.memo(
     );
   }
 );
+SmoothSlider.displayName = "SmoothSlider";
 
 const styles = StyleSheet.create({
   touchArea: {

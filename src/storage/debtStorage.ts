@@ -20,6 +20,13 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
+import { mutateCollectionInPlace, repairCollectionInPlace } from "./collectionRepair";
+import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
+import {
+  KEEP_ALIVE_MAX_LEAD_DAYS,
+  KEEP_ALIVE_MAX_WINDOW_MONTHS,
+  parseKeepAliveDate,
+} from "../utils/cardKeepAlive";
 export type PayoffStrategyPreference = "custom" | "avalanche" | "snowball";
 
 /**
@@ -90,6 +97,23 @@ const isPaymentDueDay = (value: unknown): boolean =>
   value >= 1 &&
   value <= 31;
 
+const isKeepAliveInt = (value: unknown, max: number): boolean =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= 1 &&
+  value <= max;
+
+/** Keep-alive fields are optional; out-of-range values are dropped on read. */
+const keepAliveFieldsOk = (debt: Debt): boolean =>
+  (debt.keepAliveEnabled === undefined ||
+    typeof debt.keepAliveEnabled === "boolean") &&
+  (debt.keepAliveWindowMonths === undefined ||
+    isKeepAliveInt(debt.keepAliveWindowMonths, KEEP_ALIVE_MAX_WINDOW_MONTHS)) &&
+  (debt.keepAliveLeadDays === undefined ||
+    isKeepAliveInt(debt.keepAliveLeadDays, KEEP_ALIVE_MAX_LEAD_DAYS)) &&
+  (debt.keepAliveLastUsedAt === undefined ||
+    parseKeepAliveDate(debt.keepAliveLastUsedAt) !== null);
+
 const normalizeDebt = (debt: Debt): Debt => {
   const rawClass = (debt as { debtClass?: unknown }).debtClass;
   const ownerOk = isDebtOwner(debt.owner);
@@ -98,7 +122,10 @@ const normalizeDebt = (debt: Debt): Debt => {
   const stampOk = !!debt.updatedAt;
   const dueDayOk =
     debt.paymentDueDay === undefined || isPaymentDueDay(debt.paymentDueDay);
-  if (ownerOk && classOk && sourceOk && stampOk && dueDayOk) return debt;
+  const keepAliveOk = keepAliveFieldsOk(debt);
+  if (ownerOk && classOk && sourceOk && stampOk && dueDayOk && keepAliveOk) {
+    return debt;
+  }
 
   let nextClass: DebtClass;
   if (classOk) {
@@ -112,10 +139,33 @@ const normalizeDebt = (debt: Debt): Debt => {
     ...debt,
     owner: ownerOk ? debt.owner : "mine",
     debtClass: nextClass,
-    debtClassSource: sourceOk ? debt.debtClassSource : "inferred",
+    // A class we just inferred (missing, or split from legacy car_house) is
+    // not a user choice, whatever the stored source claimed.
+    debtClassSource: sourceOk && classOk ? debt.debtClassSource : "inferred",
     paymentDueDay: isPaymentDueDay(debt.paymentDueDay)
       ? Math.floor(debt.paymentDueDay!)
       : undefined,
+    keepAliveEnabled:
+      typeof debt.keepAliveEnabled === "boolean"
+        ? debt.keepAliveEnabled
+        : undefined,
+    keepAliveWindowMonths: isKeepAliveInt(
+      debt.keepAliveWindowMonths,
+      KEEP_ALIVE_MAX_WINDOW_MONTHS
+    )
+      ? debt.keepAliveWindowMonths
+      : undefined,
+    keepAliveLeadDays: isKeepAliveInt(
+      debt.keepAliveLeadDays,
+      KEEP_ALIVE_MAX_LEAD_DAYS
+    )
+      ? debt.keepAliveLeadDays
+      : undefined,
+    keepAliveLastUsedAt:
+      debt.keepAliveLastUsedAt !== undefined &&
+      parseKeepAliveDate(debt.keepAliveLastUsedAt) !== null
+        ? debt.keepAliveLastUsedAt
+        : undefined,
     updatedAt: debt.updatedAt || debt.createdAt || new Date().toISOString(),
   };
 };
@@ -149,7 +199,11 @@ export const getDebtsIncludingDeleted = async (): Promise<Debt[]> => {
     });
     const purged = purgeExpiredTombstones(normalized);
     if (normalizeChanged || purged !== normalized) {
-      await writeDebts(purged);
+      // Repair via atomic recompute, NOT by writing `purged`: our snapshot
+      // may already be stale (a mutation or sync write can land between the
+      // read above and this write), and persisting it would revert that
+      // writer's change.
+      await repairCollectionInPlace(STORAGE_KEYS.DEBTS, normalizeDebt);
     }
     return purged;
   } catch {
@@ -164,6 +218,19 @@ export const getDebtsIncludingDeleted = async (): Promise<Debt[]> => {
  */
 const writeDebts = async (debts: Debt[]): Promise<void> => {
   await EncryptedStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+};
+
+/**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync). `merge` sees the current
+ * stored array normalized exactly as the getter would.
+ */
+export const mergeDebtsFromSync = async (
+  merge: (stored: Debt[]) => Debt[]
+): Promise<void> => {
+  await mutateCollectionInPlace<Debt>(STORAGE_KEYS.DEBTS, (stored) =>
+    merge(stored.map(normalizeDebt))
+  );
 };
 
 /**
@@ -281,6 +348,21 @@ export const savePayments = async (payments: Payment[]): Promise<void> => {
   );
 };
 
+/**
+ * Incoming-sync merge for payments, atomic against every other writer on
+ * the payments key (see budgetStorage.mergeBudgetEntriesFromSync). The
+ * debts the caller's merge may consult are read separately - a debt write
+ * landing in between only affects the minimum-due dedupe heuristic, never
+ * which payment records survive.
+ */
+export const mergePaymentsFromSync = async (
+  merge: (stored: Payment[]) => Payment[]
+): Promise<void> => {
+  await mutateCollectionInPlace<Payment>(STORAGE_KEYS.PAYMENTS, (stored) =>
+    merge(stored.map(normalizePayment))
+  );
+};
+
 export const getPayments = async (): Promise<Payment[]> => {
   const all = await getPaymentsIncludingDeleted();
   return filterLive(all);
@@ -305,15 +387,44 @@ export const getPaymentsIncludingDeleted = async (): Promise<Payment[]> => {
     });
     const purged = purgeExpiredTombstones(normalized);
     if (normalizeChanged || purged !== normalized) {
-      await EncryptedStorage.setItem(
-        STORAGE_KEYS.PAYMENTS,
-        JSON.stringify(purged)
-      );
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot - see the debts getter above.
+      await repairCollectionInPlace(STORAGE_KEYS.PAYMENTS, normalizePayment);
     }
     return purged;
   } catch {
     return [];
   }
+};
+
+/**
+ * Repair pass for the double-counted minimum-payment sync bug: both
+ * partners confirmed the same "minimum due" prompt before syncing, and the
+ * merge kept both randomly-id'd rows (see debtPaymentDedupe for the full
+ * story and the safety gate). Tombstones the duplicate rows WITHOUT
+ * touching the debt balance - the balance was only ever decremented once -
+ * and the tombstones propagate to the partner on the next sync.
+ *
+ * Runs on every app launch (App.tsx, deferred past first paint): it's a
+ * cheap no-op on healthy data, and re-running also catches duplicates
+ * reintroduced later by a JSON import or a partner on an older app version.
+ *
+ * @returns number of duplicate rows tombstoned
+ */
+export const repairDuplicateMinimumDuePayments = async (): Promise<number> => {
+  const [debts, payments] = await Promise.all([
+    getDebtsIncludingDeleted(),
+    getPaymentsIncludingDeleted(),
+  ]);
+  const { payments: deduped, removedCount } = dedupeMinimumDuePayments(
+    debts,
+    payments,
+    new Date().toISOString()
+  );
+  if (removedCount > 0) {
+    await savePayments(deduped);
+  }
+  return removedCount;
 };
 
 /**
@@ -338,6 +449,19 @@ export const recordPayment = async (
     getPaymentsIncludingDeleted(),
   ]);
 
+  /* Prompt-logged minimums carry a deterministic id (see
+   * minimumDuePaymentId), so the same real-world payment can arrive twice:
+   * if a live record with this id already exists - e.g. the partner's copy
+   * of this month's minimum synced in while the prompt was on screen -
+   * recording again must be a no-op, or one payment decrements the balance
+   * twice. A tombstoned match (the user deleted this month's log, then
+   * re-confirmed the prompt) is revived in place below instead of appended,
+   * so two records never share an id. */
+  const existing = payments.find((p) => p.id === payment.id);
+  if (existing && !existing.deletedAt) {
+    return { debts: filterLive(debts), payments: filterLive(payments) };
+  }
+
   /* Calculate updated debt balance - only matches a live debt, never a
    * tombstone (UI couldn't have surfaced a deleted debt to pay). */
   const now = new Date().toISOString();
@@ -353,8 +477,14 @@ export const recordPayment = async (
   });
 
   /* Append the new payment (stamped with the delta actually applied, so
-   * deletePayment can reverse exactly), preserving existing tombstones. */
-  const updatedPayments = [...payments, { ...payment, appliedAmount: applied }];
+   * deletePayment can reverse exactly), preserving existing tombstones. A
+   * tombstoned record with the same id is replaced in place - the fresh
+   * record has no deletedAt and a newer updatedAt, so the revival also wins
+   * LWW against the delete on the next sync. */
+  const stamped = { ...payment, appliedAmount: applied };
+  const updatedPayments = existing
+    ? payments.map((p) => (p.id === payment.id ? stamped : p))
+    : [...payments, stamped];
 
   /* Save both in one native AsyncStorage call to shrink the partial-state window. */
   await EncryptedStorage.multiSet([
@@ -495,6 +625,9 @@ const RESET_KEYS = [
   "@budgetark_savings_goals",
   "@budgetark_net_worth_snapshots",
   "@budgetark_asset_accounts",
+  // Per-account daily values behind the Bridge rise/drop tracker - derived
+  // from the accounts wiped above, so it resets with them.
+  "@budgetark_account_value_history",
   "@budgetark_debt_milestones",
   "@budgetark_open_ark_setup_once",
   // Walkthrough state - without this, a fresh reset wouldn't re-show the
@@ -515,8 +648,14 @@ const RESET_KEYS = [
   // unread and clear the Resume card.
   "@budgetark_learning_progress",
   "@budgetark_custom_categories",
+  // Businesses expense entries are tagged with (tombstones included - a
+  // fresh account must not inherit the previous user's client list).
+  "@budgetark_businesses",
+  // People spending is assigned to (same tombstone rationale as businesses).
+  "@budgetark_people",
   "@budgetark_category_bucket_overrides",
   "@budgetark_debt_due_dismissals",
+  "@budgetark_card_keepalive_dismissals",
   // Unlocked badges + the stats that drive them (streaks, export count,
   // review opens). Without these a fresh anonymous account inherits the
   // previous user's achievements after "Reset All Data."
@@ -526,6 +665,22 @@ const RESET_KEYS = [
   // a reset there's no history left to claim as "already backfilled" - and
   // a backup restored later must get a full re-send, not incremental diffs.
   "@budgetark_sync_backfill_done_v1",
+  // Expense-tracking check-in notification settings. The nudge schedule is
+  // anchored to the user's entry history, so it resets with the data (the
+  // reset flow also cancels any already-scheduled notifications).
+  "@budgetark_tracking_reminder_settings",
+  // App-lock PIN record. A fresh account must not inherit the previous
+  // user's PIN - after a reset there is no data left to protect, and the
+  // reset drops back into first-launch onboarding.
+  "@budgetark_app_lock",
+  // Auto-backup preferences (the backup FILES are wiped separately by
+  // clearAllAutoBackups in ProfileScreen's reset flow - RESET_KEYS only
+  // clears AsyncStorage).
+  "@budgetark_auto_backup_settings",
+  // Month-start checking balances (cash-flow projection) + the per-device
+  // once-per-month prompt marker.
+  "@budgetark_month_start_balances",
+  "@budgetark_month_balance_prompt",
 ] as const;
 
 export class ResetIncompleteError extends Error {

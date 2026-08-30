@@ -21,6 +21,7 @@ Generated files are written to:
 
 - `screenshots/app-store/iphone-6.9/` (1320x2868)
 - `screenshots/app-store/iphone-6.5/` (1242x2688)
+- `screenshots/app-store/iphone-6.1/` (1179x2556)
 - `screenshots/app-store/ipad-13/` (2064x2752)
 - `screenshots/app-store/ipad-12.9/` (2048x2732)
 

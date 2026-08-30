@@ -1,7 +1,19 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+/**
+ * BudgetArk - Budget Tab
+ * File: src/screens/BudgetScreen.tsx
+ *
+ * Monthly income/expense ledger: entry list with category budgets and
+ * limits, the month-start cash-flow card, recurring entries, private
+ * entries, bank Review Inbox access, and the Add/Edit entry modal. Every
+ * write goes through the atomic budgetStorage helpers so a partner sync or
+ * bank sync landing behind this screen is never reverted by a stale save.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePresentAfterDismiss } from "../hooks/usePresentAfterDismiss";
 import {
-  Alert,
   FlatList,
+  InteractionManager,
   Modal,
   ScrollView,
   StatusBar,
@@ -11,18 +23,29 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { generateUUID } from "../utils/uuid";
-import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import BudgetBucketCard from "../components/BudgetBucketCard";
-import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
-import AddBudgetEntryModal from "../components/AddBudgetEntryModal";
-import EditBudgetEntryModal from "../components/EditBudgetEntryModal";
+import SpendingCard, {
+  type ExpenseCategoryRow,
+  isAutoEntryId,
+} from "../components/SpendingCard";
+import { buildExpenseCategoryRows } from "../utils/expenseCategoryRows";
+import { resolveCategoryBuckets } from "../utils/categoryBucketResolve";
+import FoodSplitModal, { type FoodSplitCategory } from "../components/FoodSplitModal";
+import BudgetEntryModal from "../components/BudgetEntryModal";
+import BudgetLimitsModal from "../components/BudgetLimitsModal";
+import ReviewInboxModal from "../components/ReviewInboxModal";
+import { useConnections } from "../connections/ConnectionsProvider";
 import MonthlyReviewModal from "../components/MonthlyReviewModal";
 import BillCalendarModal from "../components/BillCalendarModal";
+import GlobalSearchModal from "../components/GlobalSearchModal";
+import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import DueDateReminderBanner from "../components/DueDateReminderBanner";
 import DebtDueReminderBanner from "../components/DebtDueReminderBanner";
+import TrackingReminderOfferCard from "../components/TrackingReminderOfferCard";
 import {
   getDebtDueDismissals,
   type DebtDueDismissals,
@@ -44,14 +67,8 @@ import {
   Debt,
   NewBudgetEntryInput,
   Payment,
-  RecurrenceInterval,
   SavingsGoal,
   AssetAccount,
-  AssetAccountCategory,
-  ASSET_ACCOUNT_CATEGORIES,
-  ASSET_ACCOUNT_CATEGORY_LABELS,
-  NetWorthSnapshot,
-  CustomCategory,
   BudgetBucket,
   RootTabParamList,
 } from "../types";
@@ -59,7 +76,7 @@ import {
   getBudgetEntries,
   getAllLimitsByMonth,
   getCategoryBudgetLimits,
-  saveBudgetEntries,
+  addBudgetEntries,
   saveCategoryBudgetLimits,
   deleteBudgetEntry,
   restoreBudgetEntry,
@@ -68,6 +85,8 @@ import {
   restoreBudgetEntries,
   setBudgetEntryCategories,
 } from "../storage/budgetStorage";
+import { subscribeDataChanged } from "../storage/dataChangeNotifier";
+import type { BalanceDelta } from "../utils/assetBalanceDeltas";
 import {
   buildMonthlyReview,
   type MonthlyReviewData,
@@ -82,10 +101,9 @@ import {
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
-  saveAssetAccounts,
-  deleteAssetAccount,
-  restoreAssetAccount,
+  adjustAssetAccountBalances,
 } from "../storage/assetAccountStorage";
+import { useBusinesses, usePeople } from "../people/PeopleProvider";
 import {
   getCategoryBucketOverrides,
   removeCategoryBucketOverride,
@@ -95,6 +113,7 @@ import {
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
+import { useTipJar } from "../tipjar/TipJarProvider";
 import { recordMonthlyReviewOpen } from "../storage/achievementStatsStorage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -104,6 +123,33 @@ import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fabBottomOffset, TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { useUndo } from "../undo/UndoProvider";
+import type { ThemeColors } from "../theme/themes";
+import type { DensityTokens } from "../theme/density";
+import { getRecurrenceTag } from "../utils/recurrence";
+import { entriesForMonth } from "../utils/billFulfillment";
+import { buildPaceAlerts, pacingClockFor } from "../utils/budgetPacing";
+import SpendingPaceBanner from "../components/SpendingPaceBanner";
+import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
+import { applyEmergencyFundContribution } from "../utils/savingsGoals";
+import { formatMonthKeyLabel, getBudgetMonthKeys, getMonthDateFromKey, getMonthKey } from "../utils/budgetMonths";
+import {
+  getEmergencyFundSource,
+  resolveEmergencyFundGoal,
+  sumSavingsReserve,
+} from "../utils/emergencyFund";
+import { totalsByBucket } from "../utils/budgetBucketMath";
+import { summarizePaychecks } from "../utils/paycheckMath";
+import CashFlowCard from "../components/CashFlowCard";
+import MonthBalancePromptModal from "../components/MonthBalancePromptModal";
+import {
+  getLastBalancePromptMonth,
+  getMonthStartBalances,
+  setLastBalancePromptMonth,
+} from "../storage/monthlyBalanceStorage";
+import {
+  computeMonthReconciliationDelta,
+  type MonthStartBalanceMap,
+} from "../utils/cashFlow";
 
 /**
  * FAB layout constants - kept here so the coachmark can compute a
@@ -114,90 +160,6 @@ import { useUndo } from "../undo/UndoProvider";
  */
 const FAB_RIGHT = 20;
 const FAB_SIZE = 52;
-import type { ThemeColors } from "../theme/themes";
-import type { DensityTokens } from "../theme/density";
-import { calculateNetWorthTotals } from "../utils/netWorth";
-import {
-  getRecurrenceTag,
-  isEntryActiveInMonth,
-} from "../utils/recurrence";
-import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
-import { totalsByBucket } from "../utils/budgetBucketMath";
-
-type ExpenseCategoryEntry = {
-  id: string;
-  amount: number;
-  description?: string;
-  date: string;
-  recurring?: boolean;
-  recurrenceInterval?: RecurrenceInterval;
-};
-
-type ExpenseCategoryRow = {
-  category: CategoryName;
-  spent: number;
-  limit: number | null;
-  ratio: number | null;
-  entries: ExpenseCategoryEntry[];
-};
-
-const inferFoodSplitCategory = (entry: BudgetEntry): Extract<BudgetCategory, "Grocery" | "Restaurant"> => {
-  const text = `${entry.description || ""} ${entry.category}`.toLowerCase();
-  const restaurantHints = [
-    "restaurant",
-    "dine",
-    "dinner",
-    "lunch",
-    "breakfast",
-    "takeout",
-    "delivery",
-    "uber eats",
-    "doordash",
-    "grubhub",
-    "cafe",
-    "coffee",
-    "bar",
-    "pizza",
-  ];
-  return restaurantHints.some((hint) => text.includes(hint))
-    ? "Restaurant"
-    : "Grocery";
-};
-
-const getMonthKey = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-};
-
-const getMonthDateFromKey = (monthKey: string): Date =>
-  new Date(`${monthKey}-01T00:00:00`);
-
-const formatMonthLabel = (monthKey: string): string =>
-  getMonthDateFromKey(monthKey).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-
-const getMonthKeyOffset = (offset: number, fromDate: Date = new Date()): string => {
-  const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-  cursor.setMonth(cursor.getMonth() + offset);
-  return getMonthKey(cursor);
-};
-
-/**
- * Selectable months: next month (forecast) + current + a full trailing
- * year of history. Matches the 13-month limit-history retention in
- * budgetStorage so every navigable month still has its saved limits.
- */
-const BUDGET_HISTORY_MONTHS = 12;
-
-const getBudgetMonthKeys = (): string[] => {
-  const keys = [getMonthKeyOffset(1)];
-  for (let offset = 0; offset >= -BUDGET_HISTORY_MONTHS; offset--) {
-    keys.push(getMonthKeyOffset(offset));
-  }
-  return keys;
-};
 
 const CATEGORY_CHART_PALETTE = [
   "#4E79A7",
@@ -226,12 +188,20 @@ const CATEGORY_CHART_PALETTE = [
   "#7B6D8D",
 ] as const;
 
+/** Display name of the bill an actual was filed against, for the nudge copy. */
+const billLabelIn = (all: BudgetEntry[], billId: string | undefined): string | undefined => {
+  const bill = billId ? all.find((entry) => entry.id === billId) : undefined;
+  return bill ? bill.description?.trim() || bill.category : undefined;
+};
+
 const BudgetScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+  const route = useRoute<RouteProp<RootTabParamList, "Budget">>();
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
-  const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const { formatCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
+  const { noteWin, showNudgeToast } = useTipJar();
   const insets = useSafeAreaInsets();
   const { pushUndo } = useUndo();
   const coachmark = useTabCoachmark("Budget");
@@ -246,16 +216,13 @@ const BudgetScreen: React.FC = () => {
   // FAB - by definition.
   const anchorBudgetFab = useCoachmarkAnchor("budget-fab");
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
-  // Spending donut scales with the effective font scale (Density × Text Size)
-  // so the accessibility Text Size setting zooms the chart too, not just text.
-  const donutSize = Math.round(108 * tokens.fontScale);
-  const donutStroke = Math.round(16 * tokens.fontScale);
-
-  const { customCategories } = useCustomCategories();
+  const presentAfterDismiss = usePresentAfterDismiss();
+  const { customCategories, visibleBuiltIns } = useCustomCategories();
   const customCategoryNames = useMemo(
     () => customCategories.map((c) => c.name),
     [customCategories]
   );
+  const { connections, pendingCount } = useConnections();
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -263,55 +230,83 @@ const BudgetScreen: React.FC = () => {
   const [dueDismissals, setDueDismissals] = useState<DebtDueDismissals>({});
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [limits, setLimits] = useState<CategoryBudgetLimit[]>([]);
+  const [monthBalances, setMonthBalances] = useState<MonthStartBalanceMap>({});
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  /** True when the open balance modal came from the once-per-month nudge. */
+  const [balanceModalIsPrompt, setBalanceModalIsPrompt] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  /** Category preselected by the Quick Entry widget's deep link, if any. */
+  const [quickAddCategory, setQuickAddCategory] = useState<CategoryName | undefined>(undefined);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
+  /** Pace banner tap -> Spending card expands this category. */
+  const [paceExpandRequest, setPaceExpandRequest] = useState<
+    { category: CategoryName; nonce: number } | null
+  >(null);
+  /** "Log actual" target: the add sheet opens prefilled as this bill's charge. */
+  const [logActualBill, setLogActualBill] = useState<
+    { bill: BudgetEntry; yearMonth: string } | undefined
+  >(undefined);
   const [showBillCalendar, setShowBillCalendar] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  /** Reference time for search date presets - stamped when the sheet opens,
+   * never in render (react-hooks/purity). */
+  const [searchNow, setSearchNow] = useState<Date | null>(null);
+  const [showReviewInbox, setShowReviewInbox] = useState(false);
   const [limitModalCategory, setLimitModalCategory] = useState<CategoryName | null>(null);
   const [limitInput, setLimitInput] = useState("");
+  /** The all-categories Limits sheet (header link on the Spending card). */
+  const [showLimitsModal, setShowLimitsModal] = useState(false);
   const [selectedMonthKey, setSelectedMonthKey] = useState(getMonthKey(new Date()));
   const [showFoodSplitModal, setShowFoodSplitModal] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   // Multi-select for bulk delete / recategorize. `selectionMode` flips row
   // taps from "edit" to "toggle select"; auto-debt-payment rows are never
   // selectable (they're derived from debts, not real budget entries).
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
   const [showBulkCategoryPicker, setShowBulkCategoryPicker] = useState(false);
-  const [foodSplitDraft, setFoodSplitDraft] = useState<Record<string, "Grocery" | "Restaurant">>({});
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewData, setReviewData] = useState<MonthlyReviewData | null>(null);
   const [reviewPreviewData, setReviewPreviewData] = useState<MonthlyReviewData | null>(null);
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
-  const [showAssetModal, setShowAssetModal] = useState(false);
-  const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
-  const [assetName, setAssetName] = useState("");
-  const [assetBalance, setAssetBalance] = useState("");
-  const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("savings");
+  // Reloaded on every focus, so edits in Profile -> Businesses show up here.
+  const { businesses } = useBusinesses();
+  // Same focus-reload rationale for Profile -> People edits.
+  const { people } = usePeople();
+  /** Spending-card "💼 Business only" filter chip. Session-only by design -
+   *  a sticky filter would silently misrepresent spending next launch. */
+  const [businessOnly, setBusinessOnly] = useState(false);
   const [keelTarget, setKeelTarget] = useState(0);
   const [showEfContribModal, setShowEfContribModal] = useState(false);
   const [efContribAmount, setEfContribAmount] = useState("");
-  const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
   const [bucketOverrides, setBucketOverrides] = useState<CategoryBucketOverrides>({});
   const [bucketOverrideCategory, setBucketOverrideCategory] = useState<string | null>(null);
 
   const monthKeys = useMemo(() => getBudgetMonthKeys(), []);
-  const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
-  const nextMonthKey = monthKeys[0];
   const selectedMonthIndex = Math.max(0, monthKeys.indexOf(selectedMonthKey));
 
+  // Persists a fresh snapshot for sync; nothing on this screen renders the
+  // result since the net-worth history card moved to the Bridge screen.
   const refreshNetWorthSnapshots = useCallback(async () => {
-    const nextSnapshots = await syncNetWorthSnapshot();
-    setNetWorthSnapshots(nextSnapshots);
-    return nextSnapshots;
+    await syncNetWorthSnapshot();
   }, []);
 
   const refreshMonthlyReview = useCallback(async (reviewEntries: BudgetEntry[]) => {
     const limitsByMonth = await getAllLimitsByMonth();
-    const nextReviewData = buildMonthlyReview(reviewEntries, limitsByMonth);
+    const nextReviewData = buildMonthlyReview(reviewEntries, limitsByMonth, 6, people);
     setReviewPreviewData(nextReviewData);
     return nextReviewData;
-  }, []);
+  }, [people]);
+
+  // Bumped when partner sync / bank sync / an import writes storage while
+  // this tab is mounted; it's a dep of the focus loader below, so the loader
+  // re-runs (while focused) and the screen picks up the merged records
+  // instead of holding a stale snapshot until the next tab switch.
+  const [reloadTick, setReloadTick] = useState(0);
+  useEffect(
+    () => subscribeDataChanged(() => setReloadTick((tick) => tick + 1)),
+    []
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -322,7 +317,6 @@ const BudgetScreen: React.FC = () => {
       const loadBudgetData = async () => {
         const [
           storedEntries,
-          storedLimits,
           storedDebts,
           storedPayments,
           storedGoals,
@@ -331,9 +325,9 @@ const BudgetScreen: React.FC = () => {
           allLimitsByMonth,
           storedBucketOverrides,
           storedDueDismissals,
+          storedMonthBalances,
         ] = await Promise.all([
           getBudgetEntries(),
-          getCategoryBudgetLimits(selectedMonthKey),
           getDebts(),
           getPayments(),
           getSavingsGoals(),
@@ -342,39 +336,35 @@ const BudgetScreen: React.FC = () => {
           getAllLimitsByMonth(),
           getCategoryBucketOverrides(),
           getDebtDueDismissals(),
+          getMonthStartBalances(),
         ]);
         if (cancelled) return;
         const keelStep = milestonePlan.steps.find((s) => s.key === "keel");
         setKeelTarget(keelStep?.targetAmount ?? 1000);
-        // Apply missed recurring linked-account contributions through the
-        // shared util - it carries the orphan-account skip and UTC month-key
-        // handling that this screen's old inline copy was missing.
-        const processed = applyMissedRecurringLinkedAccountContributions(
+        // Apply + persist missed recurring linked-account contributions via
+        // the shared shell - it owns the save-order invariant that prevents
+        // double-crediting (see linkedAccountRecurringApply.ts). BridgeScreen
+        // goes through the same shell.
+        const processed = await applyAndPersistMissedContributions(
           storedEntries,
           storedAssets
         );
 
-        if (processed.changed) {
-          // Save entries first (commits the lastAppliedMonth marker), then
-          // assets (commits the new balance). Doing the asset save first or
-          // running them concurrently allows a reader on another tab to see
-          // (newBalance, oldLastApplied) and re-apply the same contribution,
-          // silently double-crediting the asset. Same protection sits in
-          // BridgeScreen's auto-apply path.
-          await saveBudgetEntries(processed.entries);
-          await saveAssetAccounts(processed.assetAccounts);
-        }
-
         if (cancelled) return;
-        const nextReviewData = buildMonthlyReview(processed.entries, allLimitsByMonth);
+        const nextReviewData = buildMonthlyReview(
+          processed.entries,
+          allLimitsByMonth,
+          6,
+          people
+        );
 
         setEntries(processed.entries);
-        setLimits(storedLimits);
         setDebts(storedDebts);
         setPayments(storedPayments);
         setDueDismissals(storedDueDismissals);
         setSavingsGoals(storedGoals);
         setAssetAccounts(processed.assetAccounts);
+        setMonthBalances(storedMonthBalances);
         setReviewPreviewData(nextReviewData);
         setBucketOverrides(storedBucketOverrides);
         await refreshNetWorthSnapshots();
@@ -382,11 +372,43 @@ const BudgetScreen: React.FC = () => {
         setIsLoaded(true);
       };
 
-      loadBudgetData();
+      // A rejected read (5 s storage timeout on a near-full device, decrypt
+      // failure) must not leave isLoaded false forever - that's a blank tab
+      // with no retry. Keep whatever state we have (empty defaults on a
+      // cold load, the previous load's data otherwise), settle the loader,
+      // and let the next focus try again. Mirrors DebtTracker/Bridge.
+      loadBudgetData().catch((error: unknown) => {
+        if (cancelled) return;
+        if (__DEV__) console.error("Failed to load budget:", error);
+        setIsLoaded(true);
+      });
       return () => {
         cancelled = true;
       };
-    }, [refreshNetWorthSnapshots, selectedMonthKey])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
+    }, [people, refreshNetWorthSnapshots, reloadTick])
+  );
+
+  // Category limits are the ONLY month-scoped collection, so they reload on
+  // their own when the user pages months - the wide load above deliberately
+  // does not depend on selectedMonthKey, which used to re-read all eleven
+  // collections (and re-run the recurring-contribution sweep) per page.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getCategoryBudgetLimits(selectedMonthKey)
+        .then((storedLimits) => {
+          if (!cancelled) setLimits(storedLimits);
+        })
+        .catch((error: unknown) => {
+          // Keep the previous month's limits on screen rather than crash
+          // with an unhandled rejection; the next focus/page retries.
+          if (__DEV__) console.error("Failed to load budget limits:", error);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [selectedMonthKey])
   );
 
   const selectedMonthDate = useMemo(
@@ -394,9 +416,16 @@ const BudgetScreen: React.FC = () => {
     [selectedMonthKey]
   );
 
+  // Recurring-aware AND fulfilment-aware: a bill whose actual charge landed
+  // this month shows the actual, not the estimate (utils/billFulfillment).
   const monthlyEntries = useMemo(
-    () => entries.filter((entry) => isEntryActiveInMonth(entry, selectedMonthKey)),
+    () => entriesForMonth(entries, selectedMonthKey),
     [entries, selectedMonthKey]
+  );
+
+  const entriesById = useMemo(
+    () => new Map(entries.map((entry) => [entry.id, entry])),
+    [entries]
   );
 
   const monthlyIncome = useMemo(
@@ -471,57 +500,40 @@ const BudgetScreen: React.FC = () => {
 
   const monthlyNet = monthlyIncome - monthlyExpenses;
 
-  // Emergency-fund derived current amount. Only the "Savings" category
-  // counts toward the EF; Retirement and Investing aren't liquid emergency
-  // money. Kept in sync with the same narrowing in BridgeScreen and
-  // DebtTrackerScreen.
-  const savingsReserve = useMemo(
+  /**
+   * Reconciliation for the Cash Flow card: how the selected month's entered
+   * starting balance compares against last month's projected end. Needs
+   * both months' records plus last month's net, computed with the exact
+   * same building blocks as the on-screen totals (recurring entries via
+   * isEntryActiveInMonth + the debt payment plan) so plan and projection
+   * can never disagree.
+   */
+  const cashFlowReconciliationDelta = useMemo(
     () =>
-      entries
-        .filter(
-          (e) => e.type === "expense" && e.category === "Savings"
-        )
-        .reduce((sum, e) => sum + e.amount, 0),
-    [entries]
-  );
-
-  const emergencyFundGoal = useMemo(() => {
-    const explicit = savingsGoals.find((g) => g.category === "emergency_fund");
-    if (explicit) return explicit;
-    // Fall back to Keel milestone data so the emergency fund appears automatically
-    if (keelTarget > 0 || savingsReserve > 0) {
-      return {
-        id: "__keel_ef__",
-        name: "Emergency Fund",
-        category: "emergency_fund" as const,
-        targetAmount: keelTarget,
-        currentAmount: savingsReserve,
-        createdAt: "",
-        updatedAt: "",
-      } satisfies SavingsGoal;
-    }
-    return null;
-  }, [savingsGoals, keelTarget, savingsReserve]);
-
-  const totalAssetBalance = useMemo(
-    () => assetAccounts.reduce((sum, a) => sum + a.balance, 0),
-    [assetAccounts]
-  );
-
-  const netWorthTotals = useMemo(
-    () =>
-      calculateNetWorthTotals({
+      computeMonthReconciliationDelta({
+        monthKey: selectedMonthKey,
+        monthBalances,
         entries,
         debts,
-        savingsGoals,
-        assetAccounts,
+        payments,
+        currentMonthKey: getMonthKey(new Date()),
       }),
-    [assetAccounts, debts, entries, savingsGoals]
+    [monthBalances, selectedMonthKey, entries, debts, payments]
   );
 
-  const totalSavings = netWorthTotals.totalAssets;
-  const totalDebt = netWorthTotals.totalDebt;
-  const netWorth = netWorthTotals.netWorth;
+  const savingsReserve = useMemo(() => sumSavingsReserve(entries), [entries]);
+
+  // Savings accounts designated as the emergency fund (Bridge account
+  // editor). When any exist the EF value is their combined balance and
+  // manual contributions are disabled. Goal resolution itself lives in
+  // utils/emergencyFund.resolveEmergencyFundGoal, shared with BridgeScreen.
+  const efSource = useMemo(() => getEmergencyFundSource(assetAccounts), [assetAccounts]);
+
+  const emergencyFundGoal = useMemo(
+    () =>
+      resolveEmergencyFundGoal({ savingsGoals, assetAccounts, keelTarget, savingsReserve }),
+    [assetAccounts, savingsGoals, keelTarget, savingsReserve],
+  );
 
   const limitByCategory = useMemo(() => {
     const map: Record<string, number> = {};
@@ -547,56 +559,52 @@ const BudgetScreen: React.FC = () => {
     return map;
   }, [debtPaymentsTotal, monthlyEntries]);
 
-  const bucketByCategory = useMemo(() => {
-    const map: Record<string, BudgetBucket> = {};
-    for (const [category, amount] of Object.entries(expensesByCategory)) {
-      if (amount <= 0) continue;
-      map[category] =
-        bucketOverrides[category] ??
-        getDefaultBucketForCategory(category, customCategories) ??
-        DEFAULT_CUSTOM_CATEGORY_BUCKET;
-    }
+  /** Whether the selected month has any business-tagged expense - gates the
+   *  Spending card's "Business only" chip. */
+  const hasBusinessSpending = useMemo(
+    () =>
+      monthlyEntries.some(
+        (entry) => entry.type === "expense" && entry.businessId
+      ),
+    [monthlyEntries]
+  );
+
+  /**
+   * Category totals feeding the Spending card. With the "Business only"
+   * chip active, only business-tagged expenses count and the synthetic
+   * Debt Payments rollup is left out (debt minimums aren't business
+   * spending). The unfiltered `expensesByCategory` still drives the bucket
+   * card and monthly totals - the chip deliberately scopes to the Spending
+   * card so personal budget math never silently changes underneath it.
+   */
+  const spendingByCategory = useMemo(() => {
+    if (!businessOnly) return expensesByCategory;
+    const map: Record<string, number> = {};
+    monthlyEntries
+      .filter((entry) => entry.type === "expense" && entry.businessId)
+      .forEach((entry) => {
+        map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
+      });
     return map;
-  }, [bucketOverrides, customCategories, expensesByCategory]);
+  }, [businessOnly, expensesByCategory, monthlyEntries]);
+
+  // Override > built-in/custom default, then the per-bucket lists the
+  // bucket card renders. See utils/categoryBucketResolve.
+  const { bucketByCategory, categoriesByBucket } = useMemo(
+    () =>
+      resolveCategoryBuckets({
+        expensesByCategory,
+        bucketOverrides,
+        customCategories,
+      }),
+    [bucketOverrides, customCategories, expensesByCategory]
+  );
 
   const bucketTotals = useMemo(
     () => totalsByBucket(expensesByCategory, bucketByCategory),
     [bucketByCategory, expensesByCategory]
   );
 
-  const categoriesByBucket = useMemo(() => {
-    const grouped: Record<BudgetBucket, Array<{ category: string; amount: number; hasOverride: boolean }>> = {
-      needs: [],
-      wants: [],
-      savings: [],
-    };
-    for (const [category, amount] of Object.entries(expensesByCategory)) {
-      if (amount <= 0) continue;
-      const bucket = bucketByCategory[category];
-      if (!bucket) continue;
-      grouped[bucket].push({
-        category,
-        amount,
-        hasOverride: bucketOverrides[category] != null,
-      });
-    }
-    (Object.keys(grouped) as BudgetBucket[]).forEach((bucket) => {
-      grouped[bucket].sort((a, b) => b.amount - a.amount);
-    });
-    return grouped;
-  }, [bucketByCategory, bucketOverrides, expensesByCategory]);
-
-  const incomeByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-
-    monthlyEntries
-      .filter((entry) => entry.type === "income")
-      .forEach((entry) => {
-        map[entry.category] = (map[entry.category] ?? 0) + entry.amount;
-      });
-
-    return map;
-  }, [monthlyEntries]);
 
   const incomeEntries = useMemo(
     () =>
@@ -606,97 +614,50 @@ const BudgetScreen: React.FC = () => {
     [monthlyEntries]
   );
 
-  const expenseRows = useMemo<ExpenseCategoryRow[]>(() => {
-    const categoriesInPlay = new Set<CategoryName>();
+  // W-2 / 1099 rollup for the selected month: 401(k) dollars withheld from
+  // paychecks (not part of income totals) and the tax set-aside owed on
+  // 1099 income. monthlyEntries is already recurring-aware.
+  const paycheckSummary = useMemo(
+    () => summarizePaychecks(monthlyEntries),
+    [monthlyEntries]
+  );
 
-    const allCategories: CategoryName[] = [
-      ...BUDGET_CATEGORIES,
-      ...customCategoryNames,
-    ];
-    allCategories.forEach((category) => {
-      if ((expensesByCategory[category] ?? 0) > 0 || limitByCategory[category] != null) {
-        categoriesInPlay.add(category);
-      }
-    });
-
-    return Array.from(categoriesInPlay)
-      .map((category) => {
-        const spent = expensesByCategory[category] ?? 0;
-        const limit = limitByCategory[category] ?? null;
-        const ratio = limit ? spent / limit : null;
-        const entries: ExpenseCategoryEntry[] = monthlyEntries
-          .filter((e) => e.type === "expense" && e.category === category)
-          .map((e) => ({
-            id: e.id,
-            amount: e.amount,
-            description: e.description,
-            date: e.date,
-            recurring: e.recurring,
-            recurrenceInterval: e.recurrenceInterval,
-          }))
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        if (category === "Debt Payments") {
-          const paymentsByDebt = new Map<string, Payment[]>();
-          for (const payment of recordedDebtPaymentsForMonth) {
-            const list = paymentsByDebt.get(payment.debtId);
-            if (list) list.push(payment);
-            else paymentsByDebt.set(payment.debtId, [payment]);
-          }
-
-          for (const { debt, paid, amount } of debtPaymentPlanForMonth) {
-            const debtPayments = paymentsByDebt.get(debt.id) ?? [];
-            if (debtPayments.length > 0) {
-              for (const payment of debtPayments) {
-                entries.push({
-                  id: `payment-${payment.id}`,
-                  amount: payment.amount,
-                  description: `${debt.name} payment`,
-                  date: payment.date,
-                });
-              }
-              // Planned shortfall on top of logged payments. `amount` only
-              // exceeds `paid` for current/future months (past months carry
-              // no minimum floor), so closed months never grow a phantom
-              // "(planned)" row next to what was actually paid.
-              if (amount > paid) {
-                entries.push({
-                  id: `debt-min-topup-${debt.id}`,
-                  amount: amount - paid,
-                  description: `${debt.name} minimum (planned)`,
-                  date: selectedMonthDate.toISOString(),
-                });
-              }
-            } else {
-              entries.push({
-                id: `auto-debt-${debt.id}`,
-                amount,
-                description: `${debt.name} minimum payment (planned)`,
-                date: selectedMonthDate.toISOString(),
-              });
-            }
-          }
-        }
-
-        return { category, spent, limit, ratio, entries };
-      })
-      .sort((a, b) => b.spent - a.spent);
-  }, [
-    customCategoryNames,
-    debtPaymentPlanForMonth,
-    expensesByCategory,
-    limitByCategory,
-    monthlyEntries,
-    recordedDebtPaymentsForMonth,
-    selectedMonthDate,
-  ]);
-
-  const chartData = useMemo(
+  const expenseRows = useMemo<ExpenseCategoryRow[]>(
     () =>
-      expenseRows
-        .filter((row) => row.spent > 0)
-        .map((row) => ({ category: row.category, amount: row.spent })),
-    [expenseRows]
+      buildExpenseCategoryRows({
+        monthlyEntries,
+        customCategoryNames,
+        spendingByCategory,
+        limitByCategory,
+        businessOnly,
+        debtPaymentPlanForMonth,
+        recordedDebtPaymentsForMonth,
+        selectedMonthDate,
+        entriesById,
+      }),
+    [
+      businessOnly,
+      customCategoryNames,
+      debtPaymentPlanForMonth,
+      entriesById,
+      limitByCategory,
+      monthlyEntries,
+      recordedDebtPaymentsForMonth,
+      selectedMonthDate,
+      spendingByCategory,
+    ]
+  );
+
+  // Day-weighted pace for the viewed month (null unless it's the current
+  // one). Read once per month switch; a screen left open across midnight
+  // catches up on the next focus/reload like the rest of the tab.
+  const pacingClock = useMemo(
+    () => pacingClockFor(selectedMonthKey, new Date()),
+    [selectedMonthKey]
+  );
+  const paceAlerts = useMemo(
+    () => (businessOnly ? [] : buildPaceAlerts(expenseRows, pacingClock)),
+    [businessOnly, expenseRows, pacingClock]
   );
 
   const categoryChartColors = useMemo(() => {
@@ -733,53 +694,25 @@ const BudgetScreen: React.FC = () => {
     [categoryChartColors]
   );
 
-  const pieData = useMemo<DonutSlice[]>(
-    () =>
-      chartData.map((item) => ({
-        label: item.category,
-        value: item.amount,
-        color: colorForCategory(item.category),
-      })),
-    [colorForCategory, chartData]
-  );
+  /**
+   * Every entry mutation below goes through a storage-level
+   * read-modify-write (`addBudgetEntries`, `updateBudgetEntry`, ...) and
+   * then adopts the live array storage hands back - never
+   * `save*(stateArray)`. Partner sync and bank auto-approvals write
+   * entries while this tab is mounted; saving this screen's snapshot
+   * over them silently hard-deleted their records (and the partner never
+   * re-sent them). Same rule for linked-account balances:
+   * `adjustAssetAccountBalances` nets the deltas onto the stored accounts.
+   */
+  const applyAssetDeltas = useCallback(async (deltas: BalanceDelta[]) => {
+    if (deltas.length === 0) return;
+    setAssetAccounts(await adjustAssetAccountBalances(deltas));
+  }, []);
 
-  const spendingTotal = useMemo(
-    () => chartData.reduce((sum, item) => sum + item.amount, 0),
-    [chartData]
-  );
-
-  // Scale denominator for limit-less category bars (kept ≥1 to avoid /0).
-  const maxCategorySpent = useMemo(
-    () => Math.max(1, ...expenseRows.map((row) => row.spent)),
-    [expenseRows]
-  );
-
-  const adjustAssetAccounts = useCallback(
-    (
-      accounts: AssetAccount[],
-      deltas: Array<{ accountId: string; amount: number }>
-    ): AssetAccount[] => {
-      if (deltas.length === 0) return accounts;
-
-      const totalsById = new Map<string, number>();
-      deltas.forEach(({ accountId, amount }) => {
-        totalsById.set(accountId, (totalsById.get(accountId) ?? 0) + amount);
-      });
-
-      return accounts.map((account) => {
-        const delta = totalsById.get(account.id);
-        if (!delta) return account;
-        return {
-          ...account,
-          balance: account.balance + delta,
-          updatedAt: new Date().toISOString(),
-        };
-      });
-    },
-    []
-  );
-
-  const handleAddEntry = useCallback(async (inputs: NewBudgetEntryInput[]) => {
+  const handleAddEntry = useCallback(async (
+    inputs: NewBudgetEntryInput[],
+    options?: { keepOpen?: boolean }
+  ) => {
     if (inputs.length === 0) return;
 
     const now = new Date().toISOString();
@@ -792,39 +725,165 @@ const BudgetScreen: React.FC = () => {
       lastAppliedMonth: input.linkedAccountId ? monthKey : undefined,
     }));
 
-    const deltas = newEntries
+    const deltas: BalanceDelta[] = newEntries
       .filter((entry) => entry.linkedAccountId)
       .map((entry) => ({
         accountId: entry.linkedAccountId as string,
         amount: entry.amount,
       }));
 
-    const nextEntries = [...entries, ...newEntries];
-    const nextAssets =
-      deltas.length > 0 ? adjustAssetAccounts(assetAccounts, deltas) : assetAccounts;
-
+    // Entries first, then balances - same order the recurring-apply shell
+    // relies on, so a crash between the two can't double-credit.
+    const nextEntries = await addBudgetEntries(newEntries);
     setEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      setAssetAccounts(nextAssets);
-    }
-
-    await saveBudgetEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      await saveAssetAccounts(nextAssets);
-    }
+    await applyAssetDeltas(deltas);
     await Promise.all([
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(nextEntries),
     ]);
-    setShowAddModal(false);
+    // "Save & add another" keeps the sheet up for the next receipt.
+    if (!options?.keepOpen) {
+      setShowAddModal(false);
+      setQuickAddCategory(undefined);
+      setLogActualBill(undefined);
+    }
     triggerHaptic("success");
     void notifyAchievementCheck();
-  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
+    // A charge filed against its bill ("Log actual" or the picker) is a
+    // win; the sheet is closed by now, so the occasional note floats up.
+    const billed = newEntries.find((entry) => entry.fulfillsRecurringId);
+    if (billed) {
+      const nudge = await noteWin({
+        kind: "bill-paid",
+        label: billLabelIn(nextEntries, billed.fulfillsRecurringId),
+      });
+      if (nudge) showNudgeToast(nudge);
+    }
+  }, [applyAssetDeltas, noteWin, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast]);
+
+  /**
+   * Reload entries after Review Inbox approvals - they're written by
+   * reviewInboxService (entry -> ledger -> inbox order), not through this
+   * screen's local state, so re-read storage and refresh the derived views.
+   */
+  const reloadAfterInboxChange = useCallback(async () => {
+    const storedEntries = await getBudgetEntries();
+    setEntries(storedEntries);
+    await Promise.all([
+      refreshNetWorthSnapshots(),
+      refreshMonthlyReview(storedEntries),
+    ]);
+    void notifyAchievementCheck();
+  }, [notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots]);
+
+  // Profile's "Review Inbox" row navigates here with openInbox set. Deferred
+  // past the tab-switch transition: presenting a Modal mid-navigation is the
+  // iOS silent-present failure this codebase keeps hitting, and it also keeps
+  // the setState out of the effect's synchronous body.
+  useEffect(() => {
+    if (!route.params?.openInbox) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setShowReviewInbox(true);
+      navigation.setParams({ openInbox: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.openInbox]);
+
+  // The Quick Entry home-screen widget deep-links here with quickAdd set
+  // (via QuickAddLinkHost). Same deferral rationale as openInbox above.
+  useEffect(() => {
+    const quickAdd = route.params?.quickAdd;
+    if (!quickAdd) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setQuickAddCategory(quickAdd.category);
+      setShowAddModal(true);
+      navigation.setParams({ quickAdd: undefined });
+    });
+    return () => task.cancel();
+  }, [navigation, route.params?.quickAdd]);
+
+  // Once-per-calendar-month starting-balance nudge. Fires only when the tab
+  // is settled on the current month, the month has no recorded balance yet,
+  // and the prompt hasn't already fired this month (marker stamped when
+  // shown, so "Not now" never re-nags until next month). Deferred past
+  // interactions like every other modal here, and skipped entirely when a
+  // deep-link param is about to present a different modal - stacking two
+  // Modal presents in one transition is the iOS silent-present failure.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isLoaded) return;
+      if (
+        route.params?.quickAdd ||
+        route.params?.openInbox ||
+        route.params?.searchEntryId
+      ) {
+        return;
+      }
+      const currentKey = getMonthKey(new Date());
+      if (selectedMonthKey !== currentKey) return;
+      if (monthBalances[currentKey]) return;
+      let cancelled = false;
+      let task: ReturnType<typeof InteractionManager.runAfterInteractions> | null =
+        null;
+      getLastBalancePromptMonth().then((lastPrompted) => {
+        if (cancelled || lastPrompted === currentKey) return;
+        task = InteractionManager.runAfterInteractions(() => {
+          void setLastBalancePromptMonth(currentKey);
+          setBalanceModalIsPrompt(true);
+          setShowBalanceModal(true);
+        });
+      });
+      return () => {
+        cancelled = true;
+        task?.cancel();
+      };
+    }, [
+      isLoaded,
+      monthBalances,
+      selectedMonthKey,
+      route.params?.quickAdd,
+      route.params?.openInbox,
+      route.params?.searchEntryId,
+    ])
+  );
+
+  // A budget-entry result tap in another tab's search sheet navigates here
+  // with searchEntryId set - open that entry's edit sheet. Same deferral
+  // rationale as openInbox above. Waits for isLoaded so a first-ever visit
+  // to this tab doesn't drop the param before entries exist; a genuinely
+  // missing id (entry deleted meanwhile) just clears the param.
+  useEffect(() => {
+    const searchEntryId = route.params?.searchEntryId;
+    if (!searchEntryId || !isLoaded) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      const found = entries.find((entry) => entry.id === searchEntryId) ?? null;
+      if (found) setEditingEntry(found);
+      navigation.setParams({ searchEntryId: undefined });
+    });
+    return () => task.cancel();
+  }, [entries, isLoaded, navigation, route.params?.searchEntryId]);
+
+  /** Open the global search sheet, stamping its date-preset reference. */
+  const openSearch = useCallback(() => {
+    triggerHaptic("selection");
+    setSearchNow(new Date());
+    setShowSearch(true);
+  }, []);
 
   const handleEditEntry = useCallback((entryId: string) => {
     const found = entries.find((e) => e.id === entryId) ?? null;
     setEditingEntry(found);
   }, [entries]);
+
+  // "Log actual" on a projected bill row: open the add sheet prefilled as
+  // the real charge for that bill in the selected month. A direct user tap,
+  // not a navigation-triggered present, so no InteractionManager deferral.
+  const handleLogActual = useCallback((entryId: string) => {
+    const bill = entries.find((e) => e.id === entryId);
+    if (!bill) return;
+    setLogActualBill({ bill, yearMonth: selectedMonthKey });
+    setShowAddModal(true);
+  }, [entries, selectedMonthKey]);
 
   const handleSaveEntry = useCallback(async (updated: BudgetEntry) => {
     const original = entries.find((e) => e.id === updated.id);
@@ -833,7 +892,7 @@ const BudgetScreen: React.FC = () => {
       return;
     }
 
-    const deltas: Array<{ accountId: string; amount: number }> = [];
+    const deltas: BalanceDelta[] = [];
     if (original.linkedAccountId) {
       deltas.push({ accountId: original.linkedAccountId, amount: -original.amount });
     }
@@ -841,20 +900,11 @@ const BudgetScreen: React.FC = () => {
       deltas.push({ accountId: updated.linkedAccountId, amount: updated.amount });
     }
 
-    const nextEntries = entries.map((entry) => (entry.id === updated.id ? updated : entry));
-    const nextAssets = deltas.length > 0
-      ? adjustAssetAccounts(assetAccounts, deltas)
-      : assetAccounts;
-
+    // Whole-record patch: the edit sheet hands back the full entry, and
+    // `updateBudgetEntry` re-stamps updatedAt for LWW.
+    const nextEntries = await updateBudgetEntry(updated.id, updated);
     setEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      setAssetAccounts(nextAssets);
-    }
-
-    await saveBudgetEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      await saveAssetAccounts(nextAssets);
-    }
+    await applyAssetDeltas(deltas);
     await Promise.all([
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(nextEntries),
@@ -862,6 +912,15 @@ const BudgetScreen: React.FC = () => {
     setEditingEntry(null);
     triggerHaptic("success");
     void notifyAchievementCheck();
+    // Newly linking an existing expense to its bill is the same win as
+    // logging the actual; re-saving an already-linked one is not.
+    if (updated.fulfillsRecurringId && updated.fulfillsRecurringId !== original.fulfillsRecurringId) {
+      const nudge = await noteWin({
+        kind: "bill-paid",
+        label: billLabelIn(nextEntries, updated.fulfillsRecurringId),
+      });
+      if (nudge) showNudgeToast(nudge);
+    }
     // Inverse of the linked-account deltas this edit applied, so undo
     // also unwinds any asset-balance side effect.
     const inverseDeltas = deltas.map((d) => ({ ...d, amount: -d.amount }));
@@ -870,12 +929,7 @@ const BudgetScreen: React.FC = () => {
       onUndo: async () => {
         const reverted = await updateBudgetEntry(updated.id, original);
         setEntries(reverted);
-        if (inverseDeltas.length > 0) {
-          const fresh = await getAssetAccounts();
-          const adjusted = adjustAssetAccounts(fresh, inverseDeltas);
-          await saveAssetAccounts(adjusted);
-          setAssetAccounts(adjusted);
-        }
+        await applyAssetDeltas(inverseDeltas);
         await Promise.all([
           refreshNetWorthSnapshots(),
           refreshMonthlyReview(reverted),
@@ -883,22 +937,20 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
+  }, [applyAssetDeltas, entries, noteWin, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
-    const nextAssets = target?.linkedAccountId
-      ? adjustAssetAccounts(assetAccounts, [{ accountId: target.linkedAccountId, amount: -target.amount }])
-      : assetAccounts;
 
     // Soft-delete the entry so a paired partner removes its copy on next
     // sync. `deleteBudgetEntry` returns only live entries, which is what
     // the screen renders.
     const nextEntries = await deleteBudgetEntry(id);
     setEntries(nextEntries);
-    if (nextAssets !== assetAccounts) {
-      setAssetAccounts(nextAssets);
-      await saveAssetAccounts(nextAssets);
+    if (target?.linkedAccountId) {
+      await applyAssetDeltas([
+        { accountId: target.linkedAccountId, amount: -target.amount },
+      ]);
     }
     await Promise.all([
       refreshNetWorthSnapshots(),
@@ -916,12 +968,9 @@ const BudgetScreen: React.FC = () => {
         // The delete pulled `target.amount` out of its linked asset;
         // putting the entry back must add it again.
         if (target?.linkedAccountId) {
-          const fresh = await getAssetAccounts();
-          const adjusted = adjustAssetAccounts(fresh, [
+          await applyAssetDeltas([
             { accountId: target.linkedAccountId, amount: target.amount },
           ]);
-          await saveAssetAccounts(adjusted);
-          setAssetAccounts(adjusted);
         }
         await Promise.all([
           refreshNetWorthSnapshots(),
@@ -930,25 +979,9 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [adjustAssetAccounts, assetAccounts, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
+  }, [applyAssetDeltas, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
 
   /* ─── Bulk multi-select ─── */
-
-  /**
-   * Synthetic Debt Payments rows derived from the debt tracker rather than
-   * stored budget entries: logged payments (`payment-`), planned-minimum
-   * shortfalls (`debt-min-topup-`), and unpaid planned minimums
-   * (`auto-debt-`). None exist in budget storage, so edit/select/delete
-   * must exclude all three - `deleteBudgetEntries` would silently no-op on
-   * their ids while the toast claims success and the row re-derives.
-   */
-  const isAutoEntry = useCallback(
-    (id: string) =>
-      id.startsWith("auto-debt-") ||
-      id.startsWith("payment-") ||
-      id.startsWith("debt-min-topup-"),
-    []
-  );
 
   const exitSelection = useCallback(() => {
     setSelectionMode(false);
@@ -957,7 +990,7 @@ const BudgetScreen: React.FC = () => {
 
   const toggleSelectEntry = useCallback(
     (id: string) => {
-      if (isAutoEntry(id)) return;
+      if (isAutoEntryId(id)) return;
       setSelectedEntryIds((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
@@ -965,28 +998,35 @@ const BudgetScreen: React.FC = () => {
         return next;
       });
     },
-    [isAutoEntry]
+    []
   );
+
+  const toggleBusinessOnly = useCallback(() => {
+    setBusinessOnly((prev) => !prev);
+  }, []);
+
+  const openFoodSplitModal = useCallback(() => {
+    setShowFoodSplitModal(true);
+  }, []);
 
   const enterSelectionWith = useCallback(
     (id: string) => {
-      if (isAutoEntry(id)) return;
+      if (isAutoEntryId(id)) return;
       setSelectionMode(true);
       setSelectedEntryIds(new Set([id]));
     },
-    [isAutoEntry]
+    []
   );
 
-  // Same category set the Add/Edit pickers offer, plus the user's customs.
-  const bulkCategoryOptions = useMemo<CategoryName[]>(() => {
-    const expenseBuiltins = BUDGET_CATEGORIES.filter(
-      (c) => c !== "Freelance" && c !== "Debt Payments" && c !== "Food"
-    ) as CategoryName[];
-    return [...expenseBuiltins, ...customCategories.map((c) => c.name)];
-  }, [customCategories]);
+  // Same category set the Add/Edit pickers offer (visible built-ins, see
+  // utils/categoryVisibility), plus the user's customs.
+  const bulkCategoryOptions = useMemo<CategoryName[]>(
+    () => [...visibleBuiltIns, ...customCategories.map((c) => c.name)],
+    [customCategories, visibleBuiltIns]
+  );
 
   const handleBulkDelete = useCallback(async () => {
-    const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntry(id));
+    const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntryId(id));
     if (ids.length === 0) {
       exitSelection();
       return;
@@ -1000,12 +1040,7 @@ const BudgetScreen: React.FC = () => {
 
     const nextEntries = await deleteBudgetEntries(ids);
     setEntries(nextEntries);
-    if (deltas.length > 0) {
-      const fresh = await getAssetAccounts();
-      const adjusted = adjustAssetAccounts(fresh, deltas);
-      await saveAssetAccounts(adjusted);
-      setAssetAccounts(adjusted);
-    }
+    await applyAssetDeltas(deltas);
     await Promise.all([
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(nextEntries),
@@ -1018,12 +1053,7 @@ const BudgetScreen: React.FC = () => {
       onUndo: async () => {
         const restored = await restoreBudgetEntries(ids);
         setEntries(restored);
-        if (inverse.length > 0) {
-          const fresh = await getAssetAccounts();
-          const adjusted = adjustAssetAccounts(fresh, inverse);
-          await saveAssetAccounts(adjusted);
-          setAssetAccounts(adjusted);
-        }
+        await applyAssetDeltas(inverse);
         await Promise.all([
           refreshNetWorthSnapshots(),
           refreshMonthlyReview(restored),
@@ -1031,11 +1061,11 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [adjustAssetAccounts, entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
+  }, [applyAssetDeltas, entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
 
   const handleBulkRecategorize = useCallback(
     async (category: CategoryName) => {
-      const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntry(id));
+      const ids = Array.from(selectedEntryIds).filter((id) => !isAutoEntryId(id));
       if (ids.length === 0) {
         setShowBulkCategoryPicker(false);
         exitSelection();
@@ -1068,7 +1098,7 @@ const BudgetScreen: React.FC = () => {
         },
       });
     },
-    [entries, exitSelection, isAutoEntry, notifyAchievementCheck, pushUndo, refreshMonthlyReview, selectedEntryIds]
+    [entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, selectedEntryIds]
   );
 
   const foodEntriesToSplit = useMemo(
@@ -1076,42 +1106,26 @@ const BudgetScreen: React.FC = () => {
     [entries]
   );
 
-  const openFoodSplitModal = useCallback(() => {
-    const draft: Record<string, "Grocery" | "Restaurant"> = {};
-    foodEntriesToSplit.forEach((entry) => {
-      draft[entry.id] = inferFoodSplitCategory(entry);
-    });
-    setFoodSplitDraft(draft);
-    setShowFoodSplitModal(true);
-  }, [foodEntriesToSplit]);
-
-  const setFoodSplitForEntry = useCallback((entryId: string, category: "Grocery" | "Restaurant") => {
-    setFoodSplitDraft((current) => ({ ...current, [entryId]: category }));
-  }, []);
-
-  const applyFoodSplit = useCallback(async () => {
-    const nextEntries = entries.map((entry) => {
-      if (entry.type !== "expense" || entry.category !== "Food") return entry;
-      const mapped = foodSplitDraft[entry.id];
-      return mapped ? { ...entry, category: mapped } : entry;
-    });
-    setEntries(nextEntries);
-    await saveBudgetEntries(nextEntries);
-    await refreshMonthlyReview(nextEntries);
-    setShowFoodSplitModal(false);
-  }, [entries, foodSplitDraft, refreshMonthlyReview]);
-
-  const toggleCategory = useCallback((category: string) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) {
-        next.delete(category);
-      } else {
-        next.add(category);
+  const applyFoodSplit = useCallback(
+    async (draft: Record<string, FoodSplitCategory>) => {
+      // Only the entries the draft actually maps; `setBudgetEntryCategories`
+      // stamps updatedAt on those and leaves everything else (including
+      // records synced in behind this screen) untouched.
+      const categoryById: Record<string, FoodSplitCategory> = {};
+      for (const entry of entries) {
+        if (entry.type !== "expense" || entry.category !== "Food") continue;
+        const mapped = draft[entry.id];
+        if (mapped) categoryById[entry.id] = mapped;
       }
-      return next;
-    });
-  }, []);
+      if (Object.keys(categoryById).length > 0) {
+        const nextEntries = await setBudgetEntryCategories(categoryById);
+        setEntries(nextEntries);
+        await refreshMonthlyReview(nextEntries);
+      }
+      setShowFoodSplitModal(false);
+    },
+    [entries, refreshMonthlyReview]
+  );
 
   const openLimitModal = useCallback(
     (category: CategoryName) => {
@@ -1184,113 +1198,22 @@ const BudgetScreen: React.FC = () => {
     void notifyAchievementCheck();
   }, [entries, refreshMonthlyReview, reviewPreviewData, notifyAchievementCheck]);
 
-  const openAddAssetModal = useCallback(() => {
-    setEditingAsset(null);
-    setAssetName("");
-    setAssetBalance("");
-    setAssetCategory("savings");
-    setShowAssetModal(true);
-  }, []);
-
-  const openEditAssetModal = useCallback((account: AssetAccount) => {
-    setEditingAsset(account);
-    setAssetName(account.name);
-    setAssetBalance(String(account.balance));
-    setAssetCategory(account.category);
-    setShowAssetModal(true);
-  }, []);
-
-  const closeAssetModal = useCallback(() => {
-    setShowAssetModal(false);
-    setEditingAsset(null);
-  }, []);
-
-  const saveAsset = useCallback(async () => {
-    const parsedBalance = parseFloat(assetBalance);
-    if (!assetName.trim() || Number.isNaN(parsedBalance) || parsedBalance < 0) return;
-
-    const now = new Date().toISOString();
-    let nextAccounts: AssetAccount[];
-
-    if (editingAsset) {
-      nextAccounts = assetAccounts.map((account) =>
-        account.id === editingAsset.id
-          ? {
-              ...account,
-              name: assetName.trim(),
-              balance: parsedBalance,
-              category: assetCategory,
-              updatedAt: now,
-            }
-          : account
-      );
-    } else {
-      const newAccount: AssetAccount = {
-        id: generateUUID(),
-        name: assetName.trim(),
-        category: assetCategory,
-        balance: parsedBalance,
-        createdAt: now,
-        updatedAt: now,
-      };
-      nextAccounts = [...assetAccounts, newAccount];
-    }
-
-    setAssetAccounts(nextAccounts);
-    await saveAssetAccounts(nextAccounts);
-    await refreshNetWorthSnapshots();
-    closeAssetModal();
-    void notifyAchievementCheck();
-  }, [assetAccounts, assetBalance, assetCategory, assetName, closeAssetModal, editingAsset, notifyAchievementCheck, refreshNetWorthSnapshots]);
-
-  const deleteAsset = useCallback(async (id: string) => {
-    const prior = assetAccounts.find((a) => a.id === id) ?? null;
-    // Soft-delete so the partner's next sync removes this account locally.
-    const nextAccounts = await deleteAssetAccount(id);
-    setAssetAccounts(nextAccounts);
-    await refreshNetWorthSnapshots();
-    closeAssetModal();
-    pushUndo({
-      message: prior ? `Deleted "${prior.name}"` : "Deleted account",
-      onUndo: async () => {
-        const restored = await restoreAssetAccount(id);
-        setAssetAccounts(restored);
-        await refreshNetWorthSnapshots();
-      },
-    });
-  }, [assetAccounts, closeAssetModal, pushUndo, refreshNetWorthSnapshots]);
-
   const handleEfContribution = useCallback(async () => {
-    const parsed = parseFloat(efContribAmount);
-    if (Number.isNaN(parsed) || parsed === 0) return;
-
-    const now = new Date().toISOString();
-    const existing = savingsGoals.find((g) => g.category === "emergency_fund");
-
-    let updatedGoals: SavingsGoal[];
-
-    if (existing) {
-      const updatedGoal = {
-        ...existing,
-        currentAmount: Math.max(0, existing.currentAmount + parsed),
-        updatedAt: now,
-      };
-      updatedGoals = savingsGoals.map((g) =>
-        g.id === existing.id ? updatedGoal : g
-      );
-    } else {
-      // Create a real savings goal so the contribution persists
-      const newGoal: SavingsGoal = {
-        id: generateUUID(),
-        name: "Emergency Fund",
-        category: "emergency_fund",
-        targetAmount: keelTarget,
-        currentAmount: Math.max(0, parsed),
-        createdAt: now,
-        updatedAt: now,
-      };
-      updatedGoals = [...savingsGoals, newGoal];
+    // Linked mode (EF-designated savings accounts): the goal's stored amount
+    // is ignored, so a manual contribution would silently vanish - refuse it.
+    if (efSource.linked) {
+      setShowEfContribModal(false);
+      setEfContribAmount("");
+      return;
     }
+    // Shared pure update (utils/savingsGoals) - BridgeScreen runs the same
+    // logic; only the refresh side effects below differ per screen.
+    const updatedGoals = applyEmergencyFundContribution(
+      savingsGoals,
+      parseFloat(efContribAmount),
+      keelTarget
+    );
+    if (!updatedGoals) return;
 
     setSavingsGoals(updatedGoals);
     await saveSavingsGoals(updatedGoals);
@@ -1298,7 +1221,7 @@ const BudgetScreen: React.FC = () => {
     setShowEfContribModal(false);
     setEfContribAmount("");
     void notifyAchievementCheck();
-  }, [efContribAmount, keelTarget, notifyAchievementCheck, refreshNetWorthSnapshots, savingsGoals]);
+  }, [efContribAmount, efSource.linked, keelTarget, notifyAchievementCheck, refreshNetWorthSnapshots, savingsGoals]);
 
   const bucketOverrideDefault = bucketOverrideCategory
     ? getDefaultBucketForCategory(bucketOverrideCategory, customCategories) ??
@@ -1322,6 +1245,36 @@ const BudgetScreen: React.FC = () => {
         >
           <Text style={styles.calendarIconGlyph}>📅</Text>
         </TouchableOpacity>
+        {/* Search sits at the left edge, or beside the inbox icon when
+            bank connections put that in the corner. */}
+        <TouchableOpacity
+          style={[
+            styles.searchIconBtn,
+            (connections.length > 0 || pendingCount > 0) && styles.searchIconBtnShifted,
+          ]}
+          onPress={openSearch}
+          activeOpacity={0.7}
+          accessibilityLabel="Search debts, payments, and budget entries"
+        >
+          <Text style={styles.calendarIconGlyph}>🔍</Text>
+        </TouchableOpacity>
+        {connections.length > 0 || pendingCount > 0 ? (
+          <TouchableOpacity
+            style={styles.inboxIconBtn}
+            onPress={() => setShowReviewInbox(true)}
+            activeOpacity={0.7}
+            accessibilityLabel={`Review inbox, ${pendingCount} waiting`}
+          >
+            <Text style={styles.calendarIconGlyph}>📥</Text>
+            {pendingCount > 0 ? (
+              <View style={styles.inboxBadge}>
+                <Text style={styles.inboxBadgeText}>
+                  {pendingCount > 99 ? "99+" : pendingCount}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.monthPillRow}>
@@ -1335,6 +1288,7 @@ const BudgetScreen: React.FC = () => {
           }}
           disabled={selectedMonthIndex >= monthKeys.length - 1}
           accessibilityLabel="Previous month"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
         >
           <Text
             style={[
@@ -1346,7 +1300,7 @@ const BudgetScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.monthPillLabel}>{formatMonthLabel(selectedMonthKey)}</Text>
+        <Text style={styles.monthPillLabel}>{formatMonthKeyLabel(selectedMonthKey)}</Text>
 
         <TouchableOpacity
           style={styles.monthPillArrowBtn}
@@ -1357,6 +1311,7 @@ const BudgetScreen: React.FC = () => {
           }}
           disabled={selectedMonthIndex <= 0}
           accessibilityLabel="Next month"
+          hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
         >
           <Text
             style={[
@@ -1426,6 +1381,11 @@ const BudgetScreen: React.FC = () => {
                   {entry.description || entry.category}
                 </Text>
                 <View style={styles.incomeSummaryRight}>
+                  {entry.incomeType && (
+                    <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]}>
+                      {entry.incomeType === "w2" ? "W-2" : "1099"}
+                    </Text>
+                  )}
                   {entry.recurring && (
                     <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
                       {getRecurrenceTag(entry)}
@@ -1439,13 +1399,41 @@ const BudgetScreen: React.FC = () => {
             ))}
           </View>
         )}
+        {paycheckSummary.retirementContribution > 0 && (
+          <Text style={styles.autoDebtHint}>
+            Plus {formatCurrency(paycheckSummary.retirementContribution)} into your
+            401(k) this month (not counted as income)
+          </Text>
+        )}
+        {paycheckSummary.taxSetAside > 0 && (
+          <Text style={[styles.autoDebtHint, { color: colors.warning }]}>
+            Set aside {formatCurrency(paycheckSummary.taxSetAside)} of this
+            month's 1099 income for taxes
+          </Text>
+        )}
       </View>
+
+      <CashFlowCard
+        record={monthBalances[selectedMonthKey] ?? null}
+        monthlyIncome={monthlyIncome}
+        monthlyExpenses={monthlyExpenses}
+        reconciliationDelta={cashFlowReconciliationDelta}
+        isCurrentMonth={selectedMonthKey === getMonthKey(new Date())}
+        onSetBalance={() => {
+          setBalanceModalIsPrompt(false);
+          setShowBalanceModal(true);
+        }}
+      />
 
       <DueDateReminderBanner
         entries={entries}
         onOpen={() => setShowBillCalendar(true)}
         style={styles.reminderBanner}
       />
+
+      {/* One-time "want reminders?" offer for phones that never answered it
+          (self-retiring; see the component header). */}
+      <TrackingReminderOfferCard style={styles.reminderBanner} />
 
       <DebtDueReminderBanner
         debts={debts}
@@ -1456,194 +1444,41 @@ const BudgetScreen: React.FC = () => {
         style={styles.reminderBanner}
       />
 
-      {/* Spending card - donut chart + category rows in one card */}
-      <View ref={anchorBudgetSpending} collapsable={false} style={styles.spendingCard}>
-        <View style={styles.topHairline} />
-        <View style={styles.spendingHeaderRow}>
-          <Text style={styles.spendingTitle}>Spending</Text>
-          {foodEntriesToSplit.length > 0 ? (
-            <TouchableOpacity onPress={openFoodSplitModal}>
-              <Text style={[styles.spendingHint, { color: colors.accent }]}>Split Food ({foodEntriesToSplit.length})</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.spendingHint}>Tap row to expand · Hold for limit</Text>
-          )}
-        </View>
+      {pacingClock && paceAlerts.length > 0 && (
+        <SpendingPaceBanner
+          alerts={paceAlerts}
+          dayOfMonth={pacingClock.dayOfMonth}
+          onOpen={(category) =>
+            setPaceExpandRequest((prev) => ({
+              category,
+              nonce: (prev?.nonce ?? 0) + 1,
+            }))
+          }
+          style={styles.reminderBanner}
+        />
+      )}
 
-        {chartData.length > 0 ? (
-          <View style={styles.donutSection}>
-            <View style={[styles.donutWrap, { width: donutSize, height: donutSize }]}>
-              <DonutChart data={pieData} size={donutSize} strokeWidth={donutStroke} />
-              <View style={styles.donutCenter}>
-                <Text style={styles.donutLabel}>Total</Text>
-                <Text style={styles.donutTotal}>
-                  {formatCompactCurrency(monthlyExpenses)}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.legend}>
-              {pieData.slice(0, 6).map((slice) => {
-                const pct =
-                  spendingTotal > 0
-                    ? Math.round((slice.value / spendingTotal) * 100)
-                    : 0;
-                return (
-                  <View key={slice.label} style={styles.legendItem}>
-                    <View
-                      style={[styles.legendDot, { backgroundColor: slice.color }]}
-                    />
-                    <Text style={styles.legendName} numberOfLines={1}>
-                      {slice.label}
-                    </Text>
-                    <Text style={styles.legendPct}>{pct}%</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        ) : (
-          <View style={styles.spendingEmptyWrap}>
-            <Text style={styles.emptyCardTitle}>No expenses this month</Text>
-            <Text style={styles.emptyCardSubtext}>Add entries to see your spending chart.</Text>
-          </View>
-        )}
-
-        {expenseRows.map((item) => {
-          const ratio = item.ratio;
-          const hasWarning = ratio != null && ratio >= 0.8 && ratio < 1;
-          const isOver = ratio != null && ratio >= 1;
-          const dotColor = colorForCategory(item.category);
-          const isExpanded = expandedCategories.has(item.category);
-          // With a limit, the track represents the limit (100% = at limit).
-          // Without one, it scales against the biggest category this month so
-          // the bars stay comparable.
-          const fillPercent = item.limit
-            ? Math.min(ratio ?? 0, 1) * 100
-            : Math.min(1, item.spent / maxCategorySpent) * 100;
-          const fillColor = item.limit
-            ? isOver
-              ? colors.danger
-              : hasWarning
-                ? colors.warning
-                : dotColor
-            : dotColor;
-
-          return (
-            <View key={item.category}>
-              <TouchableOpacity
-                style={styles.spendRow}
-                activeOpacity={0.7}
-                onPress={() => toggleCategory(item.category)}
-                onLongPress={() => openLimitModal(item.category)}
-              >
-                <View style={[styles.spendDot, { backgroundColor: dotColor }]} />
-                <Text style={styles.spendName} numberOfLines={1}>
-                  {getCategoryIcon(item.category, customCategories)} {item.category}
-                </Text>
-                <View style={styles.spendBarTrack}>
-                  <View
-                    style={[
-                      styles.spendBarFill,
-                      { width: `${fillPercent}%`, backgroundColor: fillColor },
-                    ]}
-                  />
-                  {item.limit ? (
-                    <View style={styles.spendLimitMark} />
-                  ) : null}
-                </View>
-                <Text
-                  style={[
-                    styles.spendAmount,
-                    isOver ? { color: colors.danger } : null,
-                  ]}
-                >
-                  {formatCurrency(item.spent)}
-                </Text>
-                <Text style={styles.spendChevron}>{isExpanded ? "▾" : "›"}</Text>
-              </TouchableOpacity>
-
-              {isExpanded && item.entries.length > 0 && (
-                <View style={styles.expandedEntries}>
-                  <Text style={styles.expandedHeader}>
-                    Expanded - {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
-                  </Text>
-                  {item.entries.map((entry) => {
-                    const isLoggedPayment = entry.id.startsWith("payment-");
-                    const isAutoDebtRow = isAutoEntry(entry.id);
-                    const isSelected = selectedEntryIds.has(entry.id);
-                    const entryDate = new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-                    return (
-                      <TouchableOpacity
-                        key={entry.id}
-                        style={[
-                          styles.expandedEntryRow,
-                          isSelected && {
-                            backgroundColor: `${colors.accent}22`,
-                            borderRadius: 8,
-                          },
-                        ]}
-                        onPress={() => {
-                          if (isAutoDebtRow) {
-                            // Not a stored budget entry - point at the real
-                            // home instead of silently doing nothing.
-                            if (isLoggedPayment) {
-                              Alert.alert(
-                                "Logged debt payment",
-                                "This payment was logged on the Debts tab. To edit or delete it, open the debt's payment history there."
-                              );
-                            }
-                            return;
-                          }
-                          if (selectionMode) toggleSelectEntry(entry.id);
-                          else handleEditEntry(entry.id);
-                        }}
-                        onLongPress={() => {
-                          if (!isAutoDebtRow) enterSelectionWith(entry.id);
-                        }}
-                        delayLongPress={300}
-                        activeOpacity={isAutoDebtRow && !isLoggedPayment ? 1 : 0.6}
-                      >
-                        {selectionMode && !isAutoDebtRow && (
-                          <Text
-                            style={[
-                              styles.entryEditHint,
-                              {
-                                color: isSelected ? colors.accent : colors.textMuted,
-                                marginRight: 8,
-                                fontSize: 16,
-                              },
-                            ]}
-                          >
-                            {isSelected ? "☑" : "☐"}
-                          </Text>
-                        )}
-                        <View style={styles.expandedEntryLeft}>
-                          <Text style={styles.entryAmount}>{formatCurrency(entry.amount)}</Text>
-                          {entry.description ? (
-                            <Text style={styles.entryDesc} numberOfLines={1}> - {entry.description}</Text>
-                          ) : null}
-                        </View>
-                        <View style={styles.expandedEntryRight}>
-                          {entry.recurring && (
-                            <Text style={[styles.entryEditHint, { color: colors.accent }]}>
-                              {getRecurrenceTag(entry)}
-                            </Text>
-                          )}
-                          {isAutoDebtRow && !isLoggedPayment ? (
-                            <Text style={styles.entryEditHint}>Auto</Text>
-                          ) : (
-                            <Text style={styles.expandedEntryDate}>{entryDate}</Text>
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          );
-        })}
-      </View>
+      <SpendingCard
+        anchorRef={anchorBudgetSpending}
+        rows={expenseRows}
+        monthlyExpenses={monthlyExpenses}
+        hasBusinessSpending={hasBusinessSpending}
+        businessOnly={businessOnly}
+        onToggleBusinessOnly={toggleBusinessOnly}
+        colorForCategory={colorForCategory}
+        foodSplitCount={foodEntriesToSplit.length}
+        onSplitFood={openFoodSplitModal}
+        onLongPressCategory={openLimitModal}
+        onOpenLimits={() => setShowLimitsModal(true)}
+        selectionMode={selectionMode}
+        selectedEntryIds={selectedEntryIds}
+        onToggleSelect={toggleSelectEntry}
+        onEnterSelection={enterSelectionWith}
+        onEditEntry={handleEditEntry}
+        onLogActual={handleLogActual}
+        pacingClock={pacingClock}
+        expandCategoryRequest={paceExpandRequest}
+      />
 
       <BudgetBucketCard
         takeHomeIncome={monthlyIncome}
@@ -1883,28 +1718,100 @@ const BudgetScreen: React.FC = () => {
         </View>
       </Modal>
 
-      <AddBudgetEntryModal
+      <BudgetEntryModal
+        mode="add"
         visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => {
+          setShowAddModal(false);
+          setQuickAddCategory(undefined);
+          setLogActualBill(undefined);
+        }}
         onAdd={handleAddEntry}
+        initialCategory={quickAddCategory}
+        initialBill={logActualBill}
+        entries={entries}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
+        businesses={businesses}
+        people={people}
       />
 
-      <EditBudgetEntryModal
+      <BudgetEntryModal
+        mode="edit"
         entry={editingEntry}
         onClose={() => setEditingEntry(null)}
         onSave={handleSaveEntry}
         onDelete={handleDeleteEntry}
+        entries={entries}
         assetAccounts={assetAccounts}
         customCategories={customCategories}
+        businesses={businesses}
+        people={people}
       />
+
+      <ReviewInboxModal
+        visible={showReviewInbox}
+        onClose={() => setShowReviewInbox(false)}
+        customCategories={customCategories}
+        businesses={businesses}
+        people={people}
+        entries={entries}
+        onChanged={reloadAfterInboxChange}
+      />
+
+      {showBalanceModal && (
+        <MonthBalancePromptModal
+          monthKey={selectedMonthKey}
+          isPrompt={balanceModalIsPrompt}
+          existingBalance={monthBalances[selectedMonthKey]?.balance ?? null}
+          onSaved={(balances, accounts) => {
+            setMonthBalances(balances);
+            if (accounts) {
+              setAssetAccounts(accounts);
+              // The checking balance moved - recapture today's net-worth
+              // snapshot so the Bridge/history reflect it without waiting
+              // for the next focus.
+              void refreshNetWorthSnapshots();
+            }
+            setShowBalanceModal(false);
+          }}
+          onClose={() => setShowBalanceModal(false)}
+        />
+      )}
 
       <MonthlyReviewModal
         visible={showReviewModal}
         onClose={() => setShowReviewModal(false)}
         data={reviewData}
       />
+
+      {showSearch && searchNow !== null && (
+        <GlobalSearchModal
+          onClose={() => setShowSearch(false)}
+          debts={debts}
+          payments={payments}
+          entries={entries}
+          now={searchNow}
+          onSelectEntry={(entry) => {
+            // Wait for the search sheet's dismiss animation before
+            // presenting the edit sheet - iOS doesn't reliably handle
+            // dismiss-then-present in the same frame.
+            setShowSearch(false);
+            presentAfterDismiss(() => setEditingEntry(entry));
+          }}
+          onSelectDebt={() => {
+            // Debts live on the Debt Tracker tab; hop over after dismiss.
+            setShowSearch(false);
+            presentAfterDismiss(() => navigation.navigate("DebtTracker"));
+          }}
+          onSelectPayment={() => {
+            // DebtTrackerScreen consumes openHistory on focus (deferred
+            // there past the tab transition).
+            setShowSearch(false);
+            presentAfterDismiss(() => navigation.navigate("DebtTracker", { openHistory: true }));
+          }}
+        />
+      )}
 
       <BillCalendarModal
         visible={showBillCalendar}
@@ -1918,82 +1825,17 @@ const BudgetScreen: React.FC = () => {
           // Wait for the calendar Modal's close animation before presenting
           // the edit sheet - iOS doesn't reliably handle dismiss-then-present
           // in the same frame and one of the two ends up hidden.
-          setTimeout(() => setEditingEntry(entry), 250);
+          presentAfterDismiss(() => setEditingEntry(entry));
         }}
       />
 
-      <Modal
-        visible={showFoodSplitModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowFoodSplitModal(false)}
-      >
-        <View style={styles.limitOverlay}>
-          <View style={styles.limitModalCard}>
-            <Text style={styles.limitModalTitle}>Split Food Entries</Text>
-            <Text style={styles.limitModalSub}>Review each Food expense and assign Grocery or Restaurant.</Text>
-
-            <FlatList
-              data={foodEntriesToSplit}
-              keyExtractor={(item) => item.id}
-              style={styles.foodSplitList}
-              contentContainerStyle={styles.foodSplitListContent}
-              renderItem={({ item }) => {
-                const selected = foodSplitDraft[item.id] || "Grocery";
-                return (
-                  <View style={[styles.foodSplitRow, { borderColor: colors.cardBorder }]}> 
-                    <View style={styles.foodSplitInfo}>
-                      <Text style={styles.foodSplitAmount}>{formatCurrency(item.amount)}</Text>
-                      <Text style={styles.foodSplitDesc} numberOfLines={1}>
-                        {item.description || new Date(item.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                      </Text>
-                    </View>
-                    <View style={styles.foodSplitOptions}>
-                      {(["Grocery", "Restaurant"] as const).map((option) => {
-                        const isSelected = selected === option;
-                        return (
-                          <TouchableOpacity
-                            key={option}
-                            style={[
-                              styles.foodSplitOption,
-                              {
-                                borderColor: isSelected ? colors.accent : colors.cardBorder,
-                                backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
-                              },
-                            ]}
-                            onPress={() => setFoodSplitForEntry(item.id, option)}
-                          >
-                            <Text
-                              style={[
-                                styles.foodSplitOptionText,
-                                { color: isSelected ? colors.accent : colors.textDim },
-                              ]}
-                            >
-                              {option}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              }}
-            />
-
-            <View style={styles.limitActions}>
-              <TouchableOpacity
-                style={styles.limitCancelBtn}
-                onPress={() => setShowFoodSplitModal(false)}
-              >
-                <Text style={styles.limitCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.limitSaveBtn} onPress={applyFoodSplit}>
-                <Text style={styles.limitSaveText}>Apply Split</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {showFoodSplitModal ? (
+        <FoodSplitModal
+          entries={foodEntriesToSplit}
+          onClose={() => setShowFoodSplitModal(false)}
+          onApply={applyFoodSplit}
+        />
+      ) : null}
 
       <Modal
         visible={limitModalCategory != null}
@@ -2001,7 +1843,7 @@ const BudgetScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={closeLimitModal}
       >
-        <View style={styles.limitOverlay}>
+        <KeyboardAwareModalOverlay style={styles.limitOverlay}>
           <View style={styles.limitModalCard}>
             <Text style={styles.limitModalTitle}>Set Monthly Limit</Text>
             <Text style={styles.limitModalSub}>{limitModalCategory}</Text>
@@ -2026,89 +1868,20 @@ const BudgetScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
 
-      {/* Asset Account Add/Edit Modal */}
-      <Modal
-        visible={showAssetModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeAssetModal}
-      >
-        <View style={styles.limitOverlay}>
-          <View style={styles.limitModalCard}>
-            <Text style={styles.limitModalTitle}>
-              {editingAsset ? "Edit Account" : "Add Account"}
-            </Text>
-            <Text style={styles.limitModalSub}>
-              Track a balance that won't affect your monthly budget.
-            </Text>
-
-            <TextInput
-              style={styles.limitInput}
-              placeholder="Account name"
-              placeholderTextColor={colors.textMuted}
-              value={assetName}
-              onChangeText={setAssetName}
-            />
-
-            <TextInput
-              style={styles.limitInput}
-              placeholder="Balance"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="decimal-pad"
-              value={assetBalance}
-              onChangeText={setAssetBalance}
-            />
-
-            <View style={styles.assetCategoryRow}>
-              {ASSET_ACCOUNT_CATEGORIES.map((cat) => {
-                const isSelected = assetCategory === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.assetCategoryChip,
-                      {
-                        borderColor: isSelected ? colors.accent : colors.cardBorder,
-                        backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
-                      },
-                    ]}
-                    onPress={() => setAssetCategory(cat)}
-                  >
-                    <Text
-                      style={[
-                        styles.assetCategoryChipText,
-                        { color: isSelected ? colors.accent : colors.textDim },
-                      ]}
-                    >
-                      {ASSET_ACCOUNT_CATEGORY_LABELS[cat]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.limitActions}>
-              {editingAsset && (
-                <TouchableOpacity
-                  style={styles.limitCancelBtn}
-                  onPress={() => deleteAsset(editingAsset.id)}
-                >
-                  <Text style={[styles.limitCancelText, { color: colors.danger }]}>Delete</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.limitCancelBtn} onPress={closeAssetModal}>
-                <Text style={styles.limitCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.limitSaveBtn} onPress={saveAsset}>
-                <Text style={styles.limitSaveText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <BudgetLimitsModal
+        visible={showLimitsModal}
+        monthKey={selectedMonthKey}
+        entries={entries}
+        customCategories={customCategories}
+        onClose={() => setShowLimitsModal(false)}
+        onSaved={(next) => {
+          setLimits(next);
+          void refreshMonthlyReview(entries);
+        }}
+      />
 
       {/* Emergency Fund Contribution Modal */}
       <Modal
@@ -2117,13 +1890,18 @@ const BudgetScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowEfContribModal(false)}
       >
-        <View style={styles.limitOverlay}>
+        <KeyboardAwareModalOverlay style={styles.limitOverlay}>
           <View style={styles.limitModalCard}>
             <Text style={styles.limitModalTitle}>Emergency Fund</Text>
             <Text style={styles.limitModalSub}>
               Current balance: {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
               {emergencyFundGoal?.targetAmount
                 ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                : ""}
+              {efSource.linked
+                ? ` • tracked from ${efSource.accounts.length} designated savings ${
+                    efSource.accounts.length === 1 ? "account" : "accounts"
+                  }`
                 : ""}
             </Text>
 
@@ -2152,7 +1930,7 @@ const BudgetScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAwareModalOverlay>
       </Modal>
       {coachmark}
     </View>
@@ -2191,6 +1969,53 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       alignItems: "center",
       justifyContent: "center",
     },
+    inboxIconBtn: {
+      position: "absolute",
+      top: 50,
+      left: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    searchIconBtn: {
+      position: "absolute",
+      top: 50,
+      left: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    /** When the Review Inbox icon occupies the left corner. */
+    searchIconBtnShifted: {
+      left: 48,
+    },
+    inboxBadge: {
+      position: "absolute",
+      top: -6,
+      right: -6,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      paddingHorizontal: 4,
+      backgroundColor: colors.accent,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    inboxBadgeText: {
+      color: colors.white,
+      fontSize: 10,
+      fontWeight: "700",
+    },
     calendarIconGlyph: {
       fontSize: 20,
     },
@@ -2225,22 +2050,24 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      paddingVertical: 7,
-      paddingHorizontal: 12,
+      paddingVertical: 2,
+      paddingHorizontal: 6,
       borderRadius: 20,
       borderWidth: 1,
       borderColor: `${colors.accent}26`,
       backgroundColor: colors.card,
     },
+    /* Padding lives on the arrow buttons (not the pill) so the tap targets
+     * reach ~44pt with hitSlop while the pill stays visually the same size. */
     monthPillArrowBtn: {
-      paddingHorizontal: 4,
-      paddingVertical: 2,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
     },
     monthPillArrow: {
       color: colors.accent,
-      fontSize: scale(18),
+      fontSize: scale(20),
       fontWeight: "800",
-      lineHeight: scale(20),
+      lineHeight: scale(22),
     },
     monthPillArrowDisabled: {
       color: colors.textMuted,
@@ -2257,15 +2084,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       width: 1,
       marginVertical: 6,
       backgroundColor: colors.cardBorder,
-    },
-    topHairline: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 1,
-      backgroundColor: colors.accent,
-      opacity: 0.18,
     },
     summaryCard: {
       backgroundColor: colors.card,
@@ -2445,151 +2263,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: 11,
       color: colors.textMuted,
     },
-    spendingCard: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: tokens.radius,
-      padding: tokens.pad,
-      overflow: "hidden",
-    },
     reminderBanner: {
       marginBottom: tokens.gap,
-    },
-    spendingHeaderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 12,
-    },
-    spendingTitle: {
-      fontSize: scale(18),
-      fontWeight: "800",
-      color: colors.text,
-    },
-    donutSection: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
-      marginBottom: 8,
-      paddingBottom: 8,
-    },
-    donutWrap: {
-      width: 92,
-      height: 92,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    donutCenter: {
-      ...StyleSheet.absoluteFill,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    donutLabel: {
-      fontSize: scale(7),
-      fontWeight: "600",
-      letterSpacing: 1,
-      color: colors.textDim,
-      textTransform: "uppercase",
-    },
-    donutTotal: {
-      fontSize: scale(12),
-      fontWeight: "800",
-      color: colors.text,
-      fontVariant: ["tabular-nums"] as any,
-    },
-    legend: {
-      flex: 1,
-      gap: 5,
-    },
-    legendItem: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 7,
-    },
-    legendDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 2,
-    },
-    legendName: {
-      flex: 1,
-      fontSize: scale(11),
-      color: colors.textDim,
-    },
-    legendPct: {
-      fontSize: scale(10),
-      fontWeight: "600",
-      color: colors.textMuted,
-      fontVariant: ["tabular-nums"] as any,
-    },
-    spendRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 9,
-      paddingVertical: 9,
-      borderTopWidth: 1,
-      borderTopColor: colors.cardBorder,
-    },
-    spendDot: {
-      width: scale(9),
-      height: scale(9),
-      borderRadius: 2,
-    },
-    spendName: {
-      width: scale(98),
-      fontSize: scale(13),
-      fontWeight: "600",
-      color: colors.text,
-    },
-    spendBarTrack: {
-      flex: 1,
-      height: scale(8),
-      borderRadius: 4,
-      backgroundColor: `${colors.textMuted}33`,
-      overflow: "hidden",
-      justifyContent: "center",
-    },
-    spendBarFill: {
-      height: "100%",
-      borderRadius: 4,
-      minWidth: 2,
-    },
-    spendLimitMark: {
-      position: "absolute",
-      right: 0,
-      top: -2,
-      bottom: -2,
-      width: 2,
-      backgroundColor: colors.textDim,
-      opacity: 0.6,
-    },
-    spendAmount: {
-      minWidth: scale(58),
-      textAlign: "right",
-      fontSize: scale(12),
-      fontWeight: "700",
-      color: colors.textDim,
-      fontVariant: ["tabular-nums"] as any,
-    },
-    spendChevron: {
-      fontSize: scale(14),
-      color: colors.textMuted,
-      fontWeight: "600",
-      width: 12,
-      textAlign: "center",
-    },
-    spendingHint: {
-      fontSize: 11,
-      color: colors.textMuted,
     },
     spendingChartWrap: {
       alignItems: "center",
       marginBottom: 8,
-    },
-    spendingEmptyWrap: {
-      alignItems: "center",
-      paddingVertical: 16,
     },
     categoryRow: {
       flexDirection: "row",
@@ -2618,39 +2297,9 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     categoryProgressTrack: {
       height: 4,
       backgroundColor: colors.bg,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
       marginBottom: 4,
-    },
-    expandedEntries: {
-      backgroundColor: colors.bg,
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 8,
-      gap: 8,
-    },
-    expandedHeader: {
-      fontSize: 11,
-      color: colors.textMuted,
-      marginBottom: 2,
-    },
-    expandedEntryRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: 8,
-    },
-    expandedEntryLeft: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    expandedEntryRight: {
-      alignItems: "flex-end",
-    },
-    expandedEntryDate: {
-      fontSize: 11,
-      color: colors.textMuted,
     },
     emptyCard: {
       backgroundColor: colors.card,
@@ -2659,17 +2308,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: 16,
       padding: 20,
       alignItems: "center",
-    },
-    emptyCardTitle: {
-      fontSize: 15,
-      color: colors.text,
-      fontWeight: "600",
-      marginBottom: 4,
-    },
-    emptyCardSubtext: {
-      fontSize: 13,
-      color: colors.textDim,
-      textAlign: "center",
     },
     categoryDot: {
       width: 10,
@@ -2690,12 +2328,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     progressTrack: {
       height: 8,
       backgroundColor: colors.bg,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       overflow: "hidden",
     },
     progressFill: {
       height: "100%",
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       minWidth: 2,
     },
     emptyWrap: {
@@ -2715,7 +2353,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     limitOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: 20,
     },
@@ -2757,47 +2395,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       gap: 10,
       marginTop: 16,
     },
-    foodSplitList: {
-      maxHeight: 320,
-    },
-    foodSplitListContent: {
-      gap: 8,
-    },
-    foodSplitRow: {
-      borderWidth: 1,
-      borderRadius: 10,
-      padding: 10,
-      gap: 8,
-      backgroundColor: colors.bg,
-    },
-    foodSplitInfo: {
-      gap: 2,
-    },
-    foodSplitAmount: {
-      color: colors.text,
-      fontSize: 13,
-      fontWeight: "700",
-      fontVariant: ["tabular-nums"],
-    },
-    foodSplitDesc: {
-      color: colors.textDim,
-      fontSize: 12,
-    },
-    foodSplitOptions: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    foodSplitOption: {
-      flex: 1,
-      borderWidth: 1,
-      borderRadius: 8,
-      paddingVertical: 8,
-      alignItems: "center",
-    },
-    foodSplitOptionText: {
-      fontSize: 12,
-      fontWeight: "600",
-    },
     bucketAssignRow: {
       flexDirection: "row",
       gap: 8,
@@ -2806,7 +2403,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     bucketAssignChip: {
       flex: 1,
       borderWidth: 1,
-      borderRadius: 999,
+      borderRadius: tokens.radiusPill,
       paddingVertical: 10,
       alignItems: "center",
     },
@@ -2838,22 +2435,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       color: colors.white,
       fontSize: 14,
       fontWeight: "700",
-    },
-    entryAmount: {
-      color: colors.text,
-      fontSize: 13,
-      fontWeight: "600",
-      fontVariant: ["tabular-nums"],
-    },
-    entryDesc: {
-      flex: 1,
-      color: colors.textDim,
-      fontSize: 12,
-    },
-    entryEditHint: {
-      color: colors.accent,
-      fontSize: 10,
-      fontWeight: "600",
     },
 
     /* Accounts card */
@@ -2931,23 +2512,6 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontWeight: "700",
       fontVariant: ["tabular-nums"] as any,
     },
-    assetCategoryRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginBottom: 8,
-    },
-    assetCategoryChip: {
-      borderWidth: 1,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
-    },
-    assetCategoryChipText: {
-      fontSize: 12,
-      fontWeight: "600",
-    },
-
     /* FAB */
     fab: {
       position: "absolute",
@@ -3011,7 +2575,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     bulkPickerOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.7)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: 28,
     },

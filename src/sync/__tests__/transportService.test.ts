@@ -218,6 +218,20 @@ describe("protocol version gate", () => {
 });
 
 describe("age and replay protection", () => {
+  // These two cases straddle MAX_MESSAGE_AGE_MS (5 min) by only a 60s
+  // margin; on the real clock that's deterministic in practice but still a
+  // clock read outside the test's control. Pin the clock so both the
+  // message timestamp and transportService's own `Date.now()` check are
+  // computed from the same fixed instant.
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("drops a stale message", async () => {
     const { socket, received } = await newClient();
     socket.feed(validFrame({ timestamp: new Date(Date.now() - 6 * 60 * 1000).toISOString() }));
@@ -279,6 +293,31 @@ describe("frame buffering", () => {
     socket.feed(combined);
     expect(received.map((r) => JSON.parse(r.payload).i)).toEqual([1, 2]);
   });
+
+  it("reassembles a header split across chunks", async () => {
+    const { socket, received } = await newClient();
+    const f = validFrame({ payloadObj: { split: 2 } });
+    socket.feed(f.slice(0, 2)); // half the length prefix
+    socket.feed(f.slice(2, 5)); // rest of prefix + 1 body byte
+    socket.feed(f.slice(5));
+    expect(received).toHaveLength(1);
+    expect(JSON.parse(received[0].payload)).toEqual({ split: 2 });
+  });
+
+  it("destroys the socket on an oversize length prefix before buffering the body", async () => {
+    // The prefix is read pre-authentication, so an unauthenticated LAN peer
+    // claiming a 4 GB frame must be cut off at the framing layer instead of
+    // being buffered until OOM.
+    const { socket, received } = await newClient();
+    const destroy = jest.spyOn(socket, "destroy");
+    const evil = Buffer.alloc(4);
+    evil.writeUInt32BE(0xffffffff, 0);
+    socket.feed(evil);
+    expect(destroy).toHaveBeenCalled();
+    // Reader is dead: even a valid frame afterwards is ignored.
+    socket.feed(validFrame({ payloadObj: { late: true } }));
+    expect(received).toHaveLength(0);
+  });
 });
 
 describe("startServer", () => {
@@ -291,19 +330,61 @@ describe("startServer", () => {
 
     const sock = TcpSocket.__newSocket();
     srv._onConn(sock); // simulate a client connecting
+    // Resolution requires an AUTHENTICATED frame, not a bare connection.
+    sock.feed(validFrame({ nonce: "srv-1", payloadObj: { ok: 1 } }));
     const { connection, port } = await p;
     expect(port).toBe(54321);
 
     const received: string[] = [];
     connection.onMessage((_m, payload) => received.push(payload));
-    sock.feed(validFrame({ nonce: "srv-1", payloadObj: { ok: 1 } }));
+    // The authenticating frame arrived before onMessage could register; it
+    // is buffered and replayed so the SYNC_REQUEST/PAIR_OFFER isn't lost.
     expect(received).toHaveLength(1);
+    expect(JSON.parse(received[0])).toEqual({ ok: 1 });
+    // Later frames deliver live.
+    sock.feed(validFrame({ nonce: "srv-2", payloadObj: { ok: 2 } }));
+    expect(received).toHaveLength(2);
   });
 
-  it("rejects if the server is closed before a client connects", async () => {
+  it("does not let an unauthenticated first connection occupy the partner slot", async () => {
+    // Regression: the old design resolved on the FIRST socket to connect,
+    // so any LAN device connecting during the (up to 60s) pairing/sync
+    // window occupied the slot and the real partner's frames went nowhere.
+    const p = startServer("me", "partner", KEY);
+    const srv = TcpSocket.__servers[TcpSocket.__servers.length - 1];
+
+    const attacker = TcpSocket.__newSocket();
+    srv._onConn(attacker); // connects first, never authenticates
+    attacker.feed(rawFrame("garbage that fails validation"));
+
+    const partner = TcpSocket.__newSocket();
+    srv._onConn(partner);
+    partner.feed(validFrame({ nonce: "real-1", payloadObj: { real: true } }));
+
+    const { connection } = await p; // resolved by the authenticated socket
+    const received: string[] = [];
+    connection.onMessage((_m, payload) => received.push(payload));
+    expect(JSON.parse(received[0])).toEqual({ real: true });
+
+    // Replies go to the authenticated partner, not the first connector.
+    connection.send("SYNC_RESPONSE", { hello: true });
+    expect(partner.written).toHaveLength(1);
+    expect(attacker.written).toHaveLength(0);
+  });
+
+  it("rejects if the server is closed before a partner authenticates", async () => {
     const p = startServer("me", "partner", KEY);
     const srv = TcpSocket.__servers[TcpSocket.__servers.length - 1];
     srv.close(); // close-before-connect
+    await expect(p).rejects.toThrow(/closed before/);
+  });
+
+  it("rejects on cancel even when an unauthenticated client is attached", async () => {
+    const p = startServer("me", "partner", KEY);
+    const srv = TcpSocket.__servers[TcpSocket.__servers.length - 1];
+    const lurker = TcpSocket.__newSocket();
+    srv._onConn(lurker); // connected but never authenticated
+    srv.close(); // caller cancels (e.g. switching to client mode)
     await expect(p).rejects.toThrow(/closed before/);
   });
 });

@@ -1,7 +1,9 @@
 import { calculateNetWorthTotals } from "../netWorth";
 
-// ts-jest runs with isolatedModules (transpile-only), so light `as any` casts
-// keep these fixtures concise without dragging in the full record shapes.
+// `npm run typecheck` (tsc) covers this file even though ts-jest itself is
+// transpile-only, but these fixtures deliberately stay partial-shape (only
+// the fields calculateNetWorthTotals reads), so `as any` is the accurate
+// escape hatch rather than a shared full-record builder.
 const entry = (over: Record<string, unknown>): any => ({
   id: "e",
   type: "expense",
@@ -121,5 +123,32 @@ describe("calculateNetWorthTotals", () => {
       assetAccounts: [{ balance: 750 } as any],
     });
     expect(result.totalAssets).toBe(1000);
+  });
+
+  it("skips the emergency-fund goal when EF-designated accounts exist", () => {
+    const result = calculateNetWorthTotals({
+      entries: [],
+      debts: [],
+      savingsGoals: [
+        { category: "emergency_fund", currentAmount: 900 } as any,
+        { category: "travel", currentAmount: 40 } as any,
+      ],
+      assetAccounts: [
+        { category: "savings", balance: 1200, isEmergencyFund: true } as any,
+      ],
+    });
+    // EF money lives in the designated account balance; the goal's stored
+    // amount must not be added on top. Other goals still count.
+    expect(result.totalAssets).toBe(1240);
+  });
+
+  it("still counts the emergency-fund goal when no account is designated", () => {
+    const result = calculateNetWorthTotals({
+      entries: [],
+      debts: [],
+      savingsGoals: [{ category: "emergency_fund", currentAmount: 900 } as any],
+      assetAccounts: [{ category: "savings", balance: 1200 } as any],
+    });
+    expect(result.totalAssets).toBe(2100);
   });
 });

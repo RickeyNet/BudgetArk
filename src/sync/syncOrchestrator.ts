@@ -53,7 +53,7 @@ const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
 
     // Start TCP server - publish via Zeroconf as soon as the port is assigned
     // (before any client connects) so the partner can discover us.
-    const { connection, port } = await Transport.startServer(
+    const { connection } = await Transport.startServer(
       user.id,
       pairing.partnerId,
       pairing.sharedSecret,
@@ -106,8 +106,12 @@ const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
               if (ackMsg.type === "SYNC_ACK") {
                 clearTimeout(timeout);
 
+                // Persist the watermark captured before ourDiff's reads, not
+                // "now": records edited while the sync was in flight must
+                // stay newer than lastSyncTimestamp so the next diff re-sends
+                // them (see computeOutgoingDiff).
+                await updateSyncMetadata(ourDiff.syncTimestamp);
                 const now = new Date().toISOString();
-                await updateSyncMetadata(now);
                 // Full-history backlog (net worth, categories) has been
                 // delivered - future diffs can go back to incremental.
                 await markBackfillSyncDone();
@@ -195,8 +199,10 @@ const syncAsClient = async (
 
           clearTimeout(timeout);
 
+          // Same early-watermark rule as the server path (see
+          // computeOutgoingDiff): mid-sync edits must outlive the stamp.
+          await updateSyncMetadata(ourDiff.syncTimestamp);
           const now = new Date().toISOString();
-          await updateSyncMetadata(now);
           // Same backlog stamp as the server path.
           await markBackfillSyncDone();
 
@@ -308,8 +314,11 @@ const countDiffEntries = (diff: SyncDiff): number => {
     diff.budgetLimits.length +
     // Optional-chained like assetAccounts: these fields were added after
     // launch, so a diff built by an older peer may omit them entirely.
+    (diff.businesses?.length ?? 0) +
+    (diff.people?.length ?? 0) +
     (diff.customCategories?.length ?? 0) +
     Object.keys(diff.categoryBucketOverrides ?? {}).length +
+    Object.keys(diff.monthStartBalances ?? {}).length +
     (diff.netWorthSnapshots?.length ?? 0) +
     (diff.debtMilestonePlan ? 1 : 0) +
     (diff.payoffStrategy ? 1 : 0)

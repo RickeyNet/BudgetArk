@@ -1,4 +1,14 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+/**
+ * BudgetArk - Bridge Tab (net worth)
+ * File: src/screens/BridgeScreen.tsx
+ *
+ * The app's home tab: assets vs debts, net worth history, per-account
+ * rise/drop deltas, Live Holdings, and the emergency-fund summary. Asset
+ * accounts are edited here (add/update via atomic assetAccountStorage
+ * helpers); the debts themselves live on the DebtTracker tab.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -10,11 +20,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { generateUUID } from "../utils/uuid";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
+import TrackingStripCard from "../components/TrackingStripCard";
 import CashFlowChart, { type CashFlowPoint } from "../components/CashFlowChart";
 import Medal from "../components/Medal";
 import AchievementsScreen from "./AchievementsScreen";
@@ -26,7 +38,6 @@ import {
   AssetAccountCategory,
   ASSET_ACCOUNT_CATEGORIES,
   ASSET_ACCOUNT_CATEGORY_LABELS,
-  HOLDINGS_CATEGORIES,
   categorySupportsHoldings,
   categoryIsPureHoldings,
   CachedQuote,
@@ -34,18 +45,30 @@ import {
   Holding,
   HoldingsSettings,
   NetWorthSnapshot,
+  RootTabParamList,
   SavingsGoal,
   BudgetEntry,
 } from "../types";
-import { getBudgetEntries, saveBudgetEntries } from "../storage/budgetStorage";
+import PurchasePlanList, {
+  filterPurchasePlans,
+} from "../components/PurchasePlanList";
+import { getBudgetEntries } from "../storage/budgetStorage";
 import { getDebts } from "../storage/debtStorage";
+import CardKeepAliveBanner from "../components/CardKeepAliveBanner";
+import {
+  dismissCardKeepAliveForMonth,
+  getCardKeepAliveDismissals,
+  type CardKeepAliveDismissals,
+} from "../storage/cardKeepAliveDismissalStorage";
 import { getSavingsGoals, saveSavingsGoals } from "../storage/savingsGoalStorage";
 import { getDebtMilestonePlan } from "../storage/debtMilestoneStorage";
 import {
   getAssetAccounts,
-  saveAssetAccounts,
+  addAssetAccount,
+  updateAssetAccount,
   deleteAssetAccount,
 } from "../storage/assetAccountStorage";
+import { subscribeDataChanged } from "../storage/dataChangeNotifier";
 import {
   getHoldings,
   saveHoldings,
@@ -67,9 +90,26 @@ import {
   normalizeSymbol,
   accountHoldingsValue,
   isQuoteRefreshDue,
-  QUOTE_REFRESH_INTERVAL_MS,
 } from "../utils/holdingsMath";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
+import { getAccountValueHistory } from "../storage/accountValueSnapshotStorage";
+import {
+  ACCOUNT_CHANGE_PERIODS,
+  combineChanges,
+  type AccountChangePeriodKey,
+  type AccountValueHistory,
+  type CombinedChange,
+} from "../utils/accountValueHistory";
+import {
+  buildAccountBreakdown,
+  buildAccountChanges,
+  buildAccountDonutSlices,
+  buildHoldingsCategoryData,
+  buildTrailingCashFlow,
+  computeTrackedAccountsTotal,
+  formatNextQuoteRefresh,
+  hasAnyAccountChange,
+} from "../utils/bridgeMath";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
@@ -78,8 +118,13 @@ import { useTabCoachmark } from "../onboarding/useTabCoachmark";
 import { useCoachmarkAnchor } from "../onboarding/CoachmarkAnchorContext";
 import type { ThemeColors } from "../theme/themes";
 import { calculateNetWorthTotals } from "../utils/netWorth";
-import { applyMissedRecurringLinkedAccountContributions } from "../utils/linkedAccountRecurring";
-import { isEntryActiveInMonth } from "../utils/recurrence";
+import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
+import { applyEmergencyFundContribution } from "../utils/savingsGoals";
+import {
+  getEmergencyFundSource,
+  resolveEmergencyFundGoal,
+  sumSavingsReserve,
+} from "../utils/emergencyFund";
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import {
@@ -133,6 +178,7 @@ const BridgeScreen: React.FC = () => {
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency, preference, rates } = useCurrency();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const coachmark = useTabCoachmark("Bridge");
   const listRef = useRef<FlatList>(null);
   const anchorBridgeAccounts = useCoachmarkAnchor("bridge-accounts-card", { scrollRef: listRef });
@@ -150,6 +196,12 @@ const BridgeScreen: React.FC = () => {
     disclosureAcknowledged: false,
   });
   const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
+  const [accountValueHistory, setAccountValueHistory] = useState<AccountValueHistory>({});
+  const [keepAliveDismissals, setKeepAliveDismissals] =
+    useState<CardKeepAliveDismissals>({});
+  // Window the rise/drop deltas compare against. 30D matches the net-worth
+  // history card's default range.
+  const [changePeriod, setChangePeriod] = useState<AccountChangePeriodKey>("30D");
   const [keelTarget, setKeelTarget] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -171,6 +223,10 @@ const BridgeScreen: React.FC = () => {
   const [assetName, setAssetName] = useState("");
   const [assetBalance, setAssetBalance] = useState("");
   const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("checking");
+  // "This savings account is (part of) my emergency fund" toggle in the
+  // account editor. Only meaningful for the savings category - saveAsset
+  // drops it when the account is saved under any other category.
+  const [assetIsEmergencyFund, setAssetIsEmergencyFund] = useState(false);
   // Editable ticker rows shown in the modal when the account is an Investment
   // (broker). Holds the broker's holdings while editing; reconciled on save.
   const [brokerTickers, setBrokerTickers] = useState<TickerDraft[]>([]);
@@ -195,6 +251,9 @@ const BridgeScreen: React.FC = () => {
   const refreshNetWorthSnapshots = useCallback(async () => {
     const nextSnapshots = await syncNetWorthSnapshot();
     setNetWorthSnapshots(nextSnapshots);
+    // The sync above also just recorded today's per-account values; reload
+    // the history so the rise/drop deltas include this capture.
+    setAccountValueHistory(await getAccountValueHistory());
     return nextSnapshots;
   }, []);
 
@@ -247,7 +306,9 @@ const BridgeScreen: React.FC = () => {
         createdAt: now,
         updatedAt: now,
       };
-      await saveAssetAccounts([...accounts, broker]);
+      // Storage-level append: partner sync may have written accounts since
+      // `accounts` was read, and `saveAssetAccounts(snapshot)` would drop them.
+      await addAssetAccount(broker);
     }
     const brokerId = broker.id;
     const nextHoldings = holdings.map((h) =>
@@ -286,6 +347,15 @@ const BridgeScreen: React.FC = () => {
     }, [refreshAchievements])
   );
 
+  // Bumped when partner sync / bank sync / an import writes storage while
+  // this tab is mounted; a dep of the focus loader below so it re-runs and
+  // the screen shows the merged accounts/holdings instead of a stale snapshot.
+  const [reloadTick, setReloadTick] = useState(0);
+  useEffect(
+    () => subscribeDataChanged(() => setReloadTick((tick) => tick + 1)),
+    []
+  );
+
   useFocusEffect(
     useCallback(() => {
       // Cancellation flag - prevents a slower load from overwriting a newer
@@ -297,37 +367,37 @@ const BridgeScreen: React.FC = () => {
           // the freshly-created default broker + reassigned holdings are picked
           // up by this same pass. No-op after the first run.
           await migrateOrphanHoldings();
-          const [storedEntries, storedDebts, storedGoals, storedAssets, milestonePlan] =
-            await Promise.all([
-              getBudgetEntries(),
-              getDebts(),
-              getSavingsGoals(),
-              getAssetAccounts(),
-              getDebtMilestonePlan(),
-            ]);
+          const [
+            storedEntries,
+            storedDebts,
+            storedGoals,
+            storedAssets,
+            milestonePlan,
+            storedKeepAliveDismissals,
+          ] = await Promise.all([
+            getBudgetEntries(),
+            getDebts(),
+            getSavingsGoals(),
+            getAssetAccounts(),
+            getDebtMilestonePlan(),
+            getCardKeepAliveDismissals(),
+          ]);
           if (cancelled) return;
 
           const keelStep = milestonePlan.steps.find((step) => step.key === "keel");
-          const processed = applyMissedRecurringLinkedAccountContributions(
+          // Apply + persist missed recurring contributions via the shared
+          // shell - it owns the save-order invariant that prevents
+          // double-crediting (see linkedAccountRecurringApply.ts).
+          // BudgetScreen goes through the same shell.
+          const processed = await applyAndPersistMissedContributions(
             storedEntries,
             storedAssets
           );
-
-          if (processed.changed) {
-            // Sequence the two saves: commit the lastAppliedMonth marker on
-            // the entries first, *then* the asset balance. Reversing this
-            // (or running them concurrently) opens a race window where
-            // another reader (e.g. BudgetScreen on a quick tab switch) can
-            // see the new asset balance with the OLD lastAppliedMonth and
-            // re-apply the contribution - silently double-crediting the
-            // asset.
-            await saveBudgetEntries(processed.entries);
-            await saveAssetAccounts(processed.assetAccounts);
-          }
           if (cancelled) return;
 
           setEntries(processed.entries);
           setDebts(storedDebts);
+          setKeepAliveDismissals(storedKeepAliveDismissals);
           setSavingsGoals(storedGoals);
           setAssetAccounts(processed.assetAccounts);
           setKeelTarget(keelStep?.targetAmount ?? 1000);
@@ -347,6 +417,7 @@ const BridgeScreen: React.FC = () => {
           setHoldings([]);
           setQuotes({});
           setNetWorthSnapshots([]);
+          setAccountValueHistory({});
           setKeelTarget(0);
         }
         if (!cancelled) setIsLoaded(true);
@@ -356,39 +427,23 @@ const BridgeScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [loadHoldingsState, migrateOrphanHoldings, refreshNetWorthSnapshots])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
+    }, [loadHoldingsState, migrateOrphanHoldings, refreshNetWorthSnapshots, reloadTick])
   );
 
-  // Emergency-fund derived current amount. Only the "Savings" category
-  // counts toward the EF; Retirement and Investing aren't liquid emergency
-  // money and feed the Gather Animals milestone separately.
-  const savingsReserve = useMemo(
+  const savingsReserve = useMemo(() => sumSavingsReserve(entries), [entries]);
+
+  // Savings accounts designated as the emergency fund (Bridge account
+  // editor). When any exist the EF value is their combined balance and
+  // manual contributions are disabled. Goal resolution itself lives in
+  // utils/emergencyFund.resolveEmergencyFundGoal, shared with BudgetScreen.
+  const efSource = useMemo(() => getEmergencyFundSource(assetAccounts), [assetAccounts]);
+
+  const emergencyFundGoal = useMemo(
     () =>
-      entries
-        .filter(
-          (entry) =>
-            entry.type === "expense" && entry.category === "Savings"
-        )
-        .reduce((sum, entry) => sum + entry.amount, 0),
-    [entries]
+      resolveEmergencyFundGoal({ savingsGoals, assetAccounts, keelTarget, savingsReserve }),
+    [assetAccounts, savingsGoals, keelTarget, savingsReserve],
   );
-
-  const emergencyFundGoal = useMemo(() => {
-    const explicit = savingsGoals.find((goal) => goal.category === "emergency_fund");
-    if (explicit) return explicit;
-    if (keelTarget > 0 || savingsReserve > 0) {
-      return {
-        id: "__keel_ef__",
-        name: "Emergency Fund",
-        category: "emergency_fund" as const,
-        targetAmount: keelTarget,
-        currentAmount: savingsReserve,
-        createdAt: "",
-        updatedAt: "",
-      } satisfies SavingsGoal;
-    }
-    return null;
-  }, [keelTarget, savingsGoals, savingsReserve]);
 
   // Convert holdings (quoted in their own currency - USD for US listings, the
   // pair's quote side for crypto) into the user's display currency, so they
@@ -397,6 +452,55 @@ const BridgeScreen: React.FC = () => {
     () => ({ displayCurrency: preference.currencyCode, rates }),
     [preference.currencyCode, rates]
   );
+
+  /**
+   * Rise/drop per account over the selected window, keyed by account id:
+   * today's live value (cash + priced holdings, same math the rows display)
+   * against the recorded daily history. Null = nothing recorded before today
+   * yet. Category headers sum these via combineChanges.
+   */
+  const accountChanges = useMemo(
+    () =>
+      buildAccountChanges({
+        assetAccounts,
+        holdings,
+        quotes,
+        history: accountValueHistory,
+        periodKey: changePeriod,
+        now: new Date(),
+        holdingValueOpts,
+      }),
+    [assetAccounts, holdings, quotes, holdingValueOpts, accountValueHistory, changePeriod]
+  );
+
+  const hasAnyChangeData = useMemo(
+    () => hasAnyAccountChange(accountChanges),
+    [accountChanges]
+  );
+
+  /**
+   * One rise/drop line: "▲ +$120.50 (2.1%)" in success green, "▼ -$45.00
+   * (0.8%)" in danger red, a muted "±$0.00" when flat, nothing when there's
+   * no baseline yet.
+   */
+  const renderChange = (change: CombinedChange | null) => {
+    if (!change) return null;
+    const rising = change.amount >= 0.005;
+    const dropping = change.amount <= -0.005;
+    const color = rising ? colors.success : dropping ? colors.danger : colors.textMuted;
+    const arrow = rising ? "▲ +" : dropping ? "▼ -" : "±";
+    const pct =
+      change.percent != null && (rising || dropping)
+        ? ` (${Math.abs(change.percent).toFixed(1)}%)`
+        : "";
+    return (
+      <Text style={[styles.accountChangeText, { color }]}>
+        {arrow}
+        {formatCurrency(Math.abs(change.amount))}
+        {pct}
+      </Text>
+    );
+  };
 
   const netWorthTotals = useMemo(
     () =>
@@ -437,41 +541,36 @@ const BridgeScreen: React.FC = () => {
    * providers) and its section total. Pure-holdings categories total their
    * tickers only; HSA adds each account's cash balance to its holdings value.
    */
-  const holdingsCategoryData = useMemo(() => {
-    return HOLDINGS_CATEGORIES.map((category) => {
-      const accounts = assetAccounts.filter((a) => a.category === category);
-      // hasCash drives whether the cash balance is shown/editable (HSA only).
-      // The stored balance is always counted in totals regardless, so any
-      // legacy cash on a pure-holdings account stays consistent with net worth.
-      const hasCash = !categoryIsPureHoldings(category);
-      const total = accounts.reduce((sum, account) => {
-        const positions = accountHoldingsValue(account.id, holdings, quotes, holdingValueOpts);
-        return sum + positions + account.balance;
-      }, 0);
-      return { category, accounts, hasCash, total };
-    });
-  }, [assetAccounts, holdings, quotes, holdingValueOpts]);
+  const holdingsCategoryData = useMemo(
+    () => buildHoldingsCategoryData(assetAccounts, holdings, quotes, holdingValueOpts),
+    [assetAccounts, holdings, quotes, holdingValueOpts]
+  );
 
-  /** Whether a manual price refresh is allowed yet (daily window). */
-  const priceRefreshDue = isQuoteRefreshDue(quotesLastFetchedAt, Date.now());
+  /**
+   * Whether a manual price refresh is allowed yet (daily window). Reading the
+   * clock during render is deliberate - the gate only needs re-render-level
+   * freshness, and the comparison itself lives in pure holdingsMath.
+   */
+  const priceRefreshDue = isQuoteRefreshDue(
+    quotesLastFetchedAt,
+    new Date().getTime()
+  );
   /**
    * Whether anything is actually priceable. A portfolio of only manual-value
    * funds has no tickers to fetch, so the update button would be a no-op -
    * hide it rather than let it silently do nothing.
    */
   const hasFetchableSymbols = useMemo(() => collectSymbols(holdings).length > 0, [holdings]);
-  /** Human label for how long until the next refresh is allowed (interval-aware). */
-  const nextRefreshLabel = useMemo(() => {
-    if (!quotesLastFetchedAt) return "";
-    const last = new Date(quotesLastFetchedAt).getTime();
-    if (!Number.isFinite(last)) return "";
-    const msLeft = last + QUOTE_REFRESH_INTERVAL_MS - Date.now();
-    if (msLeft <= 0) return "";
-    const hours = Math.ceil(msLeft / (60 * 60 * 1000));
-    if (hours < 24) return `Next update in ${hours}h`;
-    const days = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
-    return `Next update in ${days}d`;
-  }, [quotesLastFetchedAt]);
+  /**
+   * Human label for how long until the next refresh is allowed
+   * (interval-aware). The clock is read inside the memo - deliberately NOT a
+   * dependency - so the countdown re-derives when the fetch timestamp moves
+   * rather than on every render.
+   */
+  const nextRefreshLabel = useMemo(
+    () => formatNextQuoteRefresh(quotesLastFetchedAt, new Date().getTime()),
+    [quotesLastFetchedAt]
+  );
 
   /** Most recent price timestamp across cached quotes, for the "as of" label. */
   const quotesAsOf = useMemo(() => {
@@ -489,9 +588,15 @@ const BridgeScreen: React.FC = () => {
   );
 
   // Investment accounts carry a 0 balance (value lives in their holdings), so
-  // add holdings value in explicitly to get the true tracked total.
-  const trackedAccountsTotal =
-    totalAssetBalance + holdingsValue + (emergencyFundGoal?.currentAmount ?? 0);
+  // add holdings value in explicitly to get the true tracked total. A linked
+  // emergency fund is already inside totalAssetBalance (it IS designated
+  // accounts) - only a goal-tracked EF is added on top.
+  const trackedAccountsTotal = computeTrackedAccountsTotal({
+    totalAssetBalance,
+    holdingsValue,
+    emergencyFundLinked: efSource.linked,
+    emergencyFundAmount: emergencyFundGoal?.currentAmount,
+  });
 
   /**
    * Per-category color palette for the asset donut + category headers.
@@ -515,39 +620,20 @@ const BridgeScreen: React.FC = () => {
    * Iteration order follows ASSET_ACCOUNT_CATEGORIES so the UI stays stable
    * regardless of insertion order.
    */
-  const accountsByCategory = useMemo(() => {
-    // Holdings categories (Investment/Retirement/HSA) render in their own
-    // broker-style sections, so exclude them from the plain balance list.
-    return ASSET_ACCOUNT_CATEGORIES.filter((category) => !categorySupportsHoldings(category))
-      .map((category) => {
-        const accounts = assetAccounts.filter((a) => a.category === category);
-        const total = accounts.reduce((sum, a) => sum + a.balance, 0);
-        return { category, accounts, total };
-      })
-      .filter((group) => group.accounts.length > 0);
-  }, [assetAccounts]);
+  // Holdings categories (Investment/Retirement/HSA) render in their own
+  // broker-style sections, so they're excluded from the plain balance list.
+  const accountsByCategory = useMemo(
+    () => buildAccountBreakdown(assetAccounts),
+    [assetAccounts]
+  );
 
-  const accountDonutSlices = useMemo<DonutSlice[]>(() => {
-    const slices: DonutSlice[] = accountsByCategory
-      .filter((group) => group.total > 0)
-      .map((group) => ({
-        label: group.category,
-        value: group.total,
-        color: assetCategoryColors[group.category],
-      }));
-    // Each holdings category shows as one slice valued by its section total
-    // (tickers, plus cash for HSA).
-    for (const data of holdingsCategoryData) {
-      if (data.total > 0) {
-        slices.push({
-          label: data.category,
-          value: data.total,
-          color: assetCategoryColors[data.category],
-        });
-      }
-    }
-    return slices;
-  }, [accountsByCategory, assetCategoryColors, holdingsCategoryData]);
+  // Each holdings category shows as one slice valued by its section total
+  // (tickers, plus cash for HSA).
+  const accountDonutSlices = useMemo<DonutSlice[]>(
+    () =>
+      buildAccountDonutSlices(accountsByCategory, holdingsCategoryData, assetCategoryColors),
+    [accountsByCategory, assetCategoryColors, holdingsCategoryData]
+  );
 
   const toggleAccountCategory = useCallback((category: AssetAccountCategory) => {
     setCollapsedAccountCategories((prev) => {
@@ -561,27 +647,10 @@ const BridgeScreen: React.FC = () => {
   // Trailing 6 months of income vs expense, oldest → newest, for the cash
   // flow panel. Recurring entries are counted in every month from their
   // start onward (mirrors how the Budget screen rolls them forward).
-  const cashFlow = useMemo<CashFlowPoint[]>(() => {
-    const now = new Date();
-    const buckets: CashFlowPoint[] = [];
-    for (let offset = 5; offset >= 0; offset--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      let income = 0;
-      let expense = 0;
-      for (const entry of entries) {
-        if (!isEntryActiveInMonth(entry, monthKey)) continue;
-        if (entry.type === "income") income += entry.amount;
-        else expense += entry.amount;
-      }
-      buckets.push({
-        label: d.toLocaleDateString(undefined, { month: "short" }),
-        income,
-        expense,
-      });
-    }
-    return buckets;
-  }, [entries]);
+  const cashFlow = useMemo<CashFlowPoint[]>(
+    () => buildTrailingCashFlow(entries, new Date()),
+    [entries]
+  );
 
   const hasCashFlow = cashFlow.some((m) => m.income > 0 || m.expense > 0);
 
@@ -590,6 +659,7 @@ const BridgeScreen: React.FC = () => {
     setAssetName("");
     setAssetBalance("");
     setAssetCategory("savings");
+    setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
     setShowAssetModal(true);
   }, []);
@@ -604,6 +674,7 @@ const BridgeScreen: React.FC = () => {
     setAssetName("");
     setAssetBalance("");
     setAssetCategory(category);
+    setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
     setShowAssetModal(true);
   }, []);
@@ -614,6 +685,7 @@ const BridgeScreen: React.FC = () => {
       setAssetName(account.name);
       setAssetBalance(String(account.balance));
       setAssetCategory(account.category);
+      setAssetIsEmergencyFund(account.isEmergencyFund === true);
       // Preload this broker's tickers for inline editing (Investment only).
       setBrokerTickers(
         holdings
@@ -652,6 +724,7 @@ const BridgeScreen: React.FC = () => {
     setAssetName("");
     setAssetBalance("");
     setAssetCategory("savings");
+    setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
   }, []);
 
@@ -726,19 +799,33 @@ const BridgeScreen: React.FC = () => {
     const now = new Date().toISOString();
     const accountId = editingAsset ? editingAsset.id : generateUUID();
 
-    const nextAccounts: AssetAccount[] = editingAsset
-      ? assetAccounts.map((account) =>
-          account.id === editingAsset.id
-            ? { ...account, name, balance, category: assetCategory, updatedAt: now }
-            : account
-        )
-      : [
-          ...assetAccounts,
-          { id: accountId, name, balance, category: assetCategory, createdAt: now, updatedAt: now },
-        ];
+    // The emergency-fund designation only exists on savings accounts;
+    // `undefined` (not `false`) clears it so re-categorized accounts don't
+    // carry a stale flag through sync/export.
+    const isEmergencyFund =
+      assetCategory === "savings" && assetIsEmergencyFund ? true : undefined;
 
+    // Storage-level upsert (never `saveAssetAccounts(stateArray)`): a
+    // partner sync landing while this tab is mounted adds accounts this
+    // screen's state doesn't know about, and persisting the snapshot over
+    // them hard-deleted those accounts with no tombstone.
+    const nextAccounts: AssetAccount[] = editingAsset
+      ? await updateAssetAccount(editingAsset.id, {
+          name,
+          balance,
+          category: assetCategory,
+          isEmergencyFund,
+        })
+      : await addAssetAccount({
+          id: accountId,
+          name,
+          balance,
+          category: assetCategory,
+          isEmergencyFund,
+          createdAt: now,
+          updatedAt: now,
+        });
     setAssetAccounts(nextAccounts);
-    await saveAssetAccounts(nextAccounts);
 
     if (hasHoldings) {
       const parseCost = (raw: string): number | undefined => {
@@ -889,15 +976,16 @@ const BridgeScreen: React.FC = () => {
     await loadHoldingsState();
     void refreshAchievements();
   }, [
-    assetAccounts,
     assetBalance,
     assetCategory,
+    assetIsEmergencyFund,
     assetName,
     brokerTickers,
     closeAssetModal,
     editingAsset,
     holdings,
     loadHoldingsState,
+    quotes,
     refreshAchievements,
     refreshNetWorthSnapshots,
   ]);
@@ -1000,38 +1088,34 @@ const BridgeScreen: React.FC = () => {
     }
   }, [enableHoldings, holdingsSettings.disclosureAcknowledged]);
 
+  /**
+   * Purchase-plan mutations (contribute/delete) land in savings-goal
+   * storage inside PurchasePlanList; mirror the fresh array into state and
+   * refresh the same derived surfaces the EF contribution touches.
+   */
+  const handlePlanGoalsChanged = useCallback(
+    (goals: SavingsGoal[]) => {
+      setSavingsGoals(goals);
+      void refreshNetWorthSnapshots();
+      void refreshAchievements();
+    },
+    [refreshAchievements, refreshNetWorthSnapshots]
+  );
+
   const handleEfContribution = useCallback(async () => {
-    const parsed = parseFloat(efContribAmount);
-    if (Number.isNaN(parsed) || parsed === 0) return;
-
-    const now = new Date().toISOString();
-    const existing = savingsGoals.find((goal) => goal.category === "emergency_fund");
-
-    let updatedGoals: SavingsGoal[];
-
-    if (existing) {
-      const updatedGoal = {
-        ...existing,
-        currentAmount: Math.max(0, existing.currentAmount + parsed),
-        updatedAt: now,
-      };
-      updatedGoals = savingsGoals.map((goal) =>
-        goal.id === existing.id ? updatedGoal : goal
-      );
-    } else {
-      updatedGoals = [
-        ...savingsGoals,
-        {
-          id: generateUUID(),
-          name: "Emergency Fund",
-          category: "emergency_fund",
-          targetAmount: keelTarget,
-          currentAmount: Math.max(0, parsed),
-          createdAt: now,
-          updatedAt: now,
-        },
-      ];
-    }
+    // Linked mode: the fund's value comes from the designated accounts, so a
+    // manual goal contribution would be invisible (and double-counted later
+    // if the accounts are ever un-designated). The entry point is disabled
+    // in that mode; this guard keeps the invariant even if it regresses.
+    if (efSource.linked) return;
+    // Shared pure update (utils/savingsGoals) - BudgetScreen runs the same
+    // logic; only the refresh side effects below differ per screen.
+    const updatedGoals = applyEmergencyFundContribution(
+      savingsGoals,
+      parseFloat(efContribAmount),
+      keelTarget
+    );
+    if (!updatedGoals) return;
 
     setSavingsGoals(updatedGoals);
     await saveSavingsGoals(updatedGoals);
@@ -1039,7 +1123,13 @@ const BridgeScreen: React.FC = () => {
     setShowEfContribModal(false);
     setEfContribAmount("");
     void refreshAchievements();
-  }, [efContribAmount, keelTarget, refreshAchievements, refreshNetWorthSnapshots, savingsGoals]);
+  }, [efContribAmount, efSource.linked, keelTarget, refreshAchievements, refreshNetWorthSnapshots, savingsGoals]);
+
+  /** "Later" on the keep-alive banner: mute that card for this month. */
+  const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
+    await dismissCardKeepAliveForMonth(debt.id);
+    setKeepAliveDismissals(await getCardKeepAliveDismissals());
+  }, []);
 
   const listHeader = (
     <View>
@@ -1048,6 +1138,28 @@ const BridgeScreen: React.FC = () => {
         <Text style={styles.screenTitle}>The Bridge</Text>
         <Text style={styles.screenSubtitle}>Net worth, accounts, and progress.</Text>
       </View>
+
+      {/* Card keep-alive warning also surfaces here (the initial tab) so an
+          approaching inactivity deadline can't hide behind an unvisited
+          Debts tab. Tapping it lands on DebtTracker, where the card lives. */}
+      <CardKeepAliveBanner
+        debts={debts}
+        dismissals={keepAliveDismissals}
+        onOpen={() => navigation.navigate("DebtTracker", { openKeepAlive: true })}
+        onDismiss={handleKeepAliveDismiss}
+        style={{ marginBottom: tokens.gap }}
+      />
+
+      {/* The budget's pulse on the home tab: month-to-date spend, days since
+          the last entry, the last three entries, and Add. Hands off to the
+          Budget tab's own modals via its route params. */}
+      <TrackingStripCard
+        entries={entries}
+        onAdd={() => navigation.navigate("Budget", { quickAdd: {} })}
+        onOpenEntry={(entryId) => navigation.navigate("Budget", { searchEntryId: entryId })}
+        onOpenBudget={() => navigation.navigate("Budget")}
+        style={{ marginBottom: tokens.gap }}
+      />
 
       <View ref={anchorBridgeHistory} collapsable={false}>
         <NetWorthHistoryCard
@@ -1097,15 +1209,64 @@ const BridgeScreen: React.FC = () => {
                   <Text style={[styles.accountsSummaryMeta, { color: colors.textMuted }]}>
                     across {assetAccounts.length}{" "}
                     {assetAccounts.length === 1 ? "account" : "accounts"}
-                    {emergencyFundGoal ? " + Emergency Fund" : ""}
+                    {/* A linked EF is already inside the account balances -
+                        only a goal-tracked EF is an extra line item. */}
+                    {emergencyFundGoal && !efSource.linked ? " + Emergency Fund" : ""}
                   </Text>
                 </View>
               </View>
             ) : null}
 
+            {assetAccounts.length > 0 ? (
+              <View style={styles.changePeriodRow}>
+                <Text style={[styles.changePeriodLabel, { color: colors.textMuted }]}>
+                  Change
+                </Text>
+                <View style={styles.changePeriodChips}>
+                  {ACCOUNT_CHANGE_PERIODS.map((option) => {
+                    const isSelected = changePeriod === option.key;
+                    return (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[
+                          styles.changePeriodChip,
+                          {
+                            borderColor: isSelected ? colors.accent : colors.cardBorder,
+                            backgroundColor: isSelected ? `${colors.accent}20` : colors.bg,
+                          },
+                        ]}
+                        onPress={() => setChangePeriod(option.key)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show ${option.label} change`}
+                      >
+                        <Text
+                          style={[
+                            styles.changePeriodChipText,
+                            { color: isSelected ? colors.accent : colors.textDim },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+            {assetAccounts.length > 0 && !hasAnyChangeData ? (
+              <Text style={[styles.changeTrackingHint, { color: colors.textMuted }]}>
+                Tracking starts today - rise/drop appears after the next visit.
+              </Text>
+            ) : null}
+
             {emergencyFundGoal ? (
               <TouchableOpacity
                 style={styles.accountRow}
+                // Linked mode: the value comes from the designated savings
+                // accounts (edit those instead), so manual contributions are
+                // disabled rather than silently ignored.
+                disabled={efSource.linked}
                 onPress={() => {
                   setEfContribAmount("");
                   setShowEfContribModal(true);
@@ -1118,9 +1279,17 @@ const BridgeScreen: React.FC = () => {
                 <View style={styles.accountRowLeft}>
                   <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
                   <Text style={styles.accountCategory}>
-                    {emergencyFundGoal.targetAmount > 0
-                      ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
-                      : "Savings Goal"}
+                    {efSource.linked
+                      ? `From ${efSource.accounts.length} savings ${
+                          efSource.accounts.length === 1 ? "account" : "accounts"
+                        }${
+                          emergencyFundGoal.targetAmount > 0
+                            ? ` • ${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                            : ""
+                        }`
+                      : emergencyFundGoal.targetAmount > 0
+                        ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                        : "Savings Goal"}
                   </Text>
                 </View>
                 <Text style={[styles.accountBalance, { color: colors.teal }]}>
@@ -1146,9 +1315,16 @@ const BridgeScreen: React.FC = () => {
                     <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
                       {iconForCategory(group.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[group.category]}
                     </Text>
-                    <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
-                      {formatCurrency(group.total)}
-                    </Text>
+                    <View style={styles.accountRowRight}>
+                      <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
+                        {formatCurrency(group.total)}
+                      </Text>
+                      {renderChange(
+                        combineChanges(
+                          group.accounts.map((a) => accountChanges.get(a.id) ?? null)
+                        )
+                      )}
+                    </View>
                   </TouchableOpacity>
 
                   {!isCollapsed
@@ -1160,11 +1336,17 @@ const BridgeScreen: React.FC = () => {
                           activeOpacity={0.7}
                         >
                           <View style={styles.accountRowLeft}>
-                            <Text style={styles.accountName} numberOfLines={1}>{account.name}</Text>
+                            <Text style={styles.accountName} numberOfLines={1}>
+                              {account.isEmergencyFund ? "🛡️ " : ""}
+                              {account.name}
+                            </Text>
                           </View>
-                          <Text style={[styles.accountBalance, { color: colors.success }]}>
-                            {formatCurrency(account.balance)}
-                          </Text>
+                          <View style={styles.accountRowRight}>
+                            <Text style={[styles.accountBalance, { color: colors.success }]}>
+                              {formatCurrency(account.balance)}
+                            </Text>
+                            {renderChange(accountChanges.get(account.id) ?? null)}
+                          </View>
                         </TouchableOpacity>
                       ))
                     : null}
@@ -1212,9 +1394,16 @@ const BridgeScreen: React.FC = () => {
                     <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
                       {iconForCategory(section.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[section.category]}
                     </Text>
-                    <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
-                      {formatCurrency(section.total)}
-                    </Text>
+                    <View style={styles.accountRowRight}>
+                      <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
+                        {formatCurrency(section.total)}
+                      </Text>
+                      {renderChange(
+                        combineChanges(
+                          section.accounts.map((a) => accountChanges.get(a.id) ?? null)
+                        )
+                      )}
+                    </View>
                   </TouchableOpacity>
 
                   {!isCollapsed ? (
@@ -1241,9 +1430,12 @@ const BridgeScreen: React.FC = () => {
                                 </Text>
                                 <Text style={styles.accountName} numberOfLines={1}>{broker.name}</Text>
                               </TouchableOpacity>
-                              <Text style={[styles.accountBalance, { color: colors.success }]}>
-                                {formatCurrency(brokerTotal)}
-                              </Text>
+                              <View style={styles.accountRowRight}>
+                                <Text style={[styles.accountBalance, { color: colors.success }]}>
+                                  {formatCurrency(brokerTotal)}
+                                </Text>
+                                {renderChange(accountChanges.get(broker.id) ?? null)}
+                              </View>
                               <TouchableOpacity
                                 onPress={() => openEditAssetModal(broker)}
                                 accessibilityRole="button"
@@ -1370,6 +1562,36 @@ const BridgeScreen: React.FC = () => {
             ) : null}
           </>
         )}
+      </View>
+
+      {/* ── Purchase Plans (sinking funds) ──
+          Always rendered so plans have a constant tracking home on the
+          initial tab; the Charts tool is the planning wizard, this card is
+          where progress lives day to day. */}
+      <View style={styles.accountsCard}>
+        <View style={styles.topHairline} />
+        <View style={styles.accountsHeaderRow}>
+          <Text style={styles.accountsTitle}>Purchase Plans</Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Utilities")}
+            accessibilityRole="button"
+            accessibilityLabel="Plan a new purchase on the Charts tab"
+          >
+            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Plan</Text>
+          </TouchableOpacity>
+        </View>
+        {filterPurchasePlans(savingsGoals).length > 0 ? (
+          <Text style={styles.accountsEmpty}>
+            Tap a plan to add the money you&apos;ve set aside.
+          </Text>
+        ) : null}
+        <PurchasePlanList
+          savingsGoals={savingsGoals}
+          onGoalsChanged={handlePlanGoalsChanged}
+          emptyText={
+            "Saving up for something? Tap + Plan to build a sinking fund on the Charts tab - it'll be tracked here and count toward your net worth."
+          }
+        />
       </View>
 
       <TouchableOpacity
@@ -1510,6 +1732,39 @@ const BridgeScreen: React.FC = () => {
                 );
               })}
             </View>
+
+            {assetCategory === "savings" ? (
+              <TouchableOpacity
+                style={styles.efToggleRow}
+                onPress={() => setAssetIsEmergencyFund((prev) => !prev)}
+                activeOpacity={0.7}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: assetIsEmergencyFund }}
+                accessibilityLabel="This account is my emergency fund"
+              >
+                <View
+                  style={[
+                    styles.efToggle,
+                    assetIsEmergencyFund && {
+                      backgroundColor: colors.accent,
+                      borderColor: colors.accent,
+                    },
+                  ]}
+                >
+                  {assetIsEmergencyFund ? (
+                    <Text style={styles.efToggleCheck}>✓</Text>
+                  ) : null}
+                </View>
+                <View style={styles.efToggleTextWrap}>
+                  <Text style={styles.efToggleLabel}>🛡️ Emergency fund</Text>
+                  <Text style={styles.efToggleHint}>
+                    Count this balance as your Emergency Fund. With accounts
+                    designated, the fund tracks their combined balance (bank
+                    syncing keeps it current) instead of manual contributions.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
 
             {categorySupportsHoldings(assetCategory) ? (
               <View style={styles.tickerEditor}>
@@ -1897,6 +2152,46 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
+    // Right-aligned value + rise/drop stack used by category headers,
+    // account rows, and broker rows.
+    accountRowRight: {
+      alignItems: "flex-end",
+    },
+    accountChangeText: {
+      fontSize: scale(10),
+      fontWeight: "600",
+      fontVariant: ["tabular-nums"] as any,
+      marginTop: 1,
+    },
+    changePeriodRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+      marginBottom: tokens.gapSm,
+    },
+    changePeriodLabel: {
+      fontSize: scale(11),
+      fontWeight: "600",
+    },
+    changePeriodChips: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    changePeriodChip: {
+      borderWidth: 1,
+      borderRadius: tokens.radiusPill,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    changePeriodChipText: {
+      fontSize: scale(11),
+      fontWeight: "700",
+    },
+    changeTrackingHint: {
+      fontSize: scale(11),
+      marginBottom: tokens.gapSm,
+    },
     categoryDot: {
       width: 8,
       height: 8,
@@ -2037,7 +2332,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      backgroundColor: colors.overlay,
       justifyContent: "center",
       paddingHorizontal: tokens.padLg,
     },
@@ -2119,6 +2414,41 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     assetCategoryChipText: {
       fontSize: scale(12),
       fontWeight: "600",
+    },
+    efToggleRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: tokens.gapSm + 2,
+      marginBottom: 8,
+    },
+    efToggle: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 1,
+    },
+    efToggleCheck: {
+      color: colors.white,
+      fontSize: scale(13),
+      fontWeight: "700",
+    },
+    efToggleTextWrap: {
+      flex: 1,
+    },
+    efToggleLabel: {
+      fontSize: scale(13),
+      fontWeight: "600",
+      color: colors.text,
+    },
+    efToggleHint: {
+      fontSize: scale(11),
+      color: colors.textMuted,
+      lineHeight: scale(15),
     },
     holdingsAsOf: {
       fontSize: scale(11),

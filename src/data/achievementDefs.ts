@@ -15,6 +15,7 @@ import type {
   Achievement,
   AchievementTier,
   AchievementStats,
+  AssetAccount,
   CategoryBudgetLimit,
   Debt,
   Payment,
@@ -24,7 +25,8 @@ import type {
   LearningProgress,
   NetWorthSnapshot,
 } from "../types";
-import { isEntryActiveInMonth } from "../utils/recurrence";
+import { entriesForMonth } from "../utils/billFulfillment";
+import { resolveEmergencyFundAmount } from "../utils/emergencyFund";
 import { CHAPTERS } from "./lessonChapters";
 import { hasLessonBody } from "./lessonIndex";
 
@@ -33,6 +35,12 @@ export interface AchievementContext {
   payments: Payment[];
   savingsGoals: SavingsGoal[];
   budgetEntries: BudgetEntry[];
+  /**
+   * Live asset accounts - lets EF badges honor savings accounts designated
+   * as the emergency fund (AssetAccount.isEmergencyFund) over the goal's
+   * stored amount.
+   */
+  assetAccounts: AssetAccount[];
   milestonePlan: DebtMilestonePlan;
   netWorthSnapshots: NetWorthSnapshot[];
   isPaired: boolean;
@@ -113,7 +121,7 @@ const consecutiveSavingsMonths = (ctx: AchievementContext): number => {
   // Walk backwards from this month while some Savings entry is active.
   while (count < 1200) {
     const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
-    if (!savingsEntries.some((entry) => isEntryActiveInMonth(entry, key))) break;
+    if (entriesForMonth(savingsEntries, key).length === 0) break;
     count += 1;
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
   }
@@ -140,10 +148,9 @@ const underBudgetMonths = (ctx: AchievementContext): string[] => {
     if (!limits || limits.length === 0) continue;
 
     const spend: Partial<Record<string, number>> = {};
-    for (const e of ctx.budgetEntries) {
+    for (const e of entriesForMonth(ctx.budgetEntries, monthKey)) {
       if (e.type !== "expense") continue;
       if (!Number.isFinite(e.amount) || e.amount <= 0) continue;
-      if (!isEntryActiveInMonth(e, monthKey)) continue;
       spend[e.category] = (spend[e.category] ?? 0) + e.amount;
     }
 
@@ -243,8 +250,10 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     hint: "Save $1,000 for emergencies.",
     revocable: true,
     check: (ctx) => {
-      const ef = ctx.savingsGoals.find((g) => g.category === "emergency_fund");
-      if (ef && ef.currentAmount >= 1000) return true;
+      // Designated EF savings accounts win over the goal's stored amount
+      // (matches Bridge/Budget/Charts resolution).
+      const efAmount = resolveEmergencyFundAmount(ctx.savingsGoals, ctx.assetAccounts);
+      if (efAmount >= 1000) return true;
       // Fall back to "Savings" expense entries (matches Bridge screen logic).
       const savings = ctx.budgetEntries
         .filter((e) => e.type === "expense" && e.category === "Savings")
@@ -252,8 +261,7 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
       return savings >= 1000;
     },
     progress: (ctx) => {
-      const ef = ctx.savingsGoals.find((g) => g.category === "emergency_fund");
-      const efAmount = ef?.currentAmount ?? 0;
+      const efAmount = resolveEmergencyFundAmount(ctx.savingsGoals, ctx.assetAccounts);
       const savings = ctx.budgetEntries
         .filter((e) => e.type === "expense" && e.category === "Savings")
         .reduce((s, e) => s + e.amount, 0);

@@ -55,7 +55,15 @@ const SHEETS: SheetSpec[] = [
       { name: "Description", required: false, notes: "Optional note. Up to 220 characters." },
       { name: "Recurring", required: false, notes: "yes / no / true / false / 1 / 0." },
       { name: "LinkedAccountId", required: false, notes: "Asset account UUID for savings entries." },
+      { name: "BusinessId", required: false, notes: "UUID from the Businesses sheet for business-tagged expenses. Round-trips." },
+      { name: "Business", required: false, notes: "Readable business name. Export-only - ignored on import." },
+      { name: "PersonId", required: false, notes: "UUID from the People sheet for expenses assigned to a person (the first of them when shared). Round-trips." },
+      { name: "PersonIds", required: false, notes: "Every person a shared expense is assigned to, as ;-separated UUIDs. Round-trips." },
+      { name: "Person", required: false, notes: "Readable person name(s). Export-only - ignored on import." },
+      { name: "Private", required: false, notes: "yes marks a private entry that never syncs to your partner. Round-trips." },
     ],
+    footer:
+      "Receipt photos never round-trip through spreadsheets - photo files stay on the device that took them.",
   },
   {
     title: "Budget Limits",
@@ -75,7 +83,7 @@ const SHEETS: SheetSpec[] = [
       { name: "Name", required: true, notes: "Up to 80 characters." },
       { name: "Balance", required: true, notes: "Current remaining balance, ≥ 0." },
       { name: "OriginalBalance", required: true, notes: "Starting balance, ≥ 0.01." },
-      { name: "Rate", required: true, notes: "APR as a percentage, 0–200." },
+      { name: "Rate", required: true, notes: "APR as a percentage, 0-200." },
       { name: "MinPayment", required: true, notes: "Minimum monthly payment, ≥ 0." },
       { name: "Owner", required: false, notes: "mine / partner / joint. Defaults to mine." },
       { name: "DebtClass", required: false, notes: "personal_credit / car / house. (Legacy car_house splits to house when the name mentions a mortgage, otherwise car.)" },
@@ -118,6 +126,29 @@ const SHEETS: SheetSpec[] = [
       { name: "Name", required: true, notes: "Up to 80 characters." },
       { name: "Category", required: true, notes: "savings / retirement / hsa / investment / other." },
       { name: "Balance", required: true, notes: "Number, ≥ 0." },
+      { name: "EmergencyFund", required: false, notes: "yes marks a savings account designated as your emergency fund. Round-trips." },
+      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+    ],
+  },
+  {
+    title: "Businesses",
+    xlsxOnly: true,
+    description:
+      "Businesses that expense entries can be tagged with (via BusinessId). Only live businesses are exported.",
+    columns: [
+      { name: "ID", required: false, notes: "Auto-generated if missing. Budget entries reference this via BusinessId." },
+      { name: "Name", required: true, notes: "Up to 40 characters." },
+      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+    ],
+  },
+  {
+    title: "People",
+    xlsxOnly: true,
+    description:
+      "People that spending can be assigned to (via PersonId). Only live people are exported.",
+    columns: [
+      { name: "ID", required: false, notes: "Auto-generated if missing. Budget entries reference this via PersonId." },
+      { name: "Name", required: true, notes: "Up to 40 characters." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
     ],
   },
@@ -253,7 +284,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     card: {

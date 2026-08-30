@@ -143,7 +143,7 @@ integrity, financial calculations, and partner sync. Sorted by user impact.
 - [x] **Hull payoff simulator gives different numbers on different screens**
   - **Priority:** P0
   - **Files:** `src/screens/DebtTrackerScreen.tsx:560-571`, `src/components/SmartPlanModal.tsx:274-289`, `src/components/PayoffPlannerModal.tsx:152-173`
-  - **What:** DebtTrackerScreen filters `debt.debtClass !== "house"` before feeding `simulatePayoffPlan`. The two modal-based simulators feed all balances including the mortgage. With a 30-year mortgage in the list, modal numbers can be 10–30× the card numbers for "the same Hull strategy."
+  - **What:** DebtTrackerScreen filters `debt.debtClass !== "house"` before feeding `simulatePayoffPlan`. The two modal-based simulators feed all balances including the mortgage. With a 30-year mortgage in the list, modal numbers can be 10-30× the card numbers for "the same Hull strategy."
   - **Impact:** Direct contradiction of the v1.4.13 design. Same data, two different numbers depending on which screen the user opens.
   - **Fix:** Add the same `debtClass !== "house"` filter to the modals' simulator inputs.
 

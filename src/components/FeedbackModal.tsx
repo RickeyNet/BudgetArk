@@ -8,7 +8,7 @@
  * Also offers a link to GitHub Issues for public tracking.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Modal,
   View,
@@ -18,7 +18,6 @@ import {
   StyleSheet,
   Platform,
   Linking,
-  KeyboardAvoidingView,
   ScrollView,
 } from "react-native";
 import { openComposer } from "react-native-email-link";
@@ -26,6 +25,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
+import { useValueChanged } from "../hooks/useValueChanged";
+import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
 interface FeedbackModalProps {
   visible: boolean;
@@ -46,12 +47,12 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    if (!visible) {
-      setFeedbackType("bug");
-      setMessage("");
-    }
-  }, [visible]);
+  // Reset the form when the sheet closes (render-time adjustment - see
+  // useValueChanged for why this beats a setState-in-effect).
+  if (useValueChanged(visible) && !visible) {
+    setFeedbackType("bug");
+    setMessage("");
+  }
 
   const deviceInfo = useMemo(() => {
     const lines = [
@@ -154,15 +155,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        // iOS uses the ScrollView's automaticallyAdjustKeyboardInsets, so KAV
-        // stays off. The RN Modal's Android window isn't auto-resized for the
-        // keyboard, so Android needs the KAV to lift the sheet - padding slides
-        // it up smoothly, while "height" re-lays-out the subtree each frame and
-        // glitches on dismiss.
-        behavior={Platform.OS === "android" ? "padding" : undefined}
-        style={styles.overlay}
-      >
+      <SheetKeyboardAvoider style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
             <ScrollView
@@ -266,7 +259,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoider>
     </Modal>
   );
 };
@@ -275,7 +268,7 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     backdrop: {

@@ -76,6 +76,7 @@ const isLightColor = (color: string): boolean => {
 const AMBIENT_BACKGROUND_THEMES = new Set<ThemePreset["id"]>([
   "deep_space",
   "deepforest",
+  "deep_sea",
 ]);
 
 const applySurfaceStyle = (
@@ -133,8 +134,13 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     await EncryptedStorage.setItem(THEME_KEY, id);
   }, []);
 
+  // Deep Space and Deep Sea default to Glass so their ambient scenes show
+  // through the cards; an explicit user choice always wins.
   const resolvedSurfaceStyleId: SurfaceStylePreset["id"] =
-    storedSurfaceStyleId ?? (themeId === "deep_space" ? "glass" : DEFAULT_SURFACE_STYLE_ID);
+    storedSurfaceStyleId ??
+    (themeId === "deep_space" || themeId === "deep_sea"
+      ? "glass"
+      : DEFAULT_SURFACE_STYLE_ID);
   const showAmbientBackground =
     backgroundEffectsEnabled && AMBIENT_BACKGROUND_THEMES.has(themeId);
   const baseColors = THEME_BY_ID[themeId]?.colors ?? THEME_BY_ID[DEFAULT_THEME_ID].colors;

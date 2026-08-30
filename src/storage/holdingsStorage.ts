@@ -20,6 +20,8 @@ import {
   tombstone,
   untombstone,
 } from "./tombstones";
+import { mutateCollectionInPlace, repairCollectionInPlace } from "./collectionRepair";
+import { ensureUpdatedAt } from "../utils/recordTimestamps";
 
 const STORAGE_KEY = "@budgetark_holdings";
 
@@ -37,11 +39,24 @@ export const getHoldingsIncludingDeleted = async (): Promise<Holding[]> => {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as Holding[];
-    const purged = purgeExpiredTombstones(parsed);
+    // Legacy/imported holdings may lack `updatedAt`; without it they are
+    // invisible to sync in both directions (see recordTimestamps.ts).
+    let normalizeChanged = false;
+    const normalized = parsed.map((holding) => {
+      const next = ensureUpdatedAt(holding);
+      if (next !== holding) normalizeChanged = true;
+      return next;
+    });
+    const purged = purgeExpiredTombstones(normalized);
     // Ref equality: `purgeExpiredTombstones` returns the original array when
-    // nothing was dropped, so the steady-state read avoids a needless write.
-    if (purged !== parsed) {
-      await writeHoldings(purged);
+    // nothing was dropped and `ensureUpdatedAt` returns the same element
+    // refs when nothing was missing, so the steady-state read avoids a
+    // needless write.
+    if (normalizeChanged || purged !== normalized) {
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot: a mutation or sync write landing between the read above
+      // and this write must not be reverted by the repair.
+      await repairCollectionInPlace<Holding>(STORAGE_KEY, ensureUpdatedAt);
     }
     return purged;
   } catch {
@@ -62,6 +77,18 @@ const writeHoldings = async (holdings: Holding[]): Promise<void> => {
  * array: stored tombstones missing from `holdings` are merged back in so a
  * screen-level save can't erase the soft-deletes Undo and sync need.
  */
+/**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync).
+ */
+export const mergeHoldingsFromSync = async (
+  merge: (stored: Holding[]) => Holding[]
+): Promise<void> => {
+  await mutateCollectionInPlace<Holding>(STORAGE_KEY, (stored) =>
+    merge(stored.map((h) => ensureUpdatedAt(h)))
+  );
+};
+
 export const saveHoldings = async (holdings: Holding[]): Promise<void> => {
   const raw = await EncryptedStorage.getItem(STORAGE_KEY);
   let stored: Holding[] = [];

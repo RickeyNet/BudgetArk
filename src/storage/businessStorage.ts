@@ -1,0 +1,280 @@
+/**
+ * BudgetArk - Business storage
+ * File: src/storage/businessStorage.ts
+ *
+ * CRUD for user-defined businesses (companies expense entries can be tagged
+ * with). Tombstone-aware like savingsGoalStorage - entries reference
+ * businesses by id, so deletes must survive locally (Undo) and propagate
+ * through P2P sync instead of being silently resurrected by a partner.
+ * Names are sanitized and validated (length, control chars, duplicates)
+ * before write, mirroring customCategoriesStorage.
+ */
+
+import * as EncryptedStorage from "./encryptedStorage";
+import { ensureUpdatedAt } from "../utils/recordTimestamps";
+import { clearAssigneesFromMerchantRules } from "./merchantRulesStorage";
+import {
+  Business,
+  BUSINESS_STORAGE_VERSION,
+  MAX_BUSINESSES,
+  MAX_BUSINESS_NAME_LENGTH,
+} from "../types";
+import {
+  filterLive,
+  mergePreservingTombstones,
+  purgeExpiredTombstones,
+  tombstone,
+  untombstone,
+} from "./tombstones";
+import { sanitizeTextInput } from "../utils/sanitize";
+import { generateUUID } from "../utils/uuid";
+
+/** Also listed in debtStorage.RESET_KEYS - keep in lockstep. */
+const STORAGE_KEY = "@budgetark_businesses";
+
+interface BusinessStore {
+  businesses: Business[];
+  version: number;
+}
+
+export type BusinessMutationResult =
+  | { ok: true; businesses: Business[] }
+  | { ok: false; error: string };
+
+const cleanBusinesses = (businesses: unknown[]): Business[] =>
+  businesses.filter(
+    (b): b is Business =>
+      !!b &&
+      typeof (b as Business).id === "string" &&
+      typeof (b as Business).name === "string"
+  );
+
+const readStore = async (): Promise<Business[]> => {
+  const raw = await EncryptedStorage.getItem(STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Partial<BusinessStore>;
+    if (!parsed || !Array.isArray(parsed.businesses)) return [];
+    const cleaned = cleanBusinesses(parsed.businesses);
+    // Legacy/imported businesses may lack `updatedAt`; without it they are
+    // invisible to sync in both directions (see recordTimestamps.ts).
+    let normalizeChanged = false;
+    const normalized = cleaned.map((b) => {
+      const next = ensureUpdatedAt(b);
+      if (next !== b) normalizeChanged = true;
+      return next;
+    });
+    const purged = purgeExpiredTombstones(normalized);
+    if (normalizeChanged || purged !== normalized) {
+      // Atomic recompute instead of writing our own (possibly stale)
+      // snapshot: a mutation or sync write landing between the read above
+      // and this write must not be reverted by the repair. Bespoke updater
+      // (not repairCollectionInPlace) because businesses persist inside a
+      // versioned envelope, not a bare array.
+      await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+        if (!current) return null;
+        try {
+          const cur = JSON.parse(current) as Partial<BusinessStore>;
+          if (!cur || !Array.isArray(cur.businesses)) return null;
+          const curCleaned = cleanBusinesses(cur.businesses);
+          let curNormalizeChanged = false;
+          const curNormalized = curCleaned.map((b) => {
+            const next = ensureUpdatedAt(b);
+            if (next !== b) curNormalizeChanged = true;
+            return next;
+          });
+          const curPurged = purgeExpiredTombstones(curNormalized);
+          // Same trigger as the read path: rewrite only when a field was
+          // filled in or the purge actually dropped a tombstone.
+          if (!curNormalizeChanged && curPurged === curNormalized) return null;
+          const store: BusinessStore = {
+            businesses: curPurged,
+            version: BUSINESS_STORAGE_VERSION,
+          };
+          return JSON.stringify(store);
+        } catch {
+          return null;
+        }
+      });
+    }
+    return purged;
+  } catch {
+    return [];
+  }
+};
+
+const writeStore = async (businesses: Business[]): Promise<void> => {
+  const store: BusinessStore = {
+    businesses,
+    version: BUSINESS_STORAGE_VERSION,
+  };
+  await EncryptedStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+};
+
+/** Live (non-tombstoned) businesses - what every screen renders. */
+export const getBusinesses = async (): Promise<Business[]> =>
+  filterLive(await readStore());
+
+/**
+ * Sync/export-only: includes soft-deleted businesses so the diff engine
+ * and JSON export can propagate deletes. See tombstones.ts for why.
+ */
+export const getBusinessesIncludingDeleted = async (): Promise<Business[]> =>
+  readStore();
+
+/**
+ * Persists the array. Safe to call with a live-only (`getBusinesses`)
+ * array: stored tombstones missing from the input are merged back in so a
+ * screen-level save can't erase the soft-deletes Undo and sync need.
+ */
+export const saveBusinesses = async (businesses: Business[]): Promise<void> => {
+  const stored = await readStore();
+  await writeStore(mergePreservingTombstones(businesses, stored));
+};
+
+/**
+ * Bulk write used by P2P sync / replace-mode import after merging. Bypasses
+ * per-mutation name validation - the trust boundary already validated each
+ * record, and rejecting duplicate names here would brick the very merge
+ * sync just computed (entries reference by id; dup names are cosmetic).
+ */
+export const saveBusinessesFromSync = async (
+  businesses: Business[]
+): Promise<void> => writeStore(businesses);
+
+/**
+ * Incoming-sync merge, atomic against every other writer on the key (see
+ * budgetStorage.mergeBudgetEntriesFromSync). `merge` sees the current
+ * cleaned + normalized array and returns the full array to persist.
+ * Businesses newly tombstoned by the merge cascade to merchant rules, the
+ * same as an in-app delete.
+ */
+export const mergeBusinessesFromSync = async (
+  merge: (stored: Business[]) => Business[]
+): Promise<void> => {
+  const newlyDeleted: string[] = [];
+  await EncryptedStorage.updateItem(STORAGE_KEY, (current) => {
+    let stored: Business[] = [];
+    if (current) {
+      try {
+        const cur = JSON.parse(current) as Partial<BusinessStore>;
+        if (cur && Array.isArray(cur.businesses)) {
+          stored = cleanBusinesses(cur.businesses).map((b) => ensureUpdatedAt(b));
+        }
+      } catch {
+        stored = [];
+      }
+    }
+    const liveBefore = new Set(stored.filter((b) => !b.deletedAt).map((b) => b.id));
+    const next = merge(stored);
+    for (const b of next) {
+      if (b.deletedAt && liveBefore.has(b.id)) newlyDeleted.push(b.id);
+    }
+    const store: BusinessStore = { businesses: next, version: BUSINESS_STORAGE_VERSION };
+    return JSON.stringify(store);
+  });
+  if (newlyDeleted.length > 0) {
+    await clearAssigneesFromMerchantRules({ businessIds: newlyDeleted });
+  }
+};
+
+/**
+ * Validate a candidate name: sanitize, length-cap, case-insensitive
+ * duplicate check against live businesses (optionally excluding one id,
+ * for rename). Returns the cleaned name or an error string.
+ */
+const validateName = (
+  rawName: string,
+  existing: Business[],
+  excludeId?: string
+): { ok: true; name: string } | { ok: false; error: string } => {
+  const name = sanitizeTextInput(rawName).trim();
+  if (!name) return { ok: false, error: "Enter a business name." };
+  if (name.length > MAX_BUSINESS_NAME_LENGTH) {
+    return {
+      ok: false,
+      error: `Keep it under ${MAX_BUSINESS_NAME_LENGTH} characters.`,
+    };
+  }
+  const lower = name.toLowerCase();
+  const clash = existing.some(
+    (b) => !b.deletedAt && b.id !== excludeId && b.name.toLowerCase() === lower
+  );
+  if (clash) {
+    return { ok: false, error: `"${name}" already exists.` };
+  }
+  return { ok: true, name };
+};
+
+export const addBusiness = async (
+  rawName: string
+): Promise<BusinessMutationResult> => {
+  const all = await readStore();
+  const live = filterLive(all);
+  if (live.length >= MAX_BUSINESSES) {
+    return {
+      ok: false,
+      error: `You can have up to ${MAX_BUSINESSES} businesses.`,
+    };
+  }
+  const checked = validateName(rawName, all);
+  if (!checked.ok) return checked;
+
+  const now = new Date().toISOString();
+  const next: Business[] = [
+    ...all,
+    {
+      id: generateUUID(),
+      name: checked.name,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+  await writeStore(next);
+  return { ok: true, businesses: filterLive(next) };
+};
+
+export const updateBusiness = async (
+  id: string,
+  patch: { name?: string }
+): Promise<BusinessMutationResult> => {
+  const all = await readStore();
+  const target = all.find((b) => b.id === id && !b.deletedAt);
+  if (!target) return { ok: false, error: "Business not found." };
+
+  let name = target.name;
+  if (patch.name !== undefined) {
+    const checked = validateName(patch.name, all, id);
+    if (!checked.ok) return checked;
+    name = checked.name;
+  }
+
+  const next = all.map((b) =>
+    b.id === id ? { ...b, name, updatedAt: new Date().toISOString() } : b
+  );
+  await writeStore(next);
+  return { ok: true, businesses: filterLive(next) };
+};
+
+/** Soft-delete (tombstone) so the delete propagates via sync and is undoable. */
+export const deleteBusiness = async (id: string): Promise<Business[]> => {
+  const all = await readStore();
+  const now = new Date().toISOString();
+  const next = all.map((b) => (b.id === id ? tombstone(b, now) : b));
+  await writeStore(next);
+  // Referential cleanup: merchant rules that tag this business would keep
+  // suggesting "(deleted business)" on every future import.
+  await clearAssigneesFromMerchantRules({ businessIds: [id] });
+  return filterLive(next);
+};
+
+/** Undo a soft-delete. No-op if the id isn't a tombstone. */
+export const restoreBusiness = async (id: string): Promise<Business[]> => {
+  const all = await readStore();
+  const now = new Date().toISOString();
+  const next = all.map((b) =>
+    b.id === id && b.deletedAt ? untombstone(b, now) : b
+  );
+  await writeStore(next);
+  return filterLive(next);
+};

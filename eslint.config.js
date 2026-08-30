@@ -6,7 +6,10 @@ const globals = require('globals');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['node_modules/**', 'coverage/**', 'dist/**', '.expo/**', 'screenshots/**'],
+    // worker/ is a separate project (own package.json, vitest, tsconfig) and is
+    // excluded from the app's typecheck too. Root CI never installs its
+    // node_modules, so linting it from here fails on unresolved imports.
+    ignores: ['node_modules/**', 'coverage/**', 'dist/**', '.expo/**', 'screenshots/**', 'worker/**'],
   },
   {
     rules: {
@@ -21,6 +24,14 @@ module.exports = defineConfig([
       'react/display-name': 'warn',
       // Literal apostrophes in JSX copy are fine.
       'react/no-unescaped-entities': 'off',
+    },
+  },
+  {
+    // Jest tests legitimately use require() to re-import modules after
+    // jest.resetModules()/isolateModules and to grab mocked instances.
+    files: ['**/__tests__/**'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
   {

@@ -51,7 +51,7 @@ const getSnowballPriority = (debtClass?: DebtClass): number => {
 };
 
 const pickTargetDebtIndex = (
-  debts: Array<{ balance: number; rate: number; debtClass?: DebtClass }>,
+  debts: { balance: number; rate: number; debtClass?: DebtClass }[],
   method: PayoffMethod
 ): number => {
   let bestIndex = -1;
@@ -313,18 +313,18 @@ export const generatePayoffSchedule = (
   balance: number,
   annualRate: number,
   monthlyPayment: number
-): Array<{
+): {
   month: number;
   balance: number;
   interestPaid: number;
   principalPaid: number;
-}> => {
-  const schedule: Array<{
+}[] => {
+  const schedule: {
     month: number;
     balance: number;
     interestPaid: number;
     principalPaid: number;
-  }> = [];
+  }[] = [];
 
   balance = clamp(balance, 0, MAX_BALANCE);
   annualRate = clamp(annualRate, 0, MAX_RATE);

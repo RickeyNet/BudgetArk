@@ -11,14 +11,23 @@
 
 import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile } from "expo-file-system";
-import CryptoJS from "crypto-js";
+import {
+  aesCbcDecryptFromBase64,
+  decryptLegacyCryptoJsBlob,
+  hexToBytes,
+  pbkdf2Sha256,
+} from "../crypto/nativeCrypto";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
   CUSTOM_CATEGORY_STORAGE_VERSION,
+  BUSINESS_STORAGE_VERSION,
+  PERSON_STORAGE_VERSION,
   ACHIEVEMENTS_STORAGE_VERSION,
   ACHIEVEMENT_STATS_VERSION,
+  LEARNING_STORAGE_VERSION,
   type AchievementStats,
+  type LearningProgress,
 } from "../types";
 import { isBuiltInCategory, DEFAULT_CATEGORY_ICON } from "../data/categoryIcons";
 import {
@@ -26,11 +35,22 @@ import {
   isBudgetBucket,
 } from "../data/categoryBuckets";
 import { generateUUID } from "./uuid";
+import { resetSyncWatermark } from "../sync/pairingStorage";
+import { notifyDataChanged } from "../storage/dataChangeNotifier";
 import { isCurrencyPreferenceId } from "./currencyPreferences";
+import { getMonthKey } from "./budgetMonths";
+import {
+  parseMonthStartBalances,
+  type MonthStartBalanceMap,
+} from "./cashFlow";
 import {
   ENCRYPTED_EXPORT_PREFIX,
   ENCRYPTED_EXPORT_PREFIX_V2,
 } from "./exportData";
+import {
+  ENCRYPTED_EXPORT_PREFIX_V3,
+  decryptExportEnvelopeV3,
+} from "./exportEncryption";
 import {
   isObject,
   isValidDateValue,
@@ -45,6 +65,8 @@ import {
   isHoldingItem,
   isNetWorthSnapshotItem,
   isCustomCategoryItem,
+  isBusinessItem,
+  isPersonItem,
   isValidImportCategory,
   isMonthKey,
   sanitizePayoffStrategy,
@@ -65,17 +87,18 @@ const KEYS = {
   PAYOFF_STRATEGY: "@budgetark_payoff_strategy",
   NET_WORTH_SNAPSHOTS: "@budgetark_net_worth_snapshots",
   CUSTOM_CATEGORIES: "@budgetark_custom_categories",
+  BUSINESSES: "@budgetark_businesses",
+  PEOPLE: "@budgetark_people",
   CATEGORY_BUCKET_OVERRIDES: "@budgetark_category_bucket_overrides",
   ACHIEVEMENTS: "@budgetark_achievements",
   ACHIEVEMENT_STATS: "@budgetark_achievement_stats",
+  MONTH_START_BALANCES: "@budgetark_month_start_balances",
   DEBT_DUE_DISMISSALS: "@budgetark_debt_due_dismissals",
+  CARD_KEEP_ALIVE_DISMISSALS: "@budgetark_card_keepalive_dismissals",
+  LEARNING_PROGRESS: "@budgetark_learning_progress",
 } as const;
 
-const getCurrentMonthKey = (): string => {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${month}`;
-};
+const getCurrentMonthKey = (): string => getMonthKey();
 
 /* ── Minimal shape checks ── */
 
@@ -103,10 +126,15 @@ const validatePayload = (data: unknown): data is ImportPayload => {
     typeof data.payoffStrategy === "string" ||
     Array.isArray(data.netWorthSnapshots) ||
     Array.isArray(data.customCategories) ||
+    Array.isArray(data.businesses) ||
+    Array.isArray(data.people) ||
     isObject(data.categoryBucketOverrides) ||
     isObject(data.achievements) ||
     isObject(data.achievementStats) ||
-    isObject(data.debtDueDismissals);
+    isObject(data.monthStartBalances) ||
+    isObject(data.debtDueDismissals) ||
+    isObject(data.cardKeepAliveDismissals) ||
+    isObject(data.learningProgress);
 
   return hasAny;
 };
@@ -125,10 +153,15 @@ interface ImportPayload {
   payoffStrategyUpdatedAt?: unknown;
   netWorthSnapshots?: unknown[];
   customCategories?: unknown[];
+  businesses?: unknown[];
+  people?: unknown[];
   categoryBucketOverrides?: Record<string, unknown>;
   achievements?: Record<string, unknown>;
   achievementStats?: Record<string, unknown>;
+  monthStartBalances?: Record<string, unknown>;
   debtDueDismissals?: Record<string, unknown>;
+  cardKeepAliveDismissals?: Record<string, unknown>;
+  learningProgress?: Record<string, unknown>;
   user?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -154,10 +187,15 @@ interface SanitizedImportPayload {
   payoffStrategyUpdatedAt?: string;
   netWorthSnapshots: Record<string, unknown>[];
   customCategories: Record<string, unknown>[];
+  businesses: Record<string, unknown>[];
+  people: Record<string, unknown>[];
   categoryBucketOverrides?: Record<string, "needs" | "wants" | "savings">;
   achievements?: SanitizedAchievements;
   achievementStats?: AchievementStats;
+  monthStartBalances?: MonthStartBalanceMap;
   debtDueDismissals?: Record<string, string>;
+  cardKeepAliveDismissals?: Record<string, string>;
+  learningProgress?: LearningProgress;
   user?: Record<string, unknown>;
 }
 
@@ -173,6 +211,8 @@ export interface ImportResult {
   payoffStrategy: boolean;
   netWorthSnapshots: number;
   customCategories: number;
+  businesses: number;
+  people: number;
   /** Number of days since the export was created, or undefined if no exportedAt timestamp */
   staleDays?: number;
 }
@@ -353,10 +393,63 @@ const sanitizeAchievementStats = (raw: unknown): AchievementStats | undefined =>
 };
 
 /**
+ * Learning-hub progress (`lessonId -> ISO first-completed`, the Resume
+ * pointer, and the dormant affiliate flags). Invalid completions are dropped
+ * individually and bad scalars degrade to their defaults - like the other
+ * cosmetic stores, a corrupt lesson record must never block restoring
+ * financial data. Returns undefined when nothing usable is present so an
+ * older export without the field leaves the local key untouched.
+ */
+const LESSON_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
+const isLessonId = (value: unknown): value is string =>
+  typeof value === "string" && LESSON_ID_PATTERN.test(value);
+
+const sanitizeLearningProgress = (raw: unknown): LearningProgress | undefined => {
+  if (!isObject(raw)) return undefined;
+  const completedLessons: Record<string, string> = {};
+  if (isObject(raw.completedLessons)) {
+    for (const [lessonId, completedAt] of Object.entries(raw.completedLessons)) {
+      // Lesson ids are catalog slugs ("ch1-l1-what-is-budget"); anything
+      // else is not a lesson this or a future build could ever look up.
+      if (!isLessonId(lessonId)) continue;
+      if (!isValidDateValue(completedAt)) continue;
+      completedLessons[lessonId] = completedAt;
+    }
+  }
+  const currentLessonId = isLessonId(raw.currentLessonId)
+    ? raw.currentLessonId
+    : undefined;
+  const affiliateDisclosureSeenAt = isValidDateValue(raw.affiliateDisclosureSeenAt)
+    ? raw.affiliateDisclosureSeenAt
+    : undefined;
+  if (
+    Object.keys(completedLessons).length === 0 &&
+    !currentLessonId &&
+    !affiliateDisclosureSeenAt
+  ) {
+    return undefined;
+  }
+  return {
+    completedLessons,
+    currentLessonId,
+    affiliateTapCount:
+      typeof raw.affiliateTapCount === "number" &&
+      Number.isFinite(raw.affiliateTapCount) &&
+      raw.affiliateTapCount >= 0
+        ? Math.floor(raw.affiliateTapCount)
+        : 0,
+    affiliateDisclosureSeenAt,
+    showAffiliateLinks: raw.showAffiliateLinks === true,
+    version: LEARNING_STORAGE_VERSION,
+  };
+};
+
+/**
  * Debt due-day dismissals: `"<debtId>:<YYYY-MM>" → ISO dismissed-at`. Only
  * the key matters to the reminder engine (the value is bookkeeping), so
  * validation gates on key shape and a sane value string; bad pairs are
- * dropped, not fatal.
+ * dropped, not fatal. Card keep-alive dismissals share the exact key shape
+ * and reuse this sanitizer.
  */
 const sanitizeDebtDueDismissals = (
   raw: unknown
@@ -407,6 +500,12 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     "custom categories",
     isCustomCategoryItem
   );
+  const businesses = sanitizeCollection(
+    data.businesses,
+    "businesses",
+    isBusinessItem
+  );
+  const people = sanitizeCollection(data.people, "people", isPersonItem);
   const debtMilestones = sanitizeDebtMilestones(data.debtMilestones);
   const payoffStrategy = sanitizePayoffStrategy(data.payoffStrategy);
   const payoffStrategyUpdatedAt = isValidDateValue(data.payoffStrategyUpdatedAt)
@@ -417,7 +516,21 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   );
   const achievements = sanitizeAchievements(data.achievements);
   const achievementStats = sanitizeAchievementStats(data.achievementStats);
+  // Month-start balances: drop invalid entries individually (parse is
+  // fail-closed per record) - one corrupt month must not block restoring
+  // the user's financial data. Older exports without the field skip it.
+  const monthStartBalancesParsed = parseMonthStartBalances(
+    data.monthStartBalances
+  );
+  const monthStartBalances =
+    Object.keys(monthStartBalancesParsed).length > 0
+      ? monthStartBalancesParsed
+      : undefined;
   const debtDueDismissals = sanitizeDebtDueDismissals(data.debtDueDismissals);
+  const cardKeepAliveDismissals = sanitizeDebtDueDismissals(
+    data.cardKeepAliveDismissals
+  );
+  const learningProgress = sanitizeLearningProgress(data.learningProgress);
   const user = sanitizeUser(data.user);
 
   const limitsByMonthCount = budgetLimitsByMonth
@@ -434,7 +547,9 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     assetAccounts.length +
     holdings.length +
     netWorthSnapshots.length +
-    customCategories.length;
+    customCategories.length +
+    businesses.length +
+    people.length;
   if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
     throw new Error(
       `Import rejected: payload is too large. Maximum total records is ${LIMITS.MAX_TOTAL_ITEMS}.`
@@ -452,10 +567,15 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     holdings,
     netWorthSnapshots,
     customCategories,
+    businesses,
+    people,
     categoryBucketOverrides,
     achievements,
     achievementStats,
+    monthStartBalances,
     debtDueDismissals,
+    cardKeepAliveDismissals,
+    learningProgress,
     debtMilestones,
     payoffStrategy,
     payoffStrategyUpdatedAt,
@@ -474,37 +594,35 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
  */
 /**
  * Returns true if the raw string is a password-encrypted BudgetArk export
- * (either format - v1 legacy or v2 PBKDF2).
+ * (any format - v1 legacy, v2 PBKDF2, or v3 encrypt-then-MAC).
  */
 export const isEncryptedExport = (raw: string): boolean => {
   const head = raw.trimStart();
   return (
+    head.startsWith(ENCRYPTED_EXPORT_PREFIX_V3) ||
     head.startsWith(ENCRYPTED_EXPORT_PREFIX_V2) ||
     head.startsWith(ENCRYPTED_EXPORT_PREFIX)
   );
 };
 
-/** Decrypts a v2 envelope: salt-hex "." iv-hex "." ciphertext-base64. */
-const decryptV2Envelope = (envelope: string, password: string): string => {
+/**
+ * Decrypts a v2 envelope: salt-hex "." iv-hex "." ciphertext-base64.
+ * Native crypto with the same parameters the crypto-js implementation used
+ * (PBKDF2-SHA256 250k / AES-256-CBC) - old exports decrypt unchanged, and
+ * the 250k iterations now run async on a native thread instead of freezing
+ * the UI. Golden fixtures in importData.test.ts pin the compatibility.
+ */
+const decryptV2Envelope = async (
+  envelope: string,
+  password: string
+): Promise<string> => {
   const parts = envelope.split(".");
   if (parts.length !== 3) {
     throw new Error("Decryption failed. The encrypted export is malformed.");
   }
   const [saltHex, ivHex, ctB64] = parts;
-  const salt = CryptoJS.enc.Hex.parse(saltHex);
-  const iv = CryptoJS.enc.Hex.parse(ivHex);
-  const ciphertext = CryptoJS.enc.Base64.parse(ctB64);
-  const key = CryptoJS.PBKDF2(password, salt, {
-    keySize: 256 / 32,
-    iterations: 250_000,
-    hasher: CryptoJS.algo.SHA256,
-  });
-  const decrypted = CryptoJS.AES.decrypt(
-    CryptoJS.lib.CipherParams.create({ ciphertext }),
-    key,
-    { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
-  );
-  return decrypted.toString(CryptoJS.enc.Utf8);
+  const key = await pbkdf2Sha256(password, hexToBytes(saltHex), 250_000, 32);
+  return aesCbcDecryptFromBase64(ctB64, key, hexToBytes(ivHex));
 };
 
 export const importFromString = async (
@@ -518,12 +636,26 @@ export const importFromString = async (
     );
   }
 
-  /* 0. Decrypt if this is a password-encrypted export. v2 uses PBKDF2 +
-   * explicit salt/iv; v1 uses CryptoJS's weak default EVP_BytesToKey KDF
-   * and is still readable here for backward-compat with older backups. */
+  /* 0. Decrypt if this is a password-encrypted export. v3 (current write
+   * format) is encrypt-then-MAC and verifies integrity before decrypting;
+   * v2 uses PBKDF2 + explicit salt/iv with no MAC; v1 uses CryptoJS's weak
+   * default EVP_BytesToKey KDF. All three stay readable forever so old
+   * backups never become unrestorable. */
   let jsonString = raw;
   const trimmed = raw.trimStart();
-  if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)) {
+  if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V3)) {
+    if (!password) {
+      throw new Error(
+        "This export is password-encrypted. Please enter the password to decrypt it."
+      );
+    }
+    // Throws its own precise message (wrong password / altered file) - the
+    // MAC check makes those the only failure modes, so don't re-wrap it.
+    jsonString = await decryptExportEnvelopeV3(
+      trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V3.length),
+      password
+    );
+  } else if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)) {
     if (!password) {
       throw new Error(
         "This export is password-encrypted. Please enter the password to decrypt it."
@@ -531,7 +663,7 @@ export const importFromString = async (
     }
     const envelope = trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V2.length);
     try {
-      jsonString = decryptV2Envelope(envelope, password);
+      jsonString = await decryptV2Envelope(envelope, password);
     } catch {
       throw new Error("Decryption failed. The password may be incorrect.");
     }
@@ -544,10 +676,12 @@ export const importFromString = async (
         "This export is password-encrypted. Please enter the password to decrypt it."
       );
     }
+    // Legacy v1: crypto-js's passphrase format (EVP_BytesToKey KDF), decrypted
+    // via the native EVP-compatible helper. A wrong password surfaces as a
+    // padding/parse throw.
     const ciphertext = trimmed.slice(ENCRYPTED_EXPORT_PREFIX.length);
     try {
-      const bytes = CryptoJS.AES.decrypt(ciphertext, password);
-      jsonString = bytes.toString(CryptoJS.enc.Utf8);
+      jsonString = decryptLegacyCryptoJsBlob(ciphertext, password);
     } catch {
       throw new Error("Decryption failed. The password may be incorrect.");
     }
@@ -580,8 +714,8 @@ export const importFromString = async (
 
   /* 2b. Check export age for stale-import warning */
   let staleDays: number | undefined;
-  if (isObject(data) && typeof (data as any).exportedAt === "string") {
-    const exportedMs = Date.parse((data as any).exportedAt);
+  if (isObject(data) && typeof data.exportedAt === "string") {
+    const exportedMs = Date.parse(data.exportedAt);
     if (!Number.isNaN(exportedMs)) {
       staleDays = Math.floor((Date.now() - exportedMs) / (1000 * 60 * 60 * 24));
       if (staleDays < 0) staleDays = 0;
@@ -601,6 +735,8 @@ export const importFromString = async (
     payoffStrategy: false,
     netWorthSnapshots: 0,
     customCategories: 0,
+    businesses: 0,
+    people: 0,
     staleDays,
   };
 
@@ -619,7 +755,15 @@ export const importFromString = async (
   // fresh import.
   const computeMergedById = async (
     storageKey: string,
-    incoming: unknown[] | undefined
+    incoming: unknown[] | undefined,
+    // Optional hook to reconcile an incoming record with the local one it
+    // replaces (merge mode only). Used for budget entries to preserve
+    // device-local attachment metadata and the isPrivate partner-sync flag
+    // - see reconcileBudgetEntry.
+    reconcile?: (
+      incoming: Record<string, unknown>,
+      existing: Record<string, unknown>
+    ) => Record<string, unknown>
   ): Promise<{ json: string; count: number } | null> => {
     if (!incoming || incoming.length === 0) return null;
 
@@ -631,7 +775,8 @@ export const importFromString = async (
     let existing: Record<string, unknown>[] = [];
     if (existingRaw) {
       try {
-        existing = JSON.parse(existingRaw);
+        const parsed: unknown = JSON.parse(existingRaw);
+        if (Array.isArray(parsed)) existing = parsed;
       } catch {
         existing = []; // corrupted storage - treat as empty
       }
@@ -647,14 +792,18 @@ export const importFromString = async (
 
     const indexById = new Map<string, number>();
     existing.forEach((item, idx) => {
-      const id = (item as any).id;
-      if (typeof id === "string") indexById.set(id, idx);
+      if (isObject(item) && typeof item.id === "string") {
+        indexById.set(item.id, idx);
+      }
     });
 
     let touched = 0;
     for (const rawItem of incoming) {
-      const item = rawItem as Record<string, unknown>;
-      const id = item.id as string | undefined;
+      // Narrow, don't assert: sanitizePayload validated these, but this
+      // merge is the last stop before storage - rule 15 says check anyway.
+      if (!isObject(rawItem)) continue;
+      const item = rawItem;
+      const id = typeof item.id === "string" && item.id ? item.id : undefined;
       if (!id) continue;
 
       const existingIdx = indexById.get(id);
@@ -668,7 +817,9 @@ export const importFromString = async (
       // Both rows present. LWW on updatedAt; ties go to the incoming record
       // since the user explicitly chose to import.
       if (tsOf(item) >= tsOf(existing[existingIdx])) {
-        existing[existingIdx] = item;
+        existing[existingIdx] = reconcile
+          ? reconcile(item, existing[existingIdx])
+          : item;
         touched++;
       }
     }
@@ -676,52 +827,45 @@ export const importFromString = async (
     return { json: JSON.stringify(existing), count: touched };
   };
 
-  // Compute merged budget limits in memory
-  const computeMergedLimits = async (
-    incoming: unknown[] | undefined
-  ): Promise<{ json: string; count: number } | null> => {
-    if (!incoming || incoming.length === 0) return null;
-
-    const monthKey = getCurrentMonthKey();
-
-    if (mode === "replace") {
-      return { json: JSON.stringify({ [monthKey]: incoming }), count: incoming.length };
+  /**
+   * Budget-entry reconcile hook, applied when the incoming record wins LWW:
+   *
+   *  - Attachments: metadata points at encrypted photo files that exist only
+   *    on THIS device, and spreadsheet rows carry no attachments at all
+   *    (there is no column). Without this, a merge-mode re-import of an
+   *    unchanged entry (updatedAt tie goes to incoming) would replace it
+   *    with an attachment-less copy - and the orphan sweep would then
+   *    permanently delete the photo files. An import may therefore never
+   *    REMOVE local attachment references; when the incoming record carries
+   *    its own list (JSON exports do), the incoming list wins as usual.
+   *
+   *  - isPrivate: privacy is device-side intent, so an import may never
+   *    silently CLEAR a locally-set flag - a partner's export (or a backup
+   *    taken before the entry was marked private) carries the public copy,
+   *    and letting it win verbatim would un-private the entry and resume
+   *    syncing it. Content still merges by LWW as usual; only the flag
+   *    sticks. Un-privating is a local UI action only. Mirrors the same
+   *    rule in sync's applyIncomingDiff.
+   */
+  const reconcileBudgetEntry = (
+    incoming: Record<string, unknown>,
+    existing: Record<string, unknown>
+  ): Record<string, unknown> => {
+    let result = incoming;
+    const incomingHasAttachments =
+      Array.isArray(incoming.attachments) && incoming.attachments.length > 0;
+    const existingAttachments = existing.attachments;
+    if (
+      !incomingHasAttachments &&
+      Array.isArray(existingAttachments) &&
+      existingAttachments.length > 0
+    ) {
+      result = { ...result, attachments: existingAttachments };
     }
-
-    const existingRaw = await EncryptedStorage.getItem(KEYS.BUDGET_LIMITS);
-    let parsed: unknown = {};
-    if (existingRaw) {
-      try {
-        parsed = JSON.parse(existingRaw);
-      } catch {
-        parsed = {}; // corrupted storage - treat as empty
-      }
+    if (existing.isPrivate === true && result.isPrivate !== true) {
+      result = { ...result, isPrivate: true };
     }
-    const history =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-
-    const existingForMonth = Array.isArray(history[monthKey])
-      ? (history[monthKey] as Record<string, unknown>[])
-      : [];
-
-    const existingCategories = new Set(
-      existingForMonth.map((item) => (item as any).category as string).filter(Boolean)
-    );
-
-    for (const item of incoming) {
-      const cat = (item as any)?.category;
-      if (cat && existingCategories.has(cat)) {
-        const idx = existingForMonth.findIndex((e) => (e as any).category === cat);
-        if (idx >= 0) existingForMonth[idx] = item as Record<string, unknown>;
-      } else {
-        existingForMonth.push(item as Record<string, unknown>);
-      }
-    }
-
-    history[monthKey] = existingForMonth;
-    return { json: JSON.stringify(history), count: incoming.length };
+    return result;
   };
 
   /**
@@ -754,8 +898,8 @@ export const importFromString = async (
     const importStampIso = new Date().toISOString();
     for (const limits of Object.values(incomingMap)) {
       for (const limit of limits) {
-        if (typeof (limit as any).updatedAt !== "string" || !(limit as any).updatedAt) {
-          (limit as any).updatedAt = importStampIso;
+        if (typeof limit.updatedAt !== "string" || !limit.updatedAt) {
+          limit.updatedAt = importStampIso;
         }
       }
     }
@@ -786,21 +930,41 @@ export const importFromString = async (
         ? (parsed as Record<string, Record<string, unknown>[]>)
         : {};
 
+    // Same LWW-on-updatedAt rule as computeMergedById: merge is documented
+    // as non-destructive, so a stale backup must not roll back a limit the
+    // user edited since the export. Ties go to the incoming record since
+    // the user explicitly chose to import.
+    const tsOf = (record: Record<string, unknown> | undefined): number => {
+      if (!record) return -Infinity;
+      const raw = record.updatedAt;
+      if (typeof raw !== "string") return 0;
+      const t = Date.parse(raw);
+      return Number.isFinite(t) ? t : 0;
+    };
+
     let totalItems = 0;
     for (const [monthKey, incomingArr] of Object.entries(incomingMap)) {
       const existingForMonth = Array.isArray(existing[monthKey])
         ? existing[monthKey]
         : [];
-      const existingCategories = new Set(
-        existingForMonth.map((it: any) => it.category as string).filter(Boolean)
-      );
+      const existingCategories = new Set<string>();
+      for (const it of existingForMonth) {
+        if (isObject(it) && typeof it.category === "string" && it.category) {
+          existingCategories.add(it.category);
+        }
+      }
       for (const item of incomingArr) {
-        const cat = (item as any)?.category;
+        const cat =
+          isObject(item) && typeof item.category === "string"
+            ? item.category
+            : undefined;
         if (cat && existingCategories.has(cat)) {
           const idx = existingForMonth.findIndex(
-            (e: any) => e.category === cat
+            (e) => isObject(e) && e.category === cat
           );
-          if (idx >= 0) existingForMonth[idx] = item;
+          if (idx >= 0 && tsOf(item) >= tsOf(existingForMonth[idx])) {
+            existingForMonth[idx] = item;
+          }
         } else {
           existingForMonth.push(item);
         }
@@ -846,7 +1010,7 @@ export const importFromString = async (
     // Names referenced by imported entries / limits.
     const referenced = new Set<string>();
     for (const e of sanitized.budgetEntries) {
-      const c = (e as any).category;
+      const c = e.category;
       if (typeof c === "string" && !isBuiltInCategory(c)) referenced.add(c);
     }
     const allLimitArrays: Record<string, unknown>[][] = [
@@ -857,7 +1021,7 @@ export const importFromString = async (
     ];
     for (const arr of allLimitArrays) {
       for (const l of arr) {
-        const c = (l as any).category;
+        const c = l.category;
         if (typeof c === "string" && !isBuiltInCategory(c)) referenced.add(c);
       }
     }
@@ -882,17 +1046,19 @@ export const importFromString = async (
 
     const byId = new Map<string, Record<string, unknown>>();
     for (const c of base) {
-      const id = (c as any).id;
-      if (typeof id === "string") byId.set(id, c);
+      if (isObject(c) && typeof c.id === "string") byId.set(c.id, c);
     }
 
     let touched = 0;
 
     // 1. Explicit imported definitions - LWW by id.
     for (const incoming of sanitized.customCategories) {
-      const id = (incoming as any).id as string;
+      // The validator guarantees a string id; skipping anything else is the
+      // fail-closed reading, not a behavior change.
+      const id = typeof incoming.id === "string" ? incoming.id : undefined;
+      if (!id) continue;
       const existing = byId.get(id);
-      if (!existing || tsOf((incoming as any).updatedAt) >= tsOf((existing as any).updatedAt)) {
+      if (!existing || tsOf(incoming.updatedAt) >= tsOf(existing.updatedAt)) {
         byId.set(id, incoming);
         touched++;
       }
@@ -902,7 +1068,7 @@ export const importFromString = async (
     // shadow a built-in category.
     const nameWinner = new Map<string, string>(); // lowerName -> id
     for (const [id, rec] of byId) {
-      const name = (rec as any).name;
+      const name = rec.name;
       if (typeof name !== "string" || isBuiltInCategory(name)) {
         byId.delete(id);
         continue;
@@ -913,7 +1079,7 @@ export const importFromString = async (
         nameWinner.set(key, id);
       } else {
         const prev = byId.get(prevId)!;
-        if (tsOf((rec as any).updatedAt) >= tsOf((prev as any).updatedAt)) {
+        if (tsOf(rec.updatedAt) >= tsOf(prev.updatedAt)) {
           byId.delete(prevId);
           nameWinner.set(key, id);
         } else {
@@ -955,6 +1121,128 @@ export const importFromString = async (
   };
 
   /**
+   * Businesses live in a `{businesses, version}` store (not a bare array),
+   * so computeMergedById can't be reused directly. Same LWW-by-id semantics:
+   * a tombstoned business survives a stale import, a newer import wins.
+   * Tombstones ride along so a restore can't resurrect a deleted business.
+   */
+  const computeMergedBusinesses = async (): Promise<{
+    json: string;
+    count: number;
+  } | null> => {
+    if (sanitized.businesses.length === 0) return null;
+    const wrap = (arr: Record<string, unknown>[]): string =>
+      JSON.stringify({ businesses: arr, version: BUSINESS_STORAGE_VERSION });
+
+    if (mode === "replace") {
+      return {
+        json: wrap(sanitized.businesses),
+        count: sanitized.businesses.length,
+      };
+    }
+
+    let existing: Record<string, unknown>[] = [];
+    const existingRaw = await EncryptedStorage.getItem(KEYS.BUSINESSES);
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (Array.isArray(parsed?.businesses)) existing = parsed.businesses;
+      } catch {
+        existing = [];
+      }
+    }
+
+    const indexById = new Map<string, number>();
+    existing.forEach((item, idx) => {
+      if (isObject(item) && typeof item.id === "string") {
+        indexById.set(item.id, idx);
+      }
+    });
+
+    let touched = 0;
+    for (const item of sanitized.businesses) {
+      const id = typeof item.id === "string" ? item.id : undefined;
+      if (!id) continue;
+      const existingIdx = indexById.get(id);
+      if (existingIdx === undefined) {
+        existing.push(item);
+        indexById.set(id, existing.length - 1);
+        touched++;
+        continue;
+      }
+      if (
+        parseTimestamp(item.updatedAt) >=
+        parseTimestamp(existing[existingIdx].updatedAt)
+      ) {
+        existing[existingIdx] = item;
+        touched++;
+      }
+    }
+
+    return { json: wrap(existing), count: touched };
+  };
+
+  /**
+   * People mirror businesses exactly: `{people, version}` envelope, LWW by
+   * id, tombstones ride along so a restore can't resurrect a deleted person.
+   */
+  const computeMergedPeople = async (): Promise<{
+    json: string;
+    count: number;
+  } | null> => {
+    if (sanitized.people.length === 0) return null;
+    const wrap = (arr: Record<string, unknown>[]): string =>
+      JSON.stringify({ people: arr, version: PERSON_STORAGE_VERSION });
+
+    if (mode === "replace") {
+      return {
+        json: wrap(sanitized.people),
+        count: sanitized.people.length,
+      };
+    }
+
+    let existing: Record<string, unknown>[] = [];
+    const existingRaw = await EncryptedStorage.getItem(KEYS.PEOPLE);
+    if (existingRaw) {
+      try {
+        const parsed = JSON.parse(existingRaw);
+        if (Array.isArray(parsed?.people)) existing = parsed.people;
+      } catch {
+        existing = [];
+      }
+    }
+
+    const indexById = new Map<string, number>();
+    existing.forEach((item, idx) => {
+      if (isObject(item) && typeof item.id === "string") {
+        indexById.set(item.id, idx);
+      }
+    });
+
+    let touched = 0;
+    for (const item of sanitized.people) {
+      const id = typeof item.id === "string" ? item.id : undefined;
+      if (!id) continue;
+      const existingIdx = indexById.get(id);
+      if (existingIdx === undefined) {
+        existing.push(item);
+        indexById.set(id, existing.length - 1);
+        touched++;
+        continue;
+      }
+      if (
+        parseTimestamp(item.updatedAt) >=
+        parseTimestamp(existing[existingIdx].updatedAt)
+      ) {
+        existing[existingIdx] = item;
+        touched++;
+      }
+    }
+
+    return { json: wrap(existing), count: touched };
+  };
+
+  /**
    * Net-worth snapshots: replace mode takes the import verbatim; merge mode
    * unions by dayKey, keeping whichever side captured that day later. Merge
    * must never lose local-only days - importing an old backup in Merge mode
@@ -984,22 +1272,23 @@ export const importFromString = async (
     }
     const byDay = new Map<string, Record<string, unknown>>();
     for (const snap of existing) {
-      const day = (snap as any)?.dayKey;
-      if (typeof day === "string") byDay.set(day, snap);
+      if (isObject(snap) && typeof snap.dayKey === "string") {
+        byDay.set(snap.dayKey, snap);
+      }
     }
     for (const snap of sanitized.netWorthSnapshots) {
-      const day = (snap as any).dayKey as string;
+      const day = typeof snap.dayKey === "string" ? snap.dayKey : undefined;
+      if (!day) continue;
       const prev = byDay.get(day);
       if (
         !prev ||
-        parseTimestamp((snap as any).capturedAt) >=
-          parseTimestamp((prev as any).capturedAt)
+        parseTimestamp(snap.capturedAt) >= parseTimestamp(prev.capturedAt)
       ) {
         byDay.set(day, snap);
       }
     }
     const merged = Array.from(byDay.values()).sort((a, b) =>
-      String((a as any).dayKey).localeCompare(String((b as any).dayKey))
+      String(a.dayKey).localeCompare(String(b.dayKey))
     );
     return { json: JSON.stringify(merged), count: sanitized.netWorthSnapshots.length };
   };
@@ -1135,19 +1424,108 @@ export const importFromString = async (
   };
 
   /**
-   * Due-day dismissals are idempotent facts ("user said 'not yet' for this
-   * debt+month on some device"), so merge is a key-wise union. The value is
-   * only a dismissed-at bookkeeping stamp - either side's is fine; imported
-   * wins on conflict for consistency with the bucket-override merge.
+   * Learning progress: completions are "first completed at" facts, so the
+   * merge unions both sides keeping the EARLIEST timestamp per lesson (same
+   * rule as achievement unlocks). The Resume pointer keeps the local one
+   * when set (it is this device's "where I left off"); the affiliate tap
+   * counter takes the max and the disclosure-seen date the earliest, both
+   * for the same "more real activity / older truth" reasons as the
+   * achievement stats. Replace mode takes the import verbatim.
+   */
+  const computeMergedLearningProgress = async (): Promise<{ json: string } | null> => {
+    const incoming = sanitized.learningProgress;
+    if (!incoming) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(incoming) };
+    }
+    let local: LearningProgress | undefined;
+    const existingRaw = await EncryptedStorage.getItem(KEYS.LEARNING_PROGRESS);
+    if (existingRaw) {
+      try {
+        local = sanitizeLearningProgress(JSON.parse(existingRaw));
+      } catch {
+        local = undefined;
+      }
+    }
+    if (!local) return { json: JSON.stringify(incoming) };
+    const completedLessons: Record<string, string> = { ...local.completedLessons };
+    for (const [lessonId, completedAt] of Object.entries(incoming.completedLessons)) {
+      const prev = completedLessons[lessonId];
+      // ISO-8601 UTC strings compare correctly as strings.
+      completedLessons[lessonId] =
+        prev === undefined || completedAt < prev ? completedAt : prev;
+    }
+    const seenCandidates = [
+      local.affiliateDisclosureSeenAt,
+      incoming.affiliateDisclosureSeenAt,
+    ].filter((v): v is string => typeof v === "string");
+    const merged: LearningProgress = {
+      completedLessons,
+      currentLessonId: local.currentLessonId ?? incoming.currentLessonId,
+      affiliateTapCount: Math.max(local.affiliateTapCount, incoming.affiliateTapCount),
+      affiliateDisclosureSeenAt:
+        seenCandidates.length > 0
+          ? seenCandidates.reduce((a, b) => (a < b ? a : b))
+          : undefined,
+      showAffiliateLinks: local.showAffiliateLinks || incoming.showAffiliateLinks,
+      version: LEARNING_STORAGE_VERSION,
+    };
+    return { json: JSON.stringify(merged) };
+  };
+
+  /**
+   * Month-start balances: merge is per-month LWW on updatedAt, mirroring
+   * the sync merge in diffEngine - with ties going to the incoming record
+   * since the user explicitly chose to import (same tie rule as every
+   * other collection here). Local-only months always survive a merge.
    * Replace mode takes the import verbatim.
    */
-  const computeMergedDueDismissals = async (): Promise<{ json: string } | null> => {
-    if (!sanitized.debtDueDismissals) return null;
+  const computeMergedMonthStartBalances = async (): Promise<{
+    json: string;
+  } | null> => {
+    const incoming = sanitized.monthStartBalances;
+    if (!incoming) return null;
     if (mode === "replace") {
-      return { json: JSON.stringify(sanitized.debtDueDismissals) };
+      return { json: JSON.stringify(incoming) };
+    }
+    let existing: MonthStartBalanceMap = {};
+    const existingRaw = await EncryptedStorage.getItem(
+      KEYS.MONTH_START_BALANCES
+    );
+    if (existingRaw) {
+      try {
+        existing = parseMonthStartBalances(JSON.parse(existingRaw));
+      } catch {
+        existing = {};
+      }
+    }
+    const merged: MonthStartBalanceMap = { ...existing };
+    for (const [monthKey, record] of Object.entries(incoming)) {
+      const local = merged[monthKey];
+      if (!local || parseTimestamp(record.updatedAt) >= parseTimestamp(local.updatedAt)) {
+        merged[monthKey] = record;
+      }
+    }
+    return { json: JSON.stringify(merged) };
+  };
+
+  /**
+   * Dismissals (debt due-day + card keep-alive) are idempotent facts ("user
+   * said 'not yet' for this debt+month on some device"), so merge is a
+   * key-wise union. The value is only a dismissed-at bookkeeping stamp -
+   * either side's is fine; imported wins on conflict for consistency with
+   * the bucket-override merge. Replace mode takes the import verbatim.
+   */
+  const computeMergedDismissalMap = async (
+    imported: Record<string, string> | undefined,
+    storageKey: string
+  ): Promise<{ json: string } | null> => {
+    if (!imported) return null;
+    if (mode === "replace") {
+      return { json: JSON.stringify(imported) };
     }
     let existing: Record<string, unknown> = {};
-    const existingRaw = await EncryptedStorage.getItem(KEYS.DEBT_DUE_DISMISSALS);
+    const existingRaw = await EncryptedStorage.getItem(storageKey);
     if (existingRaw) {
       try {
         const parsed = JSON.parse(existingRaw);
@@ -1159,9 +1537,21 @@ export const importFromString = async (
       }
     }
     return {
-      json: JSON.stringify({ ...existing, ...sanitized.debtDueDismissals }),
+      json: JSON.stringify({ ...existing, ...imported }),
     };
   };
+
+  const computeMergedDueDismissals = () =>
+    computeMergedDismissalMap(
+      sanitized.debtDueDismissals,
+      KEYS.DEBT_DUE_DISMISSALS
+    );
+
+  const computeMergedKeepAliveDismissals = () =>
+    computeMergedDismissalMap(
+      sanitized.cardKeepAliveDismissals,
+      KEYS.CARD_KEEP_ALIVE_DISMISSALS
+    );
 
   /**
    * Singleton LWW gate for merge mode: write the imported value only when
@@ -1190,7 +1580,11 @@ export const importFromString = async (
   // Phase 1: Compute all merged results in memory
   const mergedDebts = await computeMergedById(KEYS.DEBTS, sanitized.debts);
   const mergedPayments = await computeMergedById(KEYS.PAYMENTS, sanitized.payments);
-  const mergedBudgetEntries = await computeMergedById(KEYS.BUDGET_ENTRIES, sanitized.budgetEntries);
+  const mergedBudgetEntries = await computeMergedById(
+    KEYS.BUDGET_ENTRIES,
+    sanitized.budgetEntries,
+    reconcileBudgetEntry
+  );
   const mergedLimits = await computeMergedLimitsHistory();
   const mergedSavingsGoals = await computeMergedById(
     KEYS.SAVINGS_GOALS,
@@ -1206,15 +1600,20 @@ export const importFromString = async (
   );
   const mergedSnapshots = await computeMergedSnapshots();
   const mergedCustomCategories = await computeMergedCustomCategories();
+  const mergedBusinesses = await computeMergedBusinesses();
+  const mergedPeople = await computeMergedPeople();
   const mergedCategoryBucketOverrides = await computeMergedBucketOverrides();
   const mergedAchievements = await computeMergedAchievements();
   const mergedAchievementStats = await computeMergedAchievementStats();
+  const mergedMonthStartBalances = await computeMergedMonthStartBalances();
   const mergedDueDismissals = await computeMergedDueDismissals();
+  const mergedKeepAliveDismissals = await computeMergedKeepAliveDismissals();
+  const mergedLearningProgress = await computeMergedLearningProgress();
 
   // Phase 2: Write to temp keys first
   const TEMP_SUFFIX = "_import_tmp";
   const tempKeys: string[] = [];
-  const tempWrites: Array<[string, string]> = [];
+  const tempWrites: [string, string][] = [];
 
   if (mergedDebts) {
     tempWrites.push([KEYS.DEBTS + TEMP_SUFFIX, mergedDebts.json]);
@@ -1246,6 +1645,12 @@ export const importFromString = async (
       mergedCustomCategories.json,
     ]);
   }
+  if (mergedBusinesses) {
+    tempWrites.push([KEYS.BUSINESSES + TEMP_SUFFIX, mergedBusinesses.json]);
+  }
+  if (mergedPeople) {
+    tempWrites.push([KEYS.PEOPLE + TEMP_SUFFIX, mergedPeople.json]);
+  }
   if (mergedCategoryBucketOverrides) {
     tempWrites.push([
       KEYS.CATEGORY_BUCKET_OVERRIDES + TEMP_SUFFIX,
@@ -1261,10 +1666,28 @@ export const importFromString = async (
       mergedAchievementStats.json,
     ]);
   }
+  if (mergedLearningProgress) {
+    tempWrites.push([
+      KEYS.LEARNING_PROGRESS + TEMP_SUFFIX,
+      mergedLearningProgress.json,
+    ]);
+  }
+  if (mergedMonthStartBalances) {
+    tempWrites.push([
+      KEYS.MONTH_START_BALANCES + TEMP_SUFFIX,
+      mergedMonthStartBalances.json,
+    ]);
+  }
   if (mergedDueDismissals) {
     tempWrites.push([
       KEYS.DEBT_DUE_DISMISSALS + TEMP_SUFFIX,
       mergedDueDismissals.json,
+    ]);
+  }
+  if (mergedKeepAliveDismissals) {
+    tempWrites.push([
+      KEYS.CARD_KEEP_ALIVE_DISMISSALS + TEMP_SUFFIX,
+      mergedKeepAliveDismissals.json,
     ]);
   }
   if (
@@ -1324,7 +1747,7 @@ export const importFromString = async (
 
   // Phase 3: Promote temp keys to real keys; rollback on failure
   // Back up originals first so we can restore them if the write loop fails
-  const backups: Array<[string, string | null]> = [];
+  const backups: [string, string | null][] = [];
   try {
     if (mode === "replace") {
       // Replace means "replace what the file carries", not "wipe the device".
@@ -1354,13 +1777,22 @@ export const importFromString = async (
       // reference a non-built-in name), so gate on the merged result, which
       // already accounts for both sources.
       if (mergedCustomCategories) keysToRemove.push(KEYS.CUSTOM_CATEGORIES);
+      if (sanitized.businesses.length > 0) keysToRemove.push(KEYS.BUSINESSES);
+      if (sanitized.people.length > 0) keysToRemove.push(KEYS.PEOPLE);
       if (sanitized.categoryBucketOverrides) {
         keysToRemove.push(KEYS.CATEGORY_BUCKET_OVERRIDES);
       }
       if (sanitized.achievements) keysToRemove.push(KEYS.ACHIEVEMENTS);
       if (sanitized.achievementStats) keysToRemove.push(KEYS.ACHIEVEMENT_STATS);
+      if (sanitized.learningProgress) keysToRemove.push(KEYS.LEARNING_PROGRESS);
+      if (sanitized.monthStartBalances) {
+        keysToRemove.push(KEYS.MONTH_START_BALANCES);
+      }
       if (sanitized.debtDueDismissals) {
         keysToRemove.push(KEYS.DEBT_DUE_DISMISSALS);
+      }
+      if (sanitized.cardKeepAliveDismissals) {
+        keysToRemove.push(KEYS.CARD_KEEP_ALIVE_DISMISSALS);
       }
       for (const key of keysToRemove) {
         const original = await EncryptedStorage.getItem(key);
@@ -1387,9 +1819,11 @@ export const importFromString = async (
     counts.holdings = mergedHoldings?.count ?? 0;
     counts.netWorthSnapshots = mergedSnapshots?.count ?? 0;
     counts.customCategories = mergedCustomCategories?.count ?? 0;
+    counts.businesses = mergedBusinesses?.count ?? 0;
+    counts.people = mergedPeople?.count ?? 0;
     counts.debtMilestones = !!sanitized.debtMilestones;
     counts.payoffStrategy = !!sanitized.payoffStrategy;
-  } catch (error) {
+  } catch {
     // Rollback: restore original values, then clean up temp keys.
     // We use `allSettled` and collect failures rather than awaiting each
     // restore in sequence - if a restore itself times out, the original
@@ -1430,6 +1864,22 @@ export const importFromString = async (
   if (tempKeys.length > 0) {
     await EncryptedStorage.multiRemove(tempKeys);
   }
+
+  // Phase 5: Make the restored records visible to a paired partner. Merged
+  // records keep their original `updatedAt` (phase 2, LWW), which is older
+  // than the sync watermark for anything restored from a backup - the
+  // outgoing diff would never send them. Resetting the watermark turns the
+  // next sync into a full (idempotent) send. Best-effort: the import itself
+  // has already succeeded, so a metadata write failure must not report the
+  // whole restore as failed.
+  try {
+    await resetSyncWatermark();
+  } catch (error) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn("Import: could not reset sync watermark", error);
+    }
+  }
+  notifyDataChanged("import");
 
   return counts;
 };

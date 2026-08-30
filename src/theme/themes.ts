@@ -24,12 +24,28 @@ export type ThemeColors = Readonly<{
   teal: string;           
   tealDim: string;
   accentButtonText: string;
+  /**
+   * Scrim behind centered dialogs and celebration cards - dims the screen
+   * but keeps it recognisable. Every scrim in the app reads these two
+   * tokens instead of hardcoding rgba() so a theme can tune them (a light
+   * parchment theme, for instance, could use a warm brown scrim).
+   */
+  overlay: string;
+  /** Scrim behind bottom sheets / full-screen pickers - nearly opaque. */
+  overlayStrong: string;
 }>;
 
 export type ThemePreset = Readonly<{
   id: string;
   name: string;
   colors: ThemeColors;
+  /**
+   * Zeroes the density radius tokens (radius/radiusSm/radiusPill) so cards,
+   * buttons, and chips render square while this theme is active. Surfaces
+   * with hardcoded borderRadius values are unaffected until they migrate to
+   * the tokens (the incremental path density.ts already prescribes).
+   */
+  squareCorners?: boolean;
 }>;
 
 const ARK_PARCHMENT: ThemePreset = {
@@ -53,6 +69,8 @@ const ARK_PARCHMENT: ThemePreset = {
     teal: "#5A8A7A",
     tealDim: "rgba(90, 138, 122, 0.15)",
     accentButtonText: "#D4B896",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -77,6 +95,8 @@ const FOREST_GOLD: ThemePreset = {
     teal: "#3aaa8a",
     tealDim: "rgba(58, 170, 138, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -101,6 +121,8 @@ const NEON_PURPLE: ThemePreset = {
     teal: "#00bcd4",                         
     tealDim: "rgba(0, 188, 212, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -125,6 +147,8 @@ const SLATE_DARK: ThemePreset = {
     teal: "#7aaca0",
     tealDim: "rgba(122, 172, 160, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -149,6 +173,8 @@ const ROSE_LIGHT: ThemePreset = {
     teal: "#5aafb0",
     tealDim: "rgba(90, 175, 176, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -173,6 +199,8 @@ const SYNTHWAVE: ThemePreset = {
     teal: "#6aadcc",
     tealDim: "rgba(106, 173, 204, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -197,6 +225,8 @@ const DEEPFOREST: ThemePreset = {
     teal: "#7bd7c6",
     tealDim: "rgba(123, 215, 198, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -223,6 +253,77 @@ const OCEAN_CORAL: ThemePreset = {
     teal: "#5abaa0",
     tealDim: "rgba(90, 186, 160, 0.15)",
     accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
+  },
+};
+
+/**
+ * Slate - graphite greys with a mustard-yellow accent, in the spirit of
+ * monkeytype's serika dark. Neutral warm-grey text keeps numbers calm;
+ * the yellow is reserved for accents so it reads as highlight, not alert
+ * (warning shifts orange so the two stay distinguishable).
+ */
+const SLATE: ThemePreset = {
+  id: "slate",
+  name: "Slate",
+  colors: {
+    bg: "#323437",
+    card: "#3d3f43",
+    cardBorder: "#515458",
+    accent: "#e2b714",
+    success: "#7cbf6b",
+    successDim: "rgba(124, 191, 107, 0.15)",
+    warning: "#e59435",
+    warningDim: "rgba(229, 148, 53, 0.15)",
+    danger: "#ca4754",
+    dangerDim: "rgba(202, 71, 84, 0.15)",
+    text: "#d1d0c5",
+    textDim: "#9a9ca0",
+    textMuted: "#6b6d71",
+    white: "#f0efe8",
+    teal: "#63b0a0",
+    tealDim: "rgba(99, 176, 160, 0.15)",
+    accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
+  },
+};
+
+/**
+ * Classic - the Windows 98 desktop, verbatim: teal desktop background,
+ * silver window-chrome cards, navy title-bar accent (white text on it,
+ * like a title bar), maroon danger, square corners via squareCorners.
+ * Fonts and beveled borders are outside what a ThemePreset can express.
+ *
+ * The dim/muted greys run darker than other themes on purpose: they have
+ * to stay legible on BOTH the teal desktop bg and the silver cards, and
+ * on #008080 even pure black only reaches ~4.7:1 - mid greys vanish.
+ */
+const CLASSIC: ThemePreset = {
+  id: "classic",
+  name: "Classic",
+  squareCorners: true,
+  colors: {
+    bg: "#008080",
+    card: "#c0c0c0",
+    cardBorder: "#808080",
+    accent: "#000080",
+    success: "#008000",
+    successDim: "rgba(0, 128, 0, 0.15)",
+    warning: "#b8860b",
+    warningDim: "rgba(184, 134, 11, 0.15)",
+    danger: "#a00000",
+    dangerDim: "rgba(160, 0, 0, 0.15)",
+    text: "#000000",
+    textDim: "#222222",
+    textMuted: "#383838",
+    white: "#ffffff",
+    teal: "#006666",
+    tealDim: "rgba(0, 102, 102, 0.15)",
+    accentButtonText: "#ffffff",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
@@ -254,10 +355,186 @@ const DEEP_SPACE: ThemePreset = {
     teal: "#2dd4bf",
     tealDim: "rgba(45, 212, 191, 0.14)",
     accentButtonText: "#ffffff",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
   },
 };
 
-export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, DEEP_SPACE] as const;
+/**
+ * Deep Sea - third of the "Deep" ambient themes (Space / Forest / Sea).
+ *
+ * Abyssal navy-teal base with a bioluminescent cyan-green accent. Like
+ * Deep Space, cards are opaque here so the surface-style layer can turn
+ * them into glass and let the underwater ambient background show through.
+ */
+const DEEP_SEA: ThemePreset = {
+  id: "deep_sea",
+  name: "Deep Sea",
+  colors: {
+    bg: "#030b11",
+    card: "#0a1b24",
+    cardBorder: "#164a58",
+    accent: "#3fd9c0",
+    success: "#4fd98a",
+    successDim: "rgba(79, 217, 138, 0.14)",
+    warning: "#e0b45c",
+    warningDim: "rgba(224, 180, 92, 0.14)",
+    danger: "#e06868",
+    dangerDim: "rgba(224, 104, 104, 0.14)",
+    text: "#dcedf1",
+    textDim: "#82a9b6",
+    textMuted: "#3e6371",
+    white: "#f0fafc",
+    teal: "#54b8e8",
+    tealDim: "rgba(84, 184, 232, 0.14)",
+    accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
+  },
+};
+
+/**
+ * Lighthouse - the high-contrast accessibility theme: near-black base, warm
+ * beam-yellow accent. "When the fog rolls in, follow the light."
+ *
+ * EVERY text-carrying slot (text/textDim/textMuted, accent, success,
+ * warning, danger, teal) is verified >= 7:1 (WCAG AAA) against BOTH bg and
+ * card; the lowest is textMuted at 7.75:1 on card. cardBorder clears the
+ * 3:1 non-text bar at 4.5:1. That audit is this theme's whole promise -
+ * re-verify contrast ratios before changing ANY value here.
+ */
+const LIGHTHOUSE: ThemePreset = {
+  id: "lighthouse",
+  name: "Lighthouse",
+  colors: {
+    bg: "#050505",
+    card: "#141414",
+    cardBorder: "#767676",
+    accent: "#ffd75e",
+    success: "#7ee787",
+    successDim: "rgba(126, 231, 135, 0.18)",
+    warning: "#ffbe4d",
+    warningDim: "rgba(255, 190, 77, 0.18)",
+    danger: "#ff9191",
+    dangerDim: "rgba(255, 145, 145, 0.18)",
+    text: "#ffffff",
+    textDim: "#d6d6d6",
+    textMuted: "#a8a8a8",
+    white: "#ffffff",
+    teal: "#79e0e8",
+    tealDim: "rgba(121, 224, 232, 0.18)",
+    accentButtonText: "#000000",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
+  },
+};
+
+/**
+ * Chart Room - a real nautical chart: pale SEA-BLUE background (the water)
+ * with buff land-tone cards floating on it, dark teal contour-ink text,
+ * brass accent. The sea/land two-tone is the theme's identity and what
+ * keeps it out of The Ark's cream-parchment territory - don't warm the
+ * background back toward paper. Rhymes with the Captain's Course branding.
+ */
+const CHART_ROOM: ThemePreset = {
+  id: "chart_room",
+  name: "Chart Room",
+  colors: {
+    bg: "#c5d6d3",
+    card: "#eee2c0",
+    cardBorder: "#a08a5e",
+    accent: "#75561f",
+    success: "#3d6634",
+    successDim: "rgba(61, 102, 52, 0.15)",
+    warning: "#8a5a10",
+    warningDim: "rgba(138, 90, 16, 0.15)",
+    danger: "#963527",
+    dangerDim: "rgba(150, 53, 39, 0.15)",
+    text: "#123a44",
+    textDim: "#3f6167",
+    textMuted: "#7e8f83",
+    white: "#f2e4c4",
+    teal: "#275f6b",
+    tealDim: "rgba(39, 95, 107, 0.15)",
+    accentButtonText: "#f2e4c4",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
+  },
+};
+
+/**
+ * Harbor Dawn - the pastel coastal light theme: a clearly PEACH morning-sky
+ * background over seafoam-tinted cards (that warm/cool duo is the theme's
+ * identity - keep the two tints distinct), with a muted gold accent.
+ * "New month, fresh start" energy for people who find dark finance apps
+ * gloomy.
+ */
+const HARBOR_DAWN: ThemePreset = {
+  id: "harbor_dawn",
+  name: "Harbor Dawn",
+  colors: {
+    bg: "#fadfc9",
+    card: "#eef6f2",
+    cardBorder: "#c3d8d0",
+    // Deeper than a typical "muted gold" so the accent (and text on it)
+    // clears ~4:1 on the peach bg too - verified alongside Lighthouse.
+    accent: "#8a6a14",
+    success: "#297a58",
+    successDim: "rgba(41, 122, 88, 0.15)",
+    warning: "#96620f",
+    warningDim: "rgba(150, 98, 15, 0.15)",
+    danger: "#ad4237",
+    dangerDim: "rgba(173, 66, 55, 0.15)",
+    text: "#3a4550",
+    textDim: "#61707d",
+    textMuted: "#a0aeb2",
+    // Light: white is used as text on accent/status-colored buttons, and
+    // the accent here is dark gold (unlike Rose, whose light accent needs
+    // a dark "white").
+    white: "#ffffff",
+    teal: "#2b756c",
+    tealDim: "rgba(43, 117, 108, 0.15)",
+    accentButtonText: "#ffffff",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
+  },
+};
+
+/**
+ * Ledger - the nostalgic banker's theme, keyed to classic "green bar"
+ * accounting paper: a pale ledger-green background (NOT cream - that's
+ * what separates it from Chart Room's sepia), white paper cards with
+ * ruled-line green borders, accounting-green accent, red-ink danger.
+ * Ruled lines and tabular typography are outside what a ThemePreset can
+ * express; the palette does the talking.
+ */
+const LEDGER: ThemePreset = {
+  id: "ledger",
+  name: "Ledger",
+  colors: {
+    bg: "#dde9d8",
+    card: "#f8faf2",
+    cardBorder: "#a9c19f",
+    accent: "#1e6f47",
+    success: "#277a4c",
+    successDim: "rgba(39, 122, 76, 0.15)",
+    warning: "#97701c",
+    warningDim: "rgba(151, 112, 28, 0.15)",
+    danger: "#a82e2e",
+    dangerDim: "rgba(168, 46, 46, 0.15)",
+    text: "#232a20",
+    textDim: "#5c6b54",
+    textMuted: "#96a68e",
+    white: "#eaf4ea",
+    teal: "#34756d",
+    tealDim: "rgba(52, 117, 109, 0.15)",
+    accentButtonText: "#eaf4ea",
+    overlay: "rgba(0, 0, 0, 0.75)",
+    overlayStrong: "rgba(0, 0, 0, 0.85)",
+  },
+};
+
+export const THEME_PRESETS: readonly ThemePreset[] = [FOREST_GOLD, NEON_PURPLE, SLATE_DARK, ROSE_LIGHT, SYNTHWAVE, DEEPFOREST, ARK_PARCHMENT, OCEAN_CORAL, SLATE, CLASSIC, DEEP_SPACE, DEEP_SEA, LIGHTHOUSE, CHART_ROOM, HARBOR_DAWN, LEDGER] as const;
 
 /** Default theme the app uses on first launch */
 export const DEFAULT_THEME_ID: ThemePreset["id"] = "forest_gold";
