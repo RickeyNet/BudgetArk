@@ -84,6 +84,9 @@
     },
     "@expo/plist": {
       "@xmldom/xmldom": "^0.8.13"
+    },
+    "@bacons/xcode": {
+      "uuid": "^14.0.0"
     }
   },
   "expo": {

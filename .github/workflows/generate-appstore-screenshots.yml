@@ -26,13 +26,30 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Raw device screenshots are deliberately NOT committed (screenshots/raw/**
+      # is gitignored - they are real phone captures). Without them the generator
+      # exits 1, so skip the work with a notice instead of failing the run; the
+      # steps below only run when source images are actually present in git.
+      - name: Check for source screenshots
+        id: sources
+        run: |
+          if find screenshots/raw -type f ( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' ) | grep -q .; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No source screenshots in screenshots/raw/ (they are gitignored) - nothing to generate. Run 'npm run screenshots:generate' locally."
+          fi
+
       - name: Install dependencies
+        if: steps.sources.outputs.present == 'true'
         run: npm ci
 
       - name: Generate screenshots
+        if: steps.sources.outputs.present == 'true'
         run: npm run screenshots:generate
 
       - name: Upload screenshot artifacts
+        if: steps.sources.outputs.present == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-store-screenshots
