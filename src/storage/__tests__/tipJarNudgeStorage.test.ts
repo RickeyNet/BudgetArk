@@ -3,15 +3,15 @@
  * File: src/storage/__tests__/tipJarNudgeStorage.test.ts
  *
  * Pins the persisted cadence: wins accumulate across calls, the Nth earns
- * the nudge and resets the counter, the switch survives round-trips, and
- * a corrupt record falls back to defaults instead of throwing. Storage is
+ * the nudge and resets the counter, a stale `enabled:false` from before
+ * the switch was removed is dropped, and a corrupt record falls back to
+ * defaults instead of throwing. Storage is
  * an in-memory map, matching monthlyBalanceStorage.test.ts's pattern.
  */
 import {
   clearTipJarNudgeState,
   getTipJarNudgeState,
   recordTipJarWin,
-  setTipJarNudgeEnabled,
 } from "../tipJarNudgeStorage";
 import { DEFAULT_TIP_NUDGE_STATE, TIP_NUDGE_WINS_BETWEEN } from "../../utils/tipJarNudge";
 
@@ -59,13 +59,18 @@ describe("tipJarNudgeStorage", () => {
     });
   });
 
-  it("round-trips the switch without disturbing the counters", async () => {
-    await recordTipJarWin(T0);
-    await setTipJarNudgeEnabled(false);
-    expect(await getTipJarNudgeState()).toMatchObject({ enabled: false, totalWins: 1 });
-    expect(await recordTipJarWin(T0)).toBe(false);
-    await setTipJarNudgeEnabled(true);
-    expect(await getTipJarNudgeState()).toMatchObject({ enabled: true, totalWins: 2 });
+  it("drops a stale enabled:false left by the retired Profile switch", async () => {
+    mockStore.set(
+      KEY,
+      JSON.stringify({ enabled: false, winsSinceNudge: 0, lastNudgeAt: null, totalWins: 0 })
+    );
+    expect(await getTipJarNudgeState()).toEqual(DEFAULT_TIP_NUDGE_STATE);
+    const verdicts: boolean[] = [];
+    for (let i = 0; i < TIP_NUDGE_WINS_BETWEEN; i++) {
+      verdicts.push(await recordTipJarWin(T0));
+    }
+    expect(verdicts[TIP_NUDGE_WINS_BETWEEN - 1]).toBe(true);
+    expect(mockStore.get(KEY)).not.toContain("enabled");
   });
 
   it("recovers from a corrupt record", async () => {

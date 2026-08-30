@@ -3,9 +3,9 @@
  *
  * The win counter and "last shown" stamp behind the occasional Tip Jar
  * mention after a payment, payoff, or settled bill (utils/tipJarNudge).
- * Device-local preference: not synced to a partner and not part of
- * backups - it holds no financial data, only a switch and two counters,
- * and a restored phone simply starts the cadence over. Nothing here says
+ * Device-local: not synced to a partner and not part of backups - it
+ * holds no financial data, only two counters and a timestamp, and a
+ * restored phone simply starts the cadence over. Nothing here says
  * whether the user ever tipped; the app never learns that.
  */
 
@@ -20,13 +20,6 @@ const TIP_JAR_NUDGE_KEY = "@budgetark_tip_nudge" as const;
 
 export const getTipJarNudgeState = async (): Promise<TipJarNudgeState> =>
   parseTipJarNudgeState(await EncryptedStorage.getItem(TIP_JAR_NUDGE_KEY));
-
-/** Profile switch. Off keeps counting wins so re-enabling doesn't fire at once. */
-export const setTipJarNudgeEnabled = async (enabled: boolean): Promise<void> => {
-  await EncryptedStorage.updateItem(TIP_JAR_NUDGE_KEY, (current) =>
-    JSON.stringify({ ...parseTipJarNudgeState(current), enabled })
-  );
-};
 
 /**
  * Count one win; resolves true when this win earns a nudge. Read-modify-

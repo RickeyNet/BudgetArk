@@ -150,7 +150,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `reviewInboxStorage.test.ts` | `reviewInboxStorage.ts` | Ingest-ledger TTL pruning, 500-item inbox cap ordering |
 | `connectionSecretsStorage.test.ts` | `connectionSecretsStorage.ts` | Rule 2: `EncryptionUnavailableError` propagates, provider-mismatch refusal |
 | `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
-| `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, switch round-trip, corrupt record recovery |
+| `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, stale `enabled:false` dropped, corrupt record recovery |
 | `hiddenCategoriesStorage.test.ts` | `hiddenCategoriesStorage.ts` | Hidden built-ins: hide/restore round-trip, idempotent, protected/unknown names ignored, corrupt record reads empty |
 
 ### Bank connections (`src/services/connections`)

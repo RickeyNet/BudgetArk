@@ -56,16 +56,6 @@ describe("recordWinForNudge", () => {
     expect(recordWinForNudge(primed, almost).show).toBe(false);
   });
 
-  it("keeps counting while disabled but never shows, and doesn't fire the moment it's re-enabled early", () => {
-    const off: TipJarNudgeState = { ...DEFAULT_TIP_NUDGE_STATE, enabled: false };
-    const { verdicts, state } = runWins(off, 10, T0);
-    expect(verdicts.some(Boolean)).toBe(false);
-    expect(state.totalWins).toBe(10);
-    expect(state.winsSinceNudge).toBe(10);
-    // Re-enabled with the cadence met and no prior nudge: the next win shows.
-    expect(recordWinForNudge({ ...state, enabled: true }, T0).show).toBe(true);
-  });
-
   it("reads a clock that went backwards as too soon", () => {
     const first = runWins(DEFAULT_TIP_NUDGE_STATE, TIP_NUDGE_WINS_BETWEEN, T0).state;
     const primed = runWins(first, TIP_NUDGE_WINS_BETWEEN, T0).state;
@@ -85,11 +75,21 @@ describe("parseTipJarNudgeState", () => {
   it("sanitizes each field independently", () => {
     expect(
       parseTipJarNudgeState(
-        JSON.stringify({ enabled: false, winsSinceNudge: -3, lastNudgeAt: "garbage", totalWins: 2.5 })
+        JSON.stringify({ winsSinceNudge: -3, lastNudgeAt: "garbage", totalWins: 2.5 })
       )
-    ).toEqual({ enabled: false, winsSinceNudge: 0, lastNudgeAt: null, totalWins: 0 });
-    const good = { enabled: true, winsSinceNudge: 2, lastNudgeAt: T0.toISOString(), totalWins: 9 };
+    ).toEqual({ winsSinceNudge: 0, lastNudgeAt: null, totalWins: 0 });
+    const good = { winsSinceNudge: 2, lastNudgeAt: T0.toISOString(), totalWins: 9 };
     expect(parseTipJarNudgeState(JSON.stringify(good))).toEqual(good);
+  });
+
+  it("ignores the retired `enabled` switch from older records", () => {
+    const legacy = { enabled: false, winsSinceNudge: 2, lastNudgeAt: null, totalWins: 2 };
+    const parsed = parseTipJarNudgeState(JSON.stringify(legacy));
+    expect(parsed).toEqual({ winsSinceNudge: 2, lastNudgeAt: null, totalWins: 2 });
+    expect("enabled" in parsed).toBe(false);
+    // ...and the cadence runs as if the switch never existed.
+    const { verdicts } = runWins(parsed, TIP_NUDGE_WINS_BETWEEN - 2, T0);
+    expect(verdicts[verdicts.length - 1]).toBe(true);
   });
 });
 

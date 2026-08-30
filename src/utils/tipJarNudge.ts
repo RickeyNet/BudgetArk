@@ -6,8 +6,10 @@
  * its budget line - earns a quiet Tip Jar mention, and what that mention
  * says. The rule is a cadence, not a reflex: one nudge per
  * TIP_NUDGE_WINS_BETWEEN wins and never two inside
- * TIP_NUDGE_MIN_DAYS_BETWEEN days, off entirely when the user says so.
- * Wins are still counted while off so re-enabling doesn't fire at once.
+ * TIP_NUDGE_MIN_DAYS_BETWEEN days. There is deliberately no off switch:
+ * the cadence itself is the courtesy (the user asked for the mention to
+ * be occasional, not optional), and an older record's `enabled` flag is
+ * ignored on read.
  *
  * Pure and unit-tested; tipJarNudgeStorage persists the state and the
  * TipJarProvider/cards only render the result. Nothing here records what
@@ -23,8 +25,6 @@ export interface WinEvent {
 }
 
 export interface TipJarNudgeState {
-  /** User switch (Profile > Tip Jar). Default on. */
-  enabled: boolean;
   /** Wins since the last nudge actually shown. */
   winsSinceNudge: number;
   /** ISO timestamp of the last nudge shown, null if never. */
@@ -34,7 +34,6 @@ export interface TipJarNudgeState {
 }
 
 export const DEFAULT_TIP_NUDGE_STATE: TipJarNudgeState = {
-  enabled: true,
   winsSinceNudge: 0,
   lastNudgeAt: null,
   totalWins: 0,
@@ -63,7 +62,6 @@ export const parseTipJarNudgeState = (raw: string | null): TipJarNudgeState => {
         ? parsed.lastNudgeAt
         : null;
     return {
-      enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : true,
       winsSinceNudge: isNonNegativeInt(parsed.winsSinceNudge) ? parsed.winsSinceNudge : 0,
       lastNudgeAt,
       totalWins: isNonNegativeInt(parsed.totalWins) ? parsed.totalWins : 0,
@@ -87,7 +85,6 @@ export const recordWinForNudge = (
     winsSinceNudge: state.winsSinceNudge + 1,
     totalWins: state.totalWins + 1,
   };
-  if (!counted.enabled) return { state: counted, show: false };
   if (counted.winsSinceNudge < TIP_NUDGE_WINS_BETWEEN) return { state: counted, show: false };
   if (counted.lastNudgeAt) {
     const elapsed = now.getTime() - Date.parse(counted.lastNudgeAt);
