@@ -21,8 +21,8 @@
     "@bacons/apple-targets": "^5.0.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
-    "@react-navigation/bottom-tabs": "^7.15.7",
-    "@react-navigation/native": "^7.2.0",
+    "@react-navigation/bottom-tabs": "^7.18.18",
+    "@react-navigation/native": "^7.3.18",
     "babel-preset-expo": "~57.0.0",
     "crypto-js": "^4.2.0",
     "expo": "~57.0.18",
@@ -67,12 +67,12 @@
     "@types/react": "~19.2.10",
     "eslint": "^9.39.4",
     "eslint-config-expo": "~57.0.2",
-    "jest": "^30.4.2",
+    "jest": "^30.5.0",
     "ts-jest": "^29.4.11",
     "typescript": "~6.0.3"
   },
   "optionalDependencies": {
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "overrides": {
     "postcss": "^8.5.13",
