@@ -4,7 +4,8 @@
  *
  * The Charts-tab "Plan a Purchase" tool: set up a sinking fund for a
  * specific item (name, price, monthly set-aside, optional need-by month),
- * see when it's ready and whether the pace fits your free cash flow, and
+ * see when it's ready and whether the pace fits your free cash flow, what
+ * it costs in hours of take-home pay and against financing it instead, and
  * get Ark-milestone-aware guidance so the purchase never quietly derails
  * the bigger program. Saved plans persist as SavingsGoals, so they ride
  * partner sync, backups, and net worth like every other goal, and are
@@ -14,7 +15,7 @@
  * shell.
  */
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutAnimation,
   StyleSheet,
@@ -39,10 +40,26 @@ import { addSavingsGoal } from "../storage/savingsGoalStorage";
 import {
   assessPurchaseFit,
   buildArkPurchaseGuidance,
+  calcFinanceVsSave,
+  calcHourlyTakeHome,
+  calcHoursOfWork,
   calcPurchaseSliderMax,
   calcPurchaseTimeline,
   calcRequiredMonthly,
+  describeHoursOfWork,
+  FINANCE_TERM_OPTIONS,
+  suggestFinanceApr,
 } from "../utils/purchasePlanner";
+import {
+  getPurchasePlanSettings,
+  updatePurchasePlanSettings,
+} from "../storage/purchasePlanSettingsStorage";
+import {
+  DEFAULT_PURCHASE_PLAN_SETTINGS,
+  MAX_HOURLY_RATE,
+  type PurchasePlanSettings,
+} from "../utils/purchasePlanSettings";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import type { MonthlyCashFlow } from "../utils/purchasePlanner";
 import { calcDebtRedirectImpact, formatWhatIfMonths } from "../utils/whatIfSpending";
 import { sanitizeTextInput } from "../utils/sanitize";
@@ -150,6 +167,66 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
   const plans = useMemo(() => filterPurchasePlans(savingsGoals), [savingsGoals]);
 
   const canSave = itemName.trim().length > 0 && price > 0;
+
+  /* ── Cost analysis: hours of work, finance vs save ── */
+
+  // Shares the device-local record with PurchasePlanList; each side saves
+  // only the fields it owns (patch merge in the store), debounced.
+  const [analysis, setAnalysis] = useState<PurchasePlanSettings>(
+    DEFAULT_PURCHASE_PLAN_SETTINGS
+  );
+  const [hourlyText, setHourlyText] = useState("");
+  const analysisTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analysisPatch = useRef<Partial<PurchasePlanSettings>>({});
+  useEffect(() => {
+    let cancelled = false;
+    void getPurchasePlanSettings().then((stored) => {
+      if (cancelled) return;
+      setAnalysis(stored);
+      if (stored.hourlyOverride !== null) setHourlyText(String(stored.hourlyOverride));
+    });
+    return () => {
+      cancelled = true;
+      if (analysisTimer.current) clearTimeout(analysisTimer.current);
+    };
+  }, []);
+  const changeAnalysis = useCallback((patch: Partial<PurchasePlanSettings>) => {
+    setAnalysis((prev) => ({ ...prev, ...patch }));
+    analysisPatch.current = { ...analysisPatch.current, ...patch };
+    if (analysisTimer.current) clearTimeout(analysisTimer.current);
+    analysisTimer.current = setTimeout(() => {
+      analysisTimer.current = null;
+      const toSave = analysisPatch.current;
+      analysisPatch.current = {};
+      void updatePurchasePlanSettings(toSave);
+    }, 400);
+  }, []);
+
+  const hourlyFromIncome = calcHourlyTakeHome(cashFlow.avgIncome, analysis.hoursPerWeek);
+  const hourlyRate = analysis.hourlyOverride ?? hourlyFromIncome;
+  const hoursOfWork = useMemo(
+    () => (hourlyRate ? calcHoursOfWork(price, hourlyRate, analysis.hoursPerWeek) : null),
+    [price, hourlyRate, analysis.hoursPerWeek]
+  );
+  const financeApr = analysis.financeApr ?? suggestFinanceApr(activeDebts);
+  const finance = useMemo(
+    () =>
+      calcFinanceVsSave({
+        price,
+        alreadySaved,
+        monthlySetAside: monthly,
+        aprPercent: financeApr,
+        termMonths: analysis.financeTermMonths,
+      }),
+    [price, alreadySaved, monthly, financeApr, analysis.financeTermMonths]
+  );
+  const financeReady = useMemo(
+    () =>
+      finance && finance.saveMonths !== null
+        ? calcPurchaseTimeline(price, alreadySaved, monthly).readyDate
+        : null,
+    [finance, price, alreadySaved, monthly]
+  );
 
   /* ── Mutations ── */
 
@@ -371,6 +448,152 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                     )}
                   </View>
 
+                  {/* Cost analysis */}
+                  {price > 0 ? (
+                    <View style={tool.efCard}>
+                      <Text style={tool.efSectionTitle}>What it really costs</Text>
+
+                      {/* Hours of work */}
+                      {hoursOfWork && hourlyRate ? (
+                        <Text style={styles.fitText}>
+                          {`${formatCurrency(price)} is ${describeHoursOfWork(hoursOfWork)} at ${formatCurrency(Math.round(hourlyRate * 100) / 100)}/hr take-home${
+                            analysis.hourlyOverride === null
+                              ? ` (from your average income of ${formatCurrency(cashFlow.avgIncome)}/mo)`
+                              : ""
+                          }.`}
+                        </Text>
+                      ) : (
+                        <Text style={tool.efAutoHint}>
+                          Log your income in the Budget tab, or type your take-home
+                          per hour below, to see this price in hours of work.
+                        </Text>
+                      )}
+                      <View style={tool.sliderGroup}>
+                        <SliderRow
+                          label="Hours you work per week"
+                          value={analysis.hoursPerWeek}
+                          min={1}
+                          max={80}
+                          step={1}
+                          displayValue={`${analysis.hoursPerWeek} hrs`}
+                          onValueChange={(value) =>
+                            changeAnalysis({ hoursPerWeek: Math.round(value) })
+                          }
+                          onAdjust={(delta) =>
+                            changeAnalysis({
+                              hoursPerWeek: Math.max(
+                                1,
+                                Math.min(80, analysis.hoursPerWeek + delta)
+                              ),
+                            })
+                          }
+                        />
+                      </View>
+                      <Text style={tool.inputLabel}>
+                        {hourlyFromIncome
+                          ? "Or type your take-home per hour (leave blank to use your income)"
+                          : "Your take-home per hour"}
+                      </Text>
+                      <TextInput
+                        style={tool.input}
+                        placeholder="e.g. 28.50"
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType="decimal-pad"
+                        value={hourlyText}
+                        onChangeText={(text) => {
+                          setHourlyText(text);
+                          const parsed = parseMoneyInput(text);
+                          changeAnalysis({
+                            hourlyOverride:
+                              parsed !== null && parsed > 0 && parsed <= MAX_HOURLY_RATE
+                                ? parsed
+                                : null,
+                          });
+                        }}
+                      />
+
+                      {/* Finance vs save */}
+                      <Text style={[tool.efSectionTitle, styles.analysisSubTitle]}>
+                        Finance it vs. save for it
+                      </Text>
+                      <View style={tool.sliderGroup}>
+                        <SliderRow
+                          label="APR if you financed it"
+                          value={financeApr}
+                          min={0}
+                          max={40}
+                          step={0.5}
+                          displayValue={`${financeApr.toFixed(1)}%`}
+                          onValueChange={(value) => changeAnalysis({ financeApr: value })}
+                          onAdjust={(delta) =>
+                            changeAnalysis({
+                              financeApr: Math.max(0, Math.min(40, financeApr + delta)),
+                            })
+                          }
+                        />
+                      </View>
+                      <View style={tool.chipWrap}>
+                        {FINANCE_TERM_OPTIONS.map((term) => (
+                          <TouchableOpacity
+                            key={term}
+                            style={[
+                              tool.chip,
+                              analysis.financeTermMonths === term && tool.chipActive,
+                            ]}
+                            onPress={() => changeAnalysis({ financeTermMonths: term })}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: analysis.financeTermMonths === term }}
+                          >
+                            <Text
+                              style={[
+                                tool.chipText,
+                                analysis.financeTermMonths === term && tool.chipTextActive,
+                              ]}
+                            >
+                              {term} mo
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {finance ? (
+                        <>
+                          <Text style={styles.fitText}>
+                            {`Financing ${formatCurrency(finance.financed)} at ${financeApr.toFixed(1)}% over ${finance.termMonths} months: ${formatCurrency(Math.round(finance.monthlyPayment))}/mo, ${formatCurrency(Math.round(finance.totalInterest))} in interest (${formatCurrency(Math.round(finance.totalPaid))} total).`}
+                          </Text>
+                          {finance.saveMonths !== null && financeReady ? (
+                            <Text style={styles.fitText}>
+                              {finance.saveMonths === 0
+                                ? "You already have the money - saving wins outright."
+                                : `Saving instead gets it ${formatPlanMonthYear(financeReady)}, ${formatWhatIfMonths(finance.saveMonths)} later, and keeps the ${formatCurrency(Math.round(finance.totalInterest))}${
+                                    finance.interestPerMonthSooner !== null
+                                      ? ` - about ${formatCurrency(Math.round(finance.interestPerMonthSooner))} for every month of waiting the loan would skip`
+                                      : ""
+                                  }.${
+                                    finance.extraPerMonthVsSaving > 0
+                                      ? ` The loan payment is also ${formatCurrency(Math.round(finance.extraPerMonthVsSaving))}/mo more than your set-aside, for ${finance.termMonths} months.`
+                                      : ""
+                                  }`}
+                            </Text>
+                          ) : (
+                            <Text style={tool.efAutoHint}>
+                              Pick a monthly set-aside above to compare the wait
+                              against the interest.
+                            </Text>
+                          )}
+                          {guidance.tone !== "go" && guidance.stepTitle ? (
+                            <Text style={[styles.fitText, { color: toneColor }]}>
+                              {`A new loan while you're on the ${guidance.stepTitle} step moves your Ark backwards - that interest is money the step needs.`}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : (
+                        <Text style={tool.efAutoHint}>
+                          Nothing to finance - what you've saved already covers it.
+                        </Text>
+                      )}
+                    </View>
+                  ) : null}
+
                   {/* Ark guidance */}
                   <View style={[styles.arkCard, { backgroundColor: toneBg }]}>
                     <Text style={[styles.arkTitle, { color: toneColor }]}>
@@ -455,6 +678,11 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: 13,
       color: colors.accent,
       fontWeight: "600",
+    },
+
+    /* Cost analysis */
+    analysisSubTitle: {
+      marginTop: 12,
     },
 
     /* Fit + Ark guidance */

@@ -66,7 +66,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `quickStart.test.ts` | `quickStart.ts` / `data/quickStartTemplates.ts` | Onboarding templates: allocation sanity, lenient amount parse, seed = tidy limits + income/housing lines, zero-based totals pay exactly, nothing sized without income |
 | `trackingReminderOffer.test.ts` | `trackingReminderOffer.ts` | One-time reminders offer shows only to a phone that never decided (enabled / sheet visited / dismissed all retire it) |
 | `whatIfSpending.test.ts` | `whatIfSpending.ts` | "What if I stopped spending on X": category averages, redirect impact on payoff and savings |
-| `purchasePlanner.test.ts` / `purchasePlanSettings.test.ts` | `purchasePlanner.ts` / `purchasePlanSettings.ts` | Plan-a-Purchase sinking funds: monthly need, Ark-step guidance, plan ordering (snowball / soonest / custom), reorder assignments, rollover vs parallel month-by-month projection, list summary and slider suggestions; fail-closed plan-list settings parse |
+| `purchasePlanner.test.ts` / `purchasePlanSettings.test.ts` | `purchasePlanner.ts` / `purchasePlanSettings.ts` | Plan-a-Purchase sinking funds: monthly need, Ark-step guidance, plan ordering (snowball / soonest / custom), reorder assignments, rollover vs parallel month-by-month projection, list summary and slider suggestions, hours-of-work and finance-vs-save math; fail-closed plan-list + cost-analysis settings parse |
 | `emergencyFund.test.ts` | `emergencyFund.ts` | EF goal resolution (explicit goal > Keel synthetic > linked savings accounts), savings reserve sum |
 | `savingsGoals.test.ts` | `savingsGoals.ts` | EF contribution application, EF source selection |
 | `paycheckMath.test.ts` | `paycheckMath.ts` | W-2 / 1099 rollups: tax set-aside, 401(k) contributions, monthly summary |
@@ -151,6 +151,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `connectionSecretsStorage.test.ts` | `connectionSecretsStorage.ts` | Rule 2: `EncryptionUnavailableError` propagates, provider-mismatch refusal |
 | `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
 | `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, stale `enabled:false` dropped, corrupt record recovery |
+| `purchasePlanSettingsStorage.test.ts` | `purchasePlanSettingsStorage.ts` | Device-local plan-list settings: patch merge between the two owning components, fail-closed over a corrupt record |
 | `hiddenCategoriesStorage.test.ts` | `hiddenCategoriesStorage.ts` | Hidden built-ins: hide/restore round-trip, idempotent, protected/unknown names ignored, corrupt record reads empty |
 
 ### Bank connections (`src/services/connections`)

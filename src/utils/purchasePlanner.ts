@@ -600,3 +600,137 @@ export const calcCombinedSliderMax = (
   );
   return Math.ceil(raw / 25) * 25;
 };
+
+/* ── Cost analysis: hours of work, finance vs save ── */
+
+export const DEFAULT_HOURS_PER_WEEK = 40;
+export const WEEKS_PER_YEAR = 52;
+/** Loan terms offered by the finance-vs-save comparison. */
+export const FINANCE_TERM_OPTIONS: readonly number[] = [6, 12, 24, 36, 48, 60];
+/** APR assumed when the user has no debts to borrow a rate from. */
+export const DEFAULT_FINANCE_APR = 22;
+
+/**
+ * Take-home pay per hour from the budget's average monthly income (net pay
+ * as logged) and the hours worked per week. Null when either is unusable -
+ * the UI then offers a typed hourly rate instead.
+ */
+export const calcHourlyTakeHome = (
+  avgMonthlyIncome: number,
+  hoursPerWeek: number
+): number | null => {
+  if (
+    !Number.isFinite(avgMonthlyIncome) ||
+    avgMonthlyIncome <= 0 ||
+    !Number.isFinite(hoursPerWeek) ||
+    hoursPerWeek <= 0
+  ) {
+    return null;
+  }
+  return (avgMonthlyIncome * 12) / (WEEKS_PER_YEAR * hoursPerWeek);
+};
+
+export type HoursOfWork = { hours: number; weeks: number };
+
+/** How long the user works to earn `price`, at `hourlyRate` take-home. */
+export const calcHoursOfWork = (
+  price: number,
+  hourlyRate: number,
+  hoursPerWeek: number
+): HoursOfWork | null => {
+  if (
+    !Number.isFinite(price) ||
+    price <= 0 ||
+    !Number.isFinite(hourlyRate) ||
+    hourlyRate <= 0 ||
+    !Number.isFinite(hoursPerWeek) ||
+    hoursPerWeek <= 0
+  ) {
+    return null;
+  }
+  const hours = price / hourlyRate;
+  return { hours, weeks: hours / hoursPerWeek };
+};
+
+/** "under an hour" / "3 hours" / "120 hours - about 3 weeks of work". */
+export const describeHoursOfWork = (work: HoursOfWork): string => {
+  if (work.hours < 1) return "under an hour of work";
+  const hours = Math.round(work.hours);
+  const base = `${hours} hour${hours === 1 ? "" : "s"} of work`;
+  if (work.weeks < 1) return base;
+  const weeks = Math.round(work.weeks * 10) / 10;
+  return `${base} - about ${weeks} week${weeks === 1 ? "" : "s"}`;
+};
+
+/** Standard amortized payment; 0% APR is plain division. */
+export const calcLoanPayment = (
+  principal: number,
+  aprPercent: number,
+  termMonths: number
+): number => {
+  if (!Number.isFinite(principal) || principal <= 0) return 0;
+  if (!Number.isFinite(termMonths) || termMonths <= 0) return 0;
+  const r = Number.isFinite(aprPercent) && aprPercent > 0 ? aprPercent / 100 / 12 : 0;
+  if (r === 0) return principal / termMonths;
+  return (principal * r) / (1 - Math.pow(1 + r, -termMonths));
+};
+
+export type FinanceVsSave = {
+  /** What would be borrowed: the price less what's already saved. */
+  financed: number;
+  monthlyPayment: number;
+  totalPaid: number;
+  totalInterest: number;
+  termMonths: number;
+  /** Months until the plan is funded by saving; null when no set-aside. */
+  saveMonths: number | null;
+  /** Interest paid per month of waiting avoided (financing gets it now). */
+  interestPerMonthSooner: number | null;
+  /** Loan payment minus the monthly set-aside (positive = loan costs more each month). */
+  extraPerMonthVsSaving: number;
+};
+
+/**
+ * Buying now on credit versus saving up: the loan's payment and interest
+ * against the save-up wait. Null when nothing would be financed or the
+ * term is unusable.
+ */
+export const calcFinanceVsSave = (input: {
+  price: number;
+  alreadySaved: number;
+  monthlySetAside: number;
+  aprPercent: number;
+  termMonths: number;
+}): FinanceVsSave | null => {
+  const financed = Math.max(0, input.price - Math.max(0, input.alreadySaved));
+  if (financed <= 0 || !Number.isFinite(input.termMonths) || input.termMonths <= 0) {
+    return null;
+  }
+  const monthlyPayment = calcLoanPayment(financed, input.aprPercent, input.termMonths);
+  const totalPaid = monthlyPayment * input.termMonths;
+  const totalInterest = Math.max(0, totalPaid - financed);
+  const timeline = calcPurchaseTimeline(input.price, input.alreadySaved, input.monthlySetAside);
+  const saveMonths = Number.isFinite(timeline.monthsToReady) ? timeline.monthsToReady : null;
+  return {
+    financed,
+    monthlyPayment,
+    totalPaid,
+    totalInterest,
+    termMonths: input.termMonths,
+    saveMonths,
+    interestPerMonthSooner:
+      saveMonths !== null && saveMonths > 0 ? totalInterest / saveMonths : null,
+    extraPerMonthVsSaving: monthlyPayment - Math.max(0, input.monthlySetAside),
+  };
+};
+
+/** APR to start the comparison at: the user's highest-rate live debt, else a typical card. */
+export const suggestFinanceApr = (
+  debts: readonly { balance: number; rate: number }[]
+): number => {
+  let best = 0;
+  for (const debt of debts) {
+    if (debt.balance > 0 && Number.isFinite(debt.rate) && debt.rate > best) best = debt.rate;
+  }
+  return best > 0 ? best : DEFAULT_FINANCE_APR;
+};

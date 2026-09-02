@@ -59,7 +59,7 @@ import {
 } from "../utils/purchasePlanner";
 import {
   getPurchasePlanSettings,
-  savePurchasePlanSettings,
+  updatePurchasePlanSettings,
 } from "../storage/purchasePlanSettingsStorage";
 import {
   DEFAULT_PURCHASE_PLAN_SETTINGS,
@@ -142,14 +142,13 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   const [settings, setSettings] = useState<PurchasePlanSettings>(
     DEFAULT_PURCHASE_PLAN_SETTINGS,
   );
-  const settingsLoaded = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Fields changed since the last write - saved as one merged patch. */
+  const pendingPatch = useRef<Partial<PurchasePlanSettings>>({});
   useEffect(() => {
     let cancelled = false;
     void getPurchasePlanSettings().then((stored) => {
-      if (cancelled) return;
-      settingsLoaded.current = true;
-      setSettings(stored);
+      if (!cancelled) setSettings(stored);
     });
     return () => {
       cancelled = true;
@@ -157,17 +156,21 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
     };
   }, []);
 
-  /** Update + persist (debounced, so a slider drag is one write). */
+  /**
+   * Update + persist (debounced, so a slider drag is one write). Only the
+   * changed fields are written: the planner card owns the analysis fields
+   * of the same record and must not be overwritten with stale copies.
+   */
   const changeSettings = useCallback((patch: Partial<PurchasePlanSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => {
-        saveTimer.current = null;
-        void savePurchasePlanSettings(next);
-      }, SETTINGS_SAVE_DELAY_MS);
-      return next;
-    });
+    setSettings((prev) => ({ ...prev, ...patch }));
+    pendingPatch.current = { ...pendingPatch.current, ...patch };
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      const toSave = pendingPatch.current;
+      pendingPatch.current = {};
+      void updatePurchasePlanSettings(toSave);
+    }, SETTINGS_SAVE_DELAY_MS);
   }, []);
 
   const summary = useMemo(() => summarizePurchasePlans(plans), [plans]);

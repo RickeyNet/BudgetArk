@@ -12,7 +12,13 @@ import {
   assessPurchaseFit,
   buildArkPurchaseGuidance,
   calcCombinedSliderMax,
+  calcFinanceVsSave,
+  calcHourlyTakeHome,
+  calcHoursOfWork,
+  calcLoanPayment,
   calcMonthlyCashFlow,
+  DEFAULT_FINANCE_APR,
+  describeHoursOfWork,
   calcPurchaseSliderMax,
   calcPurchaseTimeline,
   calcRequiredMonthly,
@@ -22,6 +28,7 @@ import {
   projectPurchasePlans,
   PURCHASE_LOOKBACK_MONTHS,
   suggestCombinedMonthly,
+  suggestFinanceApr,
   summarizePurchasePlans,
 } from "../purchasePlanner";
 import type { MonthlyCashFlow } from "../purchasePlanner";
@@ -462,5 +469,101 @@ describe("suggestCombinedMonthly / calcCombinedSliderMax", () => {
     expect(calcCombinedSliderMax(summary({ totalRemaining: 3000 }), null)).toBe(250);
     expect(calcCombinedSliderMax(summary(), cashFlow({ freeCashFlow: 810 }))).toBe(825);
     expect(calcCombinedSliderMax(summary({ requiredMonthlyForDates: 900 }), null)).toBe(900);
+  });
+});
+
+/* ── Cost analysis ── */
+
+describe("hours of work", () => {
+  it("derives take-home per hour from average monthly income and hours per week", () => {
+    // $4,333.33/mo * 12 = $52,000/yr over 52 * 40 = 2,080 hours -> $25/hr
+    expect(calcHourlyTakeHome(4333.3333, 40)).toBeCloseTo(25, 2);
+    expect(calcHourlyTakeHome(0, 40)).toBeNull();
+    expect(calcHourlyTakeHome(4000, 0)).toBeNull();
+    expect(calcHourlyTakeHome(Number.NaN, 40)).toBeNull();
+  });
+
+  it("turns a price into hours and weeks at that rate", () => {
+    expect(calcHoursOfWork(1000, 25, 40)).toEqual({ hours: 40, weeks: 1 });
+    expect(calcHoursOfWork(0, 25, 40)).toBeNull();
+    expect(calcHoursOfWork(1000, 0, 40)).toBeNull();
+  });
+
+  it("describes the result in plain words", () => {
+    expect(describeHoursOfWork({ hours: 0.4, weeks: 0.01 })).toBe("under an hour of work");
+    expect(describeHoursOfWork({ hours: 1.2, weeks: 0.03 })).toBe("1 hour of work");
+    expect(describeHoursOfWork({ hours: 23.6, weeks: 0.59 })).toBe("24 hours of work");
+    expect(describeHoursOfWork({ hours: 120, weeks: 3 })).toBe("120 hours of work - about 3 weeks");
+    expect(describeHoursOfWork({ hours: 40, weeks: 1 })).toBe("40 hours of work - about 1 week");
+    expect(describeHoursOfWork({ hours: 100, weeks: 2.5 })).toBe("100 hours of work - about 2.5 weeks");
+  });
+});
+
+describe("finance vs save", () => {
+  it("amortizes a loan payment; 0% is plain division", () => {
+    // $1,200 at 12% over 12 months -> $106.62/mo (standard table value)
+    expect(calcLoanPayment(1200, 12, 12)).toBeCloseTo(106.62, 2);
+    expect(calcLoanPayment(1200, 0, 12)).toBe(100);
+    expect(calcLoanPayment(0, 12, 12)).toBe(0);
+    expect(calcLoanPayment(1200, 12, 0)).toBe(0);
+  });
+
+  it("compares the loan's interest against the save-up wait", () => {
+    const result = calcFinanceVsSave({
+      price: 1500,
+      alreadySaved: 300,
+      monthlySetAside: 200,
+      aprPercent: 12,
+      termMonths: 12,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.financed).toBe(1200);
+    expect(result!.monthlyPayment).toBeCloseTo(106.62, 2);
+    expect(result!.totalPaid).toBeCloseTo(1279.44, 1);
+    expect(result!.totalInterest).toBeCloseTo(79.44, 1);
+    expect(result!.saveMonths).toBe(6); // 1200 / 200
+    expect(result!.interestPerMonthSooner).toBeCloseTo(79.44 / 6, 1);
+    expect(result!.extraPerMonthVsSaving).toBeCloseTo(106.62 - 200, 2);
+  });
+
+  it("reports no wait figure without a set-aside, and null when nothing would be financed", () => {
+    const noSetAside = calcFinanceVsSave({
+      price: 1000,
+      alreadySaved: 0,
+      monthlySetAside: 0,
+      aprPercent: 20,
+      termMonths: 24,
+    });
+    expect(noSetAside!.saveMonths).toBeNull();
+    expect(noSetAside!.interestPerMonthSooner).toBeNull();
+    expect(
+      calcFinanceVsSave({ price: 500, alreadySaved: 500, monthlySetAside: 50, aprPercent: 20, termMonths: 12 }),
+    ).toBeNull();
+    expect(
+      calcFinanceVsSave({ price: 500, alreadySaved: 0, monthlySetAside: 50, aprPercent: 20, termMonths: 0 }),
+    ).toBeNull();
+  });
+
+  it("already-funded plans compare as zero months of waiting", () => {
+    const result = calcFinanceVsSave({
+      price: 1000,
+      alreadySaved: 200,
+      monthlySetAside: 5000,
+      aprPercent: 20,
+      termMonths: 12,
+    });
+    expect(result!.saveMonths).toBe(1);
+  });
+
+  it("suggests the highest live debt rate, else a typical card APR", () => {
+    expect(
+      suggestFinanceApr([
+        { balance: 500, rate: 19.9 },
+        { balance: 0, rate: 29.9 }, // paid off - ignored
+        { balance: 8000, rate: 6.5 },
+      ]),
+    ).toBe(19.9);
+    expect(suggestFinanceApr([])).toBe(DEFAULT_FINANCE_APR);
+    expect(suggestFinanceApr([{ balance: 100, rate: 0 }])).toBe(DEFAULT_FINANCE_APR);
   });
 });
