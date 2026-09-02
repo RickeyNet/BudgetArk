@@ -53,6 +53,7 @@ import PurchasePlanList, {
   filterPurchasePlans,
 } from "../components/PurchasePlanList";
 import { getBudgetEntries } from "../storage/budgetStorage";
+import { calcMonthlyCashFlow } from "../utils/purchasePlanner";
 import { getDebts } from "../storage/debtStorage";
 import CardKeepAliveBanner from "../components/CardKeepAliveBanner";
 import {
@@ -186,6 +187,8 @@ const BridgeScreen: React.FC = () => {
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [entries, setEntries] = useState<BudgetEntry[]>([]);
+  /** Free-cash-flow context for the Purchase Plans header's fit verdict. */
+  const planCashFlow = useMemo(() => calcMonthlyCashFlow(entries), [entries]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
@@ -1588,6 +1591,7 @@ const BridgeScreen: React.FC = () => {
         <PurchasePlanList
           savingsGoals={savingsGoals}
           onGoalsChanged={handlePlanGoalsChanged}
+          cashFlow={planCashFlow}
           emptyText={
             "Saving up for something? Tap + Plan to build a sinking fund on the Charts tab - it'll be tracked here and count toward your net worth."
           }

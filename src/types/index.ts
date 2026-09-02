@@ -475,6 +475,13 @@ export interface SavingsGoal {
   targetAmount: number;
   currentAmount: number;
   targetDate?: string;
+  /**
+   * Hand-set rank for the purchase planner's "My order" method (0 = first).
+   * Only consulted under that method; the snowball / soonest-needed
+   * orderings derive rank from the goal itself. Syncs and exports like any
+   * other field - older peers ignore it.
+   */
+  priority?: number;
   createdAt: string;
   updatedAt: string;
   /** Tombstone marker - see Debt.deletedAt. */

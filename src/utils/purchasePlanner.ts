@@ -11,7 +11,12 @@
  * thin shell that feeds inputs in and renders the numbers out.
  */
 
-import type { BudgetEntry, DebtMilestoneKey, DebtMilestonePlan } from "../types";
+import type {
+  BudgetEntry,
+  DebtMilestoneKey,
+  DebtMilestonePlan,
+  SavingsGoal,
+} from "../types";
 import { getMonthKey } from "./budgetMonths";
 import { entriesForMonth } from "./billFulfillment";
 
@@ -279,5 +284,319 @@ export const calcPurchaseSliderMax = (
     Number.isFinite(price) && price > 0 ? price / 12 : 0,
   ];
   const raw = Math.max(...targets);
+  return Math.ceil(raw / 25) * 25;
+};
+
+/* ── Plan ordering, rollover allocation, and the list summary ── */
+
+/**
+ * How the plan list ranks purchases - the purchase-planner analogue of the
+ * debt tracker's snowball / avalanche choice. Purchases carry no interest,
+ * so the "avalanche" seat goes to urgency (soonest need-by date first).
+ */
+export type PlanPriorityMethod = "snowball" | "soonest" | "custom";
+
+/**
+ * How one combined monthly set-aside is spread across the plans:
+ * `rollover` pours it all into the first unfunded plan and rolls the
+ * money down the list as each completes (a debt-snowball rollover);
+ * `parallel` splits it evenly across every unfunded plan.
+ */
+export type PlanAllocationMode = "rollover" | "parallel";
+
+export const PLAN_PRIORITY_METHODS: readonly PlanPriorityMethod[] = [
+  "snowball",
+  "soonest",
+  "custom",
+];
+
+export const PLAN_PRIORITY_METHOD_LABELS: Record<PlanPriorityMethod, string> = {
+  snowball: "Smallest first",
+  soonest: "Soonest needed",
+  custom: "My order",
+};
+
+export const PLAN_PRIORITY_METHOD_HINTS: Record<PlanPriorityMethod, string> = {
+  snowball: "Finish the cheapest plans first for quick wins - the snowball.",
+  soonest: "Plans with the nearest need-by date come first; undated ones after.",
+  custom: "Rank them yourself with the arrows on each plan.",
+};
+
+export const PLAN_ALLOCATION_MODES: readonly PlanAllocationMode[] = [
+  "rollover",
+  "parallel",
+];
+
+export const PLAN_ALLOCATION_LABELS: Record<PlanAllocationMode, string> = {
+  rollover: "One at a time",
+  parallel: "Split evenly",
+};
+
+/** Simulation horizon; a plan not funded by then reports "never" (null). */
+export const MAX_PLAN_PROJECTION_MONTHS = 240;
+
+export const remainingForPlan = (goal: SavingsGoal): number =>
+  Math.max(0, goal.targetAmount - Math.max(0, goal.currentAmount));
+
+const isFundedPlan = (goal: SavingsGoal): boolean =>
+  goal.targetAmount > 0 && remainingForPlan(goal) <= 0;
+
+/** Compare by need-by month (YYYY-MM prefix); undated sorts last. */
+const compareNeedBy = (a: SavingsGoal, b: SavingsGoal): number => {
+  const am = a.targetDate?.slice(0, 7) ?? null;
+  const bm = b.targetDate?.slice(0, 7) ?? null;
+  if (am === bm) return 0;
+  if (am === null) return 1;
+  if (bm === null) return -1;
+  return am < bm ? -1 : 1;
+};
+
+const compareCreated = (a: SavingsGoal, b: SavingsGoal): number =>
+  a.createdAt.localeCompare(b.createdAt);
+
+/**
+ * Rank purchase plans for the list and the allocation. Funded plans always
+ * sink to the bottom (there's nothing left to allocate to them) and keep
+ * their relative order. Ties fall back to creation order so the list never
+ * shuffles between renders.
+ *
+ *  - snowball: smallest remaining balance first.
+ *  - soonest:  nearest need-by month first, undated plans after (by
+ *              remaining), so a deadline is never starved by a wish.
+ *  - custom:   the user's `priority` (0 = first); plans never ranked sit
+ *              after the ranked ones.
+ */
+export const orderPurchasePlans = (
+  goals: readonly SavingsGoal[],
+  method: PlanPriorityMethod
+): SavingsGoal[] => {
+  const compare = (a: SavingsGoal, b: SavingsGoal): number => {
+    const fundedDiff = Number(isFundedPlan(a)) - Number(isFundedPlan(b));
+    if (fundedDiff !== 0) return fundedDiff;
+    switch (method) {
+      case "snowball": {
+        const diff = remainingForPlan(a) - remainingForPlan(b);
+        return diff !== 0 ? diff : compareCreated(a, b);
+      }
+      case "soonest": {
+        const byDate = compareNeedBy(a, b);
+        if (byDate !== 0) return byDate;
+        const diff = remainingForPlan(a) - remainingForPlan(b);
+        return diff !== 0 ? diff : compareCreated(a, b);
+      }
+      case "custom": {
+        const ap = Number.isFinite(a.priority) ? (a.priority as number) : Infinity;
+        const bp = Number.isFinite(b.priority) ? (b.priority as number) : Infinity;
+        if (ap !== bp) return ap < bp ? -1 : 1;
+        return compareCreated(a, b);
+      }
+    }
+  };
+  return [...goals].sort(compare);
+};
+
+export type PlanPriorityAssignment = { id: string; priority: number };
+
+/**
+ * Move one plan up (-1) or down (+1) within the given order and return the
+ * full priority assignment (0..n-1) that pins the new order - every plan
+ * gets an explicit rank so "My order" is stable from then on. Returns null
+ * when the plan is already at that edge or unknown, so callers can skip the
+ * write.
+ */
+export const movePlanInOrder = (
+  orderedGoals: readonly SavingsGoal[],
+  goalId: string,
+  direction: -1 | 1
+): PlanPriorityAssignment[] | null => {
+  const index = orderedGoals.findIndex((goal) => goal.id === goalId);
+  if (index < 0) return null;
+  const target = index + direction;
+  if (target < 0 || target >= orderedGoals.length) return null;
+  const ids = orderedGoals.map((goal) => goal.id);
+  [ids[index], ids[target]] = [ids[target], ids[index]];
+  return ids.map((id, priority) => ({ id, priority }));
+};
+
+export type PlanProjection = {
+  goalId: string;
+  /** Months from now until funded under this allocation; null = not within the horizon. */
+  readyInMonths: number | null;
+  readyDate: Date | null;
+  /** What this plan receives in the first month of the allocation. */
+  monthlyNow: number;
+  /**
+   * Months past the plan's need-by date it lands (0 = on time). Null when
+   * the plan has no need-by date; Infinity when it never funds in horizon.
+   */
+  lateByMonths: number | null;
+};
+
+export type PlanProjectionResult = {
+  projections: PlanProjection[];
+  /** Months until the LAST plan funds; null when any plan never does. */
+  allFundedInMonths: number | null;
+  allFundedDate: Date | null;
+};
+
+const roundCents = (n: number): number => Math.round(n * 100) / 100;
+
+/**
+ * Month-by-month simulation of one combined monthly set-aside across the
+ * plans in the given order. Under `rollover` each month's money goes to the
+ * first unfunded plan and any excess flows to the next (the snowball
+ * rollover); under `parallel` it is split evenly among the unfunded plans,
+ * with a finished plan's share re-split the same month. Already-funded
+ * plans report ready now. A non-positive set-aside funds nothing.
+ */
+export const projectPurchasePlans = (
+  orderedGoals: readonly SavingsGoal[],
+  combinedMonthly: number,
+  mode: PlanAllocationMode,
+  now: Date = new Date()
+): PlanProjectionResult => {
+  const remaining = orderedGoals.map(remainingForPlan);
+  const readyIn: (number | null)[] = remaining.map((left) => (left <= 0 ? 0 : null));
+  const monthlyNow = orderedGoals.map(() => 0);
+  const budget = Number.isFinite(combinedMonthly) ? Math.max(0, combinedMonthly) : 0;
+
+  if (budget > 0) {
+    for (let month = 1; month <= MAX_PLAN_PROJECTION_MONTHS; month++) {
+      let left = budget;
+      if (mode === "rollover") {
+        for (let i = 0; i < remaining.length && left > 0; i++) {
+          if (remaining[i] <= 0) continue;
+          const pay = Math.min(remaining[i], left);
+          remaining[i] = roundCents(remaining[i] - pay);
+          left = roundCents(left - pay);
+          if (month === 1) monthlyNow[i] = roundCents(monthlyNow[i] + pay);
+          if (remaining[i] <= 0) readyIn[i] = month;
+        }
+      } else {
+        // Re-split whenever a plan finishes mid-month; bounded so float
+        // dust can't loop forever.
+        for (let pass = 0; pass < 10 && left > 0; pass++) {
+          const open = remaining
+            .map((value, i) => (value > 0 ? i : -1))
+            .filter((i) => i >= 0);
+          if (open.length === 0) break;
+          const share = left / open.length;
+          let spent = 0;
+          for (const i of open) {
+            const pay = Math.min(remaining[i], share);
+            remaining[i] = roundCents(remaining[i] - pay);
+            spent += pay;
+            if (month === 1) monthlyNow[i] = roundCents(monthlyNow[i] + pay);
+            if (remaining[i] <= 0) readyIn[i] = month;
+          }
+          left = roundCents(left - spent);
+        }
+      }
+      if (remaining.every((value) => value <= 0)) break;
+    }
+  }
+
+  const monthStart = (months: number): Date =>
+    new Date(now.getFullYear(), now.getMonth() + months, 1);
+
+  const projections: PlanProjection[] = orderedGoals.map((goal, i) => {
+    const months = readyIn[i];
+    let lateByMonths: number | null = null;
+    if (goal.targetDate) {
+      const until = monthsUntilTarget(goal.targetDate.slice(0, 7), now);
+      if (until !== null) {
+        lateByMonths = months === null ? Infinity : Math.max(0, months - until);
+      }
+    }
+    return {
+      goalId: goal.id,
+      readyInMonths: months,
+      readyDate: months === null ? null : monthStart(months),
+      monthlyNow: monthlyNow[i],
+      lateByMonths,
+    };
+  });
+
+  const allFundedInMonths = readyIn.every((months) => months !== null)
+    ? readyIn.reduce<number>((max, months) => Math.max(max, months ?? 0), 0)
+    : null;
+
+  return {
+    projections,
+    allFundedInMonths,
+    allFundedDate: allFundedInMonths === null ? null : monthStart(allFundedInMonths),
+  };
+};
+
+export type PurchasePlanSummary = {
+  planCount: number;
+  fundedCount: number;
+  totalTarget: number;
+  totalSaved: number;
+  totalRemaining: number;
+  /** 0..1 of the combined target already saved (0 when nothing is planned). */
+  progress: number;
+  /** Sum of the per-plan monthly amounts the dated, unfunded plans need to hit their dates. */
+  requiredMonthlyForDates: number;
+};
+
+/** The "sum of everything" header for the plan list. */
+export const summarizePurchasePlans = (
+  goals: readonly SavingsGoal[],
+  now: Date = new Date()
+): PurchasePlanSummary => {
+  let totalTarget = 0;
+  let totalSaved = 0;
+  let fundedCount = 0;
+  let requiredMonthlyForDates = 0;
+  for (const goal of goals) {
+    totalTarget += Math.max(0, goal.targetAmount);
+    totalSaved += Math.min(Math.max(0, goal.currentAmount), Math.max(0, goal.targetAmount));
+    if (isFundedPlan(goal)) fundedCount += 1;
+    else if (goal.targetDate) {
+      requiredMonthlyForDates +=
+        calcRequiredMonthly(goal.targetAmount, goal.currentAmount, goal.targetDate.slice(0, 7), now) ?? 0;
+    }
+  }
+  return {
+    planCount: goals.length,
+    fundedCount,
+    totalTarget: roundCents(totalTarget),
+    totalSaved: roundCents(totalSaved),
+    totalRemaining: roundCents(Math.max(0, totalTarget - totalSaved)),
+    progress: totalTarget > 0 ? Math.min(1, totalSaved / totalTarget) : 0,
+    requiredMonthlyForDates,
+  };
+};
+
+/**
+ * Starting point for the combined set-aside when the user hasn't set one:
+ * what the dated plans need, else half the free cash flow (the planner's
+ * "fits comfortably" line), else nothing - all in $25 steps.
+ */
+export const suggestCombinedMonthly = (
+  summary: PurchasePlanSummary,
+  cashFlow: MonthlyCashFlow | null
+): number => {
+  if (summary.requiredMonthlyForDates > 0) {
+    return Math.ceil(summary.requiredMonthlyForDates / 25) * 25;
+  }
+  if (cashFlow && cashFlow.freeCashFlow > 0) {
+    return Math.floor((cashFlow.freeCashFlow * PURCHASE_FIT_COMFORT_SHARE) / 25) * 25;
+  }
+  return 0;
+};
+
+/** Slider ceiling for the combined set-aside - same shape as calcPurchaseSliderMax. */
+export const calcCombinedSliderMax = (
+  summary: PurchasePlanSummary,
+  cashFlow: MonthlyCashFlow | null
+): number => {
+  const raw = Math.max(
+    100,
+    cashFlow?.freeCashFlow ?? 0,
+    summary.totalRemaining / 12,
+    summary.requiredMonthlyForDates
+  );
   return Math.ceil(raw / 25) * 25;
 };

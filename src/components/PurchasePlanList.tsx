@@ -2,8 +2,13 @@
  * BudgetArk - Purchase Plan List
  * File: src/components/PurchasePlanList.tsx
  *
- * The shared "your purchase plans" list: progress rows for every non-EF
- * savings goal plus the contribute and delete modals that manage them.
+ * The shared "your purchase plans" list: a summary header (everything
+ * added up, the ranking method, the combined monthly set-aside and how it
+ * flows down the list), ranked progress rows with projected ready dates,
+ * plus the contribute and delete modals that manage them. Ranking and
+ * allocation math is utils/purchasePlanner (pure, unit-tested); the
+ * method / mode / amount persist device-locally via
+ * storage/purchasePlanSettingsStorage, the hand-set order on the goals.
  * Rendered in two places - the Bridge's always-visible Purchase Plans
  * card (the tracking home) and the Charts tab's Plan a Purchase tool
  * (the planning wizard) - so both surfaces stay in lockstep instead of
@@ -11,7 +16,7 @@
  * synced, exported); the fresh array is handed back via onGoalsChanged.
  */
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   StyleSheet,
@@ -21,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
+import SliderRow from "./SliderRow";
 import { describeError } from "../utils/errorMessage";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { useTheme } from "../theme/ThemeProvider";
@@ -32,8 +38,33 @@ import type { SavingsGoal, SavingsGoalCategory } from "../types";
 import {
   deleteSavingsGoal,
   updateSavingsGoal,
+  updateSavingsGoalPriorities,
 } from "../storage/savingsGoalStorage";
-import { calcRequiredMonthly } from "../utils/purchasePlanner";
+import {
+  assessPurchaseFit,
+  calcCombinedSliderMax,
+  calcRequiredMonthly,
+  movePlanInOrder,
+  orderPurchasePlans,
+  PLAN_ALLOCATION_LABELS,
+  PLAN_ALLOCATION_MODES,
+  PLAN_PRIORITY_METHOD_HINTS,
+  PLAN_PRIORITY_METHOD_LABELS,
+  PLAN_PRIORITY_METHODS,
+  projectPurchasePlans,
+  suggestCombinedMonthly,
+  summarizePurchasePlans,
+  type MonthlyCashFlow,
+  type PlanProjection,
+} from "../utils/purchasePlanner";
+import {
+  getPurchasePlanSettings,
+  savePurchasePlanSettings,
+} from "../storage/purchasePlanSettingsStorage";
+import {
+  DEFAULT_PURCHASE_PLAN_SETTINGS,
+  type PurchasePlanSettings,
+} from "../utils/purchasePlanSettings";
 import { triggerHaptic } from "../utils/haptics";
 
 /** Purchase-friendly labels for the existing SavingsGoal categories. */
@@ -76,12 +107,22 @@ type PurchasePlanListProps = {
   onGoalsChanged: (goals: SavingsGoal[]) => void;
   /** Rendered when there are no plans; omit to render nothing at all. */
   emptyText?: string;
+  /**
+   * Free-cash-flow context for the combined set-aside's fits / tight / over
+   * verdict and the slider ceiling. Optional: without it the header still
+   * adds up and projects, it just can't say whether the amount fits.
+   */
+  cashFlow?: MonthlyCashFlow | null;
 };
+
+/** Debounce for persisting slider drags. */
+const SETTINGS_SAVE_DELAY_MS = 400;
 
 const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   savingsGoals,
   onGoalsChanged,
   emptyText,
+  cashFlow = null,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
@@ -95,6 +136,95 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const plans = filterPurchasePlans(savingsGoals);
+
+  /* ── Ranking, allocation, and the summary header ── */
+
+  const [settings, setSettings] = useState<PurchasePlanSettings>(
+    DEFAULT_PURCHASE_PLAN_SETTINGS,
+  );
+  const settingsLoaded = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getPurchasePlanSettings().then((stored) => {
+      if (cancelled) return;
+      settingsLoaded.current = true;
+      setSettings(stored);
+    });
+    return () => {
+      cancelled = true;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, []);
+
+  /** Update + persist (debounced, so a slider drag is one write). */
+  const changeSettings = useCallback((patch: Partial<PurchasePlanSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        void savePurchasePlanSettings(next);
+      }, SETTINGS_SAVE_DELAY_MS);
+      return next;
+    });
+  }, []);
+
+  const summary = useMemo(() => summarizePurchasePlans(plans), [plans]);
+  const ordered = useMemo(
+    () => orderPurchasePlans(plans, settings.method),
+    [plans, settings.method],
+  );
+  // Never-set amount: suggest one from the dated plans / free cash flow.
+  const combinedMonthly =
+    settings.combinedMonthly ?? suggestCombinedMonthly(summary, cashFlow);
+  const sliderMax = useMemo(
+    () => Math.max(calcCombinedSliderMax(summary, cashFlow), combinedMonthly),
+    [summary, cashFlow, combinedMonthly],
+  );
+  const projection = useMemo(
+    () => projectPurchasePlans(ordered, combinedMonthly, settings.allocation),
+    [ordered, combinedMonthly, settings.allocation],
+  );
+  const projectionById = useMemo(() => {
+    const map = new Map<string, PlanProjection>();
+    for (const item of projection.projections) map.set(item.goalId, item);
+    return map;
+  }, [projection]);
+  const fit = cashFlow ? assessPurchaseFit(combinedMonthly, cashFlow) : "unknown";
+  const lateCount = projection.projections.filter(
+    (item) => item.lateByMonths !== null && item.lateByMonths > 0,
+  ).length;
+
+  const [reorderError, setReorderError] = useState<string | null>(null);
+  const movePlan = useCallback(
+    async (goalId: string, direction: -1 | 1) => {
+      const assignments = movePlanInOrder(ordered, goalId, direction);
+      if (!assignments) return;
+      setReorderError(null);
+      try {
+        const updated = await updateSavingsGoalPriorities(assignments);
+        triggerHaptic("selection");
+        onGoalsChanged(updated);
+      } catch (error) {
+        setReorderError(describeError(error, "Couldn't save the new order."));
+      }
+    },
+    [onGoalsChanged, ordered],
+  );
+
+  const fitLine =
+    !cashFlow || fit === "unknown"
+      ? cashFlow && cashFlow.monthsTracked === 0 && combinedMonthly > 0
+        ? "Track a full month of income and spending and this will say whether the amount fits."
+        : null
+      : fit === "fits"
+        ? `Fits: about ${formatCurrency(cashFlow.freeCashFlow)}/mo is free after your average spending.`
+        : fit === "tight"
+          ? `Tight: this takes most of the ~${formatCurrency(cashFlow.freeCashFlow)}/mo free after your average spending.`
+          : cashFlow.freeCashFlow > 0
+            ? `Over: more than the ~${formatCurrency(cashFlow.freeCashFlow)}/mo free after your average spending.`
+            : "Over: your average spending already exceeds your income, so any set-aside comes from somewhere else.";
 
   const handleContribute = useCallback(async () => {
     if (!contributeGoal) return;
@@ -144,64 +274,263 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
       {plans.length === 0 ? (
         <Text style={styles.emptyText}>{emptyText}</Text>
       ) : (
-        plans.map((goal) => {
-          const funded =
-            goal.currentAmount >= goal.targetAmount && goal.targetAmount > 0;
-          const progress =
-            goal.targetAmount > 0
-              ? Math.min(1, goal.currentAmount / goal.targetAmount)
-              : 0;
-          const planRequired = goal.targetDate
-            ? calcRequiredMonthly(
-                goal.targetAmount,
-                goal.currentAmount,
-                goal.targetDate.slice(0, 7)
-              )
-            : null;
-          return (
-            <TouchableOpacity
-              key={goal.id}
-              style={styles.planRow}
-              onPress={() => {
-                setContributeText("");
-                setContributeGoal(goal);
-              }}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={`Add funds to ${goal.name}`}
-            >
-              <Text style={styles.planIcon}>
-                {iconForPlanCategory(goal.category)}
-              </Text>
-              <View style={styles.planBody}>
-                <Text style={styles.planName} numberOfLines={1}>
-                  {goal.name}
-                </Text>
-                <View style={styles.planTrack}>
-                  <View
-                    style={[
-                      styles.planFill,
-                      {
-                        width: `${Math.round(progress * 100)}%`,
-                        backgroundColor: funded ? colors.success : colors.accent,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.planMeta}>
-                  {funded
-                    ? "Funded - ready to buy 🎉"
-                    : `${formatCurrency(goal.currentAmount)} of ${formatCurrency(goal.targetAmount)}${
-                        planRequired && planRequired > 0
-                          ? ` · ${formatCurrency(planRequired)}/mo to hit ${formatPlanMonthYear(new Date(`${goal.targetDate?.slice(0, 7)}-15`))}`
-                          : ""
-                      }`}
-                </Text>
+        <>
+          {/* ── Everything added up ── */}
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryTopRow}>
+              <View style={styles.summaryCol}>
+                <Text style={styles.summaryLabel}>SAVED</Text>
+                <Text style={styles.summaryBig}>{formatCurrency(summary.totalSaved)}</Text>
               </View>
-              <Text style={styles.planChevron}>›</Text>
-            </TouchableOpacity>
-          );
-        })
+              <View style={styles.summaryCol}>
+                <Text style={styles.summaryLabel}>STILL TO GO</Text>
+                <Text style={styles.summaryBig}>{formatCurrency(summary.totalRemaining)}</Text>
+              </View>
+              <View style={styles.summaryColRight}>
+                <Text style={styles.summaryLabel}>TOTAL</Text>
+                <Text style={styles.summaryBig}>{formatCurrency(summary.totalTarget)}</Text>
+              </View>
+            </View>
+            <View style={styles.planTrack}>
+              <View
+                style={[
+                  styles.planFill,
+                  {
+                    width: `${Math.round(summary.progress * 100)}%`,
+                    backgroundColor:
+                      summary.progress >= 1 ? colors.success : colors.accent,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.summaryMeta}>
+              {`${summary.planCount} plan${summary.planCount === 1 ? "" : "s"}`}
+              {summary.fundedCount > 0 ? ` · ${summary.fundedCount} funded` : ""}
+              {projection.allFundedDate
+                ? projection.allFundedInMonths === 0
+                  ? " · all funded"
+                  : ` · all funded by ${formatPlanMonthYear(projection.allFundedDate)}`
+                : combinedMonthly > 0
+                  ? " · not all funded within 20 years at this pace"
+                  : " · set a monthly amount below to see when"}
+            </Text>
+            {lateCount > 0 ? (
+              <Text style={[styles.summaryMeta, { color: colors.warning }]}>
+                {`${lateCount} plan${lateCount === 1 ? "" : "s"} would miss ${
+                  lateCount === 1 ? "its" : "their"
+                } need-by date at this pace.`}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* ── Order ── */}
+          <Text style={styles.controlLabel}>ORDER</Text>
+          <View style={styles.chipRow}>
+            {PLAN_PRIORITY_METHODS.map((method) => (
+              <TouchableOpacity
+                key={method}
+                style={[styles.chip, settings.method === method && styles.chipActive]}
+                onPress={() => changeSettings({ method })}
+                accessibilityRole="button"
+                accessibilityState={{ selected: settings.method === method }}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    settings.method === method && styles.chipTextActive,
+                  ]}
+                >
+                  {PLAN_PRIORITY_METHOD_LABELS[method]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.hintText}>{PLAN_PRIORITY_METHOD_HINTS[settings.method]}</Text>
+
+          {/* ── Combined set-aside + how it flows ── */}
+          <SliderRow
+            label="Set aside for all plans"
+            value={combinedMonthly}
+            min={0}
+            max={sliderMax}
+            step={5}
+            displayValue={`${formatCurrency(combinedMonthly)}/mo`}
+            onValueChange={(value) => changeSettings({ combinedMonthly: value })}
+            onAdjust={(delta) =>
+              changeSettings({
+                combinedMonthly: Math.max(
+                  0,
+                  Math.min(sliderMax, combinedMonthly + delta * 25),
+                ),
+              })
+            }
+          />
+          {fitLine ? (
+            <Text
+              style={[
+                styles.hintText,
+                fit === "over"
+                  ? { color: colors.danger }
+                  : fit === "tight"
+                    ? { color: colors.warning }
+                    : null,
+              ]}
+            >
+              {fitLine}
+            </Text>
+          ) : null}
+          <View style={styles.chipRow}>
+            {PLAN_ALLOCATION_MODES.map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[styles.chip, settings.allocation === mode && styles.chipActive]}
+                onPress={() => changeSettings({ allocation: mode })}
+                accessibilityRole="button"
+                accessibilityState={{ selected: settings.allocation === mode }}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    settings.allocation === mode && styles.chipTextActive,
+                  ]}
+                >
+                  {PLAN_ALLOCATION_LABELS[mode]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.hintText}>
+            {settings.allocation === "rollover"
+              ? "The whole amount goes to the first plan; when it's funded, the money rolls into the next - like a debt snowball."
+              : "The amount is split evenly across every unfunded plan, and a finished plan's share moves to the rest."}
+          </Text>
+          {reorderError ? (
+            <Text style={[styles.hintText, { color: colors.danger }]}>{reorderError}</Text>
+          ) : null}
+
+          {/* ── Ranked plans ── */}
+          {ordered.map((goal, index) => {
+            const funded =
+              goal.currentAmount >= goal.targetAmount && goal.targetAmount > 0;
+            const progress =
+              goal.targetAmount > 0
+                ? Math.min(1, goal.currentAmount / goal.targetAmount)
+                : 0;
+            const planRequired = goal.targetDate
+              ? calcRequiredMonthly(
+                  goal.targetAmount,
+                  goal.currentAmount,
+                  goal.targetDate.slice(0, 7)
+                )
+              : null;
+            const projected = projectionById.get(goal.id);
+            const late =
+              projected && projected.lateByMonths !== null && projected.lateByMonths > 0;
+            const projectionLine = funded
+              ? null
+              : !projected || combinedMonthly <= 0
+                ? null
+                : projected.readyDate
+                  ? `Ready ${formatPlanMonthYear(projected.readyDate)}${
+                      projected.monthlyNow > 0
+                        ? ` · ${formatCurrency(projected.monthlyNow)}/mo now`
+                        : " · waits its turn"
+                    }${
+                      late
+                        ? ` · ${
+                            projected.lateByMonths === Infinity
+                              ? "misses"
+                              : `${projected.lateByMonths} mo late for`
+                          } ${goal.targetDate ? formatPlanMonthYear(new Date(`${goal.targetDate.slice(0, 7)}-15`)) : "its date"}`
+                        : ""
+                    }`
+                  : "Not funded within 20 years at this pace";
+            return (
+              <View key={goal.id} style={styles.planRow}>
+                <View style={styles.rankBadge}>
+                  <Text style={styles.rankText}>{index + 1}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.planMain}
+                  onPress={() => {
+                    setContributeText("");
+                    setContributeGoal(goal);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add funds to ${goal.name}`}
+                >
+                  <Text style={styles.planIcon}>
+                    {iconForPlanCategory(goal.category)}
+                  </Text>
+                  <View style={styles.planBody}>
+                    <Text style={styles.planName} numberOfLines={1}>
+                      {goal.name}
+                    </Text>
+                    <View style={styles.planTrack}>
+                      <View
+                        style={[
+                          styles.planFill,
+                          {
+                            width: `${Math.round(progress * 100)}%`,
+                            backgroundColor: funded ? colors.success : colors.accent,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.planMeta}>
+                      {funded
+                        ? "Funded - ready to buy 🎉"
+                        : `${formatCurrency(goal.currentAmount)} of ${formatCurrency(goal.targetAmount)}${
+                            planRequired && planRequired > 0
+                              ? ` · ${formatCurrency(planRequired)}/mo to hit ${formatPlanMonthYear(new Date(`${goal.targetDate?.slice(0, 7)}-15`))}`
+                              : ""
+                          }`}
+                    </Text>
+                    {projectionLine ? (
+                      <Text
+                        style={[
+                          styles.planMeta,
+                          late ? { color: colors.warning } : null,
+                        ]}
+                      >
+                        {projectionLine}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.planChevron}>›</Text>
+                </TouchableOpacity>
+                {settings.method === "custom" ? (
+                  <View style={styles.arrowCol}>
+                    <TouchableOpacity
+                      style={[styles.arrowBtn, index === 0 && styles.arrowBtnDisabled]}
+                      disabled={index === 0}
+                      onPress={() => void movePlan(goal.id, -1)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Move ${goal.name} up`}
+                    >
+                      <Text style={styles.arrowText}>▲</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.arrowBtn,
+                        index === ordered.length - 1 && styles.arrowBtnDisabled,
+                      ]}
+                      disabled={index === ordered.length - 1}
+                      onPress={() => void movePlan(goal.id, 1)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Move ${goal.name} down`}
+                    >
+                      <Text style={styles.arrowText}>▼</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </>
       )}
 
       {/* Contribute modal */}
@@ -359,6 +688,116 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     planChevron: {
       fontSize: 18,
       color: colors.textMuted,
+    },
+    planMain: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    summaryCard: {
+      backgroundColor: colors.bg,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      gap: 8,
+      marginBottom: tokens.gap,
+    },
+    summaryTopRow: {
+      flexDirection: "row",
+      gap: tokens.gap,
+    },
+    summaryCol: {
+      flex: 1,
+    },
+    summaryColRight: {
+      flex: 1,
+      alignItems: "flex-end",
+    },
+    summaryLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.textMuted,
+    },
+    summaryBig: {
+      fontSize: scale(16),
+      fontWeight: "700",
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
+    },
+    summaryMeta: {
+      fontSize: 12,
+      color: colors.textDim,
+      lineHeight: 17,
+    },
+    controlLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.textMuted,
+      marginTop: 4,
+      marginBottom: 6,
+    },
+    chipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 6,
+    },
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+    },
+    chipActive: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accent,
+    },
+    chipText: {
+      fontSize: scale(12),
+      fontWeight: "600",
+      color: colors.textDim,
+    },
+    chipTextActive: {
+      color: colors.accentButtonText,
+    },
+    hintText: {
+      fontSize: 12,
+      color: colors.textDim,
+      lineHeight: 17,
+      marginTop: 6,
+      marginBottom: 4,
+    },
+    rankBadge: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: colors.bg,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    rankText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: colors.textDim,
+      fontVariant: ["tabular-nums"],
+    },
+    arrowCol: {
+      gap: 2,
+    },
+    arrowBtn: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    arrowBtnDisabled: {
+      opacity: 0.3,
+    },
+    arrowText: {
+      fontSize: 12,
+      color: colors.accent,
     },
     input: {
       backgroundColor: colors.bg,

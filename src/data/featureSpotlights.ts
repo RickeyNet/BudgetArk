@@ -252,6 +252,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Browse themes", kind: "profile-section", section: "theme" },
   },
   {
+    id: "purchase-plan-priorities",
+    sinceVersion: "1.10.1",
+    icon: "🎯",
+    title: "Purchase plans, in order",
+    blurb:
+      "Your Purchase Plans card now adds everything up - saved, still to go, and when it's all funded - and lets you rank the plans smallest-first, soonest-needed, or in your own order. Set one monthly amount and it flows down the list like a debt snowball, each plan rolling into the next.",
+    cta: { label: "See your plans", kind: "bridge" },
+  },
+  {
     id: "tip-jar",
     sinceVersion: "1.9.0",
     requiresRuntimeVersion: "1.9.0",

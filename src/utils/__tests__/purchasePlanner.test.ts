@@ -6,17 +6,23 @@
 // the Ark-milestone guidance mapping. The debt trade-off shown alongside
 // the tool reuses calcDebtRedirectImpact, pinned in whatIfSpending.test.ts.
 
-import type { BudgetEntry, DebtMilestoneKey, DebtMilestonePlan } from "../../types";
+import type { BudgetEntry, DebtMilestoneKey, DebtMilestonePlan, SavingsGoal } from "../../types";
 import { DEFAULT_DEBT_MILESTONE_STEPS } from "../../types";
 import {
   assessPurchaseFit,
   buildArkPurchaseGuidance,
+  calcCombinedSliderMax,
   calcMonthlyCashFlow,
   calcPurchaseSliderMax,
   calcPurchaseTimeline,
   calcRequiredMonthly,
   monthsUntilTarget,
+  movePlanInOrder,
+  orderPurchasePlans,
+  projectPurchasePlans,
   PURCHASE_LOOKBACK_MONTHS,
+  suggestCombinedMonthly,
+  summarizePurchasePlans,
 } from "../purchasePlanner";
 import type { MonthlyCashFlow } from "../purchasePlanner";
 
@@ -241,5 +247,220 @@ describe("calcPurchaseSliderMax", () => {
   it("covers a 12-month save-up of a big price", () => {
     // price/12 = 2000 dominates the $1000 free cash flow.
     expect(calcPurchaseSliderMax(24000, cashFlow({ freeCashFlow: 1000 }))).toBe(2000);
+  });
+});
+
+/* ── Plan ordering, rollover allocation, summary ── */
+
+const goal = (over: Partial<SavingsGoal> & { id: string }): SavingsGoal => ({
+  name: over.id,
+  category: "other",
+  targetAmount: 1000,
+  currentAmount: 0,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  ...over,
+});
+
+describe("orderPurchasePlans", () => {
+  const laptop = goal({ id: "laptop", targetAmount: 1200, currentAmount: 200, createdAt: "2026-02-01T00:00:00.000Z" });
+  const bike = goal({ id: "bike", targetAmount: 600, currentAmount: 100, targetDate: "2026-09-01", createdAt: "2026-03-01T00:00:00.000Z" });
+  const trip = goal({ id: "trip", targetAmount: 3000, currentAmount: 0, targetDate: "2026-12-01", createdAt: "2026-01-01T00:00:00.000Z" });
+  const done = goal({ id: "done", targetAmount: 100, currentAmount: 100, createdAt: "2025-01-01T00:00:00.000Z" });
+
+  it("snowball: smallest remaining first, funded plans last", () => {
+    expect(orderPurchasePlans([trip, laptop, done, bike], "snowball").map((g) => g.id)).toEqual([
+      "bike", // 500 left
+      "laptop", // 1000 left
+      "trip", // 3000 left
+      "done",
+    ]);
+  });
+
+  it("soonest: nearest need-by first, undated after by remaining, funded last", () => {
+    expect(orderPurchasePlans([laptop, done, trip, bike], "soonest").map((g) => g.id)).toEqual([
+      "bike", // Sep
+      "trip", // Dec
+      "laptop", // undated
+      "done",
+    ]);
+  });
+
+  it("custom: explicit priority ascending, unranked after by creation date", () => {
+    const ranked = [
+      goal({ ...laptop, priority: 2 }),
+      goal({ ...trip, priority: 0 }),
+      bike, // unranked
+      goal({ ...done, priority: 1 }),
+    ];
+    expect(orderPurchasePlans(ranked, "custom").map((g) => g.id)).toEqual([
+      "trip",
+      "laptop",
+      "bike",
+      "done", // ranked 1 but funded - sinks regardless
+    ]);
+  });
+
+  it("breaks ties by creation date so the list never shuffles", () => {
+    const a = goal({ id: "a", createdAt: "2026-05-01T00:00:00.000Z" });
+    const b = goal({ id: "b", createdAt: "2026-04-01T00:00:00.000Z" });
+    expect(orderPurchasePlans([a, b], "snowball").map((g) => g.id)).toEqual(["b", "a"]);
+    expect(orderPurchasePlans([a, b], "custom").map((g) => g.id)).toEqual(["b", "a"]);
+  });
+
+  it("does not mutate its input", () => {
+    const input = [laptop, bike];
+    orderPurchasePlans(input, "snowball");
+    expect(input.map((g) => g.id)).toEqual(["laptop", "bike"]);
+  });
+});
+
+describe("movePlanInOrder", () => {
+  const ordered = [goal({ id: "a" }), goal({ id: "b" }), goal({ id: "c" })];
+
+  it("swaps with the neighbour and pins every plan's rank", () => {
+    expect(movePlanInOrder(ordered, "c", -1)).toEqual([
+      { id: "a", priority: 0 },
+      { id: "c", priority: 1 },
+      { id: "b", priority: 2 },
+    ]);
+    expect(movePlanInOrder(ordered, "a", 1)).toEqual([
+      { id: "b", priority: 0 },
+      { id: "a", priority: 1 },
+      { id: "c", priority: 2 },
+    ]);
+  });
+
+  it("returns null at the edges and for unknown ids", () => {
+    expect(movePlanInOrder(ordered, "a", -1)).toBeNull();
+    expect(movePlanInOrder(ordered, "c", 1)).toBeNull();
+    expect(movePlanInOrder(ordered, "zzz", 1)).toBeNull();
+  });
+});
+
+describe("projectPurchasePlans", () => {
+  const now = new Date(2026, 6, 15); // July 2026
+  const first = goal({ id: "first", targetAmount: 300, currentAmount: 0 });
+  const second = goal({ id: "second", targetAmount: 500, currentAmount: 0, targetDate: "2026-09-01" });
+  const funded = goal({ id: "funded", targetAmount: 100, currentAmount: 100 });
+
+  it("rollover pours everything into the first plan and rolls the remainder down", () => {
+    const result = projectPurchasePlans([first, second, funded], 200, "rollover", now);
+    const [p1, p2, p3] = result.projections;
+    // Month 1: 200 -> first (100 left). Month 2: 100 finishes first, 100 -> second.
+    // Months 3,4: 400 more -> second done in month 4.
+    expect(p1).toMatchObject({ goalId: "first", readyInMonths: 2, monthlyNow: 200, lateByMonths: null });
+    expect(p1.readyDate).toEqual(new Date(2026, 8, 1));
+    expect(p2).toMatchObject({ goalId: "second", readyInMonths: 4, monthlyNow: 0 });
+    // Need-by Sep 2026 = 2 months away; ready in 4 -> 2 months late.
+    expect(p2.lateByMonths).toBe(2);
+    expect(p3).toMatchObject({ goalId: "funded", readyInMonths: 0, monthlyNow: 0 });
+    expect(result.allFundedInMonths).toBe(4);
+    expect(result.allFundedDate).toEqual(new Date(2026, 10, 1));
+  });
+
+  it("parallel splits evenly and re-splits a finished plan's share the same month", () => {
+    const result = projectPurchasePlans([first, second], 200, "parallel", now);
+    const [p1, p2] = result.projections;
+    // 100/100 per month: first done in month 3 (its month-3 share is 100,
+    // fully used); second has 200 left after month 3, gets 200 in month 4.
+    expect(p1).toMatchObject({ readyInMonths: 3, monthlyNow: 100 });
+    expect(p2).toMatchObject({ readyInMonths: 4, monthlyNow: 100 });
+    expect(result.allFundedInMonths).toBe(4);
+  });
+
+  it("re-splits within a month when a plan finishes with money to spare", () => {
+    const tiny = goal({ id: "tiny", targetAmount: 50, currentAmount: 0 });
+    const big = goal({ id: "big", targetAmount: 1000, currentAmount: 0 });
+    const result = projectPurchasePlans([tiny, big], 200, "parallel", now);
+    const [t, b] = result.projections;
+    expect(t).toMatchObject({ readyInMonths: 1, monthlyNow: 50 });
+    expect(b.monthlyNow).toBe(150); // the tiny plan's unused 50 moved over
+  });
+
+  it("a zero set-aside funds nothing; funded plans still read ready now", () => {
+    const result = projectPurchasePlans([first, second, funded], 0, "rollover", now);
+    expect(result.projections.map((p) => p.readyInMonths)).toEqual([null, null, 0]);
+    expect(result.projections[1].lateByMonths).toBe(Infinity);
+    expect(result.allFundedInMonths).toBeNull();
+    expect(result.allFundedDate).toBeNull();
+  });
+
+  it("gives up at the horizon instead of looping", () => {
+    const huge = goal({ id: "huge", targetAmount: 10_000_000 });
+    const result = projectPurchasePlans([huge], 10, "rollover", now);
+    expect(result.projections[0].readyInMonths).toBeNull();
+  });
+
+  it("an empty list is all funded now", () => {
+    const result = projectPurchasePlans([], 100, "rollover", now);
+    expect(result.projections).toEqual([]);
+    expect(result.allFundedInMonths).toBe(0);
+  });
+});
+
+describe("summarizePurchasePlans", () => {
+  const now = new Date(2026, 6, 15);
+
+  it("adds everything up, caps saved at each target, and sums what dated plans need", () => {
+    const summary = summarizePurchasePlans(
+      [
+        goal({ id: "a", targetAmount: 1000, currentAmount: 250, targetDate: "2026-12-01" }), // 750 / 5 mo = 150
+        goal({ id: "b", targetAmount: 500, currentAmount: 900 }), // over-saved counts as 500
+        goal({ id: "c", targetAmount: 300, currentAmount: 0 }), // undated: no monthly need
+      ],
+      now,
+    );
+    expect(summary).toEqual({
+      planCount: 3,
+      fundedCount: 1,
+      totalTarget: 1800,
+      totalSaved: 750,
+      totalRemaining: 1050,
+      progress: 750 / 1800,
+      requiredMonthlyForDates: 150,
+    });
+  });
+
+  it("is all zeros for no plans", () => {
+    expect(summarizePurchasePlans([], now)).toEqual({
+      planCount: 0,
+      fundedCount: 0,
+      totalTarget: 0,
+      totalSaved: 0,
+      totalRemaining: 0,
+      progress: 0,
+      requiredMonthlyForDates: 0,
+    });
+  });
+});
+
+describe("suggestCombinedMonthly / calcCombinedSliderMax", () => {
+  const summary = (over: Partial<ReturnType<typeof summarizePurchasePlans>> = {}) => ({
+    planCount: 2,
+    fundedCount: 0,
+    totalTarget: 3000,
+    totalSaved: 0,
+    totalRemaining: 3000,
+    progress: 0,
+    requiredMonthlyForDates: 0,
+    ...over,
+  });
+
+  it("suggests what the dated plans need, rounded up to $25", () => {
+    expect(suggestCombinedMonthly(summary({ requiredMonthlyForDates: 160 }), null)).toBe(175);
+  });
+
+  it("falls back to half the free cash flow in $25 steps, then to zero", () => {
+    expect(suggestCombinedMonthly(summary(), cashFlow({ freeCashFlow: 420 }))).toBe(200);
+    expect(suggestCombinedMonthly(summary(), cashFlow({ freeCashFlow: -50 }))).toBe(0);
+    expect(suggestCombinedMonthly(summary(), null)).toBe(0);
+  });
+
+  it("slider max covers free cash flow, a 12-month save-up, the dated need, and a $100 floor", () => {
+    expect(calcCombinedSliderMax(summary({ totalRemaining: 120 }), null)).toBe(100);
+    expect(calcCombinedSliderMax(summary({ totalRemaining: 3000 }), null)).toBe(250);
+    expect(calcCombinedSliderMax(summary(), cashFlow({ freeCashFlow: 810 }))).toBe(825);
+    expect(calcCombinedSliderMax(summary({ requiredMonthlyForDates: 900 }), null)).toBe(900);
   });
 });

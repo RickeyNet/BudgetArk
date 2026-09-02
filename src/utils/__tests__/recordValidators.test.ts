@@ -668,6 +668,15 @@ describe("isSavingsGoalItem", () => {
     expect(isSavingsGoalItem(valid)).toBe(true);
   });
 
+  it("accepts an optional purchase-planner priority and rejects a bad one", () => {
+    expect(isSavingsGoalItem({ ...valid, priority: 0 })).toBe(true);
+    expect(isSavingsGoalItem({ ...valid, priority: 3 })).toBe(true);
+    expect(isSavingsGoalItem({ ...valid, priority: -1 })).toBe(false);
+    expect(isSavingsGoalItem({ ...valid, priority: "1" })).toBe(false);
+    expect(isSavingsGoalItem({ ...valid, priority: Number.NaN })).toBe(false);
+    expect(isSavingsGoalItem({ ...valid, priority: 10_001 })).toBe(false);
+  });
+
   it("rejects an unknown category", () => {
     expect(isSavingsGoalItem({ ...valid, category: "yacht" })).toBe(false);
   });

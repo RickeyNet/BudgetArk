@@ -117,6 +117,28 @@ export const updateSavingsGoal = async (
 };
 
 /**
+ * Pin the purchase planner's "My order" for several goals in ONE write
+ * (a reorder touches every plan's rank). Unknown ids are ignored; only
+ * goals whose rank actually changes get a fresh updatedAt, so a no-op
+ * reorder doesn't churn sync diffs.
+ */
+export const updateSavingsGoalPriorities = async (
+  assignments: readonly { id: string; priority: number }[]
+): Promise<SavingsGoal[]> => {
+  const byId = new Map(assignments.map((a) => [a.id, a.priority]));
+  const now = new Date().toISOString();
+  const goals = await getSavingsGoalsIncludingDeleted();
+  const updated = goals.map((goal) => {
+    const priority = byId.get(goal.id);
+    return priority === undefined || goal.priority === priority
+      ? goal
+      : { ...goal, priority, updatedAt: now };
+  });
+  await writeSavingsGoals(updated);
+  return filterLive(updated);
+};
+
+/**
  * Soft-deletes a savings goal. See debtStorage.deleteDebt for rationale.
  */
 export const deleteSavingsGoal = async (goalId: string): Promise<SavingsGoal[]> => {
