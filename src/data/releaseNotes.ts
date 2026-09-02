@@ -8,8 +8,8 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.10.1",
-    title: "Bank Connections That Keep Up",
-    releasedAt: "2026-09-01",
+    title: "Banks That Keep Up, Plans That Add Up",
+    releasedAt: "2026-09-02",
     highlights: [
       "Bank accounts can now land in any Bridge category. The '+ New account' form in the connection wizard (and in Profile → Bank Connections) offers 401k / Retirement and Investment alongside Checking, Savings, HSA and Other, and existing 401k or brokerage accounts appear in the 'Balance updates' picker too. A synced 401k balance shows as that account's Cash line on the Bridge; add its funds there as well and they count on top of it.",
       "The form also guesses the category from the bank's own account name - 'Fidelity 401(k)' preselects 401k / Retirement, 'High Yield Savings' preselects Savings - instead of defaulting everything to Checking. It's only a default; tap another pill to change it.",
@@ -25,6 +25,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Every plan that's getting money this month now says what that money would do on your highest-rate debt instead - '$150/mo on Chase Visa instead would clear it 4 months sooner and save $312 in interest' - right on the row, on the Bridge and in the Charts tool. No debts, no line.",
       "Every plan row now carries two little what-ifs: '+$25/mo · 2 mo sooner' and '+$100 now · 1 mo sooner' (or 'Finish it: $60 now' when that's all that's left). Tap the first and the monthly amount goes up; tap the second and the contribute box opens with the amount filled in. A what-if that wouldn't change the date simply doesn't appear.",
       "And a cost per use. Tell a plan how often you'll use the thing and for how long - in the new-plan form or by tapping an existing plan - and the price becomes 'about 83¢ per use (20x a month for 3 years)'. It's the honest test for the wants column: the pricey thing you'll use every day is often the cheaper one.",
+      "And a picture of it all: a stacked savings chart under the plan controls shows every plan's balance growing month by month, one band per plan, with a dashed line at your combined target and a dot where each plan crosses its own. Switch between 'One at a time' and 'Split evenly' and you can see the difference - bands filling in turn, or all rising together.",
       "Fixed: during setup, the take-home pay, rent and display-name fields could hide behind the keyboard while you typed. The page now scrolls to keep the active field in view.",
     ],
   },

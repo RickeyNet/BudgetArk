@@ -444,6 +444,49 @@ export type PlanProjectionResult = {
 const roundCents = (n: number): number => Math.round(n * 100) / 100;
 
 /**
+ * One month of the combined set-aside, applied IN PLACE to `remaining`
+ * (per plan, in list order). `rollover` fills the first unfunded plan and
+ * carries the excess down the list; `parallel` splits evenly among the
+ * unfunded plans and re-splits a finished plan's share the same month
+ * (bounded so float dust can't loop forever). `onPay` sees every payment.
+ * Shared by the projection, the what-if nudges, and the savings chart so
+ * all three agree to the cent.
+ */
+const allocateMonth = (
+  remaining: number[],
+  budget: number,
+  mode: PlanAllocationMode,
+  onPay?: (index: number, pay: number) => void
+): void => {
+  let left = budget;
+  if (mode === "rollover") {
+    for (let i = 0; i < remaining.length && left > 0; i++) {
+      if (remaining[i] <= 0) continue;
+      const pay = Math.min(remaining[i], left);
+      remaining[i] = roundCents(remaining[i] - pay);
+      left = roundCents(left - pay);
+      onPay?.(i, pay);
+    }
+    return;
+  }
+  for (let pass = 0; pass < 10 && left > 0; pass++) {
+    const open = remaining
+      .map((value, i) => (value > 0 ? i : -1))
+      .filter((i) => i >= 0);
+    if (open.length === 0) break;
+    const share = left / open.length;
+    let spent = 0;
+    for (const i of open) {
+      const pay = Math.min(remaining[i], share);
+      remaining[i] = roundCents(remaining[i] - pay);
+      spent += pay;
+      onPay?.(i, pay);
+    }
+    left = roundCents(left - spent);
+  }
+};
+
+/**
  * Month-by-month simulation of one combined monthly set-aside across the
  * plans in the given order. Under `rollover` each month's money goes to the
  * first unfunded plan and any excess flows to the next (the snowball
@@ -464,36 +507,10 @@ export const projectPurchasePlans = (
 
   if (budget > 0) {
     for (let month = 1; month <= MAX_PLAN_PROJECTION_MONTHS; month++) {
-      let left = budget;
-      if (mode === "rollover") {
-        for (let i = 0; i < remaining.length && left > 0; i++) {
-          if (remaining[i] <= 0) continue;
-          const pay = Math.min(remaining[i], left);
-          remaining[i] = roundCents(remaining[i] - pay);
-          left = roundCents(left - pay);
-          if (month === 1) monthlyNow[i] = roundCents(monthlyNow[i] + pay);
-          if (remaining[i] <= 0) readyIn[i] = month;
-        }
-      } else {
-        // Re-split whenever a plan finishes mid-month; bounded so float
-        // dust can't loop forever.
-        for (let pass = 0; pass < 10 && left > 0; pass++) {
-          const open = remaining
-            .map((value, i) => (value > 0 ? i : -1))
-            .filter((i) => i >= 0);
-          if (open.length === 0) break;
-          const share = left / open.length;
-          let spent = 0;
-          for (const i of open) {
-            const pay = Math.min(remaining[i], share);
-            remaining[i] = roundCents(remaining[i] - pay);
-            spent += pay;
-            if (month === 1) monthlyNow[i] = roundCents(monthlyNow[i] + pay);
-            if (remaining[i] <= 0) readyIn[i] = month;
-          }
-          left = roundCents(left - spent);
-        }
-      }
+      allocateMonth(remaining, budget, mode, (i, pay) => {
+        if (month === 1) monthlyNow[i] = roundCents(monthlyNow[i] + pay);
+        if (remaining[i] <= 0) readyIn[i] = month;
+      });
       if (remaining.every((value) => value <= 0)) break;
     }
   }
@@ -962,5 +979,102 @@ export const calcPlanNudges = (
       lumpSooner !== null && (finishes || lumpSooner > 0)
         ? { amount: lump, monthsSooner: lumpSooner, finishes }
         : null,
+  };
+};
+
+/* ── Stacked cumulative-savings chart ── */
+
+/** Longest horizon the chart draws, even when plans take longer. */
+export const MAX_CHART_MONTHS = 36;
+/** Shortest horizon, so a chart never collapses to a couple of points. */
+export const MIN_CHART_MONTHS = 6;
+
+/**
+ * Month-by-month saved balance of every plan (capped at its target),
+ * index 0 = today, under the same allocation the projection uses.
+ */
+export const simulatePlanBalances = (
+  orderedGoals: readonly SavingsGoal[],
+  combinedMonthly: number,
+  mode: PlanAllocationMode,
+  months: number
+): number[][] => {
+  const targets = orderedGoals.map((goal) => Math.max(0, goal.targetAmount));
+  const remaining = orderedGoals.map(remainingForPlan);
+  const saved = orderedGoals.map((goal, i) =>
+    Math.min(targets[i], Math.max(0, goal.currentAmount))
+  );
+  const series = saved.map((value) => [value]);
+  const budget = Number.isFinite(combinedMonthly) ? Math.max(0, combinedMonthly) : 0;
+  for (let month = 1; month <= months; month++) {
+    if (budget > 0) {
+      allocateMonth(remaining, budget, mode, (i, pay) => {
+        saved[i] = Math.min(targets[i], roundCents(saved[i] + pay));
+      });
+    }
+    for (let i = 0; i < series.length; i++) series[i].push(saved[i]);
+  }
+  return series;
+};
+
+export type SavingsChartSeries = {
+  goalId: string;
+  name: string;
+  target: number;
+  /** Saved balance per month, index 0 = today. */
+  values: number[];
+  /** Month index the plan reaches its target within the horizon, if it does. */
+  readyAtMonth: number | null;
+};
+
+export type SavingsChartModel = {
+  /** Number of months after today the chart covers. */
+  months: number;
+  series: SavingsChartSeries[];
+  totalTarget: number;
+  /** Highest stacked total across the horizon (the y-axis ceiling candidate). */
+  peakTotal: number;
+};
+
+/**
+ * Data behind the stacked cumulative-savings chart: every plan's balance
+ * over a horizon that runs to the month the last plan funds, clamped to
+ * [MIN_CHART_MONTHS, MAX_CHART_MONTHS]. Funded plans are included (flat at
+ * their target) so the stack still adds up to what's really saved. Null
+ * when there are no plans.
+ */
+export const buildSavingsChart = (
+  orderedGoals: readonly SavingsGoal[],
+  combinedMonthly: number,
+  mode: PlanAllocationMode,
+  now: Date = new Date()
+): SavingsChartModel | null => {
+  if (orderedGoals.length === 0) return null;
+  const projection = projectPurchasePlans(orderedGoals, combinedMonthly, mode, now);
+  const horizon = projection.allFundedInMonths ?? MAX_CHART_MONTHS;
+  const months = Math.max(MIN_CHART_MONTHS, Math.min(MAX_CHART_MONTHS, horizon));
+  const balances = simulatePlanBalances(orderedGoals, combinedMonthly, mode, months);
+  const series: SavingsChartSeries[] = orderedGoals.map((goal, i) => {
+    const target = Math.max(0, goal.targetAmount);
+    const readyIndex = balances[i].findIndex((value) => target > 0 && value >= target);
+    return {
+      goalId: goal.id,
+      name: goal.name,
+      target,
+      values: balances[i],
+      readyAtMonth: readyIndex >= 0 ? readyIndex : null,
+    };
+  });
+  let peakTotal = 0;
+  for (let m = 0; m <= months; m++) {
+    let total = 0;
+    for (const item of series) total += item.values[m];
+    peakTotal = Math.max(peakTotal, total);
+  }
+  return {
+    months,
+    series,
+    totalTarget: series.reduce((sum, item) => sum + item.target, 0),
+    peakTotal,
   };
 };

@@ -27,6 +27,7 @@ import {
 } from "react-native";
 import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
 import SliderRow from "./SliderRow";
+import PurchasePlanChart from "./PurchasePlanChart";
 import { describeError } from "../utils/errorMessage";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { useTheme } from "../theme/ThemeProvider";
@@ -42,6 +43,7 @@ import {
 } from "../storage/savingsGoalStorage";
 import {
   assessPurchaseFit,
+  buildSavingsChart,
   calcCombinedSliderMax,
   calcCostPerUse,
   calcDebtOpportunityCost,
@@ -141,7 +143,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, formatCompactCurrency } = useCurrency();
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
@@ -207,6 +209,20 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
     () => projectPurchasePlans(ordered, combinedMonthly, settings.allocation),
     [ordered, combinedMonthly, settings.allocation],
   );
+  // Stacked cumulative-savings chart; only worth drawing once money flows.
+  const chartModel = useMemo(
+    () =>
+      combinedMonthly > 0 && summary.fundedCount < summary.planCount
+        ? buildSavingsChart(ordered, combinedMonthly, settings.allocation)
+        : null,
+    [ordered, combinedMonthly, settings.allocation, summary],
+  );
+  const formatChartMonth = useCallback((monthsFromNow: number) => {
+    if (monthsFromNow === 0) return "Now";
+    const date = new Date();
+    return formatPlanMonthYear(new Date(date.getFullYear(), date.getMonth() + monthsFromNow, 1));
+  }, []);
+
   const projectionById = useMemo(() => {
     const map = new Map<string, PlanProjection>();
     for (const item of projection.projections) map.set(item.goalId, item);
@@ -459,6 +475,14 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               ? "The whole amount goes to the first plan; when it's funded, the money rolls into the next - like a debt snowball."
               : "The amount is split evenly across every unfunded plan, and a finished plan's share moves to the rest."}
           </Text>
+          {chartModel ? (
+            <PurchasePlanChart
+              model={chartModel}
+              colors={colors}
+              formatCompactCurrency={formatCompactCurrency}
+              formatMonth={formatChartMonth}
+            />
+          ) : null}
           {reorderError ? (
             <Text style={[styles.hintText, { color: colors.danger }]}>{reorderError}</Text>
           ) : null}

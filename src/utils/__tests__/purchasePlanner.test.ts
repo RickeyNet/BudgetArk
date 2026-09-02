@@ -11,6 +11,7 @@ import { DEFAULT_DEBT_MILESTONE_STEPS } from "../../types";
 import {
   assessPurchaseFit,
   buildArkPurchaseGuidance,
+  buildSavingsChart,
   calcCombinedSliderMax,
   calcCostPerUse,
   calcDebtOpportunityCost,
@@ -28,6 +29,8 @@ import {
   calcPurchaseTimeline,
   calcRequiredMonthly,
   monthsUntilTarget,
+  MAX_CHART_MONTHS,
+  MIN_CHART_MONTHS,
   movePlanInOrder,
   NUDGE_LUMP_SUM,
   NUDGE_MONTHLY_STEP,
@@ -35,6 +38,7 @@ import {
   pickOpportunityDebt,
   projectPurchasePlans,
   PURCHASE_LOOKBACK_MONTHS,
+  simulatePlanBalances,
   suggestCombinedMonthly,
   suggestFinanceApr,
   summarizePurchasePlans,
@@ -730,5 +734,76 @@ describe("calcPlanNudges", () => {
     // +25: 62.5 each -> first done month 10 (625), second has 625, 375 left / 125 = 3 -> month 13.
     const nudges = calcPlanNudges([first, second], "second", 100, "parallel", now);
     expect(nudges.extraMonthly).toEqual({ amount: NUDGE_MONTHLY_STEP, monthsSooner: 3 });
+  });
+});
+
+/* ── Stacked cumulative-savings chart ── */
+
+describe("simulatePlanBalances", () => {
+  const first = goal({ id: "first", targetAmount: 300, currentAmount: 0 });
+  const second = goal({ id: "second", targetAmount: 500, currentAmount: 100 });
+
+  it("tracks each plan's balance month by month under rollover, capped at its target", () => {
+    const series = simulatePlanBalances([first, second], 200, "rollover", 4);
+    // first: 0, 200, 300 (done, 100 rolls over), 300, 300
+    expect(series[0]).toEqual([0, 200, 300, 300, 300]);
+    // second: 100, 100, 200, 400, 500 (capped)
+    expect(series[1]).toEqual([100, 100, 200, 400, 500]);
+  });
+
+  it("splits evenly under parallel and re-splits a finished plan's share", () => {
+    const series = simulatePlanBalances([first, second], 200, "parallel", 3);
+    // 100 each: first 100, 200, 300(done at m3); second 200, 300, 400
+    expect(series[0]).toEqual([0, 100, 200, 300]);
+    expect(series[1]).toEqual([100, 200, 300, 400]);
+  });
+
+  it("stays flat with no set-aside and agrees with the projection's ready months", () => {
+    expect(simulatePlanBalances([first], 0, "rollover", 2)).toEqual([[0, 0, 0]]);
+    const projection = projectPurchasePlans([first, second], 200, "rollover");
+    const series = simulatePlanBalances([first, second], 200, "rollover", 6);
+    for (const item of projection.projections) {
+      const index = item.goalId === "first" ? 0 : 1;
+      const target = index === 0 ? 300 : 500;
+      expect(series[index].findIndex((value) => value >= target)).toBe(item.readyInMonths);
+    }
+  });
+});
+
+describe("buildSavingsChart", () => {
+  const now = new Date(2026, 6, 15);
+  const first = goal({ id: "first", name: "Bike", targetAmount: 300, currentAmount: 0 });
+  const second = goal({ id: "second", name: "Trip", targetAmount: 500, currentAmount: 100 });
+
+  it("runs to the month the last plan funds, floored at the minimum horizon", () => {
+    const model = buildSavingsChart([first, second], 200, "rollover", now);
+    expect(model).not.toBeNull();
+    // Last plan funds in month 4 -> clamped up to MIN_CHART_MONTHS.
+    expect(model!.months).toBe(MIN_CHART_MONTHS);
+    expect(model!.series.map((s) => s.name)).toEqual(["Bike", "Trip"]);
+    expect(model!.series[0].readyAtMonth).toBe(2);
+    expect(model!.series[1].readyAtMonth).toBe(4);
+    expect(model!.totalTarget).toBe(800);
+    expect(model!.peakTotal).toBe(800);
+    expect(model!.series[0].values).toHaveLength(MIN_CHART_MONTHS + 1);
+  });
+
+  it("caps a long horizon and reports plans that never fund within it", () => {
+    const slow = goal({ id: "slow", targetAmount: 100_000, currentAmount: 0 });
+    const model = buildSavingsChart([slow], 50, "rollover", now);
+    expect(model!.months).toBe(MAX_CHART_MONTHS);
+    expect(model!.series[0].readyAtMonth).toBeNull();
+    expect(model!.peakTotal).toBe(50 * MAX_CHART_MONTHS);
+  });
+
+  it("keeps funded plans in the stack, flat at their target, with ready-at 0", () => {
+    const done = goal({ id: "done", targetAmount: 100, currentAmount: 100 });
+    const model = buildSavingsChart([done, first], 100, "rollover", now);
+    expect(model!.series[0].values.every((value) => value === 100)).toBe(true);
+    expect(model!.series[0].readyAtMonth).toBe(0);
+  });
+
+  it("is null with no plans", () => {
+    expect(buildSavingsChart([], 100, "rollover", now)).toBeNull();
   });
 });
