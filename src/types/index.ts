@@ -720,6 +720,15 @@ export interface BankConnection {
   lastErrorCode?: ConnectionErrorCode;
   /** Short human-readable summary of the last error, for the UI. */
   lastErrorMessage?: string;
+  /**
+   * Per-institution warnings the provider returned alongside an otherwise
+   * successful fetch - SimpleFIN's `errors` list, e.g. "Connection to Chase
+   * may need attention": the bridge is fine, one bank behind it wants a
+   * fresh login. Set from the latest clean fetch (cleared when the list
+   * comes back empty). Sanitized, capped text; shown in the Connections
+   * manager only, never in a notification.
+   */
+  providerWarnings?: string[];
 }
 
 /**

@@ -662,3 +662,109 @@ describe("startConnectionsMonitoring / stopConnectionsMonitoring", () => {
     expect(remove).toHaveBeenCalled();
   });
 });
+
+describe("gap backfill (a bank behind the bridge comes back after going dark)", () => {
+  const DAY = 24 * 3600_000;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const startOfCall = (index: number): number =>
+    mockFetchSimplefin.mock.calls[index][1].startDateEpochSec * 1000;
+
+  beforeEach(() => {
+    mockGetConnections.mockResolvedValue([conn({ lastSyncedAt: iso(NOW - DAY) })]);
+  });
+
+  it("re-fetches once from the frozen balance date minus the overlap and ingests that superset", async () => {
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", lastExternalBalanceAt: iso(NOW - 30 * DAY) }),
+    ]);
+    const cameBack = account({ balanceAsOf: iso(NOW) });
+    mockFetchSimplefin
+      .mockResolvedValueOnce(okFetch({ accounts: [cameBack], transactions: [tx({ providerTxId: "RECENT" })] }))
+      .mockResolvedValueOnce(
+        okFetch({
+          accounts: [cameBack],
+          transactions: [tx({ providerTxId: "RECENT" }), tx({ providerTxId: "OLD", postedAt: iso(NOW - 20 * DAY) })],
+        }),
+      );
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+
+    expect(mockFetchSimplefin).toHaveBeenCalledTimes(2);
+    expect(startOfCall(0)).toBe(NOW - DAY - 7 * DAY);
+    expect(startOfCall(1)).toBe(NOW - 30 * DAY - 7 * DAY);
+    expect(result.outcome).toBe("updated");
+    expect(result.backfilledFrom).toBe(iso(NOW - 30 * DAY - 7 * DAY));
+    expect(result.newPendingCount).toBe(2);
+    const upserted = mockUpsertPendingTransactions.mock.calls[0][0].map((item: any) => item.providerTxId).sort();
+    expect(upserted).toEqual(["OLD", "RECENT"]);
+  });
+
+  it("fetches once when every bank's balance date is current", async () => {
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", lastExternalBalanceAt: iso(NOW - 2 * DAY) }),
+    ]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ accounts: [account({ balanceAsOf: iso(NOW) })] }));
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(mockFetchSimplefin).toHaveBeenCalledTimes(1);
+    expect(result.backfilledFrom).toBeUndefined();
+  });
+
+  it("keeps the first result when the wider re-fetch fails, so the pass still succeeds", async () => {
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", lastExternalBalanceAt: iso(NOW - 30 * DAY) }),
+    ]);
+    mockFetchSimplefin
+      .mockResolvedValueOnce(okFetch({ accounts: [account({ balanceAsOf: iso(NOW) })], transactions: [tx()] }))
+      .mockResolvedValueOnce({ ok: false, error: "rate-limited", message: "limit" });
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("updated");
+    expect(result.backfilledFrom).toBeUndefined();
+    expect(result.newPendingCount).toBe(1);
+  });
+
+  it("an explicit re-import widens the window to N days, skips the cooldown, and never gap-detects", async () => {
+    mockGetConnections.mockResolvedValue([
+      conn({ lastSyncedAt: iso(NOW - DAY), lastAttemptAt: iso(NOW - 60_000) }), // inside the 15-min cooldown
+    ]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", lastExternalBalanceAt: iso(NOW - 30 * DAY) }),
+    ]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ accounts: [account({ balanceAsOf: iso(NOW) })] }));
+
+    const [plain] = await syncConnections({ now: NOW, manual: true });
+    expect(plain.outcome).toBe("fresh");
+
+    const [result] = await syncConnections({ now: NOW, manual: true, backfillDays: 90 });
+    expect(result.outcome).toBe("updated");
+    expect(mockFetchSimplefin).toHaveBeenCalledTimes(1);
+    expect(startOfCall(0)).toBe(NOW - 90 * DAY);
+    expect(result.backfilledFrom).toBe(iso(NOW - 90 * DAY));
+  });
+});
+
+describe("provider warnings (SimpleFIN per-institution errors)", () => {
+  it("stores the bridge's warnings on a successful pass and clears them on the next clean one", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockFetchSimplefin.mockResolvedValue({
+      ...okFetch(),
+      warnings: ["Connection to Chase may need attention"],
+    });
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("updated");
+    expect(mockUpdateConnection).toHaveBeenCalledWith(
+      "conn-1",
+      expect.objectContaining({
+        authStatus: "ok",
+        providerWarnings: ["Connection to Chase may need attention"],
+      }),
+    );
+
+    mockUpdateConnection.mockClear();
+    mockFetchSimplefin.mockResolvedValue(okFetch());
+    await syncConnections({ now: NOW + 3600_000, manual: true });
+    expect(mockUpdateConnection).toHaveBeenCalledWith(
+      "conn-1",
+      expect.objectContaining({ authStatus: "ok", providerWarnings: undefined }),
+    );
+  });
+});

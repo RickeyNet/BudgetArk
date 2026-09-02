@@ -43,6 +43,11 @@ export type ProviderFetchResult =
       ok: true;
       accounts: NormalizedAccount[];
       transactions: NormalizedTransaction[];
+      /**
+       * Provider-side per-institution warnings that did NOT fail the fetch
+       * (SimpleFIN `errors`). Already sanitized and capped by the parser.
+       */
+      warnings?: string[];
     }
   | {
       ok: false;

@@ -36,8 +36,14 @@ interface ConnectionsContextValue {
   isReady: boolean;
   /** Reload connections + inbox from storage (after wizard/approve/dismiss). */
   refresh: () => Promise<void>;
-  /** Run a manual sync (all connections, or one), then refresh. */
-  syncNow: (connectionId?: string) => Promise<ConnectionSyncResult[]>;
+  /**
+   * Run a manual sync (all connections, or one), then refresh.
+   * `backfillDays` = the manager's "Re-import the last N days".
+   */
+  syncNow: (
+    connectionId?: string,
+    opts?: { backfillDays?: number },
+  ) => Promise<ConnectionSyncResult[]>;
 }
 
 const ConnectionsContext = createContext<ConnectionsContextValue | null>(null);
@@ -84,10 +90,17 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => subscribeDataChanged(() => void refresh()), [refresh]);
 
   const syncNow = useCallback(
-    async (connectionId?: string): Promise<ConnectionSyncResult[]> => {
+    async (
+      connectionId?: string,
+      opts?: { backfillDays?: number },
+    ): Promise<ConnectionSyncResult[]> => {
       setIsSyncing(true);
       try {
-        const results = await syncConnections({ manual: true, connectionId });
+        const results = await syncConnections({
+          manual: true,
+          connectionId,
+          backfillDays: opts?.backfillDays,
+        });
         await refresh();
         return results;
       } finally {
@@ -97,8 +110,15 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
     [refresh],
   );
 
+  // Re-auth / errors, or a bank behind a healthy bridge asking for a fresh
+  // login (providerWarnings) - both need the user, not another sync.
   const needsAttention = useMemo(
-    () => connections.some((c) => c.enabled && c.authStatus !== "ok"),
+    () =>
+      connections.some(
+        (c) =>
+          c.enabled &&
+          (c.authStatus !== "ok" || (c.providerWarnings?.length ?? 0) > 0),
+      ),
     [connections],
   );
 

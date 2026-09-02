@@ -160,7 +160,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `simplefinParser.test.ts` / `tellerParser.test.ts` | provider parsers | Fail-closed parsing of bank responses (https enforced for SimpleFIN) |
 | `http1.test.ts` / `tellerMtlsClient.test.ts` | transport | Minimal HTTP/1 client; Teller mTLS peer-identity verification |
 | `ingest.test.ts` / `merchant.test.ts` | `ingest.ts` / `merchant.ts` | Transaction ingest planning (dedupe, twins, pending→posted), inbox reconciliation against partner-synced entries/dismissals, the synced-dismissal selector, merchant normalization |
-| `syncGate.test.ts` / `linkPreferences.test.ts` | `syncGate.ts` / `linkPreferences.ts` | Sync gating; account-link edit rules |
+| `syncGate.test.ts` / `linkPreferences.test.ts` | `syncGate.ts` / `linkPreferences.ts` | Sync gating, fetch windows incl. explicit re-import, gap backfill for a bank that came back after going dark; account-link edit rules |
 | `debtBalances.test.ts` | `debtBalances.ts` | Bank → credit-card balance mirroring: sign-tolerant magnitude, high-water `originalBalance`, link/debt gating |
 | `assetCategoryHint.test.ts` | `assetCategoryHint.ts` | Bridge category guessed from a bank account name (401k/IRA → retirement, HSA, brokerage, savings, checking; fallback checking) |
 | `reviewInboxService.test.ts` | `reviewInboxService.ts` | Approve/skip/bulk flows, merchant-rule creation and edits, crash-safe write order, storage-backed inbox reconciliation |

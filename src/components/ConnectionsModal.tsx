@@ -52,6 +52,7 @@ import {
   removeConnection,
   updateLinkPreferences,
 } from "../services/connections/connectionsService";
+import { MAX_GAP_BACKFILL_DAYS } from "../services/connections/syncGate";
 import type { LinkPreferenceChange } from "../services/connections/linkPreferences";
 import { suggestAssetCategory } from "../services/connections/assetCategoryHint";
 import { generateUUID } from "../utils/uuid";
@@ -290,6 +291,12 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         tone: colors.danger,
       };
     }
+    if ((connection.providerWarnings?.length ?? 0) > 0) {
+      return {
+        text: "A bank needs attention on your SimpleFIN Bridge",
+        tone: colors.warning,
+      };
+    }
     return {
       text: `Last synced ${timeAgo(connection.lastSyncedAt)}`,
       tone: colors.textMuted,
@@ -378,6 +385,26 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             <Text style={styles.warningText}>
               This connection needs to be re-authorized. Remove it and add it
               again to reconnect.
+            </Text>
+          </View>
+        ) : null}
+
+        {(connection.providerWarnings?.length ?? 0) > 0 ? (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningText}>
+              Your SimpleFIN Bridge reports that a bank behind this connection
+              needs a fresh login. Its transactions stop arriving until you
+              reconnect it:
+            </Text>
+            {connection.providerWarnings?.map((warning) => (
+              <Text key={warning} style={styles.warningText}>
+                • {warning}
+              </Text>
+            ))}
+            <Text style={styles.warningText}>
+              Sign in at beta-bridge.simplefin.org and reconnect that bank.
+              Once it's back, the next sync re-imports the transactions it
+              missed on its own.
             </Text>
           </View>
         ) : null}
@@ -609,6 +636,31 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             <Text style={styles.secondaryButtonText}>Sync Now</Text>
           )}
         </TouchableOpacity>
+
+        {/* Manual safety net for a bank that came back after going dark when
+            the automatic gap detection had nothing to go on. Skips the
+            15-minute cooldown; the ledger keeps reviewed items from
+            resurfacing, so it's safe to tap. */}
+        {linksLoaded && links.length > 0 ? (
+          <>
+            <TouchableOpacity
+              style={[styles.secondaryButton, isSyncing && styles.buttonDisabled]}
+              onPress={() =>
+                void syncNow(connection.id, { backfillDays: MAX_GAP_BACKFILL_DAYS })
+              }
+              disabled={isSyncing}
+            >
+              <Text style={styles.secondaryButtonText}>
+                Re-import the last {MAX_GAP_BACKFILL_DAYS} days
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.hint}>
+              Use this if a bank was disconnected for a while and its
+              transactions are missing. Anything you already reviewed stays
+              as it is.
+            </Text>
+          </>
+        ) : null}
 
         <TouchableOpacity
           style={styles.dangerButton}

@@ -119,6 +119,36 @@ describe("parseAccountsResponse", () => {
     expect(result.droppedTransactions).toBe(2);
   });
 
+  it("surfaces the bridge's per-institution errors as sanitized, capped, deduped warnings", () => {
+    const result = parseAccountsResponse({
+      ...body,
+      errors: [
+        "Connection to Chase may need attention",
+        "Connection to Chase may need attention", // duplicate
+        "  Bad\u0000 control chars  ",
+        42, // non-string dropped
+        "x".repeat(500), // capped
+        "e1",
+        "e2",
+        "e3",
+        "e4", // beyond MAX_WARNINGS
+      ],
+    });
+    expect(result.warnings).toHaveLength(5);
+    expect(result.warnings[0]).toBe("Connection to Chase may need attention");
+    expect(result.warnings[1]).toBe("Bad control chars");
+    expect(result.warnings[2]).toHaveLength(200);
+    expect(result.warnings.slice(3)).toEqual(["e1", "e2"]);
+    // Accounts still parse alongside the warnings - a warning is not a failure.
+    expect(result.accounts).toHaveLength(1);
+  });
+
+  it("returns no warnings when errors is absent, empty, or not an array", () => {
+    expect(parseAccountsResponse(body).warnings).toEqual([]);
+    expect(parseAccountsResponse({ ...body, errors: [] }).warnings).toEqual([]);
+    expect(parseAccountsResponse({ ...body, errors: "nope" }).warnings).toEqual([]);
+  });
+
   it("returns empty results for non-object or schema-surprise bodies", () => {
     expect(parseAccountsResponse(null).accounts).toEqual([]);
     expect(parseAccountsResponse("x").accounts).toEqual([]);

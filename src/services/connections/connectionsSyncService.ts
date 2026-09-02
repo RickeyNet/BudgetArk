@@ -61,7 +61,7 @@ import {
   reconcileInboxWithDecisions,
 } from "./reviewInboxService";
 import { notifyDataChanged } from "../../storage/dataChangeNotifier";
-import { computeFetchWindow, isSyncDue } from "./syncGate";
+import { computeFetchWindow, isSyncDue, planGapBackfill } from "./syncGate";
 import type {
   NormalizedAccount,
   NormalizedTransaction,
@@ -84,11 +84,17 @@ export interface ConnectionSyncResult {
   /** AssetAccount balances + credit-card (debt) balances that changed. */
   balancesUpdated: number;
   errorMessage?: string;
+  /**
+   * Set when the pass re-fetched from an earlier start than the normal
+   * window: a bank behind the bridge came back after going dark (ISO date
+   * the second fetch started from), or the user asked for a re-import.
+   */
+  backfilledFrom?: string;
 }
 
 const fetchForConnection = async (
   connection: BankConnection,
-  nowMs: number,
+  startDate: Date,
 ): Promise<ProviderFetchResult> => {
   const secrets = await getConnectionSecrets(connection.id);
   if (!secrets || secrets.provider !== connection.provider) {
@@ -98,15 +104,14 @@ const fetchForConnection = async (
       message: "This connection's credentials are missing. Remove and re-add it.",
     };
   }
-  const window = computeFetchWindow(connection.lastSyncedAt, nowMs);
 
   if (secrets.provider === "simplefin") {
     return fetchSimplefinAccounts(secrets.accessUrl, {
-      startDateEpochSec: window.startDate.getTime() / 1000,
+      startDateEpochSec: startDate.getTime() / 1000,
     });
   }
 
-  return fetchTellerData(secrets, { startDate: window.startDate });
+  return fetchTellerData(secrets, { startDate });
 };
 
 /**
@@ -215,7 +220,7 @@ const applyBalances = async (
 
 const syncOneConnection = async (
   connection: BankConnection,
-  opts: { manual: boolean; nowMs: number },
+  opts: { manual: boolean; nowMs: number; backfillDays?: number },
 ): Promise<ConnectionSyncResult> => {
   const base: ConnectionSyncResult = {
     connectionId: connection.id,
@@ -229,7 +234,12 @@ const syncOneConnection = async (
   if (connection.authStatus === "needs-reauth" && !opts.manual) {
     return { ...base, outcome: "needs-reauth" };
   }
-  if (!isSyncDue(connection.lastAttemptAt, opts.nowMs, opts.manual)) {
+  // An explicit re-import is the user's deliberate one-off, so it skips the
+  // manual cooldown (still one request against the daily budget).
+  if (
+    opts.backfillDays === undefined &&
+    !isSyncDue(connection.lastAttemptAt, opts.nowMs, opts.manual)
+  ) {
     return { ...base, outcome: "fresh" };
   }
 
@@ -238,7 +248,14 @@ const syncOneConnection = async (
     lastAttemptAt: new Date(opts.nowMs).toISOString(),
   });
 
-  const result = await fetchForConnection(connection, opts.nowMs);
+  const window = computeFetchWindow(
+    connection.lastSyncedAt,
+    opts.nowMs,
+    opts.backfillDays,
+  );
+  let result = await fetchForConnection(connection, window.startDate);
+  let backfilledFrom: string | undefined =
+    opts.backfillDays !== undefined ? window.startDate.toISOString() : undefined;
 
   if (!result.ok) {
     const outcome: ConnectionSyncOutcome =
@@ -256,6 +273,28 @@ const syncOneConnection = async (
   }
 
   const links = await getLinksForConnection(connection.id);
+
+  // A bank behind the bridge that just came back after going dark: its
+  // backlog predates this window (see planGapBackfill). Re-fetch once from
+  // the earlier start and use that superset; a failed second fetch keeps
+  // the first result - the gap is retried on the next pass, since the
+  // links' balance dates only advance below when the pass succeeds.
+  if (opts.backfillDays === undefined) {
+    const gap = planGapBackfill({
+      links,
+      accounts: result.accounts,
+      windowStartMs: window.startDate.getTime(),
+      nowMs: opts.nowMs,
+    });
+    if (gap) {
+      const refetched = await fetchForConnection(connection, gap.startDate);
+      if (refetched.ok) {
+        result = refetched;
+        backfilledFrom = gap.startDate.toISOString();
+      }
+    }
+  }
+
   const [inbox, ledger, rules, allEntries] = await Promise.all([
     getPendingTransactions(),
     getIngestLedger(),
@@ -336,6 +375,10 @@ const syncOneConnection = async (
     authStatus: "ok",
     lastErrorCode: undefined,
     lastErrorMessage: undefined,
+    // Per-institution "needs attention" from the provider: kept while the
+    // bridge keeps reporting it, cleared the first time it comes back clean.
+    providerWarnings:
+      result.warnings && result.warnings.length > 0 ? result.warnings : undefined,
   });
 
   return {
@@ -344,6 +387,7 @@ const syncOneConnection = async (
     newPendingCount: plan.newInboxItems.length,
     updatedPendingCount: plan.updatedInboxItems.length - migratedIds.length,
     balancesUpdated,
+    backfilledFrom,
   };
 };
 
@@ -351,10 +395,18 @@ let inFlight: Promise<ConnectionSyncResult[]> | null = null;
 
 /**
  * Sync all (or one) connection(s). Concurrent calls share the in-flight
- * pass rather than stacking a second one.
+ * pass rather than stacking a second one. `backfillDays` is the manager's
+ * explicit "Re-import the last N days" (capped at MAX_GAP_BACKFILL_DAYS):
+ * it widens the fetch window and skips the manual cooldown; the ledger
+ * keeps already-reviewed transactions from resurfacing.
  */
 export const syncConnections = async (
-  opts: { manual?: boolean; connectionId?: string; now?: number } = {},
+  opts: {
+    manual?: boolean;
+    connectionId?: string;
+    now?: number;
+    backfillDays?: number;
+  } = {},
 ): Promise<ConnectionSyncResult[]> => {
   if (inFlight) return inFlight;
   const run = (async () => {
@@ -379,6 +431,7 @@ export const syncConnections = async (
           await syncOneConnection(connection, {
             manual: opts.manual === true,
             nowMs,
+            backfillDays: opts.backfillDays,
           }),
         );
       } catch {

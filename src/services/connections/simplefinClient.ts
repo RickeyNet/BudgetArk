@@ -119,8 +119,8 @@ export const fetchSimplefinAccounts = async (
       };
     }
     const json = (await res.json()) as unknown;
-    const { accounts, transactions } = parseAccountsResponse(json);
-    return { ok: true, accounts, transactions };
+    const { accounts, transactions, warnings } = parseAccountsResponse(json);
+    return { ok: true, accounts, transactions, warnings };
   } catch {
     return {
       ok: false,

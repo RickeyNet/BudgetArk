@@ -8,7 +8,7 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.10.1",
-    title: "Bank Account Categories & Wizard Freeze Fix",
+    title: "Bank Connections That Keep Up",
     releasedAt: "2026-09-01",
     highlights: [
       "Bank accounts can now land in any Bridge category. The '+ New account' form in the connection wizard (and in Profile → Bank Connections) offers 401k / Retirement and Investment alongside Checking, Savings, HSA and Other, and existing 401k or brokerage accounts appear in the 'Balance updates' picker too. A synced 401k balance shows as that account's Cash line on the Bridge; add its funds there as well and they count on top of it.",
@@ -16,6 +16,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Fixed: the connection wizard's 'Connected' screen could freeze the whole app on Done (force-close was the only way out). The first sync now waits until the wizard sheet is fully gone on both platforms.",
       "Fixed: connecting a second phone to the same bank asked you to review transactions you had already reviewed on the first one. Anything you approved on one phone now clears from the other phone's Review Inbox as soon as the two sync, even if the second phone fetched the transactions first.",
       "Skipped transactions now travel with partner sync too. The list of transactions you chose not to import is shared between your paired phones (only the 'skip' decisions - never bank credentials, and nothing about entries you've marked private), so the same charge isn't offered twice. Already-paired phones send their existing skips once, on the first sync after both update.",
+      "If one of your banks needs a fresh login on your SimpleFIN Bridge, BudgetArk now tells you. Some banks expire the bridge's session every couple of weeks; the app used to keep saying 'Last synced 2 hours ago' while that bank had quietly stopped. The connection now shows 'A bank needs attention on your SimpleFIN Bridge', and its detail screen lists the bridge's message with what to do (sign in at the bridge and reconnect the bank).",
+      "And when the bank comes back, the app catches up on its own. Before, a bank that was disconnected for three weeks only ever got its last week re-checked, so the transactions in between never appeared. The next sync after a reconnect now notices the gap and re-imports it (up to 90 days back). There's also a 'Re-import the last 90 days' button on each connection for good measure - anything you've already reviewed stays exactly as it is.",
       "Fixed: during setup, the take-home pay, rent and display-name fields could hide behind the keyboard while you typed. The page now scrolls to keep the active field in view.",
     ],
   },

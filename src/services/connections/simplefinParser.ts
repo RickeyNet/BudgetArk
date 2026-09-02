@@ -6,9 +6,12 @@
  *  - a SETUP TOKEN is base64 of a one-time claim URL;
  *  - POSTing the claim URL yields an ACCESS URL with basic-auth credentials
  *    embedded (https://user:pass@host/simplefin);
- *  - GET {access}/accounts returns {accounts: [{id, name, currency, balance,
- *    "balance-date", transactions: [{id, posted, amount, description, pending?,
- *    transacted_at?}]}]}.
+ *  - GET {access}/accounts returns {errors: [string...], accounts: [{id,
+ *    name, currency, balance, "balance-date", transactions: [{id, posted,
+ *    amount, description, pending?, transacted_at?}]}]}. `errors` is the
+ *    bridge saying one INSTITUTION needs attention (a fresh bank login)
+ *    while the rest of the response is fine - surfaced as warnings, never
+ *    as a failed fetch, because the other banks' data is still good.
  *
  * SimpleFIN quirks handled here: money values are DECIMAL STRINGS ("-4.50"),
  * dates are unix epoch SECONDS, and a pending transaction may carry
@@ -17,11 +20,17 @@
  */
 
 import { base64ToUtf8, basicAuthHeader } from "./base64";
+import { sanitizeTextInput } from "../../utils/sanitize";
+
 import {
   NormalizedAccount,
   NormalizedTransaction,
   roundToCents,
 } from "./types";
+
+/** Bridge warning text is untrusted: cap each message and the list. */
+export const MAX_WARNING_LENGTH = 200;
+export const MAX_WARNINGS = 5;
 
 export interface ParsedAccessUrl {
   /** Credential-free base URL, no trailing slash: https://host/simplefin */
@@ -98,7 +107,29 @@ export interface SimplefinParseResult {
   transactions: NormalizedTransaction[];
   /** Individually malformed transactions dropped during parsing. */
   droppedTransactions: number;
+  /** Per-institution "needs attention" messages from the bridge (sanitized, capped). */
+  warnings: string[];
 }
+
+/**
+ * The bridge's `errors` list: free text about one institution. Non-strings
+ * are dropped, each message is sanitized (control characters, length),
+ * duplicates collapse, and the list is capped.
+ */
+const parseWarnings = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const text = sanitizeTextInput(item).trim().slice(0, MAX_WARNING_LENGTH);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+    if (out.length >= MAX_WARNINGS) break;
+  }
+  return out;
+};
 
 /** Parse a SimpleFIN /accounts response body into normalized shapes. */
 export const parseAccountsResponse = (json: unknown): SimplefinParseResult => {
@@ -106,8 +137,10 @@ export const parseAccountsResponse = (json: unknown): SimplefinParseResult => {
     accounts: [],
     transactions: [],
     droppedTransactions: 0,
+    warnings: [],
   };
   if (typeof json !== "object" || json === null) return result;
+  result.warnings = parseWarnings((json as Record<string, unknown>).errors);
   const rawAccounts = (json as Record<string, unknown>).accounts;
   if (!Array.isArray(rawAccounts)) return result;
 
