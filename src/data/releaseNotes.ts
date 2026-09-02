@@ -33,6 +33,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Review Inbox: charges far above what a store usually bills you, or a large first-ever charge from a new merchant, now carry a 'worth a look' line so nothing surprising slips through on Approve. It's a flag only - nothing is skipped for you.",
       "Profile → People → Settle Up: see what each person owes you for the month from the expenses assigned to them (shared ones split evenly), mark them settled when they pay you back, and step back through earlier months.",
       "Fixed: during setup, the take-home pay, rent and display-name fields could hide behind the keyboard while you typed. The page now scrolls to keep the active field in view.",
+      "The Compound Interest Calculator on the Charts tab can now compare a lump sum with monthly contributions. Set a Starting Lump Sum (what you already have, invested once) alongside the monthly amount and a new card shows what each becomes on its own, what both become together, and the year the monthly plan overtakes the lump sum. The projection and chart include the lump sum, and the monthly contribution can now be zero to look at a lump sum by itself.",
     ],
   },
   {

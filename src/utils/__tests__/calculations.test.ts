@@ -4,6 +4,8 @@ import {
   calcTotalInterest,
   calcInvestmentGrowth,
   calcInvestmentTimeline,
+  calcLumpSumGrowth,
+  compareInvestmentScenarios,
   calcPaymentForGoalDate,
   calcMonthsUntilDate,
   parseGoalDateLocal,
@@ -86,6 +88,78 @@ describe("calcInvestmentTimeline", () => {
     for (const row of timeline) {
       expect(row.total).toBe(row.contributed + row.interest);
     }
+  });
+
+  it("folds an optional starting balance into year 0 and every total", () => {
+    const timeline = calcInvestmentTimeline(100, 7, 3, 5000);
+    expect(timeline[0]).toEqual({ year: 0, total: 5000, contributed: 5000, interest: 0 });
+    for (const row of timeline) {
+      expect(row.total).toBe(row.contributed + row.interest);
+    }
+    // Lump + contributions = the two growth paths added together
+    const last = timeline[3];
+    expect(last.total).toBe(
+      Math.round(calcInvestmentGrowth(100, 7, 3) + calcLumpSumGrowth(5000, 7, 3))
+    );
+    expect(last.contributed).toBe(5000 + 100 * 12 * 3);
+  });
+
+  it("is unchanged when the starting balance is omitted", () => {
+    expect(calcInvestmentTimeline(100, 7, 3)).toEqual(calcInvestmentTimeline(100, 7, 3, 0));
+  });
+});
+
+describe("calcLumpSumGrowth", () => {
+  it("returns 0 for no principal", () => {
+    expect(calcLumpSumGrowth(0, 7, 10)).toBe(0);
+  });
+
+  it("returns the principal at 0 years or 0% return", () => {
+    expect(calcLumpSumGrowth(1000, 7, 0)).toBe(1000);
+    expect(calcLumpSumGrowth(1000, 0, 10)).toBe(1000);
+  });
+
+  it("compounds monthly like calcInvestmentGrowth", () => {
+    // 1000 at 12% annual, monthly compounding, 1 year = 1000 * 1.01^12
+    expect(calcLumpSumGrowth(1000, 12, 1)).toBeCloseTo(1126.83, 1);
+  });
+
+  it("shrinks under a negative return without going below 0", () => {
+    const result = calcLumpSumGrowth(1000, -10, 5);
+    expect(result).toBeGreaterThan(0);
+    expect(result).toBeLessThan(1000);
+  });
+});
+
+describe("compareInvestmentScenarios", () => {
+  it("reports each scenario and their sum", () => {
+    const cmp = compareInvestmentScenarios(40000, 500, 7, 20);
+    expect(cmp.lumpOnly.putIn).toBe(40000);
+    expect(cmp.lumpOnly.endValue).toBe(Math.round(calcLumpSumGrowth(40000, 7, 20)));
+    expect(cmp.monthlyOnly.putIn).toBe(120000);
+    expect(cmp.monthlyOnly.endValue).toBe(Math.round(calcInvestmentGrowth(500, 7, 20)));
+    expect(cmp.both.putIn).toBe(160000);
+    expect(cmp.both.endValue).toBe(
+      Math.round(calcLumpSumGrowth(40000, 7, 20) + calcInvestmentGrowth(500, 7, 20))
+    );
+    for (const s of [cmp.lumpOnly, cmp.monthlyOnly, cmp.both]) {
+      expect(s.growth).toBe(s.endValue - s.putIn);
+    }
+  });
+
+  it("finds the year the monthly plan overtakes the lump sum", () => {
+    // $500/mo at 7% passes $40,000-left-alone during year 10
+    expect(compareInvestmentScenarios(40000, 500, 7, 20).crossoverYear).toBe(10);
+  });
+
+  it("returns null when there is no crossover within the horizon", () => {
+    expect(compareInvestmentScenarios(40000, 500, 7, 5).crossoverYear).toBeNull();
+  });
+
+  it("returns null when either scenario is empty", () => {
+    expect(compareInvestmentScenarios(0, 500, 7, 20).crossoverYear).toBeNull();
+    expect(compareInvestmentScenarios(40000, 0, 7, 20).crossoverYear).toBeNull();
+    expect(compareInvestmentScenarios(0, 500, 7, 20).lumpOnly).toEqual({ putIn: 0, endValue: 0, growth: 0 });
   });
 });
 

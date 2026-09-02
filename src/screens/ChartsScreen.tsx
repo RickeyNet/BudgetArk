@@ -38,6 +38,7 @@ import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import {
   calcInvestmentTimeline,
+  compareInvestmentScenarios,
 } from "../utils/calculations";
 import {
   calcAutoFillYearsRemaining,
@@ -144,8 +145,14 @@ type SliderConfig = {
   step: number;
 };
 
-const SLIDERS: Record<"contribution" | "returnRate" | "years", SliderConfig> = {
-  contribution: { label: "Monthly Contribution", min: 50, max: 50000, step: 50 },
+type CalcSliderKey = "lumpSum" | "contribution" | "returnRate" | "years";
+
+const SLIDERS: Record<CalcSliderKey, SliderConfig> = {
+  // Starting lump sum: what you already have, invested once and left alone.
+  // 0 keeps the classic contributions-only projection.
+  lumpSum: { label: "Starting Lump Sum", min: 0, max: 500000, step: 1000 },
+  // Contribution may be 0 so a lump sum can be viewed on its own.
+  contribution: { label: "Monthly Contribution", min: 0, max: 50000, step: 50 },
   returnRate: { label: "Annual Return", min: 1, max: 30, step: 0.5 },
   years: { label: "Time Horizon", min: 1, max: 50, step: 1 },
 };
@@ -308,11 +315,13 @@ const ChartsScreen: React.FC = () => {
 
   /* Compound interest calculator state */
   const [calcOpen, setCalcOpen] = useState(false);
+  const [lumpSum, setLumpSum] = useState(0);
   const [contribution, setContribution] = useState(500);
   const [returnRate, setReturnRate] = useState(7);
   const [years, setYears] = useState(20);
   const [showWhyCard, setShowWhyCard] = useState(false);
   const calcEditor = useSliderValueEditor({
+    lumpSum: { ...SLIDERS.lumpSum, set: setLumpSum, commitMode: "round-int" },
     contribution: { ...SLIDERS.contribution, set: setContribution, commitMode: "raw-min" },
     returnRate: {
       ...SLIDERS.returnRate,
@@ -555,9 +564,16 @@ const ChartsScreen: React.FC = () => {
       : 0;
 
   const timeline = useMemo(
-    () => calcInvestmentTimeline(contribution, returnRate, years),
-    [contribution, returnRate, years]
+    () => calcInvestmentTimeline(contribution, returnRate, years, lumpSum),
+    [contribution, returnRate, years, lumpSum]
   );
+
+  /* Lump sum vs. monthly: shown when both inputs are in play */
+  const comparison = useMemo(
+    () => compareInvestmentScenarios(lumpSum, contribution, returnRate, years),
+    [lumpSum, contribution, returnRate, years]
+  );
+  const showComparison = lumpSum > 0 && contribution > 0;
 
   const finalData = timeline[timeline.length - 1];
   const totalValue = finalData?.total ?? 0;
@@ -783,10 +799,10 @@ const ChartsScreen: React.FC = () => {
     );
   };
 
-  const renderSlider = (key: "contribution" | "returnRate" | "years", value: number) => {
+  const renderSlider = (key: CalcSliderKey, value: number) => {
     const cfg = SLIDERS[key];
     const displayValue =
-      key === "contribution"
+      key === "contribution" || key === "lumpSum"
         ? formatCurrency(value)
         : key === "returnRate"
           ? `${value}%`
@@ -1072,9 +1088,43 @@ const ChartsScreen: React.FC = () => {
               <Text style={tool.resultLabel}>PROJECTED VALUE</Text>
               <Text style={tool.resultValue}>{formatCurrency(totalValue)}</Text>
               <Text style={tool.resultSub}>
-                in today's dollars · after {years} years at {returnRate}%
+                {lumpSum > 0
+                  ? `${formatCurrency(lumpSum)} now + ${formatCurrency(contribution)}/mo · after ${years} years at ${returnRate}%`
+                  : `in today's dollars · after ${years} years at ${returnRate}%`}
               </Text>
             </View>
+
+            {/* Lump sum vs. monthly comparison */}
+            {showComparison && (
+              <View style={tool.breakdownCard}>
+                <Text style={tool.breakdownTitle}>Lump Sum vs. Monthly</Text>
+                <View style={tool.refiSummaryRow}>
+                  <View style={tool.refiSummaryItem}>
+                    <Text style={tool.refiSummaryLabel}>{formatCurrency(lumpSum)} once</Text>
+                    <Text style={[tool.refiSummaryValue, { color: colors.accent }]}>
+                      {formatCurrency(comparison.lumpOnly.endValue)}
+                    </Text>
+                  </View>
+                  <View style={tool.refiSummaryItem}>
+                    <Text style={tool.refiSummaryLabel}>{formatCurrency(contribution)}/mo</Text>
+                    <Text style={[tool.refiSummaryValue, { color: colors.success }]}>
+                      {formatCurrency(comparison.monthlyOnly.endValue)}
+                    </Text>
+                  </View>
+                  <View style={tool.refiSummaryItem}>
+                    <Text style={tool.refiSummaryLabel}>Both</Text>
+                    <Text style={tool.refiSummaryValue}>
+                      {formatCurrency(comparison.both.endValue)}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={tool.ratioText}>
+                  {comparison.crossoverYear !== null
+                    ? `The monthly plan overtakes the lump sum in year ${comparison.crossoverYear} - but it also puts in ${formatCurrency(comparison.monthlyOnly.putIn)} against ${formatCurrency(lumpSum)}. Doing both is the real win.`
+                    : `Over ${years} years the lump sum stays ahead of the monthly plan on its own. Doing both is the real win.`}
+                </Text>
+              </View>
+            )}
 
             {/* Rule of 72 insight */}
             {returnRate > 0 && (
@@ -1117,6 +1167,7 @@ const ChartsScreen: React.FC = () => {
 
             {/* Sliders */}
             <View style={tool.slidersCard}>
+              {renderSlider("lumpSum", lumpSum)}
               {renderSlider("contribution", contribution)}
               {renderSlider("returnRate", returnRate)}
               {renderSlider("years", years)}
@@ -1170,7 +1221,7 @@ const ChartsScreen: React.FC = () => {
                   <Text style={[tool.breakdownValue, { color: colors.success }]}>
                     {formatCurrency(totalContributed)}
                   </Text>
-                  <Text style={tool.breakdownLabel}>You Contribute</Text>
+                  <Text style={tool.breakdownLabel}>{lumpSum > 0 ? "You Put In" : "You Contribute"}</Text>
                 </View>
                 <View style={tool.breakdownDivider} />
                 <View style={tool.breakdownItem}>

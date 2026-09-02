@@ -401,22 +401,50 @@ export const calcInvestmentGrowth = (
  * Returns an array with one entry per year showing total value,
  * total contributions, and interest earned.
  */
+/**
+ * Growth of a one-time amount left to compound with nothing added - the
+ * "invest what you have and leave it" half of the lump-sum-vs-monthly
+ * comparison. Same monthly-rate convention as calcInvestmentGrowth so the
+ * two can be compared or summed. Zero years returns the principal.
+ */
+export const calcLumpSumGrowth = (
+  principal: number,
+  annualReturn: number,
+  years: number
+): number => {
+  principal = clamp(principal, 0, MAX_BALANCE);
+  annualReturn = clamp(annualReturn, -MAX_RATE, MAX_RATE);
+  years = clamp(years, 0, MAX_YEARS);
+
+  if (principal <= 0) return 0;
+
+  const monthlyRate = annualReturn / 100 / 12;
+  return principal * Math.pow(1 + monthlyRate, years * 12);
+};
+
 export const calcInvestmentTimeline = (
   monthlyContribution: number,
   annualReturn: number,
-  years: number
+  years: number,
+  /** Optional one-time amount invested at year 0 alongside the contributions. */
+  startingBalance: number = 0
 ): { year: number; total: number; contributed: number; interest: number }[] => {
   monthlyContribution = clamp(monthlyContribution, 0, MAX_PAYMENT);
   // Match calcInvestmentGrowth - negative annual returns are valid input
   // for deflationary / loss scenarios; previously clamped to 0 here too.
   annualReturn = clamp(annualReturn, -MAX_RATE, MAX_RATE);
   years = clamp(years, 0, MAX_YEARS);
+  startingBalance = clamp(startingBalance, 0, MAX_BALANCE);
 
   const timeline: { year: number; total: number; contributed: number; interest: number }[] = [];
 
   for (let y = 0; y <= years; y++) {
-    const total = calcInvestmentGrowth(monthlyContribution, annualReturn, y);
-    const contributed = monthlyContribution * 12 * y;
+    const total =
+      calcInvestmentGrowth(monthlyContribution, annualReturn, y) +
+      calcLumpSumGrowth(startingBalance, annualReturn, y);
+    // "contributed" is everything the user put in: the lump sum plus the
+    // monthly deposits so far. Interest is whatever growth added on top.
+    const contributed = startingBalance + monthlyContribution * 12 * y;
     timeline.push({
       year: y,
       total: Math.round(total),
@@ -426,6 +454,74 @@ export const calcInvestmentTimeline = (
   }
 
   return timeline;
+};
+
+export type InvestmentScenario = {
+  /** Total the user puts in over the horizon. */
+  putIn: number;
+  /** Balance at the end of the horizon. */
+  endValue: number;
+  /** endValue - putIn (never below 0 for display purposes). */
+  growth: number;
+};
+
+export type InvestmentComparison = {
+  lumpOnly: InvestmentScenario;
+  monthlyOnly: InvestmentScenario;
+  both: InvestmentScenario;
+  /**
+   * First whole year in which the monthly-only balance reaches the
+   * lump-sum-only balance, or null if it never does within the horizon
+   * (or if either scenario is empty).
+   */
+  crossoverYear: number | null;
+};
+
+/**
+ * Lump sum vs. monthly contributions, side by side: what each becomes on
+ * its own, what both together become, and the year the monthly plan
+ * overtakes the lump sum. Values are rounded to whole currency units.
+ */
+export const compareInvestmentScenarios = (
+  lumpSum: number,
+  monthlyContribution: number,
+  annualReturn: number,
+  years: number
+): InvestmentComparison => {
+  lumpSum = clamp(lumpSum, 0, MAX_BALANCE);
+  monthlyContribution = clamp(monthlyContribution, 0, MAX_PAYMENT);
+  annualReturn = clamp(annualReturn, -MAX_RATE, MAX_RATE);
+  years = clamp(years, 0, MAX_YEARS);
+
+  const scenario = (putIn: number, endValue: number): InvestmentScenario => ({
+    putIn: Math.round(putIn),
+    endValue: Math.round(endValue),
+    growth: Math.max(0, Math.round(endValue - putIn)),
+  });
+
+  const lumpEnd = calcLumpSumGrowth(lumpSum, annualReturn, years);
+  const monthlyEnd = calcInvestmentGrowth(monthlyContribution, annualReturn, years);
+  const monthlyPutIn = monthlyContribution * 12 * years;
+
+  let crossoverYear: number | null = null;
+  if (lumpSum > 0 && monthlyContribution > 0) {
+    for (let y = 1; y <= years; y++) {
+      if (
+        calcInvestmentGrowth(monthlyContribution, annualReturn, y) >=
+        calcLumpSumGrowth(lumpSum, annualReturn, y)
+      ) {
+        crossoverYear = y;
+        break;
+      }
+    }
+  }
+
+  return {
+    lumpOnly: scenario(lumpSum, lumpEnd),
+    monthlyOnly: scenario(monthlyPutIn, monthlyEnd),
+    both: scenario(lumpSum + monthlyPutIn, lumpEnd + monthlyEnd),
+    crossoverYear,
+  };
 };
 
 /**
