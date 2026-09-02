@@ -22,7 +22,6 @@ import {
   Text,
   TouchableOpacity,
   Modal,
-  InteractionManager,
   Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -61,6 +60,13 @@ type ConnectionsSectionProps = {
   newFeatureIds: ReadonlySet<string>;
   onDismissNewBadge: (featureId: string) => void;
 };
+
+/**
+ * How long Android's Modal dialog takes to tear down after `visible` flips
+ * false (slide-out animation plus a frame of slack, with margin - a wedge
+ * here costs a force-close). iOS sequences via Modal.onDismiss instead.
+ */
+const ANDROID_MODAL_TEARDOWN_MS = 700;
 
 const ConnectionsSection = forwardRef<
   ConnectionsSectionHandle,
@@ -163,19 +169,68 @@ const ConnectionsSection = forwardRef<
     setShowAddConnection(true);
   }, []);
 
-  /** Connection awaiting its first sync once the wizard sheet is fully gone. */
-  const pendingSyncConnectionId = useRef<string | null>(null);
+  /**
+   * Wizard teardown sequencing - the third fix in this family, so it is
+   * deliberately belt-and-braces. Nothing that can re-render the modal
+   * stack may run while the wizard sheet is still going away: the
+   * post-setup sync's provider refresh, the manager's refresh on Cancel,
+   * anything. Mutations inside the still-visible Connections manager
+   * during that window wedged the Android UI thread (whole-app freeze on
+   * the "Connected" screen, Done unresponsive), and re-rendering the
+   * presented stack mid-dismissal is the iOS silent-present failure.
+   *
+   *  - iOS: RN's Modal keeps the sheet mounted until the native dismissal
+   *    finishes and reports it via onDismiss (an iOS-only callback), so
+   *    the queued work runs from there.
+   *  - Android: the dialog is torn down natively over a few hundred ms
+   *    with no callback, and InteractionManager doesn't know about it (it
+   *    fires as soon as the Done button's press animation ends - INSIDE
+   *    the teardown, which is exactly when a fast-failing first sync's
+   *    refresh used to land). A timer past the animation stands in.
+   *
+   * The queued callback is replaced, never stacked, so a repeat Done tap
+   * runs one sync; the timer is cleared on unmount.
+   */
+  const afterWizardDismissed = useRef<(() => void) | null>(null);
+  const teardownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (teardownTimer.current) clearTimeout(teardownTimer.current);
+    },
+    [],
+  );
+
+  const runAfterWizardDismissed = useCallback(() => {
+    const pending = afterWizardDismissed.current;
+    afterWizardDismissed.current = null;
+    pending?.();
+  }, []);
+
+  const closeWizard = useCallback(
+    (afterDismiss: () => void) => {
+      setShowAddConnection(false);
+      setAddBankInfo(null);
+      setResumeSimplefinId(null);
+      setRediscoverSimplefinId(null);
+      afterWizardDismissed.current = afterDismiss;
+      if (Platform.OS === "ios") return; // handleWizardDismissed picks it up
+      if (teardownTimer.current) clearTimeout(teardownTimer.current);
+      teardownTimer.current = setTimeout(() => {
+        teardownTimer.current = null;
+        runAfterWizardDismissed();
+      }, ANDROID_MODAL_TEARDOWN_MS);
+    },
+    [runAfterWizardDismissed],
+  );
 
   /**
    * Post-wizard sync kick. Deliberately calls the sync SERVICE directly
    * instead of the provider's syncNow: syncNow flips isSyncing
-   * synchronously, and that context-wide re-render landing in the same
-   * frame as the wizard Modal's teardown froze the whole app on Android
-   * (UI-thread wedge in the dialog dismissal - same failure family as the
-   * iOS silent-present bug). This path touches no React state until the
-   * pass finishes; the provider refreshes once at the end, long after the
-   * modal stack has settled. The service dedupes concurrent passes, so a
-   * user-tapped Sync Now during the pass just joins it.
+   * synchronously, and that context-wide re-render is the kind of churn
+   * the teardown sequencing above exists to keep away from the modal
+   * stack. This path touches no React state until the pass finishes; the
+   * provider refreshes once at the end. The service dedupes concurrent
+   * passes, so a user-tapped Sync Now during the pass just joins it.
    */
   const kickPostSetupSync = useCallback(
     (connectionId: string) => {
@@ -186,35 +241,23 @@ const ConnectionsSection = forwardRef<
     [refreshConnections],
   );
 
+  /** Done on the wizard's "Connected" screen: close, then populate the Review Inbox. */
   const handleConnectionComplete = useCallback(
     (connectionId: string) => {
-      setShowAddConnection(false);
-      setAddBankInfo(null);
-      setResumeSimplefinId(null);
-      setRediscoverSimplefinId(null);
-      // Populate the Review Inbox right away; failures surface as the
-      // connection's status in the manage list. iOS gets an extra guard:
-      // the kick fires from the Modal's onDismiss (after the dismissal
-      // animation completes; the callback is iOS-only). Android tears the
-      // dialog down synchronously with this commit, so deferring past the
-      // commit is enough once the kick itself is state-silent.
-      if (Platform.OS === "ios") {
-        pendingSyncConnectionId.current = connectionId;
-      } else {
-        InteractionManager.runAfterInteractions(() => {
-          kickPostSetupSync(connectionId);
-        });
-      }
+      closeWizard(() => kickPostSetupSync(connectionId));
     },
-    [kickPostSetupSync],
+    [closeWizard, kickPostSetupSync],
   );
 
-  /** iOS: the wizard sheet finished dismissing - safe to start the sync. */
-  const handleWizardDismissed = useCallback(() => {
-    const connectionId = pendingSyncConnectionId.current;
-    pendingSyncConnectionId.current = null;
-    if (connectionId) kickPostSetupSync(connectionId);
-  }, [kickPostSetupSync]);
+  /** Cancel / back: close, then pick up any connection the wizard saved before bailing. */
+  const handleWizardClose = useCallback(() => {
+    closeWizard(() => {
+      void refreshConnections();
+    });
+  }, [closeWizard, refreshConnections]);
+
+  /** iOS: the wizard sheet finished dismissing - safe to run the queued work. */
+  const handleWizardDismissed = runAfterWizardDismissed;
 
   return (
     <>
@@ -365,13 +408,7 @@ const ConnectionsSection = forwardRef<
       />
       <AddConnectionModal
         visible={showAddConnection}
-        onClose={() => {
-          setShowAddConnection(false);
-          setAddBankInfo(null);
-          setResumeSimplefinId(null);
-          setRediscoverSimplefinId(null);
-          void refreshConnections();
-        }}
+        onClose={handleWizardClose}
         onComplete={handleConnectionComplete}
         onDismissed={handleWizardDismissed}
         assetAccounts={wizardAssetAccounts}

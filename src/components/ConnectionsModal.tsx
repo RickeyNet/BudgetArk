@@ -31,7 +31,6 @@ import {
   type AssetAccountCategory,
   type BankConnection,
   type ExternalAccountLink,
-  categoryIsPureHoldings,
 } from "../types";
 import { describeError } from "../utils/errorMessage";
 import { formatBankBalance } from "../utils/money";
@@ -54,6 +53,7 @@ import {
   updateLinkPreferences,
 } from "../services/connections/connectionsService";
 import type { LinkPreferenceChange } from "../services/connections/linkPreferences";
+import { suggestAssetCategory } from "../services/connections/assetCategoryHint";
 import { generateUUID } from "../utils/uuid";
 import { useValueChanged } from "../hooks/useValueChanged";
 
@@ -123,10 +123,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   const [newAccountCategory, setNewAccountCategory] =
     useState<AssetAccountCategory>("checking");
 
-  const mappableAccounts = useMemo(
-    () => assetAccounts.filter((a) => !categoryIsPureHoldings(a.category)),
-    [assetAccounts],
-  );
+  // Every Bridge account can take the balance, 401k/brokerage included (the
+  // synced balance shows as their Cash line) - see MAPPABLE_ASSET_CATEGORIES.
+  const mappableAccounts = assetAccounts;
 
   const selected: BankConnection | undefined = connections.find(
     (c) => c.id === selectedId,
@@ -223,7 +222,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   const openNewAccountForm = useCallback((link: ExternalAccountLink) => {
     setNewAccountFor((current) => (current === link.id ? null : link.id));
     setNewAccountName(link.externalName.slice(0, 80));
-    setNewAccountCategory("checking");
+    // Default the category from the bank's name ("401(k)", "High Yield
+    // Savings") rather than always Checking.
+    setNewAccountCategory(suggestAssetCategory(link.externalName));
   }, []);
 
   const createAndMap = useCallback(
@@ -558,6 +559,14 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                         <Text style={styles.hint}>
                           Savings accounts can be marked as your emergency fund
                           from the Bridge tab once created.
+                        </Text>
+                      ) : null}
+                      {newAccountCategory === "retirement" ||
+                      newAccountCategory === "investment" ? (
+                        <Text style={styles.hint}>
+                          The bank's balance becomes this account's value on
+                          the Bridge. If you also add its stocks or funds
+                          there, they count on top of it.
                         </Text>
                       ) : null}
                     </View>

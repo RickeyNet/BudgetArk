@@ -6,8 +6,8 @@
  * disabled/needs-reauth/cooldown short-circuits happen BEFORE the
  * lastAttemptAt stamp and BEFORE any provider fetch; a failed fetch maps to
  * the right outcome and error bookkeeping; balances applied to an
- * AssetAccount are clamped at >= 0 and skipped for pure-holdings accounts
- * and unchanged values; a debt-linked card mirrors the provider balance in
+ * AssetAccount are clamped at >= 0 (any category, holdings ones included)
+ * and skipped for unchanged values; a debt-linked card mirrors the provider balance in
  * the same write as its keep-alive stamp; keep-alive stamping and the
  * auto-approve sweep are both best-effort (their failure must not fail the sync pass); one
  * connection's unexpected failure doesn't abort the rest of the batch; and
@@ -353,7 +353,9 @@ describe("balance application", () => {
     expect(mockUpdateAssetAccount).not.toHaveBeenCalled();
   });
 
-  it("never writes a balance for a pure-holdings account (investment/retirement)", async () => {
+  it("writes a synced balance onto a holdings account (401k / investment) like any other", async () => {
+    // Retirement/investment used to be skipped as "valued by tickers only";
+    // a bank-reported 401k balance is now the account's cash line.
     mockGetConnections.mockResolvedValue([conn()]);
     mockGetLinksForConnection.mockResolvedValue([link]);
     mockGetAssetAccounts.mockResolvedValue([
@@ -362,8 +364,8 @@ describe("balance application", () => {
     mockFetchSimplefin.mockResolvedValue(okFetch({ accounts: [account({ balance: 5000 })] }));
 
     const [result] = await syncConnections({ now: NOW, manual: true });
-    expect(result.balancesUpdated).toBe(0);
-    expect(mockUpdateAssetAccount).not.toHaveBeenCalled();
+    expect(result.balancesUpdated).toBe(1);
+    expect(mockUpdateAssetAccount).toHaveBeenCalledWith("asset-1", { balance: 5000 });
   });
 
   it("skips the AssetAccount write (but still records the raw balance on the link) when updateBalance is off", async () => {

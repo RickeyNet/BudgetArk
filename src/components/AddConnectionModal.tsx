@@ -27,7 +27,6 @@ import {
   AssetAccount,
   AssetAccountCategory,
   BankProvider,
-  categoryIsPureHoldings,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -42,6 +41,7 @@ import {
   MAPPABLE_ASSET_CATEGORIES,
   type AccountSelection,
 } from "../services/connections/connectionsService";
+import { suggestAssetCategory } from "../services/connections/assetCategoryHint";
 import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
 import { usePeople } from "../people/PeopleProvider";
 import type { NormalizedAccount } from "../services/connections/types";
@@ -67,7 +67,7 @@ const TELLER_ENVIRONMENTS: TellerEnvironment[] = [
   "sandbox",
 ];
 
-/** Balance targets must hold a cash balance - see MAPPABLE_ASSET_CATEGORIES. */
+/** Every Bridge category is a balance target - see MAPPABLE_ASSET_CATEGORIES. */
 const MAPPABLE_CATEGORIES = MAPPABLE_ASSET_CATEGORIES;
 
 interface DraftSelection {
@@ -158,10 +158,9 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   const [newAccountCategory, setNewAccountCategory] =
     useState<AssetAccountCategory>("checking");
 
-  const mappableAccounts = useMemo(
-    () => localAccounts.filter((a) => !categoryIsPureHoldings(a.category)),
-    [localAccounts],
-  );
+  // Every Bridge account can take the balance, 401k/brokerage included (the
+  // synced balance shows as their Cash line) - see MAPPABLE_ASSET_CATEGORIES.
+  const mappableAccounts = localAccounts;
 
   const reset = useCallback(() => {
     // Both modes reuse the SimpleFIN step against a saved connection.
@@ -814,6 +813,10 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                       : ext.externalAccountId,
                   );
                   setNewAccountName(ext.name.slice(0, 80));
+                  // Default the category from the bank's name ("401(k)",
+                  // "High Yield Savings") - the old always-Checking default
+                  // is how synced accounts ended up miscategorized.
+                  setNewAccountCategory(suggestAssetCategory(ext.name));
                 }}
               >
                 <Text style={styles.pillText}>+ New account</Text>
@@ -861,6 +864,20 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                 >
                   <Text style={styles.smallButtonText}>Create & map</Text>
                 </TouchableOpacity>
+                {newAccountCategory === "savings" ? (
+                  <Text style={styles.hint}>
+                    Savings accounts can be marked as your emergency fund from
+                    the Bridge tab once created.
+                  </Text>
+                ) : null}
+                {newAccountCategory === "retirement" ||
+                newAccountCategory === "investment" ? (
+                  <Text style={styles.hint}>
+                    The bank's balance becomes this account's value on the
+                    Bridge. If you also add its stocks or funds there, they
+                    count on top of it.
+                  </Text>
+                ) : null}
               </View>
             ) : null}
           </View>

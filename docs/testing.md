@@ -162,6 +162,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `ingest.test.ts` / `merchant.test.ts` | `ingest.ts` / `merchant.ts` | Transaction ingest planning (dedupe, twins, pending→posted), merchant normalization |
 | `syncGate.test.ts` / `linkPreferences.test.ts` | `syncGate.ts` / `linkPreferences.ts` | Sync gating; account-link edit rules |
 | `debtBalances.test.ts` | `debtBalances.ts` | Bank → credit-card balance mirroring: sign-tolerant magnitude, high-water `originalBalance`, link/debt gating |
+| `assetCategoryHint.test.ts` | `assetCategoryHint.ts` | Bridge category guessed from a bank account name (401k/IRA → retirement, HSA, brokerage, savings, checking; fallback checking) |
 | `reviewInboxService.test.ts` | `reviewInboxService.ts` | Approve/skip/bulk flows, merchant-rule creation and edits, crash-safe write order |
 | `connectionsSyncService.test.ts` | `connectionsSyncService.ts` | Per-connection orchestration: gates, provider routing, balance clamping, keep-alive stamping, failure isolation, secrets never written to non-secret keys |
 

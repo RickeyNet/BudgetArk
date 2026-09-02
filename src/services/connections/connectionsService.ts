@@ -14,7 +14,7 @@ import type {
   BankProvider,
   ExternalAccountLink,
 } from "../../types";
-import { BANK_PROVIDER_LABELS, categoryIsPureHoldings } from "../../types";
+import { BANK_PROVIDER_LABELS } from "../../types";
 import { addConnection, deleteConnection, updateConnection } from "../../storage/connectionsStorage";
 import { isEncryptionAvailable } from "../../storage/encryptedStorage";
 import {
@@ -263,14 +263,21 @@ export const addTellerEnrollment = async (
 };
 
 /**
- * Bridge categories a provider account's balance can land in - the account
- * must hold a cash balance, and pure-holdings categories (investment,
- * retirement) store 0 by design. Shared by the wizard's mapping step and the
- * Connections manager's after-the-fact editor so both offer the same targets.
+ * Bridge categories a provider account's balance can land in: every one of
+ * them. Investment / retirement accounts were excluded at first because the
+ * Bridge values them from their tickers, but a bank-reported 401k or
+ * brokerage balance is exactly what most people want to track, and the
+ * Bridge already counts a stored balance on those accounts (it shows as a
+ * "Cash" line under the broker - see bridgeMath.buildHoldingsCategoryData),
+ * so a synced balance needs no special casing. Shared by the wizard's mapping
+ * step and the Connections manager's after-the-fact editor so both offer the
+ * same targets. The order is the picker order.
  */
 export const MAPPABLE_ASSET_CATEGORIES: readonly AssetAccountCategory[] = [
   "checking",
   "savings",
+  "retirement",
+  "investment",
   "hsa",
   "other",
 ];
@@ -352,12 +359,9 @@ export const updateLinkPreferences = async (
     const asset = (await getAssetAccounts()).find(
       (a) => a.id === plan.seedBalance?.assetAccountId,
     );
-    // Same guards as the sync path: the target must exist and hold cash.
-    if (
-      asset &&
-      !categoryIsPureHoldings(asset.category) &&
-      asset.balance !== plan.seedBalance.balance
-    ) {
+    // Same guards as the sync path: the target must exist; unchanged
+    // balances skip the write (updatedAt churn would spam sync diffs).
+    if (asset && asset.balance !== plan.seedBalance.balance) {
       await updateAssetAccount(asset.id, { balance: plan.seedBalance.balance });
     }
   }

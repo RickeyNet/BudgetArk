@@ -13,7 +13,9 @@
  *  - Applied balances are clamped at >= 0 (isAssetAccountItem rejects
  *    negatives on the sync receive path); the raw value lands on the link
  *    for display. Unchanged balances skip the write to avoid updatedAt churn
- *    that would spam P2P sync diffs.
+ *    that would spam P2P sync diffs. Any Bridge category can be a target,
+ *    retirement/investment included (their synced balance shows as a Cash
+ *    line next to any tickers).
  *  - A link with a `debtId` is a credit card on the Debts tab: its provider
  *    balance mirrors onto the Debt (services/connections/debtBalances) and
  *    its outflows stamp the card keep-alive watch, in ONE debt write per
@@ -22,7 +24,6 @@
 
 import { AppState, AppStateStatus } from "react-native";
 import type { BankConnection, Debt, ExternalAccountLink } from "../../types";
-import { categoryIsPureHoldings } from "../../types";
 import {
   getConnections,
   updateConnection,
@@ -196,9 +197,10 @@ const applyBalances = async (
     if (!link.updateBalance || !link.assetAccountId) continue;
     const asset = assetById.get(link.assetAccountId);
     if (!asset) continue;
-    // Investment/retirement accounts are valued purely by holdings; their
-    // stored balance stays 0 by design.
-    if (categoryIsPureHoldings(asset.category)) continue;
+    // Every category is a valid target, holdings ones included: a synced
+    // 401k / brokerage balance lands on the account's stored balance, which
+    // the Bridge counts alongside any tickers and shows as a Cash line (see
+    // MAPPABLE_ASSET_CATEGORIES).
 
     const clamped = Math.max(0, provider.balance);
     if (asset.balance === clamped) continue;
