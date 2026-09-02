@@ -122,7 +122,7 @@ const holdingsFixtures = [
 const assetAccountFixtures = [
   // EF-designated savings account: the EmergencyFund flag must round-trip -
   // stripping it would silently flip the fund back to manual goal tracking.
-  { id: "a1", name: "HYSA", category: "savings", balance: 3200.5, isEmergencyFund: true, createdAt: "2026-03-01T00:00:00.000Z", updatedAt: "2026-03-02T00:00:00.000Z" },
+  { id: "a1", name: "HYSA", category: "savings", balance: 3200.5, isEmergencyFund: true, apy: 4.5, createdAt: "2026-03-01T00:00:00.000Z", updatedAt: "2026-03-02T00:00:00.000Z" },
   { id: "a2", name: "Checking", category: "checking", balance: 800, createdAt: "2026-03-01T00:00:00.000Z", updatedAt: "2026-03-01T00:00:00.000Z" },
 ];
 
@@ -326,8 +326,10 @@ describe("xlsx round-trip", () => {
       category: "savings",
       balance: 3200.5,
       isEmergencyFund: true,
+      apy: 4.5,
     });
     expect(accountsById.a2.isEmergencyFund).toBeUndefined();
+    expect(accountsById.a2.apy).toBeUndefined();
 
     // No data row was rejected on the way back in.
     expect(result?.skippedRows).toBe(0);

@@ -172,6 +172,15 @@ describe("exportSpreadsheet - XLSX", () => {
     expect(rows.some((r) => r.ID === "Total")).toBe(true);
   });
 
+  it("writes an APY column on the Asset Accounts sheet", async () => {
+    await exportSpreadsheet("xlsx");
+    const wb = parseWorkbook();
+    const header = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Asset Accounts"], {
+      header: 1,
+    })[0];
+    expect(header).toEqual(expect.arrayContaining(["EmergencyFund", "APY"]));
+  });
+
   it("writes the purchase-planner Priority column on the Savings Goals sheet, blank when unranked", async () => {
     const goalStorage = require("../../storage/savingsGoalStorage");
     (goalStorage.getSavingsGoals as jest.Mock).mockResolvedValueOnce([

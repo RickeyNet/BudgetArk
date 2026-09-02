@@ -397,6 +397,30 @@ Work through phases in order: finish the features first, then handle store prep 
 
 - [ ] Optional daily Proverb / verse - opt-in single verse shown on first app-open of each calendar day. Fits Ark theming. Bundled JSON of public-domain verses (KJV) - no network. Profile toggle defaults OFF so users who don't want it never see it.
 
+- [x] Transfer to plan (built 2026-09-02, v1.10.1) - Review Inbox outflows offer "Add to a purchase plan": the amount lands on the plan's balance, the row is retired as a synced skip decision, no expense entry is created. `reviewInboxService.applyPendingTransferToPlan`.
+
+- [x] Rule nudges (built 2026-09-02, v1.10.1) - after three hand approvals of the same merchant into the same category with no rule on file, the expanded inbox row offers "Always approve as <category>". Pure `services/connections/ruleNudges.ts`.
+
+- [x] Savings APY tracker (built 2026-09-02, v1.10.1) - optional `AssetAccount.apy`; Bridge rows show "4.5% APY · ~$144/yr" and, on savings accounts, what a typical high-yield rate would add. `utils/savingsInterest.ts`; spreadsheet APY column. Reference rate needs an annual refresh.
+
+- [ ] Subscription detective - scan bank-imported entries for merchants that charge on a fixed cadence (monthly / yearly) with no recurring bill on file; list them with the annualized cost and a one-tap "make it a bill" / "cancel reminder". Pure detector reusing `recurringBillDetection`.
+
+- [ ] Personal inflation rate - compare this year's spend per category against last year's for the same basket; show the user's own inflation % vs. headline CPI (bundled annual constant, no network).
+
+- [ ] Unusual charge flags in the inbox - flag an imported charge that is far above the merchant's usual amount or a first-ever merchant over a threshold; badge in the row, never auto-skip.
+
+- [ ] Paycheck cycle view - budget the month as pay periods (from the W-2 pay frequency) instead of calendar weeks: what's due before the next check, safe-to-spend until then.
+
+- [ ] Net worth projection & goal - extend the net-worth chart forward from the current savings rate + debt payoff plan; let the user set a target net worth + date and show on/off track.
+
+- [ ] Quarterly tax tracker - for 1099 income: quarterly set-aside vs. estimated payment due (IRS due dates bundled), with a "paid" checkbox per quarter. Reuses the take-home calculator brackets.
+
+- [ ] Settle up between people - from person assignments, compute who owes whom this month (shared expenses split evenly or by custom share) and a "mark settled" action.
+
+- [ ] Partner activity log - a device-local list of what the last partner syncs changed (counts per collection, no amounts on the lock screen) so a couple can see "12 entries arrived from Sam's phone".
+
+- [ ] Import presets for YNAB / Mint / Monarch - column mappings for the common CSV exports so switching apps is a one-tap import instead of a hand-edited sheet.
+
 - [~] Income tax / take-home pay calculator (US, v1) - SHIPPED app-side 2026-07-27 (OTA-eligible, pure JS, bundled data, no network). Built to this spec: all inputs/outputs below, "Compare states" included, disclaimer + data-source line in-card. Files as proposed: `src/data/taxData2026.ts` (Rev. Proc. 2025-32 federal brackets incl. MFS/HoH quirks, FICA + $184,500 SS wage base), `src/data/stateTaxData2026.ts` (50 states + DC from Tax Foundation 2026, MO/AZ hand-corrected), `src/utils/taxCalc.ts` (pure, 24 tests), `components/TaxCalculatorCard.tsx` on Charts after Plan a Purchase. v1 approximations documented in the data file header (MFJ doubles single state brackets, exemption states as $0 deduction, UT credit flat, no local taxes - noted per state). Annual data refresh = OTA bundle; excluded-scope list below unchanged. Device-test pending: chip grid at large text sizes, keyboard behavior, breakdown rendering across themes. Original spec follows for the v2 items:
   Inputs: gross annual income, filing status (Single / MFJ / MFS / HoH), state, optional pre-tax deductions (401k %, HSA, health premium), pay frequency (weekly / biweekly / semimonthly / monthly). Outputs: federal tax, FICA (SS + Medicare + additional Medicare), state tax, total tax burden, effective rate, marginal bracket, take-home per pay period and per year.
 

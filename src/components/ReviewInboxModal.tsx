@@ -35,6 +35,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
   BudgetEntry,
+  MerchantRule,
+  SavingsGoal,
   Business,
   CategoryName,
   CustomCategory,
@@ -53,12 +55,17 @@ import CategoryPillPicker from "./CategoryPillPicker";
 import MerchantRulesModal from "./MerchantRulesModal";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import {
+  applyPendingTransferToPlan,
   applyRulesToInbox,
   approvePendingTransaction,
   dismissAndIgnoreMerchant,
   dismissPendingTransactions,
 } from "../services/connections/reviewInboxService";
+import { suggestRuleFromHistory } from "../services/connections/ruleNudges";
 import { getLinks } from "../storage/externalAccountLinksStorage";
+import { getMerchantRules } from "../storage/merchantRulesStorage";
+import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { remainingForPlan } from "../utils/purchasePlanner";
 import { triggerHaptic } from "../utils/haptics";
 import { generateUUID } from "../utils/uuid";
 import { sanitizeTextInput } from "../utils/sanitize";
@@ -124,6 +131,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   } = useConnections();
 
   const [links, setLinks] = useState<ExternalAccountLink[]>([]);
+  /** Live merchant rules, so the "make it a rule" nudge knows what's covered. */
+  const [rules, setRules] = useState<MerchantRule[]>([]);
+  /** Purchase plans (never the emergency fund) an outflow can be added to. */
+  const [plans, setPlans] = useState<SavingsGoal[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftCategory, setDraftCategory] = useState<CategoryName>(DEFAULT_CATEGORY);
   const [draftName, setDraftName] = useState("");
@@ -163,6 +174,15 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     void getLinks()
       .then(setLinks)
       .catch(() => setLinks([]));
+    // Both nudges degrade to "not shown" when their read fails.
+    void getMerchantRules()
+      .then(setRules)
+      .catch(() => setRules([]));
+    void getSavingsGoals()
+      .then((goals) =>
+        setPlans(goals.filter((goal) => goal.category !== "emergency_fund")),
+      )
+      .catch(() => setPlans([]));
   }, [visible, refresh]);
 
   const accountNameById = useMemo(() => {
@@ -262,6 +282,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         // the inbox so matching items are approved now, not next sync.
         if (remember && item.merchant) {
           await applyRulesToInbox();
+          void getMerchantRules()
+            .then(setRules)
+            .catch(() => undefined);
         }
         await refresh();
         await onChanged();
@@ -309,6 +332,29 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       }
     },
     [refresh],
+  );
+
+  const handleTransferToPlan = useCallback(
+    async (item: PendingTransaction, goal: SavingsGoal) => {
+      setBusyId(item.id);
+      setActionError(null);
+      try {
+        const goals = await applyPendingTransferToPlan(item.id, goal.id);
+        if (goals) {
+          setPlans(goals.filter((candidate) => candidate.category !== "emergency_fund"));
+        }
+        await refresh();
+        await onChanged();
+        triggerHaptic("success");
+        setExpandedId(null);
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't add this to the plan."));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [onChanged, refresh],
   );
 
   const handleSkipSection = useCallback(
@@ -428,6 +474,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       expanded && item.suggestedType === "expense" && !draftRecurringId
         ? detectRecurringBill(item, entries)
         : null;
+    // Same merchant filed by hand into the same category a few times with
+    // no rule: offer the rule (hidden once "always" is already ticked).
+    const ruleNudge =
+      expanded && !rememberRule ? suggestRuleFromHistory(item, entries, rules) : null;
+    const planChoices = expanded && isExpense ? plans : [];
     return (
       <View style={styles.itemCard}>
         <TouchableOpacity
@@ -532,6 +583,35 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 </TouchableOpacity>
               </View>
             ) : null}
+            {ruleNudge ? (
+              <View style={styles.billSuggestCard}>
+                <Text style={styles.billSuggestTitle}>🔁 You've done this before</Text>
+                <Text style={styles.billSuggestText}>
+                  You've approved "{ruleNudge.merchant}" as {ruleNudge.category}{" "}
+                  {ruleNudge.count} times. Make it a rule and future imports from
+                  this merchant approve themselves with the same category.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.billSuggestButton, busy && styles.buttonDisabled]}
+                  onPress={() =>
+                    void handleApprove(
+                      item,
+                      ruleNudge.category,
+                      true,
+                      draftName,
+                      draftBusinessId,
+                      draftPersonIds,
+                      draftRecurringId,
+                    )
+                  }
+                  disabled={busy}
+                >
+                  <Text style={styles.billSuggestButtonText}>
+                    {busy ? "Saving..." : `Always approve as ${ruleNudge.category}`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             {billCandidates.length > 0 ? (
               <>
                 <Text style={styles.label}>APPLIES TO BILL</Text>
@@ -575,6 +655,40 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     glyph="👤"
                     deletedLabel="(deleted person)"
                   />
+              </>
+            ) : null}
+            {planChoices.length > 0 ? (
+              <>
+                <Text style={styles.label}>ADD TO A PURCHASE PLAN</Text>
+                <Text style={styles.planHint}>
+                  Moved this money into savings for one of your plans? Tap the
+                  plan and the amount lands on its balance instead of being
+                  filed as an expense.
+                </Text>
+                <View style={styles.planChipRow}>
+                  {planChoices.map((goal) => {
+                    const remaining = remainingForPlan(goal);
+                    return (
+                      <TouchableOpacity
+                        key={goal.id}
+                        style={[styles.planChip, busy && styles.buttonDisabled]}
+                        onPress={() => void handleTransferToPlan(item, goal)}
+                        disabled={busy}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add ${formatCurrency(
+                          Math.abs(item.amount),
+                        )} to ${goal.name}`}
+                      >
+                        <Text style={styles.planChipText} numberOfLines={1}>
+                          {goal.name}
+                          {remaining > 0
+                            ? ` · ${formatCurrency(remaining)} to go`
+                            : " · funded"}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </>
             ) : null}
             {item.merchant ? (
@@ -976,6 +1090,30 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
+    },
+    planHint: {
+      fontSize: 12,
+      color: colors.textMuted,
+      lineHeight: 17,
+    },
+    planChipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    planChip: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      maxWidth: "100%",
+    },
+    planChipText: {
+      fontSize: 13,
+      color: colors.text,
+      fontWeight: "600",
     },
     checkbox: {
       width: 20,

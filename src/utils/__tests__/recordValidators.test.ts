@@ -733,6 +733,24 @@ describe("isAssetAccountItem", () => {
     expect(isAssetAccountItem({ ...valid, isEmergencyFund: "yes" })).toBe(false);
     expect(isAssetAccountItem({ ...valid, isEmergencyFund: 1 })).toBe(false);
   });
+
+  it("accepts an optional APY percent in [0, 100] and rejects anything else", () => {
+    const valid = {
+      id: "a1",
+      name: "HYSA",
+      category: "savings",
+      balance: 100,
+      createdAt: "2026-06-01",
+    };
+    expect(isAssetAccountItem(valid)).toBe(true);
+    expect(isAssetAccountItem({ ...valid, apy: 4.5 })).toBe(true);
+    expect(isAssetAccountItem({ ...valid, apy: 0 })).toBe(true);
+    expect(isAssetAccountItem({ ...valid, apy: 100 })).toBe(true);
+    expect(isAssetAccountItem({ ...valid, apy: 100.5 })).toBe(false);
+    expect(isAssetAccountItem({ ...valid, apy: -1 })).toBe(false);
+    expect(isAssetAccountItem({ ...valid, apy: "4.5" })).toBe(false);
+    expect(isAssetAccountItem({ ...valid, apy: Number.NaN })).toBe(false);
+  });
 });
 
 describe("isHoldingItem", () => {

@@ -25,6 +25,7 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { generateUUID } from "../utils/uuid";
+import { describeApy, describeApyGap, parseApyInput } from "../utils/savingsInterest";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
 import TrackingStripCard from "../components/TrackingStripCard";
 import CashFlowChart, { type CashFlowPoint } from "../components/CashFlowChart";
@@ -225,6 +226,8 @@ const BridgeScreen: React.FC = () => {
   const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
   const [assetName, setAssetName] = useState("");
   const [assetBalance, setAssetBalance] = useState("");
+  /** APY percent as typed; parsed fail-closed on save (utils/savingsInterest). */
+  const [assetApy, setAssetApy] = useState("");
   const [assetCategory, setAssetCategory] = useState<AssetAccountCategory>("checking");
   // "This savings account is (part of) my emergency fund" toggle in the
   // account editor. Only meaningful for the savings category - saveAsset
@@ -661,6 +664,7 @@ const BridgeScreen: React.FC = () => {
     setEditingAsset(null);
     setAssetName("");
     setAssetBalance("");
+    setAssetApy("");
     setAssetCategory("savings");
     setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
@@ -676,6 +680,7 @@ const BridgeScreen: React.FC = () => {
     setEditingAsset(null);
     setAssetName("");
     setAssetBalance("");
+    setAssetApy("");
     setAssetCategory(category);
     setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
@@ -687,6 +692,7 @@ const BridgeScreen: React.FC = () => {
       setEditingAsset(account);
       setAssetName(account.name);
       setAssetBalance(String(account.balance));
+      setAssetApy(account.apy !== undefined ? String(account.apy) : "");
       setAssetCategory(account.category);
       setAssetIsEmergencyFund(account.isEmergencyFund === true);
       // Preload this broker's tickers for inline editing (Investment only).
@@ -807,6 +813,9 @@ const BridgeScreen: React.FC = () => {
     // carry a stale flag through sync/export.
     const isEmergencyFund =
       assetCategory === "savings" && assetIsEmergencyFund ? true : undefined;
+    // APY only makes sense where there's a cash balance; `undefined` clears
+    // it (a blank field or a pure-holdings account), never `0`.
+    const apy = isPureHoldings ? undefined : parseApyInput(assetApy);
 
     // Storage-level upsert (never `saveAssetAccounts(stateArray)`): a
     // partner sync landing while this tab is mounted adds accounts this
@@ -818,6 +827,7 @@ const BridgeScreen: React.FC = () => {
           balance,
           category: assetCategory,
           isEmergencyFund,
+          apy,
         })
       : await addAssetAccount({
           id: accountId,
@@ -825,6 +835,7 @@ const BridgeScreen: React.FC = () => {
           balance,
           category: assetCategory,
           isEmergencyFund,
+          apy,
           createdAt: now,
           updatedAt: now,
         });
@@ -979,6 +990,7 @@ const BridgeScreen: React.FC = () => {
     await loadHoldingsState();
     void refreshAchievements();
   }, [
+    assetApy,
     assetBalance,
     assetCategory,
     assetIsEmergencyFund,
@@ -1343,6 +1355,21 @@ const BridgeScreen: React.FC = () => {
                               {account.isEmergencyFund ? "🛡️ " : ""}
                               {account.name}
                             </Text>
+                            {account.apy !== undefined && account.apy > 0 ? (
+                              <Text style={styles.accountCategory} numberOfLines={2}>
+                                {describeApy(account.balance, account.apy, formatCurrency)}
+                                {account.category === "savings"
+                                  ? (() => {
+                                      const gap = describeApyGap(
+                                        account.balance,
+                                        account.apy,
+                                        formatCurrency
+                                      );
+                                      return gap ? `\n${gap}` : "";
+                                    })()
+                                  : ""}
+                              </Text>
+                            ) : null}
                           </View>
                           <View style={styles.accountRowRight}>
                             <Text style={[styles.accountBalance, { color: colors.success }]}>
@@ -1700,14 +1727,25 @@ const BridgeScreen: React.FC = () => {
             />
 
             {!categoryIsPureHoldings(assetCategory) ? (
-              <TextInput
-                style={styles.modalInput}
-                placeholder={assetCategory === "hsa" ? "Cash balance" : "Balance"}
-                placeholderTextColor={colors.textMuted}
-                keyboardType="decimal-pad"
-                value={assetBalance}
-                onChangeText={setAssetBalance}
-              />
+              <>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder={assetCategory === "hsa" ? "Cash balance" : "Balance"}
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="decimal-pad"
+                  value={assetBalance}
+                  onChangeText={setAssetBalance}
+                />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="APY % (optional) - e.g. 4.5"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="decimal-pad"
+                  value={assetApy}
+                  onChangeText={setAssetApy}
+                  accessibilityLabel="Annual percentage yield"
+                />
+              </>
             ) : null}
 
             <View style={styles.assetCategoryRow}>

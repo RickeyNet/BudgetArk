@@ -39,6 +39,7 @@ import {
   DERIVED_RECURRING_PREFIX,
 } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
+import { MAX_APY_PERCENT } from "./savingsInterest";
 import { normalizeImportCategory, VALIDATOR_LIMITS } from "./recordValidators";
 import { isValidSymbol, normalizeSymbol } from "./holdingsMath";
 import {
@@ -882,6 +883,8 @@ const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<strin
   // `false`, matching how the Bridge account editor writes it.
   const isEmergencyFund =
     parseBoolean(get(row, "EmergencyFund", "Emergency Fund")) || undefined;
+  // Optional APY percent: junk or out of range drops the field, not the row.
+  const apy = parseOptionalPositive(get(row, "APY", "Apy"), MAX_APY_PERCENT);
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
   return okRow({
     id,
@@ -889,6 +892,7 @@ const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<strin
     category,
     balance,
     ...(isEmergencyFund ? { isEmergencyFund } : {}),
+    ...(apy !== undefined ? { apy } : {}),
     createdAt,
     updatedAt: updatedAtIso || createdAt,
   });

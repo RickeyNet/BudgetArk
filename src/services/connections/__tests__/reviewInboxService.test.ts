@@ -25,8 +25,10 @@ import {
   makeExternalAccountLink,
   makeMerchantRule,
   makePendingTransaction,
+  makeSavingsGoal,
 } from "../../../__tests__/fixtures";
 import {
+  applyPendingTransferToPlan,
   approvePendingTransaction,
   autoApproveInboxByRules,
   applyRulesToInbox,
@@ -71,6 +73,7 @@ const LEDGER_KEY = "@budgetark_connection_ingest_ledger";
 const RULES_KEY = "@budgetark_merchant_rules";
 const LINKS_KEY = "@budgetark_external_account_links";
 const ENTRIES_KEY = "@budgetark_budget_entries";
+const GOALS_KEY = "@budgetark_savings_goals";
 
 const seed = (key: string, value: unknown) => {
   mockStore.set(key, JSON.stringify(value));
@@ -874,5 +877,44 @@ describe("reconcileInboxWithDecisions", () => {
     seed(INBOX_KEY, [makePendingTransaction({ id: "simplefin:ACT-1:C", providerTxId: "C" })]);
     expect(await reconcileInboxWithDecisions()).toBe(0);
     expect(readInbox()).toHaveLength(1);
+  });
+});
+
+describe("applyPendingTransferToPlan", () => {
+  it("adds the amount to the plan, records a dismissed ledger entry, and removes the row (money first, inbox last)", async () => {
+    const item = makePendingTransaction({ amount: -200.005 });
+    seed(INBOX_KEY, [item]);
+    seed(GOALS_KEY, [
+      makeSavingsGoal({ id: "plan", name: "Bike", category: "other", currentAmount: 50 }),
+      makeSavingsGoal({ id: "ef" }),
+    ]);
+
+    const goals = await applyPendingTransferToPlan(item.id, "plan");
+
+    expect(goals?.find((g) => g.id === "plan")?.currentAmount).toBe(250.01);
+    expect(read<Record<string, unknown>>(GOALS_KEY, {})).toBeTruthy();
+    const ledger = read<IngestLedger>(LEDGER_KEY, {});
+    expect(ledger[item.id]).toMatchObject({ status: "dismissed" });
+    expect(ledger[item.id].budgetEntryId).toBeUndefined();
+    expect(read<PendingTransaction[]>(INBOX_KEY, [])).toEqual([]);
+    // No expense was filed.
+    expect(read<BudgetEntry[]>(ENTRIES_KEY, [])).toEqual([]);
+  });
+
+  it("returns null and writes nothing when the item, the plan, or a positive amount is missing", async () => {
+    const item = makePendingTransaction({ amount: -20 });
+    seed(INBOX_KEY, [item]);
+    seed(GOALS_KEY, [makeSavingsGoal({ id: "plan", category: "other", currentAmount: 5 })]);
+
+    expect(await applyPendingTransferToPlan("nope", "plan")).toBeNull();
+    expect(await applyPendingTransferToPlan(item.id, "missing")).toBeNull();
+    // The emergency fund is not a purchase plan.
+    expect(await applyPendingTransferToPlan(item.id, "ef")).toBeNull();
+    seed(INBOX_KEY, [makePendingTransaction({ id: "zero", amount: 0 })]);
+    expect(await applyPendingTransferToPlan("zero", "plan")).toBeNull();
+
+    expect(read<PendingTransaction[]>(INBOX_KEY, [])).toHaveLength(1);
+    expect(read<IngestLedger>(LEDGER_KEY, {})).toEqual({});
+    expect(read<{ currentAmount: number }[]>(GOALS_KEY, [])[0].currentAmount).toBe(5);
   });
 });

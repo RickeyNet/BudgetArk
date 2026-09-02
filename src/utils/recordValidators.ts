@@ -549,6 +549,8 @@ export const isAssetAccountItem = (
     // behave like `true` downstream, so reject anything but a real boolean.
     (item.isEmergencyFund === undefined ||
       typeof item.isEmergencyFund === "boolean") &&
+    // Optional APY percent; a rate over 100% is a typo, not a bank.
+    (item.apy === undefined || isSafeNumber(item.apy, { min: 0, max: 100 })) &&
     isSafeNumber(item.balance, { min: 0 }) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&

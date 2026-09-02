@@ -19,6 +19,7 @@ import type {
   IngestLedgerEntry,
   MerchantRule,
   PendingTransaction,
+  SavingsGoal,
 } from "../../types";
 import {
   addBudgetEntry,
@@ -28,6 +29,8 @@ import {
 import { entryMonthKey, isBillCandidate } from "../../utils/billFulfillment";
 import { isEntryActiveInMonth } from "../../utils/recurrence";
 import { getLinks } from "../../storage/externalAccountLinksStorage";
+import { getSavingsGoals, updateSavingsGoal } from "../../storage/savingsGoalStorage";
+import { roundToCents } from "../../utils/money";
 import {
   getIngestLedger,
   getPendingTransactions,
@@ -277,6 +280,36 @@ export const reconcileInboxWithDecisions = async (): Promise<number> => {
 
 export const dismissPendingTransaction = (pendingId: string): Promise<void> =>
   dismissPendingTransactions([pendingId]);
+
+/**
+ * File an outflow as a contribution to a purchase plan instead of an
+ * expense: the amount lands on the plan's `currentAmount`, the row is
+ * retired with a DISMISSED ledger entry (no BudgetEntry - a transfer into
+ * savings isn't spending, and the decision still syncs so a partner's
+ * inbox retires the same row), and the inbox row goes. Same crash-safe
+ * order as approval: the money first, ledger second, inbox removal last.
+ * Returns the live goals, or null when the item or plan no longer exists.
+ */
+export const applyPendingTransferToPlan = async (
+  pendingId: string,
+  goalId: string,
+): Promise<SavingsGoal[] | null> => {
+  const inbox = await getPendingTransactions();
+  const item = inbox.find((row) => row.id === pendingId);
+  if (!item) return null;
+  const amount = Math.abs(item.amount);
+  if (!(amount > 0)) return null;
+  const goals = await getSavingsGoals();
+  const goal = goals.find((candidate) => candidate.id === goalId);
+  if (!goal || goal.category === "emergency_fund") return null;
+
+  const updated = await updateSavingsGoal(goalId, {
+    currentAmount: roundToCents(goal.currentAmount + amount),
+  });
+  await recordLedgerEntries({ [item.id]: ledgerEntryFor(item, "dismissed") });
+  await removePendingTransaction(item.id);
+  return updated;
+};
 
 /**
  * Skip one item AND remember an "ignore" rule for its merchant, so future

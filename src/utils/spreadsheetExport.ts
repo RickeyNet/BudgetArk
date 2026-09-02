@@ -245,6 +245,8 @@ const ASSET_ACCOUNT_COLUMNS = [
   // fund. Must round-trip: dropping it on a backup/restore cycle would
   // silently flip the emergency fund back to manual goal tracking.
   "EmergencyFund",
+  // Optional APY percent (4.5 = 4.5%); blank when the user never typed one.
+  "APY",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
@@ -440,6 +442,7 @@ const assetAccountToRow = (account: AssetAccount) => ({
   Category: account.category,
   Balance: account.balance,
   EmergencyFund: account.isEmergencyFund === true ? "yes" : "",
+  APY: account.apy ?? "",
   CreatedAt: account.createdAt,
   UpdatedAt: account.updatedAt ?? "",
 });

@@ -565,6 +565,14 @@ export interface AssetAccount {
    * account balances must NOT add the EF on top in that mode.
    */
   isEmergencyFund?: boolean;
+  /**
+   * Annual percentage yield the account pays, as a percent (4.5 = 4.5%),
+   * typed by the user for cash accounts. Informational only: the Bridge
+   * shows what the balance earns a year and, for savings, what a typical
+   * high-yield rate would add (utils/savingsInterest). Never applied to
+   * the balance. Optional and ignored by older peers/importers.
+   */
+  apy?: number;
   createdAt: string;
   updatedAt: string;
   /** Tombstone marker - see Debt.deletedAt. */

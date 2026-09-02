@@ -121,6 +121,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | Suite | Module under test | Feature it guards |
 | --- | --- | --- |
 | `recordValidators.test.ts` | `recordValidators.ts` | Import / sync validation of every record type, including explicit reject cases |
+| `savingsInterest.test.ts` | `savingsInterest.ts` | Bridge APY lines: fail-closed input parse, yearly interest, high-yield gap and its display floor; `REFERENCE_HYSA_APY` is a bundled constant to refresh annually |
 | `sanitize.test.ts` | `sanitize.ts` | Control-character stripping on text input |
 | `paymentUrl.test.ts` | `paymentUrl.ts` | Payment-URL normalization and scheme rejection |
 | `quickAddLink.test.ts` | `quickAddLink.ts` | Widget deep-link builder + fail-closed parser (category names only) |
@@ -164,7 +165,8 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `syncGate.test.ts` / `linkPreferences.test.ts` | `syncGate.ts` / `linkPreferences.ts` | Sync gating, fetch windows incl. explicit re-import, gap backfill for a bank that came back after going dark; account-link edit rules |
 | `debtBalances.test.ts` | `debtBalances.ts` | Bank → credit-card balance mirroring: sign-tolerant magnitude, high-water `originalBalance`, link/debt gating |
 | `assetCategoryHint.test.ts` | `assetCategoryHint.ts` | Bridge category guessed from a bank account name (401k/IRA → retirement, HSA, brokerage, savings, checking; fallback checking) |
-| `reviewInboxService.test.ts` | `reviewInboxService.ts` | Approve/skip/bulk flows, merchant-rule creation and edits, crash-safe write order, storage-backed inbox reconciliation |
+| `reviewInboxService.test.ts` | `reviewInboxService.ts` | Approve/skip/bulk flows, merchant-rule creation and edits, crash-safe write order, storage-backed inbox reconciliation, add-to-purchase-plan |
+| `ruleNudges.test.ts` | `ruleNudges.ts` | "Make it a rule" suggestion: approval threshold per merchant + category, bank-only/live-only counting, silence when a rule already covers the merchant |
 | `connectionsSyncService.test.ts` | `connectionsSyncService.ts` | Per-connection orchestration: gates, provider routing, balance clamping, keep-alive stamping, failure isolation, secrets never written to non-secret keys |
 
 ### Partner sync (`src/sync`)
