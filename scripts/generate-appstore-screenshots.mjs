@@ -12,7 +12,10 @@ const OUTPUT_DIR = join(ROOT, "screenshots", "app-store");
 const TARGETS = [
   { key: "iphone-6.9", width: 1320, height: 2868, source: "iphone" },
   { key: "iphone-6.5", width: 1242, height: 2688, source: "iphone" },
-  { key: "iphone-6.1", width: 1179, height: 2556, source: "iphone" },
+  // 1170x2532 (iPhone 12-14 class), NOT 1179x2556: App Store Connect's
+  // 6.1" bucket rejects the newer size ("dimensions are wrong", 2026-08-30);
+  // its accepted list tops out at 1170x2532.
+  { key: "iphone-6.1", width: 1170, height: 2532, source: "iphone" },
   { key: "ipad-13", width: 2064, height: 2752, source: "ipad" },
   { key: "ipad-12.9", width: 2048, height: 2732, source: "ipad" },
 ];

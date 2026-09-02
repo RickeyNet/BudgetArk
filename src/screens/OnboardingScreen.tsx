@@ -19,7 +19,7 @@
  */
 
 import { MISSION_STATEMENT } from "../data/missionStatement";
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import {
   Alert,
   View,
@@ -28,9 +28,12 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
+import { useAndroidKeyboardInputScroll } from "../hooks/useAndroidKeyboardInputScroll";
 import { ThemePreset } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { completeOnboarding } from "../storage/userStorage";
@@ -165,6 +168,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
 
   /** Memoized styles based on current theme */
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+
+  /**
+   * Keep the template/name TextInputs visible above the keyboard: iOS via
+   * the ScrollView's automaticallyAdjustKeyboardInsets, Android via the
+   * shared measure-and-scroll hook + KeyboardAvoidingView (see
+   * useAndroidKeyboardInputScroll for why both halves are needed).
+   */
+  const scrollRef = useRef<ScrollView>(null);
+  const onKeyboardInputScroll = useAndroidKeyboardInputScroll(scrollRef);
 
   /**
    * Handle theme selection - updates theme immediately for preview
@@ -843,17 +855,27 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "android" ? "padding" : undefined}
+        style={styles.screen}
       >
-        {step === "mission" && renderMissionStep()}
-        {step === "theme" && renderThemeStep()}
-        {step === "welcome" && renderWelcomeStep()}
-        {step === "template" && renderTemplateStep()}
-        {step === "reminders" && renderRemindersStep()}
-        {step === "name" && renderNameStep()}
-      </ScrollView>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          automaticallyAdjustKeyboardInsets
+          keyboardShouldPersistTaps="handled"
+          onScroll={onKeyboardInputScroll}
+          scrollEventThrottle={16}
+        >
+          {step === "mission" && renderMissionStep()}
+          {step === "theme" && renderThemeStep()}
+          {step === "welcome" && renderWelcomeStep()}
+          {step === "template" && renderTemplateStep()}
+          {step === "reminders" && renderRemindersStep()}
+          {step === "name" && renderNameStep()}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };
