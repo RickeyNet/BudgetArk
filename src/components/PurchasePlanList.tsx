@@ -34,7 +34,7 @@ import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
-import type { SavingsGoal, SavingsGoalCategory } from "../types";
+import type { Debt, SavingsGoal, SavingsGoalCategory } from "../types";
 import {
   deleteSavingsGoal,
   updateSavingsGoal,
@@ -43,9 +43,12 @@ import {
 import {
   assessPurchaseFit,
   calcCombinedSliderMax,
+  calcDebtOpportunityCost,
   calcRequiredMonthly,
+  describeDebtOpportunityCost,
   movePlanInOrder,
   orderPurchasePlans,
+  pickOpportunityDebt,
   PLAN_ALLOCATION_LABELS,
   PLAN_ALLOCATION_MODES,
   PLAN_PRIORITY_METHOD_HINTS,
@@ -113,6 +116,12 @@ type PurchasePlanListProps = {
    * adds up and projects, it just can't say whether the amount fits.
    */
   cashFlow?: MonthlyCashFlow | null;
+  /**
+   * Live debts, for each row's opportunity-cost line ("$150/mo on Chase
+   * Visa instead would clear it 4 months sooner..."). Optional: without
+   * them the line is simply absent.
+   */
+  debts?: Debt[];
 };
 
 /** Debounce for persisting slider drags. */
@@ -123,6 +132,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   onGoalsChanged,
   emptyText,
   cashFlow = null,
+  debts,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
@@ -198,6 +208,13 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   const lateCount = projection.projections.filter(
     (item) => item.lateByMonths !== null && item.lateByMonths > 0,
   ).length;
+
+  // The debt this list's money would otherwise attack (highest rate, the
+  // avalanche target); each row measures its this-month share against it.
+  const opportunityDebt = useMemo(
+    () => pickOpportunityDebt((debts ?? []).filter((debt) => !debt.deletedAt)),
+    [debts],
+  );
 
   const [reorderError, setReorderError] = useState<string | null>(null);
   const movePlan = useCallback(
@@ -448,6 +465,10 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                         : ""
                     }`
                   : "Not funded within 20 years at this pace";
+            const opportunity =
+              !funded && opportunityDebt && projected && projected.monthlyNow > 0
+                ? calcDebtOpportunityCost(opportunityDebt, projected.monthlyNow)
+                : null;
             return (
               <View key={goal.id} style={styles.planRow}>
                 <View style={styles.rankBadge}>
@@ -498,6 +519,11 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                         ]}
                       >
                         {projectionLine}
+                      </Text>
+                    ) : null}
+                    {opportunity ? (
+                      <Text style={styles.planMeta}>
+                        {describeDebtOpportunityCost(opportunity, formatCurrency)}
                       </Text>
                     ) : null}
                   </View>

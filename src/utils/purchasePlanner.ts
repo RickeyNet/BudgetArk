@@ -13,11 +13,13 @@
 
 import type {
   BudgetEntry,
+  Debt,
   DebtMilestoneKey,
   DebtMilestonePlan,
   SavingsGoal,
 } from "../types";
 import { getMonthKey } from "./budgetMonths";
+import { calcMonthsToPayoff, calcTotalInterest } from "./calculations";
 import { entriesForMonth } from "./billFulfillment";
 
 /* ── Monthly cash flow (from budget history) ── */
@@ -733,4 +735,99 @@ export const suggestFinanceApr = (
     if (debt.balance > 0 && Number.isFinite(debt.rate) && debt.rate > best) best = debt.rate;
   }
   return best > 0 ? best : DEFAULT_FINANCE_APR;
+};
+
+/* ── Opportunity cost against a specific debt ── */
+
+export type OpportunityDebt = Pick<Debt, "id" | "name" | "balance" | "rate" | "minPayment">;
+
+/**
+ * The debt a plan's money would otherwise go to: the highest-rate debt
+ * still carrying a balance (the avalanche target - the cheapest possible
+ * use of an extra dollar, so the shown cost of saving instead is never
+ * overstated). Ties go to the larger balance. Null when nothing is owed
+ * or every debt is interest-free (no interest to save).
+ */
+export const pickOpportunityDebt = (
+  debts: readonly OpportunityDebt[]
+): OpportunityDebt | null => {
+  let best: OpportunityDebt | null = null;
+  for (const debt of debts) {
+    if (!(debt.balance > 0) || !(debt.rate > 0)) continue;
+    if (
+      !best ||
+      debt.rate > best.rate ||
+      (debt.rate === best.rate && debt.balance > best.balance)
+    ) {
+      best = debt;
+    }
+  }
+  return best;
+};
+
+export type DebtOpportunityCost = {
+  debtId: string;
+  debtName: string;
+  /** The monthly amount the comparison assumes goes to the debt instead. */
+  monthlyAmount: number;
+  /** Months the debt clears sooner; Infinity when the minimum alone never clears it. */
+  monthsSooner: number;
+  /** Lifetime interest avoided (0 when the baseline never clears - see monthsSooner). */
+  interestSaved: number;
+};
+
+/**
+ * What `monthlyAmount` a month costs by going into a plan instead of onto
+ * one debt as an extra payment, on top of its minimum. Null when there is
+ * nothing to compare (no amount, no balance) or when even the extra
+ * payment can't outrun the interest - there's no honest number to show.
+ */
+export const calcDebtOpportunityCost = (
+  debt: OpportunityDebt,
+  monthlyAmount: number
+): DebtOpportunityCost | null => {
+  if (!(monthlyAmount > 0) || !(debt.balance > 0)) return null;
+  const minimum = Math.max(0, debt.minPayment);
+  const baselineMonths = calcMonthsToPayoff(debt.balance, debt.rate, minimum);
+  const extraMonths = calcMonthsToPayoff(debt.balance, debt.rate, minimum + monthlyAmount);
+  if (extraMonths === Infinity) return null;
+  if (baselineMonths === Infinity) {
+    return {
+      debtId: debt.id,
+      debtName: debt.name,
+      monthlyAmount,
+      monthsSooner: Infinity,
+      interestSaved: 0,
+    };
+  }
+  const interestSaved = Math.max(
+    0,
+    calcTotalInterest(debt.balance, debt.rate, minimum) -
+      calcTotalInterest(debt.balance, debt.rate, minimum + monthlyAmount)
+  );
+  return {
+    debtId: debt.id,
+    debtName: debt.name,
+    monthlyAmount,
+    monthsSooner: Math.max(0, baselineMonths - extraMonths),
+    interestSaved,
+  };
+};
+
+/** One plain sentence for a plan row; `money` formats a dollar amount. */
+export const describeDebtOpportunityCost = (
+  cost: DebtOpportunityCost,
+  money: (amount: number) => string
+): string => {
+  const lead = `${money(cost.monthlyAmount)}/mo on ${cost.debtName} instead`;
+  if (cost.monthsSooner === Infinity) {
+    return `${lead} would turn a debt its minimum never clears into one that does.`;
+  }
+  if (cost.monthsSooner === 0 && cost.interestSaved < 1) {
+    return `${lead} would barely move it - this plan costs you almost nothing there.`;
+  }
+  const months = `${cost.monthsSooner} month${cost.monthsSooner === 1 ? "" : "s"} sooner`;
+  return cost.interestSaved >= 1
+    ? `${lead} would clear it ${months} and save ${money(Math.round(cost.interestSaved))} in interest.`
+    : `${lead} would clear it ${months}.`;
 };

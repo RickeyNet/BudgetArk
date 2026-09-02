@@ -1592,6 +1592,7 @@ const BridgeScreen: React.FC = () => {
           savingsGoals={savingsGoals}
           onGoalsChanged={handlePlanGoalsChanged}
           cashFlow={planCashFlow}
+          debts={debts}
           emptyText={
             "Saving up for something? Tap + Plan to build a sinking fund on the Charts tab - it'll be tracked here and count toward your net worth."
           }

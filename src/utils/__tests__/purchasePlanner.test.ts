@@ -12,12 +12,14 @@ import {
   assessPurchaseFit,
   buildArkPurchaseGuidance,
   calcCombinedSliderMax,
+  calcDebtOpportunityCost,
   calcFinanceVsSave,
   calcHourlyTakeHome,
   calcHoursOfWork,
   calcLoanPayment,
   calcMonthlyCashFlow,
   DEFAULT_FINANCE_APR,
+  describeDebtOpportunityCost,
   describeHoursOfWork,
   calcPurchaseSliderMax,
   calcPurchaseTimeline,
@@ -25,6 +27,7 @@ import {
   monthsUntilTarget,
   movePlanInOrder,
   orderPurchasePlans,
+  pickOpportunityDebt,
   projectPurchasePlans,
   PURCHASE_LOOKBACK_MONTHS,
   suggestCombinedMonthly,
@@ -565,5 +568,78 @@ describe("finance vs save", () => {
     ).toBe(19.9);
     expect(suggestFinanceApr([])).toBe(DEFAULT_FINANCE_APR);
     expect(suggestFinanceApr([{ balance: 100, rate: 0 }])).toBe(DEFAULT_FINANCE_APR);
+  });
+});
+
+/* ── Opportunity cost against a specific debt ── */
+
+describe("pickOpportunityDebt", () => {
+  const card = { id: "card", name: "Chase Visa", balance: 2500, rate: 24.99, minPayment: 75 };
+  const loan = { id: "loan", name: "Car Loan", balance: 9000, rate: 6.5, minPayment: 250 };
+
+  it("chooses the highest-rate debt with a balance", () => {
+    expect(pickOpportunityDebt([loan, card])?.id).toBe("card");
+  });
+
+  it("ignores paid-off and interest-free debts, larger balance breaks a rate tie", () => {
+    expect(pickOpportunityDebt([{ ...card, balance: 0 }, loan])?.id).toBe("loan");
+    expect(pickOpportunityDebt([{ ...card, rate: 0 }])).toBeNull();
+    expect(
+      pickOpportunityDebt([
+        { ...card, id: "small", balance: 500 },
+        { ...card, id: "big", balance: 4000 },
+      ])?.id,
+    ).toBe("big");
+    expect(pickOpportunityDebt([])).toBeNull();
+  });
+});
+
+describe("calcDebtOpportunityCost", () => {
+  const card = { id: "card", name: "Chase Visa", balance: 2500, rate: 24.99, minPayment: 75 };
+
+  it("reports months sooner and interest saved for an extra payment on top of the minimum", () => {
+    const cost = calcDebtOpportunityCost(card, 150);
+    expect(cost).not.toBeNull();
+    expect(cost!).toMatchObject({ debtId: "card", debtName: "Chase Visa", monthlyAmount: 150 });
+    expect(cost!.monthsSooner).toBeGreaterThan(24);
+    expect(cost!.interestSaved).toBeGreaterThan(500);
+    // More money, more saved.
+    expect(calcDebtOpportunityCost(card, 300)!.interestSaved).toBeGreaterThan(cost!.interestSaved);
+  });
+
+  it("is null with no amount, no balance, or when the extra still can't outrun interest", () => {
+    expect(calcDebtOpportunityCost(card, 0)).toBeNull();
+    expect(calcDebtOpportunityCost({ ...card, balance: 0 }, 150)).toBeNull();
+    // 2500 at 24.99% accrues ~$52/mo; $10 minimum + $20 extra never clears it.
+    expect(calcDebtOpportunityCost({ ...card, minPayment: 10 }, 20)).toBeNull();
+  });
+
+  it("flags a minimum that never clears the debt as Infinity months sooner", () => {
+    const cost = calcDebtOpportunityCost({ ...card, minPayment: 10 }, 150);
+    expect(cost!.monthsSooner).toBe(Infinity);
+    expect(cost!.interestSaved).toBe(0);
+  });
+});
+
+describe("describeDebtOpportunityCost", () => {
+  const money = (n: number) => `$${n}`;
+  const base = { debtId: "card", debtName: "Chase Visa", monthlyAmount: 150 };
+
+  it("names the debt, the months, and the interest", () => {
+    expect(describeDebtOpportunityCost({ ...base, monthsSooner: 4, interestSaved: 312.4 }, money)).toBe(
+      "$150/mo on Chase Visa instead would clear it 4 months sooner and save $312 in interest.",
+    );
+    expect(describeDebtOpportunityCost({ ...base, monthsSooner: 1, interestSaved: 0.4 }, money)).toBe(
+      "$150/mo on Chase Visa instead would clear it 1 month sooner.",
+    );
+  });
+
+  it("has words for the never-clears and barely-moves cases", () => {
+    expect(describeDebtOpportunityCost({ ...base, monthsSooner: Infinity, interestSaved: 0 }, money)).toMatch(
+      /minimum never clears/,
+    );
+    expect(describeDebtOpportunityCost({ ...base, monthsSooner: 0, interestSaved: 0.2 }, money)).toMatch(
+      /barely move it/,
+    );
   });
 });
