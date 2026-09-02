@@ -172,6 +172,41 @@ describe("exportSpreadsheet - XLSX", () => {
     expect(rows.some((r) => r.ID === "Total")).toBe(true);
   });
 
+  it("writes the purchase-planner Priority column on the Savings Goals sheet, blank when unranked", async () => {
+    const goalStorage = require("../../storage/savingsGoalStorage");
+    (goalStorage.getSavingsGoals as jest.Mock).mockResolvedValueOnce([
+      {
+        id: "g-ranked",
+        name: "Bike",
+        category: "other",
+        targetAmount: 600,
+        currentAmount: 100,
+        priority: 2,
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+      {
+        id: "g-unranked",
+        name: "Trip",
+        category: "travel",
+        targetAmount: 3000,
+        currentAmount: 0,
+        createdAt: "2026-06-02T00:00:00.000Z",
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      },
+    ]);
+    await exportSpreadsheet("xlsx");
+    const wb = parseWorkbook();
+    const sheet = wb.Sheets["Savings Goals"];
+    const header = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 })[0];
+    expect(header).toEqual(
+      expect.arrayContaining(["TargetDate", "Priority", "CreatedAt"])
+    );
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    expect(rows.find((r) => r.ID === "g-ranked")?.Priority).toBe(2);
+    expect(rows.find((r) => r.ID === "g-unranked")?.Priority).toBe("");
+  });
+
   it("stamps a backup for XLSX", async () => {
     await exportSpreadsheet("xlsx");
     expect(mockRecordBackup).toHaveBeenCalledTimes(1);

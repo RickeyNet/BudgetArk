@@ -297,6 +297,35 @@ describe("importSpreadsheet - Savings Goals rows", () => {
     const result = await lastResult();
     expect(result?.skippedRowDetails[0].reason).toMatch(/current amount/i);
   });
+
+  it("carries the purchase-planner Priority rank (number or text), rounding fractions", async () => {
+    useXlsx({
+      "Savings Goals": [
+        { Name: "Vacation", Category: "travel", TargetAmount: 2000, CurrentAmount: 500, Priority: 0 },
+        { Name: "Boat", Category: "travel", TargetAmount: 2000, CurrentAmount: 0, Priority: "2" },
+        { Name: "Bike", Category: "other", TargetAmount: 600, CurrentAmount: 0, Priority: 1.4 },
+      ],
+    });
+    const result = await lastResult();
+    expect(result?.skippedRows).toBe(0);
+    expect(lastPayload().savingsGoals.map((g: { priority?: number }) => g.priority)).toEqual([0, 2, 1]);
+  });
+
+  it("drops a blank or junk Priority instead of skipping the row", async () => {
+    useXlsx({
+      "Savings Goals": [
+        { Name: "Vacation", Category: "travel", TargetAmount: 2000, CurrentAmount: 500, Priority: "" },
+        { Name: "Boat", Category: "travel", TargetAmount: 2000, CurrentAmount: 0, Priority: "first" },
+        { Name: "Bike", Category: "other", TargetAmount: 600, CurrentAmount: 0, Priority: -3 },
+        { Name: "Car", Category: "car", TargetAmount: 9000, CurrentAmount: 0 },
+      ],
+    });
+    const result = await lastResult();
+    expect(result?.skippedRows).toBe(0);
+    for (const goal of lastPayload().savingsGoals) {
+      expect(goal).not.toHaveProperty("priority");
+    }
+  });
 });
 
 describe("importSpreadsheet - parseDate Excel serial numbers", () => {

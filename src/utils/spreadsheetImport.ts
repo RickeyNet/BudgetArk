@@ -798,6 +798,7 @@ const rowToSavingsGoal = (row: Record<string, unknown>): RowResult<Record<string
   // isDerivedArtifactRow, so a row reaching here is a real, explicit goal.
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const targetDate = parseDate(get(row, "TargetDate", "Target Date"));
+  const priority = parsePlanPriority(get(row, "Priority"));
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
@@ -808,9 +809,27 @@ const rowToSavingsGoal = (row: Record<string, unknown>): RowResult<Record<string
     targetAmount,
     currentAmount,
     targetDate: targetDate || undefined,
+    ...(priority !== undefined ? { priority } : {}),
     createdAt,
     updatedAt: updatedAtIso || createdAt,
   });
+};
+
+/** Largest purchase-planner rank accepted (mirrors isSavingsGoalItem). */
+const MAX_PLAN_PRIORITY = 10_000;
+
+/**
+ * Purchase planner "My order" rank: a whole number >= 0. Blank means the
+ * goal was never ranked. Junk drops the field rather than skipping the
+ * row - the rank is a viewing preference, not money - and a fractional
+ * value is rounded because hand-edited sheets do that.
+ */
+const parsePlanPriority = (raw: unknown): number | undefined => {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === "string" && !raw.trim()) return undefined;
+  const value = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(value) || value < 0 || value > MAX_PLAN_PRIORITY) return undefined;
+  return Math.round(value);
 };
 
 const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<string, unknown>> => {

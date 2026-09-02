@@ -229,6 +229,7 @@ const SAVINGS_GOAL_COLUMNS = [
   "TargetAmount",
   "CurrentAmount",
   "TargetDate",
+  "Priority",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
@@ -422,6 +423,8 @@ const savingsGoalToRow = (goal: SavingsGoal) => ({
   TargetAmount: goal.targetAmount,
   CurrentAmount: goal.currentAmount,
   TargetDate: goal.targetDate ? formatDateOnly(goal.targetDate) : "",
+  // Purchase planner "My order" rank (0 = first); blank when never ranked.
+  Priority: goal.priority ?? "",
   CreatedAt: goal.createdAt,
   UpdatedAt: goal.updatedAt ?? "",
 });
