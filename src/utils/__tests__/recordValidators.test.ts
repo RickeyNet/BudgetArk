@@ -677,6 +677,21 @@ describe("isSavingsGoalItem", () => {
     expect(isSavingsGoalItem({ ...valid, priority: 10_001 })).toBe(false);
   });
 
+  it("accepts optional cost-per-use inputs and rejects bad ones", () => {
+    expect(isSavingsGoalItem({ ...valid, usesPerMonth: 20, usefulLifeYears: 3 })).toBe(true);
+    expect(isSavingsGoalItem({ ...valid, usesPerMonth: -1 })).toBe(false);
+    expect(isSavingsGoalItem({ ...valid, usefulLifeYears: "3" })).toBe(false);
+    expect(isSavingsGoalItem({ ...valid, usefulLifeYears: 101 })).toBe(false);
+  });
+
+  it("accepts optional cost-per-use inputs and rejects bad ones", () => {
+    expect(isSavingsGoalItem({ ...valid, usesPerMonth: 20, usefulLifeYears: 3 })).toBe(true);
+    expect(isSavingsGoalItem({ ...valid, usesPerMonth: -1 })).toBe(false);
+    expect(isSavingsGoalItem({ ...valid, usefulLifeYears: "3" })).toBe(false);
+    expect(isSavingsGoalItem({ ...valid, usefulLifeYears: 101 })).toBe(false);
+  });
+
+
   it("rejects an unknown category", () => {
     expect(isSavingsGoalItem({ ...valid, category: "yacht" })).toBe(false);
   });

@@ -182,6 +182,8 @@ describe("exportSpreadsheet - XLSX", () => {
         targetAmount: 600,
         currentAmount: 100,
         priority: 2,
+        usesPerMonth: 20,
+        usefulLifeYears: 3,
         createdAt: "2026-06-01T00:00:00.000Z",
         updatedAt: "2026-06-01T00:00:00.000Z",
       },
@@ -200,11 +202,13 @@ describe("exportSpreadsheet - XLSX", () => {
     const sheet = wb.Sheets["Savings Goals"];
     const header = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 })[0];
     expect(header).toEqual(
-      expect.arrayContaining(["TargetDate", "Priority", "CreatedAt"])
+      expect.arrayContaining(["TargetDate", "Priority", "UsesPerMonth", "UsefulLifeYears", "CreatedAt"])
     );
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-    expect(rows.find((r) => r.ID === "g-ranked")?.Priority).toBe(2);
-    expect(rows.find((r) => r.ID === "g-unranked")?.Priority).toBe("");
+    const ranked = rows.find((r) => r.ID === "g-ranked");
+    expect(ranked).toMatchObject({ Priority: 2, UsesPerMonth: 20, UsefulLifeYears: 3 });
+    const unranked = rows.find((r) => r.ID === "g-unranked");
+    expect(unranked).toMatchObject({ Priority: "", UsesPerMonth: "", UsefulLifeYears: "" });
   });
 
   it("stamps a backup for XLSX", async () => {

@@ -43,9 +43,14 @@ import {
 import {
   assessPurchaseFit,
   calcCombinedSliderMax,
+  calcCostPerUse,
   calcDebtOpportunityCost,
+  calcPlanNudges,
   calcRequiredMonthly,
+  describeCostPerUse,
   describeDebtOpportunityCost,
+  MAX_USEFUL_LIFE_YEARS,
+  MAX_USES_PER_MONTH,
   movePlanInOrder,
   orderPurchasePlans,
   pickOpportunityDebt,
@@ -141,6 +146,9 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
 
   const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
   const [contributeText, setContributeText] = useState("");
+  /** Cost-per-use inputs edited in the contribute dialog. */
+  const [usesText, setUsesText] = useState("");
+  const [yearsText, setYearsText] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SavingsGoal | null>(null);
   /** Last failed contribute/delete, shown inside the plan dialog. */
   const [actionError, setActionError] = useState<string | null>(null);
@@ -246,29 +254,56 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             ? `Over: more than the ~${formatCurrency(cashFlow.freeCashFlow)}/mo free after your average spending.`
             : "Over: your average spending already exceeds your income, so any set-aside comes from somewhere else.";
 
+  /** Open the contribute dialog, optionally with an amount prefilled (nudges). */
+  const openContribute = useCallback((goal: SavingsGoal, presetAmount?: number) => {
+    setContributeText(presetAmount !== undefined ? String(presetAmount) : "");
+    setUsesText(goal.usesPerMonth !== undefined ? String(goal.usesPerMonth) : "");
+    setYearsText(goal.usefulLifeYears !== undefined ? String(goal.usefulLifeYears) : "");
+    setActionError(null);
+    setContributeGoal(goal);
+  }, []);
+
+  const closeContribute = useCallback(() => {
+    setContributeGoal(null);
+    setContributeText("");
+    setUsesText("");
+    setYearsText("");
+  }, []);
+
   const handleContribute = useCallback(async () => {
     if (!contributeGoal) return;
     const amount = parsePlanAmount(contributeText);
-    if (amount === 0) {
-      setContributeGoal(null);
-      setContributeText("");
+    // Cost-per-use fields: blank or junk clears the value.
+    const parseUse = (text: string, max: number): number | undefined => {
+      const value = parseMoneyInput(text);
+      return value !== null && value > 0 && value <= max ? value : undefined;
+    };
+    const usesPerMonth = parseUse(usesText, MAX_USES_PER_MONTH);
+    const usefulLifeYears = parseUse(yearsText, MAX_USEFUL_LIFE_YEARS);
+    const usesChanged =
+      usesPerMonth !== contributeGoal.usesPerMonth ||
+      usefulLifeYears !== contributeGoal.usefulLifeYears;
+    if (amount === 0 && !usesChanged) {
+      closeContribute();
       return;
     }
     setActionError(null);
     try {
       const updated = await updateSavingsGoal(contributeGoal.id, {
-        currentAmount: Math.max(0, contributeGoal.currentAmount + amount),
+        ...(amount !== 0
+          ? { currentAmount: Math.max(0, contributeGoal.currentAmount + amount) }
+          : {}),
+        ...(usesChanged ? { usesPerMonth, usefulLifeYears } : {}),
       });
       triggerHaptic("success");
-      setContributeGoal(null);
-      setContributeText("");
+      closeContribute();
       onGoalsChanged(updated);
     } catch (error) {
-      // Dialog stays open with the typed amount so the user can retry.
+      // Dialog stays open with the typed values so the user can retry.
       triggerHaptic("error");
-      setActionError(describeError(error, "Couldn't save this contribution."));
+      setActionError(describeError(error, "Couldn't save this plan."));
     }
-  }, [contributeGoal, contributeText, onGoalsChanged]);
+  }, [closeContribute, contributeGoal, contributeText, onGoalsChanged, usesText, yearsText]);
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -469,17 +504,25 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               !funded && opportunityDebt && projected && projected.monthlyNow > 0
                 ? calcDebtOpportunityCost(opportunityDebt, projected.monthlyNow)
                 : null;
+            const costPerUse = calcCostPerUse(
+              goal.targetAmount,
+              goal.usesPerMonth,
+              goal.usefulLifeYears,
+            );
+            const nudges = funded
+              ? null
+              : calcPlanNudges(ordered, goal.id, combinedMonthly, settings.allocation);
+            const describeSooner = (months: number): string =>
+              months === Infinity ? "makes it happen" : `${months} mo sooner`;
             return (
-              <View key={goal.id} style={styles.planRow}>
+              <View key={goal.id} style={styles.planRowWrap}>
+              <View style={styles.planRow}>
                 <View style={styles.rankBadge}>
                   <Text style={styles.rankText}>{index + 1}</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.planMain}
-                  onPress={() => {
-                    setContributeText("");
-                    setContributeGoal(goal);
-                  }}
+                  onPress={() => openContribute(goal)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel={`Add funds to ${goal.name}`}
@@ -526,6 +569,18 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                         {describeDebtOpportunityCost(opportunity, formatCurrency)}
                       </Text>
                     ) : null}
+                    {costPerUse !== null &&
+                    goal.usesPerMonth !== undefined &&
+                    goal.usefulLifeYears !== undefined ? (
+                      <Text style={styles.planMeta}>
+                        {describeCostPerUse(
+                          costPerUse,
+                          goal.usesPerMonth,
+                          goal.usefulLifeYears,
+                          formatCurrency,
+                        )}
+                      </Text>
+                    ) : null}
                   </View>
                   <Text style={styles.planChevron}>›</Text>
                 </TouchableOpacity>
@@ -557,6 +612,41 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                   </View>
                 ) : null}
               </View>
+              {nudges && (nudges.extraMonthly || nudges.lumpSum) ? (
+                <View style={styles.nudgeRow}>
+                  {nudges.extraMonthly ? (
+                    <TouchableOpacity
+                      style={styles.nudgeChip}
+                      onPress={() =>
+                        changeSettings({
+                          combinedMonthly: combinedMonthly + nudges.extraMonthly!.amount,
+                        })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${formatCurrency(nudges.extraMonthly.amount)} a month to all plans`}
+                    >
+                      <Text style={styles.nudgeText}>
+                        {`+${formatCurrency(nudges.extraMonthly.amount)}/mo · ${describeSooner(nudges.extraMonthly.monthsSooner)}`}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {nudges.lumpSum ? (
+                    <TouchableOpacity
+                      style={styles.nudgeChip}
+                      onPress={() => openContribute(goal, nudges.lumpSum!.amount)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${formatCurrency(nudges.lumpSum.amount)} to ${goal.name} now`}
+                    >
+                      <Text style={styles.nudgeText}>
+                        {nudges.lumpSum.finishes
+                          ? `Finish it: ${formatCurrency(nudges.lumpSum.amount)} now`
+                          : `+${formatCurrency(nudges.lumpSum.amount)} now · ${describeSooner(nudges.lumpSum.monthsSooner)}`}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
+              </View>
             );
           })}
         </>
@@ -567,7 +657,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
         visible={contributeGoal !== null}
         animationType="fade"
         transparent
-        onRequestClose={() => setContributeGoal(null)}
+        onRequestClose={closeContribute}
       >
         <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
@@ -599,10 +689,50 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             <Text style={styles.inputHint}>
               Use a negative amount to correct a mistake.
             </Text>
+            <Text style={styles.inputLabel}>COST PER USE (OPTIONAL)</Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={[styles.input, styles.inputHalf]}
+                placeholder="Uses per month"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="decimal-pad"
+                value={usesText}
+                onChangeText={setUsesText}
+                maxLength={6}
+              />
+              <TextInput
+                style={[styles.input, styles.inputHalf]}
+                placeholder="Years you'll keep it"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="decimal-pad"
+                value={yearsText}
+                onChangeText={setYearsText}
+                maxLength={5}
+              />
+            </View>
+            {contributeGoal &&
+            (() => {
+              const uses = parseMoneyInput(usesText);
+              const years = parseMoneyInput(yearsText);
+              const value =
+                uses !== null && years !== null
+                  ? calcCostPerUse(contributeGoal.targetAmount, uses, years)
+                  : null;
+              return value !== null && uses !== null && years !== null ? (
+                <Text style={styles.inputHint}>
+                  {describeCostPerUse(value, uses, years, formatCurrency)}
+                </Text>
+              ) : (
+                <Text style={styles.inputHint}>
+                  How often you'll use it, and for how long, turns the price
+                  into a cost per use.
+                </Text>
+              );
+            })()}
             <View style={styles.dialogActions}>
               <TouchableOpacity
                 style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
-                onPress={() => setContributeGoal(null)}
+                onPress={closeContribute}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
                   Cancel
@@ -613,7 +743,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 onPress={handleContribute}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                  Add funds
+                  Save
                 </Text>
               </TouchableOpacity>
             </View>
@@ -723,6 +853,45 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
+    },
+    planRowWrap: {
+      gap: 2,
+    },
+    nudgeRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      paddingLeft: 34,
+      paddingBottom: 6,
+    },
+    nudgeChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      backgroundColor: colors.bg,
+    },
+    nudgeText: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.accent,
+      fontVariant: ["tabular-nums"],
+    },
+    inputLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.textMuted,
+      marginTop: 10,
+      marginBottom: 6,
+    },
+    inputRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    inputHalf: {
+      flex: 1,
     },
     summaryCard: {
       backgroundColor: colors.bg,

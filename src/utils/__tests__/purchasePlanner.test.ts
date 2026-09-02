@@ -12,13 +12,16 @@ import {
   assessPurchaseFit,
   buildArkPurchaseGuidance,
   calcCombinedSliderMax,
+  calcCostPerUse,
   calcDebtOpportunityCost,
   calcFinanceVsSave,
   calcHourlyTakeHome,
   calcHoursOfWork,
   calcLoanPayment,
   calcMonthlyCashFlow,
+  calcPlanNudges,
   DEFAULT_FINANCE_APR,
+  describeCostPerUse,
   describeDebtOpportunityCost,
   describeHoursOfWork,
   calcPurchaseSliderMax,
@@ -26,6 +29,8 @@ import {
   calcRequiredMonthly,
   monthsUntilTarget,
   movePlanInOrder,
+  NUDGE_LUMP_SUM,
+  NUDGE_MONTHLY_STEP,
   orderPurchasePlans,
   pickOpportunityDebt,
   projectPurchasePlans,
@@ -641,5 +646,89 @@ describe("describeDebtOpportunityCost", () => {
     expect(describeDebtOpportunityCost({ ...base, monthsSooner: 0, interestSaved: 0.2 }, money)).toMatch(
       /barely move it/,
     );
+  });
+});
+
+/* ── Cost per use ── */
+
+describe("cost per use", () => {
+  it("spreads the price over every expected use", () => {
+    // $600, 20x a month for 3 years = 720 uses -> $0.83
+    expect(calcCostPerUse(600, 20, 3)).toBeCloseTo(0.8333, 3);
+    expect(calcCostPerUse(1200, 1, 1)).toBe(100);
+  });
+
+  it("is null until both inputs are positive", () => {
+    expect(calcCostPerUse(600, undefined, 3)).toBeNull();
+    expect(calcCostPerUse(600, 20, undefined)).toBeNull();
+    expect(calcCostPerUse(600, 0, 3)).toBeNull();
+    expect(calcCostPerUse(0, 20, 3)).toBeNull();
+    expect(calcCostPerUse(600, Number.NaN, 3)).toBeNull();
+  });
+
+  it("describes cents below a dollar and money above it", () => {
+    const money = (n: number) => `$${n}`;
+    expect(describeCostPerUse(0.8333, 20, 3, money)).toBe("about 83¢ per use (20x a month for 3 years)");
+    expect(describeCostPerUse(12.5, 4, 1, money)).toBe("about $12.5 per use (4x a month for 1 year)");
+  });
+});
+
+/* ── Per-row what-if nudges ── */
+
+describe("calcPlanNudges", () => {
+  const now = new Date(2026, 6, 15);
+  const first = goal({ id: "first", targetAmount: 600, currentAmount: 0 });
+  const second = goal({ id: "second", targetAmount: 1000, currentAmount: 0 });
+  const almost = goal({ id: "almost", targetAmount: 500, currentAmount: 440 });
+
+  it("+$25/mo and +$100 now both pull the first rollover plan forward", () => {
+    // Base: 200/mo -> first ready month 3. +25: 225/mo -> still month 3 (600/225 = 2.67 -> 3).
+    // With 250/mo it would be month 3 too; use 300 base to see a difference:
+    // 300/mo -> month 2; 325/mo -> month 2. Pick numbers that move: 150/mo -> month 4; 175 -> month 4 (600/175=3.4->4).
+    // 100/mo -> month 6; 125/mo -> month 5. That moves.
+    const nudges = calcPlanNudges([first, second], "first", 100, "rollover", now);
+    expect(nudges.extraMonthly).toEqual({ amount: NUDGE_MONTHLY_STEP, monthsSooner: 1 });
+    // +100 today: 500 left at 100/mo -> month 5, one sooner than 6.
+    expect(nudges.lumpSum).toEqual({ amount: NUDGE_LUMP_SUM, monthsSooner: 1, finishes: false });
+  });
+
+  it("hides a nudge that wouldn't change the date", () => {
+    // 300/mo -> first ready month 2; 325/mo -> still month 2.
+    const nudges = calcPlanNudges([first, second], "first", 300, "rollover", now);
+    expect(nudges.extraMonthly).toBeNull();
+    // +100 today: 500 left at 300/mo -> month 2 as well.
+    expect(nudges.lumpSum).toBeNull();
+  });
+
+  it("offers to finish a nearly-funded plan with what's left, reporting the months skipped", () => {
+    // 60 left at 100/mo under rollover with `almost` first -> ready month 1.
+    const nudges = calcPlanNudges([almost, first], "almost", 100, "rollover", now);
+    expect(nudges.lumpSum).toEqual({ amount: 60, monthsSooner: 1, finishes: true });
+  });
+
+  it("with no set-aside, a lump sum that finishes the plan 'makes it happen'", () => {
+    const nudges = calcPlanNudges([almost], "almost", 0, "rollover", now);
+    expect(nudges.extraMonthly).toEqual({ amount: NUDGE_MONTHLY_STEP, monthsSooner: Infinity });
+    expect(nudges.lumpSum).toEqual({ amount: 60, monthsSooner: Infinity, finishes: true });
+  });
+
+  it("is empty for funded or unknown plans", () => {
+    const done = goal({ id: "done", targetAmount: 100, currentAmount: 100 });
+    expect(calcPlanNudges([done], "done", 100, "rollover", now)).toEqual({
+      extraMonthly: null,
+      lumpSum: null,
+    });
+    expect(calcPlanNudges([first], "nope", 100, "rollover", now)).toEqual({
+      extraMonthly: null,
+      lumpSum: null,
+    });
+  });
+
+  it("reflects the parallel split: a later plan still benefits from +$25/mo", () => {
+    // Even split 100/mo -> 50 each: second (1000) ready month 20 (first done at
+    // month 12, then second gets 100/mo: 12*50=600, 400 left / 100 = 4 -> month 16).
+    // +25: 62.5 each -> first done month 10 (625), second has 625, 375 left / 125 = 3 -> month 13.
+    const nudges = calcPlanNudges([first, second], "second", 100, "parallel", now);
+    expect(nudges.extraMonthly).toEqual({ amount: NUDGE_MONTHLY_STEP, monthsSooner: 3 });
   });
 });

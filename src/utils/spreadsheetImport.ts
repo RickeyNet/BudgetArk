@@ -799,6 +799,11 @@ const rowToSavingsGoal = (row: Record<string, unknown>): RowResult<Record<string
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const targetDate = parseDate(get(row, "TargetDate", "Target Date"));
   const priority = parsePlanPriority(get(row, "Priority"));
+  const usesPerMonth = parseOptionalPositive(get(row, "UsesPerMonth", "Uses Per Month"), 10_000);
+  const usefulLifeYears = parseOptionalPositive(
+    get(row, "UsefulLifeYears", "Useful Life Years"),
+    100
+  );
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
   // Preserve `updatedAt` to avoid clobbering partner data on next sync.
@@ -810,9 +815,23 @@ const rowToSavingsGoal = (row: Record<string, unknown>): RowResult<Record<string
     currentAmount,
     targetDate: targetDate || undefined,
     ...(priority !== undefined ? { priority } : {}),
+    ...(usesPerMonth !== undefined ? { usesPerMonth } : {}),
+    ...(usefulLifeYears !== undefined ? { usefulLifeYears } : {}),
     createdAt,
     updatedAt: updatedAtIso || createdAt,
   });
+};
+
+/**
+ * Optional positive number (cost-per-use inputs): blank = not tracked,
+ * junk or out of range drops the field rather than the row.
+ */
+const parseOptionalPositive = (raw: unknown, max: number): number | undefined => {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === "string" && !raw.trim()) return undefined;
+  const value = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(value) || value <= 0 || value > max) return undefined;
+  return value;
 };
 
 /** Largest purchase-planner rank accepted (mirrors isSavingsGoalItem). */

@@ -230,6 +230,8 @@ const SAVINGS_GOAL_COLUMNS = [
   "CurrentAmount",
   "TargetDate",
   "Priority",
+  "UsesPerMonth",
+  "UsefulLifeYears",
   "CreatedAt",
   "UpdatedAt",
 ] as const;
@@ -425,6 +427,9 @@ const savingsGoalToRow = (goal: SavingsGoal) => ({
   TargetDate: goal.targetDate ? formatDateOnly(goal.targetDate) : "",
   // Purchase planner "My order" rank (0 = first); blank when never ranked.
   Priority: goal.priority ?? "",
+  // Cost-per-use inputs; blank when not tracked.
+  UsesPerMonth: goal.usesPerMonth ?? "",
+  UsefulLifeYears: goal.usefulLifeYears ?? "",
   CreatedAt: goal.createdAt,
   UpdatedAt: goal.updatedAt ?? "",
 });

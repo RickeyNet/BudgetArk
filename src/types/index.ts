@@ -482,6 +482,13 @@ export interface SavingsGoal {
    * other field - older peers ignore it.
    */
   priority?: number;
+  /**
+   * Cost-per-use inputs for the purchase planner: how often the item will
+   * be used and for how many years. Both optional and only meaningful
+   * together; sync/export like any field, older peers ignore them.
+   */
+  usesPerMonth?: number;
+  usefulLifeYears?: number;
   createdAt: string;
   updatedAt: string;
   /** Tombstone marker - see Debt.deletedAt. */

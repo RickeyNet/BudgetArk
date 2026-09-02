@@ -40,15 +40,18 @@ import { addSavingsGoal } from "../storage/savingsGoalStorage";
 import {
   assessPurchaseFit,
   buildArkPurchaseGuidance,
+  calcCostPerUse,
   calcFinanceVsSave,
   calcHourlyTakeHome,
   calcHoursOfWork,
   calcPurchaseSliderMax,
   calcPurchaseTimeline,
   calcRequiredMonthly,
+  describeCostPerUse,
   describeHoursOfWork,
   FINANCE_TERM_OPTIONS,
   suggestFinanceApr,
+  USEFUL_LIFE_YEAR_OPTIONS,
 } from "../utils/purchasePlanner";
 import {
   getPurchasePlanSettings,
@@ -110,6 +113,9 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
   const [category, setCategory] = useState<SavingsGoalCategory>("other");
   const [needBy, setNeedBy] = useState("");
   const [showNeedByPicker, setShowNeedByPicker] = useState(false);
+  /** Cost-per-use inputs (0 uses = not tracked). */
+  const [usesPerMonth, setUsesPerMonth] = useState(0);
+  const [usefulLifeYears, setUsefulLifeYears] = useState(3);
 
   const toggleOpen = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -237,6 +243,8 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
     setMonthly(0);
     setCategory("other");
     setNeedBy("");
+    setUsesPerMonth(0);
+    setUsefulLifeYears(3);
   }, []);
 
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -253,6 +261,9 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
         targetAmount: price,
         currentAmount: alreadySaved,
         targetDate: needBy ? `${needBy}-01` : undefined,
+        ...(usesPerMonth > 0
+          ? { usesPerMonth, usefulLifeYears }
+          : {}),
         createdAt: now,
         updatedAt: now,
       });
@@ -266,7 +277,18 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
       triggerHaptic("error");
       setSaveError(describeError(error, "Couldn't start this fund. Please try again."));
     }
-  }, [alreadySaved, canSave, category, itemName, needBy, onGoalsChanged, price, resetForm]);
+  }, [
+    alreadySaved,
+    canSave,
+    category,
+    itemName,
+    needBy,
+    onGoalsChanged,
+    price,
+    resetForm,
+    usefulLifeYears,
+    usesPerMonth,
+  ]);
 
   /* ── Render helpers ── */
 
@@ -454,6 +476,60 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                     <View style={tool.efCard}>
                       <Text style={tool.efSectionTitle}>What it really costs</Text>
 
+                      {/* Cost per use */}
+                      {(() => {
+                        const perUse = calcCostPerUse(price, usesPerMonth, usefulLifeYears);
+                        return perUse !== null ? (
+                          <Text style={styles.fitText}>
+                            {`That's ${describeCostPerUse(perUse, usesPerMonth, usefulLifeYears, formatCurrency)}.`}
+                          </Text>
+                        ) : (
+                          <Text style={tool.efAutoHint}>
+                            How often will you use it? Slide up from zero to see the
+                            price per use - a good test for the wants column.
+                          </Text>
+                        );
+                      })()}
+                      <View style={tool.sliderGroup}>
+                        <SliderRow
+                          label="Times you'll use it per month"
+                          value={usesPerMonth}
+                          min={0}
+                          max={60}
+                          step={1}
+                          displayValue={usesPerMonth === 0 ? "not tracked" : `${usesPerMonth}x`}
+                          onValueChange={(value) => setUsesPerMonth(Math.round(value))}
+                          onAdjust={(delta) =>
+                            setUsesPerMonth((p) => Math.max(0, Math.min(60, p + delta)))
+                          }
+                        />
+                      </View>
+                      {usesPerMonth > 0 ? (
+                        <View style={tool.chipWrap}>
+                          {USEFUL_LIFE_YEAR_OPTIONS.map((years) => (
+                            <TouchableOpacity
+                              key={years}
+                              style={[tool.chip, usefulLifeYears === years && tool.chipActive]}
+                              onPress={() => setUsefulLifeYears(years)}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: usefulLifeYears === years }}
+                            >
+                              <Text
+                                style={[
+                                  tool.chipText,
+                                  usefulLifeYears === years && tool.chipTextActive,
+                                ]}
+                              >
+                                {years} yr{years === 1 ? "" : "s"}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      ) : null}
+
+                      <Text style={[tool.efSectionTitle, styles.analysisSubTitle]}>
+                        Hours of work
+                      </Text>
                       {/* Hours of work */}
                       {hoursOfWork && hourlyRate ? (
                         <Text style={styles.fitText}>

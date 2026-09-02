@@ -831,3 +831,136 @@ export const describeDebtOpportunityCost = (
     ? `${lead} would clear it ${months} and save ${money(Math.round(cost.interestSaved))} in interest.`
     : `${lead} would clear it ${months}.`;
 };
+
+/* ── Cost per use ── */
+
+/** "How long will you keep it" choices for the cost-per-use inputs. */
+export const USEFUL_LIFE_YEAR_OPTIONS: readonly number[] = [1, 2, 3, 5, 10];
+export const MAX_USES_PER_MONTH = 10_000;
+export const MAX_USEFUL_LIFE_YEARS = 100;
+
+/** Price spread over every expected use; null until both inputs are positive. */
+export const calcCostPerUse = (
+  price: number,
+  usesPerMonth: number | undefined,
+  usefulLifeYears: number | undefined
+): number | null => {
+  if (
+    !Number.isFinite(price) ||
+    price <= 0 ||
+    usesPerMonth === undefined ||
+    usefulLifeYears === undefined ||
+    !Number.isFinite(usesPerMonth) ||
+    !Number.isFinite(usefulLifeYears) ||
+    usesPerMonth <= 0 ||
+    usefulLifeYears <= 0
+  ) {
+    return null;
+  }
+  return price / (usesPerMonth * 12 * usefulLifeYears);
+};
+
+/** "about $0.83 per use (20x a month for 3 years)". */
+export const describeCostPerUse = (
+  costPerUse: number,
+  usesPerMonth: number,
+  usefulLifeYears: number,
+  money: (amount: number) => string
+): string => {
+  const rounded = Math.round(costPerUse * 100) / 100;
+  const cents = rounded < 1 ? `${Math.round(costPerUse * 100)}¢` : money(rounded);
+  const years = `${usefulLifeYears} year${usefulLifeYears === 1 ? "" : "s"}`;
+  return `about ${cents} per use (${usesPerMonth}x a month for ${years})`;
+};
+
+/* ── Per-row what-if nudges ── */
+
+export const NUDGE_MONTHLY_STEP = 25;
+export const NUDGE_LUMP_SUM = 100;
+
+export type PlanNudge = {
+  amount: number;
+  /** Months the plan lands sooner; Infinity = it goes from never to funded. */
+  monthsSooner: number;
+};
+
+export type PlanNudges = {
+  /** Raise the combined set-aside by NUDGE_MONTHLY_STEP. Null when it wouldn't help this plan. */
+  extraMonthly: PlanNudge | null;
+  /**
+   * A one-time contribution today (NUDGE_LUMP_SUM, or whatever is left when
+   * that's less - `finishes`). Null when the plan is funded or it wouldn't
+   * move the date.
+   */
+  lumpSum: (PlanNudge & { finishes: boolean }) | null;
+};
+
+const monthsSoonerBetween = (
+  base: number | null,
+  alt: number | null
+): number | null => {
+  if (alt === null) return null;
+  if (base === null) return Infinity;
+  return base - alt > 0 ? base - alt : null;
+};
+
+const readyMonthsFor = (
+  result: PlanProjectionResult,
+  goalId: string
+): number | null =>
+  result.projections.find((item) => item.goalId === goalId)?.readyInMonths ?? null;
+
+/**
+ * "What if I did a bit more?" for one plan, under the list's current order
+ * and allocation: re-runs the projection with the combined set-aside raised
+ * one step, and with a lump sum added to this plan today, and reports how
+ * many months sooner the plan lands in each case.
+ */
+export const calcPlanNudges = (
+  orderedGoals: readonly SavingsGoal[],
+  goalId: string,
+  combinedMonthly: number,
+  mode: PlanAllocationMode,
+  now: Date = new Date()
+): PlanNudges => {
+  const goal = orderedGoals.find((item) => item.id === goalId);
+  const remaining = goal ? remainingForPlan(goal) : 0;
+  if (!goal || remaining <= 0) return { extraMonthly: null, lumpSum: null };
+
+  const base = readyMonthsFor(
+    projectPurchasePlans(orderedGoals, combinedMonthly, mode, now),
+    goalId
+  );
+
+  const extraMonths = readyMonthsFor(
+    projectPurchasePlans(orderedGoals, combinedMonthly + NUDGE_MONTHLY_STEP, mode, now),
+    goalId
+  );
+  const extraSooner = monthsSoonerBetween(base, extraMonths);
+
+  const lump = Math.min(NUDGE_LUMP_SUM, remaining);
+  const withLump = orderedGoals.map((item) =>
+    item.id === goalId
+      ? { ...item, currentAmount: Math.max(0, item.currentAmount) + lump }
+      : item
+  );
+  const finishes = lump >= remaining;
+  const lumpMonths = readyMonthsFor(
+    projectPurchasePlans(withLump, combinedMonthly, mode, now),
+    goalId
+  );
+  const lumpSooner = finishes
+    ? base === null
+      ? Infinity
+      : base
+    : monthsSoonerBetween(base, lumpMonths);
+
+  return {
+    extraMonthly:
+      extraSooner !== null ? { amount: NUDGE_MONTHLY_STEP, monthsSooner: extraSooner } : null,
+    lumpSum:
+      lumpSooner !== null && (finishes || lumpSooner > 0)
+        ? { amount: lump, monthsSooner: lumpSooner, finishes }
+        : null,
+  };
+};

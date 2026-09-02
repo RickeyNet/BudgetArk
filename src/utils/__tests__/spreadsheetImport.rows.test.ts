@@ -311,6 +311,24 @@ describe("importSpreadsheet - Savings Goals rows", () => {
     expect(lastPayload().savingsGoals.map((g: { priority?: number }) => g.priority)).toEqual([0, 2, 1]);
   });
 
+  it("carries the cost-per-use inputs and drops blank or junk ones", async () => {
+    useXlsx({
+      "Savings Goals": [
+        { Name: "Espresso", Category: "other", TargetAmount: 600, CurrentAmount: 0, UsesPerMonth: 20, UsefulLifeYears: "3" },
+        { Name: "Bike", Category: "other", TargetAmount: 600, CurrentAmount: 0, UsesPerMonth: "", UsefulLifeYears: "lots" },
+        { Name: "Car", Category: "car", TargetAmount: 9000, CurrentAmount: 0, UsesPerMonth: -4, UsefulLifeYears: 500 },
+      ],
+    });
+    const result = await lastResult();
+    expect(result?.skippedRows).toBe(0);
+    const [espresso, bike, car] = lastPayload().savingsGoals;
+    expect(espresso).toMatchObject({ usesPerMonth: 20, usefulLifeYears: 3 });
+    expect(bike).not.toHaveProperty("usesPerMonth");
+    expect(bike).not.toHaveProperty("usefulLifeYears");
+    expect(car).not.toHaveProperty("usesPerMonth");
+    expect(car).not.toHaveProperty("usefulLifeYears");
+  });
+
   it("drops a blank or junk Priority instead of skipping the row", async () => {
     useXlsx({
       "Savings Goals": [

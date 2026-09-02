@@ -523,6 +523,10 @@ export const isSavingsGoalItem = (
     (item.targetDate === undefined || isValidDateValue(item.targetDate)) &&
     (item.priority === undefined ||
       isSafeNumber(item.priority, { min: 0, max: 10_000 })) &&
+    (item.usesPerMonth === undefined ||
+      isSafeNumber(item.usesPerMonth, { min: 0, max: 10_000 })) &&
+    (item.usefulLifeYears === undefined ||
+      isSafeNumber(item.usefulLifeYears, { min: 0, max: 100 })) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
     isOptionalIso(item.deletedAt)
