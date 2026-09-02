@@ -419,6 +419,8 @@ const AppContent: React.FC = () => {
       try {
         if (cta.kind === "budget-add-entry") {
           navigationRef.navigate("Budget", { quickAdd: {} });
+        } else if (cta.kind === "budget") {
+          navigationRef.navigate("Budget");
         } else if (cta.kind === "bridge") {
           navigationRef.navigate("Bridge");
         } else if (cta.kind === "charts") {

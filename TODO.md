@@ -405,13 +405,15 @@ Work through phases in order: finish the features first, then handle store prep 
 
 - [x] Subscription detective (built 2026-09-02, v1.10.1) - Charts-tab card over bank-imported entries: monthly (3 consecutive months, one charge each, consistent amounts) and yearly (consecutive years, same month ±1) merchants with no bill on file, yearly total, "Make it a bill" / "Not a subscription" (device-local ignore list). Pure `utils/subscriptionDetective.ts`.
 
-- [ ] Personal inflation rate - compare this year's spend per category against last year's for the same basket; show the user's own inflation % vs. headline CPI (bundled annual constant, no network).
+- [x] Personal inflation rate (built 2026-09-02, v1.10.1) - Charts-tab card: last 12 complete months vs the 12 before, per tracked month, on the categories spent in both; transfers excluded; vs bundled `HEADLINE_CPI_YOY_PERCENT` (`data/inflationData2026.ts`, refresh annually). Pure `utils/personalInflation.ts`.
 
 - [x] Unusual charge flags in the inbox (built 2026-09-02, v1.10.1) - ⚠️ line on inbox rows ≥2× (and ≥$25 over) the merchant's usual, or a first-ever charge ≥$200; flag only. Pure `utils/unusualCharges.ts`.
 
-- [ ] Paycheck cycle view - budget the month as pay periods (from the W-2 pay frequency) instead of calendar weeks: what's due before the next check, safe-to-spend until then.
+- [x] Paycheck cycle view (built 2026-09-02, v1.10.1) - Budget-tab "Until Payday" card (current month): device-local schedule (`@budgetark_paycheck_cycle`), next check, unpaid bills + debt minimums due before it, safe-to-spend + per day from the month-start balance. Pure `utils/paycheckCycle.ts`.
+  - [ ] Follow-up: estimate the next check's amount from recurring W-2 income entries and show "after payday" cash.
 
-- [ ] Net worth projection & goal - extend the net-worth chart forward from the current savings rate + debt payoff plan; let the user set a target net worth + date and show on/off track.
+- [x] Net worth projection & goal (built 2026-09-02, v1.10.1) - Bridge card under the history: budget surplus (6 tracked months, transfers excluded, minus minimums) grows assets, minimums-only schedule shrinks debts; goal = amount by month (device-local `@budgetark_net_worth_goal`), on/off track, required monthly, reach date. Pure `utils/netWorthProjection.ts`.
+  - [ ] Follow-up: sync the goal to partner phones (optional SyncDiff field); optional "extra toward debt" input on the projection.
 
 - [ ] Quarterly tax tracker - for 1099 income: quarterly set-aside vs. estimated payment due (IRS due dates bundled), with a "paid" checkbox per quarter. Reuses the take-home calculator brackets.
 

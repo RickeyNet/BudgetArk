@@ -124,6 +124,9 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `settleUp.test.ts` | `settleUp.ts` | Settle Up: per-person monthly shares (even split, bills once per month, fulfilment), settlements, deleted people, fail-closed record parse |
 | `subscriptionDetective.test.ts` | `subscriptionDetective.ts` | Subscription Detective: monthly/yearly detection, store + drifting-amount exclusions, bills on file, ignore list, totals, bill fields |
 | `unusualCharges.test.ts` | `unusualCharges.ts` | Inbox unusual-charge flags: merchant history, ratio + delta thresholds, first-time large charges, exclusions |
+| `personalInflation.test.ts` | `personalInflation.ts` | Personal inflation: 12-vs-12 month windows, per-tracked-month averaging, shared-basket rule, transfer exclusions, insufficient gate, ordering, display helpers |
+| `paycheckCycle.test.ts` | `paycheckCycle.ts` | Until Payday: fail-closed schedule parse, paydays per frequency (anchor stepping, short-month clamps), current period, due-before-payday list, safe-to-spend math |
+| `netWorthProjection.test.ts` | `netWorthProjection.ts` | Net worth projection: fail-closed goal parse, surplus estimate + transfer exclusions, minimums-only debt schedule, forward line, goal assessment (on/off track, required pace, reach date) |
 | `savingsInterest.test.ts` | `savingsInterest.ts` | Bridge APY lines: fail-closed input parse, yearly interest, high-yield gap and its display floor; `REFERENCE_HYSA_APY` is a bundled constant to refresh annually |
 | `sanitize.test.ts` | `sanitize.ts` | Control-character stripping on text input |
 | `paymentUrl.test.ts` | `paymentUrl.ts` | Payment-URL normalization and scheme rejection |
@@ -158,6 +161,8 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `purchasePlanSettingsStorage.test.ts` | `purchasePlanSettingsStorage.ts` | Device-local plan-list settings: patch merge between the two owning components, fail-closed over a corrupt record |
 | `settlementsStorage.test.ts` | `settlementsStorage.ts` | Device-local Settle Up records: append/remove in the write queue, junk store reads empty |
 | `subscriptionIgnoreStorage.test.ts` | `subscriptionIgnoreStorage.ts` | Device-local "not a subscription" merchant list: fail-closed parse, dedupe, cap |
+| `paycheckCycleStorage.test.ts` | `paycheckCycleStorage.ts` | Device-local pay schedule: round-trip, day normalization, invalid record refused, junk store reads unset |
+| `netWorthGoalStorage.test.ts` | `netWorthGoalStorage.ts` | Device-local net worth goal: round-trip, invalid goal refused, junk store reads unset |
 | `hiddenCategoriesStorage.test.ts` | `hiddenCategoriesStorage.ts` | Hidden built-ins: hide/restore round-trip, idempotent, protected/unknown names ignored, corrupt record reads empty |
 
 ### Bank connections (`src/services/connections`)

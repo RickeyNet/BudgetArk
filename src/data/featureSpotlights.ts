@@ -30,6 +30,7 @@ export type ProfileSpotlightSection =
 export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
   | { label: string; kind: "budget-add-entry" }
+  | { label: string; kind: "budget" }
   | { label: string; kind: "bridge" }
   | { label: string; kind: "charts" }
   | { label: string; kind: "debt-tracker" };
@@ -268,6 +269,24 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     blurb:
       "Under Profile → People, see what each person owes you for the month from the expenses assigned to them - shared ones split evenly - and mark them settled when they pay you back.",
     cta: { label: "Open Settle Up", kind: "profile-section", section: "people" },
+  },
+  {
+    id: "net-worth-goal",
+    sinceVersion: "1.10.1",
+    icon: "🧭",
+    title: "Where your net worth is heading",
+    blurb:
+      "The Bridge now carries your net worth line forward from your budget's monthly surplus and your debts at their minimums. Set a goal - an amount by a month - and see on track or off, what it would take per month, and when today's pace gets there.",
+    cta: { label: "See the projection", kind: "bridge" },
+  },
+  {
+    id: "paycheck-cycle",
+    sinceVersion: "1.10.1",
+    icon: "📆",
+    title: "Until Payday",
+    blurb:
+      "Budget by pay period, not calendar month: tell BudgetArk when you're paid and the Budget tab shows what's due before your next check and what's safe to spend until then.",
+    cta: { label: "Set up pay periods", kind: "budget" },
   },
   {
     id: "purchase-plan-priorities",

@@ -140,6 +140,7 @@ import {
 import { totalsByBucket } from "../utils/budgetBucketMath";
 import { summarizePaychecks } from "../utils/paycheckMath";
 import CashFlowCard from "../components/CashFlowCard";
+import PaycheckCycleCard from "../components/PaycheckCycleCard";
 import MonthBalancePromptModal from "../components/MonthBalancePromptModal";
 import {
   getLastBalancePromptMonth,
@@ -1424,6 +1425,21 @@ const BudgetScreen: React.FC = () => {
           setShowBalanceModal(true);
         }}
       />
+
+      {/* Pay-period slice of the current month only: a past or future month
+          has no "next payday" to count down to. */}
+      {selectedMonthKey === getMonthKey(new Date()) ? (
+        <PaycheckCycleCard
+          entries={entries}
+          debts={debts}
+          payments={payments}
+          startingBalance={monthBalances[selectedMonthKey]?.balance ?? null}
+          onSetBalance={() => {
+            setBalanceModalIsPrompt(false);
+            setShowBalanceModal(true);
+          }}
+        />
+      ) : null}
 
       <DueDateReminderBanner
         entries={entries}

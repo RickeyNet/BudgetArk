@@ -70,6 +70,7 @@ import WhatIfSpendingCard from "../components/WhatIfSpendingCard";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import TaxCalculatorCard from "../components/TaxCalculatorCard";
 import SubscriptionDetectiveCard from "../components/SubscriptionDetectiveCard";
+import PersonalInflationCard from "../components/PersonalInflationCard";
 import type {
   AssetAccount,
   BudgetEntry,
@@ -1699,6 +1700,9 @@ const ChartsScreen: React.FC = () => {
           entries={toolEntries}
           onEntriesChanged={handleToolEntriesChanged}
         />
+
+        {/* ── Personal Inflation Rate (your basket vs headline CPI) ── */}
+        <PersonalInflationCard entries={toolEntries} customCategories={customCategories} />
 
         {/* ── Take-Home Pay (US income tax estimator) ── */}
         <TaxCalculatorCard />

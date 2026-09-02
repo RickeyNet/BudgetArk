@@ -27,6 +27,7 @@ import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { generateUUID } from "../utils/uuid";
 import { describeApy, describeApyGap, parseApyInput } from "../utils/savingsInterest";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
+import NetWorthProjectionCard from "../components/NetWorthProjectionCard";
 import TrackingStripCard from "../components/TrackingStripCard";
 import CashFlowChart, { type CashFlowPoint } from "../components/CashFlowChart";
 import Medal from "../components/Medal";
@@ -1187,6 +1188,16 @@ const BridgeScreen: React.FC = () => {
           colors={colors}
         />
       </View>
+
+      <NetWorthProjectionCard
+        entries={entries}
+        debts={debts}
+        snapshots={netWorthSnapshots}
+        totalAssets={netWorthTotals.totalAssets}
+        netWorth={netWorthTotals.netWorth}
+        formatCurrency={formatCurrency}
+        formatCompactCurrency={formatCompactCurrency}
+      />
 
       {hasCashFlow ? (
         <CashFlowChart
