@@ -147,7 +147,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `collectionRepair.test.ts` / `referentialCleanup.test.ts` | `collectionRepair.ts` / person+business stores | Atomic read-repair; person/business deletion cascades to merchant rules and links |
 | `customCategoriesStorage.test.ts` | `customCategoriesStorage.ts` | Name validation, icon normalization, cap, collision rules, fail-closed reads |
 | `monthlyBalanceStorage.test.ts` / `netWorthSnapshotStorage.test.ts` | matching modules | Month-start balances + prompt tracking; daily net-worth history retention/repair |
-| `reviewInboxStorage.test.ts` | `reviewInboxStorage.ts` | Ingest-ledger TTL pruning, 500-item inbox cap ordering |
+| `reviewInboxStorage.test.ts` | `reviewInboxStorage.ts` | Ingest-ledger TTL pruning, partner-synced dismissal merge (newer `at` wins), 500-item inbox cap ordering |
 | `connectionSecretsStorage.test.ts` | `connectionSecretsStorage.ts` | Rule 2: `EncryptionUnavailableError` propagates, provider-mismatch refusal |
 | `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
 | `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, stale `enabled:false` dropped, corrupt record recovery |
@@ -159,18 +159,18 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | --- | --- | --- |
 | `simplefinParser.test.ts` / `tellerParser.test.ts` | provider parsers | Fail-closed parsing of bank responses (https enforced for SimpleFIN) |
 | `http1.test.ts` / `tellerMtlsClient.test.ts` | transport | Minimal HTTP/1 client; Teller mTLS peer-identity verification |
-| `ingest.test.ts` / `merchant.test.ts` | `ingest.ts` / `merchant.ts` | Transaction ingest planning (dedupe, twins, pending→posted), merchant normalization |
+| `ingest.test.ts` / `merchant.test.ts` | `ingest.ts` / `merchant.ts` | Transaction ingest planning (dedupe, twins, pending→posted), inbox reconciliation against partner-synced entries/dismissals, the synced-dismissal selector, merchant normalization |
 | `syncGate.test.ts` / `linkPreferences.test.ts` | `syncGate.ts` / `linkPreferences.ts` | Sync gating; account-link edit rules |
 | `debtBalances.test.ts` | `debtBalances.ts` | Bank → credit-card balance mirroring: sign-tolerant magnitude, high-water `originalBalance`, link/debt gating |
 | `assetCategoryHint.test.ts` | `assetCategoryHint.ts` | Bridge category guessed from a bank account name (401k/IRA → retirement, HSA, brokerage, savings, checking; fallback checking) |
-| `reviewInboxService.test.ts` | `reviewInboxService.ts` | Approve/skip/bulk flows, merchant-rule creation and edits, crash-safe write order |
+| `reviewInboxService.test.ts` | `reviewInboxService.ts` | Approve/skip/bulk flows, merchant-rule creation and edits, crash-safe write order, storage-backed inbox reconciliation |
 | `connectionsSyncService.test.ts` | `connectionsSyncService.ts` | Per-connection orchestration: gates, provider routing, balance clamping, keep-alive stamping, failure isolation, secrets never written to non-secret keys |
 
 ### Partner sync (`src/sync`)
 
 | Suite | Module under test | Feature it guards |
 | --- | --- | --- |
-| `diffEngine.test.ts` / `diffEngine.collections.test.ts` | `diffEngine.ts` | The LAN-sync trust boundary: outgoing filtering, incoming validation, last-write-wins + tombstones for every collection, limit-history first-sync split, bucket-override merge |
+| `diffEngine.test.ts` / `diffEngine.collections.test.ts` | `diffEngine.ts` | The LAN-sync trust boundary: outgoing filtering, incoming validation, last-write-wins + tombstones for every collection, limit-history first-sync split, bucket-override merge, dismissed-transaction send/validate/merge + inbox reconcile hook |
 | `transportService.test.ts` | `transportService.ts` | Full-envelope HMAC, protocol-version gate, age + nonce replay protection (fake timers), frame buffering |
 | `pairingService.test.ts` / `pairingStorage.test.ts` | `pairingService.ts` / `pairingStorage.ts` | Pairing handshake flows and codes; sync watermark reset after import |
 | `syncOrchestrator.test.ts` / `autoSyncManager.test.ts` / `discoveryService.test.ts` | matching modules | End-to-end sync coordination; auto-sync gates; mDNS publish/browse |

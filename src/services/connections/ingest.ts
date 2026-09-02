@@ -18,6 +18,12 @@
  *      (the twin may be in the inbox, or already decided in the ledger)
  *   6. otherwise                             -> new inbox item
  *
+ * Those defenses only see transactions as they are fetched; rows already
+ * in the inbox are revisited by planInboxReconciliation (below), which
+ * retires them once a partner's entry or dismissal for the same
+ * transaction arrives. selectSyncableDismissals picks the ledger slice
+ * partner sync carries.
+ *
  * Node-testable: no storage, no fetch, injectable clock via `now`.
  */
 
@@ -138,6 +144,157 @@ export interface IngestPlan {
   autoDismissed: Record<string, IngestLedgerEntry>;
 }
 
+/**
+ * Day-tolerant lookup of ledger decisions made while a transaction was
+ * pending (they carry a pendingFingerprint), so a posted twin that the
+ * provider reissued under a new id can be recognized. A decision can be the
+ * twin of exactly ONE posted transaction: once a posted id has aliased to it
+ * (this batch or an earlier one - aliases are persisted in the ledger), it
+ * must not absorb a second same-amount purchase from the same account
+ * within the window, which would otherwise sit in the inbox as "pending"
+ * forever. Shared by planIngest and planInboxReconciliation.
+ */
+export const buildDecidedTwinFinder = (
+  ledger: IngestLedger,
+): {
+  find: (fingerprint: string) => string | null;
+  claim: (decidedKey: string) => void;
+} => {
+  const decidedByPrefix = new Map<string, { day: string; key: string }[]>();
+  const claimed = new Set<string>();
+  for (const key of Object.keys(ledger)) {
+    const entry = ledger[key];
+    if (entry.aliasOf) claimed.add(entry.aliasOf);
+    if (!entry.pendingFingerprint) continue;
+    const parts = splitPendingFingerprint(entry.pendingFingerprint);
+    if (!parts) continue;
+    const list = decidedByPrefix.get(parts.prefix) ?? [];
+    list.push({ day: parts.day, key });
+    decidedByPrefix.set(parts.prefix, list);
+  }
+  return {
+    find: (fingerprint) => {
+      const parts = splitPendingFingerprint(fingerprint);
+      if (!parts) return null;
+      const candidates = decidedByPrefix.get(parts.prefix) ?? [];
+      let best: { key: string; distance: number } | null = null;
+      for (const candidate of candidates) {
+        if (claimed.has(candidate.key)) continue;
+        const distance = daysBetween(candidate.day, parts.day);
+        if (!(distance <= PENDING_MATCH_WINDOW_DAYS)) continue;
+        if (!best || distance < best.distance) {
+          best = { key: candidate.key, distance };
+        }
+      }
+      return best?.key ?? null;
+    },
+    claim: (decidedKey) => {
+      claimed.add(decidedKey);
+    },
+  };
+};
+
+export interface ReconcileInputs {
+  inbox: PendingTransaction[];
+  ledger: IngestLedger;
+  /** externalTxId -> BudgetEntry id for ALL entries, tombstoned included. */
+  knownEntries: Map<string, string>;
+  /** ISO timestamp stamped on the ledger entries this plan writes. */
+  now: string;
+}
+
+export interface ReconcilePlan {
+  /** Inbox rows that are already decided and must go. */
+  removeIds: string[];
+  /** Ledger entries recording WHY each row went, so re-fetches stay quiet. */
+  ledgerWrites: Record<string, IngestLedgerEntry>;
+}
+
+/**
+ * Retire inbox rows that were decided somewhere else after the row was
+ * created. planIngest's dedupe only guards transactions as they are
+ * FETCHED, so it never revisits a row already sitting in the inbox; this
+ * pass closes the ordering gaps that partner sync opens (the partner's
+ * approved entries and dismissed-transaction decisions can arrive after
+ * this device's connection has already fetched the same transactions).
+ * Run it before every ingest and after every applied partner diff.
+ *
+ *  1. ledger has the row's identity key   -> remove (decided elsewhere)
+ *  2. an entry carries the row's key       -> remove + ledger "approved"
+ *  3. posted row whose pending twin was
+ *     decided under a different id         -> remove + ledger alias
+ *
+ * Pure: no storage, injectable clock.
+ */
+export const planInboxReconciliation = (input: ReconcileInputs): ReconcilePlan => {
+  const plan: ReconcilePlan = { removeIds: [], ledgerWrites: {} };
+  const decidedTwins = buildDecidedTwinFinder(input.ledger);
+
+  for (const item of input.inbox) {
+    if (input.ledger[item.id]) {
+      plan.removeIds.push(item.id);
+      continue;
+    }
+
+    const entryId = input.knownEntries.get(item.id);
+    if (entryId !== undefined) {
+      plan.removeIds.push(item.id);
+      plan.ledgerWrites[item.id] = {
+        status: "approved",
+        budgetEntryId: entryId,
+        at: input.now,
+        pendingFingerprint: item.pending
+          ? pendingFingerprintFor(item.externalAccountId, item.amount, item.postedAt)
+          : undefined,
+      };
+      continue;
+    }
+
+    if (!item.pending) {
+      const decidedKey = decidedTwins.find(
+        pendingFingerprintFor(item.externalAccountId, item.amount, item.postedAt),
+      );
+      if (decidedKey) {
+        decidedTwins.claim(decidedKey);
+        plan.removeIds.push(item.id);
+        plan.ledgerWrites[item.id] = {
+          status: input.ledger[decidedKey].status,
+          budgetEntryId: input.ledger[decidedKey].budgetEntryId,
+          at: input.now,
+          aliasOf: decidedKey,
+        };
+      }
+    }
+  }
+  return plan;
+};
+
+/**
+ * The slice of the ingest ledger that partner sync carries: dismissed
+ * decisions (and the aliases that point at them - aliases copy the
+ * original's status). Approved decisions never travel this way - the
+ * BudgetEntry they created already carries the key (externalTxId), and a
+ * decision behind a private entry must not leak. Incremental by `at`
+ * unless `sendAll` (first sync / one-time backfill).
+ */
+export const selectSyncableDismissals = (
+  ledger: IngestLedger,
+  sinceMs: number,
+  sendAll: boolean,
+): Record<string, IngestLedgerEntry> => {
+  const out: Record<string, IngestLedgerEntry> = {};
+  for (const key of Object.keys(ledger)) {
+    const entry = ledger[key];
+    if (entry.status !== "dismissed") continue;
+    if (!sendAll) {
+      const at = Date.parse(entry.at);
+      if (!Number.isFinite(at) || at <= sinceMs) continue;
+    }
+    out[key] = entry;
+  }
+  return out;
+};
+
 export const planIngest = (input: IngestInputs): IngestPlan => {
   const plan: IngestPlan = {
     newInboxItems: [],
@@ -165,42 +322,8 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     list.push(item);
     pendingInboxByAccount.set(item.externalAccountId, list);
   }
-  // Ledger decisions made while pending, indexed by account+amount; the day
-  // is matched with slack below because posting shifts the date.
-  const decidedByPrefix = new Map<string, { day: string; key: string }[]>();
-  for (const key of Object.keys(input.ledger)) {
-    const fp = input.ledger[key].pendingFingerprint;
-    if (!fp) continue;
-    const parts = splitPendingFingerprint(fp);
-    if (!parts) continue;
-    const list = decidedByPrefix.get(parts.prefix) ?? [];
-    list.push({ day: parts.day, key });
-    decidedByPrefix.set(parts.prefix, list);
-  }
-  // A decision can be the twin of exactly ONE posted transaction. Once a
-  // posted id has aliased to it (this batch or an earlier one - aliases are
-  // persisted in the ledger), it must not absorb a second same-amount
-  // purchase from the same account within the window: that second posted
-  // tx belongs to a different pending item, which would otherwise sit in
-  // the inbox as "pending" forever (never migrated, never auto-approved).
-  const claimedDecisionKeys = new Set<string>();
-  for (const key of Object.keys(input.ledger)) {
-    const aliasOf = input.ledger[key].aliasOf;
-    if (aliasOf) claimedDecisionKeys.add(aliasOf);
-  }
-  const findDecidedTwinKey = (fingerprint: string): string | null => {
-    const parts = splitPendingFingerprint(fingerprint);
-    if (!parts) return null;
-    const candidates = decidedByPrefix.get(parts.prefix) ?? [];
-    let best: { key: string; distance: number } | null = null;
-    for (const candidate of candidates) {
-      if (claimedDecisionKeys.has(candidate.key)) continue;
-      const distance = daysBetween(candidate.day, parts.day);
-      if (!(distance <= PENDING_MATCH_WINDOW_DAYS)) continue;
-      if (!best || distance < best.distance) best = { key: candidate.key, distance };
-    }
-    return best?.key ?? null;
-  };
+  const decidedTwins = buildDecidedTwinFinder(input.ledger);
+  const findDecidedTwinKey = decidedTwins.find;
 
   /**
    * Rule-derived suggestions for a merchant key. Shared by the new-item
@@ -285,6 +408,15 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
   // twin search also consulted handledKeys, X would find no eligible twin
   // and become a second inbox row for the same purchase.
   const claimedTwinIds = new Set<string>();
+  const findPendingInboxTwin = (
+    tx: NormalizedTransaction,
+  ): PendingTransaction | undefined =>
+    (pendingInboxByAccount.get(tx.externalAccountId) ?? []).find(
+      (item) =>
+        item.amount === tx.amount &&
+        daysBetween(item.postedAt, tx.postedAt) <= PENDING_MATCH_WINDOW_DAYS &&
+        !claimedTwinIds.has(item.id),
+    );
 
   for (const tx of input.fetched) {
     if (!importableAccounts.has(tx.externalAccountId)) continue;
@@ -294,7 +426,27 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     if (handledKeys.has(key)) continue;
     handledKeys.add(key);
 
-    if (input.ledger[key]) continue;
+    if (input.ledger[key]) {
+      // Decided under this exact id - but if that decision arrived via
+      // partner sync for the POSTED id while this device still holds the
+      // PENDING twin in its inbox, the twin would never migrate (this branch
+      // runs before the twin path) and would sit as "pending" forever.
+      // Alias the twin's id to the decision; the sync service retires
+      // inbox rows whose id gains an alias.
+      if (!tx.pending) {
+        const twin = findPendingInboxTwin(tx);
+        if (twin && !input.ledger[twin.id]) {
+          claimedTwinIds.add(twin.id);
+          plan.ledgerAliases[twin.id] = {
+            status: input.ledger[key].status,
+            budgetEntryId: input.ledger[key].budgetEntryId,
+            at: input.now,
+            aliasOf: key,
+          };
+        }
+      }
+      continue;
+    }
     if (input.knownEntryExternalIds.has(key)) continue;
 
     const description = tx.description.slice(0, MAX_DESCRIPTION_LENGTH);
@@ -345,7 +497,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       // (transacted) date and this tx carries the settlement date.
       const decidedKey = findDecidedTwinKey(fingerprint);
       if (decidedKey) {
-        claimedDecisionKeys.add(decidedKey);
+        decidedTwins.claim(decidedKey);
         plan.ledgerAliases[key] = {
           status: input.ledger[decidedKey].status,
           budgetEntryId: input.ledger[decidedKey].budgetEntryId,
@@ -356,13 +508,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       }
 
       // Twin still sitting in the inbox -> migrate it to the new id.
-      const twins = pendingInboxByAccount.get(tx.externalAccountId) ?? [];
-      const twin = twins.find(
-        (item) =>
-          item.amount === tx.amount &&
-          daysBetween(item.postedAt, tx.postedAt) <= PENDING_MATCH_WINDOW_DAYS &&
-          !claimedTwinIds.has(item.id),
-      );
+      const twin = findPendingInboxTwin(tx);
       if (twin) {
         claimedTwinIds.add(twin.id);
         // If the pending id was ALSO listed in this batch and drifted, that

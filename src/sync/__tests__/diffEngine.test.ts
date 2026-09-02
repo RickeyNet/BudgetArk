@@ -127,6 +127,24 @@ jest.mock("../../storage/monthlyBalanceStorage", () => ({
     mockState.monthBalances = v;
   }),
 }));
+jest.mock("../../storage/reviewInboxStorage", () => ({
+  getIngestLedger: jest.fn(async () => mockState.ledger),
+  // Same LWW rule as the real store: union by key, strictly-newer `at` wins.
+  mergeLedgerFromSync: jest.fn(async (incoming: any) => {
+    let applied = 0;
+    for (const key of Object.keys(incoming)) {
+      const local = mockState.ledger[key];
+      if (!local || Date.parse(incoming[key].at) > Date.parse(local.at)) {
+        mockState.ledger[key] = incoming[key];
+        applied++;
+      }
+    }
+    return applied;
+  }),
+}));
+jest.mock("../../services/connections/reviewInboxService", () => ({
+  reconcileInboxWithDecisions: jest.fn(async () => 0),
+}));
 jest.mock("../../storage/encryptedStorage", () => ({
   getItem: jest.fn(async (k: string) =>
     mockState.encStore.has(k) ? mockState.encStore.get(k) : null
@@ -207,6 +225,7 @@ const freshState = () => ({
   bucketOverrides: {},
   snapshots: [],
   monthBalances: {},
+  ledger: {},
   limitsByMonth: {},
   encStore: new Map<string, string>(),
 });
@@ -275,6 +294,8 @@ describe("computeOutgoingDiff", () => {
   it("markBackfillSyncDone persists the flag", async () => {
     await markBackfillSyncDone();
     expect(mockState.encStore.get("@budgetark_sync_backfill_done_v1")).toBe("true");
+    // The dismissed-transactions field has its own marker (added later).
+    expect(mockState.encStore.get("@budgetark_sync_backfill_dismissals_v1")).toBe("true");
   });
 
   it("never sends private budget entries - live or tombstoned", async () => {
@@ -989,5 +1010,112 @@ describe("applyIncomingDiff - milestone plan & payoff strategy LWW", () => {
       })
     );
     expect(count).toBe(2);
+  });
+});
+
+describe("dismissed bank transactions sync", () => {
+  const inboxService = require("../../services/connections/reviewInboxService");
+  const KEY_A = "simplefin:ACT-1:TXN-A";
+  const KEY_B = "simplefin:ACT-1:TXN-B";
+  const dismissed = (at: string, over: Record<string, unknown> = {}) => ({
+    status: "dismissed" as const,
+    at,
+    ...over,
+  });
+
+  it("sends only dismissals; approvals never leave the device", async () => {
+    mockState.ledger = {
+      [KEY_A]: dismissed(NEW, { pendingFingerprint: "ACT-1|-25|2026-05-30" }),
+      [KEY_B]: { status: "approved", at: NEW, budgetEntryId: "e1" },
+    };
+    const diff = await computeOutgoingDiff(null);
+    expect(diff.dismissedTransactions).toEqual({
+      [KEY_A]: dismissed(NEW, { pendingFingerprint: "ACT-1|-25|2026-05-30" }),
+    });
+  });
+
+  it("omits the field when there is nothing to send", async () => {
+    mockState.ledger = { [KEY_B]: { status: "approved", at: NEW, budgetEntryId: "e1" } };
+    const diff = await computeOutgoingDiff(null);
+    expect(diff.dismissedTransactions).toBeUndefined();
+  });
+
+  it("sends the full dismissal backlog until its own backfill flag is set, then only newer ones", async () => {
+    mockState.ledger = { [KEY_A]: dismissed(OLD), [KEY_B]: dismissed(NEW) };
+    // The v1 flag alone doesn't cover this field - couples past the first
+    // backfill still need their pre-existing dismissals sent once.
+    mockState.encStore.set("@budgetark_sync_backfill_done_v1", "true");
+    const backlog = await computeOutgoingDiff(MID);
+    expect(Object.keys(backlog.dismissedTransactions!).sort()).toEqual([KEY_A, KEY_B]);
+
+    await markBackfillSyncDone();
+    const incremental = await computeOutgoingDiff(MID);
+    expect(Object.keys(incremental.dismissedTransactions!)).toEqual([KEY_B]);
+  });
+
+  it("rejects malformed maps, approvals, bad keys, and oversized maps outright", async () => {
+    await expect(
+      applyIncomingDiff(emptyDiff({ dismissedTransactions: "corrupt" as any }))
+    ).rejects.toThrow(/malformed dismissed transactions/i);
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({
+          dismissedTransactions: { [KEY_A]: { status: "approved", at: NEW } as any },
+        })
+      )
+    ).rejects.toThrow(/invalid dismissed transaction/i);
+    await expect(
+      applyIncomingDiff(
+        emptyDiff({ dismissedTransactions: { "no-colon-key": dismissed(NEW) } })
+      )
+    ).rejects.toThrow(/invalid dismissed transaction/i);
+    const huge: Record<string, any> = {};
+    for (let i = 0; i <= 5000; i++) huge[`simplefin:ACT-1:${i}`] = dismissed(NEW);
+    await expect(
+      applyIncomingDiff(emptyDiff({ dismissedTransactions: huge }))
+    ).rejects.toThrow(/too many dismissed transactions/i);
+    expect(mockState.ledger).toEqual({}); // nothing was written
+    expect(inboxService.reconcileInboxWithDecisions).not.toHaveBeenCalled();
+  });
+
+  it("merges into the ledger (newer wins) and reconciles the inbox afterwards", async () => {
+    mockState.ledger = { [KEY_A]: dismissed(NEW) };
+    (inboxService.reconcileInboxWithDecisions as jest.Mock).mockResolvedValueOnce(2);
+    const changed = await applyIncomingDiff(
+      emptyDiff({
+        dismissedTransactions: {
+          [KEY_A]: dismissed(OLD), // older - ignored
+          [KEY_B]: dismissed(NEW, { aliasOf: KEY_A }), // new - applied
+        },
+      })
+    );
+    expect(mockState.ledger).toEqual({
+      [KEY_A]: dismissed(NEW),
+      [KEY_B]: dismissed(NEW, { aliasOf: KEY_A }),
+    });
+    expect(inboxService.reconcileInboxWithDecisions).toHaveBeenCalledTimes(1);
+    expect(changed).toBe(1 + 2); // one ledger key + two retired inbox rows
+  });
+
+  it("also reconciles the inbox when a diff brings budget entries (partner approvals)", async () => {
+    await applyIncomingDiff(
+      emptyDiff({
+        budgetEntries: [
+          { action: "upsert", record: budgetEntry({ externalTxId: KEY_A, source: "bank" }) },
+        ],
+      })
+    );
+    expect(inboxService.reconcileInboxWithDecisions).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the reconciliation when the diff carries neither", async () => {
+    await applyIncomingDiff(emptyDiff({ debts: [{ action: "upsert", record: debt() }] }));
+    expect(inboxService.reconcileInboxWithDecisions).not.toHaveBeenCalled();
+  });
+
+  it("an older peer's diff without the field applies unchanged", async () => {
+    mockState.ledger = { [KEY_A]: dismissed(NEW) };
+    await applyIncomingDiff(emptyDiff());
+    expect(mockState.ledger).toEqual({ [KEY_A]: dismissed(NEW) });
   });
 });

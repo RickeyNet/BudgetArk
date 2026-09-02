@@ -61,6 +61,12 @@ import {
   getMonthStartBalances,
   saveMonthStartBalancesFromSync,
 } from "../storage/monthlyBalanceStorage";
+import {
+  getIngestLedger,
+  mergeLedgerFromSync,
+} from "../storage/reviewInboxStorage";
+import { selectSyncableDismissals } from "../services/connections/ingest";
+import { reconcileInboxWithDecisions } from "../services/connections/reviewInboxService";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import { isBuiltInCategory } from "../data/categoryIcons";
 import { isBudgetBucket } from "../data/categoryBuckets";
@@ -88,6 +94,8 @@ import {
   isBusinessItem,
   isPersonItem,
   isMonthStartBalanceRecord,
+  isIngestIdentityKey,
+  isIngestLedgerEntryRecord,
   isNetWorthSnapshotItem,
   isValidImportCategory,
   isMonthKey,
@@ -107,12 +115,30 @@ import {
  * means one redundant - idempotent - full send on the next sync.
  */
 const SYNC_BACKFILL_KEY = "@budgetark_sync_backfill_done_v1";
+/**
+ * Second backfill marker, for the dismissed-transactions field (v1.10.1).
+ * Separate key on purpose: couples already past the first backfill would
+ * otherwise never send the dismissals they made before this version.
+ */
+const SYNC_DISMISSALS_BACKFILL_KEY = "@budgetark_sync_backfill_dismissals_v1";
+
+/**
+ * Hard cap on the dismissed-transactions map a peer may send. The ledger
+ * is pruned at 120 days, so a real device holds a few hundred decisions at
+ * most; anything near this is a hostile or corrupt peer, and rejecting
+ * keeps a bad diff from bloating storage.
+ */
+export const MAX_SYNCED_DISMISSALS = 5000;
 
 const isBackfillSyncDone = async (): Promise<boolean> =>
   (await EncryptedStorage.getItem(SYNC_BACKFILL_KEY)) === "true";
 
+const isDismissalsBackfillDone = async (): Promise<boolean> =>
+  (await EncryptedStorage.getItem(SYNC_DISMISSALS_BACKFILL_KEY)) === "true";
+
 export const markBackfillSyncDone = async (): Promise<void> => {
   await EncryptedStorage.setItem(SYNC_BACKFILL_KEY, "true");
+  await EncryptedStorage.setItem(SYNC_DISMISSALS_BACKFILL_KEY, "true");
 };
 
 /* ─── Outgoing Diff ─── */
@@ -149,6 +175,8 @@ export const computeOutgoingDiff = async (
     netWorthSnapshots,
     monthStartBalances,
     backfillDone,
+    ingestLedger,
+    dismissalsBackfillDone,
   ] = await Promise.all([
     getDebtsIncludingDeleted(),
     getPaymentsIncludingDeleted(),
@@ -165,6 +193,8 @@ export const computeOutgoingDiff = async (
     getNetWorthSnapshots(),
     getMonthStartBalances(),
     isBackfillSyncDone(),
+    getIngestLedger(),
+    isDismissalsBackfillDone(),
   ]);
 
   const since = lastSyncTimestamp ? new Date(lastSyncTimestamp).getTime() : 0;
@@ -281,6 +311,17 @@ export const computeOutgoingDiff = async (
     // incremental filter means no backfill flag is ever needed.
     monthStartBalances:
       Object.keys(monthStartBalances).length > 0 ? monthStartBalances : undefined,
+    // Dismissed bank transactions: incremental by decision time, sent in
+    // full once after updating to the version that added the field (its
+    // own backfill flag - see SYNC_DISMISSALS_BACKFILL_KEY).
+    dismissedTransactions: (() => {
+      const selected = selectSyncableDismissals(
+        ingestLedger,
+        since,
+        !lastSyncTimestamp || !dismissalsBackfillDone,
+      );
+      return Object.keys(selected).length > 0 ? selected : undefined;
+    })(),
     debtMilestonePlan:
       !lastSyncTimestamp ||
       new Date(milestonePlan.updatedAt).getTime() > since
@@ -419,6 +460,28 @@ const validateIncomingDiff = (diff: SyncDiff): void => {
     for (const [monthKey, record] of Object.entries(diff.monthStartBalances)) {
       if (!isMonthKey(monthKey) || !isMonthStartBalanceRecord(record)) {
         throw new Error("Sync rejected: invalid month-start balance");
+      }
+    }
+  }
+
+  // Dismissed bank transactions: `identityKey → ledger entry` map. Keys
+  // gate on the identity-key shape, values on the ledger-entry validator
+  // (dismissed only - a peer can't mark something "approved"), and the
+  // whole map on a size cap. Absent field = older peer, fine.
+  if (diff.dismissedTransactions !== undefined) {
+    if (!isObject(diff.dismissedTransactions)) {
+      throw new Error("Sync rejected: malformed dismissed transactions");
+    }
+    const keys = Object.keys(diff.dismissedTransactions);
+    if (keys.length > MAX_SYNCED_DISMISSALS) {
+      throw new Error("Sync rejected: too many dismissed transactions");
+    }
+    for (const key of keys) {
+      if (
+        !isIngestIdentityKey(key) ||
+        !isIngestLedgerEntryRecord(diff.dismissedTransactions[key])
+      ) {
+        throw new Error("Sync rejected: invalid dismissed transaction");
       }
     }
   }
@@ -720,6 +783,18 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
     changedCount += applied;
   }
 
+  // Merge dismissed bank transactions into the ingest ledger - union by
+  // identity key, strictly-newer `at` wins (ties keep local, so a
+  // re-broadcast is a no-op). Only actually-applied keys count.
+  let dismissalsApplied = 0;
+  if (
+    diff.dismissedTransactions &&
+    Object.keys(diff.dismissedTransactions).length > 0
+  ) {
+    dismissalsApplied = await mergeLedgerFromSync(diff.dismissedTransactions);
+    changedCount += dismissalsApplied;
+  }
+
   // Merge net-worth snapshots - union by dayKey, strictly-newer capturedAt
   // wins (ties keep local: identical content, no churn). Mirrors
   // importData's computeMergedSnapshots so import and sync agree on
@@ -777,6 +852,19 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
         updatedAt: incomingStamp,
       });
       changedCount++;
+    }
+  }
+
+  // The partner's approved entries and dismissals may cover transactions
+  // this device's bank connection already fetched into its Review Inbox;
+  // retire those rows now rather than on the next bank-sync pass. Runs
+  // after the entry merge above so it sees the merged externalTxIds.
+  // Best-effort: a hiccup here must not reject an already-applied diff.
+  if (dismissalsApplied > 0 || diff.budgetEntries.length > 0) {
+    try {
+      changedCount += await reconcileInboxWithDecisions();
+    } catch {
+      // The next bank-sync pass reconciles again.
     }
   }
 

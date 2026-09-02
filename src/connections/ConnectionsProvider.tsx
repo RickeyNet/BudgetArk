@@ -20,6 +20,7 @@ import React, {
 import type { BankConnection, PendingTransaction } from "../types";
 import { getConnections } from "../storage/connectionsStorage";
 import { getPendingTransactions } from "../storage/reviewInboxStorage";
+import { subscribeDataChanged } from "../storage/dataChangeNotifier";
 import {
   syncConnections,
   type ConnectionSyncResult,
@@ -76,6 +77,11 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // A partner sync (or an import) can retire Review Inbox rows behind this
+  // cache's back - the partner's entries and dismissals reconcile the
+  // inbox inside applyIncomingDiff - so the badge counts must re-read.
+  useEffect(() => subscribeDataChanged(() => void refresh()), [refresh]);
 
   const syncNow = useCallback(
     async (connectionId?: string): Promise<ConnectionSyncResult[]> => {

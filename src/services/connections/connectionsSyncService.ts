@@ -56,7 +56,10 @@ import { rescheduleCardKeepAliveReminders } from "../../notifications/cardKeepAl
 import { fetchSimplefinAccounts } from "./simplefinClient";
 import { fetchTellerData } from "./tellerClient";
 import { planIngest } from "./ingest";
-import { autoApproveInboxByRules } from "./reviewInboxService";
+import {
+  autoApproveInboxByRules,
+  reconcileInboxWithDecisions,
+} from "./reviewInboxService";
 import { notifyDataChanged } from "../../storage/dataChangeNotifier";
 import { computeFetchWindow, isSyncDue } from "./syncGate";
 import type {
@@ -356,6 +359,15 @@ export const syncConnections = async (
   if (inFlight) return inFlight;
   const run = (async () => {
     const nowMs = opts.now ?? Date.now();
+    // Retire inbox rows a partner has since decided (their entries and
+    // dismissals arrive over partner sync, possibly after this device
+    // fetched the same transactions). Best-effort: a storage hiccup here
+    // must not fail the pass - the next one reconciles again.
+    try {
+      await reconcileInboxWithDecisions();
+    } catch (error) {
+      if (__DEV__) console.error("Inbox reconciliation failed:", error);
+    }
     const connections = await getConnections();
     const targets = opts.connectionId
       ? connections.filter((c) => c.id === opts.connectionId)

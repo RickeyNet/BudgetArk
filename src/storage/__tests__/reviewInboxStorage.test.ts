@@ -13,6 +13,7 @@ import {
   MAX_INBOX_SIZE,
   getIngestLedger,
   getPendingTransactions,
+  mergeLedgerFromSync,
   purgePendingForConnection,
   pruneLedger,
   recordLedgerEntries,
@@ -218,5 +219,66 @@ describe("removePendingTransaction(s) / purgePendingForConnection", () => {
     expect(await getPendingTransactions()).toEqual([]);
     mockStore.set(INBOX_KEY, "{not an array");
     expect(await getPendingTransactions()).toEqual([]);
+  });
+});
+
+describe("mergeLedgerFromSync", () => {
+  // Relative to the real clock: the merge prunes on write, so absolute
+  // stamps would silently expire past LEDGER_TTL_DAYS (the ledger date bomb).
+  const DAY = 24 * 3600_000;
+  const OLD = new Date(Date.now() - 10 * DAY).toISOString();
+  const NEW = new Date(Date.now() - 1 * DAY).toISOString();
+  const seedLedger = (ledger: IngestLedger) => mockStore.set(LEDGER_KEY, JSON.stringify(ledger));
+  const readLedger = (): IngestLedger => JSON.parse(mockStore.get(LEDGER_KEY) ?? "{}");
+
+  it("adds unknown keys and reports how many applied", async () => {
+    seedLedger({ "simplefin:a:1": { status: "dismissed", at: OLD } });
+    const applied = await mergeLedgerFromSync({
+      "simplefin:a:2": { status: "dismissed", at: NEW, pendingFingerprint: "a|-5|2026-05-30" },
+    });
+    expect(applied).toBe(1);
+    expect(readLedger()).toEqual({
+      "simplefin:a:1": { status: "dismissed", at: OLD },
+      "simplefin:a:2": { status: "dismissed", at: NEW, pendingFingerprint: "a|-5|2026-05-30" },
+    });
+  });
+
+  it("strictly-newer `at` wins; older and equal keep local and skip the write", async () => {
+    seedLedger({
+      "simplefin:a:1": { status: "approved", at: NEW, budgetEntryId: "e1" },
+      "simplefin:a:2": { status: "dismissed", at: OLD },
+    });
+    const setItem = require("../encryptedStorage").setItem as jest.Mock;
+    setItem.mockClear();
+    const applied = await mergeLedgerFromSync({
+      "simplefin:a:1": { status: "dismissed", at: OLD }, // older - local approval stands
+      "simplefin:a:2": { status: "dismissed", at: OLD }, // tie - keep local
+    });
+    expect(applied).toBe(0);
+    expect(setItem).not.toHaveBeenCalled();
+    expect(readLedger()["simplefin:a:1"].status).toBe("approved");
+  });
+
+  it("an incoming newer dismissal replaces a local older decision", async () => {
+    seedLedger({ "simplefin:a:1": { status: "dismissed", at: OLD } });
+    const applied = await mergeLedgerFromSync({
+      "simplefin:a:1": { status: "dismissed", at: NEW, aliasOf: "simplefin:a:0" },
+    });
+    expect(applied).toBe(1);
+    expect(readLedger()["simplefin:a:1"]).toEqual({
+      status: "dismissed",
+      at: NEW,
+      aliasOf: "simplefin:a:0",
+    });
+  });
+
+  it("treats an unparseable local stamp as the epoch so a real one can replace it", async () => {
+    seedLedger({ "simplefin:a:1": { status: "dismissed", at: "garbage" } });
+    expect(await mergeLedgerFromSync({ "simplefin:a:1": { status: "dismissed", at: OLD } })).toBe(1);
+  });
+
+  it("returns 0 and touches nothing for an empty map", async () => {
+    expect(await mergeLedgerFromSync({})).toBe(0);
+    expect(mockStore.has(LEDGER_KEY)).toBe(false);
   });
 });

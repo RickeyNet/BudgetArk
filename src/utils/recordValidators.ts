@@ -647,6 +647,34 @@ export const isMonthStartBalanceRecord = (
   );
 };
 
+/** Longest identity key partner sync accepts (`provider:account:txid`; oversized provider ids are hashed). */
+export const MAX_INGEST_IDENTITY_KEY_LENGTH = 400;
+
+/**
+ * One partner-synced ingest-ledger decision (the VALUES of the
+ * `identityKey → entry` map in SyncDiff.dismissedTransactions; keys are
+ * gated with `isIngestIdentityKey`). Only dismissals travel, so a peer
+ * claiming "approved" is rejected outright - it could otherwise silence a
+ * transaction that never became an entry.
+ */
+export const isIngestLedgerEntryRecord = (
+  item: unknown
+): item is Record<string, unknown> => {
+  if (!isObject(item)) return false;
+  return (
+    item.status === "dismissed" &&
+    isValidDateValue(item.at) &&
+    item.budgetEntryId === undefined &&
+    (item.aliasOf === undefined ||
+      isSafeText(item.aliasOf, MAX_INGEST_IDENTITY_KEY_LENGTH)) &&
+    (item.pendingFingerprint === undefined ||
+      isSafeText(item.pendingFingerprint, MAX_INGEST_IDENTITY_KEY_LENGTH))
+  );
+};
+
+export const isIngestIdentityKey = (value: unknown): value is string =>
+  isSafeText(value, MAX_INGEST_IDENTITY_KEY_LENGTH) && value.includes(":");
+
 export const VALID_PAYOFF_STRATEGIES = new Set([
   "custom",
   "avalanche",

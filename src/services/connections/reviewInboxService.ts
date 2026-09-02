@@ -20,11 +20,16 @@ import type {
   MerchantRule,
   PendingTransaction,
 } from "../../types";
-import { addBudgetEntry, getBudgetEntries } from "../../storage/budgetStorage";
+import {
+  addBudgetEntry,
+  getBudgetEntries,
+  getBudgetEntriesIncludingDeleted,
+} from "../../storage/budgetStorage";
 import { entryMonthKey, isBillCandidate } from "../../utils/billFulfillment";
 import { isEntryActiveInMonth } from "../../utils/recurrence";
 import { getLinks } from "../../storage/externalAccountLinksStorage";
 import {
+  getIngestLedger,
   getPendingTransactions,
   recordLedgerEntries,
   removePendingTransaction,
@@ -41,7 +46,7 @@ import {
 import { generateUUID } from "../../utils/uuid";
 import { sanitizeTextInput } from "../../utils/sanitize";
 import { entryPersonIds, personAssignmentFields } from "../../utils/entryPeople";
-import { pendingFingerprintFor } from "./ingest";
+import { pendingFingerprintFor, planInboxReconciliation } from "./ingest";
 import {
   matchMerchantRule,
   renameForRule,
@@ -235,6 +240,39 @@ export const dismissPendingTransactions = async (
   }
   await recordLedgerEntries(ledgerUpdates);
   await removePendingTransactions(pendingIds);
+};
+
+/**
+ * Retire inbox rows that were decided elsewhere after they were fetched -
+ * a partner's approved entry or dismissed-transaction decision that arrived
+ * over sync, or this device's own ledger after a crash between the ledger
+ * write and the inbox removal. Runs before every bank-sync pass and after
+ * every applied partner diff (see planInboxReconciliation for the rules).
+ * Same crash-safe order as approval: ledger first, inbox removal last, so
+ * an interrupted run leaves at worst a row the next run retires again.
+ * Returns how many rows went.
+ */
+export const reconcileInboxWithDecisions = async (): Promise<number> => {
+  const inbox = await getPendingTransactions();
+  if (inbox.length === 0) return 0;
+  const [ledger, entries] = await Promise.all([
+    getIngestLedger(),
+    getBudgetEntriesIncludingDeleted(),
+  ]);
+  const knownEntries = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry.externalTxId) knownEntries.set(entry.externalTxId, entry.id);
+  }
+  const plan = planInboxReconciliation({
+    inbox,
+    ledger,
+    knownEntries,
+    now: new Date().toISOString(),
+  });
+  if (plan.removeIds.length === 0) return 0;
+  await recordLedgerEntries(plan.ledgerWrites);
+  await removePendingTransactions(plan.removeIds);
+  return plan.removeIds.length;
 };
 
 export const dismissPendingTransaction = (pendingId: string): Promise<void> =>

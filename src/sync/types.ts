@@ -20,6 +20,7 @@ import type {
   Holding,
   Business,
   Person,
+  IngestLedgerEntry,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
 
@@ -96,15 +97,18 @@ export interface BudgetLimitDiff {
 }
 
 /**
- * Bank-connection data is DELIBERATELY absent from SyncDiff (v1):
- * connections, credentials/secrets, external-account links, the Review
- * Inbox, and the ingest ledger are per-device - connection ids mean nothing
- * on a partner device and everything in that set is credential-adjacent.
- * Cross-device transaction dedup rides on BudgetEntry.externalTxId, which
- * syncs inside `budgetEntries` like any other entry field. Merchant rules
- * (no credentials, tiny) are the one candidate for a future optional
- * `merchantRules?: DiffEntry<MerchantRule>[]` field - they'd need a
- * tombstone added first.
+ * Bank-connection data is DELIBERATELY (almost) absent from SyncDiff:
+ * connections, credentials/secrets, external-account links, and the Review
+ * Inbox are per-device - connection ids mean nothing on a partner device
+ * and everything in that set is credential-adjacent. Cross-device
+ * transaction dedup rides on BudgetEntry.externalTxId, which syncs inside
+ * `budgetEntries` like any other entry field, plus the one exception:
+ * `dismissedTransactions` carries the ingest ledger's DISMISSED decisions
+ * (identity keys are global, not connection-scoped) so a partner connected
+ * to the same institution doesn't re-offer what was already skipped.
+ * Merchant rules (no credentials, tiny) are the remaining candidate for a
+ * future optional `merchantRules?: DiffEntry<MerchantRule>[]` field -
+ * they'd need a tombstone added first.
  */
 export interface SyncDiff {
   debts: DiffEntry<Debt>[];
@@ -174,6 +178,21 @@ export interface SyncDiff {
    * peer that predates this field still applies cleanly.
    */
   monthStartBalances?: Record<string, MonthStartBalance>;
+  /**
+   * Review Inbox decisions to skip a bank transaction, keyed by the global
+   * identity key `provider:externalAccountId:providerTxId` (see
+   * services/connections/ingest.ts). Dismissals only - never approvals
+   * (their BudgetEntry already carries the key, and a decision behind a
+   * private entry must not leak) - merged key-wise, strictly-newer `at`
+   * wins. Incremental by `at`, with a one-time full send after updating to
+   * the version that added the field (same backfill scheme as snapshots).
+   * Optional so a diff from an older peer still applies, and an older peer
+   * simply ignores it. A dismissed pending item's fingerprint
+   * (account|amount|day) travels with it so the partner recognizes the
+   * posted twin - that is the only per-transaction detail this field
+   * reveals.
+   */
+  dismissedTransactions?: Record<string, IngestLedgerEntry>;
   debtMilestonePlan?: DebtMilestonePlan;
   payoffStrategy?: PayoffStrategyPreference;
   /**

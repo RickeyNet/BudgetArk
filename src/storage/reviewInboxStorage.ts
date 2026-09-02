@@ -14,9 +14,12 @@
  *    overlaps) and reconnects never re-offer them. Entries older than
  *    LEDGER_TTL_DAYS are pruned - far beyond any fetch window's reach.
  *
- * Neither collection syncs or exports. If the ledger is lost (reinstall),
- * approved transactions still dedupe via the synced BudgetEntry.externalTxId;
- * dismissed ones may reappear once - accepted v1 degradation.
+ * Neither collection exports, and the inbox never syncs. The ledger's
+ * DISMISSED decisions do ride partner sync (SyncDiff.dismissedTransactions,
+ * merged here by mergeLedgerFromSync) so a partner phone connected to the
+ * same institution doesn't re-offer what was already skipped; approved ones
+ * still dedupe via the synced BudgetEntry.externalTxId. If the ledger is
+ * lost (reinstall), the next partner sync restores the dismissals.
  */
 
 import * as EncryptedStorage from "./encryptedStorage";
@@ -138,6 +141,34 @@ export const recordLedgerEntries = async (
     ledger[key] = entries[key];
   }
   await writeIngestLedger(pruneLedger(ledger, new Date()));
+};
+
+/**
+ * Merge partner-synced ledger decisions: union by identity key, strictly
+ * newer `at` wins, ties keep local (so the re-broadcast is idempotent).
+ * Returns how many keys were applied; a no-op skips the write.
+ */
+export const mergeLedgerFromSync = async (
+  incoming: Record<string, IngestLedgerEntry>,
+): Promise<number> => {
+  const keys = Object.keys(incoming);
+  if (keys.length === 0) return 0;
+  const ledger = await getIngestLedger();
+  let applied = 0;
+  for (const key of keys) {
+    const local = ledger[key];
+    // NaN-safe: an unparseable stamp sorts as the epoch on either side.
+    const incomingAt = Date.parse(incoming[key].at);
+    const incomingMs = Number.isFinite(incomingAt) ? incomingAt : 0;
+    const localAt = local ? Date.parse(local.at) : Number.NaN;
+    const localMs = Number.isFinite(localAt) ? localAt : 0;
+    if (!local || incomingMs > localMs) {
+      ledger[key] = incoming[key];
+      applied += 1;
+    }
+  }
+  if (applied > 0) await writeIngestLedger(pruneLedger(ledger, new Date()));
+  return applied;
 };
 
 /**

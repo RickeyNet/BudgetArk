@@ -21,6 +21,9 @@ import {
   sanitizeDebtMilestones,
   explainBudgetEntryProblem,
   VALIDATOR_LIMITS,
+  isIngestIdentityKey,
+  isIngestLedgerEntryRecord,
+  MAX_INGEST_IDENTITY_KEY_LENGTH,
 } from "../recordValidators";
 
 describe("primitive guards", () => {
@@ -1084,5 +1087,51 @@ describe("sanitizeDebtMilestones", () => {
     // the basic shape, so garbage step entries pass through untouched.
     const plan = { steps: [null, 42, "garbage", { unexpected: true }] };
     expect(sanitizeDebtMilestones(plan)).toBe(plan);
+  });
+});
+
+describe("isIngestLedgerEntryRecord / isIngestIdentityKey (synced dismissals)", () => {
+  const AT = "2026-06-01T00:00:00.000Z";
+
+  it("accepts a bare dismissal and one carrying an alias + fingerprint", () => {
+    expect(isIngestLedgerEntryRecord({ status: "dismissed", at: AT })).toBe(true);
+    expect(
+      isIngestLedgerEntryRecord({
+        status: "dismissed",
+        at: AT,
+        aliasOf: "simplefin:ACT-1:TXN-0",
+        pendingFingerprint: "ACT-1|-25|2026-05-30",
+      })
+    ).toBe(true);
+  });
+
+  it("rejects approvals - a peer must not be able to silence an unreviewed transaction", () => {
+    expect(isIngestLedgerEntryRecord({ status: "approved", at: AT })).toBe(false);
+    expect(
+      isIngestLedgerEntryRecord({ status: "dismissed", at: AT, budgetEntryId: "e1" })
+    ).toBe(false);
+  });
+
+  it("rejects bad timestamps, control characters, oversized fields, and non-objects", () => {
+    expect(isIngestLedgerEntryRecord({ status: "dismissed", at: "yesterday" })).toBe(false);
+    expect(isIngestLedgerEntryRecord({ status: "dismissed", at: AT, aliasOf: "a\u0000b" })).toBe(false);
+    expect(
+      isIngestLedgerEntryRecord({
+        status: "dismissed",
+        at: AT,
+        pendingFingerprint: "x".repeat(MAX_INGEST_IDENTITY_KEY_LENGTH + 1),
+      })
+    ).toBe(false);
+    expect(isIngestLedgerEntryRecord(null)).toBe(false);
+    expect(isIngestLedgerEntryRecord("dismissed")).toBe(false);
+  });
+
+  it("identity keys must be provider:account:txid-shaped safe text", () => {
+    expect(isIngestIdentityKey("simplefin:ACT-1:TXN-1")).toBe(true);
+    expect(isIngestIdentityKey("no-colons-here")).toBe(false);
+    expect(isIngestIdentityKey("")).toBe(false);
+    expect(isIngestIdentityKey("a:b\u0007")).toBe(false);
+    expect(isIngestIdentityKey("a:" + "b".repeat(MAX_INGEST_IDENTITY_KEY_LENGTH))).toBe(false);
+    expect(isIngestIdentityKey(42)).toBe(false);
   });
 });

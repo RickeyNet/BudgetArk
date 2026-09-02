@@ -2,6 +2,8 @@ import {
   identityKeyFor,
   pendingFingerprintFor,
   planIngest,
+  planInboxReconciliation,
+  selectSyncableDismissals,
   splitPendingFingerprint,
   IngestInputs,
 } from "../ingest";
@@ -826,5 +828,191 @@ describe("planIngest - manual-entry duplicate flagging", () => {
   it("is off when no manual entries are provided", () => {
     const plan = planIngest(baseInputs());
     expect(plan.newInboxItems[0].duplicateLikely).toBeUndefined();
+  });
+});
+
+/* ─── Inbox reconciliation (decisions that arrived after the fetch) ─── */
+
+const row = (overrides: Partial<PendingTransaction> = {}): PendingTransaction => ({
+  id: KEY,
+  connectionId: "conn-1",
+  externalAccountId: "ACT-1",
+  providerTxId: "TXN-1",
+  pending: false,
+  postedAt: "2026-06-28T00:00:00.000Z",
+  amount: -25.0,
+  description: "COSTCO WHSE #1234",
+  merchant: "costco",
+  suggestedType: "expense",
+  fetchedAt: NOW,
+  updatedAt: NOW,
+  ...overrides,
+});
+
+describe("planInboxReconciliation", () => {
+  it("leaves undecided rows alone", () => {
+    const plan = planInboxReconciliation({
+      inbox: [row()],
+      ledger: {},
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    expect(plan.removeIds).toEqual([]);
+    expect(plan.ledgerWrites).toEqual({});
+  });
+
+  it("retires a row whose key is already in the ledger (synced dismissal) without rewriting the ledger", () => {
+    const plan = planInboxReconciliation({
+      inbox: [row()],
+      ledger: { [KEY]: { status: "dismissed", at: NOW } },
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    expect(plan.removeIds).toEqual([KEY]);
+    expect(plan.ledgerWrites).toEqual({});
+  });
+
+  it("retires a row whose key is on an entry (partner approved it) and records the approval", () => {
+    const plan = planInboxReconciliation({
+      inbox: [row()],
+      ledger: {},
+      knownEntries: new Map([[KEY, "entry-9"]]),
+      now: NOW,
+    });
+    expect(plan.removeIds).toEqual([KEY]);
+    expect(plan.ledgerWrites[KEY]).toEqual({
+      status: "approved",
+      budgetEntryId: "entry-9",
+      at: NOW,
+      pendingFingerprint: undefined,
+    });
+  });
+
+  it("keeps the fingerprint when the approved row was still pending, so its posted twin aliases later", () => {
+    const pendingRow = row({ pending: true, postedAt: "2026-06-27T00:00:00.000Z" });
+    const plan = planInboxReconciliation({
+      inbox: [pendingRow],
+      ledger: {},
+      knownEntries: new Map([[KEY, "entry-9"]]),
+      now: NOW,
+    });
+    expect(plan.ledgerWrites[KEY].pendingFingerprint).toBe(
+      pendingFingerprintFor("ACT-1", -25, "2026-06-27T00:00:00.000Z"),
+    );
+  });
+
+  it("retires a posted row whose pending twin was dismissed under a different id, claiming the decision once", () => {
+    const pendingKey = identityKeyFor("simplefin", "ACT-1", "PENDING-1");
+    const ledger = {
+      [pendingKey]: {
+        status: "dismissed" as const,
+        at: NOW,
+        pendingFingerprint: pendingFingerprintFor("ACT-1", -25, "2026-06-26T00:00:00.000Z"),
+      },
+    };
+    const posted1 = row({ id: identityKeyFor("simplefin", "ACT-1", "POSTED-1"), providerTxId: "POSTED-1" });
+    const posted2 = row({ id: identityKeyFor("simplefin", "ACT-1", "POSTED-2"), providerTxId: "POSTED-2" });
+    const plan = planInboxReconciliation({
+      inbox: [posted1, posted2],
+      ledger,
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    // Only the first same-amount row absorbs the decision; the second is a
+    // different purchase and stays for review.
+    expect(plan.removeIds).toEqual([posted1.id]);
+    expect(plan.ledgerWrites[posted1.id]).toEqual({
+      status: "dismissed",
+      budgetEntryId: undefined,
+      at: NOW,
+      aliasOf: pendingKey,
+    });
+    expect(plan.ledgerWrites[posted2.id]).toBeUndefined();
+  });
+
+  it("does not twin-match outside the settlement window", () => {
+    const pendingKey = identityKeyFor("simplefin", "ACT-1", "PENDING-1");
+    const plan = planInboxReconciliation({
+      inbox: [row()],
+      ledger: {
+        [pendingKey]: {
+          status: "dismissed",
+          at: NOW,
+          pendingFingerprint: pendingFingerprintFor("ACT-1", -25, "2026-06-10T00:00:00.000Z"),
+        },
+      },
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    expect(plan.removeIds).toEqual([]);
+  });
+});
+
+describe("planIngest - synced decision for the POSTED id while the PENDING twin sits in the inbox", () => {
+  const pendingKey = identityKeyFor("simplefin", "ACT-1", "PENDING-1");
+
+  it("aliases the pending inbox row to the decision so the sync service retires it", () => {
+    const plan = planIngest(
+      baseInputs({
+        fetched: [tx()], // posted, TXN-1
+        inbox: [
+          row({
+            id: pendingKey,
+            providerTxId: "PENDING-1",
+            pending: true,
+            postedAt: "2026-06-27T00:00:00.000Z",
+          }),
+        ],
+        ledger: { [KEY]: { status: "dismissed", at: NOW } },
+      }),
+    );
+    expect(plan.newInboxItems).toEqual([]);
+    expect(plan.updatedInboxItems).toEqual([]);
+    expect(plan.ledgerAliases[pendingKey]).toEqual({
+      status: "dismissed",
+      budgetEntryId: undefined,
+      at: NOW,
+      aliasOf: KEY,
+    });
+  });
+
+  it("does nothing extra when there is no pending twin in the inbox", () => {
+    const plan = planIngest(
+      baseInputs({ ledger: { [KEY]: { status: "dismissed", at: NOW } } }),
+    );
+    expect(plan.ledgerAliases).toEqual({});
+  });
+});
+
+describe("selectSyncableDismissals", () => {
+  const OLD_AT = "2026-05-01T00:00:00.000Z";
+  const NEW_AT = "2026-06-15T00:00:00.000Z";
+  const SINCE = Date.parse("2026-06-01T00:00:00.000Z");
+  const ledger = {
+    "simplefin:ACT-1:a": { status: "dismissed" as const, at: OLD_AT },
+    "simplefin:ACT-1:b": { status: "dismissed" as const, at: NEW_AT, pendingFingerprint: "ACT-1|-25|2026-06-14" },
+    "simplefin:ACT-1:c": { status: "approved" as const, at: NEW_AT, budgetEntryId: "e1" },
+    "simplefin:ACT-1:d": { status: "dismissed" as const, at: NEW_AT, aliasOf: "simplefin:ACT-1:b" },
+    "simplefin:ACT-1:e": { status: "dismissed" as const, at: "garbage" },
+  };
+
+  it("sends only dismissals newer than the watermark on an incremental sync", () => {
+    const out = selectSyncableDismissals(ledger, SINCE, false);
+    expect(Object.keys(out).sort()).toEqual(["simplefin:ACT-1:b", "simplefin:ACT-1:d"]);
+    expect(out["simplefin:ACT-1:b"]).toEqual(ledger["simplefin:ACT-1:b"]);
+  });
+
+  it("sends every dismissal (never approvals) when sendAll is set", () => {
+    const out = selectSyncableDismissals(ledger, SINCE, true);
+    expect(Object.keys(out).sort()).toEqual([
+      "simplefin:ACT-1:a",
+      "simplefin:ACT-1:b",
+      "simplefin:ACT-1:d",
+      "simplefin:ACT-1:e",
+    ]);
+  });
+
+  it("returns an empty map for an empty ledger", () => {
+    expect(selectSyncableDismissals({}, 0, true)).toEqual({});
   });
 });

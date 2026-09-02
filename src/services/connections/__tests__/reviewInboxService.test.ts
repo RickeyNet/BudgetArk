@@ -34,6 +34,7 @@ import {
   dismissAndIgnoreMerchant,
   dismissPendingTransaction,
   dismissPendingTransactions,
+  reconcileInboxWithDecisions,
   removeMerchantRule,
 } from "../reviewInboxService";
 import * as reviewInboxStorage from "../../../storage/reviewInboxStorage";
@@ -839,5 +840,39 @@ describe("bill fulfilment (BudgetEntry.fulfillsRecurringId)", () => {
 
     await changeMerchantRule({ ruleId: "rule-power", action: "approve", category: "Utilities", recurringEntryId: null });
     expect(rulesNow()[0].recurringEntryId).toBeUndefined();
+  });
+});
+
+describe("reconcileInboxWithDecisions", () => {
+  const readLedger = (): IngestLedger => JSON.parse(mockStore.get(LEDGER_KEY) ?? "{}");
+  const readInbox = (): PendingTransaction[] => JSON.parse(mockStore.get(INBOX_KEY) ?? "[]");
+
+  it("retires rows a partner approved (entry carries the key) or dismissed (synced ledger), keeps the rest", async () => {
+    const approvedElsewhere = makePendingTransaction({ id: "simplefin:ACT-1:A", providerTxId: "A" });
+    const dismissedElsewhere = makePendingTransaction({ id: "simplefin:ACT-1:B", providerTxId: "B" });
+    const stillOpen = makePendingTransaction({ id: "simplefin:ACT-1:C", providerTxId: "C" });
+    seed(INBOX_KEY, [approvedElsewhere, dismissedElsewhere, stillOpen]);
+    seed(LEDGER_KEY, {
+      "simplefin:ACT-1:B": { status: "dismissed", at: "2026-06-01T00:00:00.000Z" },
+    });
+    seed(ENTRIES_KEY, [
+      makeBudgetEntry({ id: "entry-1", externalTxId: "simplefin:ACT-1:A", source: "bank" }),
+    ]);
+
+    const removed = await reconcileInboxWithDecisions();
+
+    expect(removed).toBe(2);
+    expect(readInbox().map((item) => item.id)).toEqual(["simplefin:ACT-1:C"]);
+    const ledger = readLedger();
+    expect(ledger["simplefin:ACT-1:A"]).toMatchObject({ status: "approved", budgetEntryId: "entry-1" });
+    expect(ledger["simplefin:ACT-1:B"].status).toBe("dismissed"); // untouched
+    expect(ledger["simplefin:ACT-1:C"]).toBeUndefined();
+  });
+
+  it("is a no-op on an empty inbox and when nothing was decided elsewhere", async () => {
+    expect(await reconcileInboxWithDecisions()).toBe(0);
+    seed(INBOX_KEY, [makePendingTransaction({ id: "simplefin:ACT-1:C", providerTxId: "C" })]);
+    expect(await reconcileInboxWithDecisions()).toBe(0);
+    expect(readInbox()).toHaveLength(1);
   });
 });

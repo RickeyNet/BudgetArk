@@ -84,7 +84,10 @@ jest.mock("../../../notifications/cardKeepAliveReminders", () => ({
 }));
 jest.mock("../simplefinClient", () => ({ fetchSimplefinAccounts: jest.fn() }));
 jest.mock("../tellerClient", () => ({ fetchTellerData: jest.fn() }));
-jest.mock("../reviewInboxService", () => ({ autoApproveInboxByRules: jest.fn() }));
+jest.mock("../reviewInboxService", () => ({
+  autoApproveInboxByRules: jest.fn(),
+  reconcileInboxWithDecisions: jest.fn(async () => 0),
+}));
 jest.mock("../../../storage/dataChangeNotifier", () => ({ notifyDataChanged: jest.fn() }));
 
 (global as any).__DEV__ = false;

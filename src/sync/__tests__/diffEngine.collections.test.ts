@@ -106,6 +106,17 @@ jest.mock("../../storage/monthlyBalanceStorage", () => ({
     mockState.monthBalances = v;
   }),
 }));
+// diffEngine now reads the ingest ledger (dismissed-transaction sync) and
+// reconciles the Review Inbox through the inbox service; neither is under
+// test here (see diffEngine.test.ts), and the real service pulls ESM-only
+// deps into this Node suite.
+jest.mock("../../storage/reviewInboxStorage", () => ({
+  getIngestLedger: jest.fn(async () => mockState.ledger ?? {}),
+  mergeLedgerFromSync: jest.fn(async () => 0),
+}));
+jest.mock("../../services/connections/reviewInboxService", () => ({
+  reconcileInboxWithDecisions: jest.fn(async () => 0),
+}));
 jest.mock("../../storage/encryptedStorage", () => ({
   getItem: jest.fn(async (k: string) =>
     mockState.encStore.has(k) ? mockState.encStore.get(k) : null

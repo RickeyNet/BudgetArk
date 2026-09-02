@@ -76,6 +76,7 @@ Partner Sync lets you pair BudgetArk with one other device (for example, a partn
 
 - Bank credentials, the App Lock PIN, receipt photos, and device-local settings are never synced.
 - Entries you mark **Private** are never sent to the partner device.
+- Review Inbox decisions to **skip** a bank transaction are shared with the partner device so the same charge isn't offered twice. A skipped transaction is identified by its provider transaction id and, if it was still pending when skipped, the account, amount, and day; no description, merchant, or credentials travel with it. Approvals are not shared this way - they're simply the budget entries you already sync.
 - You can unpair at any time from the Profile tab.
 
 ## Notifications
