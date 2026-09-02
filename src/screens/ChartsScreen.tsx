@@ -68,8 +68,10 @@ import CurrencyExchangeCard from "../components/CurrencyExchangeCard";
 import WhatIfSpendingCard from "../components/WhatIfSpendingCard";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import TaxCalculatorCard from "../components/TaxCalculatorCard";
+import SubscriptionDetectiveCard from "../components/SubscriptionDetectiveCard";
 import type {
   AssetAccount,
+  BudgetEntry,
   ChapterId,
   Debt,
   DebtMilestonePlan,
@@ -390,6 +392,8 @@ const ChartsScreen: React.FC = () => {
     monthsTracked: 0,
   });
   const [savingsGoalsAll, setSavingsGoalsAll] = useState<SavingsGoal[]>([]);
+  /** Live entries for the tools that read raw history (Subscription Detective). */
+  const [toolEntries, setToolEntries] = useState<BudgetEntry[]>([]);
   const [milestonePlan, setMilestonePlan] = useState<DebtMilestonePlan | null>(null);
 
   /* Learning progress (Captain's Course card). Refreshes on focus so
@@ -691,6 +695,7 @@ const ChartsScreen: React.FC = () => {
           setRefiDebts(debts);
           setWhatIfOptions(buildCategorySpendOptions(entries));
           setPurchaseCashFlow(calcMonthlyCashFlow(entries));
+          setToolEntries(entries);
           setSavingsGoalsAll(goals);
           setMilestonePlan(storedMilestones);
         } catch (error) {
@@ -726,6 +731,17 @@ const ChartsScreen: React.FC = () => {
   // The purchase card mutates savings goals (create/contribute/delete);
   // mirror the fresh array into every local consumer so the EF calculator
   // never shows a stale balance next to the plan list.
+  const handleToolEntriesChanged = useCallback(async () => {
+    try {
+      const entries = await getBudgetEntries();
+      setToolEntries(entries);
+      setWhatIfOptions(buildCategorySpendOptions(entries));
+      setPurchaseCashFlow(calcMonthlyCashFlow(entries));
+    } catch (error) {
+      if (__DEV__) console.error("Failed to reload Charts tool entries:", error);
+    }
+  }, []);
+
   const handlePurchaseGoalsChanged = useCallback(
     (goals: SavingsGoal[]) => {
       setSavingsGoalsAll(goals);
@@ -1625,6 +1641,12 @@ const ChartsScreen: React.FC = () => {
           savingsGoals={savingsGoalsAll}
           milestonePlan={milestonePlan}
           onGoalsChanged={handlePurchaseGoalsChanged}
+        />
+
+        {/* ── Subscription Detective (repeat charges with no bill) ── */}
+        <SubscriptionDetectiveCard
+          entries={toolEntries}
+          onEntriesChanged={handleToolEntriesChanged}
         />
 
         {/* ── Take-Home Pay (US income tax estimator) ── */}

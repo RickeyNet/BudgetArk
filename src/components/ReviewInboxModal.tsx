@@ -62,6 +62,7 @@ import {
   dismissPendingTransactions,
 } from "../services/connections/reviewInboxService";
 import { suggestRuleFromHistory } from "../services/connections/ruleNudges";
+import { describeUnusualCharge, flagUnusualCharges } from "../utils/unusualCharges";
 import { getLinks } from "../storage/externalAccountLinksStorage";
 import { getMerchantRules } from "../storage/merchantRulesStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
@@ -219,6 +220,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const sections = useMemo<InboxSection[]>(
     () => buildInboxSections(pendingTransactions),
     [pendingTransactions]
+  );
+
+  // Warning lines for charges far above the merchant's usual, or large
+  // first-ever ones (utils/unusualCharges). Flags only - never auto-skipped.
+  const unusualById = useMemo(
+    () => flagUnusualCharges(pendingTransactions, entries),
+    [entries, pendingTransactions],
   );
 
   const suggestedReadyCount = useMemo(
@@ -524,6 +532,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 .filter(Boolean)
                 .join(" · ")}
             </Text>
+            {unusualById.has(item.id) ? (
+              <Text style={styles.unusualTag} numberOfLines={1}>
+                ⚠️ {describeUnusualCharge(unusualById.get(item.id)!, formatCurrency)}
+              </Text>
+            ) : null}
           </View>
           <Text
             style={[
@@ -1095,6 +1108,12 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 12,
       color: colors.textMuted,
       lineHeight: 17,
+    },
+    unusualTag: {
+      fontSize: 12,
+      color: colors.warning,
+      fontWeight: "600",
+      marginTop: 2,
     },
     planChipRow: {
       flexDirection: "row",

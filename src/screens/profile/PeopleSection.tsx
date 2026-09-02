@@ -14,6 +14,7 @@ import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
 import PersonReportModal from "../../components/PersonReportModal";
+import SettleUpModal from "../../components/SettleUpModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -40,6 +41,7 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
   const styles = useProfileStyles(tokens, colors);
 
   const [showPersonReport, setShowPersonReport] = useState(false);
+  const [showSettleUp, setShowSettleUp] = useState(false);
 
   return (
     <>
@@ -115,6 +117,29 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
               →
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => {
+              triggerHaptic("selection");
+              setShowSettleUp(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open settle up"
+          >
+            <View style={styles.rowTextWrap}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                Settle Up
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                Who owes you what this month, and mark it paid back
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -126,6 +151,7 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
         visible={showPersonReport}
         onClose={() => setShowPersonReport(false)}
       />
+      <SettleUpModal visible={showSettleUp} onClose={() => setShowSettleUp(false)} />
     </>
   );
 };

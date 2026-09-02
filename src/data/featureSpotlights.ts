@@ -252,6 +252,24 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Browse themes", kind: "profile-section", section: "theme" },
   },
   {
+    id: "subscription-detective",
+    sinceVersion: "1.10.1",
+    icon: "🕵️",
+    title: "Subscription Detective",
+    blurb:
+      "A new Charts-tab tool finds bank-imported charges that repeat like a subscription - monthly or yearly - with no bill on file, adds up what they cost a year, and makes each one a recurring bill in a tap.",
+    cta: { label: "Run the detective", kind: "charts" },
+  },
+  {
+    id: "settle-up",
+    sinceVersion: "1.10.1",
+    icon: "🤝",
+    title: "Settle Up",
+    blurb:
+      "Under Profile → People, see what each person owes you for the month from the expenses assigned to them - shared ones split evenly - and mark them settled when they pay you back.",
+    cta: { label: "Open Settle Up", kind: "profile-section", section: "people" },
+  },
+  {
     id: "purchase-plan-priorities",
     sinceVersion: "1.10.1",
     icon: "🎯",

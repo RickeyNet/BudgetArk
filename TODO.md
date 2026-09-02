@@ -403,11 +403,11 @@ Work through phases in order: finish the features first, then handle store prep 
 
 - [x] Savings APY tracker (built 2026-09-02, v1.10.1) - optional `AssetAccount.apy`; Bridge rows show "4.5% APY · ~$144/yr" and, on savings accounts, what a typical high-yield rate would add. `utils/savingsInterest.ts`; spreadsheet APY column. Reference rate needs an annual refresh.
 
-- [ ] Subscription detective - scan bank-imported entries for merchants that charge on a fixed cadence (monthly / yearly) with no recurring bill on file; list them with the annualized cost and a one-tap "make it a bill" / "cancel reminder". Pure detector reusing `recurringBillDetection`.
+- [x] Subscription detective (built 2026-09-02, v1.10.1) - Charts-tab card over bank-imported entries: monthly (3 consecutive months, one charge each, consistent amounts) and yearly (consecutive years, same month ±1) merchants with no bill on file, yearly total, "Make it a bill" / "Not a subscription" (device-local ignore list). Pure `utils/subscriptionDetective.ts`.
 
 - [ ] Personal inflation rate - compare this year's spend per category against last year's for the same basket; show the user's own inflation % vs. headline CPI (bundled annual constant, no network).
 
-- [ ] Unusual charge flags in the inbox - flag an imported charge that is far above the merchant's usual amount or a first-ever merchant over a threshold; badge in the row, never auto-skip.
+- [x] Unusual charge flags in the inbox (built 2026-09-02, v1.10.1) - ⚠️ line on inbox rows ≥2× (and ≥$25 over) the merchant's usual, or a first-ever charge ≥$200; flag only. Pure `utils/unusualCharges.ts`.
 
 - [ ] Paycheck cycle view - budget the month as pay periods (from the W-2 pay frequency) instead of calendar weeks: what's due before the next check, safe-to-spend until then.
 
@@ -415,7 +415,8 @@ Work through phases in order: finish the features first, then handle store prep 
 
 - [ ] Quarterly tax tracker - for 1099 income: quarterly set-aside vs. estimated payment due (IRS due dates bundled), with a "paid" checkbox per quarter. Reuses the take-home calculator brackets.
 
-- [ ] Settle up between people - from person assignments, compute who owes whom this month (shared expenses split evenly or by custom share) and a "mark settled" action.
+- [x] Settle up between people (built 2026-09-02, v1.10.1) - Profile → People → Settle Up: per-person monthly share of assigned expenses (even split), Mark settled / Undo, device-local `@budgetark_settlements`. Pure `utils/settleUp.ts`.
+  - [ ] Follow-ups: custom split shares per entry; sync the settlement records (optional SyncDiff field + validator + tombstones) so a partner phone shows the same "settled" state.
 
 - [ ] Partner activity log - a device-local list of what the last partner syncs changed (counts per collection, no amounts on the lock screen) so a couple can see "12 entries arrived from Sam's phone".
 

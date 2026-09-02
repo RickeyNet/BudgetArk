@@ -121,6 +121,9 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | Suite | Module under test | Feature it guards |
 | --- | --- | --- |
 | `recordValidators.test.ts` | `recordValidators.ts` | Import / sync validation of every record type, including explicit reject cases |
+| `settleUp.test.ts` | `settleUp.ts` | Settle Up: per-person monthly shares (even split, bills once per month, fulfilment), settlements, deleted people, fail-closed record parse |
+| `subscriptionDetective.test.ts` | `subscriptionDetective.ts` | Subscription Detective: monthly/yearly detection, store + drifting-amount exclusions, bills on file, ignore list, totals, bill fields |
+| `unusualCharges.test.ts` | `unusualCharges.ts` | Inbox unusual-charge flags: merchant history, ratio + delta thresholds, first-time large charges, exclusions |
 | `savingsInterest.test.ts` | `savingsInterest.ts` | Bridge APY lines: fail-closed input parse, yearly interest, high-yield gap and its display floor; `REFERENCE_HYSA_APY` is a bundled constant to refresh annually |
 | `sanitize.test.ts` | `sanitize.ts` | Control-character stripping on text input |
 | `paymentUrl.test.ts` | `paymentUrl.ts` | Payment-URL normalization and scheme rejection |
@@ -153,6 +156,8 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
 | `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, stale `enabled:false` dropped, corrupt record recovery |
 | `purchasePlanSettingsStorage.test.ts` | `purchasePlanSettingsStorage.ts` | Device-local plan-list settings: patch merge between the two owning components, fail-closed over a corrupt record |
+| `settlementsStorage.test.ts` | `settlementsStorage.ts` | Device-local Settle Up records: append/remove in the write queue, junk store reads empty |
+| `subscriptionIgnoreStorage.test.ts` | `subscriptionIgnoreStorage.ts` | Device-local "not a subscription" merchant list: fail-closed parse, dedupe, cap |
 | `hiddenCategoriesStorage.test.ts` | `hiddenCategoriesStorage.ts` | Hidden built-ins: hide/restore round-trip, idempotent, protected/unknown names ignored, corrupt record reads empty |
 
 ### Bank connections (`src/services/connections`)
