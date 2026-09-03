@@ -37,6 +37,10 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 | `Retirement401k`  | No       | 401(k) dollars withheld from a W-2 paycheck. Only kept when `IncomeType` is `w2`. Not part of `Amount` (which is the net deposit). Round-tripped. |
 | `TaxSetAsideRate` | No       | Percent (0-100) of a 1099 payment to set aside for taxes. Only kept when `IncomeType` is `1099`. Round-tripped. |
 | `Private`         | No       | `yes` marks a private entry that never syncs to a paired partner's device. Round-tripped - stripping it would silently start syncing the entry again. |
+| `FulfillsBillId`  | No       | ID of the recurring bill this one-off expense is the actual charge for. Round-tripped - without it a restore counts both the estimate and the actual. |
+| `LentTo`          | No       | Who this expense was lent to (max 60 chars). Marks the entry as a loan tracked under Profile → People → Owed to You. One-off expenses only. Round-tripped. |
+| `Repayments`      | No       | Payments received against the loan as `YYYY-MM-DD:amount` pairs separated by `;` (e.g. `2026-09-01:25;2026-09-15:25`). Only read when `LentTo` is set; a malformed cell rejects the row. Round-tripped. |
+| `StillOwed`       | No       | Loan amount minus repayments at export time. **Export-only - ignored on import** (recomputed). |
 | `CreatedAt`       | No       | ISO timestamp the entry was created. Round-tripped so re-importing doesn't reset history. |
 | `UpdatedAt`       | No       | ISO timestamp of last edit. Round-tripped so a paired-device sync after a re-import doesn't overwrite the partner's data with import-time stamps. |
 

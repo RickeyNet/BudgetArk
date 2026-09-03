@@ -333,6 +333,38 @@ describe("isBudgetEntryItem", () => {
     });
   });
 
+  describe("lentTo / loanRepayments (Owed to You)", () => {
+    const repayment = { id: "r1", amount: 25, date: "2026-09-05", createdAt: "2026-09-05T00:00:00.000Z" };
+
+    it("accepts a borrower name and well-formed repayments", () => {
+      expect(isBudgetEntryItem({ ...valid, lentTo: "Sam" })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, lentTo: "Sam", loanRepayments: [repayment] })).toBe(true);
+      expect(
+        isBudgetEntryItem({ ...valid, lentTo: "Sam", loanRepayments: [{ ...repayment, note: "cash" }] })
+      ).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, loanRepayments: [] })).toBe(true);
+    });
+
+    it("rejects an empty / oversized borrower and malformed repayments", () => {
+      expect(isBudgetEntryItem({ ...valid, lentTo: "" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, lentTo: 42 })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, lentTo: "x".repeat(61) })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, loanRepayments: "25" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, loanRepayments: [{ ...repayment, amount: 0 }] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, loanRepayments: [{ ...repayment, date: "soon" }] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, loanRepayments: [{ ...repayment, id: "" }] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, loanRepayments: [{ ...repayment, note: "n".repeat(121) }] })).toBe(false);
+      expect(
+        isBudgetEntryItem({
+          ...valid,
+          loanRepayments: Array.from({ length: 201 }, (_, i) => ({ ...repayment, id: `r${i}` })),
+        })
+      ).toBe(false);
+      expect(explainBudgetEntryProblem({ ...valid, lentTo: "" })).toContain('"lentTo"');
+      expect(explainBudgetEntryProblem({ ...valid, loanRepayments: "25" })).toContain('"loanRepayments"');
+    });
+  });
+
   describe("isPrivate partner-sync flag", () => {
     it("accepts absent, true, and false", () => {
       expect(isBudgetEntryItem(valid)).toBe(true);

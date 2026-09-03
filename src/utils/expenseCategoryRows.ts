@@ -22,6 +22,7 @@ import {
 } from "../types";
 import type { DebtPaymentPlanLine } from "./debtPaymentPlan";
 import { describeFulfillment } from "./billFulfillment";
+import { isLoanEntry, loanOutstanding } from "./loans";
 
 /** One expandable line under a category row. */
 export type ExpenseCategoryEntry = {
@@ -42,6 +43,10 @@ export type ExpenseCategoryEntry = {
   billLabel?: string;
   /** The bill's estimate, for the "est. $120 (+$17.42)" badge. */
   billEstimate?: number;
+  /** Borrower, when the expense is money lent out (BudgetEntry.lentTo). */
+  lentTo?: string;
+  /** What the borrower still owes on it. */
+  loanOutstanding?: number;
 };
 
 export type ExpenseCategoryRow = {
@@ -137,6 +142,9 @@ export const buildExpenseCategoryRows = ({
             fulfillsRecurringId: e.fulfillsRecurringId,
             billLabel: bill?.billLabel,
             billEstimate: bill?.estimate,
+            ...(isLoanEntry(e)
+              ? { lentTo: e.lentTo, loanOutstanding: loanOutstanding(e) }
+              : {}),
           };
         })
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

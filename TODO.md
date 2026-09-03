@@ -418,8 +418,8 @@ Work through phases in order: finish the features first, then handle store prep 
 - [x] Quarterly tax tracker (built 2026-09-02, v1.10.1) - Charts card under Take-Home: per IRS quarter 1099 income, set-aside, annualized-installment estimate (SE tax + federal brackets), bundled due dates, device-local "Mark paid" (`@budgetark_quarterly_tax_paid`). Pure `utils/quarterlyTax.ts`.
   - [ ] Follow-up: add state tax (reuse `calcStateTax`) and a W-2 withholding offset; sync the paid marks.
 
-- [x] Settle up between people (built 2026-09-02, v1.10.1) - Profile → People → Settle Up: per-person monthly share of assigned expenses (even split), Mark settled / Undo, device-local `@budgetark_settlements`. Pure `utils/settleUp.ts`.
-  - [ ] Follow-ups: custom split shares per entry; sync the settlement records (optional SyncDiff field + validator + tombstones) so a partner phone shows the same "settled" state.
+- [x] Owed to You - money lent out (built 2026-09-02, v1.10.1; replaced the month-based Settle Up sheet the same day) - "Lent to someone?" on the entry form + Review Inbox (`BudgetEntry.lentTo`), payments logged on the entry (`loanRepayments`), Profile → People → Owed to You (`LoansModal`). Pure `utils/loans.ts`; syncs/backs up/spreadsheets with the entry.
+  - [ ] Follow-ups: optionally log a repayment as an income entry (cash-flow reconciliation currently ignores money coming back); a proper date picker on the payment form (text `YYYY-MM-DD` today); a "still owed" line on the Bridge.
 
 - [x] Partner activity log (built 2026-09-02, v1.10.1) - `SyncResult.receivedCounts` from pure `sync/syncActivity.ts`, recorded by ProfileScreen into device-local `@budgetark_sync_activity` (30 newest); last five shown under Profile → Partner Sync → Sync Now. Counts only, never amounts.
 

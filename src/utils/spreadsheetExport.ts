@@ -14,6 +14,7 @@
  */
 
 import { entryPersonIds, formatPersonNames } from "./entryPeople";
+import { formatLoanRepaymentsCell, loanOutstanding } from "./loans";
 import * as XLSX from "xlsx";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import { Platform } from "react-native";
@@ -166,6 +167,12 @@ const BUDGET_ENTRY_COLUMNS = [
   // BudgetEntry.fulfillsRecurringId). Round-tripped: without it a restore
   // would count both the estimate and the actual in that month.
   "FulfillsBillId",
+  // Money lent out (BudgetEntry.lentTo / loanRepayments). Both round-trip
+  // so a restore keeps the loan and what has been paid back; StillOwed is
+  // a readable export-only figure (recomputed on import).
+  "LentTo",
+  "Repayments",
+  "StillOwed",
   // ISO timestamp the entry was created. Round-tripped so re-importing an
   // exported file doesn't reset history.
   "CreatedAt",
@@ -378,6 +385,9 @@ const budgetEntryToRow = (
   TaxSetAsideRate: entry.taxSetAsideRate ?? "",
   Private: entry.isPrivate ? "yes" : "",
   FulfillsBillId: entry.fulfillsRecurringId ?? "",
+  LentTo: entry.lentTo ?? "",
+  Repayments: entry.lentTo ? formatLoanRepaymentsCell(entry.loanRepayments) : "",
+  StillOwed: entry.lentTo ? loanOutstanding(entry) : "",
   CreatedAt: entry.createdAt ?? "",
   UpdatedAt: entry.updatedAt ?? "",
 });

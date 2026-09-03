@@ -47,6 +47,7 @@ import type {
 import { describeError } from "../utils/errorMessage";
 import TagPillPicker, { MultiTagPillPicker } from "./TagPillPicker";
 import { entryPersonIds, formatPersonNames } from "../utils/entryPeople";
+import { LENT_TO_MAX_LENGTH, lentToSuggestions } from "../utils/loans";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -147,7 +148,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [draftRecurringId, setDraftRecurringId] = useState<string | undefined>(
     undefined,
   );
+  /** "Lent to someone?" - free text, "" = not a loan (see BudgetEntry.lentTo). */
+  const [draftLentTo, setDraftLentTo] = useState("");
   const [rememberRule, setRememberRule] = useState(false);
+  const lentToChips = useMemo(
+    () => lentToSuggestions(entries).filter((name) => name !== draftLentTo),
+    [entries, draftLentTo],
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -257,6 +264,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setDraftRecurringId(
         item.suggestedType === "expense" ? item.suggestedRecurringId : undefined,
       );
+      setDraftLentTo("");
       setRememberRule(false);
       return item.id;
     });
@@ -271,6 +279,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       businessId: string | undefined,
       personIds: string[],
       recurringId: string | undefined,
+      lentTo: string,
     ) => {
       setBusyId(item.id);
       setActionError(null);
@@ -284,6 +293,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           businessId: businessId ?? null,
           personIds: personIds.length > 0 ? personIds : null,
           fulfillsRecurringId: recurringId ?? null,
+          lentTo: lentTo.trim() || null,
           rememberRule: remember,
         });
         // "Always" just created an auto-approve rule - sweep the rest of
@@ -615,6 +625,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       draftBusinessId,
                       draftPersonIds,
                       draftRecurringId,
+                      draftLentTo,
                     )
                   }
                   disabled={busy}
@@ -668,6 +679,42 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     glyph="👤"
                     deletedLabel="(deleted person)"
                   />
+              </>
+            ) : null}
+            {item.suggestedType === "expense" ? (
+              <>
+                <Text style={styles.label}>LENT TO SOMEONE?</Text>
+                <Text style={styles.planHint}>
+                  Money you expect back? Name who has it and track what they
+                  pay back under Profile → People → Owed to You.
+                </Text>
+                <TextInput
+                  style={styles.nameInput}
+                  value={draftLentTo}
+                  onChangeText={setDraftLentTo}
+                  placeholder="Leave blank if this isn't a loan"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={LENT_TO_MAX_LENGTH}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                />
+                {lentToChips.length > 0 ? (
+                  <View style={styles.planChipRow}>
+                    {lentToChips.map((name) => (
+                      <TouchableOpacity
+                        key={name}
+                        style={styles.planChip}
+                        onPress={() => setDraftLentTo(name)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Lent to ${name}`}
+                      >
+                        <Text style={styles.planChipText} numberOfLines={1}>
+                          🤝 {name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
               </>
             ) : null}
             {planChoices.length > 0 ? (
@@ -744,6 +791,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     draftBusinessId,
                     draftPersonIds,
                     draftRecurringId,
+                    draftLentTo,
                   )
                 }
                 disabled={busy}
@@ -880,6 +928,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 draftName,
                 draftBusinessId,
                 draftPersonIds,
+                draftLentTo,
                 rememberRule,
                 busyId,
                 bulkBusy,

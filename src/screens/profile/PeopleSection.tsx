@@ -2,9 +2,10 @@
  * BudgetArk - People Section
  * File: src/screens/profile/PeopleSection.tsx
  *
- * The People + Person Spending Report rows and their modals - where the
- * user maintains the list of household members spending can be assigned to
- * (BudgetEntry.personId) and views who spent what. The manage modal's
+ * The People, Person Spending Report and Owed to You rows and their modals
+ * - where the user maintains the list of household members spending can be
+ * assigned to (BudgetEntry.personId), views who spent what, and tracks
+ * money lent out (BudgetEntry.lentTo). The manage modal's
  * visibility stays in ProfileScreen because the feature spotlight deep
  * link (openSection: "people") opens it from there - same pattern as
  * BusinessSection; the report modal is purely local.
@@ -14,7 +15,7 @@ import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
 import PersonReportModal from "../../components/PersonReportModal";
-import SettleUpModal from "../../components/SettleUpModal";
+import LoansModal from "../../components/LoansModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -41,7 +42,7 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
   const styles = useProfileStyles(tokens, colors);
 
   const [showPersonReport, setShowPersonReport] = useState(false);
-  const [showSettleUp, setShowSettleUp] = useState(false);
+  const [showLoans, setShowLoans] = useState(false);
 
   return (
     <>
@@ -121,19 +122,23 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
             style={styles.groupedRow}
             onPress={() => {
               triggerHaptic("selection");
-              setShowSettleUp(true);
+              onDismissNewBadge("owed-to-you");
+              setShowLoans(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open settle up"
+            accessibilityLabel="Open owed to you"
           >
             <View style={styles.rowTextWrap}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Settle Up
-              </Text>
+              <View style={styles.rowTitleWithBadge}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Owed to You 🤝
+                </Text>
+                {newFeatureIds.has("owed-to-you") && <NewFeatureBadge />}
+              </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Who owes you what this month, and mark it paid back
+                Money you've lent out, and what's been paid back
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -151,7 +156,7 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
         visible={showPersonReport}
         onClose={() => setShowPersonReport(false)}
       />
-      <SettleUpModal visible={showSettleUp} onClose={() => setShowSettleUp(false)} />
+      <LoansModal visible={showLoans} onClose={() => setShowLoans(false)} />
     </>
   );
 };

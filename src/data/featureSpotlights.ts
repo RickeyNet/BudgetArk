@@ -262,13 +262,13 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Run the detective", kind: "charts" },
   },
   {
-    id: "settle-up",
+    id: "owed-to-you",
     sinceVersion: "1.10.1",
     icon: "🤝",
-    title: "Settle Up",
+    title: "Owed to You",
     blurb:
-      "Under Profile → People, see what each person owes you for the month from the expenses assigned to them - shared ones split evenly - and mark them settled when they pay you back.",
-    cta: { label: "Open Settle Up", kind: "profile-section", section: "people" },
+      "Lent someone money? Name them on the expense when you log it (or in the Review Inbox), then track what they still owe and log each payment they make under Profile → People → Owed to You.",
+    cta: { label: "Open Owed to You", kind: "profile-section", section: "people" },
   },
   {
     id: "net-worth-goal",

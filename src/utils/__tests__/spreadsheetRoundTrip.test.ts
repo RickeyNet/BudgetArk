@@ -100,6 +100,12 @@ const entryFixtures = [
   // Actual charge standing in for the recurring e3 bill in June: the
   // FulfillsBillId link must round-trip, or a restore double-counts June.
   { id: "e10", type: "expense", category: "Housing", amount: 1237.5, date: "2026-06-08", createdAt: "2026-06-08T00:00:00.000Z", fulfillsRecurringId: "e3" },
+  // Money lent out: LentTo and the Repayments cell must round-trip, or a
+  // restore forgets who owes what (and what they've already paid back).
+  { id: "e11", type: "expense", category: "Other", amount: 100, date: "2026-06-09", createdAt: "2026-06-09T00:00:00.000Z", lentTo: "Sam", loanRepayments: [
+    { id: "rp1", amount: 25, date: "2026-06-12T12:00:00.000Z", note: "cash", createdAt: "2026-06-12T00:00:00.000Z" },
+    { id: "rp2", amount: 12.5, date: "2026-06-20T12:00:00.000Z", createdAt: "2026-06-20T00:00:00.000Z" },
+  ] },
 ];
 const businessFixtures = [
   { id: "b1", name: "Acme Consulting LLC", createdAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-02-01T00:00:00.000Z" },
@@ -194,13 +200,21 @@ describe("xlsx round-trip", () => {
 
     // Entries: e1-e8 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
     expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
     expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
     expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
     // The bill link survives; without it June would count e3's estimate AND e10.
     expect(byId.e10.fulfillsRecurringId).toBe("e3");
     expect(byId.e2.fulfillsRecurringId).toBeUndefined();
+    // The loan and its repayments survive (ids are regenerated, notes are not carried).
+    expect(byId.e11.lentTo).toBe("Sam");
+    expect(byId.e11.loanRepayments.map((r: any) => [r.date, r.amount])).toEqual([
+      ["2026-06-12", 25],
+      ["2026-06-20", 12.5],
+    ]);
+    expect(byId.e2.lentTo).toBeUndefined();
+    expect(byId.e2.loanRepayments).toBeUndefined();
     // Bank provenance columns round-trip intact.
     expect(byId.e4).toMatchObject({
       source: "bank",
@@ -347,7 +361,7 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
     expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
     // Paycheck fields survive the single-sheet CSV path too.
     expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });

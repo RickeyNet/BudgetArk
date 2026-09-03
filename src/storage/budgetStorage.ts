@@ -9,6 +9,11 @@ import {
   untombstone,
 } from "./tombstones";
 import { repairCollectionInPlace } from "./collectionRepair";
+import {
+  addLoanRepayment,
+  removeLoanRepayment,
+  type NewLoanRepaymentInput,
+} from "../utils/loans";
 
 export const BUDGET_STORAGE_KEYS = {
   ENTRIES: "@budgetark_budget_entries",
@@ -248,6 +253,50 @@ export const updateBudgetEntry = async (
       entry.id === id ? { ...entry, ...patch, id: entry.id, updatedAt: now } : entry
     );
   });
+
+/**
+ * Record a payment received against a loan (BudgetEntry.lentTo). Runs the
+ * pure utils/loans rule inside the write queue so two quick taps can't
+ * both read the same pre-payment entry and overpay it. Resolves to the
+ * updated entry, or null when the rule refused (not a loan, more than is
+ * owed, bad date) - the caller shows that as a validation message.
+ */
+export const addLoanRepaymentToEntry = async (
+  entryId: string,
+  input: NewLoanRepaymentInput
+): Promise<BudgetEntry | null> => {
+  let updated: BudgetEntry | null = null;
+  await mutateBudgetEntries((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((entry) => {
+      if (entry.id !== entryId || entry.deletedAt) return entry;
+      const next = addLoanRepayment(entry, input);
+      if (!next) return entry;
+      updated = { ...next, updatedAt: now };
+      return updated;
+    });
+  });
+  return updated;
+};
+
+/** Remove one recorded repayment; no-op when the id isn't on the entry. */
+export const removeLoanRepaymentFromEntry = async (
+  entryId: string,
+  repaymentId: string
+): Promise<BudgetEntry | null> => {
+  let updated: BudgetEntry | null = null;
+  await mutateBudgetEntries((stored) => {
+    const now = new Date().toISOString();
+    return stored.map((entry) => {
+      if (entry.id !== entryId || entry.deletedAt) return entry;
+      const next = removeLoanRepayment(entry, repaymentId);
+      if (next === entry) return entry;
+      updated = { ...next, updatedAt: now };
+      return updated;
+    });
+  });
+  return updated;
+};
 
 /**
  * Undo a soft-delete: clears the tombstone so the entry is live again.

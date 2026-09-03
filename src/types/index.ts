@@ -308,6 +308,17 @@ export const DEFAULT_RECURRENCE_INTERVAL: RecurrenceInterval = 1;
 /** Max stored length for `BudgetEntry.paymentUrl`. */
 export const PAYMENT_URL_MAX_LENGTH = 512;
 
+/** One payment received against a loan (BudgetEntry.loanRepayments). */
+export interface LoanRepayment {
+  id: string;
+  /** Positive dollars received. */
+  amount: number;
+  /** ISO date the payment was received. */
+  date: string;
+  note?: string;
+  createdAt: string;
+}
+
 export interface BudgetEntry {
   id: string;
   type: BudgetEntryType;
@@ -417,6 +428,23 @@ export interface BudgetEntry {
    * so a merged record can't brick a whole diff.
    */
   attachments?: EntryAttachment[];
+  /**
+   * Who this money was lent to, when the expense is a loan the user
+   * expects back ("Owed to You" under Profile -> People). Free text, not a
+   * `Person` id: the borrower is usually outside the household. Presence
+   * marks the entry as a loan; the expense still counts as spending the
+   * month it left the account. One-off expenses only - the UI never sets
+   * it on income or recurring bills. See utils/loans.
+   */
+  lentTo?: string;
+  /**
+   * Payments the borrower has made against this loan, oldest first. Kept
+   * ON the entry (not a separate collection) so the loan and its repayments
+   * ride sync, backups and spreadsheets as one record. Only meaningful
+   * with `lentTo`; dropped when the loan mark is cleared. Repayments are
+   * not budget entries - they don't add to income.
+   */
+  loanRepayments?: LoanRepayment[];
   /**
    * Private entry: excluded from the outgoing partner-sync diff (live AND
    * tombstoned - see diffEngine). Stays in all local budget math, JSON

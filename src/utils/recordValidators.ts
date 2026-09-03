@@ -15,6 +15,11 @@ import {
   KEEP_ALIVE_MAX_LEAD_DAYS,
   KEEP_ALIVE_MAX_WINDOW_MONTHS,
 } from "./cardKeepAlive";
+import {
+  LENT_TO_MAX_LENGTH,
+  LOAN_REPAYMENT_NOTE_MAX_LENGTH,
+  MAX_LOAN_REPAYMENTS,
+} from "./loans";
 
 export const VALIDATOR_LIMITS = {
   MAX_TEXT_LENGTH: 120,
@@ -207,6 +212,25 @@ export const isEntryAttachmentsValue = (value: unknown): boolean => {
   });
 };
 
+/**
+ * BudgetEntry.loanRepayments: absent, or an array of at most
+ * MAX_LOAN_REPAYMENTS records each with a string id, a positive amount, a
+ * parseable date, an optional short note and a parseable createdAt.
+ */
+export const isLoanRepaymentsValue = (value: unknown): boolean => {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length > MAX_LOAN_REPAYMENTS) return false;
+  return value.every(
+    (r) =>
+      isObject(r) &&
+      isSafeText(r.id, 120) &&
+      isSafeNumber(r.amount, { min: 0.01 }) &&
+      isValidDateValue(r.date) &&
+      (r.note === undefined || isSafeText(r.note, LOAN_REPAYMENT_NOTE_MAX_LENGTH)) &&
+      isValidDateValue(r.createdAt)
+  );
+};
+
 export const isBudgetEntryItem = (
   item: unknown
 ): item is Record<string, unknown> => {
@@ -275,6 +299,12 @@ export const isBudgetEntryItem = (
   const fulfillsRecurringIdValid =
     item.fulfillsRecurringId === undefined ||
     isSafeText(item.fulfillsRecurringId, 120);
+  // Loan mark + repayments (BudgetEntry.lentTo / loanRepayments). The
+  // borrower is free text under the same cap the UI enforces; repayments
+  // are bounded like attachments so a hostile peer can't ship a 100k list.
+  const lentToValid =
+    item.lentTo === undefined || isSafeText(item.lentTo, LENT_TO_MAX_LENGTH);
+  const loanRepaymentsValid = isLoanRepaymentsValue(item.loanRepayments);
 
   return (
     isSafeText(item.id) &&
@@ -295,6 +325,8 @@ export const isBudgetEntryItem = (
     attachmentsValid &&
     isPrivateValid &&
     fulfillsRecurringIdValid &&
+    lentToValid &&
+    loanRepaymentsValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&
@@ -398,6 +430,12 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
     !isSafeText(item.fulfillsRecurringId, 120)
   ) {
     return '"fulfillsRecurringId" must be a non-empty string of at most 120 characters when present';
+  }
+  if (item.lentTo !== undefined && !isSafeText(item.lentTo, LENT_TO_MAX_LENGTH)) {
+    return `"lentTo" must be a non-empty string of at most ${LENT_TO_MAX_LENGTH} characters when present`;
+  }
+  if (!isLoanRepaymentsValue(item.loanRepayments)) {
+    return `"loanRepayments" must be an array of at most ${MAX_LOAN_REPAYMENTS} items, each with a string "id", a positive "amount", a parseable "date" and "createdAt", and an optional short "note"`;
   }
   if (!isValidDateValue(item.date)) {
     return '"date" must be a parseable date string (e.g. "2026-06-12")';

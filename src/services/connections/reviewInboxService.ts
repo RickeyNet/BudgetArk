@@ -56,6 +56,7 @@ import {
   replanInboxForRules,
   selectAutoApprovable,
 } from "./merchant";
+import { normalizeLentTo } from "../../utils/loans";
 
 const MAX_DESCRIPTION_LENGTH = 220;
 
@@ -88,6 +89,13 @@ export interface ApproveOptions {
    * recurring, or off-cycle in the transaction's month yields a plain entry.
    */
   fulfillsRecurringId?: string | null;
+  /**
+   * Who the money was lent to, when the transaction is a loan the user
+   * expects back (expenses only; see BudgetEntry.lentTo). Free text,
+   * normalized here. Never remembered on a merchant rule - a loan is a
+   * one-off. `null`/undefined = not a loan.
+   */
+  lentTo?: string | null;
   /**
    * Save an auto-approve merchant rule: future fetches turn matching
    * transactions straight into entries with this category - plus the
@@ -175,6 +183,7 @@ export const approvePendingTransaction = async (
           item.postedAt,
         )
       : undefined;
+  const lentTo = type === "expense" ? normalizeLentTo(opts.lentTo) : undefined;
   const entry: BudgetEntry = {
     id: generateUUID(),
     type,
@@ -191,6 +200,7 @@ export const approvePendingTransaction = async (
     businessId,
     ...people,
     fulfillsRecurringId,
+    lentTo,
   };
 
   await addBudgetEntry(entry);

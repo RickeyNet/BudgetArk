@@ -28,6 +28,12 @@
  */
 
 import { entryPersonIds, personAssignmentFields } from "../utils/entryPeople";
+import {
+  borrowerKey,
+  LENT_TO_MAX_LENGTH,
+  lentToSuggestions,
+  normalizeLentTo,
+} from "../utils/loans";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   InteractionManager,
@@ -201,6 +207,8 @@ interface EntryFormState {
   isPrivate: boolean;
   /** Bill this one-off is the actual charge for - see BudgetEntry.fulfillsRecurringId. */
   fulfillsRecurringId: string | undefined;
+  /** Who the money was lent to (BudgetEntry.lentTo); "" = not a loan. */
+  lentTo: string;
 }
 
 const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
@@ -237,6 +245,7 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
   attachments: entry?.attachments ?? [],
   isPrivate: !!entry?.isPrivate,
   fulfillsRecurringId: entry?.fulfillsRecurringId,
+  lentTo: entry?.lentTo ?? "",
 });
 
 const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
@@ -298,6 +307,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const [fulfillsRecurringId, setFulfillsRecurringId] = useState<string | undefined>(
     initialForm.fulfillsRecurringId
   );
+  const [lentTo, setLentTo] = useState(initialForm.lentTo);
   // See the header comment for the attachment lifecycle. Files are written
   // at pick time; newlyStagedIds tracks which ones a cancel may delete.
   const [attachments, setAttachments] = useState<EntryAttachment[]>(
@@ -339,6 +349,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setAttachments(next.attachments);
       setIsPrivate(next.isPrivate);
       setFulfillsRecurringId(next.fulfillsRecurringId);
+      setLentTo(next.lentTo);
     }
     setNewlyStagedIds(new Set());
     setStagingSession((s) => s + 1);
@@ -413,6 +424,15 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   // that it's MULTI-select: a grocery run is the whole family's.
   const showPersonPicker =
     type === "expense" && (people.length > 0 || personIds.length > 0);
+  // "Lent to someone?" - one-off expenses only (a recurring bill is never a
+  // loan, and income is the other direction).
+  const showLoanField = type === "expense" && !recurring;
+  const lentToChips = useMemo(() => {
+    const current = normalizeLentTo(lentTo);
+    return lentToSuggestions(entries).filter(
+      (name) => !current || borrowerKey(name) !== borrowerKey(current)
+    );
+  }, [entries, lentTo]);
   // Ids that no longer resolve (person deleted): each gets its own
   // "(deleted person)" pill so it stays visible and can be untagged.
   const missingPersonIds = useMemo(
@@ -485,6 +505,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setTaxSetAsideRate(next.taxSetAsideRate);
     setIsPrivate(next.isPrivate);
     setFulfillsRecurringId(next.fulfillsRecurringId);
+    setLentTo(next.lentTo);
     // Deliberately does NOT delete staged photo files - submit commits them
     // to the saved entry, so only the cancel path (handleCancel) deletes.
     setAttachments([]);
@@ -551,6 +572,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         taxSetAsideRate: entryTaxSetAsideRate,
         isPrivate: isPrivate || undefined,
         fulfillsRecurringId: effectiveFulfillsRecurringId,
+        lentTo: showLoanField ? normalizeLentTo(lentTo) : undefined,
         // Photos land on the FIRST valid line (the UI hints at this when
         // multiple lines are open).
         attachments: undefined,
@@ -586,6 +608,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     effectiveFulfillsRecurringId,
     incomeType,
     isPrivate,
+    lentTo,
     lines,
     linkedAccountId,
     onAdd,
@@ -595,6 +618,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     entryDay,
     recurrenceInterval,
     reset,
+    showLoanField,
     retirementContribution,
     showAccountPicker,
     showBusinessPicker,
@@ -616,6 +640,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
     const entryIncomeType = type === "income" ? incomeType : undefined;
     const contributionNum = parseFloat(retirementContribution);
+    const editLentTo = showLoanField ? normalizeLentTo(lentTo) : undefined;
 
     onSave({
       ...entry,
@@ -647,6 +672,10 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       attachments: attachments.length > 0 ? attachments : undefined,
       isPrivate: isPrivate || undefined,
       fulfillsRecurringId: effectiveFulfillsRecurringId,
+      // Clearing the borrower also drops the payments logged against the
+      // loan - they have nothing to be "against" any more.
+      lentTo: editLentTo,
+      loanRepayments: editLentTo ? entry.loanRepayments : undefined,
       updatedAt: new Date().toISOString(),
     });
 
@@ -666,6 +695,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     incomeType,
     isPrivate,
     isValid,
+    lentTo,
     lines,
     linkedAccountId,
     onSave,
@@ -677,6 +707,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     retirementContribution,
     showAccountPicker,
     showDayPicker,
+    showLoanField,
     taxSetAsideRate,
     type,
     yearMonth,
@@ -1148,6 +1179,45 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           </Text>
         </View>
       </TouchableOpacity>
+
+      {showLoanField && (
+        <View style={styles.field}>
+          <Text style={styles.label}>LENT TO SOMEONE? (OPTIONAL)</Text>
+          <Text style={styles.accountPickerHint}>
+            Money you expect back. Name who has it and the entry shows up
+            under Profile → People → Owed to You, where you log what they pay
+            back. It still counts as spending this month.
+            {isEdit && entry?.lentTo && (entry.loanRepayments?.length ?? 0) > 0
+              ? " Clearing the name also forgets the payments logged against it."
+              : ""}
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={lentTo}
+            onChangeText={setLentTo}
+            placeholder="Who owes you? Leave blank if nobody"
+            placeholderTextColor={colors.textMuted}
+            maxLength={LENT_TO_MAX_LENGTH}
+            autoCapitalize="words"
+            returnKeyType="done"
+          />
+          {lentToChips.length > 0 && (
+            <View style={styles.suggestionRow}>
+              {lentToChips.map((name) => (
+                <TouchableOpacity
+                  key={name}
+                  style={styles.suggestionChip}
+                  onPress={() => setLentTo(name)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Lent to ${name}`}
+                >
+                  <Text style={styles.suggestionChipText}>🤝 {name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {recurring && (
         <View style={styles.field}>

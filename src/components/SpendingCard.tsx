@@ -469,6 +469,20 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                             👤 {formatPersonNames(entryPersonIds(entry), personNameById)}
                           </Text>
                         )}
+                        {entry.lentTo && (
+                          <Text
+                            style={[
+                              styles.entryEditHint,
+                              { color: (entry.loanOutstanding ?? 0) > 0 ? colors.warning : colors.success },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            🤝 {entry.lentTo}
+                            {(entry.loanOutstanding ?? 0) > 0
+                              ? ` · ${formatCurrency(entry.loanOutstanding ?? 0)} owed`
+                              : " · paid back"}
+                          </Text>
+                        )}
                         {entry.fulfillsRecurringId && (
                           <Text
                             style={[styles.entryEditHint, { color: colors.accent }]}

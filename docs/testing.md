@@ -121,7 +121,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | Suite | Module under test | Feature it guards |
 | --- | --- | --- |
 | `recordValidators.test.ts` | `recordValidators.ts` | Import / sync validation of every record type, including explicit reject cases |
-| `settleUp.test.ts` | `settleUp.ts` | Settle Up: per-person monthly shares (even split, bills once per month, fulfilment), settlements, deleted people, fail-closed record parse |
+| `loans.test.ts` | `loans.ts` | Owed to You: borrower name normalization, outstanding math, repayment add/remove rules (never more than owed), borrower ledger grouping/ordering, suggestions, spreadsheet cell round-trip (fail-closed) |
 | `subscriptionDetective.test.ts` | `subscriptionDetective.ts` | Subscription Detective: monthly/yearly detection, store + drifting-amount exclusions, bills on file, ignore list, totals, bill fields |
 | `unusualCharges.test.ts` | `unusualCharges.ts` | Inbox unusual-charge flags: merchant history, ratio + delta thresholds, first-time large charges, exclusions |
 | `personalInflation.test.ts` | `personalInflation.ts` | Personal inflation: 12-vs-12 month windows, per-tracked-month averaging, shared-basket rule, transfer exclusions, insufficient gate, ordering, display helpers |
@@ -161,7 +161,6 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `exchangeRatesSettingsStorage.test.ts` / `dataChangeNotifier.test.ts` | matching modules | Disclosure ack fails closed; cross-tab change notifications |
 | `tipJarNudgeStorage.test.ts` | `tipJarNudgeStorage.ts` | Win counter persists across calls, Nth win claims the nudge atomically, stale `enabled:false` dropped, corrupt record recovery |
 | `purchasePlanSettingsStorage.test.ts` | `purchasePlanSettingsStorage.ts` | Device-local plan-list settings: patch merge between the two owning components, fail-closed over a corrupt record |
-| `settlementsStorage.test.ts` | `settlementsStorage.ts` | Device-local Settle Up records: append/remove in the write queue, junk store reads empty |
 | `subscriptionIgnoreStorage.test.ts` | `subscriptionIgnoreStorage.ts` | Device-local "not a subscription" merchant list: fail-closed parse, dedupe, cap |
 | `paycheckCycleStorage.test.ts` | `paycheckCycleStorage.ts` | Device-local pay schedule: round-trip, day normalization, invalid record refused, junk store reads unset |
 | `netWorthGoalStorage.test.ts` | `netWorthGoalStorage.ts` | Device-local net worth goal: round-trip, invalid goal refused, junk store reads unset |

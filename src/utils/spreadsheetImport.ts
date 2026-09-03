@@ -39,6 +39,7 @@ import {
   DERIVED_RECURRING_PREFIX,
 } from "./spreadsheetExport";
 import { generateUUID } from "./uuid";
+import { LENT_TO_MAX_LENGTH, normalizeLentTo, parseLoanRepaymentsCell } from "./loans";
 import { MAX_APY_PERCENT } from "./savingsInterest";
 import { normalizeImportCategory, VALIDATOR_LIMITS } from "./recordValidators";
 import { detectImportPreset, presetRowToEntryRow } from "./importPresets";
@@ -526,6 +527,23 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     fulfillsBillRaw && type === "expense" && !recurring ? fulfillsBillRaw : undefined;
 
   const now = new Date().toISOString();
+
+  // Money lent out. The borrower only sticks to one-off expenses (the same
+  // shape the app writes); repayments are parsed fail-closed - a malformed
+  // cell rejects the row rather than silently forgetting what was paid.
+  const lentTo =
+    type === "expense" && !recurring
+      ? normalizeLentTo(parseString(get(row, "LentTo", "Lent To"), LENT_TO_MAX_LENGTH))
+      : undefined;
+  const repaymentsRaw = parseString(get(row, "Repayments"), 20000);
+  const parsedRepayments = lentTo
+    ? parseLoanRepaymentsCell(repaymentsRaw, generateUUID, now)
+    : undefined;
+  if (parsedRepayments === null) {
+    return skipRow('Repayments must be "YYYY-MM-DD:amount" pairs separated by ";"');
+  }
+  const loanRepayments =
+    lentTo && parsedRepayments && parsedRepayments.length > 0 ? parsedRepayments : undefined;
   // Preserve original timestamps when round-tripping through xlsx/csv. If
   // they're missing or unparseable, fall back to `now` - but prefer carrying
   // them forward so paired-device sync doesn't treat every imported row as
@@ -565,6 +583,8 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     taxSetAsideRate,
     isPrivate,
     fulfillsRecurringId,
+    lentTo,
+    loanRepayments,
   });
 };
 
