@@ -2,7 +2,7 @@
  * BudgetArk - About Section
  * File: src/screens/profile/AboutSection.tsx
  *
- * The ABOUT card (current version + release notes, GitHub link) and the
+ * The ABOUT card (current version + release notes, website + GitHub links) and the
  * release-notes browser modal. The modal's visibility stays in ProfileScreen
  * because the "What's new" deep link (openReleaseNotes) opens it from there;
  * the accordion state is local.
@@ -51,7 +51,7 @@ const AboutSection: React.FC<AboutSectionProps> = ({
 
   return (
     <>
-      {/* ── About (release notes, github) ── */}
+      {/* ── About (release notes, website, github) ── */}
       <View style={styles.settingsSection}>
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
@@ -77,6 +77,34 @@ const AboutSection: React.FC<AboutSectionProps> = ({
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 Tap for release notes
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => Linking.openURL("https://budgetark.app")}
+            accessibilityRole="link"
+            accessibilityLabel="Open the BudgetArk website"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                Website
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                budgetark.app
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

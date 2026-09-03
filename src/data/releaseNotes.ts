@@ -39,6 +39,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Profile → Partner Sync: recent activity. After each sync, a short list under Sync Now says what arrived from your partner's phone - '12 entries, 1 debt from Sam' - as counts only, never amounts. Stays on this phone.",
       "Switching from YNAB, Mint or Monarch? Import their transaction CSV as-is. BudgetArk recognizes the file, maps the columns and categories for you (anything it doesn't recognize arrives as a custom category under its own name), and leaves out transfers between your own accounts. The import summary says what it did.",
       "Fixed: during setup, the take-home pay, rent and display-name fields could hide behind the keyboard while you typed. The page now scrolls to keep the active field in view.",
+      "Profile → About now links to the BudgetArk website, budgetark.app, next to the GitHub link.",
       "The Compound Interest Calculator on the Charts tab can now compare a lump sum with monthly contributions. Set a Starting Lump Sum (what you already have, invested once) alongside the monthly amount and a new card shows what each becomes on its own, what both become together, and the year the monthly plan overtakes the lump sum. The projection and chart include the lump sum, and the monthly contribution can now be zero to look at a lump sum by itself.",
     ],
   },
