@@ -982,7 +982,7 @@ export const calcPlanNudges = (
   };
 };
 
-/* ── Stacked cumulative-savings chart ── */
+/* ── Progress-to-target chart ── */
 
 /** Longest horizon the chart draws, even when plans take longer. */
 export const MAX_CHART_MONTHS = 36;
@@ -1023,6 +1023,8 @@ export type SavingsChartSeries = {
   target: number;
   /** Saved balance per month, index 0 = today. */
   values: number[];
+  /** Share of the target saved per month (0..1, capped), index 0 = today. */
+  progress: number[];
   /** Month index the plan reaches its target within the horizon, if it does. */
   readyAtMonth: number | null;
 };
@@ -1032,16 +1034,17 @@ export type SavingsChartModel = {
   months: number;
   series: SavingsChartSeries[];
   totalTarget: number;
-  /** Highest stacked total across the horizon (the y-axis ceiling candidate). */
+  /** Highest combined balance across the horizon. */
   peakTotal: number;
 };
 
 /**
- * Data behind the stacked cumulative-savings chart: every plan's balance
- * over a horizon that runs to the month the last plan funds, clamped to
- * [MIN_CHART_MONTHS, MAX_CHART_MONTHS]. Funded plans are included (flat at
- * their target) so the stack still adds up to what's really saved. Null
- * when there are no plans.
+ * Data behind the progress-to-target chart: every plan's balance (and the
+ * share of its own target that is) over a horizon that runs to the month
+ * the last plan funds, clamped to [MIN_CHART_MONTHS, MAX_CHART_MONTHS].
+ * Funded plans are included (flat at their target, ready at month 0) so
+ * the combined figures still add up to what's really saved. Null when
+ * there are no plans.
  */
 export const buildSavingsChart = (
   orderedGoals: readonly SavingsGoal[],
@@ -1062,6 +1065,7 @@ export const buildSavingsChart = (
       name: goal.name,
       target,
       values: balances[i],
+      progress: balances[i].map((value) => (target > 0 ? Math.min(1, value / target) : 0)),
       readyAtMonth: readyIndex >= 0 ? readyIndex : null,
     };
   });

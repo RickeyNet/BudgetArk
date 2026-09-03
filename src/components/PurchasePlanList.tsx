@@ -143,7 +143,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
-  const { formatCurrency, formatCompactCurrency } = useCurrency();
+  const { formatCurrency } = useCurrency();
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
@@ -209,7 +209,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
     () => projectPurchasePlans(ordered, combinedMonthly, settings.allocation),
     [ordered, combinedMonthly, settings.allocation],
   );
-  // Stacked cumulative-savings chart; only worth drawing once money flows.
+  // Progress-to-target chart; only worth drawing once money flows.
   const chartModel = useMemo(
     () =>
       combinedMonthly > 0 && summary.fundedCount < summary.planCount
@@ -479,7 +479,6 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             <PurchasePlanChart
               model={chartModel}
               colors={colors}
-              formatCompactCurrency={formatCompactCurrency}
               formatMonth={formatChartMonth}
             />
           ) : null}

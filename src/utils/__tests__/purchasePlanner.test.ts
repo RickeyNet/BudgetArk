@@ -788,6 +788,15 @@ describe("buildSavingsChart", () => {
     expect(model!.series[0].values).toHaveLength(MIN_CHART_MONTHS + 1);
   });
 
+  it("reports each plan's progress as a share of its own target, capped at 1", () => {
+    const model = buildSavingsChart([first, second], 200, "rollover", now);
+    // Bike: 0 -> 200 -> 300 (funded), then flat.
+    expect(model!.series[0].progress.slice(0, 4)).toEqual([0, 200 / 300, 1, 1]);
+    // Trip starts at 100/500 and only moves once Bike is funded.
+    expect(model!.series[1].progress.slice(0, 5)).toEqual([0.2, 0.2, 0.4, 0.8, 1]);
+    expect(model!.series[1].progress.every((value) => value <= 1)).toBe(true);
+  });
+
   it("caps a long horizon and reports plans that never fund within it", () => {
     const slow = goal({ id: "slow", targetAmount: 100_000, currentAmount: 0 });
     const model = buildSavingsChart([slow], 50, "rollover", now);
