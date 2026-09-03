@@ -84,18 +84,28 @@ describe("buildExpenseCategoryRows", () => {
     });
   });
 
-  it("shows a limit-only category normally but hides it in business-only mode", () => {
+  it("hides a limit-only category with no spend in both modes", () => {
     const withLimit = buildExpenseCategoryRows(
       buildInput({ limitByCategory: { Grocery: 400 } })
     );
-    expect(withLimit.map((r) => r.category)).toEqual(["Grocery"]);
-    expect(withLimit[0].spent).toBe(0);
-    expect(withLimit[0].limit).toBe(400);
+    expect(withLimit).toEqual([]);
 
     const businessOnly = buildExpenseCategoryRows(
       buildInput({ limitByCategory: { Grocery: 400 }, businessOnly: true })
     );
     expect(businessOnly).toEqual([]);
+  });
+
+  it("keeps the limit on a category once it has spend", () => {
+    const rows = buildExpenseCategoryRows(
+      buildInput({
+        spendingByCategory: { Grocery: 50 },
+        limitByCategory: { Grocery: 400 },
+      })
+    );
+    expect(rows.map((r) => r.category)).toEqual(["Grocery"]);
+    expect(rows[0].limit).toBe(400);
+    expect(rows[0].ratio).toBeCloseTo(0.125);
   });
 
   it("drops limits (and so ratios) while business-only is active", () => {

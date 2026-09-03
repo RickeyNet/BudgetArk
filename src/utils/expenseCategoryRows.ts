@@ -95,12 +95,12 @@ export const buildExpenseCategoryRows = ({
     ...customCategoryNames,
   ];
   allCategories.forEach((category) => {
-    // Filtered view: only categories with business spend - a limit alone
-    // shouldn't surface an empty row there.
-    if (
-      (spendingByCategory[category] ?? 0) > 0 ||
-      (!businessOnly && limitByCategory[category] != null)
-    ) {
+    // Only categories with spend this month get a row. A limit alone is
+    // deliberately not enough: at the start of a month nearly every limited
+    // category sits at $0, and a wall of empty rows under the chart hides the
+    // few that matter. Limits for quiet categories stay reachable from the
+    // card's "Limits" header link.
+    if ((spendingByCategory[category] ?? 0) > 0) {
       categoriesInPlay.add(category);
     }
   });
