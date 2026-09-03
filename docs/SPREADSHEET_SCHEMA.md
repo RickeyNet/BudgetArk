@@ -64,10 +64,11 @@ into the Budget Entries schema above before the normal validation runs
 | Monarch | `Merchant`, `Original Statement`, `Amount`     | Negative → expense, positive → income; `Notes` (or Merchant) → Description; Original Statement → Merchant. |
 
 Source categories map onto BudgetArk built-ins by keyword (`Groceries` →
-`Grocery`, `Gas & Fuel` → `Transportation`, `Credit Card Payment` → `Debt
+`Grocery`, `Gas & Fuel` → `Transportation`, `Car Payment` → `Debt
 Payments`); anything unrecognized is imported as a custom category under its
 own name (YNAB's `Group: Category` keeps the leaf). Rows that are transfers
-between the user's own accounts, or that have a zero / unreadable amount, are
+between the user's own accounts (credit-card payments included: the card's
+purchases are the spending), or that have a zero / unreadable amount, are
 left out and counted in the import summary - they are not income or spending.
 
 ## Sheet: Budget Limits (xlsx only)

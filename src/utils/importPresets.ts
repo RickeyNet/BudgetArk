@@ -99,7 +99,7 @@ type CategoryRule = { category: string; keywords: string[] };
  * ("Healthcare", "Electricity", "Transportation") are listed explicitly.
  */
 export const PRESET_CATEGORY_RULES: readonly CategoryRule[] = [
-  { category: "Debt Payments", keywords: ["credit card payment", "loan", "student loan", "car payment", "mortgage payment", "debt"] },
+  { category: "Debt Payments", keywords: ["loan", "student loan", "car payment", "mortgage payment", "debt"] },
   { category: "Retirement", keywords: ["retirement", "401k", "401(k)", "ira", "pension"] },
   { category: "Investing", keywords: ["invest", "brokerage", "stocks", "crypto", "cryptocurrency"] },
   { category: "Savings", keywords: ["saving", "emergency fund", "sinking"] },
@@ -170,8 +170,15 @@ export const mapPresetCategory = (raw: string, type: "income" | "expense"): stri
   return clean.length > MAX_CATEGORY_LENGTH ? clean.slice(0, MAX_CATEGORY_LENGTH).trim() : clean;
 };
 
+/**
+ * Rows that move money between the user's own accounts: explicit transfers
+ * and credit-card payments (Mint / Monarch file them under "Credit Card
+ * Payment", YNAB under a "Credit Card Payments: <card>" category). The
+ * card's purchases are the spending; importing the payment too would count
+ * it twice. Deliberately a skip rather than a Debt Payments expense.
+ */
 const isTransfer = (...fields: string[]): boolean =>
-  fields.some((field) => /\btransfer\b/i.test(field));
+  fields.some((field) => /\btransfer\b/i.test(field) || /\bcredit card payments?\b/i.test(field));
 
 const buildRow = (
   date: string,
@@ -205,7 +212,7 @@ export const presetRowToEntryRow = (
     case "ynab": {
       const payee = get(row, "Payee");
       const category = get(row, "Category") || get(row, "Category Group/Category");
-      if (isTransfer(payee)) return null;
+      if (isTransfer(payee, category)) return null;
       const outflow = parseMoney(get(row, "Outflow"));
       const inflow = parseMoney(get(row, "Inflow"));
       const amount = (Number.isFinite(inflow) ? inflow : 0) - (Number.isFinite(outflow) ? outflow : 0);

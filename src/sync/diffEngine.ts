@@ -81,6 +81,7 @@ import type { SyncDiff, DiffEntry, BudgetLimitDiff } from "./types";
 import { dedupeMinimumDuePayments } from "../utils/debtPaymentDedupe";
 import { notifyDataChanged } from "../storage/dataChangeNotifier";
 import { timestampMs } from "../utils/recordTimestamps";
+import { mergeLoanRepayments } from "../utils/loans";
 import {
   isObject,
   isDebtItem,
@@ -379,7 +380,14 @@ export const computeOutgoingDiff = async (
  */
 const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string }>(
   local: T[],
-  incoming: DiffEntry<T>[]
+  incoming: DiffEntry<T>[],
+  /**
+   * Optional set-merge applied when BOTH sides hold the record: receives
+   * the last-write-wins winner and the loser and returns the record to
+   * keep (budget entries use it to union loan repayments). Runs whichever
+   * side won, so field-level merges converge from either direction.
+   */
+  reconcile?: (winner: T, loser: T) => T
 ): T[] => {
   const localMap = new Map(local.map((item) => [item.id, item]));
 
@@ -392,7 +400,12 @@ const mergeById = <T extends { id: string; updatedAt: string; deletedAt?: string
     const localTime = localItem ? timestampMs(localItem.updatedAt) : -Infinity;
 
     if (incomingTime >= localTime) {
-      localMap.set(entry.record.id, entry.record);
+      localMap.set(
+        entry.record.id,
+        reconcile && localItem ? reconcile(entry.record, localItem) : entry.record
+      );
+    } else if (reconcile && localItem) {
+      localMap.set(entry.record.id, reconcile(localItem, entry.record));
     }
     // else: local is newer - keep it. If local is a tombstone and incoming
     // is an upsert, the tombstone wins (no resurrection). If local is live
@@ -626,7 +639,10 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
       const locallyPrivateIds = new Set(
         localEntries.filter((entry) => entry.isPrivate).map((entry) => entry.id)
       );
-      return mergeById(localEntries, diff.budgetEntries).map((entry) =>
+      // Loan repayments merge as a set (union minus tombstones) so two
+      // phones logging repayments before a sync keep both - see
+      // utils/loans.mergeLoanRepayments.
+      return mergeById(localEntries, diff.budgetEntries, mergeLoanRepayments).map((entry) =>
         locallyPrivateIds.has(entry.id) && !entry.isPrivate
           ? { ...entry, isPrivate: true }
           : entry

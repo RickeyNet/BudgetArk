@@ -187,6 +187,8 @@ export const addLoanRepayment = (
   const existing = entry.loanRepayments ?? [];
   if (existing.length >= MAX_LOAN_REPAYMENTS) return null;
   if (existing.some((r) => r.id === input.id)) return null;
+  // A tombstoned id would be erased again on the next sync merge.
+  if (entry.deletedRepaymentIds?.includes(input.id)) return null;
 
   const note = normalizeRepaymentNote(input.note);
   const repayment: LoanRepayment = {
@@ -203,8 +205,10 @@ export const addLoanRepayment = (
 };
 
 /**
- * Drop one repayment. Returns the entry unchanged (same reference) when
- * the id is unknown so callers can skip the write.
+ * Drop one repayment and remember its id as a tombstone so a partner
+ * phone that still holds the repayment can't bring it back on the next
+ * sync merge (see mergeLoanRepayments). Returns the entry unchanged (same
+ * reference) when the id is unknown so callers can skip the write.
  */
 export const removeLoanRepayment = (entry: BudgetEntry, repaymentId: string): BudgetEntry => {
   const existing = entry.loanRepayments ?? [];
@@ -213,6 +217,64 @@ export const removeLoanRepayment = (entry: BudgetEntry, repaymentId: string): Bu
   const next: BudgetEntry = { ...entry };
   if (remaining.length > 0) next.loanRepayments = remaining;
   else delete next.loanRepayments;
+  next.deletedRepaymentIds = capTombstones([
+    ...(entry.deletedRepaymentIds ?? []).filter((id) => id !== repaymentId),
+    repaymentId,
+  ]);
+  return next;
+};
+
+/** Newest tombstones win the cap; the list is append-only otherwise. */
+const capTombstones = (ids: string[]): string[] =>
+  ids.length > MAX_LOAN_REPAYMENTS ? ids.slice(ids.length - MAX_LOAN_REPAYMENTS) : ids;
+
+/** Same payment logged twice with fresh ids (a spreadsheet round-trip re-ids repayments). */
+const repaymentFingerprint = (r: LoanRepayment): string =>
+  `${r.date}|${r.amount}|${r.note ?? ""}`;
+
+/**
+ * Set-merge of two copies of the same loan entry after last-write-wins
+ * has picked `winner`: every repayment either copy holds survives unless
+ * either copy tombstoned it, so two phones logging repayments before a
+ * sync keep both, and a removal on one phone sticks everywhere. A loser
+ * repayment that matches a winner one exactly (date, amount, note) under
+ * a different id is treated as the same payment - spreadsheet round-trips
+ * re-id repayments - at the cost of collapsing two genuinely identical
+ * same-day payments logged on different phones. Tombstones are unioned
+ * too, so a removal can't be undone by merging in the other direction
+ * later. The winner's other fields are untouched; a winner that is
+ * deleted or no longer a loan is returned as-is (no resurrection), and so
+ * is a loser that is a tombstone.
+ */
+export const mergeLoanRepayments = (winner: BudgetEntry, loser: BudgetEntry): BudgetEntry => {
+  if (winner.deletedAt || loser.deletedAt || !isLoanEntry(winner)) return winner;
+  const tombstones = new Set([
+    ...(winner.deletedRepaymentIds ?? []),
+    ...(loser.deletedRepaymentIds ?? []),
+  ]);
+  const winnerRepayments = (winner.loanRepayments ?? []).filter((r) => !tombstones.has(r.id));
+  const seenIds = new Set(winnerRepayments.map((r) => r.id));
+  const seenPrints = new Set(winnerRepayments.map(repaymentFingerprint));
+  const extra = (loser.loanRepayments ?? []).filter(
+    (r) =>
+      !tombstones.has(r.id) && !seenIds.has(r.id) && !seenPrints.has(repaymentFingerprint(r))
+  );
+  const merged = [...winnerRepayments, ...extra]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, MAX_LOAN_REPAYMENTS);
+  const tombstoneList = capTombstones(Array.from(tombstones));
+
+  const unchanged =
+    merged.length === (winner.loanRepayments ?? []).length &&
+    merged.every((r, i) => r === winner.loanRepayments?.[i]) &&
+    tombstoneList.length === (winner.deletedRepaymentIds ?? []).length;
+  if (unchanged) return winner;
+
+  const next: BudgetEntry = { ...winner };
+  if (merged.length > 0) next.loanRepayments = merged;
+  else delete next.loanRepayments;
+  if (tombstoneList.length > 0) next.deletedRepaymentIds = tombstoneList;
+  else delete next.deletedRepaymentIds;
   return next;
 };
 

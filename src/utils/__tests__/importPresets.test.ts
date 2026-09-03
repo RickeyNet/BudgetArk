@@ -117,6 +117,47 @@ describe("presetRowToEntryRow - Mint", () => {
   });
 });
 
+describe("presetRowToEntryRow - credit card payments are transfers", () => {
+  it("skips Mint / Monarch 'Credit Card Payment' rows and YNAB's card-payment category", () => {
+    expect(
+      presetRowToEntryRow("mint", {
+        Date: "8/14/2026",
+        Description: "Payment to Chase",
+        Amount: "850.00",
+        "Transaction Type": "debit",
+        Category: "Credit Card Payment",
+      }),
+    ).toBeNull();
+    expect(
+      presetRowToEntryRow("monarch", {
+        Date: "2026-08-14",
+        Merchant: "Chase Card Services",
+        Category: "Credit Card Payment",
+        Amount: "-850.00",
+      }),
+    ).toBeNull();
+    expect(
+      presetRowToEntryRow("ynab", {
+        Date: "08/14/2026",
+        Payee: "Chase",
+        "Category Group/Category": "Credit Card Payments: Visa",
+        Outflow: "$850.00",
+        Inflow: "",
+      }),
+    ).toBeNull();
+    // A card's own purchases are still the spending.
+    expect(
+      presetRowToEntryRow("mint", {
+        Date: "8/14/2026",
+        Description: "Costco",
+        Amount: "120.00",
+        "Transaction Type": "debit",
+        Category: "Groceries",
+      }),
+    ).toMatchObject({ Type: "expense", Category: "Grocery", Amount: "120.00" });
+  });
+});
+
 describe("presetRowToEntryRow - Monarch", () => {
   it("reads the signed amount and keeps notes as the description", () => {
     const row = presetRowToEntryRow("monarch", {

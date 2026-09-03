@@ -231,6 +231,16 @@ export const isLoanRepaymentsValue = (value: unknown): boolean => {
   );
 };
 
+/**
+ * BudgetEntry.deletedRepaymentIds: absent, or at most MAX_LOAN_REPAYMENTS
+ * short string ids (the repayment tombstones sync merges against).
+ */
+export const isDeletedRepaymentIdsValue = (value: unknown): boolean => {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length > MAX_LOAN_REPAYMENTS) return false;
+  return value.every((id) => isSafeText(id, 120));
+};
+
 export const isBudgetEntryItem = (
   item: unknown
 ): item is Record<string, unknown> => {
@@ -305,6 +315,7 @@ export const isBudgetEntryItem = (
   const lentToValid =
     item.lentTo === undefined || isSafeText(item.lentTo, LENT_TO_MAX_LENGTH);
   const loanRepaymentsValid = isLoanRepaymentsValue(item.loanRepayments);
+  const deletedRepaymentIdsValid = isDeletedRepaymentIdsValue(item.deletedRepaymentIds);
 
   return (
     isSafeText(item.id) &&
@@ -327,6 +338,7 @@ export const isBudgetEntryItem = (
     fulfillsRecurringIdValid &&
     lentToValid &&
     loanRepaymentsValid &&
+    deletedRepaymentIdsValid &&
     isValidDateValue(item.date) &&
     isValidDateValue(item.createdAt) &&
     isOptionalIso(item.updatedAt) &&

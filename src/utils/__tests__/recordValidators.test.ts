@@ -345,6 +345,17 @@ describe("isBudgetEntryItem", () => {
       expect(isBudgetEntryItem({ ...valid, loanRepayments: [] })).toBe(true);
     });
 
+    it("accepts repayment tombstones as a bounded list of ids and rejects anything else", () => {
+      expect(isBudgetEntryItem({ ...valid, lentTo: "Sam", deletedRepaymentIds: ["r1", "r2"] })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, deletedRepaymentIds: [] })).toBe(true);
+      expect(isBudgetEntryItem({ ...valid, deletedRepaymentIds: "r1" })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, deletedRepaymentIds: [""] })).toBe(false);
+      expect(isBudgetEntryItem({ ...valid, deletedRepaymentIds: [42] })).toBe(false);
+      expect(
+        isBudgetEntryItem({ ...valid, deletedRepaymentIds: Array.from({ length: 201 }, (_, i) => `r${i}`) })
+      ).toBe(false);
+    });
+
     it("rejects an empty / oversized borrower and malformed repayments", () => {
       expect(isBudgetEntryItem({ ...valid, lentTo: "" })).toBe(false);
       expect(isBudgetEntryItem({ ...valid, lentTo: 42 })).toBe(false);

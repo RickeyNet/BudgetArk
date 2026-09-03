@@ -446,6 +446,14 @@ export interface BudgetEntry {
    */
   loanRepayments?: LoanRepayment[];
   /**
+   * Ids of repayments the user removed. Partner sync merges an entry's
+   * repayments as a set (union of both phones' lists minus these
+   * tombstones - see utils/loans.mergeLoanRepayments) so two phones logging
+   * repayments before syncing keep both, while a removal still wins
+   * everywhere. Capped like loanRepayments; older peers ignore the field.
+   */
+  deletedRepaymentIds?: string[];
+  /**
    * Private entry: excluded from the outgoing partner-sync diff (live AND
    * tombstoned - see diffEngine). Stays in all local budget math, JSON
    * export/import, and spreadsheets (the flag must round-trip or a

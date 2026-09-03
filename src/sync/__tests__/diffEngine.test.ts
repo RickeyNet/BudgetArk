@@ -417,6 +417,47 @@ describe("applyIncomingDiff - validation gate", () => {
     expect(outgoing.budgetEntries.map((e) => e.record.id)).toEqual([]);
   });
 
+  it("merges loan repayments as a set whichever side wins LWW, honouring tombstones", async () => {
+    const rA = { id: "a", amount: 20, date: OLD, createdAt: OLD };
+    const rB = { id: "b", amount: 30, date: OLD, createdAt: OLD };
+    const rC = { id: "c", amount: 10, date: OLD, createdAt: OLD };
+    // Local logged B and removed C; the partner (newer) logged A and still holds C.
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", lentTo: "Sam", loanRepayments: [rB], deletedRepaymentIds: ["c"], updatedAt: MID }),
+    ];
+    await applyIncomingDiff(
+      emptyDiff({
+        budgetEntries: [
+          {
+            action: "upsert",
+            record: budgetEntry({ id: "e1", lentTo: "Sam", loanRepayments: [rA, rC], updatedAt: NEW }),
+          },
+        ],
+      }),
+    );
+    const stored = mockState.budgetEntries.find((e: any) => e.id === "e1");
+    expect(stored.loanRepayments.map((r: any) => r.id).sort()).toEqual(["a", "b"]);
+    expect(stored.deletedRepaymentIds).toEqual(["c"]);
+
+    // Same scenario with the partner OLDER: local wins, but A is still kept.
+    mockState.budgetEntries = [
+      budgetEntry({ id: "e1", lentTo: "Sam", loanRepayments: [rB], deletedRepaymentIds: ["c"], updatedAt: NEW }),
+    ];
+    await applyIncomingDiff(
+      emptyDiff({
+        budgetEntries: [
+          {
+            action: "upsert",
+            record: budgetEntry({ id: "e1", lentTo: "Sam", loanRepayments: [rA, rC], updatedAt: MID }),
+          },
+        ],
+      }),
+    );
+    const kept = mockState.budgetEntries.find((e: any) => e.id === "e1");
+    expect(kept.updatedAt).toBe(NEW);
+    expect(kept.loanRepayments.map((r: any) => r.id).sort()).toEqual(["a", "b"]);
+  });
+
   it("keeps a tombstone private when a stale partner delete wins", async () => {
     mockState.budgetEntries = [
       budgetEntry({ id: "e1", isPrivate: true, updatedAt: MID }),
