@@ -155,6 +155,19 @@ describe("detectSubscriptions - yearly", () => {
     expect(detectSubscriptions(pricier, { nowKey: NOW }).subscriptions).toHaveLength(0);
   });
 
+  it("rejects charges in consecutive calendar years that are only days apart", () => {
+    // A monthly subscription that started in late December, seen in January:
+    // two charges a week apart must not read as a $31/yr subscription.
+    const newYear = [charge("LOCAL BISTRO", "2025-12-28", 30), charge("LOCAL BISTRO", "2026-01-03", 31)];
+    expect(detectSubscriptions(newYear, { nowKey: "2026-01" }).subscriptions).toHaveLength(0);
+    // Ten months apart is still not a year.
+    const tenMonths = [charge("X", "2025-02-10", 50), charge("X", "2025-12-10", 50)];
+    expect(detectSubscriptions(tenMonths, { nowKey: "2026-01" }).subscriptions).toHaveLength(0);
+    // Thirteen months (one month of drift) still counts.
+    const thirteen = [charge("X", "2024-11-10", 50), charge("X", "2025-12-10", 50)];
+    expect(detectSubscriptions(thirteen, { nowKey: "2026-01" }).subscriptions).toHaveLength(1);
+  });
+
   it("does not report a single charge", () => {
     expect(
       detectSubscriptions([charge("X", "2026-09-10", 50)], { nowKey: NOW }).subscriptions,

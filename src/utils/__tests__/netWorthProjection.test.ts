@@ -98,9 +98,44 @@ describe("projectNetWorth", () => {
       months: 2,
     });
     expect(points).toEqual([
-      { monthOffset: 0, assets: 1000, debt: 100, netWorth: 900 },
-      { monthOffset: 1, assets: 1200, debt: 50, netWorth: 1150 },
-      { monthOffset: 2, assets: 1400, debt: 0, netWorth: 1400 },
+      { monthOffset: 0, assets: 1000, debt: 100, netWorth: 900, freedMinimums: 0 },
+      { monthOffset: 1, assets: 1200, debt: 50, netWorth: 1150, freedMinimums: 0 },
+      { monthOffset: 2, assets: 1400, debt: 0, netWorth: 1400, freedMinimums: 0 },
+    ]);
+  });
+
+  it("returns a retired debt's minimum to the asset side instead of deducting it forever", () => {
+    // Surplus after the $100 minimum is $400; the debt is gone after month 3
+    // (three full payments), so from month 4 the whole $500 lands on assets.
+    const points = projectNetWorth({
+      currentAssets: 0,
+      debts: [makeDebt({ balance: 300, rate: 0, minPayment: 100 })],
+      monthlySurplus: 400,
+      months: 5,
+    });
+    expect(points.map((p) => [p.debt, p.freedMinimums, p.assets])).toEqual([
+      [300, 0, 0],
+      [200, 0, 400],
+      [100, 0, 800],
+      [0, 0, 1200],
+      [0, 100, 1700],
+      [0, 200, 2200],
+    ]);
+  });
+
+  it("frees the unused part of a final short payment", () => {
+    // $150 owed at $100/mo: month 2 pays only the $50 left, freeing $50.
+    const points = projectNetWorth({
+      currentAssets: 0,
+      debts: [makeDebt({ balance: 150, rate: 0, minPayment: 100 })],
+      monthlySurplus: 0,
+      months: 3,
+    });
+    expect(points.map((p) => [p.debt, p.freedMinimums])).toEqual([
+      [150, 0],
+      [50, 0],
+      [0, 50],
+      [0, 150],
     ]);
   });
 
@@ -161,6 +196,25 @@ describe("buildNetWorthOutlook", () => {
       reachDate: null,
     });
     expect(outlook.goal!.gap).toBeLessThan(0);
+  });
+
+  it("keeps counting a retired debt's minimum toward a goal past its payoff", () => {
+    // Same $1,200 debt at $100/mo (gone after month 12) but a 24-month goal:
+    // months 13-24 add the freed $100 back, so 1000 + 400*24 + 100*12.
+    const goal = { targetAmount: 100000, targetMonth: monthKeyAt(-24), createdAt: "2026-09-02T00:00:00.000Z" };
+    const outlook = buildNetWorthOutlook({
+      entries: history,
+      debts: [makeDebt({ balance: 1200, rate: 0, minPayment: 100 })],
+      currentAssets: 1000,
+      goal,
+      now: NOW,
+    });
+    expect(outlook.goal).toMatchObject({
+      monthsUntil: 24,
+      projectedAtTarget: 11800,
+      // (100000 - (1000 assets + 1200 freed - 0 debt)) / 24
+      requiredMonthly: 4075,
+    });
   });
 
   it("looks past the horizon for the reach date and clamps a past goal month to one month", () => {

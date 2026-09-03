@@ -178,9 +178,19 @@ const applyDebtLinks = async (
   }
 };
 
+/**
+ * `gapPendingIds`: accounts whose backlog re-fetch failed this pass. Their
+ * link keeps its old balance date (and balance, so the next pass still
+ * sees a jump) - planGapBackfill reads that date, and stamping it now
+ * would hide the gap forever. `gapResolvedIds`: accounts whose backlog
+ * was re-fetched; their date is stamped even when the balance didn't
+ * move, so the same gap isn't re-fetched every pass.
+ */
 const applyBalances = async (
   links: ExternalAccountLink[],
   accounts: NormalizedAccount[],
+  gapPendingIds: ReadonlySet<string> = new Set(),
+  gapResolvedIds: ReadonlySet<string> = new Set(),
 ): Promise<number> => {
   const accountsById = new Map(accounts.map((a) => [a.externalAccountId, a]));
   const assetAccounts = await getAssetAccounts();
@@ -191,10 +201,14 @@ const applyBalances = async (
     const provider = accountsById.get(link.externalAccountId);
     if (!provider) continue;
 
-    // Raw provider balance always lands on the link for display.
+    // Raw provider balance always lands on the link for display - except
+    // while its backlog is still owed (see the doc comment above); the
+    // asset mirror below still gets the real balance either way.
     if (
-      link.lastExternalBalance !== provider.balance ||
-      !link.lastExternalBalanceAt
+      !gapPendingIds.has(link.externalAccountId) &&
+      (link.lastExternalBalance !== provider.balance ||
+        !link.lastExternalBalanceAt ||
+        gapResolvedIds.has(link.externalAccountId))
     ) {
       await updateLink(link.id, {
         lastExternalBalance: provider.balance,
@@ -277,8 +291,10 @@ const syncOneConnection = async (
   // A bank behind the bridge that just came back after going dark: its
   // backlog predates this window (see planGapBackfill). Re-fetch once from
   // the earlier start and use that superset; a failed second fetch keeps
-  // the first result - the gap is retried on the next pass, since the
-  // links' balance dates only advance below when the pass succeeds.
+  // the first result and the gap is retried on the next pass - which only
+  // works because applyBalances leaves those links' balance dates alone.
+  const gapPendingIds = new Set<string>();
+  const gapResolvedIds = new Set<string>();
   if (opts.backfillDays === undefined) {
     const gap = planGapBackfill({
       links,
@@ -291,6 +307,9 @@ const syncOneConnection = async (
       if (refetched.ok) {
         result = refetched;
         backfilledFrom = gap.startDate.toISOString();
+        for (const id of gap.staleAccountIds) gapResolvedIds.add(id);
+      } else {
+        for (const id of gap.staleAccountIds) gapPendingIds.add(id);
       }
     }
   }
@@ -362,7 +381,7 @@ const syncOneConnection = async (
   }
 
   const balancesUpdated =
-    (await applyBalances(links, result.accounts)) +
+    (await applyBalances(links, result.accounts, gapPendingIds, gapResolvedIds)) +
     (await applyDebtLinks(
       links,
       result.accounts,

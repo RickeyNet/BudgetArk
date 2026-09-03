@@ -155,6 +155,13 @@ const detectYearly = (
   for (let i = 1; i < years.length; i++) {
     if (years[i] !== years[i - 1] + 1) return null;
   }
+  // Consecutive calendar years aren't enough on their own: a charge on
+  // Dec 28 and another on Jan 3 are a week apart, not a year. Each pair of
+  // neighbouring charges must be about a year apart (11-13 months).
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = monthDistance(entryMonthKey(sorted[i - 1].date), entryMonthKey(sorted[i].date));
+    if (gap < 11 || gap > 13) return null;
+  }
   const latestMonth = Number(latestKey.slice(5, 7));
   for (const entry of sorted) {
     const month = Number(entryMonthKey(entry.date).slice(5, 7));

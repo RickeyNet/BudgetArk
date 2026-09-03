@@ -121,11 +121,12 @@ export const calcPurchaseTimeline = (
 };
 
 /**
- * Whole months from `now` until the end of a "YYYY-MM" target month.
- * Floors at 1 (a target inside the current month still needs one saving
- * month); null when the string doesn't parse.
+ * Signed whole months from `now`'s month to a "YYYY-MM" target month: 0 =
+ * this month, negative = already past. Null when the string doesn't parse.
+ * Lateness math needs the real distance; the required-monthly math wants
+ * the floored version below.
  */
-export const monthsUntilTarget = (
+export const monthsToTargetMonth = (
   targetYearMonth: string,
   now: Date = new Date()
 ): number | null => {
@@ -134,8 +135,20 @@ export const monthsUntilTarget = (
   const year = Number(match[1]);
   const month = Number(match[2]);
   if (month < 1 || month > 12) return null;
-  const diff = (year - now.getFullYear()) * 12 + (month - 1 - now.getMonth());
-  return Math.max(1, diff);
+  return (year - now.getFullYear()) * 12 + (month - 1 - now.getMonth());
+};
+
+/**
+ * Whole months from `now` until the end of a "YYYY-MM" target month.
+ * Floors at 1 (a target inside the current month still needs one saving
+ * month); null when the string doesn't parse.
+ */
+export const monthsUntilTarget = (
+  targetYearMonth: string,
+  now: Date = new Date()
+): number | null => {
+  const diff = monthsToTargetMonth(targetYearMonth, now);
+  return diff === null ? null : Math.max(1, diff);
 };
 
 /**
@@ -522,7 +535,9 @@ export const projectPurchasePlans = (
     const months = readyIn[i];
     let lateByMonths: number | null = null;
     if (goal.targetDate) {
-      const until = monthsUntilTarget(goal.targetDate.slice(0, 7), now);
+      // Unfloored on purpose: a need-by month already behind us makes
+      // every month of saving a month late, not "one month away".
+      const until = monthsToTargetMonth(goal.targetDate.slice(0, 7), now);
       if (until !== null) {
         lateByMonths = months === null ? Infinity : Math.max(0, months - until);
       }

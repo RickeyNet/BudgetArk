@@ -167,6 +167,21 @@ describe("buildPaycheckPeriodView", () => {
     expect(view!.perDay).toBe(145);
   });
 
+  it("counts a bill due today once: under 'due', not also as already spent", () => {
+    const withToday = [
+      ...entries,
+      makeBudgetEntry({ id: "water", description: "Water", category: "Utilities", amount: 60, recurring: true, date: "2026-01-10T12:00:00.000Z" }),
+      // A one-off logged today really was spent.
+      makeBudgetEntry({ id: "lunch", category: "Restaurant", amount: 12, date: "2026-09-10T12:00:00.000Z" }),
+    ];
+    const view = buildPaycheckPeriodView({ settings, entries: withToday, debts, payments: [], startingBalance: 500, now });
+    expect(view!.due.map((d) => `${d.label}:${d.daysUntil}`)).toEqual(["Water:0", "Visa:2", "Electric:5"]);
+    expect(view!.dueTotal).toBe(200);
+    // 500 + 2000 - 1200 (rent) - 12 (lunch); the water bill is in dueTotal only.
+    expect(view!.cashNow).toBe(1288);
+    expect(view!.safeToSpend).toBe(1088);
+  });
+
   it("drops a debt already paid this month and leaves cash figures null without a balance", () => {
     const payments = [makePayment({ id: "p1", debtId: "visa", amount: 50, date: "2026-09-02T15:00:00.000Z" })];
     const view = buildPaycheckPeriodView({ settings, entries, debts, payments, startingBalance: null, now });

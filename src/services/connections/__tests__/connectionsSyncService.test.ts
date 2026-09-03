@@ -722,6 +722,49 @@ describe("gap backfill (a bank behind the bridge comes back after going dark)", 
     expect(result.newPendingCount).toBe(1);
   });
 
+  it("leaves the link's balance date alone when the re-fetch fails, so the next pass sees the gap again", async () => {
+    const link = makeExternalAccountLink({
+      externalAccountId: "ACT-1",
+      lastExternalBalance: 100,
+      lastExternalBalanceAt: iso(NOW - 30 * DAY),
+    });
+    mockGetLinksForConnection.mockResolvedValue([link]);
+    const cameBack = account({ balance: 250, balanceAsOf: iso(NOW) });
+    mockFetchSimplefin
+      .mockResolvedValueOnce(okFetch({ accounts: [cameBack], transactions: [tx()] }))
+      .mockResolvedValueOnce({ ok: false, error: "rate-limited", message: "limit" });
+
+    await syncConnections({ now: NOW, manual: true });
+
+    // The balance changed, which would normally stamp lastExternalBalanceAt
+    // = now and make planGapBackfill think the window already covers it.
+    const stamped = mockUpdateLink.mock.calls.filter(
+      (call: any[]) => call[0] === link.id && "lastExternalBalanceAt" in (call[1] ?? {}),
+    );
+    expect(stamped).toHaveLength(0);
+  });
+
+  it("stamps the balance date after a successful re-fetch even when the balance did not move", async () => {
+    const link = makeExternalAccountLink({
+      externalAccountId: "ACT-1",
+      lastExternalBalance: 100,
+      lastExternalBalanceAt: iso(NOW - 30 * DAY),
+    });
+    mockGetLinksForConnection.mockResolvedValue([link]);
+    const unchanged = account({ balance: 100, balanceAsOf: iso(NOW) });
+    mockFetchSimplefin
+      .mockResolvedValueOnce(okFetch({ accounts: [unchanged], transactions: [tx()] }))
+      .mockResolvedValueOnce(okFetch({ accounts: [unchanged], transactions: [tx()] }));
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+
+    expect(result.backfilledFrom).toBeDefined();
+    expect(mockUpdateLink).toHaveBeenCalledWith(
+      link.id,
+      expect.objectContaining({ lastExternalBalanceAt: iso(NOW) }),
+    );
+  });
+
   it("an explicit re-import widens the window to N days, skips the cooldown, and never gap-detects", async () => {
     mockGetConnections.mockResolvedValue([
       conn({ lastSyncedAt: iso(NOW - DAY), lastAttemptAt: iso(NOW - 60_000) }), // inside the 15-min cooldown

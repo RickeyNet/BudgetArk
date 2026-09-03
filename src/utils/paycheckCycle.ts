@@ -242,7 +242,12 @@ export const ledgerSoFarThisMonth = (
   let income = 0;
   let expenses = 0;
   for (const entry of entriesForMonth(entries, monthKey)) {
-    if (getDayOfMonth(entry, monthKey) > today) continue;
+    const day = getDayOfMonth(entry, monthKey);
+    if (day > today) continue;
+    // A recurring bill whose day is today is still ahead of us: the
+    // period view lists it under "due" (upcomingBillsWithin starts today),
+    // so counting it as spent here would subtract it twice.
+    if (day === today && entry.recurring && entry.type === "expense") continue;
     if (!Number.isFinite(entry.amount)) continue;
     if (entry.type === "income") income += entry.amount;
     else if (entry.type === "expense") expenses += entry.amount;

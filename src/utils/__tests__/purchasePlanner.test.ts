@@ -378,6 +378,19 @@ describe("projectPurchasePlans", () => {
     expect(result.allFundedDate).toEqual(new Date(2026, 10, 1));
   });
 
+  it("counts every month past a need-by date that is already behind us as late", () => {
+    // Need-by March 2026, now July: 4 months gone. $50 left at $100/mo
+    // funds next month -> 5 months late, not "ready next month, on time".
+    const overdue = goal({ id: "overdue", targetAmount: 100, currentAmount: 50, targetDate: "2026-03-01" });
+    const thisMonth = goal({ id: "thisMonth", targetAmount: 300, currentAmount: 0, targetDate: "2026-07-20" });
+    const result = projectPurchasePlans([overdue, thisMonth], 100, "rollover", now);
+    const [p1, p2] = result.projections;
+    expect(p1).toMatchObject({ readyInMonths: 1, lateByMonths: 5 });
+    // Month 1: 50 -> overdue done, 50 -> thisMonth; months 2-3: 200 more -> ready month 4.
+    // Need-by is this month (0 away) -> 4 months late.
+    expect(p2).toMatchObject({ readyInMonths: 4, lateByMonths: 4 });
+  });
+
   it("parallel splits evenly and re-splits a finished plan's share the same month", () => {
     const result = projectPurchasePlans([first, second], 200, "parallel", now);
     const [p1, p2] = result.projections;

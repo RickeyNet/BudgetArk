@@ -116,11 +116,8 @@ export const estimateMonthlySurplus = (
     }
   }
   if (monthsTracked === 0) return { monthly: 0, monthsTracked: 0 };
-  const minimums = debts
-    .filter((d) => d.balance > 0)
-    .reduce((sum, d) => sum + Math.max(0, d.minPayment), 0);
   return {
-    monthly: roundToCents(net / monthsTracked - minimums),
+    monthly: roundToCents(net / monthsTracked - currentMinimums(debts)),
     monthsTracked,
   };
 };
@@ -131,7 +128,20 @@ export const estimateMonthlySurplus = (
  * that doesn't cover the interest lets that balance grow - the honest
  * answer, and the same thing simulatePayoffPlan reports as unsolvable.
  */
-export const projectDebtBalances = (debts: readonly Debt[], months: number): number[] => {
+export const projectDebtBalances = (debts: readonly Debt[], months: number): number[] =>
+  simulateMinimums(debts, months).balances;
+
+/**
+ * The minimums-only schedule with what it actually costs each month:
+ * `balances[m]` is the total owed after month m (index 0 = today) and
+ * `paid[m]` the minimums that went out that month (paid[0] = 0). A paid-off
+ * debt stops costing anything, and the final payment is only what's left -
+ * so `paid` falls below today's minimums as debts retire.
+ */
+export const simulateMinimums = (
+  debts: readonly Debt[],
+  months: number
+): { balances: number[]; paid: number[] } => {
   const live = debts
     .filter((d) => d.balance > 0)
     .map((d) => ({
@@ -139,27 +149,47 @@ export const projectDebtBalances = (debts: readonly Debt[], months: number): num
       monthlyRate: Math.max(0, d.rate) / 100 / 12,
       minPayment: Math.max(0, d.minPayment),
     }));
-  const out: number[] = [roundToCents(live.reduce((sum, d) => sum + d.balance, 0))];
+  const balances: number[] = [roundToCents(live.reduce((sum, d) => sum + d.balance, 0))];
+  const paid: number[] = [0];
   for (let m = 1; m <= months; m++) {
     let total = 0;
+    let outflow = 0;
     for (const debt of live) {
       if (debt.balance <= 0) continue;
-      debt.balance = Math.max(0, debt.balance + debt.balance * debt.monthlyRate - debt.minPayment);
+      const owed = debt.balance + debt.balance * debt.monthlyRate;
+      const payment = Math.min(debt.minPayment, owed);
+      debt.balance = Math.max(0, owed - payment);
+      outflow += payment;
       total += debt.balance;
     }
-    out.push(roundToCents(total));
+    balances.push(roundToCents(total));
+    paid.push(roundToCents(outflow));
   }
-  return out;
+  return { balances, paid };
 };
+
+/** Today's minimums - the figure estimateMonthlySurplus takes off the cash side. */
+export const currentMinimums = (debts: readonly Debt[]): number =>
+  debts.filter((d) => d.balance > 0).reduce((sum, d) => sum + Math.max(0, d.minPayment), 0);
 
 export type ProjectionPoint = {
   monthOffset: number;
   assets: number;
   debt: number;
   netWorth: number;
+  /**
+   * Minimums no longer owed by this month, cumulative: once a debt is paid
+   * off its payment stays on the cash side, so it lands in `assets` here.
+   */
+  freedMinimums: number;
 };
 
-/** The forward line: assets grow by the surplus, debts follow the minimums schedule. */
+/**
+ * The forward line: assets grow by the surplus, debts follow the minimums
+ * schedule. `monthlySurplus` is net of TODAY's minimums (estimateMonthlySurplus),
+ * so each month the part of those minimums the schedule no longer spends -
+ * a retired debt, or a final short payment - is added back to assets.
+ */
 export const projectNetWorth = (input: {
   currentAssets: number;
   debts: readonly Debt[];
@@ -167,12 +197,22 @@ export const projectNetWorth = (input: {
   months: number;
 }): ProjectionPoint[] => {
   const months = Math.max(0, Math.min(PROJECTION_MAX_MONTHS, Math.floor(input.months)));
-  const debtLine = projectDebtBalances(input.debts, months);
+  const schedule = simulateMinimums(input.debts, months);
+  const minimumsToday = currentMinimums(input.debts);
   const points: ProjectionPoint[] = [];
+  let freed = 0;
   for (let m = 0; m <= months; m++) {
-    const assets = roundToCents(input.currentAssets + input.monthlySurplus * m);
-    const debt = debtLine[m];
-    points.push({ monthOffset: m, assets, debt, netWorth: roundToCents(assets - debt) });
+    if (m > 0) freed += Math.max(0, minimumsToday - schedule.paid[m]);
+    const freedMinimums = roundToCents(freed);
+    const assets = roundToCents(input.currentAssets + input.monthlySurplus * m + freedMinimums);
+    const debt = schedule.balances[m];
+    points.push({
+      monthOffset: m,
+      assets,
+      debt,
+      netWorth: roundToCents(assets - debt),
+      freedMinimums,
+    });
   }
   return points;
 };
@@ -241,8 +281,10 @@ export const buildNetWorthOutlook = (input: {
     const atIndex = Math.min(monthsUntil, PROJECTION_MAX_MONTHS);
     const projectedAtTarget = full[atIndex].netWorth;
     const debtThen = full[atIndex].debt;
+    // The freed minimums arrive whatever the surplus is, so they count
+    // toward the target before the pace that is asked of the user.
     const requiredMonthly = roundToCents(
-      (target - (input.currentAssets - debtThen)) / monthsUntil
+      (target - (input.currentAssets + full[atIndex].freedMinimums - debtThen)) / monthsUntil
     );
     const reachIndex = full.findIndex((p) => p.netWorth >= target);
     goal = {
