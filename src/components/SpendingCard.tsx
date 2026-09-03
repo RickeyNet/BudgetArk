@@ -335,7 +335,9 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
         const paceLabel = pacing
           ? pacing.status === "over"
             ? `Over limit by ${formatCurrency(pacing.overBy)}`
-            : pacing.status === "ahead"
+            : pacing.status === "at-limit"
+              ? "At the limit - nothing left this month"
+              : pacing.status === "ahead"
               ? `Ahead of pace - on track would be ${formatCurrency(pacing.expectedSpent)} by today`
               : `On pace - ${formatCurrency(pacing.expectedSpent)} expected by today`
           : null;

@@ -24,7 +24,12 @@ export interface PacingClock {
   daysInMonth: number;
 }
 
-export type PaceStatus = "over" | "ahead" | "on-track";
+/**
+ * `at-limit` = spent equals the limit to the cent: the budget is used up
+ * but not exceeded, so it is never an alert (the banner used to announce
+ * "over by $0"). It stays distinct from `on-track` so the row can say so.
+ */
+export type PaceStatus = "over" | "at-limit" | "ahead" | "on-track";
 
 export interface CategoryPacing {
   status: PaceStatus;
@@ -92,8 +97,11 @@ export const computeCategoryPacing = (
   const projectedSpent = round2(elapsedFraction > 0 ? spent / elapsedFraction : spent);
 
   let status: PaceStatus = "on-track";
-  if (spent >= limit) {
+  if (spent > limit + 0.005) {
     status = "over";
+  } else if (spent >= limit - 0.005) {
+    // Exactly on the limit (to the cent): used up, not exceeded.
+    status = "at-limit";
   } else if (
     elapsedFraction >= MIN_ELAPSED_FOR_AHEAD &&
     spent > expectedSpent &&
@@ -145,7 +153,9 @@ export const buildPaceAlerts = (
   const alerts: PaceAlert[] = [];
   for (const row of rows) {
     const pacing = computeCategoryPacing(row.spent, row.limit, clock);
-    if (!pacing || pacing.status === "on-track" || !row.limit) continue;
+    if (!pacing || pacing.status === "on-track" || pacing.status === "at-limit" || !row.limit) {
+      continue;
+    }
     alerts.push({
       category: row.category,
       status: pacing.status,

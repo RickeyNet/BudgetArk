@@ -64,7 +64,19 @@ describe("computeCategoryPacing", () => {
     const day2 = { dayOfMonth: 2, daysInMonth: 30 };
     // 25% spent on day 2 projects to 375% - still noise this early.
     expect(computeCategoryPacing(100, 400, day2)?.status).toBe("on-track");
-    expect(computeCategoryPacing(400, 400, day2)?.status).toBe("over");
+    expect(computeCategoryPacing(400.01, 400, day2)?.status).toBe("over");
+  });
+
+  it("treats spending exactly on the limit as at-limit, not over, and never alerts on it", () => {
+    const pacing = computeCategoryPacing(400, 400, mid);
+    expect(pacing?.status).toBe("at-limit");
+    expect(pacing?.overBy).toBe(0);
+    // A cent either side flips it.
+    expect(computeCategoryPacing(399.99, 400, mid)?.status).not.toBe("at-limit");
+    expect(computeCategoryPacing(400.01, 400, mid)?.status).toBe("over");
+    // The banner used to announce "over its $400 limit by $0".
+    expect(buildPaceAlerts([{ category: "Grocery", spent: 400, limit: 400 }], mid)).toEqual([]);
+    expect(buildPaceAlerts([{ category: "Grocery", spent: 400.01, limit: 400 }], mid)).toHaveLength(1);
   });
 
   it("reports over with the overshoot amount", () => {
