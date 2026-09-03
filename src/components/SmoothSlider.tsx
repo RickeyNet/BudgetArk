@@ -12,8 +12,14 @@
  * NOT affect the visual smoothness of the slider.
  *
  * ScrollView interop:
- * - activeOffsetX  → gesture activates after 5 px horizontal movement
- * - failOffsetY    → gesture fails (lets ScrollView scroll) on 10 px vertical
+ * - activeOffsetX  → pan activates after 5 px horizontal movement
+ * - failOffsetY    → pan fails (lets ScrollView scroll) on 10 px vertical
+ * - The value is deliberately NOT committed on touch-down. A vertical
+ *   scroll that happens to start on a slider passes through onBegin before
+ *   the pan fails, so committing there re-set the value on every scroll.
+ *   Drags commit from onStart onward; a clean tap (finger lifts without
+ *   drifting) commits via a separate Tap gesture that only runs once the
+ *   pan has failed.
  */
 
 import React, { useCallback } from "react";
@@ -87,9 +93,9 @@ const SmoothSlider: React.FC<SmoothSliderProps> = React.memo(
       [min, max, step, onValueChange]
     );
 
-    /* ── Gesture ── */
-    const gesture = Gesture.Pan()
-      .onBegin((e) => {
+    /* ── Gestures ── */
+    const pan = Gesture.Pan()
+      .onStart((e) => {
         "worklet";
         if (trackWidth.value <= 0) return;
         const pct = Math.max(0, Math.min(1, e.x / trackWidth.value));
@@ -106,6 +112,22 @@ const SmoothSlider: React.FC<SmoothSliderProps> = React.memo(
       .activeOffsetX([-5, 5])
       .failOffsetY([-10, 10])
       .hitSlop({ top: 10, bottom: 10 });
+
+    // Tap-to-jump. Exclusive() lets the tap run only after the pan has
+    // failed (finger lifted without a horizontal drag); maxDistance keeps a
+    // short scroll flick from counting as a tap.
+    const tap = Gesture.Tap()
+      .maxDistance(6)
+      .onEnd((e, success) => {
+        "worklet";
+        if (!success || trackWidth.value <= 0) return;
+        const pct = Math.max(0, Math.min(1, e.x / trackWidth.value));
+        progress.value = pct;
+        runOnJS(commitValue)(pct);
+      })
+      .hitSlop({ top: 10, bottom: 10 });
+
+    const gesture = Gesture.Exclusive(pan, tap);
 
     /* ── Layout ── */
     const handleLayout = useCallback(

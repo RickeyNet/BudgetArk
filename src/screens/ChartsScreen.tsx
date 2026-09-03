@@ -1089,11 +1089,40 @@ const ChartsScreen: React.FC = () => {
             <View style={tool.resultCard}>
               <Text style={tool.resultLabel}>PROJECTED VALUE</Text>
               <Text style={tool.resultValue}>{formatCurrency(totalValue)}</Text>
-              <Text style={tool.resultSub}>
+              <Text style={[tool.resultSub, styles.calcResultSub]} numberOfLines={2}>
                 {lumpSum > 0
                   ? `${formatCurrency(lumpSum)} now + ${formatCurrency(contribution)}/mo · after ${years} years at ${returnRate}%`
                   : `in today's dollars · after ${years} years at ${returnRate}%`}
               </Text>
+            </View>
+
+            {/* Sliders sit directly under the result card, and everything
+                that mounts/unmounts or rewraps as the values change (the
+                comparison card, Rule of 72, Why 7%) is deliberately placed
+                BELOW them. Anything above the sliders that changes height
+                mid-drag shifts the track under the finger and makes the
+                page jump. */}
+            {/* Sliders */}
+            <View style={tool.slidersCard}>
+              {renderSlider("lumpSum", lumpSum)}
+              {renderSlider("contribution", contribution)}
+              {renderSlider("returnRate", returnRate)}
+              {renderSlider("years", years)}
+
+              {/* Timeline Presets */}
+              <View style={tool.presetRow}>
+                {YEAR_PRESETS.map((preset) => (
+                  <TouchableOpacity
+                    key={preset}
+                    style={[tool.presetBtn, years === preset && tool.presetBtnActive]}
+                    onPress={() => setYears(preset)}
+                  >
+                    <Text style={[tool.presetBtnText, years === preset && tool.presetBtnTextActive]}>
+                      {preset}yr
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             {/* Lump sum vs. monthly comparison */}
@@ -1166,29 +1195,6 @@ const ChartsScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-
-            {/* Sliders */}
-            <View style={tool.slidersCard}>
-              {renderSlider("lumpSum", lumpSum)}
-              {renderSlider("contribution", contribution)}
-              {renderSlider("returnRate", returnRate)}
-              {renderSlider("years", years)}
-
-              {/* Timeline Presets */}
-              <View style={tool.presetRow}>
-                {YEAR_PRESETS.map((preset) => (
-                  <TouchableOpacity
-                    key={preset}
-                    style={[tool.presetBtn, years === preset && tool.presetBtnActive]}
-                    onPress={() => setYears(preset)}
-                  >
-                    <Text style={[tool.presetBtnText, years === preset && tool.presetBtnTextActive]}>
-                      {preset}yr
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
 
             {/* Chart */}
             <View style={styles.chartCard}>
@@ -1808,6 +1814,12 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
 
 
     /* Return rate presets */
+    // Reserve two lines so the subtext rewrapping mid-drag never changes the
+    // result card's height (the sliders live directly beneath it).
+    calcResultSub: {
+      lineHeight: 18,
+      minHeight: 36,
+    },
     ratePresetRow: {
       flexDirection: "row",
       gap: 6,
