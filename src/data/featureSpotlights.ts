@@ -22,6 +22,7 @@ export type ProfileSpotlightSection =
   | "connections"
   | "businesses"
   | "people"
+  | "owedToYou"
   | "tipJar"
   | "trackingReminders"
   | "theme"
@@ -268,7 +269,7 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     title: "Owed to You",
     blurb:
       "Lent someone money? Name them on the expense when you log it (or in the Review Inbox), then track what they still owe and log each payment they make under Profile → People → Owed to You.",
-    cta: { label: "Open Owed to You", kind: "profile-section", section: "people" },
+    cta: { label: "Open Owed to You", kind: "profile-section", section: "owedToYou" },
   },
   {
     id: "net-worth-goal",

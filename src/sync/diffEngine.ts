@@ -136,10 +136,35 @@ const isBackfillSyncDone = async (): Promise<boolean> =>
 const isDismissalsBackfillDone = async (): Promise<boolean> =>
   (await EncryptedStorage.getItem(SYNC_DISMISSALS_BACKFILL_KEY)) === "true";
 
-export const markBackfillSyncDone = async (): Promise<void> => {
+/**
+ * Stamps the backfill markers after a successful sync.
+ *
+ * `peerSupportsDismissals` must be true only when the PEER's diff carried
+ * the `dismissedTransactions` field (see `peerSupportsDismissals` in the
+ * orchestrator). A 1.10.0 peer silently ignores that field, so stamping
+ * the dismissals marker after syncing with one would mean: partner
+ * upgrades later, we only send dismissals newer than lastSyncTimestamp,
+ * and they never receive the older ones - re-offering transactions this
+ * device already skipped. The v1 marker (snapshots/categories) is stamped
+ * unconditionally because every protocol-compatible peer understands those.
+ */
+export const markBackfillSyncDone = async (
+  peerSupportsDismissals: boolean,
+): Promise<void> => {
   await EncryptedStorage.setItem(SYNC_BACKFILL_KEY, "true");
-  await EncryptedStorage.setItem(SYNC_DISMISSALS_BACKFILL_KEY, "true");
+  if (peerSupportsDismissals) {
+    await EncryptedStorage.setItem(SYNC_DISMISSALS_BACKFILL_KEY, "true");
+  }
 };
+
+/**
+ * True when an incoming diff came from a peer that understands
+ * `dismissedTransactions`: senders on that version always include the
+ * field (an empty map when there is nothing to send), so its presence is
+ * the capability signal and `undefined` means an older peer.
+ */
+export const peerSupportsDismissals = (diff: SyncDiff): boolean =>
+  diff.dismissedTransactions !== undefined;
 
 /* ─── Outgoing Diff ─── */
 
@@ -313,15 +338,16 @@ export const computeOutgoingDiff = async (
       Object.keys(monthStartBalances).length > 0 ? monthStartBalances : undefined,
     // Dismissed bank transactions: incremental by decision time, sent in
     // full once after updating to the version that added the field (its
-    // own backfill flag - see SYNC_DISMISSALS_BACKFILL_KEY).
-    dismissedTransactions: (() => {
-      const selected = selectSyncableDismissals(
-        ingestLedger,
-        since,
-        !lastSyncTimestamp || !dismissalsBackfillDone,
-      );
-      return Object.keys(selected).length > 0 ? selected : undefined;
-    })(),
+    // own backfill flag - see SYNC_DISMISSALS_BACKFILL_KEY). ALWAYS present
+    // - an empty map when there is nothing to send - because the receiver
+    // uses the field's presence as "this peer understands dismissals"
+    // (peerSupportsDismissals) to decide whether its own backfill is done.
+    // Backwards compatible: an older peer ignores unknown fields.
+    dismissedTransactions: selectSyncableDismissals(
+      ingestLedger,
+      since,
+      !lastSyncTimestamp || !dismissalsBackfillDone,
+    ),
     debtMilestonePlan:
       !lastSyncTimestamp ||
       new Date(milestonePlan.updatedAt).getTime() > since

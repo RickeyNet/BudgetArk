@@ -10,10 +10,12 @@
 
 import {
   DEFAULT_PURCHASE_PLAN_SETTINGS,
+  hasPurchasePlanPatchFields,
   MAX_COMBINED_MONTHLY,
   MAX_FINANCE_APR,
   MAX_HOURLY_RATE,
   MAX_HOURS_PER_WEEK,
+  overlayPendingPurchasePlanPatch,
   parsePurchasePlanSettings,
 } from "../purchasePlanSettings";
 
@@ -98,5 +100,40 @@ describe("parsePurchasePlanSettings", () => {
     const parsed = parsePurchasePlanSettings(null);
     parsed.method = "custom";
     expect(DEFAULT_PURCHASE_PLAN_SETTINGS.method).toBe("snowball");
+  });
+});
+
+describe("hasPurchasePlanPatchFields", () => {
+  it("is false for an empty patch so a flush never writes {}", () => {
+    expect(hasPurchasePlanPatchFields({})).toBe(false);
+  });
+
+  it("is true once any field is queued, including an explicit null", () => {
+    expect(hasPurchasePlanPatchFields({ combinedMonthly: 25 })).toBe(true);
+    expect(hasPurchasePlanPatchFields({ hourlyOverride: null })).toBe(true);
+  });
+});
+
+describe("overlayPendingPurchasePlanPatch", () => {
+  const stored = { ...DEFAULT_PURCHASE_PLAN_SETTINGS, combinedMonthly: 300, method: "custom" as const };
+
+  it("returns the fresh read untouched when nothing is pending", () => {
+    expect(overlayPendingPurchasePlanPatch(stored, {})).toEqual(stored);
+  });
+
+  it("lets the fields still in the debounce win over what was on disk", () => {
+    // The other surface wrote combinedMonthly: 300 while this one queued
+    // allocation: parallel; the focus re-read must keep both.
+    expect(
+      overlayPendingPurchasePlanPatch(stored, { allocation: "parallel", combinedMonthly: 325 }),
+    ).toEqual({ ...stored, allocation: "parallel", combinedMonthly: 325 });
+  });
+
+  it("does not mutate either input", () => {
+    const pending = { method: "soonest" as const };
+    const merged = overlayPendingPurchasePlanPatch(stored, pending);
+    merged.method = "snowball";
+    expect(stored.method).toBe("custom");
+    expect(pending.method).toBe("soonest");
   });
 });

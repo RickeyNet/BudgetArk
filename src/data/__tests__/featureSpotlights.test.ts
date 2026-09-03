@@ -130,6 +130,7 @@ describe("FEATURE_SPOTLIGHTS data", () => {
           "trackingReminders",
           "theme",
           "appLock",
+          "owedToYou",
         ]).toContain(s.cta.section);
       }
     }

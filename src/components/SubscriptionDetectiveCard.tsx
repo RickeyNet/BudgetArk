@@ -58,8 +58,10 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
   const [busyMerchant, setBusyMerchant] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Loaded on mount, not on open: the collapsed header's count and yearly
+  // total come from the same scan, so a hidden merchant must be excluded
+  // before the card is ever expanded (one small encrypted read).
   useEffect(() => {
-    if (!open) return;
     let cancelled = false;
     void getIgnoredSubscriptionMerchants()
       .then((list) => {
@@ -69,7 +71,7 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, []);
 
   const nowKey = getMonthKey();
   const scan = useMemo(
@@ -131,6 +133,12 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
   );
 
   const count = scan.subscriptions.length;
+  // The summary spans every row, so name the cadence the rows actually have.
+  const cadenceWord = scan.subscriptions.every((s) => s.cadence === "yearly")
+    ? "year"
+    : scan.subscriptions.every((s) => s.cadence === "monthly")
+      ? "month"
+      : "month or year";
 
   return (
     <>
@@ -172,7 +180,7 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
                 <Text style={tool.resultSub}>
                   about {formatCurrency(scan.monthlyTotal)} a month across {count}{" "}
                   {count === 1 ? "subscription" : "subscriptions"}. Make each one a
-                  bill and the budget expects it every {"month"} - or hide the
+                  bill and the budget expects it every {cadenceWord} - or hide the
                   ones that aren't subscriptions.
                 </Text>
               </View>

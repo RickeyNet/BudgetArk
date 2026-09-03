@@ -102,7 +102,7 @@ import PartnerSyncSection from "./profile/PartnerSyncSection";
 import ProgressSection from "./profile/ProgressSection";
 import CategoriesSection from "./profile/CategoriesSection";
 import BusinessSection from "./profile/BusinessSection";
-import PeopleSection from "./profile/PeopleSection";
+import PeopleSection, { type PeopleSectionHandle } from "./profile/PeopleSection";
 import DataSection, { type DataSectionHandle } from "./profile/DataSection";
 import ConnectionsSection, {
   type ConnectionsSectionHandle,
@@ -140,6 +140,7 @@ const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
   connections: "bank-connections",
   businesses: "business-expenses",
   people: "people-assignment",
+  owedToYou: "owed-to-you",
   tipJar: "tip-jar",
   trackingReminders: "tracking-reminders",
   theme: "deep-sea-theme",
@@ -167,6 +168,7 @@ const ProfileScreen: React.FC = () => {
   /** Imperative handles into sections for the banner + deep links. */
   const dataSectionRef = useRef<DataSectionHandle>(null);
   const connectionsSectionRef = useRef<ConnectionsSectionHandle>(null);
+  const peopleSectionRef = useRef<PeopleSectionHandle>(null);
   const settingsSectionRef = useRef<SettingsSectionHandle>(null);
 
   /** Feature ids whose settings rows currently show a NEW badge. */
@@ -354,6 +356,9 @@ const ProfileScreen: React.FC = () => {
           break;
         case "people":
           setShowManagePeople(true);
+          break;
+        case "owedToYou":
+          peopleSectionRef.current?.openOwedToYou();
           break;
         case "tipJar":
           setShowTipJar(true);
@@ -725,6 +730,7 @@ const ProfileScreen: React.FC = () => {
 
         {/* ── People ── */}
         <PeopleSection
+          ref={peopleSectionRef}
           newFeatureIds={newFeatureIds}
           onDismissNewBadge={dismissNewBadge}
           showManagePeople={showManagePeople}

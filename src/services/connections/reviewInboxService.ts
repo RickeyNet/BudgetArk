@@ -296,8 +296,15 @@ export const dismissPendingTransaction = (pendingId: string): Promise<void> =>
  * expense: the amount lands on the plan's `currentAmount`, the row is
  * retired with a DISMISSED ledger entry (no BudgetEntry - a transfer into
  * savings isn't spending, and the decision still syncs so a partner's
- * inbox retires the same row), and the inbox row goes. Same crash-safe
- * order as approval: the money first, ledger second, inbox removal last.
+ * inbox retires the same row), and the inbox row goes. Deliberately NOT
+ * the approval order (entry, ledger, removal): approval's BudgetEntry
+ * carries the externalTxId, so a crash after it still lets the reconcile
+ * pass see the decision - but a credited goal carries nothing, so money
+ * before ledger meant a crash left the row pending with the plan already
+ * credited, and the retry double-credited. So: ledger first (the decision
+ * is durable and syncs), money second, inbox removal last. A crash between
+ * ledger and money leaves an un-credited row the reconcile pass retires -
+ * never a double credit.
  * Returns the live goals, or null when the item or plan no longer exists.
  */
 export const applyPendingTransferToPlan = async (
@@ -313,10 +320,10 @@ export const applyPendingTransferToPlan = async (
   const goal = goals.find((candidate) => candidate.id === goalId);
   if (!goal || goal.category === "emergency_fund") return null;
 
+  await recordLedgerEntries({ [item.id]: ledgerEntryFor(item, "dismissed") });
   const updated = await updateSavingsGoal(goalId, {
     currentAmount: roundToCents(goal.currentAmount + amount),
   });
-  await recordLedgerEntries({ [item.id]: ledgerEntryFor(item, "dismissed") });
   await removePendingTransaction(item.id);
   return updated;
 };

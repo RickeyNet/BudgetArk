@@ -48,6 +48,22 @@ export const DEFAULT_PURCHASE_PLAN_SETTINGS: PurchasePlanSettings = {
   financeTermMonths: 24,
 };
 
+/** True when a debounced patch carries fields - a flush must never write `{}`. */
+export const hasPurchasePlanPatchFields = (
+  patch: Partial<PurchasePlanSettings>
+): boolean => Object.keys(patch).length > 0;
+
+/**
+ * A freshly re-read record with the fields still waiting in a component's
+ * debounce layered over it. Both surfaces re-read on focus; what the user
+ * changed *here* since the read started beats what was on disk, so a focus
+ * never visibly reverts an edit that simply hasn't been written yet.
+ */
+export const overlayPendingPurchasePlanPatch = (
+  stored: PurchasePlanSettings,
+  pending: Partial<PurchasePlanSettings>
+): PurchasePlanSettings => ({ ...stored, ...pending });
+
 /** Upper bound on a stored set-aside - anything larger is treated as corrupt. */
 export const MAX_COMBINED_MONTHLY = 1_000_000;
 export const MAX_HOURS_PER_WEEK = 168;

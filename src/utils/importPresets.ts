@@ -92,37 +92,55 @@ type CategoryRule = { category: string; keywords: string[] };
 /**
  * Keyword -> built-in category; first rule to match wins, so the specific
  * (loan payments, insurance, personal care) sit above the general (car,
- * gas). Keywords match at a word start ("grocer" takes "Groceries", "car"
- * takes "Car Payment" but not "Childcare").
+ * gas). Keywords match a whole word plus at most a plural/simple suffix
+ * (see keywordMatches): "grocer" takes "Groceries" and "car" takes "Car
+ * Payment", but "rent" does not take "Rental Car", "bar" "Barber", "pet"
+ * "Petrol" or "car" "Childcare". Word forms outside the suffix allowlist
+ * ("Healthcare", "Electricity", "Transportation") are listed explicitly.
  */
 export const PRESET_CATEGORY_RULES: readonly CategoryRule[] = [
   { category: "Debt Payments", keywords: ["credit card payment", "loan", "student loan", "car payment", "mortgage payment", "debt"] },
   { category: "Retirement", keywords: ["retirement", "401k", "401(k)", "ira", "pension"] },
-  { category: "Investing", keywords: ["invest", "brokerage", "stocks", "crypto"] },
+  { category: "Investing", keywords: ["invest", "brokerage", "stocks", "crypto", "cryptocurrency"] },
   { category: "Savings", keywords: ["saving", "emergency fund", "sinking"] },
-  { category: "Freelance", keywords: ["freelance", "1099", "contract", "consulting", "side hustle"] },
+  { category: "Freelance", keywords: ["freelance", "1099", "contract", "contractor", "consulting", "side hustle"] },
   { category: "Salary", keywords: ["paycheck", "salary", "payroll", "wages", "income", "ready to assign", "inflow"] },
   { category: "Grocery", keywords: ["grocer", "supermarket"] },
   { category: "Restaurant", keywords: ["restaurant", "dining", "fast food", "coffee", "takeout", "take-out", "bar", "eating out"] },
-  { category: "Housing", keywords: ["rent", "mortgage", "housing", "hoa", "home improvement", "furnish"] },
-  { category: "Utilities", keywords: ["utilit", "electric", "water", "sewer", "trash", "internet", "phone", "mobile", "cable", "natural gas", "gas & electric", "gas and electric"] },
-  { category: "Healthcare", keywords: ["health", "medical", "doctor", "pharmacy", "dental", "dentist", "vision", "therapy"] },
+  { category: "Housing", keywords: ["rent", "mortgage", "housing", "hoa", "home improvement", "furnish", "furnishing"] },
+  { category: "Utilities", keywords: ["utilit", "electric", "electricity", "water", "sewer", "trash", "internet", "phone", "mobile", "cable", "natural gas", "gas & electric", "gas and electric"] },
+  { category: "Healthcare", keywords: ["health", "healthcare", "medical", "doctor", "pharmacy", "dental", "dentist", "vision", "therapy"] },
   { category: "Insurance", keywords: ["insurance"] },
   { category: "Fitness", keywords: ["gym", "fitness"] },
-  { category: "Shopping", keywords: ["shopping", "clothing", "clothes", "amazon", "household", "personal care", "child care", "care", "beauty", "pet", "kids", "baby"] },
-  { category: "Transportation", keywords: ["gas", "fuel", "auto", "car", "transport", "parking", "toll", "uber", "lyft", "transit", "rideshare"] },
-  { category: "Tech", keywords: ["electronics", "software", "tech", "computer"] },
+  { category: "Shopping", keywords: ["shopping", "clothing", "clothes", "amazon", "household", "personal care", "child care", "beauty", "pet", "kids", "baby"] },
+  { category: "Transportation", keywords: ["gas", "fuel", "auto", "car", "transport", "transportation", "parking", "toll", "uber", "lyft", "transit", "rideshare"] },
+  { category: "Tech", keywords: ["electronics", "software", "tech", "technology", "computer"] },
   { category: "Entertainment", keywords: ["entertainment", "streaming", "movie", "music", "games", "gaming", "subscription", "hobbies", "hobby", "fun money"] },
   { category: "Travel", keywords: ["travel", "vacation", "hotel", "airfare", "flight", "airline"] },
-  { category: "Giving", keywords: ["gift", "charity", "donation", "giving", "church", "tithe"] },
+  { category: "Giving", keywords: ["gift", "charity", "charities", "donation", "giving", "church", "tithe"] },
   { category: "Food", keywords: ["food"] },
   { category: "Other", keywords: ["uncategorized", "misc", "other"] },
 ];
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const keywordMatches = (lower: string, keyword: string): boolean =>
-  new RegExp(`(^|[^a-z0-9])${escapeRegExp(keyword)}`).test(lower);
+/**
+ * Suffixes a keyword may carry and still count as the same word, so the
+ * rule list can say "grocer" / "utilit" / "invest" / "saving" / "gift" once
+ * and take Groceries, Utilities, Investments, Savings, Gifts. Anything
+ * longer is a different word ("Rental", "Barber", "Petrol").
+ */
+const KEYWORD_SUFFIXES = ["s", "es", "ies", "y", "ing", "ment", "ments"] as const;
+
+const suffixPattern = `(?:${KEYWORD_SUFFIXES.join("|")})?`;
+
+/**
+ * True when `keyword` appears in `lower` as a whole word: preceded by the
+ * start or a non-alphanumeric, followed by the end, a non-alphanumeric, or
+ * one allowlisted suffix. Pure; exported for the tests that pin it.
+ */
+export const keywordMatches = (lower: string, keyword: string): boolean =>
+  new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(keyword)}${suffixPattern}(?=$|[^a-z0-9])`).test(lower);
 
 /**
  * Best-effort BudgetArk category for a source category. Built-in by

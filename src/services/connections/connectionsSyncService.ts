@@ -361,12 +361,17 @@ const syncOneConnection = async (
       ...plan.newInboxItems,
       ...plan.updatedInboxItems,
     ]);
-    const staleIds = Object.keys(plan.ledgerAliases).filter((key) =>
-      inbox.some((existing) => existing.id === key),
-    );
-    if (staleIds.length > 0) {
-      await removePendingTransactions(staleIds);
-    }
+  }
+  // Retire inbox rows whose id gained an alias. Runs independently of the
+  // upsert above: when a partner-synced decision names the POSTED id and the
+  // pending twin is the only thing in the inbox, the planner emits an alias
+  // but no new/updated rows - gating the removal on those lists left the
+  // pending row alive until the next pass's reconcile.
+  const staleIds = Object.keys(plan.ledgerAliases).filter((key) =>
+    inbox.some((existing) => existing.id === key),
+  );
+  if (staleIds.length > 0) {
+    await removePendingTransactions(staleIds);
   }
 
   // Auto-approve sweep: items covered by an "approve" merchant rule become

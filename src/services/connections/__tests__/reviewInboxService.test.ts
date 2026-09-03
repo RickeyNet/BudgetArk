@@ -881,16 +881,28 @@ describe("reconcileInboxWithDecisions", () => {
 });
 
 describe("applyPendingTransferToPlan", () => {
-  it("adds the amount to the plan, records a dismissed ledger entry, and removes the row (money first, inbox last)", async () => {
+  it("adds the amount to the plan, records a dismissed ledger entry, and removes the row (ledger first, money second, inbox last)", async () => {
     const item = makePendingTransaction({ amount: -200.005 });
     seed(INBOX_KEY, [item]);
     seed(GOALS_KEY, [
       makeSavingsGoal({ id: "plan", name: "Bike", category: "other", currentAmount: 50 }),
       makeSavingsGoal({ id: "ef" }),
     ]);
+    const encryptedStorage = jest.requireMock("../../../storage/encryptedStorage") as {
+      setItem: jest.Mock;
+    };
+    encryptedStorage.setItem.mockClear();
 
     const goals = await applyPendingTransferToPlan(item.id, "plan");
 
+    // The write order IS the crash-safety guarantee: a credited goal carries
+    // no externalTxId, so the ledger (the durable decision) must land before
+    // the money, and the inbox row goes last.
+    expect(encryptedStorage.setItem.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      LEDGER_KEY,
+      GOALS_KEY,
+      INBOX_KEY,
+    ]);
     expect(goals?.find((g) => g.id === "plan")?.currentAmount).toBe(250.01);
     expect(read<Record<string, unknown>>(GOALS_KEY, {})).toBeTruthy();
     const ledger = read<IngestLedger>(LEDGER_KEY, {});
@@ -916,5 +928,38 @@ describe("applyPendingTransferToPlan", () => {
     expect(read<PendingTransaction[]>(INBOX_KEY, [])).toHaveLength(1);
     expect(read<IngestLedger>(LEDGER_KEY, {})).toEqual({});
     expect(read<{ currentAmount: number }[]>(GOALS_KEY, [])[0].currentAmount).toBe(5);
+  });
+
+  it("a crash between the ledger and the goal write leaves an un-credited row, never a double credit", async () => {
+    const item = makePendingTransaction({ id: "p-plan-crash", amount: -40 });
+    seed(INBOX_KEY, [item]);
+    seed(GOALS_KEY, [makeSavingsGoal({ id: "plan", category: "other", currentAmount: 10 })]);
+
+    const encryptedStorage = jest.requireMock("../../../storage/encryptedStorage") as {
+      setItem: jest.Mock;
+    };
+    const originalSetItem = encryptedStorage.setItem.getMockImplementation()!;
+    encryptedStorage.setItem.mockImplementation(async (k: string, v: string) => {
+      if (k === GOALS_KEY) throw new Error("simulated goal write failure");
+      return originalSetItem(k, v);
+    });
+
+    try {
+      await expect(applyPendingTransferToPlan(item.id, "plan")).rejects.toThrow(
+        "simulated goal write failure",
+      );
+      // Ledger FIRST: the decision is durable even though the credit failed.
+      expect(ledgerNow()[item.id]).toMatchObject({ status: "dismissed" });
+      // Money SECOND (failed): nothing was credited, so a retry cannot
+      // double-count; the reconcile pass retires the row from the ledger.
+      expect(read<{ currentAmount: number }[]>(GOALS_KEY, [])[0].currentAmount).toBe(10);
+      expect(inboxNow().map((i) => i.id)).toEqual([item.id]);
+    } finally {
+      encryptedStorage.setItem.mockImplementation(originalSetItem);
+    }
+
+    expect(await reconcileInboxWithDecisions()).toBe(1);
+    expect(inboxNow()).toEqual([]);
+    expect(read<{ currentAmount: number }[]>(GOALS_KEY, [])[0].currentAmount).toBe(10);
   });
 });

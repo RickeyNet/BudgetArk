@@ -17,6 +17,7 @@ import {
   computeOutgoingDiff,
   applyIncomingDiff,
   markBackfillSyncDone,
+  peerSupportsDismissals,
 } from "./diffEngine";
 import type { SyncResult, SyncStatus, SyncDiff } from "./types";
 import { summarizeIncomingDiff } from "./syncActivity";
@@ -114,8 +115,10 @@ const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
                 await updateSyncMetadata(ourDiff.syncTimestamp);
                 const now = new Date().toISOString();
                 // Full-history backlog (net worth, categories) has been
-                // delivered - future diffs can go back to incremental.
-                await markBackfillSyncDone();
+                // delivered - future diffs can go back to incremental. The
+                // dismissals backlog only counts as delivered when the peer
+                // proved it understands the field (see markBackfillSyncDone).
+                await markBackfillSyncDone(peerSupportsDismissals(partnerDiff));
 
                 connection.close();
                 Discovery.stop();
@@ -206,7 +209,7 @@ const syncAsClient = async (
           await updateSyncMetadata(ourDiff.syncTimestamp);
           const now = new Date().toISOString();
           // Same backlog stamp as the server path.
-          await markBackfillSyncDone();
+          await markBackfillSyncDone(peerSupportsDismissals(partnerDiff));
 
           setTimeout(() => connection.close(), 500);
           Transport.resetReplayProtection();

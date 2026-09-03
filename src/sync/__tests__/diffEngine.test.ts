@@ -9,6 +9,7 @@ import {
   computeOutgoingDiff,
   applyIncomingDiff,
   markBackfillSyncDone,
+  peerSupportsDismissals,
 } from "../diffEngine";
 import type { SyncDiff } from "../types";
 import {
@@ -291,11 +292,27 @@ describe("computeOutgoingDiff", () => {
     expect(diff.customCategories).toEqual([]);
   });
 
-  it("markBackfillSyncDone persists the flag", async () => {
-    await markBackfillSyncDone();
+  it("markBackfillSyncDone persists both flags when the peer understands dismissals", async () => {
+    await markBackfillSyncDone(true);
     expect(mockState.encStore.get("@budgetark_sync_backfill_done_v1")).toBe("true");
     // The dismissed-transactions field has its own marker (added later).
     expect(mockState.encStore.get("@budgetark_sync_backfill_dismissals_v1")).toBe("true");
+  });
+
+  it("markBackfillSyncDone leaves the dismissals flag unset after syncing with an older peer", async () => {
+    await markBackfillSyncDone(false);
+    expect(mockState.encStore.get("@budgetark_sync_backfill_done_v1")).toBe("true");
+    expect(mockState.encStore.get("@budgetark_sync_backfill_dismissals_v1")).toBeUndefined();
+  });
+
+  it("peerSupportsDismissals keys off the field's presence, not its size", () => {
+    expect(peerSupportsDismissals(emptyDiff())).toBe(false);
+    expect(peerSupportsDismissals(emptyDiff({ dismissedTransactions: {} }))).toBe(true);
+    expect(
+      peerSupportsDismissals(
+        emptyDiff({ dismissedTransactions: { "simplefin:ACT-1:TXN-A": { status: "dismissed", at: NEW } } })
+      )
+    ).toBe(true);
   });
 
   it("never sends private budget entries - live or tombstoned", async () => {
@@ -1034,10 +1051,17 @@ describe("dismissed bank transactions sync", () => {
     });
   });
 
-  it("omits the field when there is nothing to send", async () => {
+  it("always includes the field - an empty map when there is nothing to send - so the peer can tell we understand it", async () => {
     mockState.ledger = { [KEY_B]: { status: "approved", at: NEW, budgetEntryId: "e1" } };
-    const diff = await computeOutgoingDiff(null);
-    expect(diff.dismissedTransactions).toBeUndefined();
+    const first = await computeOutgoingDiff(null);
+    expect(first.dismissedTransactions).toEqual({});
+    const incremental = await computeOutgoingDiff(MID);
+    expect(incremental.dismissedTransactions).toEqual({});
+  });
+
+  it("applies an empty incoming map as a no-op (the capability signal carries no data)", async () => {
+    await expect(applyIncomingDiff(emptyDiff({ dismissedTransactions: {} }))).resolves.toBe(0);
+    expect(inboxService.reconcileInboxWithDecisions).not.toHaveBeenCalled();
   });
 
   it("sends the full dismissal backlog until its own backfill flag is set, then only newer ones", async () => {
@@ -1048,9 +1072,20 @@ describe("dismissed bank transactions sync", () => {
     const backlog = await computeOutgoingDiff(MID);
     expect(Object.keys(backlog.dismissedTransactions!).sort()).toEqual([KEY_A, KEY_B]);
 
-    await markBackfillSyncDone();
+    await markBackfillSyncDone(true);
     const incremental = await computeOutgoingDiff(MID);
     expect(Object.keys(incremental.dismissedTransactions!)).toEqual([KEY_B]);
+  });
+
+  it("keeps sending the full dismissal backlog after a sync with a peer that ignores the field", async () => {
+    // A upgrades first and syncs with B still on 1.10.0: B's diff has no
+    // dismissedTransactions, so A must not consider its backlog delivered.
+    // When B upgrades, A's older dismissals still go out once.
+    mockState.ledger = { [KEY_A]: dismissed(OLD), [KEY_B]: dismissed(NEW) };
+    await markBackfillSyncDone(false);
+    expect(mockState.encStore.get("@budgetark_sync_backfill_done_v1")).toBe("true");
+    const stillBacklog = await computeOutgoingDiff(MID);
+    expect(Object.keys(stillBacklog.dismissedTransactions!).sort()).toEqual([KEY_A, KEY_B]);
   });
 
   it("rejects malformed maps, approvals, bad keys, and oversized maps outright", async () => {

@@ -19,7 +19,13 @@
  */
 
 import type { BankConnection } from "../../../types";
-import { makeAssetAccount, makeBankConnection, makeDebt, makeExternalAccountLink } from "../../../__tests__/fixtures";
+import {
+  makeAssetAccount,
+  makeBankConnection,
+  makeDebt,
+  makeExternalAccountLink,
+  makePendingTransaction,
+} from "../../../__tests__/fixtures";
 import type { NormalizedAccount, NormalizedTransaction } from "../types";
 import { syncConnections, startConnectionsMonitoring, stopConnectionsMonitoring } from "../connectionsSyncService";
 import { getConnections, updateConnection } from "../../../storage/connectionsStorage";
@@ -305,6 +311,38 @@ describe("successful sync bookkeeping", () => {
     const [[upserted]] = mockUpsertPendingTransactions.mock.calls;
     expect(upserted).toHaveLength(1);
     expect(upserted[0]).toMatchObject({ externalAccountId: "ACT-1", amount: -25 });
+  });
+
+  it("retires a pending inbox twin in the SAME pass when a synced decision names its posted id and nothing else is new", async () => {
+    // Partner dismissed the POSTED transaction (decision arrived via sync);
+    // this device still holds the PENDING twin in its inbox. The planner
+    // emits only an alias - no new/updated rows - and the removal must not
+    // wait for the next pass's reconcile.
+    const postedKey = "simplefin:ACT-1:TXN-1";
+    const pendingKey = "simplefin:ACT-1:PENDING-1";
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([makeExternalAccountLink({ externalAccountId: "ACT-1" })]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ transactions: [tx({ providerTxId: "TXN-1", pending: false })] }));
+    mockGetIngestLedger.mockResolvedValue({
+      [postedKey]: { status: "dismissed", at: "2026-06-30T00:00:00.000Z" },
+    });
+    mockGetPendingTransactions.mockResolvedValue([
+      makePendingTransaction({
+        id: pendingKey,
+        providerTxId: "PENDING-1",
+        pending: true,
+        postedAt: "2026-06-27T00:00:00.000Z",
+      }),
+    ]);
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.newPendingCount).toBe(0);
+    expect(mockUpsertPendingTransactions).not.toHaveBeenCalled();
+    expect(mockRecordLedgerEntries).toHaveBeenCalledWith(
+      expect.objectContaining({ [pendingKey]: expect.objectContaining({ status: "dismissed", aliasOf: postedKey }) }),
+    );
+    expect(mockRemovePendingTransactions).toHaveBeenCalledTimes(1);
+    expect(mockRemovePendingTransactions).toHaveBeenCalledWith([pendingKey]);
   });
 
   it("notifies dataChanged only when at least one connection outcome is 'updated'", async () => {

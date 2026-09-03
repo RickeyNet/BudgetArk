@@ -24,6 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -59,7 +60,9 @@ import {
 } from "../storage/purchasePlanSettingsStorage";
 import {
   DEFAULT_PURCHASE_PLAN_SETTINGS,
+  hasPurchasePlanPatchFields,
   MAX_HOURLY_RATE,
+  overlayPendingPurchasePlanPatch,
   type PurchasePlanSettings,
 } from "../utils/purchasePlanSettings";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
@@ -184,29 +187,80 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
   const [hourlyText, setHourlyText] = useState("");
   const analysisTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const analysisPatch = useRef<Partial<PurchasePlanSettings>>({});
-  useEffect(() => {
-    let cancelled = false;
-    void getPurchasePlanSettings().then((stored) => {
-      if (cancelled) return;
-      setAnalysis(stored);
-      if (stored.hourlyOverride !== null) setHourlyText(String(stored.hourlyOverride));
-    });
-    return () => {
-      cancelled = true;
-      if (analysisTimer.current) clearTimeout(analysisTimer.current);
-    };
-  }, []);
-  const changeAnalysis = useCallback((patch: Partial<PurchasePlanSettings>) => {
-    setAnalysis((prev) => ({ ...prev, ...patch }));
-    analysisPatch.current = { ...analysisPatch.current, ...patch };
-    if (analysisTimer.current) clearTimeout(analysisTimer.current);
-    analysisTimer.current = setTimeout(() => {
+  /** The typed hourly field is seeded from storage once, on the first load. */
+  const hourlyHydrated = useRef(false);
+
+  /**
+   * Write whatever the debounce is holding, now - shared by the timer, by
+   * blur / unmount (a term chip tapped just before switching tabs must not
+   * be dropped), and by the focus re-read. Returns the write so a re-read
+   * can queue behind it; null when nothing was pending (never writes `{}`).
+   */
+  const flushAnalysis = useCallback((): Promise<unknown> | null => {
+    if (analysisTimer.current) {
+      clearTimeout(analysisTimer.current);
       analysisTimer.current = null;
-      const toSave = analysisPatch.current;
-      analysisPatch.current = {};
-      void updatePurchasePlanSettings(toSave);
-    }, 400);
+    }
+    const toSave = analysisPatch.current;
+    if (!hasPurchasePlanPatchFields(toSave)) return null;
+    analysisPatch.current = {};
+    return updatePurchasePlanSettings(toSave).catch(() => {
+      // The on-screen value already reflects the change; the next edit
+      // re-sends the field.
+    });
   }, []);
+
+  // Same record as the (twice-mounted) PurchasePlanList, so re-read on
+  // every focus rather than once; a pending patch here is written first
+  // and layered back over the fresh read so a focus never reverts it.
+  // Also the mount-time load whenever the tab is focused at mount.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      Promise.resolve(flushAnalysis())
+        .then(() => getPurchasePlanSettings())
+        .then((stored) => {
+          if (cancelled) return;
+          setAnalysis(overlayPendingPurchasePlanPatch(stored, analysisPatch.current));
+          // Only this card writes hourlyOverride, so a later re-read can't
+          // bring a different value - and re-seeding would clobber typing.
+          if (!hourlyHydrated.current) {
+            hourlyHydrated.current = true;
+            if (stored.hourlyOverride !== null) {
+              setHourlyText(String(stored.hourlyOverride));
+            }
+          }
+        })
+        .catch(() => {
+          // Unreadable record: keep what is shown (defaults on a fresh mount).
+        });
+      return () => {
+        cancelled = true;
+        void flushAnalysis();
+      };
+    }, [flushAnalysis])
+  );
+
+  // Unmount flushes rather than dropping the pending patch.
+  useEffect(
+    () => () => {
+      void flushAnalysis();
+    },
+    [flushAnalysis]
+  );
+
+  const changeAnalysis = useCallback(
+    (patch: Partial<PurchasePlanSettings>) => {
+      setAnalysis((prev) => ({ ...prev, ...patch }));
+      analysisPatch.current = { ...analysisPatch.current, ...patch };
+      if (analysisTimer.current) clearTimeout(analysisTimer.current);
+      analysisTimer.current = setTimeout(() => {
+        analysisTimer.current = null;
+        void flushAnalysis();
+      }, 400);
+    },
+    [flushAnalysis]
+  );
 
   const hourlyFromIncome = calcHourlyTakeHome(cashFlow.avgIncome, analysis.hoursPerWeek);
   const hourlyRate = analysis.hourlyOverride ?? hourlyFromIncome;

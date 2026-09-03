@@ -11,7 +11,7 @@
  * BusinessSection; the report modal is purely local.
  */
 
-import React, { useState } from "react";
+import React, { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
 import PersonReportModal from "../../components/PersonReportModal";
@@ -30,19 +30,26 @@ type PeopleSectionProps = {
   onCloseManagePeople: () => void;
 };
 
-const PeopleSection: React.FC<PeopleSectionProps> = ({
-  newFeatureIds,
-  onDismissNewBadge,
-  showManagePeople,
-  onOpenManagePeople,
-  onCloseManagePeople,
-}) => {
+/** Imperative surface for ProfileScreen's spotlight deep link (openSection: "owedToYou"). */
+export type PeopleSectionHandle = {
+  openOwedToYou: () => void;
+};
+
+const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(function PeopleSection(
+  { newFeatureIds, onDismissNewBadge, showManagePeople, onOpenManagePeople, onCloseManagePeople },
+  ref,
+) {
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
 
   const [showPersonReport, setShowPersonReport] = useState(false);
   const [showLoans, setShowLoans] = useState(false);
+
+  // The deep link arrives through ProfileScreen's runAfterInteractions
+  // effect, so presenting here is already deferred past the tab switch.
+  const openOwedToYou = useCallback(() => setShowLoans(true), []);
+  useImperativeHandle(ref, () => ({ openOwedToYou }), [openOwedToYou]);
 
   return (
     <>
@@ -159,6 +166,6 @@ const PeopleSection: React.FC<PeopleSectionProps> = ({
       <LoansModal visible={showLoans} onClose={() => setShowLoans(false)} />
     </>
   );
-};
+});
 
 export default PeopleSection;

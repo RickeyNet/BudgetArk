@@ -25,6 +25,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
 import SliderRow from "./SliderRow";
 import PurchasePlanChart from "./PurchasePlanChart";
@@ -73,6 +74,8 @@ import {
 } from "../storage/purchasePlanSettingsStorage";
 import {
   DEFAULT_PURCHASE_PLAN_SETTINGS,
+  hasPurchasePlanPatchFields,
+  overlayPendingPurchasePlanPatch,
   type PurchasePlanSettings,
 } from "../utils/purchasePlanSettings";
 import { triggerHaptic } from "../utils/haptics";
@@ -165,33 +168,81 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Fields changed since the last write - saved as one merged patch. */
   const pendingPatch = useRef<Partial<PurchasePlanSettings>>({});
-  useEffect(() => {
-    let cancelled = false;
-    void getPurchasePlanSettings().then((stored) => {
-      if (!cancelled) setSettings(stored);
+
+  /**
+   * Write whatever the debounce is holding, now. Shared by the timer, by
+   * blur / unmount (a chip tapped just before collapsing the Charts card
+   * or switching tabs must not be silently dropped), and by the focus
+   * re-read below. Returns the write so a re-read can queue behind it;
+   * null when nothing was pending - an empty patch is never written.
+   */
+  const flushPending = useCallback((): Promise<unknown> | null => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const toSave = pendingPatch.current;
+    if (!hasPurchasePlanPatchFields(toSave)) return null;
+    pendingPatch.current = {};
+    return updatePurchasePlanSettings(toSave).catch(() => {
+      // Nothing to surface: the on-screen value already reflects the tap,
+      // and the next change re-sends the field.
     });
-    return () => {
-      cancelled = true;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
   }, []);
+
+  // This list is mounted twice at once (Bridge card + Charts tool; bottom
+  // tabs stay mounted) over one shared record, so re-read whenever this
+  // screen regains focus: a slider moved on the other tab must not leave
+  // this copy stale - a "+$25/mo" nudge here would then write stale + 25
+  // over the new value. Anything still in THIS instance's debounce is
+  // written first (the read queues behind it) and layered back over the
+  // fresh record, so a focus never reverts a change made here. Runs on
+  // mount too when the screen is focused, which is the mount-time load.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      Promise.resolve(flushPending())
+        .then(() => getPurchasePlanSettings())
+        .then((stored) => {
+          if (cancelled) return;
+          setSettings(overlayPendingPurchasePlanPatch(stored, pendingPatch.current));
+        })
+        .catch(() => {
+          // Unreadable record: keep what is shown (defaults on a fresh mount).
+        });
+      return () => {
+        cancelled = true;
+        // Blur: write now so the other surface's focus re-read sees it.
+        void flushPending();
+      };
+    }, [flushPending])
+  );
+
+  // Unmount (the Charts card collapsing) flushes rather than dropping.
+  useEffect(
+    () => () => {
+      void flushPending();
+    },
+    [flushPending]
+  );
 
   /**
    * Update + persist (debounced, so a slider drag is one write). Only the
    * changed fields are written: the planner card owns the analysis fields
    * of the same record and must not be overwritten with stale copies.
    */
-  const changeSettings = useCallback((patch: Partial<PurchasePlanSettings>) => {
-    setSettings((prev) => ({ ...prev, ...patch }));
-    pendingPatch.current = { ...pendingPatch.current, ...patch };
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      saveTimer.current = null;
-      const toSave = pendingPatch.current;
-      pendingPatch.current = {};
-      void updatePurchasePlanSettings(toSave);
-    }, SETTINGS_SAVE_DELAY_MS);
-  }, []);
+  const changeSettings = useCallback(
+    (patch: Partial<PurchasePlanSettings>) => {
+      setSettings((prev) => ({ ...prev, ...patch }));
+      pendingPatch.current = { ...pendingPatch.current, ...patch };
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        void flushPending();
+      }, SETTINGS_SAVE_DELAY_MS);
+    },
+    [flushPending]
+  );
 
   const summary = useMemo(() => summarizePurchasePlans(plans), [plans]);
   const ordered = useMemo(

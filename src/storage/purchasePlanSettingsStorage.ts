@@ -21,18 +21,32 @@ import {
 
 const SETTINGS_KEY = "@budgetark_purchase_plan_settings" as const;
 
-export const getPurchasePlanSettings = async (): Promise<PurchasePlanSettings> =>
-  parsePurchasePlanSettings(await EncryptedStorage.getItem(SETTINGS_KEY));
+/**
+ * Tail of the most recent patch write. encryptedStorage serializes WRITES
+ * per key, but a plain read does not wait behind them - so a read issued
+ * right after a patch (the Charts list re-reading on focus while the
+ * Bridge list's blur-time flush is still in flight) could hand back the
+ * old record. Reads queue behind the last write here instead. Assigned
+ * synchronously on call so a flush-then-read in the same tick is ordered.
+ */
+let lastWrite: Promise<unknown> = Promise.resolve();
 
-export const updatePurchasePlanSettings = async (
+export const getPurchasePlanSettings = async (): Promise<PurchasePlanSettings> => {
+  await lastWrite;
+  return parsePurchasePlanSettings(await EncryptedStorage.getItem(SETTINGS_KEY));
+};
+
+export const updatePurchasePlanSettings = (
   patch: Partial<PurchasePlanSettings>
 ): Promise<PurchasePlanSettings> => {
   let next: PurchasePlanSettings = parsePurchasePlanSettings(null);
-  await EncryptedStorage.updateItem(SETTINGS_KEY, (current) => {
+  const write = EncryptedStorage.updateItem(SETTINGS_KEY, (current) => {
     next = parsePurchasePlanSettings(
       JSON.stringify({ ...parsePurchasePlanSettings(current), ...patch })
     );
     return JSON.stringify(next);
   });
-  return next;
+  // A failed write must not wedge every later read; the caller still sees it.
+  lastWrite = write.catch(() => undefined);
+  return write.then(() => next);
 };

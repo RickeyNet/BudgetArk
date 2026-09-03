@@ -12,6 +12,7 @@ import {
   updatePurchasePlanSettings,
 } from "../purchasePlanSettingsStorage";
 import { DEFAULT_PURCHASE_PLAN_SETTINGS } from "../../utils/purchasePlanSettings";
+import * as EncryptedStorage from "../encryptedStorage";
 
 let mockStore: Map<string, string>;
 
@@ -64,5 +65,32 @@ describe("purchasePlanSettingsStorage", () => {
     });
     expect(next.method).toBe("soonest");
     expect(next.financeTermMonths).toBe(24);
+  });
+
+  it("a read issued right behind a slow patch sees the patch", async () => {
+    // encryptedStorage serializes writes per key but a plain read does not
+    // wait on them: the Charts list's focus re-read must still queue behind
+    // the Bridge list's blur-time flush.
+    const updateItem = EncryptedStorage.updateItem as jest.Mock;
+    updateItem.mockImplementationOnce(
+      async (k: string, updater: (current: string | null) => string | null) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const next = updater(mockStore.has(k) ? mockStore.get(k)! : null);
+        if (next !== null) mockStore.set(k, next);
+      },
+    );
+    const write = updatePurchasePlanSettings({ combinedMonthly: 325 });
+    const read = getPurchasePlanSettings(); // not awaiting the write first
+    expect((await read).combinedMonthly).toBe(325);
+    await write;
+  });
+
+  it("a failed patch write does not wedge later reads", async () => {
+    const updateItem = EncryptedStorage.updateItem as jest.Mock;
+    updateItem.mockImplementationOnce(async () => {
+      throw new Error("keystore unavailable");
+    });
+    await expect(updatePurchasePlanSettings({ method: "custom" })).rejects.toThrow();
+    expect(await getPurchasePlanSettings()).toEqual(DEFAULT_PURCHASE_PLAN_SETTINGS);
   });
 });

@@ -36,6 +36,8 @@ jest.mock("../diffEngine", () => ({
   computeOutgoingDiff: jest.fn(),
   applyIncomingDiff: jest.fn(),
   markBackfillSyncDone: jest.fn(),
+  // Pure field-presence check; the real one is pinned in diffEngine.test.
+  peerSupportsDismissals: jest.fn((diff: any) => diff.dismissedTransactions !== undefined),
 }));
 
 const userStorage = require("../../storage/userStorage");
@@ -135,6 +137,9 @@ describe("client role (partner discovered first)", () => {
     expect(pairingStorage.updateSyncMetadata).toHaveBeenCalledTimes(1);
     expect(pairingStorage.updateSyncMetadata).toHaveBeenCalledWith(OUT_DIFF.syncTimestamp);
     expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledTimes(1);
+    // The partner's diff had no dismissedTransactions field (older peer):
+    // the dismissals backfill must NOT be stamped done.
+    expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledWith(false);
     expect(statuses).toEqual(["discovering", "connecting", "syncing", "complete"]);
 
     // The connection is closed on a short delay, and cleanup ran.
@@ -142,6 +147,22 @@ describe("client role (partner discovered first)", () => {
     expect(conn.close).toHaveBeenCalled();
     expect(Discovery.stop).toHaveBeenCalled();
     expect(Transport.resetReplayProtection).toHaveBeenCalled();
+  });
+
+  it("stamps the dismissals backfill done only when the partner's diff carries the field", async () => {
+    Discovery.discoverPartner.mockResolvedValue({ host: "10.0.0.2", port: 5000 });
+    const conn = makeConn();
+    Transport.connectToHost.mockResolvedValue(conn);
+
+    const p = syncNow();
+    await flush();
+    // An EMPTY map still proves the peer understands the collection.
+    conn.emit({ type: "SYNC_RESPONSE" }, JSON.stringify({ from: "partner", dismissedTransactions: {} }));
+    const result = await p;
+
+    expect(result.success).toBe(true);
+    expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledTimes(1);
+    expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledWith(true);
   });
 
   it("times out waiting for the partner's response", async () => {
@@ -231,6 +252,26 @@ describe("server role (partner not discovered)", () => {
     expect(conn.close).toHaveBeenCalled();
     expect(Discovery.stop).toHaveBeenCalled();
     expect(statuses).toContain("complete");
+    // Joiner's diff lacked dismissedTransactions -> older peer -> not stamped.
+    expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledTimes(1);
+    expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledWith(false);
+  });
+
+  it("stamps the dismissals backfill done when the joiner's diff carries the field", async () => {
+    Discovery.discoverPartner.mockResolvedValue(null);
+    const conn = makeConn();
+    wireServer(conn, 7000);
+
+    const p = syncNow();
+    await flush();
+    conn.emit({ type: "SYNC_REQUEST" }, JSON.stringify({ from: "joiner", dismissedTransactions: {} }));
+    await flush();
+    conn.emit({ type: "SYNC_ACK" });
+    const result = await p;
+
+    expect(result.success).toBe(true);
+    expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledTimes(1);
+    expect(diffEngine.markBackfillSyncDone).toHaveBeenCalledWith(true);
   });
 
   it("times out waiting for a partner to connect", async () => {

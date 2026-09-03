@@ -7,7 +7,31 @@
  * merchants), and the keyword category mapping with its fallbacks.
  */
 
-import { detectImportPreset, mapPresetCategory, presetRowToEntryRow } from "../importPresets";
+import { detectImportPreset, keywordMatches, mapPresetCategory, presetRowToEntryRow } from "../importPresets";
+
+describe("keywordMatches", () => {
+  it("matches a whole word, optionally with one plural/simple suffix", () => {
+    expect(keywordMatches("groceries", "grocer")).toBe(true);
+    expect(keywordMatches("grocery", "grocer")).toBe(true);
+    expect(keywordMatches("utilities", "utilit")).toBe(true);
+    expect(keywordMatches("investments", "invest")).toBe(true);
+    expect(keywordMatches("investing", "invest")).toBe(true);
+    expect(keywordMatches("savings", "saving")).toBe(true);
+    expect(keywordMatches("gifts & donations", "gift")).toBe(true);
+    expect(keywordMatches("coffee shops", "coffee")).toBe(true);
+    expect(keywordMatches("401(k)", "401(k)")).toBe(true);
+    expect(keywordMatches("inflow: ready to assign", "inflow")).toBe(true);
+  });
+
+  it("does not match the start of a longer word, nor a word's tail", () => {
+    expect(keywordMatches("rental car & taxi", "rent")).toBe(false);
+    expect(keywordMatches("barber", "bar")).toBe(false);
+    expect(keywordMatches("petrol", "pet")).toBe(false);
+    expect(keywordMatches("childcare", "car")).toBe(false);
+    expect(keywordMatches("healthcare", "health")).toBe(false);
+    expect(keywordMatches("contractor", "contract")).toBe(false);
+  });
+});
 
 describe("detectImportPreset", () => {
   it("recognizes each app's export by its signature headers, case-insensitively", () => {
@@ -125,9 +149,43 @@ describe("mapPresetCategory", () => {
     expect(mapPresetCategory("Student Loan", "expense")).toBe("Debt Payments");
     expect(mapPresetCategory("Personal Care", "expense")).toBe("Shopping");
     expect(mapPresetCategory("Childcare", "expense")).not.toBe("Transportation");
+    // No bare "care" in the Shopping rule: "Car Care" is a car expense,
+    // while "Personal Care" / "Child Care" still match their own keywords.
+    expect(mapPresetCategory("Car Care", "expense")).toBe("Transportation");
+    expect(mapPresetCategory("Personal Care", "expense")).toBe("Shopping");
     expect(mapPresetCategory("Natural Gas", "expense")).toBe("Utilities");
     expect(mapPresetCategory("Car Payment", "expense")).toBe("Debt Payments");
     expect(mapPresetCategory("Dining Out", "expense")).toBe("Restaurant");
+  });
+
+  it("takes plural and simple suffix forms of a keyword", () => {
+    expect(mapPresetCategory("Utilities", "expense")).toBe("Utilities");
+    expect(mapPresetCategory("Gifts", "expense")).toBe("Giving");
+    expect(mapPresetCategory("Investments", "expense")).toBe("Investing");
+    expect(mapPresetCategory("Savings", "expense")).toBe("Savings");
+    expect(mapPresetCategory("Hobbies", "expense")).toBe("Entertainment");
+    expect(mapPresetCategory("Games", "expense")).toBe("Entertainment");
+    expect(mapPresetCategory("Paychecks", "income")).toBe("Salary");
+  });
+
+  it("never lets a short keyword claim the start of a longer word (Mint categories)", () => {
+    expect(mapPresetCategory("Rental Car & Taxi", "expense")).toBe("Transportation");
+    expect(mapPresetCategory("Barber", "expense")).not.toBe("Restaurant");
+    expect(mapPresetCategory("Barber", "expense")).toBe("Barber");
+    expect(mapPresetCategory("Petrol", "expense")).not.toBe("Shopping");
+    expect(mapPresetCategory("Petrol", "expense")).toBe("Petrol");
+    expect(mapPresetCategory("Childcare", "expense")).toBe("Childcare");
+  });
+
+  it("still maps the word forms the suffix allowlist cannot derive", () => {
+    expect(mapPresetCategory("Healthcare", "expense")).toBe("Healthcare");
+    expect(mapPresetCategory("Electricity", "expense")).toBe("Utilities");
+    expect(mapPresetCategory("Transportation", "expense")).toBe("Transportation");
+    expect(mapPresetCategory("Technology", "expense")).toBe("Tech");
+    expect(mapPresetCategory("Cryptocurrency", "expense")).toBe("Investing");
+    expect(mapPresetCategory("Contractor", "income")).toBe("Freelance");
+    expect(mapPresetCategory("Home Furnishings", "expense")).toBe("Housing");
+    expect(mapPresetCategory("Charities", "expense")).toBe("Giving");
   });
 
   it("keeps income in income categories and expenses out of them", () => {
