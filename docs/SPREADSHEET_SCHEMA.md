@@ -46,6 +46,26 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 
 Category names are case-sensitive on import.
 
+### Importing a YNAB, Mint or Monarch export
+
+A transaction CSV exported by one of these apps can be imported as-is. The
+importer recognizes the file by its signature headers and rewrites each row
+into the Budget Entries schema above before the normal validation runs
+(`src/utils/importPresets.ts`):
+
+| App     | Recognized by                                  | Mapping                                                                                          |
+| ------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| YNAB    | `Payee`, `Outflow`, `Inflow`                   | Outflow → expense, Inflow → income; `Memo` (or Payee) → Description; Payee → Merchant.            |
+| Mint    | `Transaction Type`, `Original Description`, `Amount` | `debit` → expense, `credit` → income; `Notes` (or Description) → Description; Original Description → Merchant. |
+| Monarch | `Merchant`, `Original Statement`, `Amount`     | Negative → expense, positive → income; `Notes` (or Merchant) → Description; Original Statement → Merchant. |
+
+Source categories map onto BudgetArk built-ins by keyword (`Groceries` →
+`Grocery`, `Gas & Fuel` → `Transportation`, `Credit Card Payment` → `Debt
+Payments`); anything unrecognized is imported as a custom category under its
+own name (YNAB's `Group: Category` keeps the leaf). Rows that are transfers
+between the user's own accounts, or that have a zero / unreadable amount, are
+left out and counted in the import summary - they are not income or spending.
+
 ## Sheet: Budget Limits (xlsx only)
 
 | Column         | Required | Notes                              |

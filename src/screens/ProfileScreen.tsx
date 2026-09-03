@@ -67,13 +67,14 @@ import {
   setAutoSyncEnabled,
 } from "../sync/pairingStorage";
 import { syncNow } from "../sync/syncOrchestrator";
+import { recordSyncActivity } from "../storage/syncActivityStorage";
 import {
   getCurrentSSID,
   startMonitoring,
   stopMonitoring,
   requestLocationPermission,
 } from "../sync/autoSyncManager";
-import type { PairingState, SyncStatus } from "../sync/types";
+import type { PairingState, SyncResult, SyncStatus } from "../sync/types";
 import { triggerHaptic } from "../utils/haptics";
 import { getTrackingReminderSettings } from "../storage/trackingReminderSettingsStorage";
 import { cancelAllTrackingReminders } from "../notifications/trackingReminders";
@@ -111,6 +112,28 @@ import SettingsSection, {
 } from "./profile/SettingsSection";
 import HelpSection from "./profile/HelpSection";
 import AboutSection from "./profile/AboutSection";
+
+/**
+ * Appends a successful sync to the device-local activity log (counts per
+ * collection only - see sync/syncActivity). Best-effort: the log must
+ * never turn a finished sync into an error, and a result from an older
+ * orchestrator without counts is simply not logged.
+ */
+const noteSyncActivity = async (result: SyncResult): Promise<void> => {
+  if (!result.success || !result.receivedCounts) return;
+  try {
+    const pairing = await getPairingState();
+    if (!pairing) return;
+    await recordSyncActivity({
+      partnerName: pairing.partnerName,
+      received: result.receivedCounts,
+      sent: result.recordsSent,
+      at: result.timestamp,
+    });
+  } catch {
+    // Display-only log; nothing to recover.
+  }
+};
 
 /** Which feature's NEW badge each openSection deep-link target clears. */
 const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
@@ -276,7 +299,7 @@ const ProfileScreen: React.FC = () => {
         if (pairState.value?.autoSyncEnabled) {
           startMonitoring((result) => {
             if (result.success) {
-              setLastSyncTime(result.timestamp);
+              void noteSyncActivity(result).then(() => setLastSyncTime(result.timestamp));
             }
           });
           monitoringActiveRef.current = true;
@@ -378,6 +401,7 @@ const ProfileScreen: React.FC = () => {
     try {
       const result = await syncNow((status) => setSyncStatus(status));
       if (result.success) {
+        await noteSyncActivity(result);
         setLastSyncTime(result.timestamp);
         setInfoModal({
           title: "Sync Complete",
@@ -469,7 +493,9 @@ const ProfileScreen: React.FC = () => {
     setPairing((prev) => (prev ? { ...prev, autoSyncEnabled: next } : null));
     if (next) {
       startMonitoring((result) => {
-        if (result.success) setLastSyncTime(result.timestamp);
+        if (result.success) {
+          void noteSyncActivity(result).then(() => setLastSyncTime(result.timestamp));
+        }
       });
       monitoringActiveRef.current = true;
     } else {

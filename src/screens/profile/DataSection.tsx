@@ -519,7 +519,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           if (result.assetAccounts > 0)
             parts.push(`${result.assetAccounts} asset accounts`);
           if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
-          let message = `${label} ${parts.join(", ")} from the spreadsheet.`;
+          let message = result.preset
+            ? `Recognized a ${result.preset} export. ${label} ${parts.join(", ")}.`
+            : `${label} ${parts.join(", ")} from the spreadsheet.`;
+          if (result.preset && (result.presetDroppedRows ?? 0) > 0) {
+            message += `\n\n${result.presetDroppedRows} transfer / zero-amount row${result.presetDroppedRows === 1 ? "" : "s"} left out - moves between your own accounts aren't income or spending.`;
+          }
           if (result.skippedRows > 0) {
             message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} skipped (required fields missing or invalid):`;
             // List the first few offending rows so the user can find and fix

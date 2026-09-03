@@ -127,6 +127,8 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `personalInflation.test.ts` | `personalInflation.ts` | Personal inflation: 12-vs-12 month windows, per-tracked-month averaging, shared-basket rule, transfer exclusions, insufficient gate, ordering, display helpers |
 | `paycheckCycle.test.ts` | `paycheckCycle.ts` | Until Payday: fail-closed schedule parse, paydays per frequency (anchor stepping, short-month clamps), current period, due-before-payday list, safe-to-spend math |
 | `netWorthProjection.test.ts` | `netWorthProjection.ts` | Net worth projection: fail-closed goal parse, surplus estimate + transfer exclusions, minimums-only debt schedule, forward line, goal assessment (on/off track, required pace, reach date) |
+| `quarterlyTax.test.ts` | `quarterlyTax.ts` | Quarterly Taxes: quarter calendar + due dates, self-employment tax, annual estimate, per-quarter income/set-aside/annualized installment, statuses, fail-closed paid-map parse, default tax year |
+| `importPresets.test.ts` | `importPresets.ts` | YNAB / Mint / Monarch presets: signature detection (own schema never matches), per-app row rewrites, transfer + zero drops, keyword category mapping and custom fallback |
 | `savingsInterest.test.ts` | `savingsInterest.ts` | Bridge APY lines: fail-closed input parse, yearly interest, high-yield gap and its display floor; `REFERENCE_HYSA_APY` is a bundled constant to refresh annually |
 | `sanitize.test.ts` | `sanitize.ts` | Control-character stripping on text input |
 | `paymentUrl.test.ts` | `paymentUrl.ts` | Payment-URL normalization and scheme rejection |
@@ -163,6 +165,8 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `subscriptionIgnoreStorage.test.ts` | `subscriptionIgnoreStorage.ts` | Device-local "not a subscription" merchant list: fail-closed parse, dedupe, cap |
 | `paycheckCycleStorage.test.ts` | `paycheckCycleStorage.ts` | Device-local pay schedule: round-trip, day normalization, invalid record refused, junk store reads unset |
 | `netWorthGoalStorage.test.ts` | `netWorthGoalStorage.ts` | Device-local net worth goal: round-trip, invalid goal refused, junk store reads unset |
+| `quarterlyTaxPaidStorage.test.ts` | `quarterlyTaxPaidStorage.ts` | Device-local quarter paid marks: mark/unmark in the write queue, cap drops oldest, junk store reads empty |
+| `syncActivityStorage.test.ts` | `syncActivityStorage.ts` | Device-local sync activity log: prepend + cap, partner-name trim, junk store reads empty |
 | `hiddenCategoriesStorage.test.ts` | `hiddenCategoriesStorage.ts` | Hidden built-ins: hide/restore round-trip, idempotent, protected/unknown names ignored, corrupt record reads empty |
 
 ### Bank connections (`src/services/connections`)
@@ -187,6 +191,7 @@ faithful `updateItem` read-modify-write) and run the real store logic.
 | `transportService.test.ts` | `transportService.ts` | Full-envelope HMAC, protocol-version gate, age + nonce replay protection (fake timers), frame buffering |
 | `pairingService.test.ts` / `pairingStorage.test.ts` | `pairingService.ts` / `pairingStorage.ts` | Pairing handshake flows and codes; sync watermark reset after import |
 | `syncOrchestrator.test.ts` / `autoSyncManager.test.ts` / `discoveryService.test.ts` | matching modules | End-to-end sync coordination; auto-sync gates; mDNS publish/browse |
+| `syncActivity.test.ts` | `syncActivity.ts` | Partner activity log: incoming-diff counts per collection (upserts vs removals, no record contents), description string, fail-closed record/log parse |
 
 ### Data, hooks & notifications
 

@@ -71,6 +71,7 @@ import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import TaxCalculatorCard from "../components/TaxCalculatorCard";
 import SubscriptionDetectiveCard from "../components/SubscriptionDetectiveCard";
 import PersonalInflationCard from "../components/PersonalInflationCard";
+import QuarterlyTaxCard from "../components/QuarterlyTaxCard";
 import type {
   AssetAccount,
   BudgetEntry,
@@ -1706,6 +1707,9 @@ const ChartsScreen: React.FC = () => {
 
         {/* ── Take-Home Pay (US income tax estimator) ── */}
         <TaxCalculatorCard />
+
+        {/* ── Quarterly Taxes (1099 estimated payments) ── */}
+        <QuarterlyTaxCard entries={toolEntries} />
       </ScrollView>
       </KeyboardAvoidingView>
       {coachmark}

@@ -210,6 +210,25 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
             </View>
 
             <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Coming from YNAB, Mint or Monarch?</Text>
+              <Text style={styles.subtle}>
+                Import their transaction CSV as-is. BudgetArk recognizes the file
+                by its headers and maps the columns for you.
+              </Text>
+              <Text style={styles.bullet}>• YNAB: Payee, Outflow, Inflow (Category, Memo)</Text>
+              <Text style={styles.bullet}>• Mint: Description, Amount, Transaction Type (Category, Notes)</Text>
+              <Text style={styles.bullet}>• Monarch: Merchant, Amount, Original Statement (Category, Notes)</Text>
+              <Text style={styles.bullet}>
+                • Categories map to BudgetArk&apos;s by keyword (Groceries → Grocery); anything
+                else arrives as a custom category under its own name.
+              </Text>
+              <Text style={styles.bullet}>
+                • Transfers between your own accounts are left out - they aren&apos;t income or
+                spending. The import summary says how many.
+              </Text>
+            </View>
+
+            <View style={styles.section}>
               <Text style={styles.sectionTitle}>Limits</Text>
               <Text style={styles.bullet}>• File size: 5 MB max</Text>
               <Text style={styles.bullet}>• Up to 5,000 rows per sheet</Text>

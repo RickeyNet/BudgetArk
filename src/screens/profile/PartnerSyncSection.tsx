@@ -9,7 +9,7 @@
  * modal visibilities.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, Modal } from "react-native";
 import PairingModal from "../../components/PairingModal";
 import type { PairingState, SyncStatus } from "../../sync/types";
@@ -17,6 +17,11 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 import { formatDateTime } from "./formatDateTime";
+import { getSyncActivityLog } from "../../storage/syncActivityStorage";
+import { describeSyncActivity, type SyncActivityRecord } from "../../sync/syncActivity";
+
+/** Recent syncs shown under Sync Now - enough to answer "what changed lately". */
+const ACTIVITY_ROWS = 5;
 
 type PartnerSyncSectionProps = {
   pairing: PairingState | null;
@@ -46,6 +51,25 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
 
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [showUnpairConfirm, setShowUnpairConfirm] = useState(false);
+  const [activity, setActivity] = useState<SyncActivityRecord[]>([]);
+
+  // Device-local log of what recent syncs delivered (counts only). Re-read
+  // whenever a sync completes - the screen bumps lastSyncTime after logging.
+  useEffect(() => {
+    // Unpaired: the list isn't rendered (see `visibleActivity`), so there is
+    // nothing to clear here - re-pairing reloads it.
+    if (!pairing) return;
+    let cancelled = false;
+    void getSyncActivityLog()
+      .then((log) => {
+        if (!cancelled) setActivity(log.slice(0, ACTIVITY_ROWS));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [pairing, lastSyncTime]);
+  const visibleActivity = pairing ? activity : [];
 
   return (
     <>
@@ -186,6 +210,35 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                 { backgroundColor: colors.cardBorder },
               ]}
             />
+
+            {visibleActivity.length > 0 ? (
+              <View style={styles.groupedRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    Recent activity
+                  </Text>
+                  {visibleActivity.map((record) => (
+                    <Text
+                      key={record.at}
+                      style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                    >
+                      {formatDateTime(record.at)} · {describeSyncActivity(record.received)}{" "}
+                      from {record.partnerName}
+                      {record.sent > 0 ? ` · sent ${record.sent}` : ""}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {visibleActivity.length > 0 ? (
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+            ) : null}
 
             <TouchableOpacity
               style={styles.groupedRow}

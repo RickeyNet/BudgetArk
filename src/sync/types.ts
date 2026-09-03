@@ -23,6 +23,7 @@ import type {
   IngestLedgerEntry,
 } from "../types";
 import type { PayoffStrategyPreference } from "../storage/debtStorage";
+import type { SyncActivityCounts } from "./syncActivity";
 
 /* ─── Pairing ─── */
 
@@ -241,6 +242,12 @@ export interface SyncResult {
   recordsReceived: number;
   timestamp: string;
   error?: string;
+  /**
+   * What the partner's diff contained, as counts per collection (see
+   * sync/syncActivity) - the Profile's "Recent activity" log records this.
+   * Local-only result field, never on the wire.
+   */
+  receivedCounts?: SyncActivityCounts;
 }
 
 export type PairingRole = "initiator" | "joiner";

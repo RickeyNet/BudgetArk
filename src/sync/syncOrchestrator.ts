@@ -19,6 +19,7 @@ import {
   markBackfillSyncDone,
 } from "./diffEngine";
 import type { SyncResult, SyncStatus, SyncDiff } from "./types";
+import { summarizeIncomingDiff } from "./syncActivity";
 
 export type SyncStatusCallback = (status: SyncStatus) => void;
 
@@ -126,6 +127,7 @@ const syncAsServer = (onStatus: SyncStatusCallback): ServerSyncHandle => {
                   recordsSent: countDiffEntries(ourDiff),
                   recordsReceived: received,
                   timestamp: now,
+                  receivedCounts: summarizeIncomingDiff(partnerDiff),
                 });
               }
             });
@@ -215,6 +217,7 @@ const syncAsClient = async (
             recordsSent: countDiffEntries(ourDiff),
             recordsReceived: received,
             timestamp: now,
+            receivedCounts: summarizeIncomingDiff(partnerDiff),
           });
         }
       } catch (err) {

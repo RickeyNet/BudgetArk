@@ -41,6 +41,7 @@ import {
 import { generateUUID } from "./uuid";
 import { MAX_APY_PERCENT } from "./savingsInterest";
 import { normalizeImportCategory, VALIDATOR_LIMITS } from "./recordValidators";
+import { detectImportPreset, presetRowToEntryRow } from "./importPresets";
 import { isValidSymbol, normalizeSymbol } from "./holdingsMath";
 import {
   KEEP_ALIVE_MAX_LEAD_DAYS,
@@ -1076,6 +1077,10 @@ export interface SpreadsheetImportResult extends ImportResult {
    * own derived/projected artifacts, which are filtered before counting.
    */
   skippedRowDetails: SkippedRowInfo[];
+  /** Set when the CSV was recognized as another app's export ("YNAB", "Mint", "Monarch"). */
+  preset?: string;
+  /** Rows the preset dropped on purpose (transfers, zero amounts) - not invalid rows. */
+  presetDroppedRows?: number;
 }
 
 /**
@@ -1155,9 +1160,26 @@ export const importSpreadsheet = async (
   // Drop the exporter's own round-trip artifacts (projected recurring copies,
   // synthetic Emergency Fund) up front so they count toward neither the valid
   // total nor `skippedRows` - they carry no user data and are not "invalid".
-  const entryRows = sheetToRows(budgetEntriesSheet).filter(
+  let entryRows = sheetToRows(budgetEntriesSheet).filter(
     (r) => !isDerivedArtifactRow(r)
   );
+  // A CSV exported by YNAB / Mint / Monarch is recognized by its headers
+  // and rewritten row by row into BudgetArk's own schema (utils/
+  // importPresets) BEFORE the normal mapper runs - so the same fail-closed
+  // validation applies to a preset file as to a hand-made sheet. Rows the
+  // preset drops (transfers between the user's own accounts, zero amounts)
+  // are counted separately; they are not "invalid".
+  const preset = isCsv && entryRows.length > 0 ? detectImportPreset(Object.keys(entryRows[0])) : null;
+  let presetDroppedRows = 0;
+  if (preset) {
+    const mapped: Record<string, unknown>[] = [];
+    for (const row of entryRows) {
+      const rewritten = presetRowToEntryRow(preset.id, row);
+      if (rewritten) mapped.push(rewritten);
+      else presetDroppedRows += 1;
+    }
+    entryRows = mapped;
+  }
   const limitRows = sheetToRows(budgetLimitsSheet);
   const debtRows = sheetToRows(debtsSheet);
   const paymentRows = sheetToRows(paymentsSheet);
@@ -1258,5 +1280,6 @@ export const importSpreadsheet = async (
     ...result,
     skippedRows,
     skippedRowDetails,
+    ...(preset ? { preset: preset.label, presetDroppedRows } : {}),
   };
 };

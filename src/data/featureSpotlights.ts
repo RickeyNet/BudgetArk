@@ -289,6 +289,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     cta: { label: "Set up pay periods", kind: "budget" },
   },
   {
+    id: "quarterly-taxes",
+    sinceVersion: "1.10.1",
+    icon: "🧾",
+    title: "Quarterly Taxes",
+    blurb:
+      "Log 1099 income and the new Charts tool shows each IRS quarter: what you earned, what you set aside, the estimated payment and its due date - with a Mark paid per quarter.",
+    cta: { label: "See my quarters", kind: "charts" },
+  },
+  {
     id: "purchase-plan-priorities",
     sinceVersion: "1.10.1",
     icon: "🎯",
