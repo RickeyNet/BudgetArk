@@ -681,6 +681,9 @@ const RESET_KEYS = [
   // once-per-month prompt marker.
   "@budgetark_month_start_balances",
   "@budgetark_month_balance_prompt",
+  // Remembered bank-statement CSV column layouts (per device, see
+  // statementImportMappingsStorage) - a fresh account starts with none.
+  "@budgetark_statement_import_mappings",
 ] as const;
 
 export class ResetIncompleteError extends Error {

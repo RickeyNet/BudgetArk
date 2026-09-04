@@ -45,6 +45,19 @@ import {
 } from "../../utils/spreadsheetExport";
 import { waitForIosModalTeardown } from "../../utils/iosNativeShare";
 import { importSpreadsheet } from "../../utils/spreadsheetImport";
+import { openDocumentPicker } from "../../utils/importData";
+import { File as ExpoFile } from "expo-file-system";
+import {
+  MAX_STATEMENT_FILE_BYTES,
+  parseStatementCsv,
+  statementHeaderSignature,
+  type BankCsvMapping,
+  type ParsedStatementFile,
+} from "../../utils/bankCsvImport";
+import {
+  getRememberedStatementMapping,
+} from "../../storage/statementImportMappingsStorage";
+import BankStatementImportModal from "../../components/BankStatementImportModal";
 import { listAutoBackups } from "../../services/autoBackup/autoBackupStore";
 import { cadenceLabel } from "../../services/autoBackup/autoBackupPlan";
 import { getAutoBackupSettings } from "../../storage/autoBackupSettingsStorage";
@@ -59,6 +72,8 @@ import { useProfileStyles } from "./profileStyles";
 export type DataSectionHandle = {
   /** Opens the export confirmation modal (used by the backup banner). */
   openExport: () => void;
+  /** Opens the bank-statement CSV picker (feature-spotlight deep link). */
+  openBankStatementImport: () => void;
 };
 
 type DataSectionProps = {
@@ -126,6 +141,17 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     /** Whether the import source-choice modal is visible */
     const [showImportModal, setShowImportModal] = useState(false);
 
+    /**
+     * Bank-statement CSV import: the parsed file + its remembered mapping,
+     * held while the mapping-confirm modal is open. Null = modal closed.
+     */
+    const [statementImport, setStatementImport] = useState<{
+      file: ParsedStatementFile;
+      signature: string;
+      remembered: { mapping: BankCsvMapping; accountLabel: string } | null;
+      suggestedLabel: string;
+    } | null>(null);
+
     /** Whether the import merge/replace modal is visible (file path) */
     const [showImportModeModal, setShowImportModeModal] = useState(false);
 
@@ -184,10 +210,6 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       setExportPassword("");
       setShowExportModal(true);
     }, []);
-
-    useImperativeHandle(ref, () => ({ openExport: handleExportData }), [
-      handleExportData,
-    ]);
 
     const confirmExport = useCallback(async () => {
       if (exportEncrypt && exportPassword.length < 4) {
@@ -563,6 +585,69 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     );
 
     /**
+     * Bank-statement path: pick a CSV downloaded from a bank, parse it, and
+     * open the mapping-confirm sheet. Shares the picker in-flight guard with
+     * the other import handlers so a double-tap can't trip
+     * expo-document-picker's "picking in progress" lock.
+     */
+    const handleImportBankStatement = useCallback(async () => {
+      if (importPickerInFlightRef.current) return;
+      importPickerInFlightRef.current = true;
+      // Same iOS modal-teardown race as the other pickers: launching the
+      // document picker over a dismissing <Modal> strands it.
+      await waitForIosModalTeardown(350);
+      try {
+        const picked = await openDocumentPicker({
+          type: ["text/csv", "text/comma-separated-values", "text/plain"],
+          copyToCacheDirectory: true,
+        });
+        if (picked.canceled) return;
+        const asset = picked.assets[0];
+        if (!asset?.uri) throw new Error("No file selected.");
+        const size = typeof asset.size === "number" ? asset.size : 0;
+        if (size > MAX_STATEMENT_FILE_BYTES) {
+          throw new Error(
+            `File is too large (${(size / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB - export a shorter date range.`,
+          );
+        }
+        const text = await new ExpoFile(asset.uri).text();
+        const file = parseStatementCsv(text);
+        const signature = statementHeaderSignature(file);
+        const remembered = await getRememberedStatementMapping(signature);
+        const suggestedLabel =
+          remembered?.accountLabel ??
+          (asset.name ?? "").replace(/\.[a-z0-9]+$/i, "").trim();
+        setStatementImport({
+          file,
+          signature,
+          remembered: remembered
+            ? { mapping: remembered.mapping, accountLabel: remembered.accountLabel }
+            : null,
+          suggestedLabel,
+        });
+      } catch (error: any) {
+        triggerHaptic("error");
+        showInfo({
+          title: "Couldn't read the file",
+          message:
+            error?.message ||
+            "That doesn't look like a bank CSV. Export your transactions as CSV and try again.",
+        });
+      } finally {
+        importPickerInFlightRef.current = false;
+      }
+    }, [showInfo]);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        openExport: handleExportData,
+        openBankStatementImport: handleImportBankStatement,
+      }),
+      [handleExportData, handleImportBankStatement],
+    );
+
+    /**
      * Paste-text path: parse the pasted JSON and write to storage.
      */
     const handlePasteImport = useCallback(
@@ -726,6 +811,34 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
                   From a CSV or Excel file
+                </Text>
+              </View>
+              <Text
+                style={[styles.settingsRowArrow, { color: colors.textDim }]}
+              >
+                →
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.groupedDivider,
+                { backgroundColor: colors.cardBorder },
+              ]}
+            />
+
+            <TouchableOpacity
+              style={styles.groupedRow}
+              onPress={handleImportBankStatement}
+            >
+              <View>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  Import Bank Statement
+                </Text>
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  A CSV from your bank → Review Inbox
                 </Text>
               </View>
               <Text
@@ -1301,6 +1414,24 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         {showAutoBackupModal ? (
           <AutoBackupModal onClose={closeAutoBackupModal} showInfo={showInfo} />
         ) : null}
+
+        {/* ── Bank Statement Import Modal ── */}
+        <BankStatementImportModal
+          visible={statementImport !== null}
+          file={statementImport?.file ?? null}
+          signature={statementImport?.signature ?? ""}
+          remembered={statementImport?.remembered ?? null}
+          suggestedLabel={statementImport?.suggestedLabel}
+          onClose={() => setStatementImport(null)}
+          onImported={(message) => {
+            triggerHaptic("success");
+            showInfo({ title: "Statement Imported", message });
+          }}
+          onError={(message) => {
+            triggerHaptic("error");
+            showInfo({ title: "Import Failed", message });
+          }}
+        />
 
         {/* ── Paste Import Modal ── */}
         <Modal

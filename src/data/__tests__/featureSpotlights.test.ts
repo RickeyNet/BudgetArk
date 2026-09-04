@@ -131,6 +131,7 @@ describe("FEATURE_SPOTLIGHTS data", () => {
           "theme",
           "appLock",
           "owedToYou",
+          "data",
         ]).toContain(s.cta.section);
       }
     }

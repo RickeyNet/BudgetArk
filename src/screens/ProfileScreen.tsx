@@ -145,6 +145,7 @@ const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
   trackingReminders: "tracking-reminders",
   theme: "deep-sea-theme",
   appLock: "app-lock",
+  data: "bank-statement-import",
 };
 
 const ProfileScreen: React.FC = () => {
@@ -371,6 +372,9 @@ const ProfileScreen: React.FC = () => {
           break;
         case "appLock":
           settingsSectionRef.current?.openAppLock();
+          break;
+        case "data":
+          dataSectionRef.current?.openBankStatementImport();
           break;
       }
       dismissNewBadge(SECTION_FEATURE_IDS[section]);

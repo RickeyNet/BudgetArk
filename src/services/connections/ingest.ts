@@ -41,6 +41,15 @@ import { matchMerchantRule, normalizeMerchant, suggestedPeopleFor } from "./merc
 import { personAssignmentFields } from "../../utils/entryPeople";
 import CryptoJS from "crypto-js";
 
+/**
+ * Where a transaction came from, for identity keys: a live bank provider,
+ * or "csv" for rows imported from a downloaded statement file
+ * (services/connections/csvStatementImport). Not a BankProvider - there is
+ * no connection, credential or fetcher behind a statement - so it is widened
+ * here rather than on the BankProvider union.
+ */
+export type IngestProvider = BankProvider | "csv";
+
 /** Max provider-id length embedded verbatim in an identity key. */
 const MAX_PROVIDER_TX_ID_LENGTH = 128;
 
@@ -59,7 +68,7 @@ export const TRANSFER_DESCRIPTION_PATTERN =
  * provider ids are hashed so the key stays bounded.
  */
 export const identityKeyFor = (
-  provider: BankProvider,
+  provider: IngestProvider,
   externalAccountId: string,
   providerTxId: string,
 ): string => {
@@ -119,7 +128,7 @@ export interface ManualEntrySignature {
 }
 
 export interface IngestInputs {
-  provider: BankProvider;
+  provider: IngestProvider;
   connectionId: string;
   fetched: NormalizedTransaction[];
   links: ExternalAccountLink[];

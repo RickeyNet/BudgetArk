@@ -69,8 +69,11 @@ const get = (row: Record<string, unknown>, ...candidates: string[]): string => {
   return "";
 };
 
-/** "$1,234.56" / "(12.00)" / "-12" -> signed number; NaN when unreadable. */
-const parseMoney = (raw: string): number => {
+/**
+ * "$1,234.56" / "(12.00)" / "-12" -> signed number; NaN when unreadable.
+ * Shared with utils/bankCsvImport, which reads bank CSVs cell by cell.
+ */
+export const parseMoney = (raw: string): number => {
   let s = raw.replace(/[\s$€£,]/g, "");
   if (!s) return Number.NaN;
   let negative = false;

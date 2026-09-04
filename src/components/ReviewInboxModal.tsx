@@ -65,6 +65,7 @@ import {
 import { suggestRuleFromHistory } from "../services/connections/ruleNudges";
 import { describeUnusualCharge, flagUnusualCharges } from "../utils/unusualCharges";
 import { getLinks } from "../storage/externalAccountLinksStorage";
+import { statementAccountLabelFrom } from "../utils/bankCsvImport";
 import { getMerchantRules } from "../storage/merchantRulesStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { remainingForPlan } from "../utils/purchasePlanner";
@@ -475,7 +476,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     const expanded = expandedId === item.id;
     const busy = busyId === item.id;
     const isExpense = item.amount < 0;
-    const accountName = accountNameById.get(item.externalAccountId);
+    // Statement-file rows have no ExternalAccountLink to name them; their
+    // label is carried in the account id (utils/bankCsvImport).
+    const accountName =
+      accountNameById.get(item.externalAccountId) ??
+      statementAccountLabelFrom(item.externalAccountId);
     // Bills this charge could stand in for, in the month it posted - best
     // guess first (same category, closest estimate).
     const billCandidates =

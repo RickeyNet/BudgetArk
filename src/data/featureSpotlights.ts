@@ -26,7 +26,8 @@ export type ProfileSpotlightSection =
   | "tipJar"
   | "trackingReminders"
   | "theme"
-  | "appLock";
+  | "appLock"
+  | "data";
 
 export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
@@ -306,6 +307,15 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     blurb:
       "Your Purchase Plans card now adds everything up - saved, still to go, and when it's all funded - and lets you rank the plans smallest-first, soonest-needed, or in your own order. Set one monthly amount and it flows down the list like a debt snowball, each plan rolling into the next.",
     cta: { label: "See your plans", kind: "bridge" },
+  },
+  {
+    id: "bank-statement-import",
+    sinceVersion: "1.10.1",
+    icon: "🏦",
+    title: "Import a bank statement",
+    blurb:
+      "Download a CSV from your bank's website and BudgetArk reads it: confirm which columns are the date, description and amount once, and every transaction lands in the Review Inbox for you to approve. For the months before you connected a bank - or a bank you never will.",
+    cta: { label: "Import a statement", kind: "profile-section", section: "data" },
   },
   {
     id: "tip-jar",
