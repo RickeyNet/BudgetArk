@@ -741,6 +741,13 @@ const buildBudgetEntriesSheet = (
     kind: "income" | "expense" | "net";
   };
   const monthSubtotals: MonthSubtotal[] = [];
+  // 0-based indices of the actual transaction rows (not subtotal/total rows),
+  // so each month's rows can be grouped into a collapsible Excel outline
+  // (level 1) that folds up under its subtotal block (level 0). Grouping
+  // never reorders rows, so the SUMIFS/subtotal formulas stay valid, and
+  // CSV export ignores "!rows" entirely - so this is display-only and
+  // round-trip safe.
+  const detailRowIdx: number[] = [];
 
   const flushMonthSubtotals = () => {
     if (currentMonth === null) return;
@@ -766,6 +773,7 @@ const buildBudgetEntriesSheet = (
     }
     currentMonth = month;
 
+    detailRowIdx.push(writeIdx);
     writeDataRow(writeIdx++, row);
 
     const amount = row.Amount;
@@ -857,6 +865,12 @@ const buildBudgetEntriesSheet = (
     s: { r: 0, c: 0 },
     e: { r: writeIdx - 1, c: BUDGET_ENTRY_COLUMNS.length - 1 },
   });
+
+  if (detailRowIdx.length > 0) {
+    const rowInfo: XLSX.RowInfo[] = [];
+    for (const r of detailRowIdx) rowInfo[r] = { level: 1 };
+    sheet["!rows"] = rowInfo;
+  }
 
   return sheet;
 };
@@ -971,6 +985,86 @@ const sanitizeFilename = (raw: string): string =>
   raw.replace(/[^A-Za-z0-9._-]/g, "_");
 
 /* ── Public API ── */
+
+/* ─── XLSX presentation (display-only, never affects CSV or round-trip) ─── */
+
+/** Widest column we will auto-size to, in characters (keeps a long note from
+ *  pushing the sheet off-screen). Narrowest keeps short headers readable. */
+const MAX_COL_WIDTH = 48;
+const MIN_COL_WIDTH = 8;
+
+/** A cell's on-screen text length: the formatted text when present (dates,
+ *  formulas), else the raw value. */
+const cellDisplayLength = (cell: XLSX.CellObject | undefined): number => {
+  if (!cell) return 0;
+  if (typeof cell.w === "string") return cell.w.length;
+  if (cell.v == null) return 0;
+  return String(cell.v).length;
+};
+
+/**
+ * Size every column to the longest value in it (header included), clamped to
+ * [MIN_COL_WIDTH, MAX_COL_WIDTH] with a little padding. Sets "!cols"
+ * (`wch`), which the XLSX writer honours and CSV export ignores.
+ */
+const autoSizeColumns = (sheet: XLSX.WorkSheet): void => {
+  if (!sheet["!ref"]) return;
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  const cols: XLSX.ColInfo[] = [];
+  for (let c = range.s.c; c <= range.e.c; c += 1) {
+    let widest = 0;
+    for (let r = range.s.r; r <= range.e.r; r += 1) {
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+      const len = cellDisplayLength(cell);
+      if (len > widest) widest = len;
+    }
+    cols[c] = { wch: Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, widest + 2)) };
+  }
+  sheet["!cols"] = cols;
+};
+
+/**
+ * Give the money columns a thousands-separated, two-decimal number format so
+ * amounts line up and read as currency. Deliberately currency-symbol-free:
+ * the app is multi-currency, and a "$" would mislabel every non-USD user's
+ * numbers. Applied ONLY to the xlsx-only sheets (never Budget Entries, which
+ * is the CSV sheet too - a format there would change the CSV text and break
+ * import round-trip). The stored numeric value is untouched, and import reads
+ * raw values, so this is round-trip safe.
+ */
+const NUMBER_FORMAT = "#,##0.00";
+const applyCurrencyFormat = (sheet: XLSX.WorkSheet, moneyColumns: readonly string[]): void => {
+  if (moneyColumns.length === 0 || !sheet["!ref"]) return;
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  const moneyCols = new Set<number>();
+  for (let c = range.s.c; c <= range.e.c; c += 1) {
+    const header = sheet[XLSX.utils.encode_cell({ r: range.s.r, c })] as XLSX.CellObject | undefined;
+    if (header && typeof header.v === "string" && moneyColumns.includes(header.v)) {
+      moneyCols.add(c);
+    }
+  }
+  for (const c of moneyCols) {
+    for (let r = range.s.r + 1; r <= range.e.r; r += 1) {
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+      if (cell && cell.t === "n") cell.z = NUMBER_FORMAT;
+    }
+  }
+};
+
+/**
+ * Final display pass over a finished workbook, run only for xlsx: auto-size
+ * columns on every sheet and format the money columns. Never touches values
+ * or headers, so the schema and import round-trip are unchanged.
+ */
+const decorateXlsxWorkbook = (wb: XLSX.WorkBook): void => {
+  for (const name of wb.SheetNames) {
+    const sheet = wb.Sheets[name];
+    if (!sheet) continue;
+    autoSizeColumns(sheet);
+    const money = SHEET_SUM_COLUMNS[name as SheetName];
+    if (money) applyCurrencyFormat(sheet, money);
+  }
+};
 
 export interface SpreadsheetExportResult {
   format: SpreadsheetFormat;
@@ -1344,6 +1438,7 @@ export const exportSpreadsheet = async (
       file.create({ overwrite: true });
       file.write(csv, { encoding: "utf8" });
     } else {
+      decorateXlsxWorkbook(wb);
       const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" }) as string;
       file.create({ overwrite: true });
       file.write(base64, { encoding: "base64" });

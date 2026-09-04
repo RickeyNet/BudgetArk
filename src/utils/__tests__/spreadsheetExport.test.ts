@@ -232,3 +232,69 @@ describe("exportSpreadsheet - XLSX", () => {
     expect(result.missingSections).toContain("Debts");
   });
 });
+
+describe("exportSpreadsheet - XLSX presentation (display-only)", () => {
+  // cellStyles/cellNF so the reader restores !cols, !rows outline levels and
+  // number formats (the default read drops them).
+  const parseWorkbook = () =>
+    XLSX.read(mockWritten.content, { type: "base64", cellStyles: true, cellNF: true });
+
+  it("auto-sizes columns on every sheet", async () => {
+    await exportSpreadsheet("xlsx");
+    const wb = parseWorkbook();
+    for (const name of wb.SheetNames) {
+      const cols = wb.Sheets[name]["!cols"];
+      expect(Array.isArray(cols)).toBe(true);
+      // Every column has a positive width within the clamped range.
+      for (const col of cols as XLSX.ColInfo[]) {
+        expect(col.wch).toBeGreaterThanOrEqual(8);
+        expect(col.wch).toBeLessThanOrEqual(48);
+      }
+    }
+  });
+
+  it("groups each month's rows into a collapsible outline on Budget Entries", async () => {
+    await exportSpreadsheet("xlsx");
+    const wb = parseWorkbook();
+    const rows = wb.Sheets["Budget Entries"]["!rows"] as XLSX.RowInfo[] | undefined;
+    expect(rows).toBeDefined();
+    // At least one transaction row is grouped at outline level 1.
+    expect((rows ?? []).some((r) => r && r.level === 1)).toBe(true);
+  });
+
+  it("formats money columns on xlsx-only sheets with a currency-neutral number format", async () => {
+    await exportSpreadsheet("xlsx");
+    const wb = parseWorkbook();
+    // Debts.Balance is a money column -> the fixture's 5000 cell is formatted.
+    const debts = wb.Sheets["Debts"];
+    const range = XLSX.utils.decode_range(debts["!ref"] as string);
+    let balanceCol = -1;
+    for (let c = range.s.c; c <= range.e.c; c += 1) {
+      const header = debts[XLSX.utils.encode_cell({ r: 0, c })];
+      if (header && header.v === "Balance") balanceCol = c;
+    }
+    expect(balanceCol).toBeGreaterThanOrEqual(0);
+    const cell = debts[XLSX.utils.encode_cell({ r: 1, c: balanceCol })];
+    expect(cell.t).toBe("n");
+    expect(String(cell.z)).toContain("0.00");
+  });
+
+  it("leaves the Budget Entries Amount column unformatted (shared with CSV)", async () => {
+    await exportSpreadsheet("xlsx");
+    const wb = parseWorkbook();
+    const entries = wb.Sheets["Budget Entries"];
+    const range = XLSX.utils.decode_range(entries["!ref"] as string);
+    let amountCol = -1;
+    for (let c = range.s.c; c <= range.e.c; c += 1) {
+      const header = entries[XLSX.utils.encode_cell({ r: 0, c })];
+      if (header && header.v === "Amount") amountCol = c;
+    }
+    expect(amountCol).toBeGreaterThanOrEqual(0);
+    // The first transaction row's Amount cell carries no currency number
+    // format (a format here would leak into the CSV export text).
+    const cell = entries[XLSX.utils.encode_cell({ r: 1, c: amountCol })];
+    if (cell && cell.t === "n") {
+      expect(cell.z == null || !String(cell.z).includes("#,##0.00")).toBe(true);
+    }
+  });
+});

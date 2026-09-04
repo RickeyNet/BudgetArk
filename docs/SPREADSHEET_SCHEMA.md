@@ -11,6 +11,8 @@ CSV files contain a single sheet (Budget Entries). Excel files contain a multi-s
 
 **v4 changes:** Budget Entries gained `Private` (`yes`/blank, round-trips) - the partner-sync privacy flag. Older files still import - the column is simply absent.
 
+> **Excel presentation is display-only.** xlsx workbooks auto-size their columns, format money columns with a `#,##0.00` (currency-neutral) number format, and group each month’s Budget Entries rows into a collapsible outline. None of this is part of the schema: cell values and headers are unchanged, the Budget Entries sheet (shared with the CSV export) carries no number format, and importing a decorated workbook round-trips exactly as before.
+
 > **Receipt photos do not round-trip.** Photo attachments on entries live as encrypted files on the device and are not part of the spreadsheet schema (or the JSON export). A **merge**-mode import never removes an entry's local photos - an entry updated from a spreadsheet row keeps the photos already on the device. A **replace**-mode spreadsheet restore keeps the entry but not its photos; the in-app JSON backup preserves the entry's photo *references* (files stay on the original device).
 
 ## Sheet: Budget Entries
