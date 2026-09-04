@@ -7,17 +7,24 @@
  * styles). Two behaviors live here once:
  *
  * - immediate (default): tapping a month commits and closes - the budget
- *   entry modals' "MONTH" field.
+ *   entry modals' "MONTH" field. There is deliberately no button row: the
+ *   month tap is the action, and a lone "Close" under the grid read as a
+ *   blank, purposeless button. Backing out is a tap on the dimmed backdrop
+ *   (or the Android back button via onRequestClose).
  * - confirm: tapping highlights a tentative month; "Done" commits - the
  *   debt payoff-goal flow, where cancelling must leave the saved goal
  *   untouched.
  *
  * The picker owns its year/tentative-month state, seeded from `value` on
  * each closed -> open edge, so callers no longer track pickerYear at all.
+ *
+ * Callers that are themselves a <Modal> must render this INSIDE that Modal,
+ * not as a sibling: iOS presents one modal per view controller, so a sibling
+ * picker never shows there (Android is permissive, which hides the bug).
  */
 
 import React, { useCallback, useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { MONTH_LABELS } from "../utils/dateFormat";
@@ -119,6 +126,13 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.pickerOverlay}>
+        {/* Tap outside the card to dismiss without changing the month. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close month picker"
+        />
         <View style={styles.pickerCard}>
           {title ? <Text style={styles.pickerTitle}>{title}</Text> : null}
 
@@ -207,11 +221,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
                 </TouchableOpacity>
               </View>
             </>
-          ) : (
-            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-              <Text style={styles.cancelText}>Close</Text>
-            </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
     </Modal>

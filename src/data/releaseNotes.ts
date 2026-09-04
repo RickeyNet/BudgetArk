@@ -41,6 +41,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Fixed: spending exactly up to a category limit no longer triggers the Spending Pace alert ('over by $0'). The row now reads 'At the limit' and the alert waits for a real overshoot. Also fixed: the Charts-tab sliders no longer catch page scrolls or jump the page, and categories with nothing spent this month stay out of the list under the spending chart.",
       "Fixed: during setup, the take-home pay, rent and display-name fields could hide behind the keyboard while you typed. The page now scrolls to keep the active field in view.",
       "Profile → About now links to the BudgetArk website, budgetark.app, next to the GitHub link.",
+      "Fixed: on iPhone, tapping the MONTH field on the Add / Edit Entry sheet did nothing, so back-dated entries (say, a January expense entered in September) could not be logged. The month grid now opens on both platforms. Tapping a month still picks it and closes the grid; the stray empty button under the grid is gone - tap outside the grid to back out instead.",
       "The Compound Interest Calculator on the Charts tab can now compare a lump sum with monthly contributions. Set a Starting Lump Sum (what you already have, invested once) alongside the monthly amount and a new card shows what each becomes on its own, what both become together, and the year the monthly plan overtakes the lump sum. The projection and chart include the lump sum, and the monthly contribution can now be zero to look at a lump sum by itself.",
     ],
   },

@@ -1469,121 +1469,123 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   );
 
   return (
-    <>
-      <Modal
-        visible={isEdit ? !!entry : visible}
-        animationType="slide"
-        transparent
-        onRequestClose={handleCancel}
-        onShow={handleShow}
-      >
-        <SheetKeyboardAvoider style={styles.overlay}>
-          {isEdit ? (
-            <>
-              {/* Tap-to-dismiss area above the sheet */}
-              <Pressable style={styles.backdrop} onPress={handleCancel} />
+    <Modal
+      visible={isEdit ? !!entry : visible}
+      animationType="slide"
+      transparent
+      onRequestClose={handleCancel}
+      onShow={handleShow}
+    >
+      <SheetKeyboardAvoider style={styles.overlay}>
+        {isEdit ? (
+          <>
+            {/* Tap-to-dismiss area above the sheet */}
+            <Pressable style={styles.backdrop} onPress={handleCancel} />
 
-              <View style={styles.editSheet}>
-                <ScrollView
-                  contentContainerStyle={[
-                    styles.editScroll,
-                    { paddingBottom: Math.max(insets.bottom, 16) },
-                  ]}
-                  keyboardShouldPersistTaps="handled"
-                  automaticallyAdjustKeyboardInsets
-                >
-                  <Text style={styles.title}>Edit Entry</Text>
-                  <Text style={styles.subtitle}>
-                    Update or delete this budget entry.
-                  </Text>
-
-                  {ready ? (
-                    <>
-                      {formBody}
-
-                      <View style={styles.editButtonRow}>
-                        <TouchableOpacity
-                          style={styles.deleteButton}
-                          onPress={handleDelete}
-                        >
-                          <Text style={styles.deleteText}>Delete</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cancelButton}
-                          onPress={handleCancel}
-                        >
-                          <Text style={styles.cancelText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.submitButton,
-                            !isValid && styles.submitButtonDisabled,
-                          ]}
-                          onPress={handleEditSave}
-                          disabled={!isValid}
-                        >
-                          <Text style={styles.submitButtonText}>Save</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  ) : (
-                    <View style={styles.loadingPlaceholder}>
-                      <Text style={styles.subtitle}>Loading...</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-            </>
-          ) : (
-            /* Add sheet - fills from near top to bottom, buttons pinned */
-            <View style={styles.addSheet}>
+            <View style={styles.editSheet}>
               <ScrollView
-                style={styles.scrollArea}
-                contentContainerStyle={styles.addScroll}
+                contentContainerStyle={[
+                  styles.editScroll,
+                  { paddingBottom: Math.max(insets.bottom, 16) },
+                ]}
                 keyboardShouldPersistTaps="handled"
                 automaticallyAdjustKeyboardInsets
               >
-                <Text style={styles.title}>Add Budget Entry</Text>
+                <Text style={styles.title}>Edit Entry</Text>
                 <Text style={styles.subtitle}>
-                  Track income and expenses by category.
+                  Update or delete this budget entry.
                 </Text>
 
-                {formBody}
+                {ready ? (
+                  <>
+                    {formBody}
+
+                    <View style={styles.editButtonRow}>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={handleDelete}
+                      >
+                        <Text style={styles.deleteText}>Delete</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={handleCancel}
+                      >
+                        <Text style={styles.cancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.submitButton,
+                          !isValid && styles.submitButtonDisabled,
+                        ]}
+                        onPress={handleEditSave}
+                        disabled={!isValid}
+                      >
+                        <Text style={styles.submitButtonText}>Save</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.loadingPlaceholder}>
+                    <Text style={styles.subtitle}>Loading...</Text>
+                  </View>
+                )}
               </ScrollView>
-
-              {/* Action buttons - pinned at bottom, always visible above keyboard */}
-              <View
-                style={[
-                  styles.addButtonRow,
-                  Platform.OS === "android" && insets.bottom > 0
-                    ? { paddingBottom: insets.bottom + 12 }
-                    : null,
-                ]}
-              >
-                <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.addAnotherButton, !isValid && styles.submitButtonDisabled]}
-                  onPress={handleAddAnother}
-                  disabled={!isValid}
-                  accessibilityLabel="Save and add another entry"
-                >
-                  <Text style={styles.addAnotherText}>Save + another</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
-                  onPress={handleAddSubmit}
-                  disabled={!isValid}
-                >
-                  <Text style={styles.submitButtonText}>{addButtonLabel}</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-          )}
-        </SheetKeyboardAvoider>
-      </Modal>
+          </>
+        ) : (
+          /* Add sheet - fills from near top to bottom, buttons pinned */
+          <View style={styles.addSheet}>
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={styles.addScroll}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+            >
+              <Text style={styles.title}>Add Budget Entry</Text>
+              <Text style={styles.subtitle}>
+                Track income and expenses by category.
+              </Text>
 
+              {formBody}
+            </ScrollView>
+
+            {/* Action buttons - pinned at bottom, always visible above keyboard */}
+            <View
+              style={[
+                styles.addButtonRow,
+                Platform.OS === "android" && insets.bottom > 0
+                  ? { paddingBottom: insets.bottom + 12 }
+                  : null,
+              ]}
+            >
+              <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addAnotherButton, !isValid && styles.submitButtonDisabled]}
+                onPress={handleAddAnother}
+                disabled={!isValid}
+                accessibilityLabel="Save and add another entry"
+              >
+                <Text style={styles.addAnotherText}>Save + another</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}
+                onPress={handleAddSubmit}
+                disabled={!isValid}
+              >
+                <Text style={styles.submitButtonText}>{addButtonLabel}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </SheetKeyboardAvoider>
+
+      {/* Nested INSIDE this Modal on purpose. iOS presents one modal per view
+          controller: a sibling <Modal> rendered next to (not within) an open
+          Modal never appears there - the MONTH field silently did nothing on
+          iOS while Android, which has no such limit, showed the picker. */}
       <MonthYearPicker
         visible={showMonthPicker}
         value={yearMonth}
@@ -1597,7 +1599,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         }}
         onClose={() => setShowMonthPicker(false)}
       />
-    </>
+    </Modal>
   );
 };
 
