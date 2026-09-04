@@ -106,8 +106,11 @@ const sumWindow = (
   return { monthsTracked, totals };
 };
 
+/** Rounded to a tenth of a percent; 0 (never Infinity/NaN) when `from` isn't a positive base. */
 const percentChange = (from: number, to: number): number =>
-  Math.round(((to - from) / from) * 1000) / 10;
+  from > 0 && Number.isFinite(from) && Number.isFinite(to)
+    ? Math.round(((to - from) / from) * 1000) / 10
+    : 0;
 
 /**
  * The user's personal inflation rate. `now` is injectable for tests; the

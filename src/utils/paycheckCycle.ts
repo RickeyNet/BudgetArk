@@ -20,7 +20,11 @@
 
 import type { BudgetEntry, Debt, Payment } from "../types";
 import { getDayOfMonth, upcomingBillsWithin } from "./billCalendar";
-import { paymentMonthKey, upcomingDebtDuesWithin } from "./debtDueCalendar";
+import {
+  overdueDebtDuesThisMonth,
+  paymentMonthKey,
+  upcomingDebtDuesWithin,
+} from "./debtDueCalendar";
 import { entriesForMonth } from "./billFulfillment";
 import { getMonthKey } from "./budgetMonths";
 import { roundToCents } from "./money";
@@ -215,7 +219,11 @@ export type DueItem = {
 
 export type PaycheckPeriodView = {
   period: PayPeriod;
-  /** Unpaid bills and debt minimums landing before the next payday, soonest first. */
+  /**
+   * Unpaid bills and debt minimums landing before the next payday, soonest
+   * first. A minimum already past its day this month with no payment logged
+   * leads the list with a negative `daysUntil` - it still has to go out.
+   */
   due: DueItem[];
   dueTotal: number;
   /** Month-start balance + what the ledger says has landed so far; null without a balance. */
@@ -291,7 +299,10 @@ export const buildPaycheckPeriodView = (input: {
     daysUntil: item.daysUntil,
     kind: "bill",
   }));
-  const debtDues = upcomingDebtDuesWithin(input.debts, input.payments, daysAhead, {}, now).map<DueItem>(
+  const debtDues = [
+    ...overdueDebtDuesThisMonth(input.debts, input.payments, now),
+    ...upcomingDebtDuesWithin(input.debts, input.payments, daysAhead, {}, now),
+  ].map<DueItem>(
     (item) => ({
       id: `debt:${item.debt.id}:${toLocalDateKey(item.date)}`,
       label: item.debt.name,

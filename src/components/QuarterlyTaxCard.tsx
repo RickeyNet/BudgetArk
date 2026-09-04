@@ -23,6 +23,7 @@ import { FILING_STATUS_OPTIONS, TAX_DATA_YEAR, type FilingStatus } from "../data
 import {
   buildQuarterlyTaxYear,
   defaultTaxYear,
+  earliestTaxYear,
   type QuarterPaidRecord,
   type QuarterRow,
 } from "../utils/quarterlyTax";
@@ -104,6 +105,7 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
   );
 
   const thisYear = new Date().getFullYear();
+  const firstYear = useMemo(() => earliestTaxYear(entries), [entries]);
   const statusLabel = (row: QuarterRow): { text: string; color: string } => {
     switch (row.status) {
       case "paid":
@@ -121,7 +123,14 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
 
   return (
     <>
-      <TouchableOpacity style={tool.toolHeader} onPress={toggle} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={tool.toolHeader}
+        onPress={toggle}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Quarterly Taxes"
+      >
         <View>
           <Text style={tool.toolTitle}>Quarterly Taxes</Text>
           <Text style={tool.toolHint}>
@@ -140,8 +149,9 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
           <View style={tool.efCard}>
             <View style={styles.yearRow}>
               <TouchableOpacity
-                onPress={() => setYear((y) => y - 1)}
-                style={styles.yearBtn}
+                onPress={() => setYear((y) => Math.max(firstYear, y - 1))}
+                style={[styles.yearBtn, year <= firstYear && styles.yearBtnDisabled]}
+                disabled={year <= firstYear}
                 accessibilityRole="button"
                 accessibilityLabel="Previous year"
               >
@@ -166,6 +176,8 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
                   style={[tool.chip, status === opt.value && tool.chipActive]}
                   onPress={() => setStatus(opt.value)}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: status === opt.value }}
                 >
                   <Text style={[tool.chipText, status === opt.value && tool.chipTextActive]}>
                     {opt.label}

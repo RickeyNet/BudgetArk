@@ -5,6 +5,7 @@ import {
   dismissalKey,
   hasPaymentInMonth,
   upcomingDebtDuesWithin,
+  overdueDebtDuesThisMonth,
   debtsDueTodayNeedingPrompt,
   debtsDueOrOverdueNeedingPrompt,
 } from "../debtDueCalendar";
@@ -97,6 +98,36 @@ describe("hasPaymentInMonth", () => {
 
   it("ignores payments belonging to other debts", () => {
     expect(hasPaymentInMonth("d3", payments, "2026-06")).toBe(false);
+  });
+});
+
+describe("overdueDebtDuesThisMonth", () => {
+  // Wednesday 10 June 2026.
+  const today = new Date(2026, 5, 10);
+
+  it("lists unpaid minimums whose day this month has passed, most overdue first", () => {
+    const debts = [
+      debt({ id: "early", name: "Early", paymentDueDay: 3, minPayment: 40 }),
+      debt({ id: "later", name: "Later", paymentDueDay: 8, minPayment: 90 }),
+      debt({ id: "today", name: "Today", paymentDueDay: 10 }),
+      debt({ id: "ahead", name: "Ahead", paymentDueDay: 20 }),
+      debt({ id: "paid", name: "Paid", paymentDueDay: 2 }),
+      debt({ id: "clear", name: "Clear", paymentDueDay: 2, balance: 0 }),
+    ];
+    const payments = [payment({ id: "pp", debtId: "paid", date: "2026-06-02T12:00:00.000Z" })];
+    const rows = overdueDebtDuesThisMonth(debts, payments, today);
+    expect(rows.map((r) => `${r.debt.id}:${r.daysUntil}:${r.amount}`)).toEqual(["early:-7:40", "later:-2:90"]);
+    expect(rows[0].date.getDate()).toBe(3);
+    // Due today or later belongs to upcomingDebtDuesWithin, never here.
+    expect(rows.some((r) => r.debt.id === "today" || r.debt.id === "ahead")).toBe(false);
+  });
+
+  it("clamps a due day the month doesn't have and pays no attention to last month's payment", () => {
+    const lastMonth = [payment({ id: "old", debtId: "d1", date: "2026-05-31T12:00:00.000Z" })];
+    const rows = overdueDebtDuesThisMonth([debt({ paymentDueDay: 31 })], lastMonth, new Date(2026, 1, 28));
+    // Feb 2026 has 28 days: due day 31 clamps to the 28th, which is today, not overdue.
+    expect(rows).toEqual([]);
+    expect(overdueDebtDuesThisMonth([debt({ paymentDueDay: 1 })], lastMonth, today)).toHaveLength(1);
   });
 });
 

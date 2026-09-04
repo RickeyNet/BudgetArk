@@ -49,6 +49,8 @@ const Chip = memo(({ code, active, onSelect, styles }: ChipProps) => {
       style={[styles.chip, active && styles.chipActive]}
       onPress={handlePress}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
     >
       <Text style={[styles.text, active && styles.textActive]}>{code}</Text>
     </TouchableOpacity>

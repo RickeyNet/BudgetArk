@@ -13,6 +13,7 @@ import {
   buildQuarterlyTaxYear,
   calcSelfEmploymentTax,
   defaultTaxYear,
+  earliestTaxYear,
   estimateAnnualTaxOn1099,
   parseQuarterPaidMap,
   quarterDueDate,
@@ -169,5 +170,19 @@ describe("parseQuarterPaidMap / defaultTaxYear", () => {
     expect(defaultTaxYear(new Date(2027, 0, 10))).toBe(2026);
     expect(defaultTaxYear(new Date(2027, 0, 20))).toBe(2027);
     expect(defaultTaxYear(new Date(2026, 8, 2))).toBe(2026);
+  });
+
+  it("floors the browsable years at the oldest live entry, never past the current tax year", () => {
+    const now = new Date(2026, 8, 2);
+    expect(earliestTaxYear([], now)).toBe(2026);
+    const entries = [
+      makeBudgetEntry({ id: "old", date: "2023-05-01T12:00:00.000Z" }),
+      makeBudgetEntry({ id: "older-deleted", date: "2019-05-01T12:00:00.000Z", deletedAt: "2026-01-01T00:00:00.000Z" }),
+      makeBudgetEntry({ id: "junk", date: "not a date" }),
+      makeBudgetEntry({ id: "future", date: "2030-05-01T12:00:00.000Z" }),
+    ];
+    expect(earliestTaxYear(entries, now)).toBe(2023);
+    // Mid-January: the current tax year is last year, and the floor follows it.
+    expect(earliestTaxYear([makeBudgetEntry({ id: "n", date: "2027-01-05T12:00:00.000Z" })], new Date(2027, 0, 5))).toBe(2026);
   });
 });

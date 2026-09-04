@@ -153,7 +153,14 @@ const TaxCalculatorCard: React.FC = () => {
 
   return (
     <>
-      <TouchableOpacity style={tool.toolHeader} onPress={toggleOpen} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={tool.toolHeader}
+        onPress={toggleOpen}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Take-Home Pay"
+      >
         <View>
           <Text style={tool.toolTitle}>Take-Home Pay</Text>
           <Text style={tool.toolHint}>
@@ -186,6 +193,8 @@ const TaxCalculatorCard: React.FC = () => {
                   style={[tool.chip, status === opt.value && tool.chipActive]}
                   onPress={() => setStatus(opt.value)}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: status === opt.value }}
                 >
                   <Text style={[tool.chipText, status === opt.value && tool.chipTextActive]}>
                     {opt.label}
@@ -201,6 +210,8 @@ const TaxCalculatorCard: React.FC = () => {
                   style={[tool.chip, payPeriods === opt.value && tool.chipActive]}
                   onPress={() => setPayPeriods(opt.value)}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: payPeriods === opt.value }}
                 >
                   <Text style={[tool.chipText, payPeriods === opt.value && tool.chipTextActive]}>
                     {opt.label}

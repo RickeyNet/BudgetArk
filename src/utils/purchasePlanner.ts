@@ -21,6 +21,7 @@ import type {
 import { getMonthKey } from "./budgetMonths";
 import { calcMonthsToPayoff, calcTotalInterest } from "./calculations";
 import { entriesForMonth } from "./billFulfillment";
+import { parseMoneyInput } from "./parseMoneyInput";
 
 /* ── Monthly cash flow (from budget history) ── */
 
@@ -419,6 +420,23 @@ export type PlanPriorityAssignment = { id: string; priority: number };
  * when the plan is already at that edge or unknown, so callers can skip the
  * write.
  */
+/**
+ * Whether the plan at `index` can swap with its neighbour in `direction`.
+ * False at the list ends and across the funded boundary: the display
+ * order always parks funded plans last, so swapping an unfunded plan with
+ * a funded one would shuffle priorities without anything moving on screen.
+ */
+export const canMovePlanInOrder = (
+  orderedGoals: readonly SavingsGoal[],
+  index: number,
+  direction: -1 | 1
+): boolean => {
+  const target = index + direction;
+  if (index < 0 || index >= orderedGoals.length) return false;
+  if (target < 0 || target >= orderedGoals.length) return false;
+  return isFundedPlan(orderedGoals[index]) === isFundedPlan(orderedGoals[target]);
+};
+
 export const movePlanInOrder = (
   orderedGoals: readonly SavingsGoal[],
   goalId: string,
@@ -426,8 +444,8 @@ export const movePlanInOrder = (
 ): PlanPriorityAssignment[] | null => {
   const index = orderedGoals.findIndex((goal) => goal.id === goalId);
   if (index < 0) return null;
+  if (!canMovePlanInOrder(orderedGoals, index, direction)) return null;
   const target = index + direction;
-  if (target < 0 || target >= orderedGoals.length) return null;
   const ids = orderedGoals.map((goal) => goal.id);
   [ids[index], ids[target]] = [ids[target], ids[index]];
   return ids.map((id, priority) => ({ id, priority }));
@@ -855,8 +873,11 @@ export const describeDebtOpportunityCost = (
   if (cost.monthsSooner === Infinity) {
     return `${lead} would turn a debt its minimum never clears into one that does.`;
   }
-  if (cost.monthsSooner === 0 && cost.interestSaved < 1) {
-    return `${lead} would barely move it - this plan costs you almost nothing there.`;
+  if (cost.monthsSooner === 0) {
+    // Same payoff month either way; only the interest line (if any) is worth saying.
+    return cost.interestSaved >= 1
+      ? `${lead} would save ${money(Math.round(cost.interestSaved))} in interest, though it clears the same month.`
+      : `${lead} would barely move it - this plan costs you almost nothing there.`;
   }
   const months = `${cost.monthsSooner} month${cost.monthsSooner === 1 ? "" : "s"} sooner`;
   return cost.interestSaved >= 1
@@ -870,6 +891,17 @@ export const describeDebtOpportunityCost = (
 export const USEFUL_LIFE_YEAR_OPTIONS: readonly number[] = [1, 2, 3, 5, 10];
 export const MAX_USES_PER_MONTH = 10_000;
 export const MAX_USEFUL_LIFE_YEARS = 100;
+
+/**
+ * One cost-per-use field as typed: a positive number no larger than `max`,
+ * else undefined (blank or junk clears the value). The contribute dialog's
+ * live preview and its Save path both go through this, so the preview can
+ * never show a cost per use that Save would then silently drop.
+ */
+export const parsePlanUseInput = (text: string, max: number): number | undefined => {
+  const value = parseMoneyInput(text);
+  return value !== null && value > 0 && value <= max ? value : undefined;
+};
 
 /** Price spread over every expected use; null until both inputs are positive. */
 export const calcCostPerUse = (

@@ -142,7 +142,14 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
 
   return (
     <>
-      <TouchableOpacity style={tool.toolHeader} onPress={toggle} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={tool.toolHeader}
+        onPress={toggle}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Subscription Detective"
+      >
         <View>
           <Text style={tool.toolTitle}>Subscription Detective</Text>
           <Text style={tool.toolHint}>

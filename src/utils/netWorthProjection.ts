@@ -282,9 +282,11 @@ export const buildNetWorthOutlook = (input: {
     const projectedAtTarget = full[atIndex].netWorth;
     const debtThen = full[atIndex].debt;
     // The freed minimums arrive whatever the surplus is, so they count
-    // toward the target before the pace that is asked of the user.
+    // toward the target before the pace that is asked of the user. A goal
+    // past the simulation cap is assessed AT the cap (projectedAtTarget and
+    // onTrack already are), so the pace divides by the same month count.
     const requiredMonthly = roundToCents(
-      (target - (input.currentAssets + full[atIndex].freedMinimums - debtThen)) / monthsUntil
+      (target - (input.currentAssets + full[atIndex].freedMinimums - debtThen)) / atIndex
     );
     const reachIndex = full.findIndex((p) => p.netWorth >= target);
     goal = {

@@ -72,6 +72,41 @@ const isDebtDueOnDate = (
 };
 
 /**
+ * Active debts whose minimum was due earlier this calendar month and has
+ * no payment logged yet. `daysUntil` is negative (days overdue). The
+ * Until Payday card lists these with the upcoming ones: the money still
+ * has to leave before the next check, and the ledger never counted it
+ * (only logged payments do) - so without this row it would vanish from
+ * safe-to-spend entirely.
+ */
+export const overdueDebtDuesThisMonth = (
+  debts: readonly Debt[],
+  payments: readonly Payment[],
+  fromDate: Date = new Date()
+): UpcomingDebtDue[] => {
+  const today = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+  const monthKey = getMonthKey(today);
+  const overdue: UpcomingDebtDue[] = [];
+  for (const debt of debts) {
+    if (!(debt.balance > 0)) continue;
+    const dueDay = clampDueDayToMonth(
+      today.getFullYear(),
+      today.getMonth(),
+      getEffectivePaymentDueDay(debt)
+    );
+    if (dueDay >= today.getDate()) continue;
+    if (hasPaymentInMonth(debt.id, payments, monthKey)) continue;
+    overdue.push({
+      debt,
+      date: new Date(today.getFullYear(), today.getMonth(), dueDay),
+      daysUntil: dueDay - today.getDate(),
+      amount: debt.minPayment,
+    });
+  }
+  return overdue.sort((a, b) => a.daysUntil - b.daysUntil || b.amount - a.amount);
+};
+
+/**
  * Active debts with a minimum due in the next `daysAhead` days (inclusive).
  * Skips debts already paid this calendar month.
  */

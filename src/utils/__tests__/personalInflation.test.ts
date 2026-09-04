@@ -174,6 +174,19 @@ describe("computePersonalInflation", () => {
     expect(INFLATION_MIN_TRACKED_MONTHS).toBe(3);
   });
 
+  it("never reports an infinite or NaN rate", () => {
+    // Every category present in both windows carries a positive prior, so
+    // rates are finite by construction; pin it for the whole result anyway.
+    const entries = [...fill(currentOffsets, "Grocery", 110), ...fill(priorOffsets, "Grocery", 100)];
+    const result = computePersonalInflation(entries, NOW);
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(Number.isFinite(result.rate)).toBe(true);
+      for (const row of result.categories) expect(Number.isFinite(row.rate)).toBe(true);
+      expect(result.rate).toBe(10);
+    }
+  });
+
   it("reports insufficient when the two years share no category", () => {
     const entries = [
       ...fill(priorOffsets, "Grocery", 400),

@@ -123,6 +123,9 @@ Imported limits land in the current month's limit set.
 | `TargetAmount`  | Yes      | Positive number.                                                                     |
 | `CurrentAmount` | Yes      | Number, ≥ 0.                                                                         |
 | `TargetDate`    | No       | Optional target date.                                                                |
+| `Priority`      | No       | Purchase planner "My order" rank (0 = first). Blank when never ranked. Round-trips.  |
+| `UsesPerMonth`  | No       | Cost-per-use input: expected uses per month (1-10,000). Blank when not tracked.      |
+| `UsefulLifeYears` | No     | Cost-per-use input: years you expect to keep it (up to 100). Blank when not tracked. |
 | `CreatedAt`     | No       | ISO timestamp; defaults to now.                                                      |
 | `UpdatedAt`     | No       | ISO timestamp of last edit. Round-tripped to preserve sync correctness.              |
 

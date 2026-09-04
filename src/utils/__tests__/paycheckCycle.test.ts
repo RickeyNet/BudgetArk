@@ -182,6 +182,27 @@ describe("buildPaycheckPeriodView", () => {
     expect(view!.safeToSpend).toBe(1088);
   });
 
+  it("keeps an unpaid minimum that is already past its day this month on the due list", () => {
+    // Loan due on the 4th, still unpaid on the 10th: the ledger never counted
+    // it (only logged payments do), so it must stay in "due" or it vanishes.
+    const withOverdue = [...debts, makeDebt({ id: "loan", name: "Loan", minPayment: 200, paymentDueDay: 4 })];
+    const view = buildPaycheckPeriodView({ settings, entries, debts: withOverdue, payments: [], startingBalance: 500, now });
+    expect(view!.due.map((d) => `${d.kind}:${d.label}:${d.daysUntil}`)).toEqual([
+      "debt:Loan:-6",
+      "debt:Visa:2",
+      "bill:Electric:5",
+    ]);
+    expect(view!.dueTotal).toBe(340);
+    expect(view!.cashNow).toBe(1300);
+    expect(view!.safeToSpend).toBe(960);
+    // Logging the payment moves it out of "due" and into cash spent.
+    const paid = [makePayment({ id: "lp", debtId: "loan", amount: 200, date: "2026-09-09T15:00:00.000Z" })];
+    const after = buildPaycheckPeriodView({ settings, entries, debts: withOverdue, payments: paid, startingBalance: 500, now });
+    expect(after!.due.map((d) => d.label)).toEqual(["Visa", "Electric"]);
+    expect(after!.cashNow).toBe(1100);
+    expect(after!.safeToSpend).toBe(960);
+  });
+
   it("drops a debt already paid this month and leaves cash figures null without a balance", () => {
     const payments = [makePayment({ id: "p1", debtId: "visa", amount: 50, date: "2026-09-02T15:00:00.000Z" })];
     const view = buildPaycheckPeriodView({ settings, entries, debts, payments, startingBalance: null, now });

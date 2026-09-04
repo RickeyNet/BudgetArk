@@ -14,6 +14,7 @@
  */
 
 import type { BudgetEntry, LoanRepayment } from "../types";
+import { roundToCents } from "./money";
 import { sanitizeTextInput } from "./sanitize";
 
 /** Borrower name cap - a first name or "Mom", not an essay. */
@@ -22,8 +23,6 @@ export const LENT_TO_MAX_LENGTH = 60;
 export const MAX_LOAN_REPAYMENTS = 200;
 /** Note cap on one repayment. */
 export const LOAN_REPAYMENT_NOTE_MAX_LENGTH = 120;
-
-const roundCents = (n: number): number => Math.round(n * 100) / 100;
 
 const cleanText = (raw: string, max: number): string | undefined => {
   const cleaned = sanitizeTextInput(raw).replace(/\s+/g, " ").trim().slice(0, max).trim();
@@ -50,14 +49,14 @@ export const isLoanEntry = (
 ): boolean => entry.type === "expense" && !!entry.lentTo && !entry.recurring;
 
 export const loanRepaidTotal = (entry: Pick<BudgetEntry, "loanRepayments">): number =>
-  roundCents(
+  roundToCents(
     (entry.loanRepayments ?? []).reduce((sum, r) => sum + (r.amount > 0 ? r.amount : 0), 0)
   );
 
 /** What is still owed on one loan - never negative, even after an overpayment. */
 export const loanOutstanding = (
   entry: Pick<BudgetEntry, "amount" | "loanRepayments">
-): number => roundCents(Math.max(0, entry.amount - loanRepaidTotal(entry)));
+): number => roundToCents(Math.max(0, entry.amount - loanRepaidTotal(entry)));
 
 export interface LoanLine {
   entry: BudgetEntry;
@@ -106,16 +105,16 @@ export const buildLoanLedger = (entries: readonly BudgetEntry[]): LoanLedger => 
     const line: LoanLine = { entry, repaid, outstanding, settled: outstanding <= 0 };
     const existing = byKey.get(key);
     if (existing) {
-      existing.lent = roundCents(existing.lent + entry.amount);
-      existing.repaid = roundCents(existing.repaid + repaid);
-      existing.outstanding = roundCents(existing.outstanding + outstanding);
+      existing.lent = roundToCents(existing.lent + entry.amount);
+      existing.repaid = roundToCents(existing.repaid + repaid);
+      existing.outstanding = roundToCents(existing.outstanding + outstanding);
       existing.loans.push(line);
       if (!line.settled) existing.openCount += 1;
     } else {
       byKey.set(key, {
         key,
         name,
-        lent: roundCents(entry.amount),
+        lent: roundToCents(entry.amount),
         repaid,
         outstanding,
         loans: [line],
@@ -134,9 +133,9 @@ export const buildLoanLedger = (entries: readonly BudgetEntry[]): LoanLedger => 
 
   return {
     borrowers,
-    totalLent: roundCents(borrowers.reduce((s, b) => s + b.lent, 0)),
-    totalRepaid: roundCents(borrowers.reduce((s, b) => s + b.repaid, 0)),
-    totalOutstanding: roundCents(borrowers.reduce((s, b) => s + b.outstanding, 0)),
+    totalLent: roundToCents(borrowers.reduce((s, b) => s + b.lent, 0)),
+    totalRepaid: roundToCents(borrowers.reduce((s, b) => s + b.repaid, 0)),
+    totalOutstanding: roundToCents(borrowers.reduce((s, b) => s + b.outstanding, 0)),
     loanCount: loans.length,
   };
 };
@@ -180,7 +179,7 @@ export const addLoanRepayment = (
 ): BudgetEntry | null => {
   if (!isLoanEntry(entry)) return null;
   if (!Number.isFinite(input.amount) || input.amount <= 0) return null;
-  const amount = roundCents(input.amount);
+  const amount = roundToCents(input.amount);
   if (amount < 0.01) return null;
   if (amount > loanOutstanding(entry) + 0.001) return null;
   if (!Number.isFinite(Date.parse(input.date))) return null;
@@ -289,7 +288,7 @@ export const mergeLoanRepayments = (winner: BudgetEntry, loser: BudgetEntry): Bu
 export const formatLoanRepaymentsCell = (
   repayments: readonly LoanRepayment[] | undefined
 ): string =>
-  (repayments ?? []).map((r) => `${r.date.slice(0, 10)}:${roundCents(r.amount)}`).join(";");
+  (repayments ?? []).map((r) => `${r.date.slice(0, 10)}:${roundToCents(r.amount)}`).join(";");
 
 const PAIR_RE = /^(\d{4}-\d{2}-\d{2}):(\d+(?:\.\d{1,2})?)$/;
 
@@ -314,7 +313,7 @@ export const parseLoanRepaymentsCell = (
     const m = PAIR_RE.exec(pair);
     if (!m) return null;
     const date = m[1];
-    const amount = roundCents(Number(m[2]));
+    const amount = roundToCents(Number(m[2]));
     if (!Number.isFinite(Date.parse(date)) || !(amount >= 0.01)) return null;
     out.push({ id: makeId(), amount, date, createdAt });
   }

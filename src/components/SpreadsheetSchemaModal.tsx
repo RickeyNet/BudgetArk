@@ -114,7 +114,11 @@ const SHEETS: SheetSpec[] = [
       { name: "TargetAmount", required: true, notes: "Positive number." },
       { name: "CurrentAmount", required: true, notes: "Number, ≥ 0." },
       { name: "TargetDate", required: false, notes: "Optional target date." },
+      { name: "Priority", required: false, notes: "Purchase planner 'My order' rank (0 = first). Blank when never ranked. Round-trips." },
+      { name: "UsesPerMonth", required: false, notes: "Cost-per-use input: expected uses per month (1-10,000). Blank when not tracked." },
+      { name: "UsefulLifeYears", required: false, notes: "Cost-per-use input: years you expect to keep it (up to 100). Blank when not tracked." },
       { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+      { name: "UpdatedAt", required: false, notes: "ISO timestamp of last edit. Round-tripped so partner sync keeps the newer copy." },
     ],
   },
   {

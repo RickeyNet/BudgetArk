@@ -217,6 +217,20 @@ describe("buildNetWorthOutlook", () => {
     });
   });
 
+  it("assesses a goal beyond the simulation cap at the cap, pace included", () => {
+    // 15 years out: projected/onTrack read the 120-month point, so the
+    // required pace divides by 120 too rather than by 180 (which understated it).
+    const far = { targetAmount: 100000, targetMonth: monthKeyAt(-180), createdAt: "2026-09-02T00:00:00.000Z" };
+    const outlook = buildNetWorthOutlook({ entries: history, debts: [], currentAssets: 1000, goal: far, now: NOW });
+    expect(outlook.horizonMonths).toBe(PROJECTION_MAX_MONTHS);
+    expect(outlook.goal).toMatchObject({
+      monthsUntil: 180,
+      projectedAtTarget: 1000 + 500 * PROJECTION_MAX_MONTHS,
+      onTrack: false,
+      requiredMonthly: 825,
+    });
+  });
+
   it("looks past the horizon for the reach date and clamps a past goal month to one month", () => {
     const soon = { targetAmount: 2000, targetMonth: monthKeyAt(2), createdAt: "2026-09-02T00:00:00.000Z" };
     const outlook = buildNetWorthOutlook({ entries: history, debts: [], currentAssets: 1000, goal: soon, now: NOW });

@@ -32,6 +32,9 @@ import {
   MAX_CHART_MONTHS,
   MIN_CHART_MONTHS,
   movePlanInOrder,
+  canMovePlanInOrder,
+  parsePlanUseInput,
+  MAX_USES_PER_MONTH,
   NUDGE_LUMP_SUM,
   NUDGE_MONTHLY_STEP,
   orderPurchasePlans,
@@ -355,6 +358,40 @@ describe("movePlanInOrder", () => {
     expect(movePlanInOrder(ordered, "c", 1)).toBeNull();
     expect(movePlanInOrder(ordered, "zzz", 1)).toBeNull();
   });
+
+  it("never swaps across the funded boundary (funded plans always display last)", () => {
+    const withFunded = [
+      goal({ id: "a" }),
+      goal({ id: "b" }),
+      goal({ id: "done", targetAmount: 100, currentAmount: 100 }),
+      goal({ id: "done2", targetAmount: 50, currentAmount: 80 }),
+    ];
+    // Last unfunded plan can't move down; first funded plan can't move up.
+    expect(canMovePlanInOrder(withFunded, 1, 1)).toBe(false);
+    expect(canMovePlanInOrder(withFunded, 2, -1)).toBe(false);
+    expect(movePlanInOrder(withFunded, "b", 1)).toBeNull();
+    expect(movePlanInOrder(withFunded, "done", -1)).toBeNull();
+    // Moves within each group still work.
+    expect(canMovePlanInOrder(withFunded, 1, -1)).toBe(true);
+    expect(canMovePlanInOrder(withFunded, 2, 1)).toBe(true);
+    expect(movePlanInOrder(withFunded, "done2", -1)?.map((a) => a.id)).toEqual(["a", "b", "done2", "done"]);
+    expect(canMovePlanInOrder(withFunded, -1, 1)).toBe(false);
+    expect(canMovePlanInOrder(withFunded, 4, -1)).toBe(false);
+  });
+});
+
+describe("parsePlanUseInput", () => {
+  it("accepts a positive number within the cap and clears everything else", () => {
+    expect(parsePlanUseInput("12", MAX_USES_PER_MONTH)).toBe(12);
+    expect(parsePlanUseInput(" 2.5 ", 100)).toBe(2.5);
+    expect(parsePlanUseInput("", 100)).toBeUndefined();
+    expect(parsePlanUseInput("0", 100)).toBeUndefined();
+    expect(parsePlanUseInput("-3", 100)).toBeUndefined();
+    expect(parsePlanUseInput("abc", 100)).toBeUndefined();
+    // Over the cap is dropped, not clamped - the preview and Save agree.
+    expect(parsePlanUseInput(String(MAX_USES_PER_MONTH + 1), MAX_USES_PER_MONTH)).toBeUndefined();
+    expect(parsePlanUseInput(String(MAX_USES_PER_MONTH), MAX_USES_PER_MONTH)).toBe(MAX_USES_PER_MONTH);
+  });
 });
 
 describe("projectPurchasePlans", () => {
@@ -663,6 +700,14 @@ describe("describeDebtOpportunityCost", () => {
     expect(describeDebtOpportunityCost({ ...base, monthsSooner: 0, interestSaved: 0.2 }, money)).toMatch(
       /barely move it/,
     );
+  });
+
+  it("never says '0 months sooner' when only the interest moves", () => {
+    const text = describeDebtOpportunityCost({ ...base, monthsSooner: 0, interestSaved: 18.6 }, money);
+    expect(text).toBe(
+      "$150/mo on Chase Visa instead would save $19 in interest, though it clears the same month.",
+    );
+    expect(text).not.toMatch(/0 months/);
   });
 });
 

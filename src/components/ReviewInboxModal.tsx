@@ -629,6 +629,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     )
                   }
                   disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: busy }}
                 >
                   <Text style={styles.billSuggestButtonText}>
                     {busy ? "Saving..." : `Always approve as ${ruleNudge.category}`}

@@ -351,7 +351,11 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
               {item.label}
             </Text>
             <Text style={styles.dueMeta}>
-              {item.daysUntil === 0 ? "today" : formatPaydayLabel(item.date)}
+              {item.daysUntil === 0
+                ? "today"
+                : item.daysUntil < 0
+                  ? `overdue · ${formatPaydayLabel(item.date)}`
+                  : formatPaydayLabel(item.date)}
             </Text>
             <Text style={styles.dueAmount}>{formatCurrency(item.amount)}</Text>
           </View>

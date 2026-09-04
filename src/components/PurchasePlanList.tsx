@@ -54,6 +54,8 @@ import {
   describeDebtOpportunityCost,
   MAX_USEFUL_LIFE_YEARS,
   MAX_USES_PER_MONTH,
+  canMovePlanInOrder,
+  parsePlanUseInput,
   movePlanInOrder,
   orderPurchasePlans,
   pickOpportunityDebt,
@@ -340,13 +342,9 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   const handleContribute = useCallback(async () => {
     if (!contributeGoal) return;
     const amount = parsePlanAmount(contributeText);
-    // Cost-per-use fields: blank or junk clears the value.
-    const parseUse = (text: string, max: number): number | undefined => {
-      const value = parseMoneyInput(text);
-      return value !== null && value > 0 && value <= max ? value : undefined;
-    };
-    const usesPerMonth = parseUse(usesText, MAX_USES_PER_MONTH);
-    const usefulLifeYears = parseUse(yearsText, MAX_USEFUL_LIFE_YEARS);
+    // Cost-per-use fields: blank or junk clears the value (same rule as the preview).
+    const usesPerMonth = parsePlanUseInput(usesText, MAX_USES_PER_MONTH);
+    const usefulLifeYears = parsePlanUseInput(yearsText, MAX_USEFUL_LIFE_YEARS);
     const usesChanged =
       usesPerMonth !== contributeGoal.usesPerMonth ||
       usefulLifeYears !== contributeGoal.usefulLifeYears;
@@ -588,6 +586,10 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               : calcPlanNudges(ordered, goal.id, combinedMonthly, settings.allocation);
             const describeSooner = (months: number): string =>
               months === Infinity ? "makes it happen" : `${months} mo sooner`;
+            // Arrows stop at the list ends and at the funded boundary (funded
+            // plans always sit last, so a swap across it would change nothing).
+            const canMoveUp = canMovePlanInOrder(ordered, index, -1);
+            const canMoveDown = canMovePlanInOrder(ordered, index, 1);
             return (
               <View key={goal.id} style={styles.planRowWrap}>
               <View style={styles.planRow}>
@@ -661,8 +663,8 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 {settings.method === "custom" ? (
                   <View style={styles.arrowCol}>
                     <TouchableOpacity
-                      style={[styles.arrowBtn, index === 0 && styles.arrowBtnDisabled]}
-                      disabled={index === 0}
+                      style={[styles.arrowBtn, !canMoveUp && styles.arrowBtnDisabled]}
+                      disabled={!canMoveUp}
                       onPress={() => void movePlan(goal.id, -1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       accessibilityRole="button"
@@ -671,11 +673,8 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                       <Text style={styles.arrowText}>▲</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[
-                        styles.arrowBtn,
-                        index === ordered.length - 1 && styles.arrowBtnDisabled,
-                      ]}
-                      disabled={index === ordered.length - 1}
+                      style={[styles.arrowBtn, !canMoveDown && styles.arrowBtnDisabled]}
+                      disabled={!canMoveDown}
                       onPress={() => void movePlan(goal.id, 1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       accessibilityRole="button"
@@ -786,13 +785,13 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             </View>
             {contributeGoal &&
             (() => {
-              const uses = parseMoneyInput(usesText);
-              const years = parseMoneyInput(yearsText);
+              const uses = parsePlanUseInput(usesText, MAX_USES_PER_MONTH);
+              const years = parsePlanUseInput(yearsText, MAX_USEFUL_LIFE_YEARS);
               const value =
-                uses !== null && years !== null
+                uses !== undefined && years !== undefined
                   ? calcCostPerUse(contributeGoal.targetAmount, uses, years)
                   : null;
-              return value !== null && uses !== null && years !== null ? (
+              return value !== null && uses !== undefined && years !== undefined ? (
                 <Text style={styles.inputHint}>
                   {describeCostPerUse(value, uses, years, formatCurrency)}
                 </Text>

@@ -259,6 +259,22 @@ export const parseQuarterPaidMap = (raw: string | null): Record<string, QuarterP
   return out;
 };
 
+/**
+ * The earliest tax year the card lets the user page back to: the year of
+ * the oldest entry on file, never later than the current tax year. The
+ * previous-year arrow used to run back without limit into years that can
+ * hold no income at all.
+ */
+export const earliestTaxYear = (entries: readonly BudgetEntry[], now: Date = new Date()): number => {
+  let earliest = defaultTaxYear(now);
+  for (const entry of entries) {
+    if (entry.deletedAt) continue;
+    const year = Number(String(entry.date).slice(0, 4));
+    if (Number.isFinite(year) && year >= 1970 && year < earliest) earliest = year;
+  }
+  return earliest;
+};
+
 /** The tax year whose quarters are "current": January still belongs to last year's Q4 window. */
 export const defaultTaxYear = (now: Date = new Date()): number =>
   now.getMonth() === 0 && now.getDate() <= 15 ? now.getFullYear() - 1 : now.getFullYear();
