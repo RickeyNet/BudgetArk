@@ -125,6 +125,14 @@ interface ReviewInboxModalProps {
 
 const DEFAULT_CATEGORY: CategoryName = "Other";
 
+/** "Sep 3" for the already-logged notice; falls back to the raw date text. */
+const formatPaymentDay = (iso: string): string => {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime())
+    ? iso
+    : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
 
 const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   visible,
@@ -187,6 +195,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [showRules, setShowRules] = useState(false);
   /** Last failed load/approve/skip, shown under the header until the next action. */
   const [actionError, setActionError] = useState<string | null>(null);
+  /**
+   * Neutral note under the header (e.g. a bank row matched to a payment
+   * already on the debt, so nothing was logged twice). Cleared like
+   * actionError, on the next action.
+   */
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   /**
    * The occasional Tip Jar note after a charge is filed against a bill.
    * Rendered inline (this sheet stays open across approvals) and dropped
@@ -428,6 +442,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     async (item: PendingTransaction, debtId: string, remember: boolean) => {
       setBusyId(item.id);
       setActionError(null);
+      setActionNotice(null);
       try {
         const result = await applyPendingPaymentToDebt(item.id, debtId, {
           rememberRule: remember,
@@ -445,7 +460,17 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         await onChanged();
         triggerHaptic("success");
         setExpandedId(null);
-        if (result) {
+        if (result?.alreadyLogged) {
+          // Matched to the due-prompt's or a hand-logged payment: nothing
+          // was added, say so - and it isn't a fresh win.
+          setActionNotice(
+            `Already on the Debts tab - matched to the ${formatCurrency(
+              result.alreadyLogged.amount,
+            )} payment logged ${formatPaymentDay(
+              result.alreadyLogged.date,
+            )}. Nothing was counted twice.`,
+          );
+        } else if (result) {
           // Same win the Debt tab counts for a logged payment.
           const nudge = await noteWin(
             result.paidOff
@@ -461,7 +486,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         setBusyId(null);
       }
     },
-    [noteWin, onChanged, refresh],
+    [formatCurrency, noteWin, onChanged, refresh],
   );
 
   const handleSkipSection = useCallback(
@@ -1049,6 +1074,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           {actionError ? (
             <Text style={styles.errorText}>{actionError}</Text>
           ) : null}
+          {actionNotice ? (
+            <Text style={styles.noticeText}>{actionNotice}</Text>
+          ) : null}
 
           {inboxNudge ? (
             <TipJarNudgeCard
@@ -1301,6 +1329,12 @@ const makeStyles = (colors: ThemeColors) =>
     errorText: {
       fontSize: 13,
       color: colors.danger,
+      paddingHorizontal: 20,
+      paddingBottom: 8,
+    },
+    noticeText: {
+      fontSize: 13,
+      color: colors.textDim,
       paddingHorizontal: 20,
       paddingBottom: 8,
     },

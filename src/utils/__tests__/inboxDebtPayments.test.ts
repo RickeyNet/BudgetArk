@@ -9,13 +9,18 @@
  * partner's copy of the same decision from paying a debt twice.
  */
 
-import { makeDebt } from "../../__tests__/fixtures";
+import { makeDebt, makePayment } from "../../__tests__/fixtures";
+import { minimumDuePaymentId } from "../debtPaymentDedupe";
 import {
   DEBT_OPTION_PREFIX,
   INBOX_PAYMENT_ID_PREFIX,
+  PAYMENT_MATCH_WINDOW_DAYS,
   debtIdFromOption,
   debtOptionId,
+  findAlreadyLoggedPayment,
   inboxPaymentId,
+  isInboxPaymentId,
+  nearbyManualPayments,
   rankDebtCandidates,
 } from "../inboxDebtPayments";
 
@@ -113,5 +118,74 @@ describe("inboxPaymentId", () => {
     // partner's isPaymentItem validates ids against (120).
     expect(id).toMatch(/^inbox:[0-9a-f]{64}$/);
     expect(id.length).toBeLessThanOrEqual(120);
+    expect(isInboxPaymentId(id)).toBe(true);
+    expect(isInboxPaymentId(minimumDuePaymentId("visa", "2026-09"))).toBe(false);
+    expect(isInboxPaymentId("manual-uuid")).toBe(false);
+  });
+});
+
+describe("due-day reminder overlap guard", () => {
+  // The due prompt confirmed on the 3rd: a deterministic duemin: row for
+  // the minimum. The bank posts the transfer on the 6th.
+  const promptLogged = makePayment({
+    id: minimumDuePaymentId("visa", "2026-09"),
+    debtId: "visa",
+    amount: 50,
+    date: "2026-09-03T14:00:00.000Z",
+  });
+  const POSTED = "2026-09-06T12:00:00.000Z";
+
+  it("matches the prompt-logged minimum to the bank row for the same amount within the window", () => {
+    expect(findAlreadyLoggedPayment([promptLogged], "visa", 50, POSTED)?.id).toBe(
+      promptLogged.id
+    );
+    // To the cent, either direction.
+    expect(findAlreadyLoggedPayment([promptLogged], "visa", 50.01, POSTED)).toBeDefined();
+    expect(findAlreadyLoggedPayment([promptLogged], "visa", 49.99, POSTED)).toBeDefined();
+  });
+
+  it("matches a hand-logged payment too, and follows the window across a month boundary", () => {
+    const manual = makePayment({
+      id: "manual-uuid",
+      debtId: "visa",
+      amount: 120,
+      date: "2026-08-30T09:00:00.000Z",
+    });
+    expect(
+      findAlreadyLoggedPayment([manual], "visa", 120, "2026-09-02T12:00:00.000Z")?.id
+    ).toBe("manual-uuid");
+    // Just outside the window: not the same payment.
+    const later = new Date(Date.parse(manual.date) + (PAYMENT_MATCH_WINDOW_DAYS + 1) * 86400_000);
+    expect(findAlreadyLoggedPayment([manual], "visa", 120, later.toISOString())).toBeUndefined();
+  });
+
+  it("never matches a different amount, another debt, a deleted row, or a bank-logged row", () => {
+    // Paid more than the minimum the prompt logged: ambiguous, no match.
+    expect(findAlreadyLoggedPayment([promptLogged], "visa", 300, POSTED)).toBeUndefined();
+    expect(findAlreadyLoggedPayment([promptLogged], "amex", 50, POSTED)).toBeUndefined();
+    expect(
+      findAlreadyLoggedPayment([{ ...promptLogged, deletedAt: POSTED }], "visa", 50, POSTED)
+    ).toBeUndefined();
+    // Two imported transfers of the same amount are two real payments -
+    // each already unique by its own hashed id.
+    const bankLogged = makePayment({
+      id: inboxPaymentId("simplefin:ACT-1:TXN-9"),
+      debtId: "visa",
+      amount: 50,
+      date: "2026-09-04T12:00:00.000Z",
+    });
+    expect(findAlreadyLoggedPayment([bankLogged], "visa", 50, POSTED)).toBeUndefined();
+    expect(nearbyManualPayments([bankLogged], "visa", POSTED)).toEqual([]);
+  });
+
+  it("lists nearby non-bank payments closest first, whatever their amount", () => {
+    const farther = makePayment({ id: "m-far", debtId: "visa", amount: 300, date: "2026-09-01T12:00:00.000Z" });
+    const nearer = makePayment({ id: "m-near", debtId: "visa", amount: 75, date: "2026-09-05T12:00:00.000Z" });
+    const outside = makePayment({ id: "m-out", debtId: "visa", amount: 50, date: "2026-08-01T12:00:00.000Z" });
+    expect(
+      nearbyManualPayments([farther, outside, nearer, promptLogged], "visa", POSTED).map((p) => p.id)
+    ).toEqual(["m-near", promptLogged.id, "m-far"]);
+    // Unparseable dates are skipped rather than matched.
+    expect(nearbyManualPayments([{ ...nearer, date: "not a date" }], "visa", POSTED)).toEqual([]);
   });
 });

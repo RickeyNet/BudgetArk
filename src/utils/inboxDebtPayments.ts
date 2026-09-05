@@ -19,7 +19,7 @@
  */
 
 import CryptoJS from "crypto-js";
-import type { Debt } from "../types";
+import type { Debt, Payment } from "../types";
 
 /**
  * Debt pills share the bill picker with recurring-entry pills, so their ids
@@ -94,3 +94,68 @@ export const inboxPaymentId = (pendingId: string): string =>
   `${INBOX_PAYMENT_ID_PREFIX}${CryptoJS.SHA256(pendingId).toString(
     CryptoJS.enc.Hex
   )}`;
+
+/** A payment this module logged from a bank row (vs. prompt/manual). */
+export const isInboxPaymentId = (id: string): boolean =>
+  id.startsWith(INBOX_PAYMENT_ID_PREFIX);
+
+/**
+ * How far apart (days) a bank posting and a hand-logged payment can be and
+ * still be the same real-world payment. The due-day prompt logs the
+ * minimum on the due day; the bank posts the transfer a few days later,
+ * occasionally across a month boundary - wider than the inbox's 3-day
+ * manual-entry duplicate window for that reason.
+ */
+export const PAYMENT_MATCH_WINDOW_DAYS = 7;
+
+/** Money values compare equal within a cent (same tolerance as debtPaymentDedupe). */
+const AMOUNT_EPSILON = 0.011;
+
+const daysBetween = (aIso: string, bIso: string): number =>
+  Math.abs(Date.parse(aIso) - Date.parse(bIso)) / (24 * 3600_000);
+
+/**
+ * Live payments on `debtId` that were NOT logged from a bank row (the due
+ * prompt's `duemin:` records, or "Log Payment" on the Debts tab) and are
+ * dated within the window of `postedAt`. Bank-logged rows are excluded on
+ * purpose: two imported payments of the same amount are two real
+ * transactions, each already unique by its own id. Closest date first.
+ */
+export const nearbyManualPayments = (
+  payments: readonly Payment[],
+  debtId: string,
+  postedAt: string,
+  windowDays: number = PAYMENT_MATCH_WINDOW_DAYS
+): Payment[] =>
+  payments
+    .filter(
+      (payment) =>
+        payment.debtId === debtId &&
+        !payment.deletedAt &&
+        !isInboxPaymentId(payment.id) &&
+        Number.isFinite(Date.parse(payment.date)) &&
+        daysBetween(payment.date, postedAt) <= windowDays
+    )
+    .sort(
+      (a, b) => daysBetween(a.date, postedAt) - daysBetween(b.date, postedAt)
+    );
+
+/**
+ * The hand-logged payment a bank row most likely IS: same debt, same
+ * amount to the cent, within the window. This is the double-count guard
+ * between the due-day prompt ("paid the $50 minimum today?" → Payment) and
+ * the bank transaction for that same payment arriving in the Review Inbox
+ * a few days later - the second must not decrement the balance again.
+ * `dedupeMinimumDuePayments` can't catch it: both rows' decrements were
+ * genuinely applied, so the balance shows no unexplained gap.
+ */
+export const findAlreadyLoggedPayment = (
+  payments: readonly Payment[],
+  debtId: string,
+  amount: number,
+  postedAt: string,
+  windowDays: number = PAYMENT_MATCH_WINDOW_DAYS
+): Payment | undefined =>
+  nearbyManualPayments(payments, debtId, postedAt, windowDays).find(
+    (payment) => Math.abs(payment.amount - amount) <= AMOUNT_EPSILON
+  );

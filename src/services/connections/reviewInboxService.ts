@@ -32,8 +32,12 @@ import { entryMonthKey, isBillCandidate } from "../../utils/billFulfillment";
 import { isEntryActiveInMonth } from "../../utils/recurrence";
 import { getLinks } from "../../storage/externalAccountLinksStorage";
 import { getSavingsGoals, updateSavingsGoal } from "../../storage/savingsGoalStorage";
-import { getDebts, recordPayment } from "../../storage/debtStorage";
-import { inboxPaymentId } from "../../utils/inboxDebtPayments";
+import { getDebts, getPayments, recordPayment } from "../../storage/debtStorage";
+import {
+  findAlreadyLoggedPayment,
+  inboxPaymentId,
+  nearbyManualPayments,
+} from "../../utils/inboxDebtPayments";
 import { roundToCents } from "../../utils/money";
 import {
   getIngestLedger,
@@ -370,6 +374,13 @@ export interface PendingDebtPaymentResult {
   payments: Payment[];
   /** The debt, when this payment took its balance to zero. */
   paidOff: Debt | null;
+  /**
+   * Set when the row was matched to a payment already on the debt (the
+   * due-day prompt's log, or one typed on the Debts tab) instead of being
+   * logged again: the row is retired, the balance is untouched, and this
+   * is the payment it was matched to. See findAlreadyLoggedPayment.
+   */
+  alreadyLogged: Payment | null;
 }
 
 export interface PendingDebtPaymentOptions {
@@ -396,7 +407,15 @@ export interface PendingDebtPaymentOptions {
  * removal last. The Payment id is deterministic (utils/inboxDebtPayments),
  * so a retry after a crash between ledger and money, or the partner's copy
  * of the same decision, collapses into one record instead of paying twice.
- * Returns null when the item or debt no longer exists.
+ *
+ * The other double-count: the user confirmed the due-day prompt (a
+ * `duemin:` Payment for the minimum) or logged the payment by hand, and
+ * days later the bank's copy of that same transfer lands here. A live
+ * non-bank payment on the debt with the same amount within a few days of
+ * the posting date IS that payment - the row is retired (ledger + inbox)
+ * with no second Payment and no balance change, and `alreadyLogged` names
+ * the match so the UI can say so. Returns null when the item or debt no
+ * longer exists.
  */
 export const applyPendingPaymentToDebt = async (
   pendingId: string,
@@ -408,12 +427,27 @@ export const applyPendingPaymentToDebt = async (
   if (!item) return null;
   const amount = roundToCents(Math.abs(item.amount));
   if (!(amount > 0)) return null;
-  const debts = await getDebts();
+  const [debts, existingPayments] = await Promise.all([getDebts(), getPayments()]);
   const before = debts.find((candidate) => candidate.id === debtId);
   if (!before) return null;
 
-  await recordLedgerEntries({ [item.id]: ledgerEntryFor(item, "dismissed") });
   const now = new Date().toISOString();
+  const alreadyLogged = findAlreadyLoggedPayment(
+    existingPayments,
+    debtId,
+    amount,
+    item.postedAt,
+  );
+  if (alreadyLogged) {
+    await recordLedgerEntries({ [item.id]: ledgerEntryFor(item, "dismissed") });
+    await removePendingTransaction(item.id);
+    if (opts.rememberRule && item.merchant) {
+      await rememberDebtRule(item.merchant, debtId, now);
+    }
+    return { debts, payments: existingPayments, paidOff: null, alreadyLogged };
+  }
+
+  await recordLedgerEntries({ [item.id]: ledgerEntryFor(item, "dismissed") });
   const result = await recordPayment({
     id: inboxPaymentId(item.id),
     debtId,
@@ -427,27 +461,42 @@ export const applyPendingPaymentToDebt = async (
   await removePendingTransaction(item.id);
 
   if (opts.rememberRule && item.merchant) {
-    // Full auto-approve: future imports from this merchant are logged on
-    // the debt hands-free. Category is the Budget's own Debt Payments
-    // bucket so the rule reads sensibly in the rules list (an entry is
-    // never filed while the debt exists - see MerchantRule.debtId).
-    await upsertMerchantRule({
-      id: generateUUID(),
-      merchantKey: item.merchant,
-      action: "approve",
-      category: "Debt Payments",
-      type: "expense",
-      debtId,
-      useCount: 1,
-      lastUsedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    await rememberDebtRule(item.merchant, debtId, now);
   }
 
   const after = result.debts.find((candidate) => candidate.id === debtId);
   const paidOff = before.balance > 0 && after && after.balance <= 0 ? after : null;
-  return { debts: result.debts, payments: result.payments, paidOff };
+  return {
+    debts: result.debts,
+    payments: result.payments,
+    paidOff,
+    alreadyLogged: null,
+  };
+};
+
+/**
+ * Full auto-approve rule that logs this merchant's future outflows on the
+ * debt hands-free. Category is the Budget's own Debt Payments bucket so
+ * the rule reads sensibly in the rules list (an entry is never filed while
+ * the debt exists - see MerchantRule.debtId).
+ */
+const rememberDebtRule = async (
+  merchantKey: string,
+  debtId: string,
+  now: string,
+): Promise<void> => {
+  await upsertMerchantRule({
+    id: generateUUID(),
+    merchantKey,
+    action: "approve",
+    category: "Debt Payments",
+    type: "expense",
+    debtId,
+    useCount: 1,
+    lastUsedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
 };
 
 /**
@@ -507,9 +556,28 @@ export const autoApproveInboxByRules = async (): Promise<number> => {
     getMerchantRules(),
   ]);
   const targets = selectAutoApprovable(inbox, rules);
+  // Non-bank payments never change during this sweep (it only ever adds
+  // bank-logged rows), so one read serves every debt-rule target.
+  const payments = targets.some(({ rule }) => rule.debtId)
+    ? await getPayments()
+    : [];
   let approved = 0;
   for (const { item, rule } of targets) {
     if (rule.debtId) {
+      // A hand-logged or prompt-logged payment on this debt near the
+      // posting date with a DIFFERENT amount is ambiguous - the user may
+      // have paid more than the minimum the prompt logged, or made two
+      // payments. Never decide that silently: leave the row in the inbox
+      // (its debt is preselected) for the user. Same-amount matches are
+      // handled inside applyPendingPaymentToDebt as "already logged".
+      const nearby = nearbyManualPayments(payments, rule.debtId, item.postedAt);
+      const sameAmount = findAlreadyLoggedPayment(
+        payments,
+        rule.debtId,
+        roundToCents(Math.abs(item.amount)),
+        item.postedAt,
+      );
+      if (nearby.length > 0 && !sameAmount) continue;
       // A debt rule logs a Payment, not an entry. Null means the item is
       // gone (nothing to do) or the debt was deleted - then fall through
       // and file a plain entry in the rule's category, the same "dangling

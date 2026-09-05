@@ -37,6 +37,7 @@ import {
   makeSavingsGoal,
 } from "../../../__tests__/fixtures";
 import { inboxPaymentId } from "../../../utils/inboxDebtPayments";
+import { minimumDuePaymentId } from "../../../utils/debtPaymentDedupe";
 import {
   applyPendingPaymentToDebt,
   applyPendingTransferToPlan,
@@ -929,6 +930,7 @@ describe("applyPendingPaymentToDebt", () => {
 
     expect(result?.debts.find((d) => d.id === "visa")?.balance).toBe(750);
     expect(result?.paidOff).toBeNull();
+    expect(result?.alreadyLogged).toBeNull();
     const payments = read<Payment[]>(PAYMENTS_KEY, []);
     expect(payments).toHaveLength(1);
     expect(payments[0]).toMatchObject({
@@ -1161,6 +1163,103 @@ describe("debt merchant rules (MerchantRule.debtId)", () => {
 
     await changeMerchantRule({ ruleId: "rule-card", action: "approve", category: "Debt Payments", debtId: null });
     expect(rulesNow()[0].debtId).toBeUndefined();
+  });
+});
+
+describe("due-day reminder overlap (one real payment, logged once)", () => {
+  // The prompt confirmed on the due day → duemin: row, balance already
+  // reduced by the minimum. The bank's copy posts three days later.
+  const seedPromptLogged = () => {
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 950, originalBalance: 1000, minPayment: 50 })]);
+    seed(PAYMENTS_KEY, [
+      makePayment({
+        id: minimumDuePaymentId("visa", "2026-09"),
+        debtId: "visa",
+        amount: 50,
+        appliedAmount: 50,
+        date: "2026-09-03T14:00:00.000Z",
+      }),
+    ]);
+  };
+  const bankCopy = (over: Partial<PendingTransaction> = {}) =>
+    makePendingTransaction({
+      id: "tx-bank-copy",
+      merchant: "PAYMENT TO CHASE CARD",
+      amount: -50,
+      postedAt: "2026-09-06T12:00:00.000Z",
+      transferLikely: true,
+      ...over,
+    });
+
+  it("logging the bank row from the inbox matches the prompt's payment instead of paying again", async () => {
+    seedPromptLogged();
+    seed(INBOX_KEY, [bankCopy()]);
+
+    const result = await applyPendingPaymentToDebt("tx-bank-copy", "visa", { rememberRule: true });
+
+    expect(result?.alreadyLogged?.id).toBe(minimumDuePaymentId("visa", "2026-09"));
+    expect(result?.paidOff).toBeNull();
+    // Balance untouched, still exactly one payment.
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(950);
+    expect(read<Payment[]>(PAYMENTS_KEY, [])).toHaveLength(1);
+    // The row is done (ledger + inbox) and the rule was still remembered.
+    expect(read<IngestLedger>(LEDGER_KEY, {})["tx-bank-copy"]).toMatchObject({ status: "dismissed" });
+    expect(inboxNow()).toEqual([]);
+    expect(rulesNow()[0]).toMatchObject({ action: "approve", debtId: "visa" });
+    expect(read<BudgetEntry[]>(ENTRIES_KEY, [])).toEqual([]);
+  });
+
+  it("the auto sweep does the same silently for a same-amount match", async () => {
+    seedPromptLogged();
+    seed(RULES_KEY, [
+      makeMerchantRule({ id: "rule-card", merchantKey: "PAYMENT TO CHASE CARD", action: "approve", category: "Debt Payments", debtId: "visa" }),
+    ]);
+    seed(INBOX_KEY, [bankCopy()]);
+
+    expect(await autoApproveInboxByRules()).toBe(1);
+
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(950);
+    expect(read<Payment[]>(PAYMENTS_KEY, [])).toHaveLength(1);
+    expect(inboxNow()).toEqual([]);
+  });
+
+  it("the auto sweep leaves a row alone when a nearby hand-logged payment has a different amount", async () => {
+    // Prompt logged the $50 minimum; the bank says $300 was actually paid.
+    // Paid more than the minimum, or two payments? Not the sweep's call.
+    seedPromptLogged();
+    seed(RULES_KEY, [
+      makeMerchantRule({ id: "rule-card", merchantKey: "PAYMENT TO CHASE CARD", action: "approve", category: "Debt Payments", debtId: "visa" }),
+    ]);
+    seed(INBOX_KEY, [bankCopy({ amount: -300 })]);
+
+    expect(await autoApproveInboxByRules()).toBe(0);
+
+    expect(inboxNow().map((i) => i.id)).toEqual(["tx-bank-copy"]);
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(950);
+    expect(read<Payment[]>(PAYMENTS_KEY, [])).toHaveLength(1);
+    expect(read<BudgetEntry[]>(ENTRIES_KEY, [])).toEqual([]);
+    expect(read<IngestLedger>(LEDGER_KEY, {})).toEqual({});
+  });
+
+  it("a hand-logged payment outside the window, or two bank transfers of the same amount, still record", async () => {
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 950, originalBalance: 1000, minPayment: 50 })]);
+    seed(PAYMENTS_KEY, [
+      makePayment({ id: "manual-old", debtId: "visa", amount: 50, appliedAmount: 50, date: "2026-08-03T14:00:00.000Z" }),
+    ]);
+    seed(RULES_KEY, [
+      makeMerchantRule({ id: "rule-card", merchantKey: "PAYMENT TO CHASE CARD", action: "approve", category: "Debt Payments", debtId: "visa" }),
+    ]);
+    seed(INBOX_KEY, [
+      bankCopy({ id: "tx-1", postedAt: "2026-09-06T12:00:00.000Z" }),
+      bankCopy({ id: "tx-2", postedAt: "2026-09-08T12:00:00.000Z" }),
+    ]);
+
+    expect(await autoApproveInboxByRules()).toBe(2);
+
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(850);
+    expect(read<Payment[]>(PAYMENTS_KEY, []).map((p) => p.id).sort()).toEqual(
+      ["manual-old", inboxPaymentId("tx-1"), inboxPaymentId("tx-2")].sort(),
+    );
   });
 });
 
