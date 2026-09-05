@@ -310,7 +310,7 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   },
   {
     id: "bank-statement-import",
-    sinceVersion: "1.10.1",
+    sinceVersion: "1.10.2",
     icon: "🏦",
     title: "Import a bank statement",
     blurb:
