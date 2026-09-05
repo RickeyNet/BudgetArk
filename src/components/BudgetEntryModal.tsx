@@ -80,7 +80,9 @@ import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 import { clampTaxSetAsideRate } from "../utils/paycheckMath";
 import {
+  WEEKDAY_SHORT_LABELS,
   buildEntryDateISO,
+  buildMonthDayRows,
   dayOfMonthFromIso,
   lastDayOfYearMonth,
 } from "../utils/entryDate";
@@ -1078,29 +1080,51 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               </TouchableOpacity>
             )}
           </View>
-          <View style={styles.dayGrid}>
-            {Array.from({ length: lastDayOfYearMonth(yearMonth) }, (_, i) => i + 1).map(
-              (day) => (
-                <TouchableOpacity
-                  key={day}
-                  style={[styles.dayBtn, entryDay === day && styles.dayBtnActive]}
-                  onPress={() => setEntryDay(day)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Day ${day}`}
-                  accessibilityState={{ selected: entryDay === day }}
-                >
-                  <Text
-                    style={[
-                      styles.dayBtnText,
-                      entryDay === day && styles.dayBtnTextActive,
-                    ]}
-                  >
-                    {day}
-                  </Text>
-                </TouchableOpacity>
-              )
-            )}
+          {/* A real calendar, not a numbered strip: weekday headers and
+              the days aligned to their columns (utils/entryDate
+              .buildMonthDayRows, the same layout as the Bill Calendar),
+              so "Tuesday the 8th" is one glance. Today is outlined. */}
+          <View style={styles.calendarWeekRow}>
+            {WEEKDAY_SHORT_LABELS.map((label) => (
+              <Text key={label} style={styles.calendarWeekLabel}>
+                {label}
+              </Text>
+            ))}
           </View>
+          {buildMonthDayRows(yearMonth).map((week, weekIdx) => (
+            <View key={weekIdx} style={styles.calendarWeekRow}>
+              {week.map((day, cellIdx) =>
+                day == null ? (
+                  <View key={`blank-${cellIdx}`} style={styles.calendarCell} />
+                ) : (
+                  <TouchableOpacity
+                    key={day}
+                    style={[
+                      styles.calendarCell,
+                      styles.dayBtn,
+                      yearMonth === todayYearMonth() &&
+                        day === todayDay() &&
+                        styles.dayBtnToday,
+                      entryDay === day && styles.dayBtnActive,
+                    ]}
+                    onPress={() => setEntryDay(day)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${WEEKDAY_SHORT_LABELS[cellIdx]} ${day}`}
+                    accessibilityState={{ selected: entryDay === day }}
+                  >
+                    <Text
+                      style={[
+                        styles.dayBtnText,
+                        entryDay === day && styles.dayBtnTextActive,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                ),
+              )}
+            </View>
+          ))}
         </View>
       )}
 
@@ -1822,6 +1846,28 @@ const makeStyles = (colors: ThemeColors) =>
     dayBtnActive: {
       borderColor: colors.accent,
       backgroundColor: `${colors.accent}20`,
+    },
+    dayBtnToday: {
+      borderColor: colors.textDim,
+      borderStyle: "dashed",
+    },
+    /* One-off DAY calendar: seven equal columns per row (header + weeks). */
+    calendarWeekRow: {
+      flexDirection: "row",
+      gap: 6,
+      marginBottom: 6,
+    },
+    calendarCell: {
+      flex: 1,
+      aspectRatio: 1,
+    },
+    calendarWeekLabel: {
+      flex: 1,
+      textAlign: "center",
+      color: colors.textDim,
+      fontSize: 11,
+      fontWeight: "600",
+      letterSpacing: 0.3,
     },
     dayBtnText: {
       color: colors.textDim,

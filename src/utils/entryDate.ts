@@ -55,3 +55,42 @@ export const dayOfMonthFromIso = (iso: string): number => {
     ? day
     : DEFAULT_RECURRENCE_DAY;
 };
+
+/** Column headers for a Sunday-first month grid (see buildMonthDayGrid). */
+export const WEEKDAY_SHORT_LABELS = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+] as const;
+
+/**
+ * Calendar layout for a "YYYY-MM" month: the days 1..N laid out Sunday
+ * first, with `null` for the blank cells before the 1st and after the last
+ * day, so the array is always a whole number of 7-cell weeks. One layout
+ * rule for every month grid in the app (the entry form's day picker, the
+ * Bill Calendar) so they can't disagree on which column a date sits in.
+ * Weekday of the 1st comes from the local calendar - the same calendar the
+ * user's phone shows.
+ */
+export const buildMonthDayGrid = (yearMonth: string): (number | null)[] => {
+  const [yStr, mStr] = yearMonth.split("-");
+  const firstWeekday = new Date(Number(yStr), Number(mStr) - 1, 1).getDay();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  const days = lastDayOfYearMonth(yearMonth);
+  for (let day = 1; day <= days; day++) cells.push(day);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+};
+
+/** `buildMonthDayGrid` sliced into rows of seven, for row-based layouts. */
+export const buildMonthDayRows = (yearMonth: string): (number | null)[][] => {
+  const cells = buildMonthDayGrid(yearMonth);
+  const rows: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  return rows;
+};

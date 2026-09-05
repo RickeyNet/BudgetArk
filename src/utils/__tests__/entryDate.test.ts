@@ -6,7 +6,10 @@
 
 import {
   DEFAULT_RECURRENCE_DAY,
+  WEEKDAY_SHORT_LABELS,
   buildEntryDateISO,
+  buildMonthDayGrid,
+  buildMonthDayRows,
   dayOfMonthFromIso,
   lastDayOfYearMonth,
   localYearMonth,
@@ -83,5 +86,45 @@ describe("lastDayOfYearMonth", () => {
     expect(lastDayOfYearMonth("2026-02")).toBe(28);
     expect(lastDayOfYearMonth("2024-02")).toBe(29);
     expect(lastDayOfYearMonth("2026-04")).toBe(30);
+  });
+});
+
+describe("buildMonthDayGrid (the entry form's DAY calendar and the Bill Calendar)", () => {
+  it("lays days out Sunday-first with blanks before the 1st and pads to whole weeks", () => {
+    // September 2026 starts on a Tuesday and has 30 days: 2 leading blanks,
+    // 30 days, 3 trailing blanks = 35 cells / 5 weeks.
+    const grid = buildMonthDayGrid("2026-09");
+    expect(grid.length % 7).toBe(0);
+    expect(grid.slice(0, 3)).toEqual([null, null, 1]);
+    expect(grid.filter((d) => d != null)).toHaveLength(30);
+    expect(grid.slice(-3)).toEqual([null, null, null]);
+    expect(grid.length).toBe(35);
+    // Column = weekday: day 8 sits under "Tue".
+    expect(WEEKDAY_SHORT_LABELS[grid.indexOf(8) % 7]).toBe("Tue");
+  });
+
+  it("has no leading blank when the month starts on a Sunday, and 6 when it starts on a Saturday", () => {
+    // Feb 2026 starts on a Sunday; Aug 2026 starts on a Saturday.
+    expect(buildMonthDayGrid("2026-02")[0]).toBe(1);
+    expect(buildMonthDayGrid("2026-08").slice(0, 7)).toEqual([null, null, null, null, null, null, 1]);
+  });
+
+  it("uses the month's real length: 28, leap 29, 31", () => {
+    const count = (ym: string) => buildMonthDayGrid(ym).filter((d) => d != null).length;
+    expect(count("2026-02")).toBe(28);
+    expect(count("2028-02")).toBe(29);
+    expect(count("2026-07")).toBe(31);
+    // Days run 1..N in order with no repeats.
+    expect(buildMonthDayGrid("2026-07").filter((d) => d != null)).toEqual(
+      Array.from({ length: 31 }, (_, i) => i + 1)
+    );
+  });
+
+  it("slices the same cells into rows of seven", () => {
+    const rows = buildMonthDayRows("2026-09");
+    expect(rows).toHaveLength(5);
+    expect(rows.every((row) => row.length === 7)).toBe(true);
+    expect(rows.flat()).toEqual(buildMonthDayGrid("2026-09"));
+    expect(rows[0]).toEqual([null, null, 1, 2, 3, 4, 5]);
   });
 });

@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatMonthKeyLabel } from "../utils/budgetMonths";
+import { buildMonthDayGrid } from "../utils/entryDate";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -57,16 +58,11 @@ interface GridCell {
 }
 
 const buildGridCells = (monthKey: string, bills: BillsByDay): GridCell[] => {
-  const [yStr, mStr] = monthKey.split("-");
-  const year = Number(yStr);
-  const monthIdx = Number(mStr) - 1;
-  const firstWeekday = new Date(year, monthIdx, 1).getDay();
-  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
-  const cells: GridCell[] = [];
-  for (let i = 0; i < firstWeekday; i++) {
-    cells.push({ day: null, total: 0, categories: [] });
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
+  // Same Sunday-first layout as the entry form's day picker
+  // (utils/entryDate.buildMonthDayGrid), so a date sits in the same
+  // column in both.
+  const cells: GridCell[] = buildMonthDayGrid(monthKey).map((d) => {
+    if (d == null) return { day: null, total: 0, categories: [] };
     const list = bills.byDay.get(d) ?? [];
     const total = list.reduce((s, e) => s + e.amount, 0);
     // Distinct category list, max 3 dots per cell so the row stays legible.
@@ -75,11 +71,8 @@ const buildGridCells = (monthKey: string, bills: BillsByDay): GridCell[] => {
       if (!cats.includes(e.category)) cats.push(e.category);
       if (cats.length >= 3) break;
     }
-    cells.push({ day: d, total, categories: cats });
-  }
-  while (cells.length % 7 !== 0) {
-    cells.push({ day: null, total: 0, categories: [] });
-  }
+    return { day: d, total, categories: cats };
+  });
   return cells;
 };
 
