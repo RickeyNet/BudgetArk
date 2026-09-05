@@ -768,8 +768,16 @@ const BudgetScreen: React.FC = () => {
    * screen's local state, so re-read storage and refresh the derived views.
    */
   const reloadAfterInboxChange = useCallback(async () => {
-    const storedEntries = await getBudgetEntries();
+    // Debts and payments too: an inbox row logged as a debt payment changes
+    // the Debt Payments rows here (utils/inboxDebtPayments), not entries.
+    const [storedEntries, storedDebts, storedPayments] = await Promise.all([
+      getBudgetEntries(),
+      getDebts(),
+      getPayments(),
+    ]);
     setEntries(storedEntries);
+    setDebts(storedDebts);
+    setPayments(storedPayments);
     await Promise.all([
       refreshNetWorthSnapshots(),
       refreshMonthlyReview(storedEntries),

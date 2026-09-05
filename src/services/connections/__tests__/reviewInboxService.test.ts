@@ -19,15 +19,26 @@
  * merchantRulesStorage, externalAccountLinksStorage) runs for real.
  */
 
-import type { BudgetEntry, IngestLedger, MerchantRule, PendingTransaction } from "../../../types";
+import type {
+  BudgetEntry,
+  Debt,
+  IngestLedger,
+  MerchantRule,
+  Payment,
+  PendingTransaction,
+} from "../../../types";
 import {
   makeBudgetEntry,
+  makeDebt,
   makeExternalAccountLink,
   makeMerchantRule,
+  makePayment,
   makePendingTransaction,
   makeSavingsGoal,
 } from "../../../__tests__/fixtures";
+import { inboxPaymentId } from "../../../utils/inboxDebtPayments";
 import {
+  applyPendingPaymentToDebt,
   applyPendingTransferToPlan,
   approvePendingTransaction,
   autoApproveInboxByRules,
@@ -75,6 +86,8 @@ const RULES_KEY = "@budgetark_merchant_rules";
 const LINKS_KEY = "@budgetark_external_account_links";
 const ENTRIES_KEY = "@budgetark_budget_entries";
 const GOALS_KEY = "@budgetark_savings_goals";
+const DEBTS_KEY = "@budgetark_debts";
+const PAYMENTS_KEY = "@budgetark_payments";
 
 const seed = (key: string, value: unknown) => {
   mockStore.set(key, JSON.stringify(value));
@@ -878,6 +891,137 @@ describe("reconcileInboxWithDecisions", () => {
     seed(INBOX_KEY, [makePendingTransaction({ id: "simplefin:ACT-1:C", providerTxId: "C" })]);
     expect(await reconcileInboxWithDecisions()).toBe(0);
     expect(readInbox()).toHaveLength(1);
+  });
+});
+
+describe("applyPendingPaymentToDebt", () => {
+  const storageMock = () =>
+    jest.requireMock("../../../storage/encryptedStorage") as {
+      setItem: jest.Mock;
+      multiSet: jest.Mock;
+    };
+
+  it("logs a Payment on the debt (balance reduced), records a dismissed ledger entry, removes the row, and files NO expense", async () => {
+    const item = makePendingTransaction({ id: "simplefin:ACT-1:PAY-1", amount: -150.004 });
+    seed(INBOX_KEY, [item]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", name: "Visa", balance: 900 })]);
+    const { setItem, multiSet } = storageMock();
+    setItem.mockClear();
+    multiSet.mockClear();
+
+    const result = await applyPendingPaymentToDebt(item.id, "visa");
+
+    // Ledger first (durable decision), money second, inbox row last -
+    // the same crash-safety order as applyPendingTransferToPlan.
+    const order = [
+      ...setItem.mock.calls.map((call: unknown[], i: number) => ({
+        key: call[0] as string,
+        at: setItem.mock.invocationCallOrder[i],
+      })),
+      ...multiSet.mock.calls.map((call: unknown[], i: number) => ({
+        key: (call[0] as [string, string][]).map((pair) => pair[0]).join("+"),
+        at: multiSet.mock.invocationCallOrder[i],
+      })),
+    ]
+      .sort((a, b) => a.at - b.at)
+      .map((entry) => entry.key);
+    expect(order).toEqual([LEDGER_KEY, `${DEBTS_KEY}+${PAYMENTS_KEY}`, INBOX_KEY]);
+
+    expect(result?.debts.find((d) => d.id === "visa")?.balance).toBe(750);
+    expect(result?.paidOff).toBeNull();
+    const payments = read<Payment[]>(PAYMENTS_KEY, []);
+    expect(payments).toHaveLength(1);
+    expect(payments[0]).toMatchObject({
+      id: inboxPaymentId(item.id),
+      debtId: "visa",
+      amount: 150,
+      appliedAmount: 150,
+      // Dated when the bank posted it, so it lands in the statement's month.
+      date: item.postedAt,
+    });
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(750);
+    const ledger = read<IngestLedger>(LEDGER_KEY, {});
+    expect(ledger[item.id]).toMatchObject({ status: "dismissed" });
+    expect(ledger[item.id].budgetEntryId).toBeUndefined();
+    expect(inboxNow()).toEqual([]);
+    // No BudgetEntry: the Budget's Debt Payments figure is derived from the
+    // Payment collection, so an entry too would count the money twice.
+    expect(read<BudgetEntry[]>(ENTRIES_KEY, [])).toEqual([]);
+  });
+
+  it("reports the debt as paid off when the payment clears its balance", async () => {
+    const item = makePendingTransaction({ id: "simplefin:ACT-1:PAY-2", amount: -120 });
+    seed(INBOX_KEY, [item]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", name: "Visa", balance: 100 })]);
+
+    const result = await applyPendingPaymentToDebt(item.id, "visa");
+
+    expect(result?.paidOff?.id).toBe("visa");
+    expect(result?.debts[0].balance).toBe(0);
+    // Overpayment applies only what was owed (recordPayment clamps).
+    expect(read<Payment[]>(PAYMENTS_KEY, [])[0]).toMatchObject({ amount: 120, appliedAmount: 100 });
+  });
+
+  it("returns null and writes nothing when the item, the debt, or a positive amount is missing", async () => {
+    const item = makePendingTransaction({ amount: -20 });
+    seed(INBOX_KEY, [item]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 500 })]);
+
+    expect(await applyPendingPaymentToDebt("nope", "visa")).toBeNull();
+    expect(await applyPendingPaymentToDebt(item.id, "missing")).toBeNull();
+    // A deleted debt is not offered and not paid.
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 500, deletedAt: item.postedAt })]);
+    expect(await applyPendingPaymentToDebt(item.id, "visa")).toBeNull();
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 500 })]);
+    seed(INBOX_KEY, [makePendingTransaction({ id: "zero", amount: 0 })]);
+    expect(await applyPendingPaymentToDebt("zero", "visa")).toBeNull();
+
+    expect(read<PendingTransaction[]>(INBOX_KEY, [])).toHaveLength(1);
+    expect(read<IngestLedger>(LEDGER_KEY, {})).toEqual({});
+    expect(read<Payment[]>(PAYMENTS_KEY, [])).toEqual([]);
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(500);
+  });
+
+  it("a retry after the payment already landed (crash before inbox removal, or the partner's copy) never pays twice", async () => {
+    const item = makePendingTransaction({ id: "simplefin:ACT-1:PAY-3", amount: -50 });
+    seed(INBOX_KEY, [item]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 300 })]);
+    // The same real-world payment is already on file under the
+    // deterministic id (the balance was reduced when it was recorded).
+    seed(PAYMENTS_KEY, [
+      makePayment({ id: inboxPaymentId(item.id), debtId: "visa", amount: 50, appliedAmount: 50 }),
+    ]);
+
+    const result = await applyPendingPaymentToDebt(item.id, "visa");
+
+    expect(result?.debts[0].balance).toBe(300);
+    expect(read<Payment[]>(PAYMENTS_KEY, [])).toHaveLength(1);
+    expect(inboxNow()).toEqual([]);
+    expect(read<IngestLedger>(LEDGER_KEY, {})[item.id]).toMatchObject({ status: "dismissed" });
+  });
+
+  it("a crash between the ledger and the payment write leaves an unpaid row, never a double payment", async () => {
+    const item = makePendingTransaction({ id: "simplefin:ACT-1:PAY-4", amount: -40 });
+    seed(INBOX_KEY, [item]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 300 })]);
+    const { multiSet } = storageMock();
+    const original = multiSet.getMockImplementation()!;
+    multiSet.mockImplementation(async (pairs: [string, string][]) => {
+      if (pairs.some(([k]) => k === PAYMENTS_KEY)) throw new Error("simulated payment write failure");
+      return original(pairs);
+    });
+
+    try {
+      await expect(applyPendingPaymentToDebt(item.id, "visa")).rejects.toThrow(
+        "simulated payment write failure",
+      );
+      expect(ledgerNow()[item.id]).toMatchObject({ status: "dismissed" });
+      expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(300);
+      expect(read<Payment[]>(PAYMENTS_KEY, [])).toEqual([]);
+      expect(inboxNow().map((i) => i.id)).toEqual([item.id]);
+    } finally {
+      multiSet.mockImplementation(original);
+    }
   });
 });
 

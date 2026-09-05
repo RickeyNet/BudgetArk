@@ -6,7 +6,10 @@
  * posted date, with heuristic sections ("Likely transfers", "Possibly already
  * in your budget") that offer a Skip-all shortcut. Each row expands into a
  * name field (rename the noisy bank text), a category picker, a business
- * picker (expenses, when businesses exist) and an "always do this" rule
+ * picker (expenses, when businesses exist), an "Applies to bill" picker
+ * that lists the month's recurring bills AND the Debt tracker's debts (a
+ * card payment logged against its debt records a Payment there instead of
+ * an expense - utils/inboxDebtPayments), and an "always do this" rule
  * checkbox - on Approve it creates an auto-approve rule (future imports
  * become entries without stopping here, and matching items still in the
  * inbox are approved on the spot); on Skip it creates an ignore rule so
@@ -40,6 +43,7 @@ import type {
   Business,
   CategoryName,
   CustomCategory,
+  Debt,
   ExternalAccountLink,
   PendingTransaction,
   Person,
@@ -56,6 +60,7 @@ import CategoryPillPicker from "./CategoryPillPicker";
 import MerchantRulesModal from "./MerchantRulesModal";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import {
+  applyPendingPaymentToDebt,
   applyPendingTransferToPlan,
   applyRulesToInbox,
   approvePendingGroup,
@@ -69,6 +74,12 @@ import { getLinks } from "../storage/externalAccountLinksStorage";
 import { statementAccountLabelFrom } from "../utils/bankCsvImport";
 import { getMerchantRules } from "../storage/merchantRulesStorage";
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
+import { getDebts } from "../storage/debtStorage";
+import {
+  debtIdFromOption,
+  debtOptionId,
+  rankDebtCandidates,
+} from "../utils/inboxDebtPayments";
 import { remainingForPlan } from "../utils/purchasePlanner";
 import { triggerHaptic } from "../utils/haptics";
 import { generateUUID } from "../utils/uuid";
@@ -141,6 +152,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [rules, setRules] = useState<MerchantRule[]>([]);
   /** Purchase plans (never the emergency fund) an outflow can be added to. */
   const [plans, setPlans] = useState<SavingsGoal[]>([]);
+  /** Debt tracker debts an outflow can be logged as a payment on. */
+  const [debts, setDebts] = useState<Debt[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftCategory, setDraftCategory] = useState<CategoryName>(DEFAULT_CATEGORY);
   const [draftName, setDraftName] = useState("");
@@ -149,6 +162,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   );
   // Multi-select, like the entry form: a grocery run is the whole family's.
   const [draftPersonIds, setDraftPersonIds] = useState<string[]>([]);
+  // Either a recurring bill's entry id or a debt pill ("debt:<id>", see
+  // utils/inboxDebtPayments) - the two share one "Applies to bill" picker.
   const [draftRecurringId, setDraftRecurringId] = useState<string | undefined>(
     undefined,
   );
@@ -203,6 +218,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         setPlans(goals.filter((goal) => goal.category !== "emergency_fund")),
       )
       .catch(() => setPlans([]));
+    // Debts are offered in the bill picker; a failed read just hides them.
+    void getDebts()
+      .then(setDebts)
+      .catch(() => setDebts([]));
   }, [visible, refresh]);
 
   const accountNameById = useMemo(() => {
@@ -390,6 +409,41 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     [onChanged, refresh],
   );
 
+  /**
+   * "Applies to bill" → a debt: log the outflow as a payment on that debt
+   * (Debt tab balance + history) and retire the row without an expense
+   * entry - see applyPendingPaymentToDebt for why no entry.
+   */
+  const handleLogDebtPayment = useCallback(
+    async (item: PendingTransaction, debtId: string) => {
+      setBusyId(item.id);
+      setActionError(null);
+      try {
+        const result = await applyPendingPaymentToDebt(item.id, debtId);
+        if (result) setDebts(result.debts);
+        await refresh();
+        await onChanged();
+        triggerHaptic("success");
+        setExpandedId(null);
+        if (result) {
+          // Same win the Debt tab counts for a logged payment.
+          const nudge = await noteWin(
+            result.paidOff
+              ? { kind: "debt-payoff", label: result.paidOff.name }
+              : { kind: "debt-payment" },
+          );
+          if (nudge) setInboxNudge(nudge);
+        }
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, "Couldn't log this debt payment."));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [noteWin, onChanged, refresh],
+  );
+
   const handleSkipSection = useCallback(
     async (items: PendingTransaction[]) => {
       setBulkBusy(true);
@@ -550,6 +604,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     const accountName =
       accountNameById.get(item.externalAccountId) ??
       statementAccountLabelFrom(item.externalAccountId);
+    // The picked pill, when it is a debt rather than a bill.
+    const draftDebtId = expanded ? debtIdFromOption(draftRecurringId) : undefined;
     // Bills this charge could stand in for, in the month it posted - best
     // guess first (same category, closest estimate).
     const billCandidates =
@@ -560,6 +616,31 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             keepId: draftRecurringId,
           })
         : [];
+    // Debts the outflow could be a payment on (utils/inboxDebtPayments) -
+    // the Budget's "Debt Payments" rows come from the Debt tracker, not
+    // from entries, so they are offered here alongside the bills. Debts
+    // lead when the category says it's a debt payment; bills otherwise.
+    const debtCandidates =
+      expanded && item.suggestedType === "expense"
+        ? rankDebtCandidates(debts, {
+            amount: Math.abs(item.amount),
+            keepId: draftDebtId,
+          })
+        : [];
+    const billOptions = billCandidates.map((bill) => ({
+      id: bill.id,
+      name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
+        bill.amount,
+      )}`,
+    }));
+    const debtOptions = debtCandidates.map((debt) => ({
+      id: debtOptionId(debt.id),
+      name: `${debt.name} · min ${formatCurrency(debt.minPayment)}`,
+    }));
+    const applyToOptions =
+      draftCategory === "Debt Payments"
+        ? [...debtOptions, ...billOptions]
+        : [...billOptions, ...debtOptions];
     // A merchant that has charged once a month for three months with no
     // bill on file: offer to create one (hidden once a bill is picked).
     const billSuggestion =
@@ -567,9 +648,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         ? detectRecurringBill(item, entries)
         : null;
     // Same merchant filed by hand into the same category a few times with
-    // no rule: offer the rule (hidden once "always" is already ticked).
+    // no rule: offer the rule (hidden once "always" is already ticked, and
+    // when a debt is picked - a rule can't log debt payments).
     const ruleNudge =
-      expanded && !rememberRule ? suggestRuleFromHistory(item, entries, rules) : null;
+      expanded && !rememberRule && !draftDebtId
+        ? suggestRuleFromHistory(item, entries, rules)
+        : null;
     const planChoices = expanded && isExpense ? plans : [];
     return (
       <View style={styles.itemCard}>
@@ -712,21 +796,24 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 </TouchableOpacity>
               </View>
             ) : null}
-            {billCandidates.length > 0 ? (
+            {applyToOptions.length > 0 ? (
               <>
                 <Text style={styles.label}>APPLIES TO BILL</Text>
                 <TagPillPicker
-                  options={billCandidates.map((bill) => ({
-                    id: bill.id,
-                    name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
-                      bill.amount,
-                    )}`,
-                  }))}
+                  options={applyToOptions}
                   value={draftRecurringId}
                   onChange={setDraftRecurringId}
                   noneLabel="Not a bill"
                   glyph="🧾"
                 />
+                {draftDebtId ? (
+                  <Text style={styles.planHint}>
+                    Logged as a payment on this debt - its balance and payment
+                    history update on the Debts tab, and the Budget counts it
+                    under Debt Payments. No separate expense is created, and
+                    the category above is not used.
+                  </Text>
+                ) : null}
               </>
             ) : null}
             {item.suggestedType === "expense" &&
@@ -827,7 +914,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 </View>
               </>
             ) : null}
-            {item.merchant ? (
+            {item.merchant && !draftDebtId ? (
               <TouchableOpacity
                 style={styles.rememberRow}
                 onPress={() => setRememberRule((prev) => !prev)}
@@ -849,35 +936,41 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.skipButton, busy && styles.buttonDisabled]}
-                onPress={() => void handleSkip(item, rememberRule)}
+                onPress={() => void handleSkip(item, rememberRule && !draftDebtId)}
                 disabled={busy}
               >
                 <Text style={styles.skipButtonText}>
-                  {rememberRule && item.merchant ? "Always Skip" : "Skip"}
+                  {rememberRule && item.merchant && !draftDebtId
+                    ? "Always Skip"
+                    : "Skip"}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.approveButton, busy && styles.buttonDisabled]}
                 onPress={() =>
-                  void handleApprove(
-                    item,
-                    draftCategory,
-                    rememberRule,
-                    draftName,
-                    draftBusinessId,
-                    draftPersonIds,
-                    draftRecurringId,
-                    draftLentTo,
-                  )
+                  void (draftDebtId
+                    ? handleLogDebtPayment(item, draftDebtId)
+                    : handleApprove(
+                        item,
+                        draftCategory,
+                        rememberRule,
+                        draftName,
+                        draftBusinessId,
+                        draftPersonIds,
+                        draftRecurringId,
+                        draftLentTo,
+                      ))
                 }
                 disabled={busy}
               >
                 <Text style={styles.approveButtonText}>
                   {busy
                     ? "Saving..."
-                    : rememberRule && item.merchant
-                      ? "Always Approve"
-                      : "Approve"}
+                    : draftDebtId
+                      ? "Log Payment"
+                      : rememberRule && item.merchant
+                        ? "Always Approve"
+                        : "Approve"}
                 </Text>
               </TouchableOpacity>
             </View>

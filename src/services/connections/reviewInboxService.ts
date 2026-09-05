@@ -16,8 +16,10 @@ import type {
   BudgetEntry,
   BudgetEntryType,
   CategoryName,
+  Debt,
   IngestLedgerEntry,
   MerchantRule,
+  Payment,
   PendingTransaction,
   SavingsGoal,
 } from "../../types";
@@ -30,6 +32,8 @@ import { entryMonthKey, isBillCandidate } from "../../utils/billFulfillment";
 import { isEntryActiveInMonth } from "../../utils/recurrence";
 import { getLinks } from "../../storage/externalAccountLinksStorage";
 import { getSavingsGoals, updateSavingsGoal } from "../../storage/savingsGoalStorage";
+import { getDebts, recordPayment } from "../../storage/debtStorage";
+import { inboxPaymentId } from "../../utils/inboxDebtPayments";
 import { roundToCents } from "../../utils/money";
 import {
   getIngestLedger,
@@ -357,6 +361,63 @@ export const applyPendingTransferToPlan = async (
   });
   await removePendingTransaction(item.id);
   return updated;
+};
+
+export interface PendingDebtPaymentResult {
+  /** Live debts after the balance was reduced. */
+  debts: Debt[];
+  /** Live payments including the one just logged. */
+  payments: Payment[];
+  /** The debt, when this payment took its balance to zero. */
+  paidOff: Debt | null;
+}
+
+/**
+ * File an outflow as a payment on a debt instead of an expense: the amount
+ * is logged through `recordPayment` (balance reduced, payment history row
+ * added - exactly what "Log Payment" on the Debt tab does), the row is
+ * retired with a DISMISSED ledger entry and no BudgetEntry. No entry on
+ * purpose: the Budget tab's "Debt Payments" figure is derived from the
+ * Payment collection plus each debt's minimum, so an entry in that category
+ * on top of the payment would count the same money twice.
+ *
+ * Same write order as applyPendingTransferToPlan and for the same reason:
+ * ledger first (the decision is durable and syncs), money second, inbox
+ * removal last. The Payment id is deterministic (utils/inboxDebtPayments),
+ * so a retry after a crash between ledger and money, or the partner's copy
+ * of the same decision, collapses into one record instead of paying twice.
+ * Returns null when the item or debt no longer exists.
+ */
+export const applyPendingPaymentToDebt = async (
+  pendingId: string,
+  debtId: string,
+): Promise<PendingDebtPaymentResult | null> => {
+  const inbox = await getPendingTransactions();
+  const item = inbox.find((row) => row.id === pendingId);
+  if (!item) return null;
+  const amount = roundToCents(Math.abs(item.amount));
+  if (!(amount > 0)) return null;
+  const debts = await getDebts();
+  const before = debts.find((candidate) => candidate.id === debtId);
+  if (!before) return null;
+
+  await recordLedgerEntries({ [item.id]: ledgerEntryFor(item, "dismissed") });
+  const now = new Date().toISOString();
+  const result = await recordPayment({
+    id: inboxPaymentId(item.id),
+    debtId,
+    amount,
+    // Dated when the bank posted it, not when it was reviewed, so it lands
+    // in the same Budget month as the statement (paymentMonthKey buckets
+    // by this) and the due-reminder sees the month as paid.
+    date: item.postedAt,
+    updatedAt: now,
+  });
+  await removePendingTransaction(item.id);
+
+  const after = result.debts.find((candidate) => candidate.id === debtId);
+  const paidOff = before.balance > 0 && after && after.balance <= 0 ? after : null;
+  return { debts: result.debts, payments: result.payments, paidOff };
 };
 
 /**
