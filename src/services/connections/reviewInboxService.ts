@@ -239,6 +239,37 @@ export const approvePendingTransaction = async (
   return entry;
 };
 
+/**
+ * Approve a whole vendor group at once: every id becomes a BudgetEntry with
+ * the SAME category (each keeps its own income/expense direction, via
+ * approvePendingTransaction). When `rememberRule` is set, one auto-approve
+ * merchant rule is saved - from the first item that produces one - so the
+ * rest of the group and every future import from that vendor ride it; the
+ * caller should follow with applyRulesToInbox() to sweep anything not in
+ * the group. Returns how many entries were created. Skips ids that no
+ * longer exist (already approved, synced away).
+ */
+export const approvePendingGroup = async (
+  pendingIds: readonly string[],
+  category: CategoryName,
+  opts?: { rememberRule?: boolean },
+): Promise<number> => {
+  let approved = 0;
+  let remembered = false;
+  for (const id of pendingIds) {
+    const entry = await approvePendingTransaction({
+      pendingId: id,
+      category,
+      rememberRule: !!opts?.rememberRule && !remembered,
+    });
+    if (entry) {
+      approved += 1;
+      if (opts?.rememberRule) remembered = true;
+    }
+  }
+  return approved;
+};
+
 /** Dismiss inbox items - they never become entries and never come back. */
 export const dismissPendingTransactions = async (
   pendingIds: string[],

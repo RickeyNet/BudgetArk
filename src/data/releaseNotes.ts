@@ -13,6 +13,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
     highlights: [
       "Import a bank statement. Download the transaction CSV from your bank's website (Profile → Data → Import Bank Statement), confirm which columns hold the date, description and amount - BudgetArk guesses, you check the preview - and every row lands in the Review Inbox to approve, categorize or skip, with your merchant rules applied. Ideal for months before you connected a bank, or a bank that has no connection at all. Layouts are remembered per bank, re-importing the same file never doubles anything, and rows that look like an entry you already have are flagged.",
       "The Excel export is easier to read. Every column is sized to fit its contents (no more cut-off text or ##### amounts), each month's transactions on the Budget Entries sheet folds into a collapsible group so you can jump between months, and money columns line up with thousands separators. None of this changes the file's format - re-importing the workbook works exactly as before.",
+      "Review the inbox by vendor. When you have a lot to go through - a whole statement, or several months - tap 'Vendor' at the top of the Review Inbox to fold every transaction from the same store into one group, biggest first. Pick one category and approve the whole group at once, and tick 'Always file this vendor here' to have future imports sorted for you. 'Date' still groups by day as before."
     ],
   },
   {

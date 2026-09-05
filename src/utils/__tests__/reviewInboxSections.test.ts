@@ -9,7 +9,10 @@
 
 import {
   buildInboxSections,
+  buildInboxSectionsByMerchant,
+  groupDefaultCategory,
   DUPLICATES_SECTION_TITLE,
+  MERCHANT_NO_KEY_TITLE,
   TRANSFERS_SECTION_TITLE,
 } from "../reviewInboxSections";
 import { formatDayLabel } from "../dateFormat";
@@ -101,5 +104,65 @@ describe("buildInboxSections", () => {
 
     expect(sections[0].data.map((i) => i.id)).toEqual(["d2", "d1"]);
     expect(sections[1].data.map((i) => i.id)).toEqual(["t2", "t1"]);
+  });
+});
+
+describe("buildInboxSectionsByMerchant", () => {
+  it("groups by merchant, biggest group first then alphabetical", () => {
+    const items = [
+      makePendingTransaction({ id: "c1", merchant: "COSTCO", postedAt: "2026-01-05T12:00:00.000Z" }),
+      makePendingTransaction({ id: "c2", merchant: "COSTCO", postedAt: "2026-02-05T12:00:00.000Z" }),
+      makePendingTransaction({ id: "a1", merchant: "AMAZON", postedAt: "2026-01-09T12:00:00.000Z" }),
+      makePendingTransaction({ id: "c3", merchant: "COSTCO", postedAt: "2026-03-05T12:00:00.000Z" }),
+    ];
+    const sections = buildInboxSectionsByMerchant(items);
+    expect(sections.map((s) => s.title)).toEqual(["COSTCO · 3", "AMAZON · 1"]);
+    // Within a group, newest posted first.
+    expect(sections[0].data.map((i) => i.id)).toEqual(["c3", "c2", "c1"]);
+    expect(sections[0].groupKey).toBe("COSTCO");
+    expect(sections[0].bulkCategorizable).toBe(true);
+  });
+
+  it("collects merchant-less items into one non-categorizable section", () => {
+    const sections = buildInboxSectionsByMerchant([
+      makePendingTransaction({ id: "m", merchant: "TARGET" }),
+      makePendingTransaction({ id: "n1", merchant: "" }),
+      makePendingTransaction({ id: "n2", merchant: "" }),
+    ]);
+    const other = sections.find((s) => s.title === MERCHANT_NO_KEY_TITLE);
+    expect(other?.data.map((i) => i.id).sort()).toEqual(["n1", "n2"]);
+    expect(other?.bulkCategorizable).toBeUndefined();
+  });
+
+  it("keeps duplicates and transfers in their own trailing sections", () => {
+    const sections = buildInboxSectionsByMerchant([
+      makePendingTransaction({ id: "reg", merchant: "COSTCO" }),
+      makePendingTransaction({ id: "dup", merchant: "COSTCO", duplicateLikely: true }),
+      makePendingTransaction({ id: "xfer", merchant: "COSTCO", transferLikely: true }),
+      makePendingTransaction({ id: "both", merchant: "COSTCO", duplicateLikely: true, transferLikely: true }),
+    ]);
+    const titles = sections.map((s) => s.title);
+    expect(titles).toContain(DUPLICATES_SECTION_TITLE);
+    expect(titles).toContain(TRANSFERS_SECTION_TITLE);
+    const dup = sections.find((s) => s.title === DUPLICATES_SECTION_TITLE)!;
+    const xfer = sections.find((s) => s.title === TRANSFERS_SECTION_TITLE)!;
+    // A duplicate+transfer item appears only under transfers (one section rule).
+    expect(dup.data.map((i) => i.id)).toEqual(["dup"]);
+    expect(xfer.data.map((i) => i.id).sort()).toEqual(["both", "xfer"]);
+    // The merchant group holds only the plain regular item.
+    expect(sections[0].data.map((i) => i.id)).toEqual(["reg"]);
+  });
+});
+
+describe("groupDefaultCategory", () => {
+  it("returns the most-suggested category, else undefined", () => {
+    expect(
+      groupDefaultCategory([
+        makePendingTransaction({ id: "1", suggestedCategory: "Grocery" }),
+        makePendingTransaction({ id: "2", suggestedCategory: "Grocery" }),
+        makePendingTransaction({ id: "3", suggestedCategory: "Shopping" }),
+      ]),
+    ).toBe("Grocery");
+    expect(groupDefaultCategory([makePendingTransaction({ id: "x" })])).toBeUndefined();
   });
 });

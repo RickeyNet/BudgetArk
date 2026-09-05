@@ -58,6 +58,7 @@ import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import {
   applyPendingTransferToPlan,
   applyRulesToInbox,
+  approvePendingGroup,
   approvePendingTransaction,
   dismissAndIgnoreMerchant,
   dismissPendingTransactions,
@@ -89,6 +90,8 @@ import {
 } from "../utils/billFulfillment";
 import {
   buildInboxSections,
+  buildInboxSectionsByMerchant,
+  groupDefaultCategory,
   type InboxSection,
 } from "../utils/reviewInboxSections";
 
@@ -152,6 +155,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   /** "Lent to someone?" - free text, "" = not a loan (see BudgetEntry.lentTo). */
   const [draftLentTo, setDraftLentTo] = useState("");
   const [rememberRule, setRememberRule] = useState(false);
+  // "By vendor" grouping: fold every transaction from one merchant into a
+  // single section so a big multi-month import is triaged vendor by vendor.
+  const [groupByMerchant, setGroupByMerchant] = useState(false);
+  // The merchant group whose inline "Categorize all" controls are open, and
+  // the category / remember-rule the user picked for it.
+  const [categorizeGroupKey, setCategorizeGroupKey] = useState<string | null>(null);
+  const [groupCategory, setGroupCategory] = useState<CategoryName>(DEFAULT_CATEGORY);
+  const [groupRemember, setGroupRemember] = useState(false);
   const lentToChips = useMemo(
     () => lentToSuggestions(entries).filter((name) => name !== draftLentTo),
     [entries, draftLentTo],
@@ -226,8 +237,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   // item flagged both duplicate- and transfer-likely appears only under
   // "Likely transfers" - see utils/reviewInboxSections.
   const sections = useMemo<InboxSection[]>(
-    () => buildInboxSections(pendingTransactions),
-    [pendingTransactions]
+    () =>
+      groupByMerchant
+        ? buildInboxSectionsByMerchant(pendingTransactions)
+        : buildInboxSections(pendingTransactions),
+    [groupByMerchant, pendingTransactions]
   );
 
   // Warning lines for charges far above the merchant's usual, or large
@@ -439,6 +453,61 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       }
     },
     [creatingBillId, draftCategory, draftName, onChanged],
+  );
+
+  // Switch grouping; closing any open item/group editor so nothing points at
+  // a section that no longer exists in the new layout.
+  const toggleGrouping = useCallback((byMerchant: boolean) => {
+    setGroupByMerchant(byMerchant);
+    setExpandedId(null);
+    setCategorizeGroupKey(null);
+  }, []);
+
+  // Open (or close) a merchant group's inline "Categorize all" controls,
+  // seeding the category from what most of the group was already suggested.
+  const toggleCategorizeGroup = useCallback((section: InboxSection) => {
+    setCategorizeGroupKey((prev) => {
+      if (prev === section.groupKey) return null;
+      setGroupCategory(groupDefaultCategory(section.data) ?? DEFAULT_CATEGORY);
+      setGroupRemember(false);
+      return section.groupKey ?? null;
+    });
+  }, []);
+
+  const handleApproveGroup = useCallback(
+    async (section: InboxSection) => {
+      if (!section.groupKey || section.data.length === 0) return;
+      setBulkBusy(true);
+      setActionError(null);
+      try {
+        await approvePendingGroup(
+          section.data.map((item) => item.id),
+          groupCategory,
+          { rememberRule: groupRemember },
+        );
+        // A remembered rule can cover items outside this group (other months
+        // already in the inbox); sweep so they are handled now too.
+        if (groupRemember) {
+          await applyRulesToInbox();
+          void getMerchantRules()
+            .then(setRules)
+            .catch(() => undefined);
+        }
+        setCategorizeGroupKey(null);
+        await refresh();
+        await onChanged();
+        triggerHaptic("success");
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(
+          describeError(error, "Couldn't categorize this vendor's transactions."),
+        );
+        await refresh().catch(() => undefined);
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [groupCategory, groupRemember, onChanged, refresh],
   );
 
   const handleBulkApprove = useCallback(async () => {
@@ -878,6 +947,44 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             />
           ) : null}
 
+          {pendingTransactions.length > 1 ? (
+            <View style={styles.groupToggleRow}>
+              <Text style={styles.groupToggleLabel}>Group by</Text>
+              <View style={styles.groupToggle}>
+                <TouchableOpacity
+                  style={[styles.groupToggleBtn, !groupByMerchant && styles.groupToggleBtnActive]}
+                  onPress={() => toggleGrouping(false)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: !groupByMerchant }}
+                >
+                  <Text
+                    style={[
+                      styles.groupToggleText,
+                      !groupByMerchant && styles.groupToggleTextActive,
+                    ]}
+                  >
+                    Date
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.groupToggleBtn, groupByMerchant && styles.groupToggleBtnActive]}
+                  onPress={() => toggleGrouping(true)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: groupByMerchant }}
+                >
+                  <Text
+                    style={[
+                      styles.groupToggleText,
+                      groupByMerchant && styles.groupToggleTextActive,
+                    ]}
+                  >
+                    Vendor
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           {suggestedReadyCount > 0 ? (
             <TouchableOpacity
               style={[styles.bulkBar, bulkBusy && styles.buttonDisabled]}
@@ -904,27 +1011,91 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               sections={sections}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
-              renderSectionHeader={({ section }) => (
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionHeader}>{section.title}</Text>
-                  {section.bulkSkippable ? (
-                    <TouchableOpacity
-                      onPress={() => void handleSkipSection(section.data)}
-                      disabled={bulkBusy}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Text
-                        style={[
-                          styles.sectionSkipAll,
-                          bulkBusy && styles.buttonDisabled,
-                        ]}
-                      >
-                        Skip all
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              )}
+              renderSectionHeader={({ section }) => {
+                const categorizing =
+                  section.bulkCategorizable &&
+                  section.groupKey != null &&
+                  categorizeGroupKey === section.groupKey;
+                return (
+                  <View>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionHeader}>{section.title}</Text>
+                      {section.bulkSkippable ? (
+                        <TouchableOpacity
+                          onPress={() => void handleSkipSection(section.data)}
+                          disabled={bulkBusy}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text
+                            style={[
+                              styles.sectionSkipAll,
+                              bulkBusy && styles.buttonDisabled,
+                            ]}
+                          >
+                            Skip all
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {section.bulkCategorizable ? (
+                        <TouchableOpacity
+                          onPress={() => toggleCategorizeGroup(section)}
+                          disabled={bulkBusy}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text
+                            style={[
+                              styles.sectionSkipAll,
+                              bulkBusy && styles.buttonDisabled,
+                            ]}
+                          >
+                            {categorizing ? "Close" : "Categorize all"}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    {categorizing ? (
+                      <View style={styles.groupCategorizer}>
+                        <CategoryPillPicker
+                          value={groupCategory}
+                          onChange={setGroupCategory}
+                          pinCurrentValue
+                        />
+                        <TouchableOpacity
+                          style={styles.rememberRow}
+                          onPress={() => setGroupRemember((v) => !v)}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: groupRemember }}
+                        >
+                          <View
+                            style={[
+                              styles.checkbox,
+                              groupRemember && styles.checkboxActive,
+                            ]}
+                          >
+                            {groupRemember ? (
+                              <Text style={styles.checkboxCheck}>✓</Text>
+                            ) : null}
+                          </View>
+                          <Text style={styles.rememberLabel}>
+                            Always file this vendor here
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.groupApproveBtn, bulkBusy && styles.buttonDisabled]}
+                          onPress={() => void handleApproveGroup(section)}
+                          disabled={bulkBusy}
+                        >
+                          <Text style={styles.groupApproveText}>
+                            {bulkBusy
+                              ? "Working..."
+                              : `Approve ${section.data.length} as ${groupCategory}`}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              }}
               contentContainerStyle={styles.listContent}
               stickySectionHeadersEnabled={false}
               keyboardShouldPersistTaps="handled"
@@ -939,6 +1110,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 rememberRule,
                 busyId,
                 bulkBusy,
+                groupByMerchant,
+                categorizeGroupKey,
+                groupCategory,
+                groupRemember,
               ]}
             />
           )}
@@ -1098,6 +1273,61 @@ const makeStyles = (colors: ThemeColors) =>
     sectionSkipAll: {
       color: colors.accent,
       fontSize: 12,
+      fontWeight: "700",
+    },
+    groupToggleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginTop: 4,
+      marginBottom: 4,
+    },
+    groupToggleLabel: {
+      fontSize: 12,
+      color: colors.textDim,
+      fontWeight: "600",
+    },
+    groupToggle: {
+      flexDirection: "row",
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      overflow: "hidden",
+    },
+    groupToggleBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      backgroundColor: colors.bg,
+    },
+    groupToggleBtnActive: {
+      backgroundColor: colors.accent,
+    },
+    groupToggleText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textDim,
+    },
+    groupToggleTextActive: {
+      color: colors.white,
+    },
+    groupCategorizer: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 12,
+      backgroundColor: colors.bg,
+      padding: 12,
+      marginBottom: 8,
+      gap: 10,
+    },
+    groupApproveBtn: {
+      backgroundColor: colors.accent,
+      borderRadius: 10,
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    groupApproveText: {
+      color: colors.white,
+      fontSize: 15,
       fontWeight: "700",
     },
     itemCard: {

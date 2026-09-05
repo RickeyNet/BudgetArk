@@ -38,6 +38,7 @@ import {
   dismissPendingTransactions,
   reconcileInboxWithDecisions,
   removeMerchantRule,
+  approvePendingGroup,
 } from "../reviewInboxService";
 import * as reviewInboxStorage from "../../../storage/reviewInboxStorage";
 
@@ -961,5 +962,40 @@ describe("applyPendingTransferToPlan", () => {
     expect(await reconcileInboxWithDecisions()).toBe(1);
     expect(inboxNow()).toEqual([]);
     expect(read<{ currentAmount: number }[]>(GOALS_KEY, [])[0].currentAmount).toBe(10);
+  });
+});
+
+describe("approvePendingGroup", () => {
+  it("approves every item in the group with one category and one remembered rule", async () => {
+    const a = makePendingTransaction({ id: "a", merchant: "COSTCO", amount: -20, description: "COSTCO #1" });
+    const b = makePendingTransaction({ id: "b", merchant: "COSTCO", amount: -35, description: "COSTCO #2" });
+    seed(INBOX_KEY, [a, b]);
+
+    const count = await approvePendingGroup(["a", "b"], "Grocery", { rememberRule: true });
+
+    expect(count).toBe(2);
+    // Both became Grocery entries.
+    const entries = entriesNow();
+    expect(entries).toHaveLength(2);
+    expect(entries.every((e: any) => e.category === "Grocery")).toBe(true);
+    // Inbox emptied.
+    expect(inboxNow()).toHaveLength(0);
+    // Exactly one auto-approve rule was remembered for the shared merchant.
+    const costcoRules = rulesNow().filter((r) => r.merchantKey === "COSTCO");
+    expect(costcoRules).toHaveLength(1);
+    expect(costcoRules[0].action).toBe("approve");
+    expect(costcoRules[0].category).toBe("Grocery");
+  });
+
+  it("does not remember a rule when rememberRule is false", async () => {
+    seed(INBOX_KEY, [makePendingTransaction({ id: "a", merchant: "COSTCO" })]);
+    await approvePendingGroup(["a"], "Grocery");
+    expect(rulesNow()).toHaveLength(0);
+  });
+
+  it("skips ids that are already gone", async () => {
+    seed(INBOX_KEY, [makePendingTransaction({ id: "a", merchant: "COSTCO" })]);
+    const count = await approvePendingGroup(["a", "missing"], "Grocery");
+    expect(count).toBe(1);
   });
 });
