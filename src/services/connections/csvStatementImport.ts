@@ -148,13 +148,27 @@ export const importStatementTransactions = async (
 
   // Best-effort like the sync path: a failed sweep leaves the rows waiting
   // for manual approval instead of failing the import.
+  //
+  // The sweep can turn some of the rows we just added straight into entries
+  // (an "approve" merchant rule), so re-read the inbox and split `kept` into
+  // "still waiting" and "auto-approved" - otherwise `added` would double-count
+  // the rows that `autoApproved` also reports. autoApproveInboxByRules sweeps
+  // the WHOLE inbox, so its return value can include older rows; we attribute
+  // only the rows this import added.
+  let stillWaiting = kept.length;
   try {
-    summary.autoApproved = await autoApproveInboxByRules();
+    const sweptCount = await autoApproveInboxByRules();
+    if (sweptCount > 0 && kept.length > 0) {
+      const remaining = await getPendingTransactions();
+      const remainingIds = new Set(remaining.map((item) => item.id));
+      stillWaiting = kept.filter((item) => remainingIds.has(item.id)).length;
+    }
   } catch (error) {
     if (__DEV__) console.error("Statement auto-approve sweep failed:", error);
   }
 
-  summary.added = kept.length;
+  summary.added = stillWaiting;
+  summary.autoApproved = kept.length - stillWaiting;
   summary.deferredForCapacity = deferred.length;
   summary.autoDismissed = Object.keys(plan.autoDismissed).length;
   summary.flaggedDuplicates = kept.filter((item) => item.duplicateLikely).length;

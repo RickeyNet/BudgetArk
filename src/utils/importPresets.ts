@@ -85,6 +85,11 @@ export const parseMoney = (raw: string): number => {
     negative = !negative;
     s = s.slice(1);
   }
+  // Some bank exports write the sign as a TRAILING minus ("12.00-").
+  if (s.endsWith("-")) {
+    negative = !negative;
+    s = s.slice(0, -1);
+  }
   if (!/^\d*\.?\d*$/.test(s) || s === "" || s === ".") return Number.NaN;
   const value = Number(s);
   return negative ? -value : value;

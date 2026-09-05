@@ -225,7 +225,9 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
             />
             <Text style={styles.hint}>
               Shown on each row in the Review Inbox so you can tell this
-              import apart from your bank sync.
+              import apart from your bank sync. Keep the same label when you
+              re-import a file from this bank - matching labels let BudgetArk
+              skip the rows you already imported.
             </Text>
 
             <Text style={styles.sectionLabel}>COLUMNS</Text>

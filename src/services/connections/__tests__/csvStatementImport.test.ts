@@ -48,6 +48,7 @@ const seed = (key: string, value: unknown) => mockStore.set(key, JSON.stringify(
 const read = <T,>(key: string, fallback: T): T =>
   mockStore.has(key) ? (JSON.parse(mockStore.get(key)!) as T) : fallback;
 const inboxNow = (): PendingTransaction[] => read(INBOX_KEY, []);
+const entriesNow = (): Record<string, unknown>[] => read(ENTRIES_KEY, []);
 
 const ACCOUNT = "csv:Chase";
 const tx = (
@@ -143,7 +144,36 @@ describe("importStatementTransactions", () => {
     expect(inboxNow()).toHaveLength(0);
   });
 
-  it("flags a row that duplicates an existing manual entry", async () => {
+  it("counts auto-approved rows separately from those left in the inbox", async () => {
+    // An "approve" rule for COSTCO: matching rows become entries immediately.
+    const rule: MerchantRule = {
+      id: "r1",
+      merchantKey: "COSTCO",
+      action: "approve",
+      category: "Grocery",
+      type: "expense",
+      useCount: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    seed(RULES_KEY, [rule]);
+    const summary = await importStatementTransactions(
+      [
+        tx({ description: "COSTCO", amount: -30 }),
+        tx({ description: "TARGET", amount: -15 }),
+      ],
+      ACCOUNT,
+    );
+    // COSTCO auto-approves into an entry; TARGET waits in the inbox. The two
+    // counts must not overlap: added is the inbox survivor only.
+    expect(summary.autoApproved).toBe(1);
+    expect(summary.added).toBe(1);
+    expect(inboxNow()).toHaveLength(1);
+    expect(inboxNow()[0].merchant).toBe("TARGET");
+    expect(entriesNow().some((e) => e.category === "Grocery")).toBe(true);
+  });
+
+    it("flags a row that duplicates an existing manual entry", async () => {
     seed(ENTRIES_KEY, [
       {
         id: "m1",

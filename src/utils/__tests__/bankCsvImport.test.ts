@@ -281,7 +281,17 @@ describe("parseStatementRows - fail closed and dedupe", () => {
     );
   });
 
-  it("split layout uses column magnitudes even if the debit is already negative", () => {
+  it("reads a trailing-minus amount as an outflow (some bank exports)", () => {
+    const parsed = parseStatementRows(
+      fileOf([{ Date: "01/05/2026", Description: "TRAILING MINUS", Amount: "84.32-" }]),
+      map,
+      "csv:x",
+    );
+    expect(parsed.transactions).toHaveLength(1);
+    expect(parsed.transactions[0].amount).toBe(-84.32);
+  });
+
+    it("split layout uses column magnitudes even if the debit is already negative", () => {
     const parsed = parseStatementRows(
       {
         headers: ["Date", "Description", "Debit", "Credit"],
