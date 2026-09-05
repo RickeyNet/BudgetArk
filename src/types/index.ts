@@ -900,6 +900,13 @@ export interface PendingTransaction {
    */
   suggestedRecurringId?: string;
   /**
+   * From a matched MerchantRule's `debtId`: the Debt tracker debt this
+   * outflow is expected to be a payment on (utils/inboxDebtPayments).
+   * Expenses only. Wins over `suggestedRecurringId` in the inbox picker.
+   * Validated against the live debts at approval time.
+   */
+  suggestedDebtId?: string;
+  /**
    * Heuristic: a manually-entered budget entry with the same amount and
    * direction exists within a few days - approving would double count.
    * Flag only, like transferLikely - never dropped automatically.
@@ -965,6 +972,19 @@ export interface MerchantRule {
    * yields a plain entry. Unread while action is "ignore".
    */
   recurringEntryId?: string;
+  /**
+   * Debt future outflows from this merchant are logged as payments on
+   * (utils/inboxDebtPayments) - "PAYMENT TO CHASE CARD" is always the
+   * Chase Visa. An approve rule with a debt records a Payment on the Debt
+   * tab (balance + history) and files NO expense entry; a categorize rule
+   * preselects the debt in the inbox picker. Wins over `recurringEntryId`.
+   * Because card payments usually trip the transfer heuristic, a debt rule
+   * is the one approve rule that still auto-applies to transfer-likely
+   * rows (pending and duplicate-likely rows still wait). A deleted debt
+   * falls back to a plain entry in the rule's category. Unread while
+   * action is "ignore".
+   */
+  debtId?: string;
   useCount: number;
   lastUsedAt?: string;
   createdAt: string;

@@ -292,6 +292,35 @@ describe("replanInboxForRules", () => {
     expect(plan.dismissIds).toEqual([]);
   });
 
+  it("suggests a rule's debt on expenses only, and clears a stale one", () => {
+    const debtRule: MerchantRule = {
+      ...rule("PAYMENT TO CHASE CARD", "Debt Payments"),
+      debtId: "visa",
+    };
+    const gained = replanInboxForRules(
+      [item("a", "PAYMENT TO CHASE CARD", "Debt Payments")],
+      [debtRule],
+      NOW,
+    );
+    expect(gained.updatedItems).toHaveLength(1);
+    expect(gained.updatedItems[0].suggestedDebtId).toBe("visa");
+
+    const income = replanInboxForRules(
+      [{ ...item("in", "PAYMENT TO CHASE CARD", "Debt Payments"), amount: 40, suggestedType: "income" }],
+      [debtRule],
+      NOW,
+    );
+    expect(income.updatedItems).toEqual([]);
+
+    const cleared = replanInboxForRules(
+      [{ ...item("b", "PAYMENT TO CHASE CARD", "Debt Payments"), suggestedDebtId: "visa" }],
+      [rule("PAYMENT TO CHASE CARD", "Debt Payments")],
+      NOW,
+    );
+    expect(cleared.updatedItems).toHaveLength(1);
+    expect(cleared.updatedItems[0].suggestedDebtId).toBeUndefined();
+  });
+
   it("treats an approve rule like categorize (suggests, never dismisses)", () => {
     const approve: MerchantRule = {
       ...rule("COSTCO WHSE", "Grocery"),
@@ -330,6 +359,25 @@ describe("selectAutoApprovable", () => {
     ];
     const result = selectAutoApprovable(items, [approveRule]);
     expect(result.map((r) => r.item.id)).toEqual(["ok"]);
+  });
+
+  it("lets a debt rule apply to transfer-likely rows, but never pending or duplicate-likely ones", () => {
+    // Card payments match the transfer heuristic almost by definition; a
+    // rule that logs them on a debt is the user's explicit "this is that
+    // payment", so it still applies. The other guards stay.
+    const debtRule: MerchantRule = {
+      ...rule("PAYMENT TO CHASE CARD", "Debt Payments"),
+      action: "approve",
+      debtId: "visa",
+    };
+    const items = [
+      { ...item("transfer", "PAYMENT TO CHASE CARD"), transferLikely: true },
+      { ...item("pending", "PAYMENT TO CHASE CARD"), pending: true, transferLikely: true },
+      { ...item("dup", "PAYMENT TO CHASE CARD"), duplicateLikely: true },
+      item("plain", "PAYMENT TO CHASE CARD"),
+    ];
+    const result = selectAutoApprovable(items, [debtRule]);
+    expect(result.map((r) => r.item.id)).toEqual(["transfer", "plain"]);
   });
 
   it("ignores categorize and ignore rules", () => {

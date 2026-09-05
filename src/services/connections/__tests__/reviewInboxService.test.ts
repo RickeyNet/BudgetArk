@@ -1025,6 +1025,145 @@ describe("applyPendingPaymentToDebt", () => {
   });
 });
 
+describe("debt merchant rules (MerchantRule.debtId)", () => {
+  const cardPayment = (over: Partial<PendingTransaction> = {}) =>
+    makePendingTransaction({
+      id: "tx-card",
+      merchant: "PAYMENT TO CHASE CARD",
+      description: "PAYMENT TO CHASE CARD 09/01",
+      amount: -150,
+      transferLikely: true,
+      ...over,
+    });
+
+  it("'always do this' on a debt payment saves an approve rule carrying the debt, no entry", async () => {
+    seed(INBOX_KEY, [cardPayment()]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 900 })]);
+
+    const result = await applyPendingPaymentToDebt("tx-card", "visa", { rememberRule: true });
+
+    expect(result?.debts[0].balance).toBe(750);
+    expect(rulesNow()).toHaveLength(1);
+    expect(rulesNow()[0]).toMatchObject({
+      merchantKey: "PAYMENT TO CHASE CARD",
+      action: "approve",
+      category: "Debt Payments",
+      type: "expense",
+      debtId: "visa",
+      useCount: 1,
+    });
+    expect(rulesNow()[0].recurringEntryId).toBeUndefined();
+    expect(read<BudgetEntry[]>(ENTRIES_KEY, [])).toEqual([]);
+  });
+
+  it("re-saving the merchant from a plain approval drops the debt from its rule", async () => {
+    seed(INBOX_KEY, [cardPayment({ id: "tx-1" }), cardPayment({ id: "tx-2", transferLikely: false })]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 900 })]);
+    await applyPendingPaymentToDebt("tx-1", "visa", { rememberRule: true });
+    expect(rulesNow()[0].debtId).toBe("visa");
+
+    await approvePendingTransaction({ pendingId: "tx-2", category: "Other", rememberRule: true });
+
+    expect(rulesNow()).toHaveLength(1);
+    expect(rulesNow()[0]).toMatchObject({ category: "Other", action: "approve" });
+    expect(rulesNow()[0].debtId).toBeUndefined();
+  });
+
+  it("the auto sweep logs payments for debt rules - transfer-likely rows included, pending and duplicate-likely still wait", async () => {
+    seed(RULES_KEY, [
+      makeMerchantRule({
+        id: "rule-card",
+        merchantKey: "PAYMENT TO CHASE CARD",
+        action: "approve",
+        category: "Debt Payments",
+        debtId: "visa",
+        useCount: 3,
+      }),
+    ]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 1000 })]);
+    seed(INBOX_KEY, [
+      cardPayment({ id: "tx-a", amount: -100 }),
+      cardPayment({ id: "tx-b", amount: -50, transferLikely: false }),
+      cardPayment({ id: "tx-pending", pending: true }),
+      cardPayment({ id: "tx-dup", duplicateLikely: true }),
+    ]);
+
+    expect(await autoApproveInboxByRules()).toBe(2);
+
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(850);
+    const payments = read<Payment[]>(PAYMENTS_KEY, []);
+    expect(payments.map((p) => p.id).sort()).toEqual(
+      [inboxPaymentId("tx-a"), inboxPaymentId("tx-b")].sort(),
+    );
+    expect(payments.every((p) => p.debtId === "visa")).toBe(true);
+    expect(inboxNow().map((i) => i.id).sort()).toEqual(["tx-dup", "tx-pending"]);
+    expect(read<BudgetEntry[]>(ENTRIES_KEY, [])).toEqual([]);
+    expect(rulesNow()[0].useCount).toBe(5);
+    const ledger = read<IngestLedger>(LEDGER_KEY, {});
+    expect(ledger["tx-a"]).toMatchObject({ status: "dismissed" });
+    expect(ledger["tx-b"]).toMatchObject({ status: "dismissed" });
+  });
+
+  it("a debt rule whose debt was deleted files a plain entry in the rule's category instead", async () => {
+    seed(RULES_KEY, [
+      makeMerchantRule({
+        id: "rule-card",
+        merchantKey: "PAYMENT TO CHASE CARD",
+        action: "approve",
+        category: "Debt Payments",
+        debtId: "gone",
+      }),
+    ]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 1000 })]);
+    seed(INBOX_KEY, [cardPayment({ id: "tx-a", transferLikely: false })]);
+
+    expect(await autoApproveInboxByRules()).toBe(1);
+
+    expect(read<Payment[]>(PAYMENTS_KEY, [])).toEqual([]);
+    expect(read<Debt[]>(DEBTS_KEY, [])[0].balance).toBe(1000);
+    const entries = read<BudgetEntry[]>(ENTRIES_KEY, []);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ category: "Debt Payments", externalTxId: "tx-a", amount: 150 });
+    expect(inboxNow()).toEqual([]);
+  });
+
+  it("applyRulesToInbox surfaces the rule's debt as a suggestion on rows it can't auto-log", async () => {
+    seed(RULES_KEY, [
+      makeMerchantRule({
+        id: "rule-card",
+        merchantKey: "PAYMENT TO CHASE CARD",
+        action: "categorize",
+        category: "Debt Payments",
+        debtId: "visa",
+      }),
+    ]);
+    seed(DEBTS_KEY, [makeDebt({ id: "visa", balance: 1000 })]);
+    seed(INBOX_KEY, [cardPayment({ id: "tx-a" })]);
+
+    const outcome = await applyRulesToInbox();
+
+    expect(outcome.autoApprovedCount).toBe(0);
+    expect(inboxNow()[0]).toMatchObject({ suggestedCategory: "Debt Payments", suggestedDebtId: "visa" });
+  });
+
+  it("changeMerchantRule keeps, replaces and clears the debt with the same tri-state as the bill", async () => {
+    seed(INBOX_KEY, []);
+    seed(ENTRIES_KEY, []);
+    seed(RULES_KEY, [
+      makeMerchantRule({ id: "rule-card", merchantKey: "PAYMENT TO CHASE CARD", action: "categorize", category: "Debt Payments", debtId: "visa" }),
+    ]);
+
+    await changeMerchantRule({ ruleId: "rule-card", action: "approve", category: "Debt Payments" });
+    expect(rulesNow()[0].debtId).toBe("visa");
+
+    await changeMerchantRule({ ruleId: "rule-card", action: "approve", category: "Debt Payments", debtId: "amex" });
+    expect(rulesNow()[0].debtId).toBe("amex");
+
+    await changeMerchantRule({ ruleId: "rule-card", action: "approve", category: "Debt Payments", debtId: null });
+    expect(rulesNow()[0].debtId).toBeUndefined();
+  });
+});
+
 describe("applyPendingTransferToPlan", () => {
   it("adds the amount to the plan, records a dismissed ledger entry, and removes the row (ledger first, money second, inbox last)", async () => {
     const item = makePendingTransaction({ amount: -200.005 });

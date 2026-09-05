@@ -31,6 +31,12 @@ export interface MerchantRuleEditForm {
   personIds: readonly string[];
   /** Undefined = no bill - approved expenses are plain entries. */
   recurringEntryId?: string;
+  /**
+   * Undefined = not a debt payment. The editor's picker holds either a
+   * bill or a debt, so the modal splits the value before building the
+   * form (utils/inboxDebtPayments.debtIdFromOption) - never both set.
+   */
+  debtId?: string;
 }
 
 /**
@@ -45,6 +51,7 @@ export interface MerchantRuleUpdate {
   businessId?: string | null;
   personIds?: readonly string[] | null;
   recurringEntryId?: string | null;
+  debtId?: string | null;
 }
 
 export const buildMerchantRuleUpdate = (
@@ -64,4 +71,5 @@ export const buildMerchantRuleUpdate = (
       ? form.personIds
       : null,
   recurringEntryId: form.ignore ? undefined : form.recurringEntryId ?? null,
+  debtId: form.ignore ? undefined : form.debtId ?? null,
 });

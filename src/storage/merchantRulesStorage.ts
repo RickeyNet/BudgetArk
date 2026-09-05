@@ -74,6 +74,7 @@ export const updateMerchantRule = async (
     | "personId"
     | "personIds"
     | "recurringEntryId"
+    | "debtId"
   >,
 ): Promise<MerchantRule[]> => {
   const rules = await getMerchantRules();

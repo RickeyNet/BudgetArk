@@ -232,6 +232,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     return map;
   }, [links]);
 
+  const debtNameById = useMemo(
+    () => new Map(debts.map((debt) => [debt.id, debt.name])),
+    [debts],
+  );
+
   const billNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const entry of entries) {
@@ -295,8 +300,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             })
           : [],
       );
+      // A rule's debt wins over its bill - the two share one picker.
       setDraftRecurringId(
-        item.suggestedType === "expense" ? item.suggestedRecurringId : undefined,
+        item.suggestedType !== "expense"
+          ? undefined
+          : item.suggestedDebtId
+            ? debtOptionId(item.suggestedDebtId)
+            : item.suggestedRecurringId,
       );
       setDraftLentTo("");
       setRememberRule(false);
@@ -415,12 +425,22 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
    * entry - see applyPendingPaymentToDebt for why no entry.
    */
   const handleLogDebtPayment = useCallback(
-    async (item: PendingTransaction, debtId: string) => {
+    async (item: PendingTransaction, debtId: string, remember: boolean) => {
       setBusyId(item.id);
       setActionError(null);
       try {
-        const result = await applyPendingPaymentToDebt(item.id, debtId);
+        const result = await applyPendingPaymentToDebt(item.id, debtId, {
+          rememberRule: remember,
+        });
         if (result) setDebts(result.debts);
+        // "Always" just created a debt rule - sweep the rest of the inbox
+        // so this merchant's other rows are logged now, not next sync.
+        if (remember && item.merchant) {
+          await applyRulesToInbox();
+          void getMerchantRules()
+            .then(setRules)
+            .catch(() => undefined);
+        }
         await refresh();
         await onChanged();
         triggerHaptic("success");
@@ -649,7 +669,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         : null;
     // Same merchant filed by hand into the same category a few times with
     // no rule: offer the rule (hidden once "always" is already ticked, and
-    // when a debt is picked - a rule can't log debt payments).
+    // when a debt is picked - the nudge's rule would file entries, not
+    // payments; the "always" checkbox below covers the debt case).
     const ruleNudge =
       expanded && !rememberRule && !draftDebtId
         ? suggestRuleFromHistory(item, entries, rules)
@@ -692,10 +713,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       "(deleted person)",
                     )}`
                   : null,
-                item.suggestedRecurringId &&
-                billNameById.has(item.suggestedRecurringId)
-                  ? `🧾 ${billNameById.get(item.suggestedRecurringId)}`
-                  : null,
+                item.suggestedDebtId
+                  ? `💳 ${debtNameById.get(item.suggestedDebtId) ?? "(deleted debt)"}`
+                  : item.suggestedRecurringId &&
+                      billNameById.has(item.suggestedRecurringId)
+                    ? `🧾 ${billNameById.get(item.suggestedRecurringId)}`
+                    : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -811,7 +834,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                     Logged as a payment on this debt - its balance and payment
                     history update on the Debts tab, and the Budget counts it
                     under Debt Payments. No separate expense is created, and
-                    the category above is not used.
+                    the category above is not used. Tick "Always do this"
+                    below and future payments to this merchant are logged on
+                    the debt without stopping here.
                   </Text>
                 ) : null}
               </>
@@ -914,7 +939,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 </View>
               </>
             ) : null}
-            {item.merchant && !draftDebtId ? (
+            {item.merchant ? (
               <TouchableOpacity
                 style={styles.rememberRow}
                 onPress={() => setRememberRule((prev) => !prev)}
@@ -936,20 +961,18 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.skipButton, busy && styles.buttonDisabled]}
-                onPress={() => void handleSkip(item, rememberRule && !draftDebtId)}
+                onPress={() => void handleSkip(item, rememberRule)}
                 disabled={busy}
               >
                 <Text style={styles.skipButtonText}>
-                  {rememberRule && item.merchant && !draftDebtId
-                    ? "Always Skip"
-                    : "Skip"}
+                  {rememberRule && item.merchant ? "Always Skip" : "Skip"}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.approveButton, busy && styles.buttonDisabled]}
                 onPress={() =>
                   void (draftDebtId
-                    ? handleLogDebtPayment(item, draftDebtId)
+                    ? handleLogDebtPayment(item, draftDebtId, rememberRule)
                     : handleApprove(
                         item,
                         draftCategory,
@@ -967,7 +990,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   {busy
                     ? "Saving..."
                     : draftDebtId
-                      ? "Log Payment"
+                      ? rememberRule && item.merchant
+                        ? "Always Log Payment"
+                        : "Log Payment"
                       : rememberRule && item.merchant
                         ? "Always Approve"
                         : "Approve"}

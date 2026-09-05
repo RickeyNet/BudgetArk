@@ -105,6 +105,19 @@ describe("buildMerchantRuleUpdate", () => {
     expect(update.personIds).toEqual(["person-9", "person-3"]);
   });
 
+  it("sends the debt through with the same clear/keep contract as the bill", () => {
+    // Picked: the id goes out; not picked: null clears whatever was
+    // stored; always-skip: undefined keeps it for when the rule flips back.
+    expect(buildMerchantRuleUpdate(buildForm({ debtId: "visa" }), rule).debtId).toBe(
+      "visa"
+    );
+    expect(buildMerchantRuleUpdate(buildForm(), rule).debtId).toBeNull();
+    expect(
+      buildMerchantRuleUpdate(buildForm({ ignore: true, debtId: "visa" }), rule)
+        .debtId
+    ).toBeUndefined();
+  });
+
   it("passes the rename field through verbatim, empty string included", () => {
     // Empty clears the rename downstream; trimming/sanitizing is the
     // service's job, so the raw text goes out unchanged.
@@ -124,6 +137,7 @@ describe("buildMerchantRuleUpdate", () => {
       "action",
       "businessId",
       "category",
+      "debtId",
       "personIds",
       "recurringEntryId",
       "renameTo",

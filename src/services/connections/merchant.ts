@@ -122,10 +122,14 @@ export const selectAutoApprovable = (
 ): AutoApprovable[] => {
   const result: AutoApprovable[] = [];
   for (const item of items) {
-    if (item.pending || item.transferLikely || item.duplicateLikely) continue;
+    if (item.pending || item.duplicateLikely) continue;
     if (!item.merchant) continue;
     const rule = matchMerchantRule(item.merchant, rules);
     if (rule?.action !== "approve") continue;
+    // Card payments usually match the transfer heuristic, so a rule that
+    // logs them on a debt is the user's explicit "this IS that payment" -
+    // it applies anyway. Every other approve rule still waits.
+    if (item.transferLikely && !rule.debtId) continue;
     result.push({ item, rule });
   }
   return result;
@@ -181,12 +185,15 @@ export const replanInboxForRules = (
     });
     const suggestedRecurringId =
       item.suggestedType === "expense" ? rule?.recurringEntryId : undefined;
+    const suggestedDebtId =
+      item.suggestedType === "expense" ? rule?.debtId : undefined;
     if (
       suggestedCategory !== item.suggestedCategory ||
       suggestedName !== item.suggestedName ||
       suggestedBusinessId !== item.suggestedBusinessId ||
       !sameIds(people, currentPeople) ||
-      suggestedRecurringId !== item.suggestedRecurringId
+      suggestedRecurringId !== item.suggestedRecurringId ||
+      suggestedDebtId !== item.suggestedDebtId
     ) {
       updatedItems.push({
         ...item,
@@ -196,6 +203,7 @@ export const replanInboxForRules = (
         suggestedPersonId,
         suggestedPersonIds,
         suggestedRecurringId,
+        suggestedDebtId,
         updatedAt: now,
       });
     }

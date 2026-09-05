@@ -613,6 +613,30 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(inflow.newInboxItems[0].suggestedRecurringId).toBeUndefined();
   });
 
+  it("suggests the rule's debt on outflows only", () => {
+    const rule: MerchantRule = {
+      id: "r-debt",
+      merchantKey: "COSTCO WHSE",
+      category: "Debt Payments",
+      type: "expense",
+      action: "approve",
+      debtId: "visa",
+      useCount: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const outflow = planIngest(baseInputs({ rules: [rule] }));
+    expect(outflow.newInboxItems[0].suggestedDebtId).toBe("visa");
+
+    const inflow = planIngest(
+      baseInputs({
+        rules: [rule],
+        fetched: [{ ...baseInputs().fetched[0], amount: 25 }],
+      })
+    );
+    expect(inflow.newInboxItems[0].suggestedDebtId).toBeUndefined();
+  });
+
   it("never suggests a business or person on an inflow", () => {
     const rules: MerchantRule[] = [
       {

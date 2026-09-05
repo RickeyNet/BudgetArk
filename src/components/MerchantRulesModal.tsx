@@ -32,6 +32,7 @@ import type {
   Business,
   CategoryName,
   CustomCategory,
+  Debt,
   MerchantRule,
   Person,
 } from "../types";
@@ -48,6 +49,12 @@ import { useConnections } from "../connections/ConnectionsProvider";
 import CategoryPillPicker from "./CategoryPillPicker";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 import { getMerchantRules } from "../storage/merchantRulesStorage";
+import { getDebts } from "../storage/debtStorage";
+import {
+  debtIdFromOption,
+  debtOptionId,
+  rankDebtCandidates,
+} from "../utils/inboxDebtPayments";
 import {
   changeMerchantRule,
   removeMerchantRule,
@@ -138,9 +145,13 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   // Multi-select, like the entry form and the inbox: one rule can assign
   // the family grocery store to everyone.
   const [draftPersonIds, setDraftPersonIds] = useState<string[]>([]);
+  // A bill's entry id or a debt pill ("debt:<id>", utils/inboxDebtPayments)
+  // - the two share the "Applies to bill" picker, like the inbox.
   const [draftRecurringId, setDraftRecurringId] = useState<string | undefined>(
     undefined,
   );
+  /** Debt tracker debts a rule can log payments on. */
+  const [debts, setDebts] = useState<Debt[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
     null,
@@ -161,6 +172,24 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     [entries, formatCurrency],
   );
 
+  // Live debts with a balance (plus whichever one the open rule already
+  // names), so a rule can log this merchant's payments on a debt.
+  const debtOptions = useMemo(
+    () =>
+      rankDebtCandidates(debts, {
+        keepId: debtIdFromOption(draftRecurringId),
+      }).map((debt) => ({
+        id: debtOptionId(debt.id),
+        name: `${debt.name} · min ${formatCurrency(debt.minPayment)}`,
+      })),
+    [debts, draftRecurringId, formatCurrency],
+  );
+
+  const debtNameById = useMemo(
+    () => new Map(debts.map((debt) => [debt.id, debt.name])),
+    [debts],
+  );
+
   const loadRules = useCallback(
     () =>
       getMerchantRules().then((loaded) =>
@@ -178,6 +207,10 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       .catch((error: unknown) =>
         setActionError(describeError(error, "Couldn't load your rules.")),
       );
+    // Debts are offered in the bill picker; a failed read just hides them.
+    void getDebts()
+      .then(setDebts)
+      .catch(() => setDebts([]));
   }, [visible, loadRules]);
 
   const handleClose = useCallback(() => {
@@ -194,7 +227,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       setDraftRename(rule.renameTo ?? "");
       setDraftBusinessId(rule.businessId);
       setDraftPersonIds(entryPersonIds(rule));
-      setDraftRecurringId(rule.recurringEntryId);
+      setDraftRecurringId(
+        rule.debtId ? debtOptionId(rule.debtId) : rule.recurringEntryId,
+      );
       return rule.id;
     });
   }, []);
@@ -207,6 +242,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         // undefined = leave the stored value alone, null = clear it; the
         // "always skip" branch preserves everything. See
         // utils/merchantRuleUpdate.
+        // The picker holds a bill OR a debt; split it so the rule never
+        // carries both.
+        const draftDebtId = debtIdFromOption(draftRecurringId);
         await changeMerchantRule(
           buildMerchantRuleUpdate(
             {
@@ -216,7 +254,8 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               renameTo: draftRename,
               businessId: draftBusinessId,
               personIds: draftPersonIds,
-              recurringEntryId: draftRecurringId,
+              recurringEntryId: draftDebtId ? undefined : draftRecurringId,
+              debtId: draftDebtId,
             },
             rule,
           ),
@@ -268,6 +307,13 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
 
   const behaviorLabel = (rule: MerchantRule): string => {
     if (rule.action === "ignore") return "Always skip - never imports";
+    if (rule.debtId) {
+      // A debt rule logs a Payment on the debt, never an entry.
+      const debtName = debtNameById.get(rule.debtId) ?? "(deleted debt)";
+      return rule.action === "approve"
+        ? `Logs a payment on 💳 ${debtName}`
+        : `Suggests a payment on 💳 ${debtName}`;
+    }
     const parts = [
       `${rule.action === "approve" ? "Auto-approves" : "Suggests"} ${getCategoryIcon(rule.category, customCategories)} ${rule.category}`,
     ];
@@ -395,17 +441,24 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             ) : null}
             {!draftIgnore &&
             rule.type === "expense" &&
-            (billOptions.length > 0 || draftRecurringId) ? (
+            (billOptions.length > 0 || debtOptions.length > 0 || draftRecurringId) ? (
               <>
                 <Text style={styles.label}>APPLIES TO BILL</Text>
                 <TagPillPicker
-                    options={billOptions}
+                    options={[...billOptions, ...debtOptions]}
                     value={draftRecurringId}
                     onChange={setDraftRecurringId}
                     noneLabel="Not a bill"
                     glyph="🧾"
                     deletedLabel="(deleted bill)"
                   />
+                {debtIdFromOption(draftRecurringId) ? (
+                  <Text style={styles.autoApproveLabel}>
+                    Payments to this merchant are logged on the debt (Debts
+                    tab balance and history) instead of being filed as an
+                    expense. The category above is not used.
+                  </Text>
+                ) : null}
               </>
             ) : null}
             <View style={styles.actionRow}>

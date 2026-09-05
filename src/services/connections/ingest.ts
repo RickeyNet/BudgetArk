@@ -366,6 +366,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       suggestedPersonIds,
       suggestedRecurringId:
         suggestedType === "expense" ? rule?.recurringEntryId : undefined,
+      suggestedDebtId: suggestedType === "expense" ? rule?.debtId : undefined,
     };
   };
 

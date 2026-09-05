@@ -372,6 +372,16 @@ export interface PendingDebtPaymentResult {
   paidOff: Debt | null;
 }
 
+export interface PendingDebtPaymentOptions {
+  /**
+   * Save an auto-approve merchant rule carrying the debt (see
+   * MerchantRule.debtId): future outflows from this merchant are logged on
+   * the debt without stopping in the inbox. Callers should follow up with
+   * applyRulesToInbox() so rows already waiting get swept too.
+   */
+  rememberRule?: boolean;
+}
+
 /**
  * File an outflow as a payment on a debt instead of an expense: the amount
  * is logged through `recordPayment` (balance reduced, payment history row
@@ -391,6 +401,7 @@ export interface PendingDebtPaymentResult {
 export const applyPendingPaymentToDebt = async (
   pendingId: string,
   debtId: string,
+  opts: PendingDebtPaymentOptions = {},
 ): Promise<PendingDebtPaymentResult | null> => {
   const inbox = await getPendingTransactions();
   const item = inbox.find((row) => row.id === pendingId);
@@ -414,6 +425,25 @@ export const applyPendingPaymentToDebt = async (
     updatedAt: now,
   });
   await removePendingTransaction(item.id);
+
+  if (opts.rememberRule && item.merchant) {
+    // Full auto-approve: future imports from this merchant are logged on
+    // the debt hands-free. Category is the Budget's own Debt Payments
+    // bucket so the rule reads sensibly in the rules list (an entry is
+    // never filed while the debt exists - see MerchantRule.debtId).
+    await upsertMerchantRule({
+      id: generateUUID(),
+      merchantKey: item.merchant,
+      action: "approve",
+      category: "Debt Payments",
+      type: "expense",
+      debtId,
+      useCount: 1,
+      lastUsedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
 
   const after = result.debts.find((candidate) => candidate.id === debtId);
   const paidOff = before.balance > 0 && after && after.balance <= 0 ? after : null;
@@ -479,6 +509,18 @@ export const autoApproveInboxByRules = async (): Promise<number> => {
   const targets = selectAutoApprovable(inbox, rules);
   let approved = 0;
   for (const { item, rule } of targets) {
+    if (rule.debtId) {
+      // A debt rule logs a Payment, not an entry. Null means the item is
+      // gone (nothing to do) or the debt was deleted - then fall through
+      // and file a plain entry in the rule's category, the same "dangling
+      // id yields a plain entry" behavior recurringEntryId has.
+      const paid = await applyPendingPaymentToDebt(item.id, rule.debtId);
+      if (paid) {
+        await touchRuleUsage(rule.id);
+        approved += 1;
+        continue;
+      }
+    }
     const entry = await approvePendingTransaction({
       pendingId: item.id,
       category: rule.category,
@@ -576,6 +618,11 @@ export interface ChangeRuleOptions {
    * MerchantRule.recurringEntryId). Same null/omit contract as businessId.
    */
   recurringEntryId?: string | null;
+  /**
+   * Debt future outflows are logged as payments on (see
+   * MerchantRule.debtId). Same null/omit contract as businessId.
+   */
+  debtId?: string | null;
 }
 
 /**
@@ -613,6 +660,8 @@ export const changeMerchantRule = async (
     opts.recurringEntryId === undefined
       ? rule.recurringEntryId
       : opts.recurringEntryId ?? undefined;
+  const debtId =
+    opts.debtId === undefined ? rule.debtId : opts.debtId ?? undefined;
   await updateMerchantRule(opts.ruleId, {
     action: opts.action,
     category:
@@ -624,6 +673,7 @@ export const changeMerchantRule = async (
     businessId,
     ...people,
     recurringEntryId,
+    debtId,
   });
   return applyRulesToInbox();
 };
