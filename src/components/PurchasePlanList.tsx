@@ -12,7 +12,9 @@
  * Rendered in two places - the Bridge's always-visible Purchase Plans
  * card (the tracking home) and the Charts tab's Plan a Purchase tool
  * (the planning wizard) - so both surfaces stay in lockstep instead of
- * drifting copies. Mutations go through savingsGoalStorage (tombstoned,
+ * drifting copies. The projection chart is opt-in (showChart) and only the
+ * Charts tool turns it on: the rows already print each plan's ready date,
+ * so on the Bridge the chart was height without new information. Mutations go through savingsGoalStorage (tombstoned,
  * synced, exported); the fresh array is handed back via onGoalsChanged.
  */
 
@@ -134,6 +136,12 @@ type PurchasePlanListProps = {
    * them the line is simply absent.
    */
   debts?: Debt[];
+  /**
+   * Draw the progress-to-target projection chart above the rows. Off by
+   * default: the Bridge card is a glanceable tracker and the rows already
+   * carry each plan's ready date; the Charts planning tool opts in.
+   */
+  showChart?: boolean;
 };
 
 /** Debounce for persisting slider drags. */
@@ -145,6 +153,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   emptyText,
   cashFlow = null,
   debts,
+  showChart = false,
 }) => {
   const { colors } = useTheme();
   const { tokens } = useDensity();
@@ -262,13 +271,14 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
     () => projectPurchasePlans(ordered, combinedMonthly, settings.allocation),
     [ordered, combinedMonthly, settings.allocation],
   );
-  // Progress-to-target chart; only worth drawing once money flows.
+  // Progress-to-target chart (Charts tool only); only worth drawing once
+  // money flows.
   const chartModel = useMemo(
     () =>
-      combinedMonthly > 0 && summary.fundedCount < summary.planCount
+      showChart && combinedMonthly > 0 && summary.fundedCount < summary.planCount
         ? buildSavingsChart(ordered, combinedMonthly, settings.allocation)
         : null,
-    [ordered, combinedMonthly, settings.allocation, summary],
+    [showChart, ordered, combinedMonthly, settings.allocation, summary],
   );
   const formatChartMonth = useCallback((monthsFromNow: number) => {
     if (monthsFromNow === 0) return "Now";

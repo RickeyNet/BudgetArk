@@ -2,7 +2,8 @@
  * BudgetArk - Purchase Plan Chart
  * File: src/components/PurchasePlanChart.tsx
  *
- * Progress-to-target chart for the Purchase Plans list: one line per
+ * Progress-to-target chart for the Purchase Plans list (shown only in the
+ * Charts tab's Plan a Purchase tool, not on the Bridge card): one line per
  * unfunded plan (colour matches its legend dot) showing what share of its
  * own target it has saved, month by month, under the list's combined
  * set-aside and allocation. Every plan shares the 0-100% axis whatever its

@@ -397,6 +397,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                 onGoalsChanged={onGoalsChanged}
                 cashFlow={cashFlow}
                 debts={debts}
+                showChart
               />
             </View>
           )}
