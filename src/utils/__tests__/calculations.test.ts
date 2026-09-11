@@ -11,6 +11,8 @@ import {
   parseGoalDateLocal,
   formatCurrency,
   generatePayoffSchedule,
+  findUnderwaterDebts,
+  describeUnsolvablePayoff,
   type PayoffDebtInput,
 } from "../calculations";
 
@@ -347,5 +349,90 @@ describe("generatePayoffSchedule with non-zero interest", () => {
     // calcMonthsToPayoff's closed-form month count rather than by walking
     // generatePayoffSchedule's array, so agreement confirms both paths.
     expect(calcTotalInterest(1000, 12, 100)).toBeCloseTo(totalInterest, 5);
+  });
+});
+
+describe("findUnderwaterDebts", () => {
+  const named = (
+    id: string,
+    balance: number,
+    rate: number,
+    minPayment: number
+  ): PayoffDebtInput & { name: string } => ({ id, name: id, balance, rate, minPayment });
+
+  it("returns nothing when every minimum beats its monthly interest", () => {
+    const debts = [named("Visa", 5000, 24, 150), named("Car", 12000, 6, 300)];
+    expect(findUnderwaterDebts(debts)).toEqual([]);
+  });
+
+  it("flags a debt whose minimum is at or below its monthly interest", () => {
+    // $10,000 at 24% APR accrues $200/mo; a $200 minimum never shrinks it.
+    const [flagged] = findUnderwaterDebts([named("Visa", 10000, 24, 200)]);
+    expect(flagged).toMatchObject({ id: "Visa", minPayment: 200 });
+    expect(flagged.monthlyInterest).toBeCloseTo(200, 6);
+  });
+
+  it("flags a $0 minimum even at 0% APR - the balance never moves", () => {
+    expect(findUnderwaterDebts([named("Loan", 3000, 0, 0)])).toHaveLength(1);
+  });
+
+  it("ignores paid-off debts and sorts the rest worst-first", () => {
+    const debts = [
+      named("Paid", 0, 30, 0),
+      named("Mild", 10000, 24, 190), // $10 short
+      named("Bad", 10000, 24, 50), // $150 short
+    ];
+    expect(findUnderwaterDebts(debts).map((d) => d.id)).toEqual(["Bad", "Mild"]);
+  });
+
+  it("agrees with simulatePayoffPlan about solvability", () => {
+    const solvable = [named("A", 5000, 24, 150), named("B", 800, 12, 25)];
+    const stuck = [named("A", 5000, 24, 150), named("B", 800, 30, 20)];
+    expect(findUnderwaterDebts(solvable)).toHaveLength(0);
+    expect(simulatePayoffPlan(solvable, "avalanche", 0).isPayoffPossible).toBe(true);
+    expect(findUnderwaterDebts(stuck)).toHaveLength(1);
+    expect(simulatePayoffPlan(stuck, "avalanche", 0).isPayoffPossible).toBe(false);
+  });
+});
+
+describe("describeUnsolvablePayoff", () => {
+  const money = (n: number) => `$${n.toFixed(0)}`;
+  const named = (
+    name: string,
+    balance: number,
+    rate: number,
+    minPayment: number
+  ): PayoffDebtInput & { name: string } => ({ id: name, name, balance, rate, minPayment });
+
+  it("names the single underwater debt with its minimum and interest", () => {
+    const text = describeUnsolvablePayoff([named("Chase Visa", 10000, 24, 150)], money);
+    expect(text).toBe(
+      "Chase Visa's $150 minimum doesn't cover its ~$200/mo interest, so it never shrinks. Raise its minimum or add an extra payment."
+    );
+  });
+
+  it("calls out a missing minimum instead of quoting $0", () => {
+    expect(describeUnsolvablePayoff([named("Medical", 2000, 0, 0)], money)).toBe(
+      "Medical has no minimum payment logged, so it never shrinks. Set its minimum or add an extra payment."
+    );
+  });
+
+  it("lists every culprit when more than one is underwater", () => {
+    const text = describeUnsolvablePayoff(
+      [named("Visa", 10000, 24, 50), named("Store Card", 2000, 30, 10), named("Fine", 500, 10, 50)],
+      money
+    );
+    expect(text).toContain("Visa, Store Card:");
+    expect(text).not.toContain("Fine");
+  });
+
+  it("explains the month-cap case when no single debt is underwater", () => {
+    // $100k at 12% accrues $1,000/mo; a $1,001 minimum shrinks it, but
+    // amortizing from a $1/mo start takes ~58 years - past the 50-year cap.
+    const crawl = [named("Slow", 100000, 12, 1001)];
+    expect(simulatePayoffPlan(crawl, "avalanche", 0, 600).isPayoffPossible).toBe(false);
+    expect(describeUnsolvablePayoff(crawl, money)).toBe(
+      "Minimum payments barely outpace interest - clearing these would take over 50 years. Add an extra payment to make it solvable."
+    );
   });
 });

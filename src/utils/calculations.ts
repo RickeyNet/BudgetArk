@@ -226,6 +226,72 @@ export const simulatePayoffPlan = (
   };
 };
 
+/** A payoff input that still knows its display name, for user-facing notes. */
+export type NamedPayoffDebt = PayoffDebtInput & { name: string };
+
+/** A debt whose minimum payment can't beat its own monthly interest. */
+export type UnderwaterDebt = {
+  id: string;
+  name: string;
+  minPayment: number;
+  /** Interest the balance accrues in one month at the stated APR. */
+  monthlyInterest: number;
+};
+
+/**
+ * The debts that make a minimums-only payoff plan unsolvable: each one's
+ * minimum payment is at or below the interest its balance accrues in a
+ * month, so the balance never shrinks (a $0 minimum counts, 0% APR or
+ * not). Same clamps as simulatePayoffPlan so the verdicts agree. Sorted by
+ * shortfall, worst first.
+ */
+export const findUnderwaterDebts = (
+  debts: NamedPayoffDebt[]
+): UnderwaterDebt[] =>
+  debts
+    .filter((debt) => debt.balance > 0)
+    .map((debt) => {
+      const balance = clamp(debt.balance, 0, MAX_BALANCE);
+      const rate = clamp(debt.rate, 0, MAX_RATE);
+      return {
+        id: debt.id,
+        name: debt.name,
+        minPayment: clamp(debt.minPayment, 0, MAX_PAYMENT),
+        monthlyInterest: balance * (rate / 100 / 12),
+      };
+    })
+    .filter((debt) => debt.minPayment <= debt.monthlyInterest)
+    .sort(
+      (a, b) => b.monthlyInterest - b.minPayment - (a.monthlyInterest - a.minPayment)
+    );
+
+/**
+ * Plain-language reason a minimums-only payoff plan came back "Not
+ * solvable", naming the debt(s) to fix. simulatePayoffPlan gives up either
+ * when the combined balance stops shrinking (some debt is underwater) or
+ * when it hits its month cap (every minimum barely outpaces interest);
+ * the fallback sentence covers the cap case.
+ */
+export const describeUnsolvablePayoff = (
+  debts: NamedPayoffDebt[],
+  formatMoney: (amount: number) => string,
+  maxMonths: number = 600
+): string => {
+  const underwater = findUnderwaterDebts(debts);
+  if (underwater.length === 0) {
+    return `Minimum payments barely outpace interest - clearing these would take over ${Math.floor(maxMonths / 12)} years. Add an extra payment to make it solvable.`;
+  }
+  if (underwater.length === 1) {
+    const [debt] = underwater;
+    if (debt.minPayment <= 0) {
+      return `${debt.name} has no minimum payment logged, so it never shrinks. Set its minimum or add an extra payment.`;
+    }
+    return `${debt.name}'s ${formatMoney(debt.minPayment)} minimum doesn't cover its ~${formatMoney(debt.monthlyInterest)}/mo interest, so it never shrinks. Raise its minimum or add an extra payment.`;
+  }
+  const names = underwater.map((debt) => debt.name).join(", ");
+  return `${names}: their minimum payments don't cover their monthly interest, so they never shrink. Raise those minimums or add an extra payment.`;
+};
+
 /**
  * Calculates the number of months required to pay off a debt
  * given a fixed monthly payment and APR.

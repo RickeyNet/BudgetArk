@@ -111,7 +111,7 @@ import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import { useTipJar } from "../tipjar/TipJarProvider";
 import type { TipNudgeCopy } from "../utils/tipJarNudge";
-import { simulatePayoffPlan } from "../utils/calculations";
+import { describeUnsolvablePayoff, simulatePayoffPlan } from "../utils/calculations";
 import {
   computeMilestoneProgress,
   shouldPromoteSecuredDebts,
@@ -614,8 +614,34 @@ const DebtTrackerScreen: React.FC = () => {
   const snowballBase = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "snowball", 0), [payoffActiveDebts]);
   const snowballWhatIf = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "snowball", hullExtraAmount), [payoffActiveDebts, hullExtraAmount]);
   /**
+   * Why the minimums-only plan isn't solvable, naming the debt(s) whose
+   * minimum can't beat their interest. Method-independent: with no extra
+   * payment both simulations only pay minimums, so one note serves both
+   * cards. Null while the plan is solvable.
+   */
+  const hullUnsolvableNote = React.useMemo(
+    () =>
+      avalancheBase.isPayoffPossible
+        ? null
+        : describeUnsolvablePayoff(payoffActiveDebts, formatCurrency),
+    [avalancheBase.isPayoffPossible, payoffActiveDebts, formatCurrency]
+  );
+  /**
+   * Interest line under a method column. An unsolvable plan's
+   * totalInterestPaid is whatever accrued before the simulation gave up -
+   * a truncated number that can run to thousands of dollars and means
+   * nothing as a "total", so render a dash instead of printing it.
+   */
+  const formatPayoffInterest = useCallback(
+    (plan: { monthsToPayoff: number; totalInterestPaid: number }): string =>
+      Number.isFinite(plan.monthsToPayoff)
+        ? `${formatCurrency(plan.totalInterestPaid)} int.`
+        : "— int.",
+    [formatCurrency]
+  );
+  /**
    * "Save $X • N mo faster" line under each method card. An unsolvable base
-   * plan reports monthsToPayoff: Infinity (and ~1 month of accrued interest),
+   * plan reports monthsToPayoff: Infinity and a truncated interest total,
    * so raw subtraction renders "Infinity mo faster" / "NaN mo faster" with a
    * meaningless dollar figure - describe the outcome instead.
    */
@@ -1692,6 +1718,11 @@ const DebtTrackerScreen: React.FC = () => {
                         </View>
                         <View style={[styles.msPayoffRecBox, { borderColor: colors.cardBorder }]}>
                           <Text style={styles.msPayoffRecText}>{payoffRecommendation}</Text>
+                          {hullUnsolvableNote ? (
+                            <Text style={[styles.msPayoffRecText, { color: colors.warning, marginTop: 4 }]}>
+                              {hullUnsolvableNote}
+                            </Text>
+                          ) : null}
                         </View>
                         {/* Avalanche */}
                         <View style={[styles.msPayoffCard, { borderColor: strategy === "avalanche" ? colors.accent : colors.cardBorder }]}>
@@ -1701,12 +1732,12 @@ const DebtTrackerScreen: React.FC = () => {
                             <View style={{ flex: 1 }}>
                               <Text style={styles.msPayoffMetricLabel}>Current</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(avalancheBase.monthsToPayoff)}</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(avalancheBase.totalInterestPaid)} int.</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(avalancheBase)}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
                               <Text style={styles.msPayoffMetricLabel}>+{formatCurrency(hullExtraAmount)}/mo</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(avalancheWhatIf.monthsToPayoff)}</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(avalancheWhatIf.totalInterestPaid)} int.</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(avalancheWhatIf)}</Text>
                             </View>
                           </View>
                           <Text style={[styles.msPayoffSaved, { color: colors.success }]}>
@@ -1729,12 +1760,12 @@ const DebtTrackerScreen: React.FC = () => {
                             <View style={{ flex: 1 }}>
                               <Text style={styles.msPayoffMetricLabel}>Current</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(snowballBase.monthsToPayoff)}</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(snowballBase.totalInterestPaid)} int.</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(snowballBase)}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
                               <Text style={styles.msPayoffMetricLabel}>+{formatCurrency(hullExtraAmount)}/mo</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(snowballWhatIf.monthsToPayoff)}</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatCurrency(snowballWhatIf.totalInterestPaid)} int.</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(snowballWhatIf)}</Text>
                             </View>
                           </View>
                           <Text style={[styles.msPayoffSaved, { color: colors.success }]}>
