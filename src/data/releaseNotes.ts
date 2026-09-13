@@ -7,6 +7,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.10.3",
+    title: "Straight Answers",
+    releasedAt: "2026-09-11",
+    highlights: [
+      "Build Your Ark's Hull step now tells you WHY a payoff plan is 'Not solvable' instead of leaving you guessing: it names the debt whose minimum payment can't keep up with its own monthly interest (\"Chase Visa's $150 minimum doesn't cover its ~$200/mo interest\"), or a missing minimum, and suggests the fix. The interest figure under a not-solvable plan is gone too - it was the interest racked up before the projection gave up, not a real total, and could read as thousands of dollars.",
+      "The Purchase Plans card on your Bridge is shorter: the projection chart has moved off it. Every plan's row already shows its ready date, so the chart was repeating the same numbers. It still lives in the Plan a Purchase tool on the Charts tab, where it shows how 'one at a time' and 'split evenly' play out.",
+    ],
+  },
+  {
     version: "1.10.2",
     title: "Bring In Your History",
     releasedAt: "2026-09-04",
