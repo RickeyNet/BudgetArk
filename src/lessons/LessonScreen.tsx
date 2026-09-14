@@ -252,7 +252,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
       transparent={false}
       animationType="slide"
     >
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+      <StatusBar barStyle="light-content" />
       <View
         style={[
           styles.screen,

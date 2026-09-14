@@ -1691,7 +1691,7 @@ const BridgeScreen: React.FC = () => {
         showAmbientBackground && styles.screenTransparent,
       ]}
     >
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+      <StatusBar barStyle="light-content" />
       {isLoaded ? (
         <FlatList
           ref={listRef}

@@ -873,7 +873,7 @@ const ChartsScreen: React.FC = () => {
         showAmbientBackground && { backgroundColor: "transparent" },
       ]}
     >
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+      <StatusBar barStyle="light-content" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.keyboardAvoider}
