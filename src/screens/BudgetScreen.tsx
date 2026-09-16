@@ -26,6 +26,7 @@ import {
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { generateUUID } from "../utils/uuid";
 import BudgetBucketCard from "../components/BudgetBucketCard";
 import SpendingCard, {
@@ -1153,7 +1154,7 @@ const BudgetScreen: React.FC = () => {
   const saveLimit = useCallback(async () => {
     if (!limitModalCategory) return;
 
-    const parsedLimit = parseFloat(limitInput);
+    const parsedLimit = parseMoneyInput(limitInput) ?? NaN;
     const withoutCategory = limits.filter((item) => item.category !== limitModalCategory);
 
     // Stamp the edit so paired-device sync can resolve last-write-wins per
@@ -1219,7 +1220,7 @@ const BudgetScreen: React.FC = () => {
     // logic; only the refresh side effects below differ per screen.
     const updatedGoals = applyEmergencyFundContribution(
       savingsGoals,
-      parseFloat(efContribAmount),
+      parseMoneyInput(efContribAmount) ?? NaN,
       keelTarget
     );
     if (!updatedGoals) return;

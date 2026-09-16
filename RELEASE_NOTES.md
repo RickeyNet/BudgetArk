@@ -1,5 +1,12 @@
 # BudgetArk Release Notes
 
+## v1.10.4 - Every Cent Counts (2026-09-16)
+
+**OTA-shippable.** Pure JS; `runtimeVersion` stays 1.10.0, so every 1.10.0 store build receives this over the air. No storage, sync, or export change.
+
+- **Decimal-comma amounts parse in every typed money field (user bug report).** A user on a comma-decimal locale could not add an expense or income under 1: the Add Entry form parsed the amount with `parseFloat`, which stops at the first comma, so "0,94" read as 0 and the button stayed disabled - and "12,50" was silently saved as 12. The shared `parseMoneyInput` helper (one comma and no dot = decimal separator) already existed for the balance prompt, purchase planner and search filter; this release routes the remaining `parseFloat` money sites through it: `BudgetEntryModal` (amount lines, 401(k) contribution, 1099 set-aside rate), `AddDebtModal` (balance, rate, minimum), `DebtCard` pay amount, `LoansModal` repayment, `BridgeScreen` (asset balance, shares, fund value, cost basis, EF contribution), `BudgetScreen` (limit modal, EF contribution), `limitsSheet.ts`, and `DebtTrackerScreen` (hull extra payment, milestone targets, savings reserve). Each site keeps its blank-input semantics (`?? NaN` where the caller checks `isFinite`/`isNaN`, `?? 0` where it checks `> 0`), so surrounding validation is unchanged. Deliberately untouched: `parseQuickStartAmount` (onboarding; documented "$2,400" → 2400 rule conflicts with the decimal-comma rule) and `commitSliderValue` (rates/months, not money). Regression tests: "0,94" / "€0,94" in `parseMoneyInput.test.ts` and a "450,50" draft in `limitsSheet.test.ts`. Device verification: type 0,94 in Add Entry on a comma-decimal keyboard and confirm the button enables and the entry saves as 0.94.
+- **Tests:** 157 suites, 2,439 tests (1.10.3 shipped 157 / 2,437).
+
 ## v1.10.3 - Straight Answers (2026-09-11)
 
 **OTA-shippable.** Pure JS; `runtimeVersion` stays 1.10.0, so every 1.10.0 store build receives this over the air. No storage, sync, or export change.

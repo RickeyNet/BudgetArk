@@ -24,6 +24,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { generateUUID } from "../utils/uuid";
 import { describeApy, describeApyGap, parseApyInput } from "../utils/savingsInterest";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
@@ -796,7 +797,7 @@ const BridgeScreen: React.FC = () => {
 
     const isPureHoldings = categoryIsPureHoldings(assetCategory);
     const hasHoldings = categorySupportsHoldings(assetCategory);
-    const parsedBalance = parseFloat(assetBalance);
+    const parsedBalance = parseMoneyInput(assetBalance) ?? NaN;
     if (!isPureHoldings && (Number.isNaN(parsedBalance) || parsedBalance < 0)) return;
     // Pure-holdings accounts (Investment/Retirement) have no cash-balance field;
     // new ones start at 0, but preserve any existing balance (e.g. a legacy 401k
@@ -845,7 +846,7 @@ const BridgeScreen: React.FC = () => {
     if (hasHoldings) {
       const parseCost = (raw: string): number | undefined => {
         const t = raw.trim();
-        const n = t === "" ? NaN : parseFloat(t);
+        const n = parseMoneyInput(t) ?? NaN;
         return Number.isFinite(n) && n >= 0 ? n : undefined;
       };
 
@@ -868,7 +869,7 @@ const BridgeScreen: React.FC = () => {
           const costBasis = parseCost(row.costBasis);
           if (row.kind === "fund") {
             const fundName = row.name.trim();
-            const value = parseFloat(row.value);
+            const value = parseMoneyInput(row.value) ?? NaN;
             if (!fundName || !Number.isFinite(value) || value < 0) return null;
             const proxy = normalizeSymbol(row.symbol);
             const hasProxy = proxy !== "" && isValidSymbol(proxy);
@@ -883,7 +884,7 @@ const BridgeScreen: React.FC = () => {
             };
           }
           const symbol = normalizeSymbol(row.symbol);
-          const shares = parseFloat(row.shares);
+          const shares = parseMoneyInput(row.shares) ?? NaN;
           if (!isValidSymbol(symbol) || !Number.isFinite(shares) || shares <= 0) {
             return null;
           }
@@ -1128,7 +1129,7 @@ const BridgeScreen: React.FC = () => {
     // logic; only the refresh side effects below differ per screen.
     const updatedGoals = applyEmergencyFundContribution(
       savingsGoals,
-      parseFloat(efContribAmount),
+      parseMoneyInput(efContribAmount) ?? NaN,
       keelTarget
     );
     if (!updatedGoals) return;

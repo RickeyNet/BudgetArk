@@ -38,6 +38,7 @@ import { useUndo } from "../undo/UndoProvider";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { generateUUID } from "../utils/uuid";
 import {
   AssetAccount,
@@ -606,7 +607,7 @@ const DebtTrackerScreen: React.FC = () => {
     [debts]
   );
   const hullExtraAmount = React.useMemo(() => {
-    const parsed = parseFloat(hullExtraDraft);
+    const parsed = parseMoneyInput(hullExtraDraft) ?? NaN;
     return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
   }, [hullExtraDraft]);
   const avalancheBase = React.useMemo(() => simulatePayoffPlan(payoffActiveDebts, "avalanche", 0), [payoffActiveDebts]);
@@ -1020,7 +1021,7 @@ const DebtTrackerScreen: React.FC = () => {
   const bumpMilestoneTargetDraft = useCallback(
     (key: DebtMilestoneKey, amount: number) => {
       setTargetDraftByStep((current) => {
-        const base = parseFloat(current[key] || "0");
+        const base = parseMoneyInput(current[key] || "0") ?? NaN;
         const unclamped = Math.max(0, (Number.isFinite(base) ? base : 0) + amount);
         const next = key === "keel" ? Math.min(unclamped, KEEL_MAX_TARGET) : unclamped;
         return { ...current, [key]: String(Math.round(next)) };
@@ -1032,7 +1033,7 @@ const DebtTrackerScreen: React.FC = () => {
   const handleSaveMilestoneTarget = useCallback(
     async (key: DebtMilestoneKey) => {
       const raw = targetDraftByStep[key];
-      const parsed = parseFloat(raw);
+      const parsed = parseMoneyInput(raw) ?? NaN;
       if (Number.isNaN(parsed) || parsed <= 0) return;
       const normalized = key === "keel" ? Math.min(parsed, KEEL_MAX_TARGET) : parsed;
       const nextPlan = await updateDebtMilestoneStep(key, {
@@ -1819,7 +1820,7 @@ const DebtTrackerScreen: React.FC = () => {
                           <TouchableOpacity
                             style={[styles.msSavingsLogBtn, { backgroundColor: colors.accent }]}
                             onPress={() => {
-                              const parsed = parseFloat(savingsDraft);
+                              const parsed = parseMoneyInput(savingsDraft) ?? NaN;
                               if (Number.isFinite(parsed) && parsed >= 0) {
                                 handleSetSavingsReserve(parsed);
                               }

@@ -33,6 +33,7 @@ import {
   parseGoalDateLocal,
 } from "../utils/calculations";
 import { keepAliveStatus } from "../utils/cardKeepAlive";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import ProgressRing from "./ProgressRing";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -203,7 +204,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
    * Uses useCallback to prevent child re-renders.
    */
   const handlePayment = useCallback(() => {
-    const raw = parseFloat(payAmount);
+    const raw = parseMoneyInput(payAmount) ?? NaN;
     if (!Number.isFinite(raw) || raw <= 0 || debt.balance <= 0) return;
     // Clamp to balance so display-rounding ($0.09 shown for a 0.0899... balance)
     // and small overpayments still zero the debt instead of silently failing.

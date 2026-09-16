@@ -97,4 +97,11 @@ describe("limitsFromDrafts", () => {
       { category: "Restaurant", monthlyLimit: 80.5, updatedAt: "2026-08-29T00:00:00.000Z" },
     ]);
   });
+
+  it("reads decimal-comma drafts the way the entry form does", () => {
+    const next = limitsFromDrafts({ Grocery: "450,50" }, [], "2026-08-29T00:00:00.000Z");
+    expect(next).toEqual([
+      { category: "Grocery", monthlyLimit: 450.5, updatedAt: "2026-08-29T00:00:00.000Z" },
+    ]);
+  });
 });

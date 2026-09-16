@@ -13,6 +13,7 @@
 
 import type { BudgetEntry, CategoryBudgetLimit, CategoryName } from "../types";
 import { entriesForMonth } from "./billFulfillment";
+import { parseMoneyInput } from "./parseMoneyInput";
 import { shiftMonthKey } from "./recurringBillDetection";
 
 /** Month key -> that month's limits (tombstones included); the shape budgetStorage persists. */
@@ -133,7 +134,7 @@ export const limitsFromDrafts = (
   const existingByCategory = new Map(existing.map((l) => [l.category, l]));
   const next: CategoryBudgetLimit[] = [];
   for (const [category, raw] of Object.entries(drafts)) {
-    const amount = parseFloat(raw);
+    const amount = parseMoneyInput(raw) ?? 0;
     if (!(amount > 0)) continue;
     const prior = existingByCategory.get(category);
     next.push(

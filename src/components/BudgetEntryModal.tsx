@@ -28,6 +28,7 @@
  */
 
 import { entryPersonIds, personAssignmentFields } from "../utils/entryPeople";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import {
   borrowerKey,
   LENT_TO_MAX_LENGTH,
@@ -386,7 +387,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   // Recurring entries can't fulfil another bill, and only expenses can.
   const billCandidates = useMemo(() => {
     if (type !== "expense" || recurring) return [];
-    const amountNum = parseFloat(lines[0]?.amount ?? "");
+    const amountNum = parseMoneyInput(lines[0]?.amount ?? "") ?? 0;
     return rankBillCandidates(entries, yearMonth, {
       category,
       amount: amountNum > 0 ? amountNum : undefined,
@@ -448,7 +449,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   }, []);
 
   const validLineCount = useMemo(
-    () => lines.filter((line) => parseFloat(line.amount) > 0).length,
+    () => lines.filter((line) => (parseMoneyInput(line.amount) ?? 0) > 0).length,
     [lines]
   );
 
@@ -460,10 +461,10 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const taxSetAsidePreview = useMemo(() => {
     if (type !== "income" || incomeType !== "1099") return 0;
     const total = lines.reduce((sum, line) => {
-      const amountNum = parseFloat(line.amount);
+      const amountNum = parseMoneyInput(line.amount) ?? 0;
       return amountNum > 0 ? sum + amountNum : sum;
     }, 0);
-    const rate = clampTaxSetAsideRate(parseFloat(taxSetAsideRate));
+    const rate = clampTaxSetAsideRate(parseMoneyInput(taxSetAsideRate) ?? 0);
     return Math.round(total * rate) / 100;
   }, [incomeType, lines, taxSetAsideRate, type]);
 
@@ -544,18 +545,17 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       : undefined;
 
     const entryIncomeType = type === "income" ? incomeType : undefined;
-    const contributionNum = parseFloat(retirementContribution);
+    const contributionNum = parseMoneyInput(retirementContribution) ?? 0;
     const entryTaxSetAsideRate =
       entryIncomeType === "1099"
-        ? clampTaxSetAsideRate(parseFloat(taxSetAsideRate))
+        ? clampTaxSetAsideRate(parseMoneyInput(taxSetAsideRate) ?? 0)
         : undefined;
 
     const payloads: NewBudgetEntryInput[] = [];
     for (const line of lines) {
-      const amountNum = parseFloat(line.amount);
-      // NaN-safe: parseFloat("") is NaN and `NaN <= 0` is false, so a bare
-      // `<= 0` check would let a blank extra line through as a NaN entry -
-      // which would also steal the payloads[0] attachments slot below.
+      const amountNum = parseMoneyInput(line.amount) ?? 0;
+      // A blank extra line parses to 0 and is skipped: it must not become an
+      // entry, and it must not steal the payloads[0] attachments slot below.
       if (!(amountNum > 0)) continue;
 
       payloads.push({
@@ -637,11 +637,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const handleEditSave = useCallback(() => {
     if (!entry || !onSave || !isValid) return;
     const line = lines[0];
-    const amountNum = parseFloat(line?.amount ?? "");
+    const amountNum = parseMoneyInput(line?.amount ?? "") ?? 0;
     if (!(amountNum > 0)) return;
 
     const entryIncomeType = type === "income" ? incomeType : undefined;
-    const contributionNum = parseFloat(retirementContribution);
+    const contributionNum = parseMoneyInput(retirementContribution) ?? 0;
     const editLentTo = showLoanField ? normalizeLentTo(lentTo) : undefined;
 
     onSave({
@@ -669,7 +669,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           : undefined,
       taxSetAsideRate:
         entryIncomeType === "1099"
-          ? clampTaxSetAsideRate(parseFloat(taxSetAsideRate))
+          ? clampTaxSetAsideRate(parseMoneyInput(taxSetAsideRate) ?? 0)
           : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
       isPrivate: isPrivate || undefined,
@@ -864,7 +864,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
             onChangeText={setRetirementContribution}
             keyboardType="decimal-pad"
           />
-          {validLineCount > 1 && parseFloat(retirementContribution) > 0 && (
+          {validLineCount > 1 && (parseMoneyInput(retirementContribution) ?? 0) > 0 && (
             <Text style={styles.linesHint}>
               The 401(k) amount attaches to the first entry.
             </Text>

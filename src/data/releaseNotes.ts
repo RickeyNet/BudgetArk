@@ -7,6 +7,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.10.4",
+    title: "Every Cent Counts",
+    releasedAt: "2026-09-16",
+    highlights: [
+      "Amounts typed with a decimal comma now work everywhere. If your keyboard writes 0,94 instead of 0.94, the Add Entry button used to stay grey for anything under 1, and bigger amounts like 12,50 were quietly saved as 12. Every money field - budget entries, debts and payments, loan repayments, category limits, Bridge balances and holdings, emergency fund contributions, milestone targets - now reads the comma as the decimal point, exactly as the balance prompt and purchase planner already did.",
+    ],
+  },
+  {
     version: "1.10.3",
     title: "Straight Answers",
     releasedAt: "2026-09-11",

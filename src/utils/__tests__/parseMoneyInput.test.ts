@@ -25,6 +25,14 @@ describe("parseMoneyInput", () => {
     expect(parseMoneyInput("1,000.00")).toBe(1000);
   });
 
+  it("sub-unit amounts typed with a decimal comma parse (bug report: \"0,94\" was 0)", () => {
+    // parseFloat("0,94") is 0, which disabled the Add Entry button for
+    // decimal-comma locales. The shared parser must see 0.94.
+    expect(parseMoneyInput("0,94")).toBe(0.94);
+    expect(parseMoneyInput("€0,94")).toBe(0.94);
+    expect(parseMoneyInput("0,5")).toBe(0.5);
+  });
+
   it("accepts a bare leading/trailing decimal point", () => {
     expect(parseMoneyInput(".5")).toBe(0.5);
     expect(parseMoneyInput("5.")).toBe(5);

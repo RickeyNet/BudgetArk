@@ -31,6 +31,7 @@ import {
   type LoanLine,
 } from "../utils/loans";
 import { formatDayLabel } from "../utils/dateFormat";
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { toLocalDateKey } from "../utils/paycheckCycle";
 import { generateUUID } from "../utils/uuid";
 import { useValueChanged } from "../hooks/useValueChanged";
@@ -122,7 +123,7 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
   const handleSavePayment = useCallback(
     async (line: LoanLine) => {
       if (busy) return;
-      const amount = parseFloat(draftAmount.replace(/[^0-9.]/g, ""));
+      const amount = parseMoneyInput(draftAmount) ?? 0;
       if (!(amount > 0)) {
         setError("Enter the amount they paid.");
         return;

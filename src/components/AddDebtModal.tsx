@@ -55,6 +55,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 
+import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { useValueChanged } from "../hooks/useValueChanged";
 import { formatYearMonthLabel } from "../utils/dateFormat";
@@ -289,8 +290,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   /** Calculate required payment for goal date */
   const goalPaymentInfo = React.useMemo(() => {
     if (!goalMonth) return null;
-    const balanceNum = bankBalance ?? parseFloat(balance);
-    const rateNum = parseFloat(rate);
+    const balanceNum = bankBalance ?? parseMoneyInput(balance) ?? NaN;
+    const rateNum = parseMoneyInput(rate) ?? NaN;
     if (isNaN(balanceNum) || balanceNum <= 0 || isNaN(rateNum) || rateNum < 0) return null;
     const months = calcMonthsUntilDate(`${goalMonth}-01`);
     if (months <= 0) return null;
@@ -328,9 +329,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
    * then calls onAdd/onEdit and resets the form.
    */
   const handleSubmit = useCallback(() => {
-    const balanceNum = bankBalance ?? parseFloat(balance);
-    const rateNum = parseFloat(rate);
-    const paymentNum = parseFloat(minPayment);
+    const balanceNum = bankBalance ?? parseMoneyInput(balance) ?? NaN;
+    const rateNum = parseMoneyInput(rate) ?? NaN;
+    const paymentNum = parseMoneyInput(minPayment) ?? NaN;
 
     /* Validate: all fields must be filled, finite, and positive. Credit
        cards may be $0 balance / $0 minimum - a paid-off card tracked purely
@@ -451,9 +452,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   ]);
 
   /** Check if form is valid (for button state) */
-  const balanceParsed = parseFloat(balance);
-  const rateParsed = parseFloat(rate);
-  const minPaymentParsed = parseFloat(minPayment);
+  const balanceParsed = parseMoneyInput(balance) ?? NaN;
+  const rateParsed = parseMoneyInput(rate) ?? NaN;
+  const minPaymentParsed = parseMoneyInput(minPayment) ?? NaN;
   const balanceValid =
     bankBalance !== null ||
     (Number.isFinite(balanceParsed) &&
