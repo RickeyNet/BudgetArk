@@ -9,12 +9,14 @@
 
 import React, { useState } from "react";
 import { Text, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import { MISSION_STATEMENT } from "../../data/missionStatement";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 
 const MissionCard: React.FC = () => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -28,9 +30,11 @@ const MissionCard: React.FC = () => {
       onPress={() => setMissionExpanded((v) => !v)}
       accessibilityRole="button"
       accessibilityState={{ expanded: missionExpanded }}
-      accessibilityLabel={`Mission statement, ${
-        missionExpanded ? "expanded" : "collapsed"
-      }`}
+      accessibilityLabel={
+        missionExpanded
+          ? t("profile.main.mission.a11yExpanded")
+          : t("profile.main.mission.a11yCollapsed")
+      }
       style={[
         styles.missionCard,
         { backgroundColor: colors.card, borderColor: colors.cardBorder },

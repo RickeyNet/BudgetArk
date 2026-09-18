@@ -30,6 +30,7 @@ import {
   Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { buildExportMessage, shareExportMessage } from "../../utils/exportData";
 import { recordExport } from "../../storage/achievementStatsStorage";
 import { useAchievements } from "../../achievements/AchievementsProvider";
@@ -59,7 +60,6 @@ import {
 } from "../../storage/statementImportMappingsStorage";
 import BankStatementImportModal from "../../components/BankStatementImportModal";
 import { listAutoBackups } from "../../services/autoBackup/autoBackupStore";
-import { cadenceLabel } from "../../services/autoBackup/autoBackupPlan";
 import { getAutoBackupSettings } from "../../storage/autoBackupSettingsStorage";
 import AutoBackupModal from "../../components/AutoBackupModal";
 import { KeyboardAwareModalOverlay } from "../../components/KeyboardAwareModalOverlay";
@@ -89,6 +89,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     const { colors } = useTheme();
     const { tokens } = useDensity();
     const styles = useProfileStyles(tokens, colors);
+    const { t, i18n } = useTranslation();
 
     const { runCheck: refreshAchievements } = useAchievements();
     const { refresh: refreshCustomCategories } = useCustomCategories();
@@ -156,7 +157,9 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     const [showImportModeModal, setShowImportModeModal] = useState(false);
 
     /** Automatic Backups row subtext + management modal visibility. */
-    const [autoBackupSummary, setAutoBackupSummary] = useState("Loading...");
+    const [autoBackupSummary, setAutoBackupSummary] = useState<string>(() =>
+      t("profile.data.autoBackup.loading"),
+    );
     const [showAutoBackupModal, setShowAutoBackupModal] = useState(false);
 
     const refreshAutoBackupSummary = useCallback(async () => {
@@ -167,17 +170,22 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         ]);
         const newest = files[0] ?? null;
         const lastLabel = newest
-          ? `last ${new Date(newest.timestampMs).toLocaleDateString()}`
-          : "none yet";
+          ? t("profile.data.autoBackup.lastOn", {
+              date: new Date(newest.timestampMs).toLocaleDateString(i18n.language),
+            })
+          : t("profile.data.autoBackup.noneYet");
         setAutoBackupSummary(
           settings.enabled
-            ? `${cadenceLabel(settings.cadence)} · ${lastLabel}`
-            : `Off · ${lastLabel}`,
+            ? t("profile.data.autoBackup.summaryEnabled", {
+                cadence: t(`profile.data.autoBackup.cadence.${settings.cadence}`),
+                last: lastLabel,
+              })
+            : t("profile.data.autoBackup.summaryOff", { last: lastLabel }),
         );
       } catch {
-        setAutoBackupSummary("Unavailable");
+        setAutoBackupSummary(t("profile.data.autoBackup.unavailable"));
       }
-    }, []);
+    }, [t, i18n.language]);
 
     useFocusEffect(
       useCallback(() => {
@@ -214,9 +222,8 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     const confirmExport = useCallback(async () => {
       if (exportEncrypt && exportPassword.length < 4) {
         showInfo({
-          title: "Password Too Short",
-          message:
-            "Please enter a password with at least 4 characters, or turn off encryption.",
+          title: t("profile.data.export.passwordTooShort.title"),
+          message: t("profile.data.export.passwordTooShort.message"),
         });
         return;
       }
@@ -255,9 +262,8 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       } catch (error: any) {
         triggerHaptic("error");
         showInfo({
-          title: "Export Failed",
-          message:
-            error?.message || "Something went wrong while exporting your data.",
+          title: t("profile.data.export.failed.title"),
+          message: error?.message || t("profile.data.export.failed.message"),
         });
       } finally {
         setIsExporting(false);
@@ -279,6 +285,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       onRefreshBackupState,
       refreshAchievements,
       showInfo,
+      t,
     ]);
 
     /**
@@ -309,38 +316,45 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         try {
           const result = await importFn(password);
           if (!result) return;
-          const parts = [
-            `${result.debts} debts`,
-            `${result.payments} payments`,
-            `${result.budgetEntries} budget entries`,
-            `${result.budgetLimits} budget limits`,
+          const sep = t("profile.data.import.listSeparator");
+          const parts: string[] = [
+            t("profile.data.import.counts.debts", { count: result.debts }),
+            t("profile.data.import.counts.payments", { count: result.payments }),
+            t("profile.data.import.counts.budgetEntries", { count: result.budgetEntries }),
+            t("profile.data.import.counts.budgetLimits", { count: result.budgetLimits }),
           ];
           if (result.savingsGoals > 0)
-            parts.push(`${result.savingsGoals} savings goals`);
+            parts.push(t("profile.data.import.counts.savingsGoals", { count: result.savingsGoals }));
           if (result.assetAccounts > 0)
-            parts.push(`${result.assetAccounts} asset accounts`);
-          if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
+            parts.push(t("profile.data.import.counts.assetAccounts", { count: result.assetAccounts }));
+          if (result.holdings > 0)
+            parts.push(t("profile.data.import.counts.holdings", { count: result.holdings }));
           if (result.netWorthSnapshots > 0)
-            parts.push(`${result.netWorthSnapshots} net worth snapshots`);
+            parts.push(
+              t("profile.data.import.counts.netWorthSnapshots", { count: result.netWorthSnapshots }),
+            );
           if (result.customCategories > 0)
-            parts.push(`${result.customCategories} custom categories`);
+            parts.push(
+              t("profile.data.import.counts.customCategories", { count: result.customCategories }),
+            );
           if (result.businesses > 0)
-            parts.push(`${result.businesses} businesses`);
-          if (result.people > 0) parts.push(`${result.people} people`);
+            parts.push(t("profile.data.import.counts.businesses", { count: result.businesses }));
+          if (result.people > 0)
+            parts.push(t("profile.data.import.counts.people", { count: result.people }));
           const extras: string[] = [];
-          if (result.debtMilestones) extras.push("milestone plan");
-          if (result.payoffStrategy) extras.push("payoff strategy");
-          let message = `${label} ${parts.join(", ")}.`;
+          if (result.debtMilestones) extras.push(t("profile.data.import.extras.milestonePlan"));
+          if (result.payoffStrategy) extras.push(t("profile.data.import.extras.payoffStrategy"));
+          let message: string = t("profile.data.import.summary", { label, parts: parts.join(sep) });
           if (extras.length > 0) {
-            message += `\nAlso restored: ${extras.join(", ")}.`;
+            message += t("profile.data.import.alsoRestored", { extras: extras.join(sep) });
           }
           if (result.staleDays !== undefined && result.staleDays > 30) {
-            message += `\n\nNote: This export is ${result.staleDays} days old. Some data may be outdated.`;
+            message += t("profile.data.import.staleNote", { days: result.staleDays });
           }
           void refreshCustomCategories();
           triggerHaptic("success");
           showInfo({
-            title: "Import Complete",
+            title: t("profile.data.import.complete.title"),
             message,
           });
         } catch (error: any) {
@@ -353,15 +367,13 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           } else {
             triggerHaptic("error");
             showInfo({
-              title: "Import Failed",
-              message:
-                error?.message ||
-                "Something went wrong while importing your data.",
+              title: t("profile.data.import.failed.title"),
+              message: error?.message || t("profile.data.import.failed.message"),
             });
           }
         }
       },
-      [refreshCustomCategories, showInfo],
+      [refreshCustomCategories, showInfo, t],
     );
 
     const confirmImportPassword = useCallback(() => {
@@ -389,14 +401,17 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         // in-progress flag stays set - every later attempt then throws
         // "Different document picking in progress" until the app restarts.
         await waitForIosModalTeardown(350);
-        const label = mode === "merge" ? "Merged" : "Imported";
+        const label =
+          mode === "merge"
+            ? t("profile.data.import.labelMerged")
+            : t("profile.data.import.labelImported");
         try {
           await executeImport((password) => importData(mode, password), label);
         } finally {
           importPickerInFlightRef.current = false;
         }
       },
-      [executeImport],
+      [executeImport, t],
     );
 
     /**
@@ -446,17 +461,22 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               : undefined,
           });
           if (!isActiveOp()) return;
-          const formatLabel = format === "csv" ? "CSV" : "Excel";
-          let note =
+          const formatLabel =
             format === "csv"
-              ? "CSV exports include budget entries only. Use Excel format for a full backup."
-              : `Workbook saved with ${result.entryCount} budget entries plus debts, payments, savings goals, and asset accounts.`;
+              ? t("profile.data.spreadsheet.export.dialog.csv")
+              : t("profile.data.spreadsheet.export.dialog.excel");
+          let note: string =
+            format === "csv"
+              ? t("profile.data.spreadsheet.export.csvNote")
+              : t("profile.data.spreadsheet.export.excelNote", { count: result.entryCount });
           if (result.partial) {
-            note += `\n\nPartial export: some sections could not be read and were skipped (${result.missingSections.join(", ")}).`;
+            note += t("profile.data.spreadsheet.export.partialNote", {
+              sections: result.missingSections.join(t("profile.data.import.listSeparator")),
+            });
           }
           triggerHaptic("success");
           showInfo({
-            title: `${formatLabel} Export Ready`,
+            title: t("profile.data.spreadsheet.export.readyTitle", { format: formatLabel }),
             message: note,
           });
           await onRefreshBackupState();
@@ -468,10 +488,8 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           if (!isActiveOp()) return;
           triggerHaptic("error");
           showInfo({
-            title: "Export Failed",
-            message:
-              error?.message ||
-              "Something went wrong while exporting the spreadsheet.",
+            title: t("profile.data.export.failed.title"),
+            message: error?.message || t("profile.data.spreadsheet.export.failedMessage"),
           });
         } finally {
           if (isActiveOp()) {
@@ -494,6 +512,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         onRefreshBackupState,
         refreshAchievements,
         showInfo,
+        t,
       ],
     );
 
@@ -526,62 +545,80 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         // document picker over a dismissing <Modal> strands the picker module
         // in its "picking in progress" state.
         await waitForIosModalTeardown(350);
-        const label = mode === "merge" ? "Merged" : "Imported";
+        const label =
+          mode === "merge"
+            ? t("profile.data.import.labelMerged")
+            : t("profile.data.import.labelImported");
         try {
           const result = await importSpreadsheet(mode);
           if (!result) return;
-          const parts = [
-            `${result.budgetEntries} budget entries`,
-            `${result.budgetLimits} limits`,
-            `${result.debts} debts`,
-            `${result.payments} payments`,
+          const sep = t("profile.data.import.listSeparator");
+          const parts: string[] = [
+            t("profile.data.import.counts.budgetEntries", { count: result.budgetEntries }),
+            t("profile.data.import.counts.limits", { count: result.budgetLimits }),
+            t("profile.data.import.counts.debts", { count: result.debts }),
+            t("profile.data.import.counts.payments", { count: result.payments }),
           ];
           if (result.savingsGoals > 0)
-            parts.push(`${result.savingsGoals} savings goals`);
+            parts.push(t("profile.data.import.counts.savingsGoals", { count: result.savingsGoals }));
           if (result.assetAccounts > 0)
-            parts.push(`${result.assetAccounts} asset accounts`);
-          if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
-          let message = result.preset
-            ? `Recognized a ${result.preset} export. ${label} ${parts.join(", ")}.`
-            : `${label} ${parts.join(", ")} from the spreadsheet.`;
+            parts.push(t("profile.data.import.counts.assetAccounts", { count: result.assetAccounts }));
+          if (result.holdings > 0)
+            parts.push(t("profile.data.import.counts.holdings", { count: result.holdings }));
+          let message: string = result.preset
+            ? t("profile.data.spreadsheet.import.recognizedPreset", {
+                preset: result.preset,
+                label,
+                parts: parts.join(sep),
+              })
+            : t("profile.data.spreadsheet.import.fromSpreadsheet", {
+                label,
+                parts: parts.join(sep),
+              });
           if (result.preset && (result.presetDroppedRows ?? 0) > 0) {
-            message += `\n\n${result.presetDroppedRows} transfer / zero-amount row${result.presetDroppedRows === 1 ? "" : "s"} left out - moves between your own accounts aren't income or spending.`;
+            message += t("profile.data.spreadsheet.import.droppedRows", {
+              count: result.presetDroppedRows ?? 0,
+            });
           }
           if (result.skippedRows > 0) {
-            message += `\n\n${result.skippedRows} row${result.skippedRows === 1 ? "" : "s"} skipped (required fields missing or invalid):`;
+            message += t("profile.data.spreadsheet.import.skippedRows", {
+              count: result.skippedRows,
+            });
             // List the first few offending rows so the user can find and fix
             // them; cap the list so a very messy file doesn't fill the modal.
             const MAX_LISTED = 8;
             const shown = result.skippedRowDetails.slice(0, MAX_LISTED);
             for (const detail of shown) {
-              message += `\n• ${detail.sheet} - ${detail.descriptor}: ${detail.reason}`;
+              message += t("profile.data.spreadsheet.import.skippedRowLine", {
+                sheet: detail.sheet,
+                descriptor: detail.descriptor,
+                reason: detail.reason,
+              });
             }
             const remaining = result.skippedRowDetails.length - shown.length;
             if (remaining > 0) {
-              message += `\n• …and ${remaining} more`;
+              message += t("profile.data.spreadsheet.import.andMore", { count: remaining });
             }
           }
           if (result.staleDays !== undefined && result.staleDays > 30) {
-            message += `\n\nNote: This file is ${result.staleDays} days old. Some data may be outdated.`;
+            message += t("profile.data.spreadsheet.import.staleNote", { days: result.staleDays });
           }
           triggerHaptic("success");
           showInfo({
-            title: "Import Complete",
+            title: t("profile.data.import.complete.title"),
             message,
           });
         } catch (error: any) {
           triggerHaptic("error");
           showInfo({
-            title: "Import Failed",
-            message:
-              error?.message ||
-              "Something went wrong while importing the spreadsheet.",
+            title: t("profile.data.import.failed.title"),
+            message: error?.message || t("profile.data.spreadsheet.import.failedMessage"),
           });
         } finally {
           importPickerInFlightRef.current = false;
         }
       },
-      [showInfo],
+      [showInfo, t],
     );
 
     /**
@@ -603,11 +640,13 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         });
         if (picked.canceled) return;
         const asset = picked.assets[0];
-        if (!asset?.uri) throw new Error("No file selected.");
+        if (!asset?.uri) throw new Error(t("profile.data.bankStatement.noFile"));
         const size = typeof asset.size === "number" ? asset.size : 0;
         if (size > MAX_STATEMENT_FILE_BYTES) {
           throw new Error(
-            `File is too large (${(size / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB - export a shorter date range.`,
+            t("profile.data.bankStatement.tooLarge", {
+              size: (size / 1024 / 1024).toFixed(1),
+            }),
           );
         }
         const text = await new ExpoFile(asset.uri).text();
@@ -628,15 +667,13 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       } catch (error: any) {
         triggerHaptic("error");
         showInfo({
-          title: "Couldn't read the file",
-          message:
-            error?.message ||
-            "That doesn't look like a bank CSV. Export your transactions as CSV and try again.",
+          title: t("profile.data.bankStatement.readFailed.title"),
+          message: error?.message || t("profile.data.bankStatement.readFailed.message"),
         });
       } finally {
         importPickerInFlightRef.current = false;
       }
-    }, [showInfo]);
+    }, [showInfo, t]);
 
     useImperativeHandle(
       ref,
@@ -655,20 +692,23 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         const text = pasteText.trim();
         if (!text) {
           showInfo({
-            title: "Empty",
-            message: "Please paste your exported JSON data first.",
+            title: t("profile.data.import.paste.empty.title"),
+            message: t("profile.data.import.paste.empty.message"),
           });
           return;
         }
         setShowPasteModal(false);
         setPasteText("");
-        const label = mode === "merge" ? "Merged" : "Imported";
+        const label =
+          mode === "merge"
+            ? t("profile.data.import.labelMerged")
+            : t("profile.data.import.labelImported");
         executeImport(
           (password) => importFromString(text, mode, password),
           label,
         );
       },
-      [pasteText, executeImport, showInfo],
+      [pasteText, executeImport, showInfo, t],
     );
 
     return (
@@ -678,7 +718,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           <Text
             style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
           >
-            DATA
+            {t("profile.data.sectionTitle")}
           </Text>
 
           <View
@@ -693,12 +733,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             >
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Export
+                  {t("profile.data.rows.export.title")}
                 </Text>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
-                  Encrypted backup to file
+                  {t("profile.data.rows.export.subtitle")}
                 </Text>
               </View>
               <Text
@@ -721,12 +761,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             >
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Import
+                  {t("profile.data.rows.import.title")}
                 </Text>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
-                  From file or clipboard
+                  {t("profile.data.rows.import.subtitle")}
                 </Text>
               </View>
               <Text
@@ -749,7 +789,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             >
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Automatic Backups
+                  {t("profile.data.rows.autoBackup.title")}
                 </Text>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
@@ -777,12 +817,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             >
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Export Spreadsheet
+                  {t("profile.data.rows.exportSpreadsheet.title")}
                 </Text>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
-                  CSV or Excel for Google Sheets / Excel
+                  {t("profile.data.rows.exportSpreadsheet.subtitle")}
                 </Text>
               </View>
               <Text
@@ -805,12 +845,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             >
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Import Spreadsheet
+                  {t("profile.data.rows.importSpreadsheet.title")}
                 </Text>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
-                  From a CSV or Excel file
+                  {t("profile.data.rows.importSpreadsheet.subtitle")}
                 </Text>
               </View>
               <Text
@@ -833,12 +873,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             >
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Import Bank Statement
+                  {t("profile.data.rows.importBankStatement.title")}
                 </Text>
                 <Text
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
-                  A CSV from your bank → Review Inbox
+                  {t("profile.data.rows.importBankStatement.subtitle")}
                 </Text>
               </View>
               <Text
@@ -860,7 +900,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               onPress={() => setShowResetModal(true)}
             >
               <Text style={[styles.settingsRowText, { color: colors.danger }]}>
-                Reset All Data
+                {t("profile.data.rows.reset.title")}
               </Text>
               <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>
                 →
@@ -908,7 +948,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   marginTop: 16,
                 }}
               >
-                Preparing your export…
+                {t("profile.data.export.spinner.title")}
               </Text>
               <Text
                 style={{
@@ -918,7 +958,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   textAlign: "center",
                 }}
               >
-                Encrypting can take a few seconds. Keep the app open.
+                {t("profile.data.export.spinner.subtitle")}
               </Text>
             </View>
           </View>
@@ -939,12 +979,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                Export My Data
+                {t("profile.data.export.dialog.title")}
               </Text>
               <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
                 {exportEncrypt
-                  ? "Your data will be encrypted with a password before sharing."
-                  : "Your data will be exported as plaintext JSON. Anyone with access to the file can read your financial data."}
+                  ? t("profile.data.export.dialog.encryptedNote")
+                  : t("profile.data.export.dialog.plaintextNote")}
               </Text>
 
               <TouchableOpacity
@@ -989,7 +1029,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   ) : null}
                 </View>
                 <Text style={{ color: colors.text, fontSize: 14 }}>
-                  Encrypt with password
+                  {t("profile.data.export.dialog.encryptToggle")}
                 </Text>
               </TouchableOpacity>
 
@@ -1007,7 +1047,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                       marginBottom: 16,
                     },
                   ]}
-                  placeholder="Enter export password"
+                  placeholder={t("profile.data.export.dialog.passwordPlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   secureTextEntry
                   value={exportPassword}
@@ -1026,7 +1066,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   }}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    Cancel
+                    {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1034,7 +1074,9 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={confirmExport}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    {exportEncrypt ? "Encrypt & Share" : "Share Plaintext"}
+                    {exportEncrypt
+                      ? t("profile.data.export.dialog.encryptAndShare")
+                      : t("profile.data.export.dialog.sharePlaintext")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1061,11 +1103,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                Encrypted Export
+                {t("profile.data.import.password.title")}
               </Text>
               <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                This export was encrypted with a password. Enter the password to
-                decrypt it.
+                {t("profile.data.import.password.message")}
               </Text>
               <TextInput
                 style={[
@@ -1080,7 +1121,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                     marginBottom: 16,
                   },
                 ]}
-                placeholder="Enter password"
+                placeholder={t("profile.data.import.password.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 secureTextEntry
                 value={importPassword}
@@ -1098,7 +1139,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   }}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    Cancel
+                    {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1106,7 +1147,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={confirmImportPassword}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    Decrypt & Import
+                    {t("profile.data.import.password.confirm")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1129,11 +1170,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                Reset All Data
+                {t("profile.data.reset.dialog.title")}
               </Text>
               <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                This will permanently delete all your debts, payments, and
-                account data. This cannot be undone.
+                {t("profile.data.reset.dialog.message")}
               </Text>
               <View style={styles.dialogActions}>
                 <TouchableOpacity
@@ -1141,7 +1181,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => setShowResetModal(false)}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    Cancel
+                    {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1154,7 +1194,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   }}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.white }]}>
-                    Reset Everything
+                    {t("profile.data.reset.dialog.confirm")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1177,10 +1217,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                Import Data
+                {t("profile.data.import.source.title")}
               </Text>
               <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                Choose an import source.
+                {t("profile.data.import.source.message")}
               </Text>
               <View style={styles.dialogActions}>
                 <TouchableOpacity
@@ -1188,7 +1228,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => setShowImportModal(false)}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    Cancel
+                    {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1196,7 +1236,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={handleImportFromFile}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    Pick File
+                    {t("profile.data.import.source.pickFile")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1208,7 +1248,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   }}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    Paste Text
+                    {t("profile.data.import.source.pasteText")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1231,11 +1271,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                Import from File
+                {t("profile.data.import.mode.title")}
               </Text>
               <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                Merge keeps your existing data and adds the imported data.
-                Replace wipes your current data first.
+                {t("profile.data.import.mode.message")}
               </Text>
               <View style={styles.dialogActions}>
                 <TouchableOpacity
@@ -1243,7 +1282,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => setShowImportModeModal(false)}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    Cancel
+                    {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1251,7 +1290,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => confirmFileImport("merge")}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
-                    Merge
+                    {t("profile.data.import.mode.merge")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1259,7 +1298,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => confirmFileImport("replace")}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
-                    Replace
+                    {t("profile.data.import.mode.replace")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1285,13 +1324,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                Export Spreadsheet
+                {t("profile.data.spreadsheet.export.dialog.title")}
               </Text>
               <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                CSV exports budget entries only - easiest for Google Sheets and
-                quick edits. Excel exports a full multi-sheet workbook (Budget
-                Entries, Budget Limits, Debts, Payments, Savings Goals, Asset
-                Accounts) for a complete backup.
+                {t("profile.data.spreadsheet.export.dialog.message")}
               </Text>
               <TouchableOpacity
                 style={styles.dialogLinkRow}
@@ -1303,7 +1339,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                 }}
               >
                 <Text style={[styles.dialogLinkText, { color: colors.accent }]}>
-                  View format reference →
+                  {t("profile.data.spreadsheet.formatReference")}
                 </Text>
               </TouchableOpacity>
               <View style={styles.dialogActions}>
@@ -1312,7 +1348,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={closeSpreadsheetExportModal}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    Cancel
+                    {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1320,7 +1356,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => confirmSpreadsheetExport("csv")}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    CSV
+                    {t("profile.data.spreadsheet.export.dialog.csv")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1328,7 +1364,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => confirmSpreadsheetExport("xlsx")}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    Excel
+                    {t("profile.data.spreadsheet.export.dialog.excel")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1351,17 +1387,13 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                Import Spreadsheet
+                {t("profile.data.spreadsheet.import.dialog.title")}
               </Text>
               <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                Pick a .csv or .xlsx file. Required headers: Date, Type
-                (income/expense), Category, Amount. Merge keeps your existing
-                data; Replace wipes it first.
+                {t("profile.data.spreadsheet.import.dialog.message")}
               </Text>
               <Text style={[styles.dialogTip, { color: colors.textMuted }]}>
-                Tip: tap Export Spreadsheet first to see the exact format, then
-                edit and re-import. IDs round-trip so existing rows update in
-                place.
+                {t("profile.data.spreadsheet.import.dialog.tip")}
               </Text>
               <TouchableOpacity
                 style={styles.dialogLinkRow}
@@ -1371,7 +1403,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                 }}
               >
                 <Text style={[styles.dialogLinkText, { color: colors.accent }]}>
-                  View format reference →
+                  {t("profile.data.spreadsheet.formatReference")}
                 </Text>
               </TouchableOpacity>
               <View style={styles.dialogActions}>
@@ -1380,7 +1412,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => setShowSpreadsheetImportModal(false)}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    Cancel
+                    {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1388,7 +1420,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => confirmSpreadsheetImport("merge")}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
-                    Merge
+                    {t("profile.data.import.mode.merge")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1396,7 +1428,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => confirmSpreadsheetImport("replace")}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.bg }]}>
-                    Replace
+                    {t("profile.data.import.mode.replace")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1425,11 +1457,11 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           onClose={() => setStatementImport(null)}
           onImported={(message) => {
             triggerHaptic("success");
-            showInfo({ title: "Statement Imported", message });
+            showInfo({ title: t("profile.data.bankStatement.importedTitle"), message });
           }}
           onError={(message) => {
             triggerHaptic("error");
-            showInfo({ title: "Import Failed", message });
+            showInfo({ title: t("profile.data.import.failed.title"), message });
           }}
         />
 
@@ -1456,10 +1488,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               ]}
             >
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Paste Export Data
+                {t("profile.data.import.paste.title")}
               </Text>
               <Text style={[styles.pasteHint, { color: colors.textDim }]}>
-                Paste the JSON text you copied from Export My Data.
+                {t("profile.data.import.paste.hint")}
               </Text>
 
               <TextInput
@@ -1473,7 +1505,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                 ]}
                 value={pasteText}
                 onChangeText={setPasteText}
-                placeholder="Paste JSON here..."
+                placeholder={t("profile.data.import.paste.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 multiline
                 textAlignVertical="top"
@@ -1487,7 +1519,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => handlePasteImport("merge")}
                 >
                   <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
-                    Merge
+                    {t("profile.data.import.mode.merge")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1495,7 +1527,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   onPress={() => handlePasteImport("replace")}
                 >
                   <Text style={[styles.pasteBtnText, { color: colors.bg }]}>
-                    Replace
+                    {t("profile.data.import.mode.replace")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1508,7 +1540,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                 }}
               >
                 <Text style={[styles.closeBtnText, { color: colors.text }]}>
-                  Cancel
+                  {t("common.cancel")}
                 </Text>
               </TouchableOpacity>
             </View>

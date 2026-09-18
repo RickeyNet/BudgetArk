@@ -6,6 +6,9 @@ import "react-native-reanimated";
 // Side-effect: clamps the OS font-scale multiplier app-wide. Must run before
 // any <Text>/<TextInput> renders, so keep it among the top imports.
 import "./src/theme/fontScalingPolicy";
+// Side-effect: initializes i18next with the bundled translations (sync, no
+// network). Must run before any screen renders so t() never sees a bare key.
+import "./src/i18n";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import {
@@ -32,6 +35,7 @@ import TrackingReminderHost from "./src/components/TrackingReminderHost";
 import CardKeepAliveReminderHost from "./src/components/CardKeepAliveReminderHost";
 import QuickAddLinkHost from "./src/components/QuickAddLinkHost";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
+import { LanguageProvider } from "./src/i18n/LanguageProvider";
 import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
 import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
@@ -698,6 +702,10 @@ export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        {/* Language sits above everything visual: it depends on nothing and
+            every screen (onboarding included) must render in the chosen
+            language. See src/i18n/LanguageProvider.tsx. */}
+        <LanguageProvider>
         <BackgroundEffectsProvider>
           <SurfaceStyleProvider>
             <ThemeProvider>
@@ -728,6 +736,7 @@ export default function App(): React.JSX.Element {
             </ThemeProvider>
           </SurfaceStyleProvider>
         </BackgroundEffectsProvider>
+        </LanguageProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

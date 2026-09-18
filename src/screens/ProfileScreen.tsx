@@ -34,6 +34,7 @@ import {
   Platform,
 } from "react-native";
 import * as Updates from "expo-updates";
+import { useTranslation } from "react-i18next";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -152,6 +153,7 @@ const ProfileScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, "Profile">>();
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   /** Current theme context */
   const { colors, showAmbientBackground } = useTheme();
@@ -395,10 +397,10 @@ const ProfileScreen: React.FC = () => {
   const handlePaired = useCallback((state: PairingState) => {
     setPairing(state);
     setInfoModal({
-      title: "Paired!",
-      message: `You're now paired with ${state.partnerName}. Tap "Sync Now" anytime to share data.`,
+      title: t("profile.main.sync.pairedTitle"),
+      message: t("profile.main.sync.pairedMessage", { partnerName: state.partnerName }),
     });
-  }, []);
+  }, [t]);
 
   const handleSyncNow = useCallback(async () => {
     if (
@@ -413,20 +415,23 @@ const ProfileScreen: React.FC = () => {
         await noteSyncActivity(result);
         setLastSyncTime(result.timestamp);
         setInfoModal({
-          title: "Sync Complete",
-          message: `Sent ${result.recordsSent} records, received ${result.recordsReceived} records.`,
+          title: t("profile.main.sync.completeTitle"),
+          message: t("profile.main.sync.completeMessage", {
+            sent: result.recordsSent,
+            received: result.recordsReceived,
+          }),
         });
       } else {
         setInfoModal({
-          title: "Sync Failed",
-          message: result.error || "Could not connect to partner.",
+          title: t("profile.main.sync.failedTitle"),
+          message: result.error || t("profile.main.sync.failedFallback"),
         });
       }
     } catch {
       setSyncStatus("error");
     }
     setSyncStatus("idle");
-  }, [syncStatus]);
+  }, [syncStatus, t]);
 
   const handleUnpair = useCallback(async () => {
     await clearPairingState();
@@ -435,20 +440,18 @@ const ProfileScreen: React.FC = () => {
     setPairing(null);
     setLastSyncTime(null);
     setInfoModal({
-      title: "Unpaired",
-      message:
-        "Partner sync has been disconnected. Your data is still on this device.",
+      title: t("profile.main.sync.unpairedTitle"),
+      message: t("profile.main.sync.unpairedMessage"),
     });
-  }, []);
+  }, [t]);
 
   const handleSetHomeNetwork = useCallback(async () => {
     if (Platform.OS === "android") {
       const granted = await requestLocationPermission();
       if (!granted) {
         setInfoModal({
-          title: "Permission Required",
-          message:
-            "Location permission is needed to read the WiFi network name for auto-sync. Your location is never stored or shared.",
+          title: t("profile.main.sync.permissionTitle"),
+          message: t("profile.main.sync.permissionMessage"),
         });
         return;
       }
@@ -456,11 +459,11 @@ const ProfileScreen: React.FC = () => {
     const ssid = await getCurrentSSID();
     if (!ssid) {
       setInfoModal({
-        title: "No WiFi Detected",
+        title: t("profile.main.sync.noWifiTitle"),
         message:
           Platform.OS === "ios"
-            ? 'Unable to read your WiFi network name. Make sure you are connected to WiFi, then check:\n\n1. Settings > Privacy & Security > Location Services - turn on for BudgetArk ("While Using")\n2. Settings > Privacy & Security > Local Network - turn on for BudgetArk\n\niOS requires location access to read the WiFi name. Your location is never stored or shared.'
-            : "Connect to your home WiFi first, then try again.",
+            ? t("profile.main.sync.noWifiIos")
+            : t("profile.main.sync.noWifiAndroid"),
       });
       return;
     }
@@ -471,18 +474,17 @@ const ProfileScreen: React.FC = () => {
       // in plaintext); tell the user rather than pretend the toggle took.
       if (__DEV__) console.error("Failed to save home network:", error);
       setInfoModal({
-        title: "Couldn't Save Home Network",
-        message:
-          "BudgetArk couldn't write the pairing settings securely on this device. Nothing was changed - please try again.",
+        title: t("profile.main.sync.saveHomeNetworkFailedTitle"),
+        message: t("profile.main.sync.saveFailedMessage"),
       });
       return;
     }
     setPairing((prev) => (prev ? { ...prev, homeSSID: ssid } : null));
     setInfoModal({
-      title: "Home Network Set",
-      message: `Auto-sync will trigger when both devices are on "${ssid}".`,
+      title: t("profile.main.sync.homeNetworkSetTitle"),
+      message: t("profile.main.sync.homeNetworkSetMessage", { ssid }),
     });
-  }, []);
+  }, [t]);
 
   const handleToggleAutoSync = useCallback(async () => {
     if (!pairing) return;
@@ -493,9 +495,8 @@ const ProfileScreen: React.FC = () => {
       // Same fail-closed write as the home-network toggle.
       if (__DEV__) console.error("Failed to save auto-sync setting:", error);
       setInfoModal({
-        title: "Couldn't Save Setting",
-        message:
-          "BudgetArk couldn't write the pairing settings securely on this device. Nothing was changed - please try again.",
+        title: t("profile.main.sync.saveSettingFailedTitle"),
+        message: t("profile.main.sync.saveFailedMessage"),
       });
       return;
     }
@@ -511,7 +512,7 @@ const ProfileScreen: React.FC = () => {
       stopMonitoring();
       monitoringActiveRef.current = false;
     }
-  }, [pairing]);
+  }, [pairing, t]);
 
   /**
    * Resets all app data after user confirmation (DataSection's confirm
@@ -530,10 +531,10 @@ const ProfileScreen: React.FC = () => {
       const message =
         err instanceof Error && err.message
           ? err.message
-          : "Some data could not be cleared. Try again or reinstall the app to complete the reset.";
+          : t("profile.main.reset.incompleteFallback");
       setInfoModal({
-        title: "Reset incomplete",
-        message: `${message} Please try Reset All Data again.`,
+        title: t("profile.main.reset.incompleteTitle"),
+        message: t("profile.main.reset.incompleteRetry", { message }),
       });
       return;
     }
@@ -567,7 +568,7 @@ const ProfileScreen: React.FC = () => {
     // No "Done" modal here: restarting onboarding unmounts this screen (and
     // any modal it would present) immediately.
     restartOnboarding();
-  }, [replayCoachmarks, restartOnboarding, setPreferenceId]);
+  }, [replayCoachmarks, restartOnboarding, setPreferenceId, t]);
 
   const closeTrackingReminders = useCallback(() => {
     setShowTrackingReminders(false);
@@ -597,7 +598,7 @@ const ProfileScreen: React.FC = () => {
                 textAlign: "center",
               }}
             >
-              Couldn't load your profile
+              {t("profile.main.loading.failedTitle")}
             </Text>
             <Text
               style={{
@@ -608,9 +609,7 @@ const ProfileScreen: React.FC = () => {
                 marginBottom: 20,
               }}
             >
-              BudgetArk couldn't read its saved data on this device. This can
-              happen when the phone is very low on free storage. Your data has
-              not been changed.
+              {t("profile.main.loading.failedBody")}
             </Text>
             <TouchableOpacity
               style={{
@@ -621,16 +620,16 @@ const ProfileScreen: React.FC = () => {
               }}
               onPress={() => setLoadAttempt((n) => n + 1)}
               accessibilityRole="button"
-              accessibilityLabel="Try again"
+              accessibilityLabel={t("profile.main.loading.tryAgainA11y")}
             >
               <Text style={{ color: colors.bg, fontSize: 15, fontWeight: "600" }}>
-                Try Again
+                {t("profile.main.loading.tryAgain")}
               </Text>
             </TouchableOpacity>
           </>
         ) : (
           <Text style={{ color: colors.textDim, fontSize: 14 }}>
-            Loading profile...
+            {t("profile.main.loading.loading")}
           </Text>
         )}
       </View>
@@ -672,10 +671,10 @@ const ProfileScreen: React.FC = () => {
             BudgetArk
           </Text>
           <Text style={[styles.screenTitle, { color: colors.text }]}>
-            Profile
+            {t("profile.main.header.title")}
           </Text>
           <Text style={[styles.screenSubtitle, { color: colors.textMuted }]}>
-            Your anonymous account settings.
+            {t("profile.main.header.subtitle")}
           </Text>
         </View>
 
@@ -784,7 +783,7 @@ const ProfileScreen: React.FC = () => {
         {/* ── App Info ── */}
         <View style={styles.appInfo}>
           <Text style={[styles.appInfoText, { color: colors.textMuted }]}>
-            {`BudgetArk v${CURRENT_APP_VERSION || "?"}`}
+            {t("profile.main.appVersion", { version: CURRENT_APP_VERSION || "?" })}
           </Text>
         </View>
       </ScrollView>
@@ -816,7 +815,7 @@ const ProfileScreen: React.FC = () => {
                 onPress={() => setInfoModal(null)}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                  OK
+                  {t("common.ok")}
                 </Text>
               </TouchableOpacity>
             </View>

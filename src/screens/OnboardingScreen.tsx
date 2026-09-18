@@ -31,6 +31,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useAndroidKeyboardInputScroll } from "../hooks/useAndroidKeyboardInputScroll";
@@ -157,6 +158,7 @@ ThemePreviewCard.displayName = "ThemePreviewCard";
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const { colors, presets, themeId, setThemeId } = useTheme();
   const { tokens } = useDensity();
+  const { t } = useTranslation();
   const [step, setStep] = useState<OnboardingStep>("mission");
   const [displayName, setDisplayName] = useState("");
   /** Guards the reminders step's button through the OS permission prompt. */
@@ -278,10 +280,8 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         void rescheduleTrackingReminders();
       } else {
         Alert.alert(
-          "Notifications are off",
-          "Reminders stay off until notifications are allowed for BudgetArk " +
-            "in your phone's Settings. You can turn them on any time from " +
-            "Profile → Tracking Reminders."
+          t("onboarding.alerts.notificationsOff.title"),
+          t("onboarding.alerts.notificationsOff.message")
         );
       }
     } catch (error) {
@@ -293,7 +293,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       setRemindersBusy(false);
       setStep("name");
     }
-  }, [remindersBusy]);
+  }, [remindersBusy, t]);
 
   /** "Not now" on the reminders step: leave them off, never re-ask. */
   const handleDeclineReminders = useCallback(() => {
@@ -319,15 +319,12 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         } catch (error) {
           if (__DEV__) console.error("Failed to save onboarding:", error);
           Alert.alert(
-            "Couldn't Save Your Setup",
-            "Your setup couldn't be saved to this device. This usually happens " +
-              "when the phone is very low on free storage. Free up some space " +
-              "and try again, or continue anyway - the app may ask you to set " +
-              "up again next time it opens.",
+            t("onboarding.alerts.saveFailed.title"),
+            t("onboarding.alerts.saveFailed.message"),
             [
-              { text: "Try Again", onPress: () => void attempt() },
+              { text: t("onboarding.alerts.saveFailed.tryAgain"), onPress: () => void attempt() },
               {
-                text: "Continue Anyway",
+                text: t("onboarding.alerts.saveFailed.continueAnyway"),
                 style: "cancel",
                 onPress: () => onComplete(options),
               },
@@ -340,16 +337,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         } catch (error) {
           if (__DEV__) console.warn("Quick-start template failed:", error);
           Alert.alert(
-            "Template not applied",
-            "Your setup is saved, but the starter limits couldn't be written. " +
-              "You can set limits any time from the Budget tab's Limits sheet."
+            t("onboarding.alerts.templateFailed.title"),
+            t("onboarding.alerts.templateFailed.message")
           );
         }
         onComplete(options);
       };
       await attempt();
     },
-    [onComplete, seedQuickStart]
+    [onComplete, seedQuickStart, t]
   );
 
   /**
@@ -369,7 +365,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render the mission step - why BudgetArk exists, before any setup. */
   const renderMissionStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 1 OF 6</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 1, total: 6 })}</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
       <Text style={styles.missionEyebrow}>{MISSION_STATEMENT.eyebrow}</Text>
       <Text style={styles.stepTitle}>{MISSION_STATEMENT.title}</Text>
@@ -385,22 +381,19 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
             {MISSION_STATEMENT.invite}
           </Text>
         </View>
-        <Text style={styles.missionFootnote}>
-          Free, no ads, no account, and your data never leaves your phone.
-          You can reread this anytime at the top of the Profile tab.
-        </Text>
+        <Text style={styles.missionFootnote}>{t("onboarding.mission.footnote")}</Text>
       </ScrollView>
 
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-          <Text style={styles.skipBtnText}>Skip Setup</Text>
+          <Text style={styles.skipBtnText}>{t("onboarding.skipSetup")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
           <Text style={[styles.nextBtnText, { color: colors.white }]}>
-            Next →
+            {t("onboarding.next")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -410,13 +403,10 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render theme selection step */
   const renderThemeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 2 OF 6</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 2, total: 6 })}</Text>
       <Text style={styles.heroEmoji}>🎨</Text>
-      <Text style={styles.stepTitle}>Choose Your Theme</Text>
-      <Text style={styles.stepSubtitle}>
-        Select a color scheme that matches your style. You can change this
-        later in settings.
-      </Text>
+      <Text style={styles.stepTitle}>{t("onboarding.theme.title")}</Text>
+      <Text style={styles.stepSubtitle}>{t("onboarding.theme.subtitle")}</Text>
 
       <ScrollView
         style={styles.themeGrid}
@@ -436,14 +426,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
 
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-          <Text style={styles.skipBtnText}>Skip Setup</Text>
+          <Text style={styles.skipBtnText}>{t("onboarding.skipSetup")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
           <Text style={[styles.nextBtnText, { color: colors.white }]}>
-            Next →
+            {t("onboarding.next")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -453,13 +443,10 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render welcome step */
   const renderWelcomeStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 3 OF 6</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 3, total: 6 })}</Text>
       <Text style={styles.heroEmoji}>💸</Text>
-      <Text style={styles.stepTitle}>Welcome to BudgetArk</Text>
-      <Text style={styles.stepSubtitle}>
-        Your personal finance companion for tracking debt, managing budgets, and
-        building wealth.
-      </Text>
+      <Text style={styles.stepTitle}>{t("onboarding.welcome.title")}</Text>
+      <Text style={styles.stepSubtitle}>{t("onboarding.welcome.subtitle")}</Text>
 
       {/* Scrollable so the five-tab overview + privacy note never push the
           buttons off a small screen. */}
@@ -471,83 +458,65 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>⛓️</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Debts</Text>
-            <Text style={styles.featureDesc}>
-              Track every debt, pick a payoff strategy, follow the Build Your
-              Ark milestones - and keep idle credit cards from being closed
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.welcome.features.debts.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.welcome.features.debts.desc")}</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>💰</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Budget</Text>
-            <Text style={styles.featureDesc}>
-              Log income and spending by category, set limits, automate
-              recurring bills, and approve bank imports from the Review Inbox
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.welcome.features.budget.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.welcome.features.budget.desc")}</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>🧭</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Bridge</Text>
-            <Text style={styles.featureDesc}>
-              Your home tab: net worth over time, every account you own,
-              purchase plans, and optional live stock tracking
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.welcome.features.bridge.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.welcome.features.bridge.desc")}</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>📈</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Charts</Text>
-            <Text style={styles.featureDesc}>
-              A free 24-lesson finance course, calculators, and what-if
-              projections built from your own numbers
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.welcome.features.charts.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.welcome.features.charts.desc")}</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>⚙️</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Profile</Text>
-            <Text style={styles.featureDesc}>
-              Themes, bank connections, partner sync, backups - and the
-              searchable onboarding guide whenever you need it
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.welcome.features.profile.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.welcome.features.profile.desc")}</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>🔒</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Private by design</Text>
-            <Text style={styles.featureDesc}>
-              Everything is encrypted on this phone. BudgetArk has no server -
-              your financial data never leaves your device
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.welcome.features.privacy.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.welcome.features.privacy.desc")}</Text>
           </View>
         </View>
       </ScrollView>
 
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
-          <Text style={styles.skipBtnText}>← Back</Text>
+          <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-          <Text style={styles.skipBtnText}>Skip</Text>
+          <Text style={styles.skipBtnText}>{t("onboarding.skip")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.nextBtn, { backgroundColor: colors.accent }]}
           onPress={handleNext}
         >
           <Text style={[styles.nextBtnText, { color: colors.white }]}>
-            Next →
+            {t("onboarding.next")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -563,14 +532,10 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
     const selected = quickStartTemplateById(templateId);
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.stepNumber}>STEP 4 OF 6</Text>
+        <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 4, total: 6 })}</Text>
         <Text style={styles.heroEmoji}>🗺️</Text>
-        <Text style={styles.stepTitle}>Start from a template?</Text>
-        <Text style={styles.stepSubtitle}>
-          Pick the closest fit and BudgetArk sets category limits and your two
-          biggest recurring lines for you. Every number stays editable - it's a
-          first draft, not a lock.
-        </Text>
+        <Text style={styles.stepTitle}>{t("onboarding.template.title")}</Text>
+        <Text style={styles.stepSubtitle}>{t("onboarding.template.subtitle")}</Text>
 
         <View style={styles.templateList}>
           {QUICK_START_TEMPLATES.map((template) => {
@@ -614,17 +579,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           >
             <Text style={styles.templateEmoji}>📄</Text>
             <View style={styles.featureContent}>
-              <Text style={styles.featureTitle}>Start empty</Text>
-              <Text style={styles.templateTagline}>
-                No limits or lines - build it as you go
-              </Text>
+              <Text style={styles.featureTitle}>{t("onboarding.template.startEmpty.title")}</Text>
+              <Text style={styles.templateTagline}>{t("onboarding.template.startEmpty.tagline")}</Text>
             </View>
           </TouchableOpacity>
         </View>
 
         {selected ? (
           <View style={styles.templateInputs}>
-            <Text style={styles.templateLabel}>MONTHLY TAKE-HOME PAY (HOUSEHOLD)</Text>
+            <Text style={styles.templateLabel}>{t("onboarding.template.incomeLabel")}</Text>
             <TextInput
               style={[
                 styles.nameInput,
@@ -634,14 +597,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
                   color: colors.text,
                 },
               ]}
-              placeholder="e.g. 4200"
+              placeholder={t("onboarding.template.incomePlaceholder")}
               placeholderTextColor={colors.textMuted}
               value={incomeInput}
               onChangeText={setIncomeInput}
               keyboardType="decimal-pad"
               maxLength={12}
             />
-            <Text style={styles.templateLabel}>RENT OR MORTGAGE</Text>
+            <Text style={styles.templateLabel}>{t("onboarding.template.housingLabel")}</Text>
             <TextInput
               style={[
                 styles.nameInput,
@@ -651,31 +614,27 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
                   color: colors.text,
                 },
               ]}
-              placeholder="e.g. 1400"
+              placeholder={t("onboarding.template.housingPlaceholder")}
               placeholderTextColor={colors.textMuted}
               value={housingInput}
               onChangeText={setHousingInput}
               keyboardType="decimal-pad"
               maxLength={12}
             />
-            <Text style={styles.nameHint}>
-              Both optional. Limits are set as a share of take-home pay; leave
-              it blank and you can fill them in later from the Budget tab's
-              Limits sheet. Stored only on this phone.
-            </Text>
+            <Text style={styles.nameHint}>{t("onboarding.template.hint")}</Text>
           </View>
         ) : null}
 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.skipBtn} onPress={handleBack}>
-            <Text style={styles.skipBtnText}>← Back</Text>
+            <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.nextBtn, { backgroundColor: colors.accent }]}
             onPress={handleNext}
           >
             <Text style={[styles.nextBtnText, { color: colors.white }]}>
-              {selected ? "Next →" : "Start empty →"}
+              {selected ? t("onboarding.next") : t("onboarding.template.startEmptyNext")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -692,46 +651,32 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    */
   const renderRemindersStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 5 OF 6</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 5, total: 6 })}</Text>
       <Text style={styles.heroEmoji}>🔔</Text>
-      <Text style={styles.stepTitle}>Want a nudge to keep tracking?</Text>
-      <Text style={styles.stepSubtitle}>
-        Budgets work when the logging habit sticks. BudgetArk can send two
-        kinds of gentle reminders - and nothing else.
-      </Text>
+      <Text style={styles.stepTitle}>{t("onboarding.reminders.title")}</Text>
+      <Text style={styles.stepSubtitle}>{t("onboarding.reminders.subtitle")}</Text>
 
       <View style={styles.reminderList}>
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>📝</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>Check-ins when you go quiet</Text>
-            <Text style={styles.featureDesc}>
-              A short "how's the week going?" if a few days pass without an
-              entry. Log regularly and you never hear from it.
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.reminders.checkins.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.reminders.checkins.desc")}</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>📅</Text>
           <View style={styles.featureContent}>
-            <Text style={styles.featureTitle}>A heads-up on the 1st</Text>
-            <Text style={styles.featureDesc}>
-              One note at the start of each month to set goals and glance at
-              last month.
-            </Text>
+            <Text style={styles.featureTitle}>{t("onboarding.reminders.monthStart.title")}</Text>
+            <Text style={styles.featureDesc}>{t("onboarding.reminders.monthStart.desc")}</Text>
           </View>
         </View>
       </View>
 
       <View style={[styles.privacyCard, { backgroundColor: colors.card }]}>
-        <Text style={styles.privacyTitle}>🔒 Nothing about your money</Text>
-        <Text style={styles.privacyText}>
-          Reminders never include an amount, a balance, an account, or a bill
-          - just a nudge to open the app. No payment-due alerts; your bank
-          does those. Change the time and cadence, or turn them off, any time
-          in Profile → Tracking Reminders.
-        </Text>
+        <Text style={styles.privacyTitle}>{t("onboarding.reminders.privacyTitle")}</Text>
+        <Text style={styles.privacyText}>{t("onboarding.reminders.privacyText")}</Text>
       </View>
 
       <TouchableOpacity
@@ -744,7 +689,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         disabled={remindersBusy}
       >
         <Text style={[styles.completeBtnText, { color: colors.accentButtonText }]}>
-          {remindersBusy ? "Asking your phone..." : "Turn on reminders"}
+          {remindersBusy ? t("onboarding.reminders.asking") : t("onboarding.reminders.enable")}
         </Text>
       </TouchableOpacity>
 
@@ -758,12 +703,12 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         disabled={remindersBusy}
       >
         <Text style={[styles.completeBtnText, { color: colors.text }]}>
-          Not now
+          {t("onboarding.reminders.notNow")}
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.backBtnFull} onPress={handleBack} disabled={remindersBusy}>
-        <Text style={styles.skipBtnText}>← Back</Text>
+        <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -771,12 +716,10 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   /** Render display name step */
   const renderNameStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepNumber}>STEP 6 OF 6</Text>
+      <Text style={styles.stepNumber}>{t("onboarding.stepOf", { step: 6, total: 6 })}</Text>
       <Text style={styles.heroEmoji}>⚓</Text>
-      <Text style={styles.stepTitle}>What should we call you?</Text>
-      <Text style={styles.stepSubtitle}>
-        Choose a display name (optional). This is only stored on your device.
-      </Text>
+      <Text style={styles.stepTitle}>{t("onboarding.name.title")}</Text>
+      <Text style={styles.stepSubtitle}>{t("onboarding.name.subtitle")}</Text>
 
       <View style={styles.nameInputContainer}>
         <TextInput
@@ -788,7 +731,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
               color: colors.text,
             },
           ]}
-          placeholder="Buddy"
+          placeholder={t("onboarding.name.placeholder")}
           placeholderTextColor={colors.textMuted}
           value={displayName}
           onChangeText={(text) => setDisplayName(sanitizeTextInput(text))}
@@ -796,24 +739,17 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           autoCapitalize="words"
           autoCorrect={false}
         />
-        <Text style={styles.nameHint}>
-          Leave blank to use the default name "Buddy"
-        </Text>
+        <Text style={styles.nameHint}>{t("onboarding.name.hint")}</Text>
       </View>
 
       <View style={[styles.privacyCard, { backgroundColor: colors.card }]}>
-        <Text style={styles.privacyTitle}>🔒 Privacy First</Text>
-        <Text style={styles.privacyText}>
-          No email, phone number, or personal data required. Your information
-          is stored locally on your device and never sent to any server.
-        </Text>
+        <Text style={styles.privacyTitle}>{t("onboarding.name.privacyTitle")}</Text>
+        <Text style={styles.privacyText}>{t("onboarding.name.privacyText")}</Text>
       </View>
 
       <View style={[styles.arkCard, { backgroundColor: colors.card }]}> 
-        <Text style={styles.arkTitle}>Build Your Ark (Optional)</Text>
-        <Text style={styles.arkText}>
-          You can set milestone targets now, or skip for now and do it later from the Debt screen.
-        </Text>
+        <Text style={styles.arkTitle}>{t("onboarding.name.arkTitle")}</Text>
+        <Text style={styles.arkText}>{t("onboarding.name.arkText")}</Text>
       </View>
 
       <TouchableOpacity
@@ -824,7 +760,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         onPress={() => handleComplete(true)}
       >
         <Text style={[styles.completeBtnText, { color: colors.accentButtonText }]}>
-          Finish + Build Your Ark
+          {t("onboarding.name.finishBuildArk")}
         </Text>
       </TouchableOpacity>
 
@@ -836,20 +772,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         onPress={() => handleComplete(false)}
       >
         <Text style={[styles.completeBtnText, { color: colors.bg }]}>
-          Skip for Now
+          {t("onboarding.name.skipForNow")}
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.backBtnFull} onPress={handleBack}>
-        <Text style={styles.skipBtnText}>← Back</Text>
+        <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
       </TouchableOpacity>
 
-      <Text style={styles.tourHint}>
-        Next, onboarding continues with a guided look at each tab - each tip
-        has a Learn more with the full detail, and you can go back a step or
-        skip at any point. Reread and search all of it later in Profile →
-        Help → Onboarding.
-      </Text>
+      <Text style={styles.tourHint}>{t("onboarding.name.tourHint")}</Text>
     </View>
   );
 

@@ -29,6 +29,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import * as Updates from "expo-updates";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type {
   CurrencyPreferenceId,
   UpdatePreferences,
@@ -98,32 +100,31 @@ type UpdateMetadata = {
 
 /** Settings-row subtext summarizing the current tracking-reminder setup. */
 const reminderRowSubtext = (
+  t: TFunction,
   settings: TrackingReminderSettings | null
 ): string => {
   if (!settings?.enabled) {
-    return "Nudges to log spending & plan each month";
+    return t("profile.settings.reminders.off");
   }
   const cadence =
-    settings.cadenceDays === 1
-      ? "After a quiet day"
-      : settings.cadenceDays === 7
-        ? "After a quiet week"
-        : `After ${settings.cadenceDays} quiet days`;
+    settings.cadenceDays === 7
+      ? t("profile.settings.reminders.afterQuietWeek")
+      : t("profile.settings.reminders.afterQuietDays", { count: settings.cadenceDays });
   const what =
     settings.checkInsEnabled && settings.monthStartEnabled
-      ? "Check-ins & month-start planning"
+      ? t("profile.settings.reminders.checkInsAndMonthStart")
       : settings.checkInsEnabled
         ? cadence
         : settings.monthStartEnabled
-          ? "Month-start planning"
-          : "Nothing selected";
+          ? t("profile.settings.reminders.monthStart")
+          : t("profile.settings.reminders.nothingSelected");
   const when =
     settings.hour === 9
-      ? "mornings"
+      ? t("profile.settings.reminders.mornings")
       : settings.hour === 13
-        ? "afternoons"
-        : "evenings";
-  return `${what} · ${when}`;
+        ? t("profile.settings.reminders.afternoons")
+        : t("profile.settings.reminders.evenings");
+  return t("profile.settings.reminders.summary", { what, when });
 };
 
 export type SettingsSectionHandle = {
@@ -155,6 +156,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
   onOpenTrackingReminders,
   onCloseTrackingReminders,
 }, ref) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -420,9 +422,8 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
       if (!canCheckUpdates) {
         if (source === "manual") {
           showInfo({
-            title: "Updates Unavailable",
-            message:
-              "Update checks are unavailable in development builds. Install an EAS preview/production build to use this feature.",
+            title: t("profile.settings.updates.unavailableTitle"),
+            message: t("profile.settings.updates.unavailableMessage"),
           });
         }
         return;
@@ -438,8 +439,10 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
         if (!checkResult.isAvailable) {
           if (source === "manual") {
             showInfo({
-              title: "Up to Date",
-              message: `No update is currently available. Last checked ${formatDateTime(checkedAt)}.`,
+              title: t("profile.settings.updates.upToDateTitle"),
+              message: t("profile.settings.updates.upToDateMessage", {
+                when: formatDateTime(checkedAt),
+              }),
             });
           }
           return;
@@ -456,9 +459,8 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
         if (!isUpdateSafe(currentRuntime, updateMeta.runtimeVersion)) {
           if (source === "manual") {
             showInfo({
-              title: "Update Rejected",
-              message:
-                "This update was rejected because it targets an older runtime version. This may indicate a rollback attempt.",
+              title: t("profile.settings.updates.rejectedTitle"),
+              message: t("profile.settings.updates.rejectedMessage"),
             });
           }
           return;
@@ -489,30 +491,32 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             lower.includes(hint),
           );
           const friendly = isNetworkError
-            ? "Could not reach the update server. Check your internet connection and try again."
-            : "Unable to check for updates right now. Please try again shortly.";
+            ? t("profile.settings.updates.failedNetwork")
+            : t("profile.settings.updates.failedGeneric");
           showInfo({
-            title: "Update Check Failed",
-            message: raw ? `${friendly}\n\nDetails: ${raw}` : friendly,
+            title: t("profile.settings.updates.failedTitle"),
+            message: raw
+              ? t("profile.settings.updates.failedDetails", { friendly, details: raw })
+              : friendly,
           });
         }
       } finally {
         setIsCheckingUpdates(false);
       }
     },
-    [canCheckUpdates, extractUpdateMetadata, isCheckingUpdates, showInfo],
+    [canCheckUpdates, extractUpdateMetadata, isCheckingUpdates, showInfo, t],
   );
 
   const toggleManualMode = useCallback(async () => {
     const updated = await setManualUpdateMode(!updatePrefs.manualUpdateMode);
     setUpdatePrefs(updated);
     showInfo({
-      title: "Update Mode Saved",
+      title: t("profile.settings.updates.modeSavedTitle"),
       message: updated.manualUpdateMode
-        ? "Manual mode is on. The app will only check for updates when you tap Check for Updates."
-        : "Automatic update checks are enabled.",
+        ? t("profile.settings.updates.modeManualMessage")
+        : t("profile.settings.updates.modeAutoMessage"),
     });
-  }, [showInfo, updatePrefs.manualUpdateMode]);
+  }, [showInfo, t, updatePrefs.manualUpdateMode]);
 
   const toggleHaptics = useCallback(async () => {
     const next = !hapticsEnabled;
@@ -552,11 +556,10 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     setShowHoldingsDisclosure(false);
     triggerHaptic("success");
     showInfo({
-      title: "Live Holdings On",
-      message:
-        "Add stocks and ETFs from the Bridge tab. Prices refresh about once a day.",
+      title: t("profile.settings.holdings.enabledTitle"),
+      message: t("profile.settings.holdings.enabledMessage"),
     });
-  }, [showInfo]);
+  }, [showInfo, t]);
 
   const closeAppLockSetup = useCallback(() => {
     setShowAppLockSetup(false);
@@ -571,12 +574,14 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     await setPrivacyMode(next);
     setPrivacyModeState(next);
     showInfo({
-      title: next ? "Privacy Mode On" : "Privacy Mode Off",
+      title: next
+        ? t("profile.settings.privacy.onTitle")
+        : t("profile.settings.privacy.offTitle"),
       message: next
-        ? "Screenshots and screen recording are now blocked."
-        : "Screenshot and screen recording protection is disabled.",
+        ? t("profile.settings.privacy.onMessage")
+        : t("profile.settings.privacy.offMessage"),
     });
-  }, [privacyMode, showInfo]);
+  }, [privacyMode, showInfo, t]);
 
   const installPendingUpdate = useCallback(async () => {
     try {
@@ -594,13 +599,12 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
       await Updates.reloadAsync();
     } catch (error: any) {
       showInfo({
-        title: "Install Failed",
+        title: t("profile.settings.updates.installFailedTitle"),
         message:
-          error?.message ||
-          "The update could not be applied right now. Please try again.",
+          error?.message || t("profile.settings.updates.installFailedMessage"),
       });
     }
-  }, [pendingUpdate, showInfo]);
+  }, [pendingUpdate, showInfo, t]);
 
   return (
     <>
@@ -609,7 +613,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          SETTINGS
+          {t("profile.settings.sectionTitle")}
         </Text>
 
         <View
@@ -624,7 +628,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           >
             <View>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Currency
+                {t("profile.settings.currency.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
@@ -650,18 +654,18 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Privacy Mode
+                {t("profile.settings.privacy.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {privacyMode
-                  ? "Screenshots & screen recording blocked"
-                  : "Screenshots & screen recording allowed"}
+                  ? t("profile.settings.privacy.enabled")
+                  : t("profile.settings.privacy.disabled")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {privacyMode ? "On" : "Off"}
+              {privacyMode ? t("common.on") : t("common.off")}
             </Text>
           </TouchableOpacity>
 
@@ -678,18 +682,18 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                App Lock
+                {t("profile.settings.appLock.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {appLockEnabled
-                  ? "PIN required when the app opens"
-                  : "Ask for a PIN when the app opens"}
+                  ? t("profile.settings.appLock.enabled")
+                  : t("profile.settings.appLock.disabled")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {appLockEnabled ? "On" : "Off"}
+              {appLockEnabled ? t("common.on") : t("common.off")}
             </Text>
           </TouchableOpacity>
 
@@ -703,18 +707,18 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           <TouchableOpacity style={styles.groupedRow} onPress={toggleHoldings}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Live Holdings
+                {t("profile.settings.holdings.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {holdingsSettings.enabled
-                  ? "Tracking stocks & ETFs in your net worth"
-                  : "Track stocks & ETFs in your net worth"}
+                  ? t("profile.settings.holdings.enabled")
+                  : t("profile.settings.holdings.disabled")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {holdingsSettings.enabled ? "On" : "Off"}
+              {holdingsSettings.enabled ? t("common.on") : t("common.off")}
             </Text>
           </TouchableOpacity>
 
@@ -728,18 +732,18 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           <TouchableOpacity style={styles.groupedRow} onPress={toggleHaptics}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Haptic Feedback
+                {t("profile.settings.haptics.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {hapticsEnabled
-                  ? "Subtle vibrations on key actions"
-                  : "Vibrations disabled"}
+                  ? t("profile.settings.haptics.enabled")
+                  : t("profile.settings.haptics.disabled")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {hapticsEnabled ? "On" : "Off"}
+              {hapticsEnabled ? t("common.on") : t("common.off")}
             </Text>
           </TouchableOpacity>
 
@@ -760,18 +764,18 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             <View style={{ flex: 1 }}>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Tracking Reminders
+                  {t("profile.settings.reminders.label")}
                 </Text>
                 {newFeatureIds.has("tracking-reminders") && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                {reminderRowSubtext(reminderSettings)}
+                {reminderRowSubtext(t, reminderSettings)}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {reminderSettings?.enabled ? "On" : "Off"}
+              {reminderSettings?.enabled ? t("common.on") : t("common.off")}
             </Text>
           </TouchableOpacity>
 
@@ -789,14 +793,16 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           >
             <View>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Check for Updates
+                {t("profile.settings.updates.checkLabel")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {updatePrefs.lastCheckedAt
-                  ? `Last checked ${formatDateTime(updatePrefs.lastCheckedAt)}`
-                  : "Never checked"}
+                  ? t("profile.settings.updates.lastChecked", {
+                      when: formatDateTime(updatePrefs.lastCheckedAt),
+                    })
+                  : t("profile.settings.updates.neverChecked")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -817,18 +823,18 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Auto Updates
+                {t("profile.settings.updates.autoLabel")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {updatePrefs.manualUpdateMode
-                  ? "Off - manual checks only"
-                  : "On - checks automatically"}
+                  ? t("profile.settings.updates.autoOff")
+                  : t("profile.settings.updates.autoOn")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {updatePrefs.manualUpdateMode ? "Off" : "On"}
+              {updatePrefs.manualUpdateMode ? t("common.off") : t("common.on")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -837,7 +843,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
       {/* ── Currency Selection Modal ── */}
       <OptionPickerModal
         visible={showCurrencyModal}
-        title="Currency & Locale"
+        title={t("profile.settings.currency.pickerTitle")}
         options={currencyOptions}
         keyOf={(option) => option.id}
         isSelected={(option) => option.id === preference.id}
@@ -883,14 +889,19 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>
-              Change currency
+              {t("profile.settings.currencyChange.title")}
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
               {pairing
-                ? `Switching to ${currencyPrompt?.toLabel} changes the currency symbol, but your amounts stay the same numbers. Your data is synced with a paired partner, so amounts can't be converted automatically - unpair first if you want to convert them.`
+                ? t("profile.settings.currencyChange.pairedMessage", {
+                    to: currencyPrompt?.toLabel ?? "",
+                  })
                 : currencyRatesLoading
-                  ? "Fetching today's exchange rate..."
-                  : `Convert your existing amounts from ${currencyPrompt?.fromLabel} to ${currencyPrompt?.toLabel} at the rate below, or just change the symbol and keep the same numbers?`}
+                  ? t("profile.settings.currencyChange.fetchingRate")
+                  : t("profile.settings.currencyChange.convertQuestion", {
+                      from: currencyPrompt?.fromLabel ?? "",
+                      to: currencyPrompt?.toLabel ?? "",
+                    })}
             </Text>
 
             {!pairing && !currencyRatesLoading && currencyRates && currencyPrompt
@@ -902,13 +913,20 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                   const r = cross >= 100 ? cross.toFixed(2) : cross.toFixed(4);
                   const prefix =
                     currencyRates.source === "live"
-                      ? "Today's rate"
+                      ? t("profile.settings.currencyChange.rateToday")
                       : currencyRates.source === "cache"
-                        ? `Rates from ${formatDateTime(currencyRates.fetchedAt)} (couldn't reach live rates)`
-                        : "Offline - using a built-in estimate";
+                        ? t("profile.settings.currencyChange.rateCached", {
+                            when: formatDateTime(currencyRates.fetchedAt),
+                          })
+                        : t("profile.settings.currencyChange.rateOffline");
                   return (
                     <Text style={[styles.dialogTip, { color: colors.text }]}>
-                      {`${prefix}: 1 ${from} = ${r} ${to}`}
+                      {t("profile.settings.currencyChange.rateLine", {
+                        prefix,
+                        from,
+                        rate: r,
+                        to,
+                      })}
                     </Text>
                   );
                 })()
@@ -929,7 +947,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                     <Text
                       style={[styles.dialogBtnText, { color: colors.accentButtonText }]}
                     >
-                      Convert my amounts
+                      {t("profile.settings.currencyChange.convertButton")}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -944,7 +962,9 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 }}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                  {pairing ? "Change symbol only" : "Just change the symbol"}
+                  {pairing
+                    ? t("profile.settings.currencyChange.symbolOnlyPaired")
+                    : t("profile.settings.currencyChange.symbolOnly")}
                 </Text>
               </TouchableOpacity>
 
@@ -954,7 +974,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 onPress={() => setCurrencyPrompt(null)}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.textDim }]}>
-                  Cancel
+                  {t("common.cancel")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -990,7 +1010,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
               return (
                 <>
                   <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                    Update Ready
+                    {t("profile.settings.updates.readyTitle")}
                   </Text>
 
                   {updateVersion ? (
@@ -1043,7 +1063,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                       style={[styles.dialogMessage, { color: colors.textDim }]}
                     >
                       {pendingUpdate?.message ||
-                        "A new update is ready to install."}
+                        t("profile.settings.updates.readyMessage")}
                     </Text>
                   )}
 
@@ -1051,7 +1071,9 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                     <Text
                       style={[styles.updateMeta, { color: colors.textMuted }]}
                     >
-                      Published {formatDateTime(pendingUpdate.createdAt)}
+                      {t("profile.settings.updates.published", {
+                        when: formatDateTime(pendingUpdate.createdAt),
+                      })}
                     </Text>
                   ) : null}
 
@@ -1063,7 +1085,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                       <Text
                         style={[styles.dialogBtnText, { color: colors.text }]}
                       >
-                        Later
+                        {t("profile.settings.updates.later")}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -1076,7 +1098,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                       <Text
                         style={[styles.dialogBtnText, { color: colors.accentButtonText }]}
                       >
-                        Install Now
+                        {t("profile.settings.updates.installNow")}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1124,7 +1146,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 onPress={() => setFxDisclosurePending(null)}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                  Not now
+                  {t("profile.settings.notNow")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1132,7 +1154,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 onPress={confirmFxDisclosure}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                  Continue
+                  {t("common.continue")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1177,7 +1199,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 onPress={() => setShowHoldingsDisclosure(false)}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                  Not now
+                  {t("profile.settings.notNow")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1185,7 +1207,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 onPress={confirmEnableHoldings}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                  Enable
+                  {t("profile.settings.holdings.enable")}
                 </Text>
               </TouchableOpacity>
             </View>

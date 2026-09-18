@@ -12,6 +12,7 @@
 
 import React, { useCallback, useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useCoachmarks } from "../../onboarding/CoachmarksProvider";
 import { useCoachmarkAnchor } from "../../onboarding/CoachmarkAnchorContext";
 import { useOnboardingGate } from "../../onboarding/OnboardingGateContext";
@@ -28,6 +29,7 @@ type HelpSectionProps = {
 };
 
 const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -71,7 +73,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          HELP
+          {t("profile.info.help.sectionTitle")}
         </Text>
 
         <View
@@ -91,12 +93,12 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
           >
             <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Onboarding
+                {t("profile.info.help.onboarding.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Searchable guide to everything, or redo the first-launch setup
+                {t("profile.info.help.onboarding.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -117,16 +119,16 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
               triggerHaptic("selection");
               replayFeatureTour();
             }}
-            accessibilityLabel="Replay the feature tour"
+            accessibilityLabel={t("profile.info.help.featureTour.a11yLabel")}
           >
             <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Feature tour
+                {t("profile.info.help.featureTour.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Rewatch the what's-new tour of recent features
+                {t("profile.info.help.featureTour.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

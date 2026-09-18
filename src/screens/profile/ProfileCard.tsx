@@ -10,6 +10,7 @@
 
 import React, { useCallback, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { UserAccount } from "../../types";
 import { updateDisplayName } from "../../storage/userStorage";
 import { sanitizeTextInput } from "../../utils/sanitize";
@@ -23,6 +24,7 @@ type ProfileCardProps = {
 };
 
 const ProfileCard: React.FC<ProfileCardProps> = ({ user, onUserUpdated }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -81,7 +83,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ user, onUserUpdated }) => {
                 onPress={handleSaveName}
               >
                 <Text style={[styles.saveBtnText, { color: colors.bg }]}>
-                  Save
+                  {t("common.save")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -98,7 +100,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ user, onUserUpdated }) => {
                 {user.displayName}
               </Text>
               <Text style={[styles.editHint, { color: colors.textMuted }]}>
-                {user.id.slice(0, 8)}... · Tap name to edit
+                {t("profile.main.card.editHint", { idPrefix: user.id.slice(0, 8) })}
               </Text>
             </TouchableOpacity>
           )}

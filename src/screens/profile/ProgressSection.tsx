@@ -9,6 +9,7 @@
 
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useAchievements } from "../../achievements/AchievementsProvider";
 import AchievementsScreen from "../AchievementsScreen";
 import { triggerHaptic } from "../../utils/haptics";
@@ -17,6 +18,7 @@ import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 
 const ProgressSection: React.FC = () => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -34,7 +36,7 @@ const ProgressSection: React.FC = () => {
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          PROGRESS
+          {t("profile.main.progress.sectionTitle")}
         </Text>
 
         <View
@@ -50,16 +52,19 @@ const ProgressSection: React.FC = () => {
               setShowAchievements(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open Ship's Log achievements"
+            accessibilityLabel={t("profile.main.progress.shipsLogA11y")}
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Ship's Log
+                {t("profile.main.progress.shipsLog")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                {`${Object.keys(achievementUnlocked).length}/${totalAchievements} achievements earned`}
+                {t("profile.main.progress.earned", {
+                  unlocked: Object.keys(achievementUnlocked).length,
+                  total: totalAchievements,
+                })}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

@@ -22,6 +22,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useDensity } from "../theme/DensityProvider";
@@ -67,6 +68,7 @@ function OptionPickerModal<T>({
 }: OptionPickerModalProps<T>): React.ReactElement {
   const { colors } = useTheme();
   const { tokens } = useDensity();
+  const { t } = useTranslation();
   const styles = React.useMemo(() => makeStyles(tokens, colors), [tokens, colors]);
 
   return (
@@ -138,10 +140,10 @@ function OptionPickerModal<T>({
             style={[styles.closeBtn, { backgroundColor: colors.accent }]}
             onPress={onClose}
             accessibilityRole="button"
-            accessibilityLabel="Done"
+            accessibilityLabel={t("common.done")}
           >
             <Text style={[styles.closeBtnText, { color: colors.white }]}>
-              Done
+              {t("common.done")}
             </Text>
           </TouchableOpacity>
         </View>

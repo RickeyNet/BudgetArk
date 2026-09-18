@@ -480,6 +480,44 @@ Work through phases in order: finish the features first, then handle store prep 
 
 ---
 
+## Localization - Russian / Ukrainian / German (requested 2026-09-16)
+
+Assessment 2026-09-16. The app has ZERO i18n today (no expo-localization, i18next, react-intl, or `useTranslation` anywhere), so this is a full retrofit, not "add three locale files". The plumbing is a day or two; the volume is weeks. Privacy posture is unaffected either way: translations are bundled, nothing calls a translation service at runtime (rule 4 untouched).
+
+Inventory at assessment time:
+- String literals of 12+ chars in `src/screens` + `src/components` + `src/data` + `src/navigation`: ~5,100 (many not user-facing; real user-facing count is still well over 1,000)
+- JSX text nodes ~615, string props (title/label/placeholder/...) ~154, `Alert.alert` calls 29
+- Screens ~12.7k lines (four screens of 2,000+ lines each), components 92 files / ~36k lines
+- Lesson prose in `src/data/lessons/`: 24 lessons, ~11,000 words; plus release notes, coachmarks, feature spotlights, disclosures, achievement text - ~15,000 words of prose total, x3 languages
+- Locale-sensitive formatting calls (`toLocaleString` / `Intl.*` / `toLocaleDateString`): 38; hardcoded `'en-US'`: 8
+- Logic sites that string-match a category name: 2
+
+- [ ] **Phase 0 - decide.** Confirm demand justifies the ongoing cost: every future feature carries four sets of strings, and a missed key renders as a raw `budget.cashflow.title` on screen. Solo-maintained, frequent releases - this tax is permanent.
+
+**Progress 2026-09-18 (branch `1.11.0`, German first):** Phase 1 DONE; Phase 2 started. `expo-localization` + `i18next` + `react-i18next` installed (native -> `runtimeVersion` bumped to 1.11.0, store build required). `src/i18n/`: typed key tree (English source `locales/en/*.ts` `as const`, German twins typed `Localized<typeof en>` - a missing/extra German key fails `npm run typecheck`; `i18next.d.ts` types `t()` keys), `pickLanguage.ts` (pure, tested), `LanguageProvider.tsx` (outermost provider; setting `@budgetark_language_id` auto/en/de via appearanceBoot, survives reset, not synced/exported), `GLOSSARY.md` (conventions + German vocabulary, informal "du"). Profile -> Appearance has the Language picker (Automatic / English / Deutsch). Translated so far (436 keys): tab bar, OptionPickerModal, Appearance card + pickers, the full Onboarding flow, and the whole Profile screen (ProfileScreen + all 15 `profile/` sections). Tests: `src/i18n/__tests__` (key parity, placeholders, plural pairs). Still English: every other screen and every `src/components` modal (incl. the ones Profile opens: AutoBackupModal, PairingModal, ConnectionsModal, TrackingRemindersModal, AppLockSetupModal, ManageCategoriesModal, ...), `src/data` copy (mission statement, disclosures, quick-start templates, coachmarks, release notes, lessons), util-thrown error messages surfaced via `error.message`, `describeSyncActivity`, `cadenceLabel`, currency option labels. Device testing pending: Intl.PluralRules on Hermes (dev-build warning added), German overflow on chips/tabs, first paint in German on a German phone, language switch re-render across tabs.
+
+- [x] **Phase 1 - infrastructure (1-2 days).** DONE 2026-09-18 - see progress note above. `expo-localization` (device locale) + `i18next` / `react-i18next` with ICU-style plurals. Language picker in Profile → Appearance (auto / en / de / uk / ru) persisted through encryptedStorage. `t()` helper + `useTranslation`. `expo-localization` is a NATIVE module → bump `app.json` `runtimeVersion` → store build, not OTA. Ship English as the fallback locale so a missing key never renders as a bare key in production.
+
+- [~] **Phase 2 - UI chrome extraction (the long part, several weeks).** Started 2026-09-18: Onboarding + Profile done; next Budget -> Debts -> Bridge -> Charts -> components. Move every user-facing literal in ~230 files to a key. Mechanical but easy to get subtly wrong; do it screen-by-screen with typecheck + lint + tests green after each. Order: navigation/tab labels → Profile → Onboarding → Budget → Debts → Bridge → Charts → components. Translate chrome only in this phase; lessons and the tax tool stay English with a small "English only" note. This gets a usable app to the requesters at roughly a third of the total cost.
+
+- [ ] **Phase 3 - locale-correct behavior, not just words.**
+  - Russian and Ukrainian have THREE plural forms (1 / 2-4 / 5+). Every `${n} entries`-style concatenation becomes a plural key (`t('entries', { count })`). Hermes ships `Intl.PluralRules` on both platforms; verify on device.
+  - German runs ~30% longer. Expect overflow on chips, tab labels, buttons, and the density-token layouts sized for English. Device verification only - no test rig catches it.
+  - Number/currency formatting must follow the locale (`1.234,56 €`, `₴`, `₽`): thread the active locale through the 38 Intl/toLocaleString call sites and remove the 8 hardcoded `'en-US'`. Check whether a display-currency setting already exists (the exchange calculator does) before adding one.
+  - Date formats (month names, first day of week) via `Intl.DateTimeFormat` with the active locale.
+
+- [ ] **Phase 4 - content translation (separate budget).** ~15,000 words of prose x3. Machine translation (DeepL is strong for German; decent for uk/ru) is fine for UI chrome, but financial education deserves a native reviewer per language. Translate lessons per language only as demand proves out.
+
+**Codebase-specific traps - read before starting:**
+- **Category names are persisted keys AND part of the sync wire contract.** `BUDGET_CATEGORIES` values ("Grocery", "Housing", ...) are stored on entries, appear in `SyncDiff`, exports, merchant rules, and the widget deep link. NEVER translate them in storage or rename them (CLAUDE.md already forbids removing names). Add a display-name lookup (`categoryLabel(name, locale)`) instead. Only 2 logic sites compare on the English name, so that is contained. User-created custom categories stay as typed.
+- **Widgets render category names natively.** The iOS WidgetKit target (`targets/quickentry`) and the Android widget need their own localization tables (Localizable.strings / values-de,uk,ru) for the built-in category names and any chrome. Deep-link params stay English keys (rule 13 - `parseQuickAddUri` fail-closed on unrecognized values).
+- **Much of the content is US-only.** The Take-Home Pay tax calculator (2026 federal + state data), W-2 / 1099 income types, 401k fields, quarterly-tax estimates, and several lessons have no meaning in Germany, Ukraine, or Russia. A German user in a German-language app will expect German tax rules. Either hide those tools for non-US locales or label them clearly as US-only; do NOT attempt foreign tax tables (annual-refresh burden is already a known cost for the US set).
+- **Tests may assert English strings** (annual report text, sanitized messages, release-note parsing). Keep pure helpers locale-independent where possible; where a helper formats user-facing text, pass the locale in and pin the English fixture.
+- **Release notes are a wire/OTA contract** (`tryParseReleaseNoteFromMessage`, `isUpdateSafe`). Keep the OTA message English; translate only the in-app rendering if at all.
+- **Accessibility labels** (the pending a11y pass above) should be written as translation keys from the start so that work is not redone.
+
+---
+
 ## Themes
 
 Ideas for new color themes (all pure JS - a `ThemePreset` in `src/theme/themes.ts` plus an optional ambient background component - so every one of these is OTA-safe). Existing lineup for reference: The Ark, Forest Gold, Neon Purple, Easy, Rose, Synthwave, Deep Forest, Coral, Deep Space, Deep Sea; ambient backgrounds currently on the "Deep" themes only.

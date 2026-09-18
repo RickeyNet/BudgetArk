@@ -8,6 +8,7 @@
 
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import ManageCategoriesModal from "../../components/ManageCategoriesModal";
 import { useCustomCategories } from "../../categories/CustomCategoriesProvider";
 import { triggerHaptic } from "../../utils/haptics";
@@ -16,6 +17,7 @@ import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 
 const CategoriesSection: React.FC = () => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -31,7 +33,7 @@ const CategoriesSection: React.FC = () => {
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          CATEGORIES
+          {t("profile.info.categories.sectionTitle")}
         </Text>
 
         <View
@@ -47,18 +49,20 @@ const CategoriesSection: React.FC = () => {
               setShowManageCategories(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Manage custom categories"
+            accessibilityLabel={t("profile.info.categories.custom.a11yLabel")}
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Custom Categories
+                {t("profile.info.categories.custom.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {customCategories.length === 0
-                  ? "Add your own budget categories"
-                  : `${customCategories.length} custom`}
+                  ? t("profile.info.categories.custom.empty")
+                  : t("profile.info.categories.custom.count", {
+                      count: customCategories.length,
+                    })}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

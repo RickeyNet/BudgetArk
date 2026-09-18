@@ -3,14 +3,21 @@
  * File: src/screens/profile/AppearanceSection.tsx
  *
  * The APPEARANCE card (theme, design style, ambient backgrounds, layout
- * density, text size) and its four OptionPickerModal pickers. The theme
- * picker's visibility stays in ProfileScreen because the feature spotlight
- * deep link (openSection: "theme") opens it from there; the other pickers
- * are local. Also registers the coachmark anchor for the appearance card.
+ * density, text size, language) and its OptionPickerModal pickers. The
+ * theme picker's visibility stays in ProfileScreen because the feature
+ * spotlight deep link (openSection: "theme") opens it from there; the other
+ * pickers are local. Also registers the coachmark anchor for the appearance
+ * card.
+ *
+ * Preset names/descriptions are looked up by preset ID in the locale tree
+ * (appearance.<axis>.presets.<id>) so they translate; the English `name`
+ * on the preset object is the fallback for an id the tree doesn't know.
+ * Theme names are proper nouns and render untranslated.
  */
 
 import React, { useCallback, useState } from "react";
 import { View, Text, TouchableOpacity, type ScrollView } from "react-native";
+import { useTranslation } from "react-i18next";
 import OptionPickerModal from "../../components/OptionPickerModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -18,6 +25,9 @@ import { useBackgroundEffects } from "../../theme/BackgroundEffectsProvider";
 import { useSurfaceStyle } from "../../theme/SurfaceStyleProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useCoachmarkAnchor } from "../../onboarding/CoachmarkAnchorContext";
+import { useLanguage, type LanguageOption } from "../../i18n/LanguageProvider";
+import { LANGUAGE_NATIVE_NAMES } from "../../i18n/pickLanguage";
+import { en } from "../../i18n/locales/en";
 import { useProfileStyles } from "./profileStyles";
 
 type AppearanceSectionProps = {
@@ -29,6 +39,12 @@ type AppearanceSectionProps = {
   onCloseThemeModal: () => void;
 };
 
+type PresetAxis = "surfaceStyle" | "density" | "textSize";
+type PresetIdOf<A extends PresetAxis> = keyof (typeof en)["appearance"][A]["presets"];
+
+const isKnownPresetId = <A extends PresetAxis>(axis: A, id: string): id is PresetIdOf<A> & string =>
+  Object.prototype.hasOwnProperty.call(en.appearance[axis].presets, id);
+
 const AppearanceSection: React.FC<AppearanceSectionProps> = ({
   scrollRef,
   newFeatureIds,
@@ -37,6 +53,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
   onOpenThemeModal,
   onCloseThemeModal,
 }) => {
+  const { t } = useTranslation();
   const { colors, presets, themeId, surfaceStyleId, setThemeId } = useTheme();
   const { backgroundEffectsEnabled, setBackgroundEffectsEnabled } =
     useBackgroundEffects();
@@ -54,6 +71,12 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
     textSizePresets,
     setTextSizeId,
   } = useDensity();
+  const {
+    languageId,
+    resolvedLanguage,
+    options: languageOptions,
+    setLanguageId,
+  } = useLanguage();
   const styles = useProfileStyles(tokens, colors);
   const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", {
     scrollRef,
@@ -62,6 +85,34 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
   const [showSurfaceStyleModal, setShowSurfaceStyleModal] = useState(false);
   const [showDensityModal, setShowDensityModal] = useState(false);
   const [showTextSizeModal, setShowTextSizeModal] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+
+  /** Translated preset name/description, English preset text as fallback. */
+  const presetText = useCallback(
+    <A extends PresetAxis>(
+      axis: A,
+      preset: { id: string; name: string; description: string },
+    ): { name: string; description: string } => {
+      if (!isKnownPresetId(axis, preset.id)) return preset;
+      // Cast: the id is proven to be a key of this axis's preset table, but
+      // i18next's key typing can't follow a generic axis + id through a
+      // template literal.
+      const base = `appearance.${axis}.presets.${preset.id}` as "appearance.density.presets.compact";
+      return { name: t(`${base}.name`), description: t(`${base}.description`) };
+    },
+    [t],
+  );
+
+  const languageOptionText = useCallback(
+    (option: LanguageOption): { name: string; description: string } =>
+      option.id === "auto"
+        ? {
+            name: t("appearance.language.options.auto.name"),
+            description: t("appearance.language.options.auto.description"),
+          }
+        : { name: option.nativeName ?? option.id, description: "" },
+    [t],
+  );
 
   /**
    * Handle theme selection
@@ -98,6 +149,13 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
     [setTextSizeId],
   );
 
+  const handleLanguageSelect = useCallback(
+    async (option: LanguageOption) => {
+      await setLanguageId(option.id);
+    },
+    [setLanguageId],
+  );
+
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
   const currentSurfaceStyle = surfaceStylePresets.find(
@@ -106,6 +164,32 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
   const currentDensity = densityPresets.find((p) => p.id === densityId);
   const currentTextSize = textSizePresets.find((p) => p.id === textSizeId);
 
+  const surfaceStyleName = currentSurfaceStyle
+    ? presetText("surfaceStyle", currentSurfaceStyle).name
+    : t("appearance.surfaceStyle.presets.solid.name");
+  const densityName = currentDensity
+    ? presetText("density", currentDensity).name
+    : t("appearance.density.presets.comfortable.name");
+  const textSizeName = currentTextSize
+    ? presetText("textSize", currentTextSize).name
+    : t("appearance.textSize.presets.default.name");
+  // "Automatic (Deutsch)" tells the user what auto resolved to; a fixed
+  // choice shows the language in its own name.
+  const languageName =
+    languageId === "auto"
+      ? t("appearance.language.autoWithResolved", {
+          language: LANGUAGE_NATIVE_NAMES[resolvedLanguage],
+        })
+      : LANGUAGE_NATIVE_NAMES[languageId];
+
+  const glassDefaultTheme =
+    storedSurfaceStyleId == null &&
+    (themeId === "deep_space" || themeId === "deep_sea")
+      ? themeId === "deep_sea"
+        ? "Deep Sea"
+        : "Deep Space"
+      : null;
+
   return (
     <>
       {/* ── Appearance (Theme + Currency) ── */}
@@ -113,7 +197,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          APPEARANCE
+          {t("appearance.sectionTitle")}
         </Text>
 
         <View
@@ -134,7 +218,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
             <View>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Theme
+                  {t("appearance.theme.label")}
                 </Text>
                 {newFeatureIds.has("deep-sea-theme") && <NewFeatureBadge />}
               </View>
@@ -162,16 +246,13 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
           >
             <View>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Design Style
+                {t("appearance.surfaceStyle.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                {currentSurfaceStyle?.name || "Solid"}
-                {storedSurfaceStyleId == null &&
-                (themeId === "deep_space" || themeId === "deep_sea")
-                  ? " · theme default"
-                  : ""}
+                {surfaceStyleName}
+                {glassDefaultTheme ? t("appearance.surfaceStyle.themeDefaultSuffix") : ""}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -192,14 +273,14 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
           >
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Ambient Backgrounds
+                {t("appearance.backgroundEffects.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {backgroundEffectsEnabled
-                  ? "Decorative themed backgrounds are enabled"
-                  : "Plain backgrounds for reduced visual noise"}
+                  ? t("appearance.backgroundEffects.enabled")
+                  : t("appearance.backgroundEffects.disabled")}
               </Text>
             </View>
             <Text
@@ -212,7 +293,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
                 },
               ]}
             >
-              {backgroundEffectsEnabled ? "On" : "Off"}
+              {backgroundEffectsEnabled ? t("common.on") : t("common.off")}
             </Text>
           </TouchableOpacity>
 
@@ -229,12 +310,12 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
           >
             <View>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Layout Density
+                {t("appearance.density.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                {currentDensity?.name || "Comfortable"}
+                {densityName}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -253,17 +334,46 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
             style={styles.groupedRow}
             onPress={() => setShowTextSizeModal(true)}
             accessibilityRole="button"
-            accessibilityLabel={`Text Size, currently ${currentTextSize?.name || "Default"}`}
-            accessibilityHint="Opens text size options for the whole app"
+            accessibilityLabel={t("appearance.textSize.a11yLabel", { current: textSizeName })}
+            accessibilityHint={t("appearance.textSize.a11yHint")}
           >
             <View>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Text Size
+                {t("appearance.textSize.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                {currentTextSize?.name || "Default"}
+                {textSizeName}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => setShowLanguageModal(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("appearance.language.a11yLabel", { current: languageName })}
+            accessibilityHint={t("appearance.language.a11yHint")}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                {t("appearance.language.label")}
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                {languageName}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -276,7 +386,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
       {/* ── Theme Selection Modal ── */}
       <OptionPickerModal
         visible={showThemeModal}
-        title="Choose Theme"
+        title={t("appearance.theme.pickerTitle")}
         options={presets}
         keyOf={(preset) => preset.id}
         isSelected={(preset) => themeId === preset.id}
@@ -325,106 +435,166 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
       {/* ── Design Style Selection Modal ── */}
       <OptionPickerModal
         visible={showSurfaceStyleModal}
-        title="Design Style"
+        title={t("appearance.surfaceStyle.pickerTitle")}
         options={surfaceStylePresets}
         keyOf={(preset) => preset.id}
         isSelected={(preset) => surfaceStyleId === preset.id}
         onSelect={(preset) => handleSurfaceStyleSelect(preset.id)}
         onClose={() => setShowSurfaceStyleModal(false)}
-        accessibilityLabelOf={(preset) => `${preset.name}. ${preset.description}`}
+        accessibilityLabelOf={(preset) => {
+          const text = presetText("surfaceStyle", preset);
+          return `${text.name}. ${text.description}`;
+        }}
         header={
-          storedSurfaceStyleId == null &&
-          (themeId === "deep_space" || themeId === "deep_sea") ? (
+          glassDefaultTheme ? (
             <Text
               style={[
                 styles.settingsRowSubtext,
                 { color: colors.textDim, marginBottom: 12 },
               ]}
             >
-              {themeId === "deep_sea" ? "Deep Sea" : "Deep Space"} currently
-              defaults to Glass. Pick a style here to keep it across all
-              themes.
+              {t("appearance.surfaceStyle.themeDefaultNote", { theme: glassDefaultTheme })}
             </Text>
           ) : null
         }
-        renderOption={(preset) => (
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.themeOptionText, { color: colors.text }]}>
-              {preset.name}
-            </Text>
-            <Text
-              style={[
-                styles.settingsRowSubtext,
-                { color: colors.textDim, marginTop: 4 },
-              ]}
-            >
-              {preset.description}
-            </Text>
-          </View>
-        )}
+        renderOption={(preset) => {
+          const text = presetText("surfaceStyle", preset);
+          return (
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                {text.name}
+              </Text>
+              <Text
+                style={[
+                  styles.settingsRowSubtext,
+                  { color: colors.textDim, marginTop: 4 },
+                ]}
+              >
+                {text.description}
+              </Text>
+            </View>
+          );
+        }}
       />
 
       {/* ── Density Selection Modal ── */}
       <OptionPickerModal
         visible={showDensityModal}
-        title="Layout Density"
+        title={t("appearance.density.pickerTitle")}
         options={densityPresets}
         keyOf={(preset) => preset.id}
         isSelected={(preset) => densityId === preset.id}
         onSelect={(preset) => handleDensitySelect(preset.id)}
         onClose={() => setShowDensityModal(false)}
-        accessibilityLabelOf={(preset) => `${preset.name}. ${preset.description}`}
-        renderOption={(preset) => (
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.themeOptionText, { color: colors.text }]}>
-              {preset.name}
-            </Text>
-            <Text
-              style={[
-                styles.settingsRowSubtext,
-                { color: colors.textDim, marginTop: 4 },
-              ]}
-            >
-              {preset.description}
-            </Text>
-          </View>
-        )}
+        accessibilityLabelOf={(preset) => {
+          const text = presetText("density", preset);
+          return `${text.name}. ${text.description}`;
+        }}
+        renderOption={(preset) => {
+          const text = presetText("density", preset);
+          return (
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                {text.name}
+              </Text>
+              <Text
+                style={[
+                  styles.settingsRowSubtext,
+                  { color: colors.textDim, marginTop: 4 },
+                ]}
+              >
+                {text.description}
+              </Text>
+            </View>
+          );
+        }}
       />
 
       {/* ── Text Size Selection Modal ── */}
       <OptionPickerModal
         visible={showTextSizeModal}
-        title="Text Size"
+        title={t("appearance.textSize.pickerTitle")}
         options={textSizePresets}
         keyOf={(preset) => preset.id}
         isSelected={(preset) => textSizeId === preset.id}
         onSelect={(preset) => handleTextSizeSelect(preset.id)}
         onClose={() => setShowTextSizeModal(false)}
-        accessibilityLabelOf={(preset) => `${preset.name}. ${preset.description}`}
-        renderOption={(preset) => (
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                styles.themeOptionText,
-                {
-                  color: colors.text,
-                  // Preview the size right in its own row.
-                  fontSize: Math.round(16 * preset.multiplier),
-                },
-              ]}
-            >
-              {preset.name}
-            </Text>
-            <Text
-              style={[
-                styles.settingsRowSubtext,
-                { color: colors.textDim, marginTop: 4 },
-              ]}
-            >
-              {preset.description}
-            </Text>
-          </View>
-        )}
+        accessibilityLabelOf={(preset) => {
+          const text = presetText("textSize", preset);
+          return `${text.name}. ${text.description}`;
+        }}
+        renderOption={(preset) => {
+          const text = presetText("textSize", preset);
+          return (
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  styles.themeOptionText,
+                  {
+                    color: colors.text,
+                    // Preview the size right in its own row.
+                    fontSize: Math.round(16 * preset.multiplier),
+                  },
+                ]}
+              >
+                {text.name}
+              </Text>
+              <Text
+                style={[
+                  styles.settingsRowSubtext,
+                  { color: colors.textDim, marginTop: 4 },
+                ]}
+              >
+                {text.description}
+              </Text>
+            </View>
+          );
+        }}
+      />
+
+      {/* ── Language Selection Modal ── */}
+      <OptionPickerModal
+        visible={showLanguageModal}
+        title={t("appearance.language.pickerTitle")}
+        options={languageOptions}
+        keyOf={(option) => option.id}
+        isSelected={(option) => languageId === option.id}
+        onSelect={handleLanguageSelect}
+        onClose={() => setShowLanguageModal(false)}
+        accessibilityLabelOf={(option) => {
+          const text = languageOptionText(option);
+          return text.description ? `${text.name}. ${text.description}` : text.name;
+        }}
+        header={
+          <Text
+            style={[
+              styles.settingsRowSubtext,
+              { color: colors.textDim, marginBottom: 12 },
+            ]}
+          >
+            {t("appearance.language.note")}
+          </Text>
+        }
+        renderOption={(option) => {
+          const text = languageOptionText(option);
+          return (
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                {text.name}
+              </Text>
+              {text.description ? (
+                <Text
+                  style={[
+                    styles.settingsRowSubtext,
+                    { color: colors.textDim, marginTop: 4 },
+                  ]}
+                >
+                  {text.description}
+                </Text>
+              ) : null}
+            </View>
+          );
+        }}
       />
     </>
   );

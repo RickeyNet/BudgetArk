@@ -9,6 +9,7 @@
 
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import FeedbackModal from "../../components/FeedbackModal";
 import TipJarModal from "../../components/TipJarModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
@@ -33,6 +34,7 @@ const SupportSection: React.FC<SupportSectionProps> = ({
   onCloseTipJar,
   showInfo,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -55,12 +57,12 @@ const SupportSection: React.FC<SupportSectionProps> = ({
           >
             <View>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Send Feedback
+                {t("profile.info.support.feedback.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Bug reports & feature requests
+                {t("profile.info.support.feedback.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -85,14 +87,14 @@ const SupportSection: React.FC<SupportSectionProps> = ({
             <View>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Tip Jar 💛
+                  {t("profile.info.support.tipJar.label")}
                 </Text>
                 {newFeatureIds.has("tip-jar") && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Optional support - nothing to unlock
+                {t("profile.info.support.tipJar.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

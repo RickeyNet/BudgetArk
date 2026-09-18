@@ -25,6 +25,7 @@ import {
   Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { AssetAccount, RootTabParamList } from "../../types";
 import {
@@ -72,6 +73,7 @@ const ConnectionsSection = forwardRef<
   ConnectionsSectionHandle,
   ConnectionsSectionProps
 >(({ newFeatureIds, onDismissNewBadge }, ref) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -266,7 +268,7 @@ const ConnectionsSection = forwardRef<
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          CONNECTIONS
+          {t("profile.connections.banks.sectionTitle")}
         </Text>
 
         <View
@@ -285,7 +287,7 @@ const ConnectionsSection = forwardRef<
             <View style={{ flex: 1 }}>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Bank Connections
+                  {t("profile.connections.banks.bankConnections")}
                 </Text>
                 {newFeatureIds.has("bank-connections") && <NewFeatureBadge />}
               </View>
@@ -298,10 +300,12 @@ const ConnectionsSection = forwardRef<
                 ]}
               >
                 {needsAttention
-                  ? "Needs attention"
+                  ? t("profile.connections.banks.needsAttention")
                   : connections.length === 0
-                    ? "Import transactions from your bank"
-                    : `${connections.length} connected`}
+                    ? t("profile.connections.banks.importPrompt")
+                    : t("profile.connections.banks.connectedCount", {
+                        count: connections.length,
+                      })}
               </Text>
             </View>
             <Text
@@ -327,14 +331,14 @@ const ConnectionsSection = forwardRef<
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Review Inbox
+                {t("profile.connections.banks.reviewInbox")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {pendingCount > 0
-                  ? `${pendingCount} transaction${pendingCount === 1 ? "" : "s"} waiting`
-                  : "Nothing to review"}
+                  ? t("profile.connections.banks.waiting", { count: pendingCount })
+                  : t("profile.connections.banks.nothingToReview")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -381,7 +385,7 @@ const ConnectionsSection = forwardRef<
                 onPress={() => setShowConnectionsDisclosure(false)}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                  Not now
+                  {t("profile.connections.banks.disclosure.notNow")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -389,7 +393,7 @@ const ConnectionsSection = forwardRef<
                 onPress={confirmConnectionsDisclosure}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                  Continue
+                  {t("profile.connections.banks.disclosure.continue")}
                 </Text>
               </TouchableOpacity>
             </View>
