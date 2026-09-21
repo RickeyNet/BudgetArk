@@ -16,7 +16,9 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { BudgetEntry } from "../types";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -35,6 +37,7 @@ const DueDateReminderBanner: React.FC<DueDateReminderBannerProps> = ({
   daysAhead = 7,
   style,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -47,25 +50,29 @@ const DueDateReminderBanner: React.FC<DueDateReminderBannerProps> = ({
   const nextBill = upcomingBills[0] ?? null;
   const totalDue = upcomingBills.reduce((sum, bill) => sum + bill.entry.amount, 0);
 
-  const summaryLine = useMemo(() => {
+  const summaryLine = useMemo<string>(() => {
     if (!nextBill) return "";
-    if (upcomingBills.length === 1) {
-      return `1 bill scheduled in the next ${daysAhead} days`;
-    }
-    return `${upcomingBills.length} bills scheduled in the next ${daysAhead} days`;
-  }, [daysAhead, nextBill, upcomingBills.length]);
+    return t("budget.cards.dueDate.summary", {
+      count: upcomingBills.length,
+      days: daysAhead,
+    });
+  }, [daysAhead, nextBill, t, upcomingBills.length]);
 
-  const nextLine = useMemo(() => {
+  const nextLine = useMemo<string>(() => {
     if (!nextBill) return "";
-    const label = nextBill.entry.description || nextBill.entry.category;
-    const when =
+    const label = nextBill.entry.description || categoryLabel(t, nextBill.entry.category);
+    const when: string =
       nextBill.daysUntil === 0
-        ? "today"
+        ? t("budget.cards.dueDate.today")
         : nextBill.daysUntil === 1
-          ? "tomorrow"
-          : `in ${nextBill.daysUntil} days`;
-    return `Next: ${label} · ${formatCurrency(nextBill.entry.amount)} · ${when}`;
-  }, [formatCurrency, nextBill]);
+          ? t("budget.cards.dueDate.tomorrow")
+          : t("budget.cards.dueDate.inDays", { count: nextBill.daysUntil });
+    return t("budget.cards.dueDate.next", {
+      name: label,
+      amount: formatCurrency(nextBill.entry.amount),
+      when,
+    });
+  }, [formatCurrency, nextBill, t]);
 
   if (!nextBill) return null;
 
@@ -84,14 +91,14 @@ const DueDateReminderBanner: React.FC<DueDateReminderBannerProps> = ({
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
           <Text style={[styles.eyebrow, { color: isUrgent ? colors.warning : colors.accent }]}>
-            DUE-DATE REMINDER
+            {t("budget.cards.dueDate.eyebrow")}
           </Text>
           <Text style={styles.title}>{summaryLine}</Text>
         </View>
         <Text style={styles.chevron}>›</Text>
       </View>
 
-      <Text style={styles.totalLine}>{formatCurrency(totalDue)} scheduled total</Text>
+      <Text style={styles.totalLine}>{t("budget.cards.dueDate.total", { amount: formatCurrency(totalDue) })}</Text>
       <Text style={styles.nextLine} numberOfLines={2}>
         {nextLine}
       </Text>

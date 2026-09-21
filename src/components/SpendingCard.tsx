@@ -19,6 +19,8 @@ import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { getCategoryIcon } from "../data/categoryIcons";
 import type { CategoryName } from "../types";
 import { useBusinesses, usePeople } from "../people/PeopleProvider";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -115,6 +117,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
   pacingClock = null,
   expandCategoryRequest = null,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
@@ -165,11 +168,12 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
   const pieData = useMemo<DonutSlice[]>(
     () =>
       chartData.map((item) => ({
-        label: item.category,
+        // Display label only - the raw category stays the React key below.
+        label: categoryLabel(t, item.category),
         value: item.amount,
         color: colorForCategory(item.category),
       })),
-    [colorForCategory, chartData]
+    [colorForCategory, chartData, t]
   );
 
   const spendingTotal = useMemo(
@@ -207,24 +211,25 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
     <View ref={anchorRef} collapsable={false} style={styles.spendingCard}>
       <View style={styles.topHairline} />
       <View style={styles.spendingHeaderRow}>
-        <Text style={styles.spendingTitle}>Spending</Text>
+        <Text style={styles.spendingTitle}>{t("budget.spending.spendingCard.title")}</Text>
         {foodSplitCount > 0 ? (
           <TouchableOpacity onPress={onSplitFood}>
-            <Text style={[styles.spendingHint, { color: colors.accent }]}>Split Food ({foodSplitCount})</Text>
+            <Text style={[styles.spendingHint, { color: colors.accent }]}>{t("budget.spending.spendingCard.splitFood", { count: foodSplitCount })}</Text>
           </TouchableOpacity>
         ) : onOpenLimits ? (
           <TouchableOpacity
             onPress={onOpenLimits}
             accessibilityRole="button"
-            accessibilityLabel="Set monthly limits for every category"
+            accessibilityLabel={t("budget.spending.spendingCard.limitsA11y")}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.spendingHint}>
-              Tap row to expand · <Text style={{ color: colors.accent }}>Limits ›</Text>
+              {t("budget.spending.spendingCard.tapToExpand")}
+              <Text style={{ color: colors.accent }}>{t("budget.spending.spendingCard.limitsLink")}</Text>
             </Text>
           </TouchableOpacity>
         ) : (
-          <Text style={styles.spendingHint}>Tap row to expand · Hold for limit</Text>
+          <Text style={styles.spendingHint}>{t("budget.spending.spendingCard.tapToExpandHold")}</Text>
         )}
       </View>
 
@@ -238,7 +243,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
             onPress={onToggleBusinessOnly}
             accessibilityRole="button"
             accessibilityState={{ selected: businessOnly }}
-            accessibilityLabel="Show business expenses only"
+            accessibilityLabel={t("budget.spending.spendingCard.businessOnlyA11y")}
           >
             <Text
               style={[
@@ -246,11 +251,11 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                 businessOnly && styles.filterChipTextActive,
               ]}
             >
-              💼 Business only
+              {t("budget.spending.spendingCard.businessOnlyChip")}
             </Text>
           </TouchableOpacity>
           {businessOnly && (
-            <Text style={styles.spendingHint}>Limits hidden while filtered</Text>
+            <Text style={styles.spendingHint}>{t("budget.spending.spendingCard.limitsHiddenFiltered")}</Text>
           )}
         </View>
       )}
@@ -260,7 +265,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
           <View style={[styles.donutWrap, { width: donutSize, height: donutSize }]}>
             <DonutChart data={pieData} size={donutSize} strokeWidth={donutStroke} />
             <View style={styles.donutCenter}>
-              <Text style={styles.donutLabel}>Total</Text>
+              <Text style={styles.donutLabel}>{t("budget.spending.spendingCard.total")}</Text>
               <Text style={styles.donutTotal}>
                 {formatCompactCurrency(
                   businessOnly ? spendingTotal : monthlyExpenses
@@ -292,13 +297,13 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
         <View style={styles.spendingEmptyWrap}>
           <Text style={styles.emptyCardTitle}>
             {businessOnly
-              ? "No business expenses this month"
-              : "No expenses this month"}
+              ? t("budget.spending.spendingCard.emptyBusinessTitle")
+              : t("budget.spending.spendingCard.emptyTitle")}
           </Text>
           <Text style={styles.emptyCardSubtext}>
             {businessOnly
-              ? "Tag an expense with a business to see it here."
-              : "Add entries to see your spending chart."}
+              ? t("budget.spending.spendingCard.emptyBusinessSubtext")
+              : t("budget.spending.spendingCard.emptySubtext")}
           </Text>
         </View>
       )}
@@ -332,14 +337,14 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
               ? colors.warning
               : dotColor
           : dotColor;
-        const paceLabel = pacing
+        const paceLabel: string | null = pacing
           ? pacing.status === "over"
-            ? `Over limit by ${formatCurrency(pacing.overBy)}`
+            ? t("budget.spending.spendingCard.pace.over", { amount: formatCurrency(pacing.overBy) })
             : pacing.status === "at-limit"
-              ? "At the limit - nothing left this month"
+              ? t("budget.spending.spendingCard.pace.atLimit")
               : pacing.status === "ahead"
-              ? `Ahead of pace - on track would be ${formatCurrency(pacing.expectedSpent)} by today`
-              : `On pace - ${formatCurrency(pacing.expectedSpent)} expected by today`
+              ? t("budget.spending.spendingCard.pace.ahead", { amount: formatCurrency(pacing.expectedSpent) })
+              : t("budget.spending.spendingCard.pace.onPace", { amount: formatCurrency(pacing.expectedSpent) })
           : null;
 
         return (
@@ -352,7 +357,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
             >
               <View style={[styles.spendDot, { backgroundColor: dotColor }]} />
               <Text style={styles.spendName} numberOfLines={1}>
-                {getCategoryIcon(item.category, customCategories)} {item.category}
+                {getCategoryIcon(item.category, customCategories)} {categoryLabel(t, item.category)}
               </Text>
               <View style={styles.spendBarTrack}>
                 <View
@@ -387,7 +392,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
             {isExpanded && item.entries.length > 0 && (
               <View style={styles.expandedEntries}>
                 <Text style={styles.expandedHeader}>
-                  Expanded - {item.entries.length} {item.entries.length === 1 ? "entry" : "entries"}
+                  {t("budget.spending.spendingCard.expandedHeader", { count: item.entries.length })}
                   {paceLabel ? ` · ${paceLabel}` : ""}
                 </Text>
                 {visibleEntries.map((entry) => {
@@ -411,8 +416,8 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                           // home instead of silently doing nothing.
                           if (isLoggedPayment) {
                             Alert.alert(
-                              "Logged debt payment",
-                              "This payment was logged on the Debts tab. To edit or delete it, open the debt's payment history there."
+                              t("budget.spending.spendingCard.loggedPayment.title"),
+                              t("budget.spending.spendingCard.loggedPayment.message")
                             );
                           }
                           return;
@@ -460,7 +465,7 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                             style={[styles.entryEditHint, { color: colors.accent }]}
                             numberOfLines={1}
                           >
-                            💼 {businessNameById.get(entry.businessId) ?? "(deleted)"}
+                            💼 {businessNameById.get(entry.businessId) ?? t("budget.spending.spendingCard.deletedBusiness")}
                           </Text>
                         )}
                         {entry.personId && (
@@ -481,8 +486,8 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                           >
                             🤝 {entry.lentTo}
                             {(entry.loanOutstanding ?? 0) > 0
-                              ? ` · ${formatCurrency(entry.loanOutstanding ?? 0)} owed`
-                              : " · paid back"}
+                              ? t("budget.spending.spendingCard.owed", { amount: formatCurrency(entry.loanOutstanding ?? 0) })
+                              : t("budget.spending.spendingCard.paidBack")}
                           </Text>
                         )}
                         {entry.fulfillsRecurringId && (
@@ -490,9 +495,9 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                             style={[styles.entryEditHint, { color: colors.accent }]}
                             numberOfLines={1}
                           >
-                            🧾 {entry.billLabel ?? "Bill"}
+                            🧾 {entry.billLabel ?? t("budget.spending.spendingCard.billFallback")}
                             {entry.billEstimate != null
-                              ? ` · est. ${formatCurrency(entry.billEstimate)}`
+                              ? t("budget.spending.spendingCard.billEstimate", { amount: formatCurrency(entry.billEstimate) })
                               : ""}
                           </Text>
                         )}
@@ -510,15 +515,15 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                               onPress={() => onLogActual(entry.id)}
                               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                               accessibilityRole="button"
-                              accessibilityLabel={`Log the actual charge for ${
-                                entry.description || item.category
-                              }`}
+                              accessibilityLabel={t("budget.spending.spendingCard.logActualA11y", {
+                                name: entry.description || categoryLabel(t, item.category),
+                              })}
                             >
-                              <Text style={styles.logActualText}>Log actual</Text>
+                              <Text style={styles.logActualText}>{t("budget.spending.spendingCard.logActual")}</Text>
                             </TouchableOpacity>
                           )}
                         {isAutoDebtRow && !isLoggedPayment ? (
-                          <Text style={styles.entryEditHint}>Auto</Text>
+                          <Text style={styles.entryEditHint}>{t("budget.spending.spendingCard.auto")}</Text>
                         ) : (
                           <Text style={styles.expandedEntryDate}>{entryDate}</Text>
                         )}
@@ -535,11 +540,10 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                       )
                     }
                     accessibilityRole="button"
-                    accessibilityLabel={`Show ${hiddenEntryCount} more entries`}
+                    accessibilityLabel={t("budget.spending.spendingCard.showMoreA11y", { count: hiddenEntryCount })}
                   >
                     <Text style={styles.showAllEntriesText}>
-                      Show {hiddenEntryCount} more{" "}
-                      {hiddenEntryCount === 1 ? "entry" : "entries"}
+                      {t("budget.spending.spendingCard.showMore", { count: hiddenEntryCount })}
                     </Text>
                   </TouchableOpacity>
                 )}

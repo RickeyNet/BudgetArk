@@ -12,6 +12,15 @@ import { common } from "./common";
 import { nav } from "./nav";
 import { appearance } from "./appearance";
 import { onboarding } from "./onboarding";
+import { categories } from "./categories";
+import { buckets } from "./buckets";
+import { categoryPicker } from "./categoryPicker";
+import { budgetScreen } from "./budgetScreen";
+import { budgetEntry } from "./budgetEntry";
+import { budgetInbox } from "./budgetInbox";
+import { budgetSpending } from "./budgetSpending";
+import { budgetTools } from "./budgetTools";
+import { budgetCards } from "./budgetCards";
 import { profileMain } from "./profileMain";
 import { profileData } from "./profileData";
 import { profileSettings } from "./profileSettings";
@@ -29,5 +38,16 @@ export const en = {
     settings: profileSettings,
     connections: profileConnections,
     info: profileInfo,
+  },
+  categories,
+  buckets,
+  categoryPicker,
+  budget: {
+    screen: budgetScreen,
+    entry: budgetEntry,
+    inbox: budgetInbox,
+    spending: budgetSpending,
+    tools: budgetTools,
+    cards: budgetCards,
   },
 } as const;

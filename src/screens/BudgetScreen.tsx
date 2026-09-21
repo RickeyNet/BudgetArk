@@ -54,7 +54,6 @@ import {
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { getCategoryIcon, categoryNameHash } from "../data/categoryIcons";
 import {
-  BUDGET_BUCKET_LABELS,
   BUDGET_BUCKET_ORDER,
   DEFAULT_CUSTOM_CATEGORY_BUCKET,
   getDefaultBucketForCategory,
@@ -116,6 +115,8 @@ import { triggerHaptic } from "../utils/haptics";
 import { useAchievements } from "../achievements/AchievementsProvider";
 import { useTipJar } from "../tipjar/TipJarProvider";
 import { recordMonthlyReviewOpen } from "../storage/achievementStatsStorage";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -191,15 +192,20 @@ const CATEGORY_CHART_PALETTE = [
 ] as const;
 
 /** Display name of the bill an actual was filed against, for the nudge copy. */
-const billLabelIn = (all: BudgetEntry[], billId: string | undefined): string | undefined => {
+const billLabelIn = (
+  all: BudgetEntry[],
+  billId: string | undefined,
+  label: (category: string) => string,
+): string | undefined => {
   const bill = billId ? all.find((entry) => entry.id === billId) : undefined;
-  return bill ? bill.description?.trim() || bill.category : undefined;
+  return bill ? bill.description?.trim() || label(bill.category) : undefined;
 };
 
 const BudgetScreen: React.FC = () => {
   const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const route = useRoute<RouteProp<RootTabParamList, "Budget">>();
   const { colors, showAmbientBackground } = useTheme();
+  const { t } = useTranslation();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const { runCheck: notifyAchievementCheck } = useAchievements();
@@ -757,11 +763,11 @@ const BudgetScreen: React.FC = () => {
     if (billed) {
       const nudge = await noteWin({
         kind: "bill-paid",
-        label: billLabelIn(nextEntries, billed.fulfillsRecurringId),
+        label: billLabelIn(nextEntries, billed.fulfillsRecurringId, (c) => categoryLabel(t, c)),
       });
       if (nudge) showNudgeToast(nudge);
     }
-  }, [applyAssetDeltas, noteWin, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast]);
+  }, [applyAssetDeltas, noteWin, notifyAchievementCheck, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast, t]);
 
   /**
    * Reload entries after Review Inbox approvals - they're written by
@@ -927,7 +933,7 @@ const BudgetScreen: React.FC = () => {
     if (updated.fulfillsRecurringId && updated.fulfillsRecurringId !== original.fulfillsRecurringId) {
       const nudge = await noteWin({
         kind: "bill-paid",
-        label: billLabelIn(nextEntries, updated.fulfillsRecurringId),
+        label: billLabelIn(nextEntries, updated.fulfillsRecurringId, (c) => categoryLabel(t, c)),
       });
       if (nudge) showNudgeToast(nudge);
     }
@@ -935,7 +941,7 @@ const BudgetScreen: React.FC = () => {
     // also unwinds any asset-balance side effect.
     const inverseDeltas = deltas.map((d) => ({ ...d, amount: -d.amount }));
     pushUndo({
-      message: `Edited "${original.description || original.category}"`,
+      message: t("budget.screen.undo.edited", { label: original.description || categoryLabel(t, original.category) }),
       onUndo: async () => {
         const reverted = await updateBudgetEntry(updated.id, original);
         setEntries(reverted);
@@ -947,7 +953,7 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [applyAssetDeltas, entries, noteWin, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast]);
+  }, [applyAssetDeltas, entries, noteWin, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, showNudgeToast, t]);
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     const target = entries.find((entry) => entry.id === id);
@@ -970,8 +976,8 @@ const BudgetScreen: React.FC = () => {
     triggerHaptic("warning");
     pushUndo({
       message: target
-        ? `Deleted "${target.description || target.category}"`
-        : "Deleted entry",
+        ? t("budget.screen.undo.deleted", { label: target.description || categoryLabel(t, target.category) })
+        : t("budget.screen.undo.deletedEntry"),
       onUndo: async () => {
         const restored = await restoreBudgetEntry(id);
         setEntries(restored);
@@ -989,7 +995,7 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [applyAssetDeltas, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots]);
+  }, [applyAssetDeltas, entries, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, t]);
 
   /* ─── Bulk multi-select ─── */
 
@@ -1059,7 +1065,7 @@ const BudgetScreen: React.FC = () => {
     triggerHaptic("warning");
     const inverse = deltas.map((d) => ({ ...d, amount: -d.amount }));
     pushUndo({
-      message: `Deleted ${ids.length} ${ids.length === 1 ? "entry" : "entries"}`,
+      message: t("budget.screen.undo.deletedCount", { count: ids.length }),
       onUndo: async () => {
         const restored = await restoreBudgetEntries(ids);
         setEntries(restored);
@@ -1071,7 +1077,7 @@ const BudgetScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [applyAssetDeltas, entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds]);
+  }, [applyAssetDeltas, entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, refreshNetWorthSnapshots, selectedEntryIds, t]);
 
   const handleBulkRecategorize = useCallback(
     async (category: CategoryName) => {
@@ -1099,7 +1105,7 @@ const BudgetScreen: React.FC = () => {
       triggerHaptic("success");
       void notifyAchievementCheck();
       pushUndo({
-        message: `Moved ${ids.length} ${ids.length === 1 ? "entry" : "entries"} to ${category}`,
+        message: t("budget.screen.undo.moved", { count: ids.length, category: categoryLabel(t, category) }),
         onUndo: async () => {
           const reverted = await setBudgetEntryCategories(priorById);
           setEntries(reverted);
@@ -1108,7 +1114,7 @@ const BudgetScreen: React.FC = () => {
         },
       });
     },
-    [entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, selectedEntryIds]
+    [entries, exitSelection, notifyAchievementCheck, pushUndo, refreshMonthlyReview, selectedEntryIds, t]
   );
 
   const foodEntriesToSplit = useMemo(
@@ -1245,13 +1251,13 @@ const BudgetScreen: React.FC = () => {
     <View>
       <View style={styles.titleSection}>
         <Text style={styles.appLabel}>BudgetArk</Text>
-        <Text style={styles.screenTitle}>Budget</Text>
-        <Text style={styles.screenSubtitle}>Track income, expenses, and category limits.</Text>
+        <Text style={styles.screenTitle}>{t("budget.screen.header.title")}</Text>
+        <Text style={styles.screenSubtitle}>{t("budget.screen.header.subtitle")}</Text>
         <TouchableOpacity
           style={styles.calendarIconBtn}
           onPress={() => setShowBillCalendar(true)}
           activeOpacity={0.7}
-          accessibilityLabel="Bill calendar"
+          accessibilityLabel={t("budget.screen.header.billCalendarA11y")}
         >
           <Text style={styles.calendarIconGlyph}>📅</Text>
         </TouchableOpacity>
@@ -1264,7 +1270,7 @@ const BudgetScreen: React.FC = () => {
           ]}
           onPress={openSearch}
           activeOpacity={0.7}
-          accessibilityLabel="Search debts, payments, and budget entries"
+          accessibilityLabel={t("budget.screen.header.searchA11y")}
         >
           <Text style={styles.calendarIconGlyph}>🔍</Text>
         </TouchableOpacity>
@@ -1273,7 +1279,7 @@ const BudgetScreen: React.FC = () => {
             style={styles.inboxIconBtn}
             onPress={() => setShowReviewInbox(true)}
             activeOpacity={0.7}
-            accessibilityLabel={`Review inbox, ${pendingCount} waiting`}
+            accessibilityLabel={t("budget.screen.header.inboxA11y", { count: pendingCount })}
           >
             <Text style={styles.calendarIconGlyph}>📥</Text>
             {pendingCount > 0 ? (
@@ -1297,7 +1303,7 @@ const BudgetScreen: React.FC = () => {
             }
           }}
           disabled={selectedMonthIndex >= monthKeys.length - 1}
-          accessibilityLabel="Previous month"
+          accessibilityLabel={t("budget.screen.monthNav.previousA11y")}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
         >
           <Text
@@ -1320,7 +1326,7 @@ const BudgetScreen: React.FC = () => {
             }
           }}
           disabled={selectedMonthIndex <= 0}
-          accessibilityLabel="Next month"
+          accessibilityLabel={t("budget.screen.monthNav.nextA11y")}
           hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
         >
           <Text
@@ -1341,28 +1347,28 @@ const BudgetScreen: React.FC = () => {
         onPress={openReviewModal}
         activeOpacity={0.7}
       >
-        <Text style={styles.reviewBtnText}>Insights</Text>
-        <Text style={styles.reviewBtnHint}>Trends, changes, streaks, comparisons</Text>
+        <Text style={styles.reviewBtnText}>{t("budget.screen.insights.title")}</Text>
+        <Text style={styles.reviewBtnHint}>{t("budget.screen.insights.hint")}</Text>
       </TouchableOpacity>
 
       <View ref={anchorBudgetSummary} collapsable={false} style={styles.summaryCard}>
         <View style={styles.summaryTopRow}>
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryStatLabel}>Income</Text>
+            <Text style={styles.summaryStatLabel}>{t("budget.screen.summary.income")}</Text>
             <Text style={[styles.summaryStatValue, { color: colors.success }]}>
               {formatCurrency(monthlyIncome)}
             </Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryStatLabel}>Spent</Text>
+            <Text style={styles.summaryStatLabel}>{t("budget.screen.summary.spent")}</Text>
             <Text style={[styles.summaryStatValue, { color: colors.warning }]}>
               {formatCurrency(monthlyExpenses)}
             </Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryStatLabel}>Net</Text>
+            <Text style={styles.summaryStatLabel}>{t("budget.screen.summary.net")}</Text>
             <Text
               style={[
                 styles.summaryStatValue,
@@ -1375,7 +1381,7 @@ const BudgetScreen: React.FC = () => {
         </View>
         {plannedDebtMinimumTotal > 0 && (
           <Text style={styles.autoDebtHint}>
-            Includes {formatCurrency(plannedDebtMinimumTotal)} planned debt minimums from the Debts tab
+            {t("budget.screen.summary.plannedMinimums", { amount: formatCurrency(plannedDebtMinimumTotal) })}
           </Text>
         )}
         {incomeEntries.length > 0 && (
@@ -1388,7 +1394,7 @@ const BudgetScreen: React.FC = () => {
                 activeOpacity={0.6}
               >
                 <Text style={styles.incomeSummaryDesc} numberOfLines={1}>
-                  {entry.description || entry.category}
+                  {entry.description || categoryLabel(t, entry.category)}
                 </Text>
                 <View style={styles.incomeSummaryRight}>
                   {entry.incomeType && (
@@ -1411,14 +1417,12 @@ const BudgetScreen: React.FC = () => {
         )}
         {paycheckSummary.retirementContribution > 0 && (
           <Text style={styles.autoDebtHint}>
-            Plus {formatCurrency(paycheckSummary.retirementContribution)} into your
-            401(k) this month (not counted as income)
+            {t("budget.screen.summary.retirement", { amount: formatCurrency(paycheckSummary.retirementContribution) })}
           </Text>
         )}
         {paycheckSummary.taxSetAside > 0 && (
           <Text style={[styles.autoDebtHint, { color: colors.warning }]}>
-            Set aside {formatCurrency(paycheckSummary.taxSetAside)} of this
-            month's 1099 income for taxes
+            {t("budget.screen.summary.taxSetAside", { amount: formatCurrency(paycheckSummary.taxSetAside) })}
           </Text>
         )}
       </View>
@@ -1577,21 +1581,21 @@ const BudgetScreen: React.FC = () => {
             onPress={exitSelection}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityRole="button"
-            accessibilityLabel="Cancel selection"
+            accessibilityLabel={t("budget.screen.selection.cancelA11y")}
           >
             <Text style={[styles.bulkBarCancel, { color: colors.textMuted }]}>
               ✕
             </Text>
           </TouchableOpacity>
           <Text style={[styles.bulkBarCount, { color: colors.text }]}>
-            {selectedEntryIds.size} selected
+            {t("budget.screen.selection.selected", { count: selectedEntryIds.size })}
           </Text>
           <View style={styles.bulkBarActions}>
             <TouchableOpacity
               disabled={selectedEntryIds.size === 0}
               onPress={() => setShowBulkCategoryPicker(true)}
               accessibilityRole="button"
-              accessibilityLabel="Recategorize selected entries"
+              accessibilityLabel={t("budget.screen.selection.recategorizeA11y")}
             >
               <Text
                 style={[
@@ -1604,14 +1608,14 @@ const BudgetScreen: React.FC = () => {
                   },
                 ]}
               >
-                Recategorize
+                {t("budget.screen.selection.recategorize")}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               disabled={selectedEntryIds.size === 0}
               onPress={handleBulkDelete}
               accessibilityRole="button"
-              accessibilityLabel="Delete selected entries"
+              accessibilityLabel={t("budget.screen.selection.deleteA11y")}
             >
               <Text
                 style={[
@@ -1624,7 +1628,7 @@ const BudgetScreen: React.FC = () => {
                   },
                 ]}
               >
-                Delete
+                {t("common.delete")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1653,8 +1657,7 @@ const BudgetScreen: React.FC = () => {
             ]}
           >
             <Text style={[styles.bulkPickerTitle, { color: colors.text }]}>
-              Move {selectedEntryIds.size}{" "}
-              {selectedEntryIds.size === 1 ? "entry" : "entries"} to…
+              {t("budget.screen.selection.moveTitle", { count: selectedEntryIds.size })}
             </Text>
             <ScrollView style={styles.bulkPickerList}>
               {bulkCategoryOptions.map((cat) => (
@@ -1667,7 +1670,7 @@ const BudgetScreen: React.FC = () => {
                   onPress={() => handleBulkRecategorize(cat)}
                 >
                   <Text style={[styles.bulkPickerRowText, { color: colors.text }]}>
-                    {getCategoryIcon(cat, customCategories)} {cat}
+                    {getCategoryIcon(cat, customCategories)} {categoryLabel(t, cat)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1684,11 +1687,13 @@ const BudgetScreen: React.FC = () => {
       >
         <View style={styles.limitOverlay}>
           <View style={styles.limitModalCard}>
-            <Text style={styles.limitModalTitle}>Reassign Bucket</Text>
+            <Text style={styles.limitModalTitle}>{t("budget.screen.bucket.title")}</Text>
             <Text style={styles.limitModalSub}>
-              {bucketOverrideCategory}
+              {bucketOverrideCategory ? categoryLabel(t, bucketOverrideCategory) : ""}
               {bucketOverrideCurrent
-                ? ` - currently ${BUDGET_BUCKET_LABELS[bucketOverrideCurrent]}`
+                ? t("budget.screen.bucket.currently", {
+                    bucket: t(`buckets.${bucketOverrideCurrent}`),
+                  })
                 : ""}
             </Text>
 
@@ -1713,7 +1718,7 @@ const BudgetScreen: React.FC = () => {
                         { color: selected ? colors.accent : colors.textDim },
                       ]}
                     >
-                      {BUDGET_BUCKET_LABELS[bucket]}
+                      {t(`buckets.${bucket}`)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -1726,7 +1731,9 @@ const BudgetScreen: React.FC = () => {
                 onPress={() => saveBucketOverride(bucketOverrideDefault)}
               >
                 <Text style={styles.limitCancelText}>
-                  Use default ({BUDGET_BUCKET_LABELS[bucketOverrideDefault]})
+                  {t("budget.screen.bucket.useDefault", {
+                    bucket: t(`buckets.${bucketOverrideDefault}`),
+                  })}
                 </Text>
               </TouchableOpacity>
             )}
@@ -1736,7 +1743,7 @@ const BudgetScreen: React.FC = () => {
                 style={styles.limitCancelBtn}
                 onPress={closeBucketOverrideModal}
               >
-                <Text style={styles.limitCancelText}>Close</Text>
+                <Text style={styles.limitCancelText}>{t("common.close")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1870,26 +1877,28 @@ const BudgetScreen: React.FC = () => {
       >
         <KeyboardAwareModalOverlay style={styles.limitOverlay}>
           <View style={styles.limitModalCard}>
-            <Text style={styles.limitModalTitle}>Set Monthly Limit</Text>
-            <Text style={styles.limitModalSub}>{limitModalCategory}</Text>
+            <Text style={styles.limitModalTitle}>{t("budget.screen.limit.title")}</Text>
+            <Text style={styles.limitModalSub}>
+              {limitModalCategory ? categoryLabel(t, limitModalCategory) : ""}
+            </Text>
 
             <TextInput
               style={styles.limitInput}
-              placeholder="0.00"
+              placeholder={t("budget.screen.limit.placeholder")}
               placeholderTextColor={colors.textMuted}
               keyboardType="decimal-pad"
               value={limitInput}
               onChangeText={setLimitInput}
             />
 
-            <Text style={styles.limitModalHint}>Leave empty to remove limit.</Text>
+            <Text style={styles.limitModalHint}>{t("budget.screen.limit.hint")}</Text>
 
             <View style={styles.limitActions}>
               <TouchableOpacity style={styles.limitCancelBtn} onPress={closeLimitModal}>
-                <Text style={styles.limitCancelText}>Cancel</Text>
+                <Text style={styles.limitCancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.limitSaveBtn} onPress={saveLimit}>
-                <Text style={styles.limitSaveText}>Save</Text>
+                <Text style={styles.limitSaveText}>{t("common.save")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1917,41 +1926,41 @@ const BudgetScreen: React.FC = () => {
       >
         <KeyboardAwareModalOverlay style={styles.limitOverlay}>
           <View style={styles.limitModalCard}>
-            <Text style={styles.limitModalTitle}>Emergency Fund</Text>
+            <Text style={styles.limitModalTitle}>{t("budget.screen.emergencyFund.title")}</Text>
             <Text style={styles.limitModalSub}>
-              Current balance: {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
+              {t("budget.screen.emergencyFund.currentBalance", {
+                amount: formatCurrency(emergencyFundGoal?.currentAmount ?? 0),
+              })}
               {emergencyFundGoal?.targetAmount
-                ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
+                ? t("budget.screen.emergencyFund.target", {
+                    amount: formatCurrency(emergencyFundGoal.targetAmount),
+                  })
                 : ""}
               {efSource.linked
-                ? ` • tracked from ${efSource.accounts.length} designated savings ${
-                    efSource.accounts.length === 1 ? "account" : "accounts"
-                  }`
+                ? t("budget.screen.emergencyFund.tracked", { count: efSource.accounts.length })
                 : ""}
             </Text>
 
             <TextInput
               style={styles.limitInput}
-              placeholder="Amount to add (or negative to withdraw)"
+              placeholder={t("budget.screen.emergencyFund.placeholder")}
               placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
               value={efContribAmount}
               onChangeText={setEfContribAmount}
             />
 
-            <Text style={styles.limitModalHint}>
-              Enter a positive number to contribute, or negative to withdraw.
-            </Text>
+            <Text style={styles.limitModalHint}>{t("budget.screen.emergencyFund.hint")}</Text>
 
             <View style={styles.limitActions}>
               <TouchableOpacity
                 style={styles.limitCancelBtn}
                 onPress={() => setShowEfContribModal(false)}
               >
-                <Text style={styles.limitCancelText}>Cancel</Text>
+                <Text style={styles.limitCancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.limitSaveBtn} onPress={handleEfContribution}>
-                <Text style={styles.limitSaveText}>Add</Text>
+                <Text style={styles.limitSaveText}>{t("common.add")}</Text>
               </TouchableOpacity>
             </View>
           </View>

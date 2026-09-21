@@ -49,6 +49,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import {
   BudgetEntry,
   BudgetEntryType,
@@ -81,7 +83,6 @@ import { deleteAttachmentFiles } from "../services/attachments/attachmentStore";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
 import { clampTaxSetAsideRate } from "../utils/paycheckMath";
 import {
-  WEEKDAY_SHORT_LABELS,
   buildEntryDateISO,
   buildMonthDayRows,
   dayOfMonthFromIso,
@@ -96,14 +97,25 @@ import {
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useValueChanged } from "../hooks/useValueChanged";
 
+// Labels live in the locale tree (budget.entry.incomeType.options.<key>).
 const INCOME_TYPE_OPTIONS: readonly {
   value: IncomeType | undefined;
-  label: string;
+  key: "regular" | "w2" | "1099";
 }[] = [
-  { value: undefined, label: "Regular" },
-  { value: "w2", label: "W-2 paycheck" },
-  { value: "1099", label: "1099 / contractor" },
+  { value: undefined, key: "regular" },
+  { value: "w2", key: "w2" },
+  { value: "1099", key: "1099" },
 ];
+
+// RECURRENCE_INTERVAL_OPTIONS (src/types) carries English labels; the form
+// translates by interval value and falls back to that label for an
+// interval the tree doesn't know.
+const FREQUENCY_KEYS: Readonly<
+  Record<number, "monthly" | "quarterly" | "semiannual" | "yearly" | undefined>
+> = { 1: "monthly", 3: "quarterly", 6: "semiannual", 12: "yearly" };
+
+// Sunday-first, matching WEEKDAY_SHORT_LABELS / buildMonthDayRows.
+const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Savings",
@@ -267,6 +279,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   entries = [],
   initialBill,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -779,15 +792,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     });
   }, [isEdit]);
 
-  const addButtonLabel =
-    validLineCount <= 1 ? "Add Entry" : `Add ${validLineCount} Entries`;
+  const addButtonLabel = t("budget.entry.add.submit", { count: Math.max(validLineCount, 1) });
 
   if (isEdit && !entry) return null;
 
   const formBody = (
     <>
       <View style={styles.field}>
-        <Text style={styles.label}>ENTRY TYPE</Text>
+        <Text style={styles.label}>{t("budget.entry.type.label")}</Text>
         <View style={styles.typeRow}>
           {(["expense", "income"] as const).map((entryType) => (
             <TouchableOpacity
@@ -810,7 +822,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   },
                 ]}
               >
-                {entryType === "expense" ? "Expense" : "Income"}
+                {entryType === "expense" ? t("budget.entry.type.expense") : t("budget.entry.type.income")}
               </Text>
             </TouchableOpacity>
           ))}
@@ -819,15 +831,12 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {type === "income" && (
         <View style={styles.field}>
-          <Text style={styles.label}>INCOME TYPE</Text>
-          <Text style={styles.accountPickerHint}>
-            W-2 tracks your take-home paycheck and 401(k). 1099 shows how much
-            of each payment to set aside for taxes.
-          </Text>
+          <Text style={styles.label}>{t("budget.entry.incomeType.label")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.incomeType.hint")}</Text>
           <View style={styles.categoryWrap}>
             {INCOME_TYPE_OPTIONS.map((opt) => (
               <TouchableOpacity
-                key={opt.label}
+                key={opt.key}
                 style={[
                   styles.categoryPill,
                   incomeType === opt.value && styles.categoryPillActive,
@@ -840,7 +849,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                     incomeType === opt.value && styles.categoryPillTextActive,
                   ]}
                 >
-                  {opt.label}
+                  {t(`budget.entry.incomeType.options.${opt.key}`)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -850,35 +859,30 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {type === "income" && incomeType === "w2" && (
         <View style={styles.field}>
-          <Text style={styles.label}>401(K) THIS PAYCHECK (OPTIONAL)</Text>
+          <Text style={styles.label}>{t("budget.entry.retirement.label")}</Text>
           <Text style={styles.accountPickerHint}>
             {isEdit
-              ? "The amount below is your take-home (net) pay. If part of this paycheck went to a 401(k), record it here - it's tracked separately, not added to income."
-              : "Enter your take-home (net) pay as the amount below. If part of this paycheck went to a 401(k), record it here - it's tracked separately, not added to income."}
+              ? t("budget.entry.retirement.hintEdit")
+              : t("budget.entry.retirement.hintAdd")}
           </Text>
           <TextInput
             style={styles.input}
-            placeholder="0.00"
+            placeholder={t("budget.entry.amount.placeholder")}
             placeholderTextColor={colors.textMuted}
             value={retirementContribution}
             onChangeText={setRetirementContribution}
             keyboardType="decimal-pad"
           />
           {validLineCount > 1 && (parseMoneyInput(retirementContribution) ?? 0) > 0 && (
-            <Text style={styles.linesHint}>
-              The 401(k) amount attaches to the first entry.
-            </Text>
+            <Text style={styles.linesHint}>{t("budget.entry.retirement.firstLineNote")}</Text>
           )}
         </View>
       )}
 
       {type === "income" && incomeType === "1099" && (
         <View style={styles.field}>
-          <Text style={styles.label}>TAX SET-ASIDE PERCENT</Text>
-          <Text style={styles.accountPickerHint}>
-            Nothing is withheld from 1099 pay, so set a slice aside for
-            end-of-year taxes. 25-30% is a common starting point.
-          </Text>
+          <Text style={styles.label}>{t("budget.entry.taxSetAside.label")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.taxSetAside.hint")}</Text>
           <TextInput
             style={styles.input}
             placeholder={String(DEFAULT_TAX_SET_ASIDE_RATE)}
@@ -890,14 +894,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           />
           {taxSetAsidePreview > 0 && (
             <Text style={[styles.helperText, { color: colors.success }]}>
-              Set aside {formatCurrency(taxSetAsidePreview)} of this for taxes.
+              {t("budget.entry.taxSetAside.preview", { amount: formatCurrency(taxSetAsidePreview) })}
             </Text>
           )}
         </View>
       )}
 
       <View style={styles.field}>
-        <Text style={styles.label}>CATEGORY</Text>
+        <Text style={styles.label}>{t("budget.entry.category.label")}</Text>
         <CategoryPillPicker
           value={category}
           onChange={setCategory}
@@ -910,10 +914,10 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       {isEdit ? (
         <>
           <View style={styles.field}>
-            <Text style={styles.label}>AMOUNT</Text>
+            <Text style={styles.label}>{t("budget.entry.amount.label")}</Text>
             <TextInput
               style={styles.input}
-              placeholder="0.00"
+              placeholder={t("budget.entry.amount.placeholder")}
               placeholderTextColor={colors.textMuted}
               value={lines[0]?.amount ?? ""}
               onChangeText={(text) =>
@@ -924,10 +928,10 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>DESCRIPTION (OPTIONAL)</Text>
+            <Text style={styles.label}>{t("budget.entry.amount.descriptionLabel")}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Grocery run, Netflix, etc."
+              placeholder={t("budget.entry.amount.descriptionPlaceholder")}
               placeholderTextColor={colors.textMuted}
               value={lines[0]?.description ?? ""}
               onChangeText={(text) =>
@@ -939,9 +943,10 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           {estimateSuggestion && (
             <View style={styles.estimateHintRow}>
               <Text style={styles.linesHint}>
-                Your last {estimateSuggestion.count} actual charges averaged{" "}
-                {formatCurrency(estimateSuggestion.average)}. The estimate only
-                changes if you tap.
+                {t("budget.entry.estimate.hint", {
+                  count: estimateSuggestion.count,
+                  average: formatCurrency(estimateSuggestion.average),
+                })}
               </Text>
               <TouchableOpacity
                 style={styles.estimateHintButton}
@@ -952,12 +957,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   })
                 }
                 accessibilityRole="button"
-                accessibilityLabel={`Update estimate to ${formatCurrency(
-                  estimateSuggestion.average
-                )}`}
+                accessibilityLabel={t("budget.entry.estimate.useA11y", {
+                  average: formatCurrency(estimateSuggestion.average),
+                })}
               >
                 <Text style={styles.estimateHintButtonText}>
-                  Use {formatCurrency(estimateSuggestion.average)}
+                  {t("budget.entry.estimate.use", {
+                    average: formatCurrency(estimateSuggestion.average),
+                  })}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -966,30 +973,29 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       ) : (
         <View style={styles.field}>
           <View style={styles.linesHeader}>
-            <Text style={styles.label}>ENTRIES</Text>
+            <Text style={styles.label}>{t("budget.entry.lines.label")}</Text>
             <TouchableOpacity
               style={styles.addLineButton}
               onPress={addLine}
-              accessibilityLabel="Add another entry line"
+              accessibilityLabel={t("budget.entry.lines.addA11y")}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.addLineButtonText}>+</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.linesHint}>
-            Add multiple amounts for the same category (e.g. several grocery
-            purchases from a bank statement).
-          </Text>
+          <Text style={styles.linesHint}>{t("budget.entry.lines.hint")}</Text>
           {lines.map((line, index) => (
             <View key={line.id} style={styles.lineCard}>
               <View style={styles.lineCardHeader}>
                 <Text style={styles.lineCardLabel}>
-                  {lines.length > 1 ? `Entry ${index + 1}` : "Amount"}
+                  {lines.length > 1
+                    ? t("budget.entry.lines.lineTitle", { index: index + 1 })
+                    : t("budget.entry.lines.singleTitle")}
                 </Text>
                 {lines.length > 1 ? (
                   <TouchableOpacity
                     onPress={() => removeLine(line.id)}
-                    accessibilityLabel={`Remove entry ${index + 1}`}
+                    accessibilityLabel={t("budget.entry.lines.removeA11y", { index: index + 1 })}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Text style={styles.removeLineText}>×</Text>
@@ -998,7 +1004,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="0.00"
+                placeholder={t("budget.entry.amount.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 value={line.amount}
                 onChangeText={(text) => updateLine(line.id, { amount: text })}
@@ -1006,7 +1012,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               />
               <TextInput
                 style={[styles.input, styles.lineDescriptionInput]}
-                placeholder="Description (optional)"
+                placeholder={t("budget.entry.amount.descriptionLinePlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 value={line.description}
                 onChangeText={(text) => handleDescriptionChange(line.id, text)}
@@ -1030,14 +1036,24 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                           if (chip.category !== category) setCategory(chip.category);
                         }}
                         accessibilityRole="button"
-                        accessibilityLabel={`Use ${chip.description}${
-                          chip.category !== category ? ` in ${chip.category}` : ""
-                        }`}
+                        accessibilityLabel={
+                          chip.category !== category
+                            ? t("budget.entry.suggestions.useInCategoryA11y", {
+                                description: chip.description,
+                                category: categoryLabel(t, chip.category),
+                              })
+                            : t("budget.entry.suggestions.useA11y", {
+                                description: chip.description,
+                              })
+                        }
                       >
                         <Text style={styles.suggestionChipText}>
                           {chip.description}
                           {chip.category !== category ? (
-                            <Text style={styles.suggestionChipMeta}> · {chip.category}</Text>
+                            <Text style={styles.suggestionChipMeta}>
+                              {" · "}
+                              {categoryLabel(t, chip.category)}
+                            </Text>
                           ) : null}
                         </Text>
                       </TouchableOpacity>
@@ -1051,7 +1067,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       )}
 
       <View style={styles.field}>
-        <Text style={styles.label}>{recurring ? "START MONTH" : "MONTH"}</Text>
+        <Text style={styles.label}>
+          {recurring ? t("budget.entry.date.startMonthLabel") : t("budget.entry.date.monthLabel")}
+        </Text>
         <TouchableOpacity
           style={styles.input}
           onPress={() => setShowMonthPicker(true)}
@@ -1065,7 +1083,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       {!recurring && (
         <View style={styles.field}>
           <View style={styles.linesHeader}>
-            <Text style={styles.label}>DAY</Text>
+            <Text style={styles.label}>{t("budget.entry.date.dayLabel")}</Text>
             {(yearMonth !== todayYearMonth() || entryDay !== todayDay()) && (
               <TouchableOpacity
                 style={styles.estimateHintButton}
@@ -1074,9 +1092,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   setEntryDay(todayDay());
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="Set the date to today"
+                accessibilityLabel={t("budget.entry.date.todayA11y")}
               >
-                <Text style={styles.estimateHintButtonText}>Today</Text>
+                <Text style={styles.estimateHintButtonText}>{t("budget.entry.date.today")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1085,9 +1103,9 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               .buildMonthDayRows, the same layout as the Bill Calendar),
               so "Tuesday the 8th" is one glance. Today is outlined. */}
           <View style={styles.calendarWeekRow}>
-            {WEEKDAY_SHORT_LABELS.map((label) => (
-              <Text key={label} style={styles.calendarWeekLabel}>
-                {label}
+            {WEEKDAY_KEYS.map((key) => (
+              <Text key={key} style={styles.calendarWeekLabel}>
+                {t(`budget.entry.date.weekdays.${key}`)}
               </Text>
             ))}
           </View>
@@ -1109,7 +1127,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                     ]}
                     onPress={() => setEntryDay(day)}
                     accessibilityRole="button"
-                    accessibilityLabel={`${WEEKDAY_SHORT_LABELS[cellIdx]} ${day}`}
+                    accessibilityLabel={`${t(`budget.entry.date.weekdays.${WEEKDAY_KEYS[cellIdx]}`)} ${day}`}
                     accessibilityState={{ selected: entryDay === day }}
                   >
                     <Text
@@ -1130,24 +1148,21 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showBillPicker && (
         <View style={styles.field}>
-          <Text style={styles.label}>APPLIES TO BILL</Text>
+          <Text style={styles.label}>{t("budget.entry.bill.label")}</Text>
           <TagPillPicker
             options={billCandidates.map((bill) => ({
               id: bill.id,
-              name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
-                bill.amount
-              )}`,
+              name: t("budget.entry.bill.option", {
+                name: bill.description?.trim() || categoryLabel(t, bill.category),
+                amount: formatCurrency(bill.amount),
+              }),
             }))}
             value={fulfillsRecurringId}
             onChange={setFulfillsRecurringId}
-            noneLabel="None"
+            noneLabel={t("budget.entry.bill.none")}
             glyph="🧾"
           />
-          <Text style={styles.linesHint}>
-            This is the real charge for one of this month's recurring bills.
-            Pick it and the bill's estimate steps aside for the month, so it
-            isn't counted twice.
-          </Text>
+          <Text style={styles.linesHint}>{t("budget.entry.bill.hint")}</Text>
         </View>
       )}
 
@@ -1168,11 +1183,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           {recurring && <Text style={styles.recurringCheck}>✓</Text>}
         </View>
         <View style={styles.recurringTextWrap}>
-          <Text style={styles.recurringLabel}>Recurring</Text>
-          <Text style={styles.recurringHint}>
-            This entry will repeat from the start month onward at the frequency
-            you choose below.
-          </Text>
+          <Text style={styles.recurringLabel}>{t("budget.entry.recurring.label")}</Text>
+          <Text style={styles.recurringHint}>{t("budget.entry.recurring.hint")}</Text>
         </View>
       </TouchableOpacity>
 
@@ -1193,12 +1205,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           {isPrivate && <Text style={styles.recurringCheck}>✓</Text>}
         </View>
         <View style={styles.recurringTextWrap}>
-          <Text style={styles.recurringLabel}>🔒 Private</Text>
+          <Text style={styles.recurringLabel}>{t("budget.entry.privacy.label")}</Text>
           <Text style={styles.recurringHint}>
-            Never syncs to your partner's device. Still counts in your budget
-            and rides your own backups and exports.
+            {t("budget.entry.privacy.hint")}
             {isEdit && !entry?.isPrivate && isPrivate
-              ? " If this entry synced before, your partner keeps the copy they already have."
+              ? t("budget.entry.privacy.alreadySyncedNote")
               : ""}
           </Text>
         </View>
@@ -1206,20 +1217,18 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showLoanField && (
         <View style={styles.field}>
-          <Text style={styles.label}>LENT TO SOMEONE? (OPTIONAL)</Text>
+          <Text style={styles.label}>{t("budget.entry.loan.label")}</Text>
           <Text style={styles.accountPickerHint}>
-            Money you expect back. Name who has it and the entry shows up
-            under Profile → People → Owed to You, where you log what they pay
-            back. It still counts as spending this month.
+            {t("budget.entry.loan.hint")}
             {isEdit && entry?.lentTo && (entry.loanRepayments?.length ?? 0) > 0
-              ? " Clearing the name also forgets the payments logged against it."
+              ? t("budget.entry.loan.clearNote")
               : ""}
           </Text>
           <TextInput
             style={styles.input}
             value={lentTo}
             onChangeText={setLentTo}
-            placeholder="Who owes you? Leave blank if nobody"
+            placeholder={t("budget.entry.loan.placeholder")}
             placeholderTextColor={colors.textMuted}
             maxLength={LENT_TO_MAX_LENGTH}
             autoCapitalize="words"
@@ -1233,7 +1242,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   style={styles.suggestionChip}
                   onPress={() => setLentTo(name)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Lent to ${name}`}
+                  accessibilityLabel={t("budget.entry.loan.chipA11y", { name })}
                 >
                   <Text style={styles.suggestionChipText}>🤝 {name}</Text>
                 </TouchableOpacity>
@@ -1245,7 +1254,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {recurring && (
         <View style={styles.field}>
-          <Text style={styles.label}>FREQUENCY</Text>
+          <Text style={styles.label}>{t("budget.entry.recurring.frequencyLabel")}</Text>
           <View style={styles.categoryWrap}>
             {RECURRENCE_INTERVAL_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -1263,7 +1272,10 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                       styles.categoryPillTextActive,
                   ]}
                 >
-                  {opt.label}
+                  {(() => {
+                    const key = FREQUENCY_KEYS[opt.value];
+                    return key ? t(`budget.entry.recurring.frequency.${key}`) : opt.label;
+                  })()}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1273,14 +1285,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showDayPicker && (
         <View style={styles.field}>
-          <Text style={styles.label}>PAY URL (OPTIONAL)</Text>
-          <Text style={styles.accountPickerHint}>
-            Link to the payment site for this bill. https:// is added if you
-            leave it off.
-          </Text>
+          <Text style={styles.label}>{t("budget.entry.recurring.payUrlLabel")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.recurring.payUrlHint")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. mybill.example.com/pay"
+            placeholder={t("budget.entry.recurring.payUrlPlaceholder")}
             placeholderTextColor={colors.textMuted}
             value={paymentUrl}
             onChangeText={setPaymentUrl}
@@ -1294,11 +1303,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showDayPicker && (
         <View style={styles.field}>
-          <Text style={styles.label}>DAY OF MONTH</Text>
-          <Text style={styles.accountPickerHint}>
-            The day this bill hits. Day 29-31 falls back to the last day in
-            shorter months.
-          </Text>
+          <Text style={styles.label}>{t("budget.entry.recurring.dayOfMonthLabel")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.recurring.dayOfMonthHint")}</Text>
           <View style={styles.dayGrid}>
             {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
               <TouchableOpacity
@@ -1322,10 +1328,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showAccountPicker && (
         <View style={styles.field}>
-          <Text style={styles.label}>LINK TO ACCOUNT</Text>
-          <Text style={styles.accountPickerHint}>
-            Contributions will be added to this account's balance.
-          </Text>
+          <Text style={styles.label}>{t("budget.entry.account.label")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.account.hint")}</Text>
           <View style={styles.categoryWrap}>
             <TouchableOpacity
               style={[
@@ -1340,7 +1344,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   !linkedAccountId && styles.categoryPillTextActive,
                 ]}
               >
-                None
+                {t("budget.entry.account.none")}
               </Text>
             </TouchableOpacity>
             {assetAccounts.map((account) => (
@@ -1368,11 +1372,11 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showBusinessPicker && (
         <View style={styles.field}>
-          <Text style={styles.label}>BUSINESS (OPTIONAL)</Text>
+          <Text style={styles.label}>{t("budget.entry.business.label")}</Text>
           <Text style={styles.accountPickerHint}>
             {isEdit
-              ? "Tag this expense to a business for the tax-time report."
-              : "Tag this expense to a business for the tax-time report. It still counts in your personal budget."}
+              ? t("budget.entry.business.hintEdit")
+              : t("budget.entry.business.hintAdd")}
           </Text>
           <View style={styles.categoryWrap}>
             <TouchableOpacity
@@ -1385,7 +1389,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   !businessId && styles.categoryPillTextActive,
                 ]}
               >
-                Personal
+                {t("budget.entry.business.personal")}
               </Text>
             </TouchableOpacity>
             {businesses.map((business) => (
@@ -1413,7 +1417,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                 onPress={() => setBusinessId(undefined)}
               >
                 <Text style={[styles.categoryPillText, styles.categoryPillTextActive]}>
-                  💼 (deleted business)
+                  {t("budget.entry.business.deleted")}
                 </Text>
               </TouchableOpacity>
             )}
@@ -1423,12 +1427,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
       {showPersonPicker && (
         <View style={styles.field}>
-          <Text style={styles.label}>PEOPLE (OPTIONAL)</Text>
-          <Text style={styles.accountPickerHint}>
-            Who was this for? Pick one person, or everyone it was shared by
-            - the whole family for groceries. Shared spending splits evenly
-            in per-person reports.
-          </Text>
+          <Text style={styles.label}>{t("budget.entry.people.label")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.people.hint")}</Text>
           <View style={styles.categoryWrap}>
             <TouchableOpacity
               style={[
@@ -1443,7 +1443,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                   personIds.length === 0 && styles.categoryPillTextActive,
                 ]}
               >
-                Unassigned
+                {t("budget.entry.people.unassigned")}
               </Text>
             </TouchableOpacity>
             {people.map((person) => {
@@ -1472,7 +1472,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                 onPress={() => togglePerson(id)}
               >
                 <Text style={[styles.categoryPillText, styles.categoryPillTextActive]}>
-                  👤 (deleted person)
+                  {t("budget.entry.people.deleted")}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1487,7 +1487,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         onRemove={handleAttachmentRemove}
       />
       {!isEdit && attachments.length > 0 && validLineCount > 1 && (
-        <Text style={styles.linesHint}>Photos attach to the first entry.</Text>
+        <Text style={styles.linesHint}>{t("budget.entry.lines.photosFirstLine")}</Text>
       )}
     </>
   );
@@ -1515,10 +1515,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                 keyboardShouldPersistTaps="handled"
                 automaticallyAdjustKeyboardInsets
               >
-                <Text style={styles.title}>Edit Entry</Text>
-                <Text style={styles.subtitle}>
-                  Update or delete this budget entry.
-                </Text>
+                <Text style={styles.title}>{t("budget.entry.edit.title")}</Text>
+                <Text style={styles.subtitle}>{t("budget.entry.edit.subtitle")}</Text>
 
                 {ready ? (
                   <>
@@ -1529,13 +1527,13 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                         style={styles.deleteButton}
                         onPress={handleDelete}
                       >
-                        <Text style={styles.deleteText}>Delete</Text>
+                        <Text style={styles.deleteText}>{t("common.delete")}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.cancelButton}
                         onPress={handleCancel}
                       >
-                        <Text style={styles.cancelText}>Cancel</Text>
+                        <Text style={styles.cancelText}>{t("common.cancel")}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -1545,13 +1543,13 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                         onPress={handleEditSave}
                         disabled={!isValid}
                       >
-                        <Text style={styles.submitButtonText}>Save</Text>
+                        <Text style={styles.submitButtonText}>{t("common.save")}</Text>
                       </TouchableOpacity>
                     </View>
                   </>
                 ) : (
                   <View style={styles.loadingPlaceholder}>
-                    <Text style={styles.subtitle}>Loading...</Text>
+                    <Text style={styles.subtitle}>{t("budget.entry.edit.loading")}</Text>
                   </View>
                 )}
               </ScrollView>
@@ -1566,10 +1564,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               keyboardShouldPersistTaps="handled"
               automaticallyAdjustKeyboardInsets
             >
-              <Text style={styles.title}>Add Budget Entry</Text>
-              <Text style={styles.subtitle}>
-                Track income and expenses by category.
-              </Text>
+              <Text style={styles.title}>{t("budget.entry.add.title")}</Text>
+              <Text style={styles.subtitle}>{t("budget.entry.add.subtitle")}</Text>
 
               {formBody}
             </ScrollView>
@@ -1584,15 +1580,15 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               ]}
             >
               <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.addAnotherButton, !isValid && styles.submitButtonDisabled]}
                 onPress={handleAddAnother}
                 disabled={!isValid}
-                accessibilityLabel="Save and add another entry"
+                accessibilityLabel={t("budget.entry.add.saveAndAnotherA11y")}
               >
-                <Text style={styles.addAnotherText}>Save + another</Text>
+                <Text style={styles.addAnotherText}>{t("budget.entry.add.saveAndAnother")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.submitButton, !isValid && styles.submitButtonDisabled]}

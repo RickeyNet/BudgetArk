@@ -16,6 +16,7 @@
 
 import React, { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -42,6 +43,7 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
   isCurrentMonth,
   onSetBalance,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -54,17 +56,14 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
     if (!isCurrentMonth) return null;
     return (
       <View style={styles.card}>
-        <Text style={styles.title}>Cash Flow</Text>
-        <Text style={styles.emptyText}>
-          Enter this month's starting checking balance and BudgetArk will
-          project where the month ends - and what's safe to spend.
-        </Text>
+        <Text style={styles.title}>{t("budget.cards.cashFlow.title")}</Text>
+        <Text style={styles.emptyText}>{t("budget.cards.cashFlow.emptyIntro")}</Text>
         <TouchableOpacity
           style={styles.ctaBtn}
           onPress={onSetBalance}
           accessibilityRole="button"
         >
-          <Text style={styles.ctaBtnText}>Set starting balance</Text>
+          <Text style={styles.ctaBtnText}>{t("budget.cards.cashFlow.setStarting")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -83,18 +82,18 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Cash Flow</Text>
+        <Text style={styles.title}>{t("budget.cards.cashFlow.title")}</Text>
         <TouchableOpacity onPress={onSetBalance} accessibilityRole="button">
-          <Text style={styles.updateLink}>Update</Text>
+          <Text style={styles.updateLink}>{t("budget.cards.cashFlow.update")}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.row}>
-        <Text style={styles.rowLabel}>Starting cash</Text>
+        <Text style={styles.rowLabel}>{t("budget.cards.cashFlow.startingCash")}</Text>
         <Text style={styles.rowValue}>{formatCurrency(record.balance)}</Text>
       </View>
       <View style={styles.row}>
-        <Text style={styles.rowLabel}>Projected end of month</Text>
+        <Text style={styles.rowLabel}>{t("budget.cards.cashFlow.projectedEnd")}</Text>
         <Text
           style={[
             styles.rowValue,
@@ -106,7 +105,7 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
       </View>
       <View style={[styles.row, styles.safeRow]}>
         <Text style={styles.safeLabel}>
-          {safeToSpend >= 0 ? "Safe to spend" : "Over plan by"}
+          {safeToSpend >= 0 ? t("budget.cards.cashFlow.safeToSpend") : t("budget.cards.cashFlow.overPlanBy")}
         </Text>
         <Text
           style={[
@@ -117,10 +116,7 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
           {formatCurrency(Math.abs(safeToSpend))}
         </Text>
       </View>
-      <Text style={styles.hint}>
-        Income minus spending this month, including planned bills and debt
-        minimums.
-      </Text>
+      <Text style={styles.hint}>{t("budget.cards.cashFlow.hint")}</Text>
 
       {delta !== null && (
         <Text
@@ -137,10 +133,10 @@ const CashFlowCard: React.FC<CashFlowCardProps> = ({
           ]}
         >
           {Math.abs(delta) < 1
-            ? "Started right on last month's plan"
+            ? t("budget.cards.cashFlow.reconcileOnPlan")
             : delta > 0
-              ? `Started ${formatCurrency(delta)} above last month's plan`
-              : `Started ${formatCurrency(Math.abs(delta))} below last month's plan`}
+              ? t("budget.cards.cashFlow.reconcileAbove", { amount: formatCurrency(delta) })
+              : t("budget.cards.cashFlow.reconcileBelow", { amount: formatCurrency(Math.abs(delta)) })}
         </Text>
       )}
     </View>

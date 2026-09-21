@@ -9,11 +9,12 @@
 
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
-  BUDGET_BUCKET_LABELS,
   BUDGET_BUCKET_ORDER,
   BUDGET_BUCKET_TARGETS,
 } from "../data/categoryBuckets";
+import { categoryLabel } from "../i18n/categoryLabel";
 import type { BudgetBucket } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -47,6 +48,7 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
   formatCurrency,
   onLongPressCategory,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -56,12 +58,14 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
     return (
       <View style={styles.card}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>50/30/20</Text>
-          <Text style={styles.takeHomeLabel}>Take-home this month: {formatCurrency(0)}</Text>
+          <Text style={styles.title}>{t("budget.spending.buckets.title")}</Text>
+          <Text style={styles.takeHomeLabel}>
+            {t("budget.spending.buckets.takeHome", { amount: formatCurrency(0) })}
+          </Text>
         </View>
         <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>Add income to see the 50/30/20 split</Text>
-          <Text style={styles.emptySubtext}>Log Salary or Freelance income for this month.</Text>
+          <Text style={styles.emptyTitle}>{t("budget.spending.buckets.emptyTitle")}</Text>
+          <Text style={styles.emptySubtext}>{t("budget.spending.buckets.emptySubtext")}</Text>
         </View>
       </View>
     );
@@ -70,9 +74,9 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>50/30/20</Text>
+        <Text style={styles.title}>{t("budget.spending.buckets.title")}</Text>
         <Text style={styles.takeHomeLabel}>
-          Take-home this month: {formatCurrency(takeHomeIncome)}
+          {t("budget.spending.buckets.takeHome", { amount: formatCurrency(takeHomeIncome) })}
         </Text>
       </View>
 
@@ -85,6 +89,7 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
         const variance = varianceForBucket(actualAmount, targetAmount);
         const isExpanded = expandedBucket === bucket;
         const categories = categoriesByBucket[bucket] ?? [];
+        const bucketLabel = t(`buckets.${bucket}`);
 
         const barColor =
           ratio > 1.02
@@ -93,12 +98,18 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
               ? colors.accent
               : colors.success;
 
-        const varianceText =
+        const varianceText: string =
           Math.abs(variance) < 0.01
-            ? `On target for ${BUDGET_BUCKET_LABELS[bucket]}`
-            : `${formatCurrency(Math.abs(variance))} ${
-                variance > 0 ? "over" : "under"
-              } target on ${BUDGET_BUCKET_LABELS[bucket]}`;
+            ? t("budget.spending.buckets.onTarget", { bucket: bucketLabel })
+            : variance > 0
+              ? t("budget.spending.buckets.overTarget", {
+                  amount: formatCurrency(Math.abs(variance)),
+                  bucket: bucketLabel,
+                })
+              : t("budget.spending.buckets.underTarget", {
+                  amount: formatCurrency(Math.abs(variance)),
+                  bucket: bucketLabel,
+                });
 
         return (
           <View key={bucket}>
@@ -109,9 +120,9 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
             >
               <View style={styles.rowTop}>
                 <View style={styles.rowTopLeft}>
-                  <Text style={styles.bucketLabel}>{BUDGET_BUCKET_LABELS[bucket]}</Text>
+                  <Text style={styles.bucketLabel}>{bucketLabel}</Text>
                   <View style={styles.targetChip}>
-                    <Text style={styles.targetChipText}>{Math.round(targetPct)}% target</Text>
+                    <Text style={styles.targetChipText}>{t("budget.spending.buckets.targetChip", { percent: Math.round(targetPct) })}</Text>
                   </View>
                 </View>
                 <Text style={styles.actualPct}>{actualPct.toFixed(0)}%</Text>
@@ -119,7 +130,7 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
 
               <View style={styles.rowMid}>
                 <Text style={styles.actualAmount}>{formatCurrency(actualAmount)}</Text>
-                <Text style={styles.expandHint}>{isExpanded ? "Hide" : "Show"}</Text>
+                <Text style={styles.expandHint}>{isExpanded ? t("budget.spending.buckets.hide") : t("budget.spending.buckets.show")}</Text>
               </View>
 
               <View style={styles.progressTrack}>
@@ -147,7 +158,7 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
             {isExpanded && (
               <View style={styles.expandedList}>
                 {categories.length === 0 ? (
-                  <Text style={styles.emptyBucketText}>No spending in this bucket this month.</Text>
+                  <Text style={styles.emptyBucketText}>{t("budget.spending.buckets.emptyBucket")}</Text>
                 ) : (
                   categories.map((item) => (
                     <TouchableOpacity
@@ -158,8 +169,8 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
                       onLongPress={() => onLongPressCategory(item.category)}
                     >
                       <Text style={styles.expandedName} numberOfLines={1}>
-                        {item.category}
-                        {item.hasOverride ? " (override)" : ""}
+                        {categoryLabel(t, item.category)}
+                        {item.hasOverride ? t("budget.spending.buckets.override") : ""}
                       </Text>
                       <View style={styles.expandedRight}>
                         <Text style={styles.expandedAmount}>{formatCurrency(item.amount)}</Text>
@@ -170,7 +181,7 @@ const BudgetBucketCard: React.FC<BudgetBucketCardProps> = ({
                     </TouchableOpacity>
                   ))
                 )}
-                <Text style={styles.expandedHint}>Long-press a category to reassign its bucket.</Text>
+                <Text style={styles.expandedHint}>{t("budget.spending.buckets.reassignHint")}</Text>
               </View>
             )}
           </View>

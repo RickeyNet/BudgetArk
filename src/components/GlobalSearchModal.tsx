@@ -23,7 +23,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
+import { categoryLabel } from "../i18n/categoryLabel";
 import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -81,6 +83,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   onSelectPayment,
   onSelectEntry,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -173,7 +176,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const truncationNote = (shown: number, total: number) =>
     total > shown ? (
       <Text style={styles.truncationNote}>
-        Showing the first {shown} of {total} - narrow the search to see the rest.
+        {t("budget.tools.search.truncation", { shown, total })}
       </Text>
     ) : null;
 
@@ -188,38 +191,35 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             style={sheet.doneButton}
             onPress={onClose}
             accessibilityRole="button"
-            accessibilityLabel="Close search"
+            accessibilityLabel={t("budget.tools.search.closeA11y")}
           >
-            <Text style={sheet.doneText}>Done</Text>
+            <Text style={sheet.doneText}>{t("common.done")}</Text>
           </TouchableOpacity>
         </>
       }
     >
-            <Text style={sheet.title}>Search</Text>
-            <Text style={sheet.subtitle}>
-              Find anything you have recorded - debts, payments, and budget
-              entries.
-            </Text>
+            <Text style={sheet.title}>{t("budget.tools.search.title")}</Text>
+            <Text style={sheet.subtitle}>{t("budget.tools.search.subtitle")}</Text>
 
             {/* ── Query ── */}
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
-                placeholder={'Try "chase", "grocery", or an amount'}
+                placeholder={t("budget.tools.search.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 value={filters.query}
                 onChangeText={(text) => patchFilters({ query: sanitizeTextInput(text) })}
                 autoCorrect={false}
                 autoFocus
                 returnKeyType="search"
-                accessibilityLabel="Search everything"
+                accessibilityLabel={t("budget.tools.search.inputA11y")}
               />
               {filters.query.length > 0 && (
                 <TouchableOpacity
                   style={styles.clearBtn}
                   onPress={() => patchFilters({ query: "" })}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel="Clear search"
+                  accessibilityLabel={t("budget.tools.search.clearA11y")}
                 >
                   <Text style={styles.clearBtnText}>✕</Text>
                 </TouchableOpacity>
@@ -237,10 +237,12 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: filtersOpen }}
-                accessibilityLabel={`Filters, ${activeFilterCount} active`}
+                accessibilityLabel={t("budget.tools.search.filtersA11y", { count: activeFilterCount })}
               >
                 <Text style={styles.filterToggleText}>
-                  Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+                  {activeFilterCount > 0
+                    ? t("budget.tools.search.filtersToggleCount", { count: activeFilterCount })
+                    : t("budget.tools.search.filtersToggle")}
                 </Text>
                 <Text style={styles.filterToggleArrow}>{filtersOpen ? "▾" : "▸"}</Text>
               </TouchableOpacity>
@@ -248,21 +250,21 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 <TouchableOpacity
                   onPress={resetFilters}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel="Reset filters"
+                  accessibilityLabel={t("budget.tools.search.resetA11y")}
                 >
-                  <Text style={[styles.filterReset, { color: colors.accent }]}>Reset</Text>
+                  <Text style={[styles.filterReset, { color: colors.accent }]}>{t("budget.tools.search.reset")}</Text>
                 </TouchableOpacity>
               )}
             </View>
 
             {filtersOpen && (
               <View style={styles.filterPanel}>
-                <Text style={styles.filterLabel}>Search in</Text>
+                <Text style={styles.filterLabel}>{t("budget.tools.search.scopeLabel")}</Text>
                 <View style={styles.chipRow}>
                   {SEARCH_SCOPE_OPTIONS.map((option) =>
                     renderChip(
                       option.id,
-                      option.label,
+                      t(`budget.tools.search.scope.${option.id}`),
                       filters.scope === option.id,
                       () => selectScope(option.id)
                     )
@@ -271,12 +273,12 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                 {showDateFilter && (
                   <>
-                    <Text style={styles.filterLabel}>Date</Text>
+                    <Text style={styles.filterLabel}>{t("budget.tools.search.dateLabel")}</Text>
                     <View style={styles.chipRow}>
                       {SEARCH_DATE_PRESET_OPTIONS.map((option) =>
                         renderChip(
                           option.id,
-                          option.label,
+                          t(`budget.tools.search.datePreset.${option.id}`),
                           filters.datePreset === option.id,
                           () => {
                             triggerHaptic("selection");
@@ -290,12 +292,12 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                 {showEntryFilters && (
                   <>
-                    <Text style={styles.filterLabel}>Budget entry type</Text>
+                    <Text style={styles.filterLabel}>{t("budget.tools.search.entryTypeLabel")}</Text>
                     <View style={styles.chipRow}>
                       {SEARCH_ENTRY_TYPE_OPTIONS.map((option) =>
                         renderChip(
                           option.id,
-                          option.label,
+                          t(`budget.tools.search.entryType.${option.id}`),
                           filters.entryType === option.id,
                           () => {
                             triggerHaptic("selection");
@@ -307,7 +309,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                     {categoryOptions.length > 0 && (
                       <>
-                        <Text style={styles.filterLabel}>Categories</Text>
+                        <Text style={styles.filterLabel}>{t("budget.tools.search.categoriesLabel")}</Text>
                         <ScrollView
                           horizontal
                           showsHorizontalScrollIndicator={false}
@@ -317,7 +319,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                             const selected = filters.categories.includes(category);
                             return renderChip(
                               category,
-                              `${getCategoryIcon(category, customCategories)} ${category}`,
+                              `${getCategoryIcon(category, customCategories)} ${categoryLabel(t, category)}`,
                               selected,
                               () => {
                                 triggerHaptic("selection");
@@ -335,11 +337,11 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   </>
                 )}
 
-                <Text style={styles.filterLabel}>Amount</Text>
+                <Text style={styles.filterLabel}>{t("budget.tools.search.amountLabel")}</Text>
                 <View style={styles.amountRow}>
                   <TextInput
                     style={styles.amountInput}
-                    placeholder="Min"
+                    placeholder={t("budget.tools.search.minPlaceholder")}
                     placeholderTextColor={colors.textMuted}
                     value={amountMinText}
                     onChangeText={(text) => {
@@ -348,12 +350,12 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                       patchFilters({ amountMin: parseMoneyInput(clean) ?? undefined });
                     }}
                     keyboardType="decimal-pad"
-                    accessibilityLabel="Minimum amount"
+                    accessibilityLabel={t("budget.tools.search.minA11y")}
                   />
                   <Text style={styles.amountDash}>-</Text>
                   <TextInput
                     style={styles.amountInput}
-                    placeholder="Max"
+                    placeholder={t("budget.tools.search.maxPlaceholder")}
                     placeholderTextColor={colors.textMuted}
                     value={amountMaxText}
                     onChangeText={(text) => {
@@ -362,7 +364,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                       patchFilters({ amountMax: parseMoneyInput(clean) ?? undefined });
                     }}
                     keyboardType="decimal-pad"
-                    accessibilityLabel="Maximum amount"
+                    accessibilityLabel={t("budget.tools.search.maxA11y")}
                   />
                 </View>
               </View>
@@ -371,21 +373,15 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             {/* ── Results ── */}
             {!searching ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>Search your records</Text>
-                <Text style={styles.emptyBody}>
-                  Type a debt name, a note, a merchant, a category, or an
-                  amount - or open Filters to browse by date, type, or
-                  category.
-                </Text>
+                <Text style={styles.emptyTitle}>{t("budget.tools.search.promptTitle")}</Text>
+                <Text style={styles.emptyBody}>{t("budget.tools.search.promptBody")}</Text>
               </View>
             ) : results.totals.overall === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>No matches</Text>
+                <Text style={styles.emptyTitle}>{t("budget.tools.search.noMatchesTitle")}</Text>
                 <Text style={styles.emptyBody}>
-                  Try fewer words or looser filters.
-                  {debtsHiddenByFilters
-                    ? " Debts don't show while a date, entry type, or category filter is on."
-                    : ""}
+                  {t("budget.tools.search.noMatchesBody")}
+                  {debtsHiddenByFilters ? ` ${t("budget.tools.search.debtsHidden")}` : ""}
                 </Text>
               </View>
             ) : (
@@ -393,7 +389,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 {results.debts.length > 0 && (
                   <>
                     <Text style={[styles.sectionHeader, { color: colors.accent }]}>
-                      DEBTS · {results.totals.debts}
+                      {t("budget.tools.search.sectionDebts", { count: results.totals.debts })}
                     </Text>
                     {results.debts.map((debt) => (
                       <TouchableOpacity
@@ -402,7 +398,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         onPress={() => onSelectDebt(debt)}
                         activeOpacity={0.7}
                         accessibilityRole="button"
-                        accessibilityLabel={`Debt ${debt.name}`}
+                        accessibilityLabel={t("budget.tools.search.debtA11y", { name: debt.name })}
                       >
                         <Text style={styles.resultIcon}>
                           {DEBT_CLASS_GLYPHS[debt.debtClass] ?? "💳"}
@@ -413,8 +409,8 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           </Text>
                           <Text style={styles.resultMeta} numberOfLines={1}>
                             {debt.balance > 0
-                              ? `${debt.rate}% APR`
-                              : "Paid off 🎉"}
+                              ? t("budget.tools.search.apr", { rate: debt.rate })
+                              : t("budget.tools.search.paidOff")}
                           </Text>
                         </View>
                         <Text style={styles.resultAmount}>
@@ -429,7 +425,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 {results.payments.length > 0 && (
                   <>
                     <Text style={[styles.sectionHeader, { color: colors.accent }]}>
-                      DEBT PAYMENTS · {results.totals.payments}
+                      {t("budget.tools.search.sectionPayments", { count: results.totals.payments })}
                     </Text>
                     {results.payments.map((hit) => (
                       <TouchableOpacity
@@ -438,7 +434,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         onPress={() => onSelectPayment(hit)}
                         activeOpacity={0.7}
                         accessibilityRole="button"
-                        accessibilityLabel={`Payment to ${hit.debtName}`}
+                        accessibilityLabel={t("budget.tools.search.paymentA11y", { name: hit.debtName })}
                       >
                         <Text style={styles.resultIcon}>💵</Text>
                         <View style={styles.resultBody}>
@@ -461,7 +457,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 {results.entries.length > 0 && (
                   <>
                     <Text style={[styles.sectionHeader, { color: colors.accent }]}>
-                      BUDGET ENTRIES · {results.totals.entries}
+                      {t("budget.tools.search.sectionEntries", { count: results.totals.entries })}
                     </Text>
                     {results.entries.map((entry) => (
                       <TouchableOpacity
@@ -470,17 +466,17 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         onPress={() => onSelectEntry(entry)}
                         activeOpacity={0.7}
                         accessibilityRole="button"
-                        accessibilityLabel={`Budget entry ${entry.description || entry.category}`}
+                        accessibilityLabel={t("budget.tools.search.entryA11y", { name: entry.description || categoryLabel(t, entry.category) })}
                       >
                         <Text style={styles.resultIcon}>
                           {getCategoryIcon(entry.category, customCategories)}
                         </Text>
                         <View style={styles.resultBody}>
                           <Text style={styles.resultTitle} numberOfLines={1}>
-                            {entry.description || entry.category}
+                            {entry.description || categoryLabel(t, entry.category)}
                           </Text>
                           <Text style={styles.resultMeta} numberOfLines={1}>
-                            {formatDate(entry.date)} · {entry.category}
+                            {formatDate(entry.date)} · {categoryLabel(t, entry.category)}
                           </Text>
                         </View>
                         <Text
@@ -500,8 +496,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                 {debtsHiddenByFilters && results.totals.overall > 0 && (
                   <Text style={styles.truncationNote}>
-                    Debts don't show while a date, entry type, or category
-                    filter is on.
+                    {t("budget.tools.search.debtsHidden")}
                   </Text>
                 )}
               </View>

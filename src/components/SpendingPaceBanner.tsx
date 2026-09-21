@@ -19,10 +19,12 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
-import { ordinalDay, type PaceAlert } from "../utils/budgetPacing";
+import type { PaceAlert } from "../utils/budgetPacing";
+import { categoryLabel } from "../i18n/categoryLabel";
 
 interface SpendingPaceBannerProps {
   alerts: readonly PaceAlert[];
@@ -39,6 +41,7 @@ const SpendingPaceBanner: React.FC<SpendingPaceBannerProps> = ({
   onOpen,
   style,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { formatCurrency } = useCurrency();
@@ -47,24 +50,43 @@ const SpendingPaceBanner: React.FC<SpendingPaceBannerProps> = ({
 
   const lines = useMemo(() => {
     if (!headline) return null;
-    const title =
+    const category = categoryLabel(t, headline.category);
+    const title: string =
       headline.status === "over"
-        ? `${headline.category} is over its ${formatCurrency(headline.limit)} limit by ${formatCurrency(headline.overBy)}`
-        : `${headline.category} is ${headline.percentSpent}% spent and it's only the ${ordinalDay(dayOfMonth)}`;
-    const detail =
+        ? t("budget.cards.pace.overTitle", {
+            category,
+            limit: formatCurrency(headline.limit),
+            overBy: formatCurrency(headline.overBy),
+          })
+        : t("budget.cards.pace.aheadTitle", {
+            category,
+            percent: headline.percentSpent,
+            dayOrdinal: t("budget.cards.paycheck.dayOrdinal", {
+              day: dayOfMonth,
+              suffix: t(`budget.cards.paycheck.ordinalSuffix.${ordinalBucket(dayOfMonth)}`),
+            }),
+          });
+    const detail: string =
       headline.status === "over"
-        ? "Anything more in this category this month comes out of the plan."
-        : `At this pace it ends the month at ${formatCurrency(headline.projectedSpent)} against a ${formatCurrency(headline.limit)} limit - ${formatCurrency(headline.expectedSpent)} would be on track by today.`;
+        ? t("budget.cards.pace.overDetail")
+        : t("budget.cards.pace.aheadDetail", {
+            projected: formatCurrency(headline.projectedSpent),
+            limit: formatCurrency(headline.limit),
+            expected: formatCurrency(headline.expectedSpent),
+          });
     const rest = alerts.length - 1;
-    const more =
+    const more: string | null =
       rest > 0
-        ? `+${rest} more ${rest === 1 ? "category" : "categories"} off pace: ${alerts
-            .slice(1)
-            .map((a) => a.category)
-            .join(", ")}`
+        ? t("budget.cards.pace.more", {
+            count: rest,
+            list: alerts
+              .slice(1)
+              .map((a) => categoryLabel(t, a.category))
+              .join(t("budget.cards.pace.listSeparator")),
+          })
         : null;
     return { title, detail, more };
-  }, [alerts, dayOfMonth, formatCurrency, headline]);
+  }, [alerts, dayOfMonth, formatCurrency, headline, t]);
 
   if (!headline || !lines) return null;
 
@@ -81,7 +103,7 @@ const SpendingPaceBanner: React.FC<SpendingPaceBannerProps> = ({
     >
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
-          <Text style={[styles.eyebrow, { color: accent }]}>SPENDING PACE</Text>
+          <Text style={[styles.eyebrow, { color: accent }]}>{t("budget.cards.pace.eyebrow")}</Text>
           <Text style={styles.title}>{lines.title}</Text>
         </View>
         {onOpen ? <Text style={styles.chevron}>›</Text> : null}
@@ -94,6 +116,22 @@ const SpendingPaceBanner: React.FC<SpendingPaceBannerProps> = ({
       ) : null}
     </TouchableOpacity>
   );
+};
+
+/** English ordinal bucket for "the 12th"; the locale supplies the suffix. */
+const ordinalBucket = (day: number): "one" | "two" | "few" | "other" => {
+  const n = Math.max(1, Math.round(day));
+  if (n % 100 >= 11 && n % 100 <= 13) return "other";
+  switch (n % 10) {
+    case 1:
+      return "one";
+    case 2:
+      return "two";
+    case 3:
+      return "few";
+    default:
+      return "other";
+  }
 };
 
 const makeStyles = (colors: ThemeColors) =>

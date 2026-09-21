@@ -26,7 +26,8 @@ import {
 } from "react-native";
 import { describeError } from "../utils/errorMessage";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
-import { formatMonthKeyLabel, getMonthKey } from "../utils/budgetMonths";
+import { useTranslation } from "react-i18next";
+import { getMonthDateFromKey, getMonthKey } from "../utils/budgetMonths";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -66,10 +67,21 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
   onSaved,
   onClose,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  // Month name in the app language (the shared util formats in the device
+  // locale, which can differ from a fixed in-app language choice).
+  const monthLabel = useMemo(
+    () =>
+      getMonthDateFromKey(monthKey).toLocaleDateString(i18n.language, {
+        month: "long",
+        year: "numeric",
+      }),
+    [i18n.language, monthKey]
+  );
 
   const [input, setInput] = useState(
     existingBalance !== null ? String(existingBalance) : ""
@@ -128,7 +140,7 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
       // Storage failure: keep the modal open so the entry isn't lost, and
       // say why the Save didn't take.
       setSaving(false);
-      setSaveError(describeError(error, "Couldn't save your balance. Please try again."));
+      setSaveError(describeError(error, t("budget.cards.monthBalance.saveFailed")));
     }
   };
 
@@ -137,22 +149,23 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
       <KeyboardAwareModalOverlay style={styles.overlay}>
         <View style={styles.card}>
           <Text style={styles.title}>
-            {isPrompt ? "New month - update your balance" : "Starting balance"}
+            {isPrompt
+              ? t("budget.cards.monthBalance.promptTitle")
+              : t("budget.cards.monthBalance.title")}
           </Text>
           <Text style={styles.subtitle}>
-            What's in checking at the start of {formatMonthKeyLabel(monthKey)}? BudgetArk
-            uses it to project your end-of-month cash and what's safe to spend.
+            {t("budget.cards.monthBalance.subtitle", { month: monthLabel })}
           </Text>
 
           <TextInput
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="0.00"
+            placeholder={t("budget.cards.monthBalance.inputPlaceholder")}
             placeholderTextColor={colors.textDim}
             keyboardType="numbers-and-punctuation"
             autoFocus
-            accessibilityLabel="Starting checking balance"
+            accessibilityLabel={t("budget.cards.monthBalance.inputA11y")}
           />
 
           {checkingTotal !== null && parsed !== checkingTotal && (
@@ -162,15 +175,16 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
               accessibilityRole="button"
             >
               <Text style={styles.prefillChipText}>
-                Use Bridge checking total: {formatCurrency(checkingTotal)}
+                {t("budget.cards.monthBalance.usePrefill", {
+                  amount: formatCurrency(checkingTotal),
+                })}
               </Text>
             </TouchableOpacity>
           )}
 
           {accountToUpdate && parsed !== null && parsed !== accountToUpdate.balance && (
             <Text style={styles.note}>
-              Also updates "{accountToUpdate.name}" on your Bridge so net worth
-              stays current.
+              {t("budget.cards.monthBalance.alsoUpdates", { account: accountToUpdate.name })}
             </Text>
           )}
           {saveError ? (
@@ -185,7 +199,7 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
               accessibilityRole="button"
             >
               <Text style={styles.cancelBtnText}>
-                {isPrompt ? "Not now" : "Cancel"}
+                {isPrompt ? t("budget.cards.monthBalance.notNow") : t("common.cancel")}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -198,7 +212,7 @@ const MonthBalancePromptModal: React.FC<MonthBalancePromptModalProps> = ({
               accessibilityRole="button"
             >
               <Text style={styles.saveBtnText}>
-                {saving ? "Saving…" : "Save"}
+                {saving ? t("budget.cards.monthBalance.saving") : t("common.save")}
               </Text>
             </TouchableOpacity>
           </View>

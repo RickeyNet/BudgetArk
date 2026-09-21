@@ -18,6 +18,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutAnimation, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -26,10 +27,8 @@ import type { DensityTokens } from "../theme/density";
 import type { BudgetEntry, Debt, Payment } from "../types";
 import {
   buildPaycheckPeriodView,
-  formatPaydayLabel,
   LAST_DAY,
   PAY_FREQUENCIES,
-  PAY_FREQUENCY_LABELS,
   SEMIMONTHLY_PRESETS,
   toLocalDateKey,
   type PaycheckCycleSettings,
@@ -66,10 +65,18 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
   startingBalance,
   onSetBalance,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  // Same shape as utils/paycheckCycle.formatPaydayLabel, but in the APP
+  // language rather than the device locale.
+  const formatPayday = useCallback(
+    (date: Date) =>
+      date.toLocaleDateString(i18n.language, { weekday: "short", month: "short", day: "numeric" }),
+    [i18n.language]
+  );
 
   const [settings, setSettings] = useState<PaycheckCycleSettings | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -112,10 +119,10 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
     const out: { key: string; label: string }[] = [];
     for (let back = 0; back < ANCHOR_DAYS; back++) {
       const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - back);
-      out.push({ key: toLocalDateKey(day), label: formatPaydayLabel(day) });
+      out.push({ key: toLocalDateKey(day), label: formatPayday(day) });
     }
     return out;
-  }, []);
+  }, [formatPayday]);
 
   const beginEdit = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -159,7 +166,7 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
     try {
       const saved = await savePaycheckCycleSettings(next);
       if (!saved) {
-        setError("Pick a recent payday first.");
+        setError(t("budget.cards.paycheck.pickPayday"));
         return;
       }
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -169,15 +176,15 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
       triggerHaptic("success");
     } catch (err) {
       triggerHaptic("error");
-      setError(describeError(err, "Couldn't save your pay schedule."));
+      setError(describeError(err, t("budget.cards.paycheck.saveFailed")));
     }
-  }, [draftAnchor, draftFrequency, draftMonthlyDay, draftPreset]);
+  }, [draftAnchor, draftFrequency, draftMonthlyDay, draftPreset, t]);
 
   if (!loaded) return null;
 
   const renderSetup = () => (
     <View style={styles.setupWrap}>
-      <Text style={styles.fieldLabel}>How often are you paid?</Text>
+      <Text style={styles.fieldLabel}>{t("budget.cards.paycheck.howOften")}</Text>
       <View style={styles.chipWrap}>
         {PAY_FREQUENCIES.map((frequency) => {
           const active = draftFrequency === frequency;
@@ -191,7 +198,7 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
               accessibilityState={{ selected: active }}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {PAY_FREQUENCY_LABELS[frequency]}
+                {t(`budget.cards.paycheck.frequency.${frequency}`)}
               </Text>
             </TouchableOpacity>
           );
@@ -200,7 +207,7 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
 
       {draftFrequency === "weekly" || draftFrequency === "biweekly" ? (
         <>
-          <Text style={styles.fieldLabel}>Your most recent payday</Text>
+          <Text style={styles.fieldLabel}>{t("budget.cards.paycheck.recentPayday")}</Text>
           <View style={styles.chipWrap}>
             {anchorChoices.map((choice) => {
               const active = draftAnchor === choice.key;
@@ -221,7 +228,7 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
         </>
       ) : draftFrequency === "semimonthly" ? (
         <>
-          <Text style={styles.fieldLabel}>Paydays</Text>
+          <Text style={styles.fieldLabel}>{t("budget.cards.paycheck.paydays")}</Text>
           <View style={styles.chipWrap}>
             {SEMIMONTHLY_PRESETS.map((preset) => {
               const active = draftPreset === preset.id;
@@ -234,7 +241,9 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
                 >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{preset.label}</Text>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {t(`budget.cards.paycheck.semimonthly.${preset.id}`)}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -242,7 +251,7 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
         </>
       ) : (
         <>
-          <Text style={styles.fieldLabel}>Payday</Text>
+          <Text style={styles.fieldLabel}>{t("budget.cards.paycheck.payday")}</Text>
           <View style={styles.chipWrap}>
             {MONTHLY_DAYS.map((day) => {
               const active = draftMonthlyDay === day;
@@ -256,7 +265,12 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
                   accessibilityState={{ selected: active }}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {day === LAST_DAY ? "Last day" : `${day}${ordinal(day)}`}
+                    {day === LAST_DAY
+                      ? t("budget.cards.paycheck.lastDay")
+                      : t("budget.cards.paycheck.dayOrdinal", {
+                          day,
+                          suffix: t(`budget.cards.paycheck.ordinalSuffix.${ordinalBucket(day)}`),
+                        })}
                   </Text>
                 </TouchableOpacity>
               );
@@ -273,30 +287,27 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
           disabled={!draftComplete}
           accessibilityRole="button"
         >
-          <Text style={styles.primaryBtnText}>Save schedule</Text>
+          <Text style={styles.primaryBtnText}>{t("budget.cards.paycheck.saveSchedule")}</Text>
         </TouchableOpacity>
         {settings ? (
           <TouchableOpacity style={styles.secondaryBtn} onPress={cancelEdit} accessibilityRole="button">
-            <Text style={styles.secondaryBtnText}>Cancel</Text>
+            <Text style={styles.secondaryBtnText}>{t("common.cancel")}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
-      <Text style={styles.hint}>Stays on this phone. Only used to slice your budget into pay periods.</Text>
+      <Text style={styles.hint}>{t("budget.cards.paycheck.privacyHint")}</Text>
     </View>
   );
 
   if (!settings || editing) {
     return (
       <View style={styles.card}>
-        <Text style={styles.title}>Until Payday</Text>
+        <Text style={styles.title}>{t("budget.cards.paycheck.title")}</Text>
         {!editing ? (
           <>
-            <Text style={styles.emptyText}>
-              Tell BudgetArk when you get paid and it will show what is due before your next
-              check - and what is safe to spend until then.
-            </Text>
+            <Text style={styles.emptyText}>{t("budget.cards.paycheck.emptyIntro")}</Text>
             <TouchableOpacity style={styles.primaryBtn} onPress={beginEdit} accessibilityRole="button">
-              <Text style={styles.primaryBtnText}>Set up pay periods</Text>
+              <Text style={styles.primaryBtnText}>{t("budget.cards.paycheck.setUp")}</Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -310,12 +321,12 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
     return (
       <View style={styles.card}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>Until Payday</Text>
+          <Text style={styles.title}>{t("budget.cards.paycheck.title")}</Text>
           <TouchableOpacity onPress={beginEdit} accessibilityRole="button">
-            <Text style={styles.updateLink}>Change</Text>
+            <Text style={styles.updateLink}>{t("budget.cards.paycheck.change")}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.emptyText}>Your pay schedule couldn&apos;t produce a next payday - check it.</Text>
+        <Text style={styles.emptyText}>{t("budget.cards.paycheck.noNextPayday")}</Text>
       </View>
     );
   }
@@ -327,22 +338,27 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Until Payday</Text>
+        <Text style={styles.title}>{t("budget.cards.paycheck.title")}</Text>
         <TouchableOpacity onPress={beginEdit} accessibilityRole="button">
-          <Text style={styles.updateLink}>Change</Text>
+          <Text style={styles.updateLink}>{t("budget.cards.paycheck.change")}</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.periodLine}>
-        Next check {formatPaydayLabel(view.period.nextPayday)} ·{" "}
-        {view.period.daysUntilNext === 1 ? "tomorrow" : `in ${view.period.daysUntilNext} days`}
+        {t("budget.cards.paycheck.nextCheck", {
+          date: formatPayday(view.period.nextPayday),
+          when:
+            view.period.daysUntilNext === 1
+              ? t("budget.cards.paycheck.tomorrow")
+              : t("budget.cards.paycheck.inDays", { count: view.period.daysUntilNext }),
+        })}
       </Text>
 
       <View style={styles.row}>
-        <Text style={styles.rowLabel}>Due before then</Text>
+        <Text style={styles.rowLabel}>{t("budget.cards.paycheck.dueBefore")}</Text>
         <Text style={styles.rowValue}>{formatCurrency(view.dueTotal)}</Text>
       </View>
       {dueRows.length === 0 ? (
-        <Text style={styles.hint}>Nothing on the calendar before your next check.</Text>
+        <Text style={styles.hint}>{t("budget.cards.paycheck.nothingDue")}</Text>
       ) : (
         dueRows.map((item) => (
           <View key={item.id} style={styles.dueRow}>
@@ -352,10 +368,10 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
             </Text>
             <Text style={styles.dueMeta}>
               {item.daysUntil === 0
-                ? "today"
+                ? t("budget.cards.paycheck.today")
                 : item.daysUntil < 0
-                  ? `overdue · ${formatPaydayLabel(item.date)}`
-                  : formatPaydayLabel(item.date)}
+                  ? t("budget.cards.paycheck.overdue", { date: formatPayday(item.date) })
+                  : formatPayday(item.date)}
             </Text>
             <Text style={styles.dueAmount}>{formatCurrency(item.amount)}</Text>
           </View>
@@ -369,31 +385,40 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
           }}
           accessibilityRole="button"
         >
-          <Text style={styles.updateLink}>{showAllDue ? "Show fewer" : `+${hiddenDue} more`}</Text>
+          <Text style={styles.updateLink}>
+            {showAllDue
+              ? t("budget.cards.paycheck.showFewer")
+              : t("budget.cards.paycheck.showMore", { count: hiddenDue })}
+          </Text>
         </TouchableOpacity>
       ) : null}
 
       {safe !== null && view.cashNow !== null && view.perDay !== null ? (
         <>
           <View style={[styles.row, styles.safeRow]}>
-            <Text style={styles.safeLabel}>{safe >= 0 ? "Safe to spend until payday" : "Short before payday by"}</Text>
+            <Text style={styles.safeLabel}>
+              {safe >= 0
+                ? t("budget.cards.paycheck.safeUntilPayday")
+                : t("budget.cards.paycheck.shortBy")}
+            </Text>
             <Text style={[styles.safeValue, { color: safe >= 0 ? colors.success : colors.danger }]}>
               {formatCurrency(Math.abs(safe))}
             </Text>
           </View>
           <Text style={styles.hint}>
             {safe >= 0
-              ? `About ${formatCurrency(Math.max(0, view.perDay))} a day. `
+              ? t("budget.cards.paycheck.perDay", {
+                  amount: formatCurrency(Math.max(0, view.perDay)),
+                })
               : ""}
-            Cash now ≈ {formatCurrency(view.cashNow)}: your starting balance plus what the ledger
-            says has landed so far this month.
+            {t("budget.cards.paycheck.cashNow", { amount: formatCurrency(view.cashNow) })}
           </Text>
         </>
       ) : (
         <TouchableOpacity onPress={onSetBalance} style={styles.safeRow} accessibilityRole="button">
           <Text style={styles.hint}>
-            Record this month&apos;s starting checking balance and this card will also say what is
-            safe to spend until payday. <Text style={styles.updateLink}>Set it</Text>
+            {t("budget.cards.paycheck.recordBalance")}
+            <Text style={styles.updateLink}>{t("budget.cards.paycheck.setIt")}</Text>
           </Text>
         </TouchableOpacity>
       )}
@@ -401,17 +426,18 @@ const PaycheckCycleCard: React.FC<PaycheckCycleCardProps> = ({
   );
 };
 
-const ordinal = (day: number): string => {
-  if (day % 100 >= 11 && day % 100 <= 13) return "th";
+/** English ordinal bucket (1st/2nd/3rd/4th); the locale supplies the suffix. */
+const ordinalBucket = (day: number): "one" | "two" | "few" | "other" => {
+  if (day % 100 >= 11 && day % 100 <= 13) return "other";
   switch (day % 10) {
     case 1:
-      return "st";
+      return "one";
     case 2:
-      return "nd";
+      return "two";
     case 3:
-      return "rd";
+      return "few";
     default:
-      return "th";
+      return "other";
   }
 };
 

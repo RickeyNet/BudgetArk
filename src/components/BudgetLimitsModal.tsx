@@ -16,7 +16,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { BudgetEntry, CategoryBudgetLimit, CustomCategory, CategoryName } from "../types";
+import { useTranslation } from "react-i18next";
 import SheetModal, { useSheetStyles } from "./SheetModal";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -58,6 +60,7 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const sheet = useSheetStyles();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -104,12 +107,12 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
         setLoaded({ history, rows });
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(describeError(e, "Couldn't load your limits."));
+        if (!cancelled) setError(describeError(e, t("budget.spending.limits.loadFailed")));
       });
     return () => {
       cancelled = true;
     };
-  }, [visible, loaded, categories, hiddenBuiltIns, monthKey, entries]);
+  }, [visible, loaded, categories, hiddenBuiltIns, monthKey, entries, t]);
 
   const setDraft = useCallback((category: string, value: string) => {
     setDrafts((prev) => ({ ...prev, [category]: value }));
@@ -156,11 +159,11 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
       triggerHaptic("success");
       onClose();
     } catch (e) {
-      setError(describeError(e, "Couldn't save your limits."));
+      setError(describeError(e, t("budget.spending.limits.saveFailed")));
     } finally {
       setSaving(false);
     }
-  }, [drafts, loaded, monthKey, onClose, onSaved, saving]);
+  }, [drafts, loaded, monthKey, onClose, onSaved, saving, t]);
 
   const anyLastMonth = loaded?.rows.some((r) => r.lastMonth != null) ?? false;
   const anyAverage = loaded?.rows.some((r) => r.averageSpend != null) ?? false;
@@ -174,34 +177,33 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
       footer={
         <>
           <TouchableOpacity style={sheet.closeButton} onPress={onClose} disabled={saving}>
-            <Text style={sheet.closeText}>Cancel</Text>
+            <Text style={sheet.closeText}>{t("common.cancel")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[sheet.doneButton, (saving || !loaded) && styles.disabled]}
             onPress={() => void handleSave()}
             disabled={saving || !loaded}
           >
-            <Text style={sheet.doneText}>{saving ? "Saving..." : "Save"}</Text>
+            <Text style={sheet.doneText}>{saving ? t("budget.spending.limits.saving") : t("common.save")}</Text>
           </TouchableOpacity>
         </>
       }
     >
-      <Text style={sheet.title}>Monthly Limits</Text>
+      <Text style={sheet.title}>{t("budget.spending.limits.title")}</Text>
       <Text style={sheet.subtitle}>
-        {formatMonthKeyLabel(monthKey)}. A limit set here carries into later months
-        until you change it. Leave a field blank for no limit.
+        {t("budget.spending.limits.subtitle", { month: formatMonthKeyLabel(monthKey) })}
       </Text>
 
       {(anyLastMonth || anyAverage) && (
         <View style={styles.fillRow}>
           {anyLastMonth ? (
             <TouchableOpacity style={styles.fillChip} onPress={copyLastMonth}>
-              <Text style={styles.fillChipText}>Copy last month</Text>
+              <Text style={styles.fillChipText}>{t("budget.spending.limits.copyLastMonth")}</Text>
             </TouchableOpacity>
           ) : null}
           {anyAverage ? (
             <TouchableOpacity style={styles.fillChip} onPress={useAverages}>
-              <Text style={styles.fillChipText}>Use 3-month averages</Text>
+              <Text style={styles.fillChipText}>{t("budget.spending.limits.useAverages")}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -212,16 +214,22 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
       {loaded ? (
         loaded.rows.map((row) => {
           const draft = drafts[row.category] ?? "";
-          const parts = [
-            `Spent ${formatCurrency(row.spentThisMonth)}`,
-            row.averageSpend != null ? `avg ${formatCurrency(row.averageSpend)}` : null,
-            row.lastMonth != null ? `last month ${formatCurrency(row.lastMonth)}` : null,
-          ].filter(Boolean);
+          const candidates: (string | null)[] = [
+            t("budget.spending.limits.spent", { amount: formatCurrency(row.spentThisMonth) }),
+            row.averageSpend != null
+              ? t("budget.spending.limits.avg", { amount: formatCurrency(row.averageSpend) })
+              : null,
+            row.lastMonth != null
+              ? t("budget.spending.limits.lastMonth", { amount: formatCurrency(row.lastMonth) })
+              : null,
+          ];
+          const parts = candidates.filter((part): part is string => part != null);
+          const label = categoryLabel(t, row.category);
           return (
             <View key={row.category} style={styles.row}>
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
-                  {getCategoryIcon(row.category, customCategories)} {row.category}
+                  {getCategoryIcon(row.category, customCategories)} {label}
                 </Text>
                 <Text style={styles.rowMeta} numberOfLines={1}>
                   {parts.join(" · ")}
@@ -233,25 +241,25 @@ const BudgetLimitsModal: React.FC<BudgetLimitsModalProps> = ({
                   onPress={() =>
                     setDraft(row.category, String(suggestLimitFromAverage(row.averageSpend ?? 0)))
                   }
-                  accessibilityLabel={`Use the average for ${row.category}`}
+                  accessibilityLabel={t("budget.spending.limits.useAverageA11y", { category: label })}
                 >
-                  <Text style={styles.avgChipText}>avg</Text>
+                  <Text style={styles.avgChipText}>{t("budget.spending.limits.avgChip")}</Text>
                 </TouchableOpacity>
               ) : null}
               <TextInput
                 style={styles.input}
                 value={draft}
                 onChangeText={(text) => setDraft(row.category, text)}
-                placeholder="none"
+                placeholder={t("budget.spending.limits.nonePlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
-                accessibilityLabel={`Monthly limit for ${row.category}`}
+                accessibilityLabel={t("budget.spending.limits.limitInputA11y", { category: label })}
               />
             </View>
           );
         })
       ) : !error ? (
-        <Text style={styles.loading}>Loading...</Text>
+        <Text style={styles.loading}>{t("budget.spending.limits.loading")}</Text>
       ) : null}
     </SheetModal>
   );
