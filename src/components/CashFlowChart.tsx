@@ -24,6 +24,7 @@ import Svg, {
   Rect,
   Stop,
 } from "react-native-svg";
+import { useTranslation } from "react-i18next";
 import type { ThemeColors } from "../theme/themes";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
@@ -50,6 +51,7 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
   colors,
   formatCompactCurrency,
 }) => {
+  const { t } = useTranslation();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const { width: windowWidth } = useWindowDimensions();
@@ -98,17 +100,17 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
       <View style={styles.topHairline} />
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.title}>Monthly Cash Flow</Text>
-          <Text style={styles.subtitle}>Income vs Expenses</Text>
+          <Text style={styles.title}>{t("bridge.reports.cashFlowChart.title")}</Text>
+          <Text style={styles.subtitle}>{t("bridge.reports.cashFlowChart.subtitle")}</Text>
         </View>
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
-            <Text style={styles.legendText}>In</Text>
+            <Text style={styles.legendText}>{t("bridge.reports.cashFlowChart.legendIn")}</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
-            <Text style={styles.legendText}>Out</Text>
+            <Text style={styles.legendText}>{t("bridge.reports.cashFlowChart.legendOut")}</Text>
           </View>
         </View>
       </View>
@@ -216,7 +218,7 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
       ) : (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>
-            Add a few months of income and expenses to see cash flow.
+            {t("bridge.reports.cashFlowChart.empty")}
           </Text>
         </View>
       )}

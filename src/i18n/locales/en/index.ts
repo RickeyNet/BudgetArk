@@ -16,6 +16,11 @@ import { categories } from "./categories";
 import { buckets } from "./buckets";
 import { categoryPicker } from "./categoryPicker";
 import { datePicker } from "./datePicker";
+import { achievements } from "./achievements";
+import { bridgeScreen } from "./bridgeScreen";
+import { bridgePlanner } from "./bridgePlanner";
+import { bridgeReports } from "./bridgeReports";
+import { bridgeProjection } from "./bridgeProjection";
 import { debtsScreen } from "./debtsScreen";
 import { debtsForm } from "./debtsForm";
 import { debtsCard } from "./debtsCard";
@@ -61,5 +66,12 @@ export const en = {
     form: debtsForm,
     card: debtsCard,
     moments: debtsMoments,
+  },
+  achievements,
+  bridge: {
+    screen: bridgeScreen,
+    planner: bridgePlanner,
+    reports: bridgeReports,
+    projection: bridgeProjection,
   },
 } as const;

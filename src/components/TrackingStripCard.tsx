@@ -29,7 +29,9 @@ import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
+import { useTranslation } from "react-i18next";
 import { useCurrency } from "../currency/CurrencyProvider";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { getCategoryBudgetLimits } from "../storage/budgetStorage";
 import { getMonthKey } from "../utils/budgetMonths";
 import { formatDayLabel } from "../utils/dateFormat";
@@ -51,6 +53,7 @@ const TrackingStripCard: React.FC<TrackingStripCardProps> = ({
   onOpenBudget,
   style,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -79,20 +82,36 @@ const TrackingStripCard: React.FC<TrackingStripCardProps> = ({
   );
 
   const spendLine = strip.totalLimits
-    ? `Spent ${formatCurrency(strip.spentThisMonth)} of ${formatCurrency(strip.totalLimits)} limits`
-    : `Spent ${formatCurrency(strip.spentThisMonth)} this month`;
+    ? t("bridge.reports.trackingStrip.spentOfLimits", {
+        spent: formatCurrency(strip.spentThisMonth),
+        limits: formatCurrency(strip.totalLimits),
+      })
+    : t("bridge.reports.trackingStrip.spentThisMonth", {
+        spent: formatCurrency(strip.spentThisMonth),
+      });
+
+  /** Row date in the app language; the shared util follows the device locale. */
+  const formatRowDate = (iso: string): string => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return formatDayLabel(iso);
+    try {
+      return date.toLocaleDateString(i18n.language, { month: "short", day: "numeric" });
+    } catch {
+      return formatDayLabel(iso);
+    }
+  };
 
   return (
     <View style={[styles.card, style]}>
       <View style={styles.headerRow}>
-        <Text style={styles.eyebrow}>THIS MONTH</Text>
+        <Text style={styles.eyebrow}>{t("bridge.reports.trackingStrip.eyebrow")}</Text>
         <TouchableOpacity
           onPress={onOpenBudget}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
-          accessibilityLabel="Open the Budget tab"
+          accessibilityLabel={t("bridge.reports.trackingStrip.openBudgetA11y")}
         >
-          <Text style={[styles.link, { color: colors.accent }]}>Budget ›</Text>
+          <Text style={[styles.link, { color: colors.accent }]}>{t("bridge.reports.trackingStrip.budgetLink")}</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.status}>
@@ -102,24 +121,32 @@ const TrackingStripCard: React.FC<TrackingStripCardProps> = ({
 
       {strip.recent.length === 0 ? (
         <Text style={styles.empty}>
-          Nothing logged yet. Add your first purchase or paycheck and it shows up
-          here.
+          {t("bridge.reports.trackingStrip.empty")}
         </Text>
       ) : (
         <View style={styles.rows}>
-          {strip.recent.map((row) => (
+          {strip.recent.map((row) => {
+            // The strip's label falls back to the raw category name when an
+            // entry has no description - show that one translated, and keep
+            // the comparison on the raw name.
+            const isBareCategory = row.label === row.category;
+            const rowLabel = isBareCategory ? categoryLabel(t, row.category) : row.label;
+            return (
             <TouchableOpacity
               key={row.id}
               style={styles.row}
               onPress={() => onOpenEntry(row.id)}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${row.label}, ${formatCurrency(row.amount)}`}
+              accessibilityLabel={t("bridge.reports.trackingStrip.openEntryA11y", {
+                label: rowLabel,
+                amount: formatCurrency(row.amount),
+              })}
             >
-              <Text style={styles.rowDate}>{formatDayLabel(row.date)}</Text>
+              <Text style={styles.rowDate}>{formatRowDate(row.date)}</Text>
               <Text style={styles.rowLabel} numberOfLines={1}>
-                {row.label}
+                {rowLabel}
                 <Text style={styles.rowMeta}>
-                  {row.label !== row.category ? ` · ${row.category}` : ""}
+                  {!isBareCategory ? ` · ${categoryLabel(t, row.category)}` : ""}
                   {row.billLabel ? " 🧾" : ""}
                 </Text>
               </Text>
@@ -133,7 +160,8 @@ const TrackingStripCard: React.FC<TrackingStripCardProps> = ({
                 {formatCurrency(row.amount)}
               </Text>
             </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -141,9 +169,9 @@ const TrackingStripCard: React.FC<TrackingStripCardProps> = ({
         style={[styles.addButton, { backgroundColor: colors.accent }]}
         onPress={onAdd}
         accessibilityRole="button"
-        accessibilityLabel="Add a budget entry"
+        accessibilityLabel={t("bridge.reports.trackingStrip.addEntryA11y")}
       >
-        <Text style={[styles.addButtonText, { color: colors.accentButtonText }]}>+ Add entry</Text>
+        <Text style={[styles.addButtonText, { color: colors.accentButtonText }]}>{t("bridge.reports.trackingStrip.addEntry")}</Text>
       </TouchableOpacity>
     </View>
   );

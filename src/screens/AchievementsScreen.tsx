@@ -20,6 +20,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import Medal from "../components/Medal";
 import {
   ACHIEVEMENT_DEFS,
@@ -43,16 +44,13 @@ interface AchievementsScreenProps {
 
 type FilterId = "all" | "earned" | "locked";
 
-const FILTERS: readonly { id: FilterId; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "earned", label: "Earned" },
-  { id: "locked", label: "Locked" },
-];
+// Chip labels resolve to achievements.filters.<id> at render.
+const FILTERS: readonly FilterId[] = ["all", "earned", "locked"];
 
-const formatUnlockDate = (timestamp: number | undefined): string => {
+const formatUnlockDate = (timestamp: number | undefined, locale: string): string => {
   if (!timestamp) return "";
   try {
-    return new Date(timestamp).toLocaleDateString(undefined, {
+    return new Date(timestamp).toLocaleDateString(locale, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -66,6 +64,7 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
   visible,
   onClose,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCompactCurrency } = useCurrency();
@@ -167,13 +166,13 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
           ]}
           onPress={() => setSelected(item)}
           accessibilityRole="button"
-          accessibilityLabel={`${item.title}${
+          accessibilityLabel={
             isEarned
-              ? ", earned"
+              ? t("achievements.cell.earnedA11y", { title: item.title })
               : prog
-                ? `, ${formatProgress(prog)}`
-                : ", locked"
-          }`}
+                ? t("achievements.cell.progressA11y", { title: item.title, progress: formatProgress(prog) })
+                : t("achievements.cell.lockedA11y", { title: item.title })
+          }
         >
           <Medal
             tier={item.tier}
@@ -199,7 +198,7 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
         </Pressable>
       );
     },
-    [colors.textMuted, formatProgress, progressMap, styles, unlocked]
+    [colors.textMuted, formatProgress, progressMap, styles, t, unlocked]
   );
 
   const detailEarned = selected ? unlocked[selected.id] : undefined;
@@ -227,30 +226,30 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
       >
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Ship's Log</Text>
+            <Text style={styles.headerTitle}>{t("achievements.title")}</Text>
             <Text style={styles.headerSubtitle}>
               {isLoaded
-                ? `${earnedCount}/${TOTAL_ACHIEVEMENTS} earned`
-                : "Tallying..."}
+                ? t("achievements.earnedCount", { earned: earnedCount, total: TOTAL_ACHIEVEMENTS })
+                : t("achievements.tallying")}
             </Text>
           </View>
           <TouchableOpacity
             onPress={handleClose}
             style={styles.closeButton}
             accessibilityRole="button"
-            accessibilityLabel="Close achievements"
+            accessibilityLabel={t("achievements.closeA11y")}
           >
-            <Text style={styles.closeButtonText}>Done</Text>
+            <Text style={styles.closeButtonText}>{t("common.done")}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.filterRow}>
-          {FILTERS.map((f) => {
-            const active = filter === f.id;
+          {FILTERS.map((id) => {
+            const active = filter === id;
             return (
               <TouchableOpacity
-                key={f.id}
-                onPress={() => setFilter(f.id)}
+                key={id}
+                onPress={() => setFilter(id)}
                 style={[styles.filterChip, active && styles.filterChipActive]}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
@@ -261,7 +260,7 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
                     active && styles.filterChipTextActive,
                   ]}
                 >
-                  {f.label}
+                  {t(`achievements.filters.${id}`)}
                 </Text>
               </TouchableOpacity>
             );
@@ -282,8 +281,8 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
                 {filter === "earned"
-                  ? "No badges earned yet - start tracking debts or savings to fill the log."
-                  : "Nothing here."}
+                  ? t("achievements.empty.earned")
+                  : t("achievements.empty.generic")}
               </Text>
             </View>
           }
@@ -320,8 +319,7 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
                   />
                   <Text style={styles.detailTitle}>{selected.title}</Text>
                   <Text style={styles.detailTier}>
-                    {selected.tier.charAt(0).toUpperCase() +
-                      selected.tier.slice(1)}
+                    {t(`achievements.tiers.${selected.tier}`)}
                   </Text>
                   <Text style={styles.detailBody}>
                     {detailEarned !== undefined
@@ -335,14 +333,16 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
                   )}
                   {detailEarned !== undefined && (
                     <Text style={styles.detailDate}>
-                      Earned {formatUnlockDate(detailEarned)}
+                      {t("achievements.detail.earnedOn", {
+                        date: formatUnlockDate(detailEarned, i18n.language),
+                      })}
                     </Text>
                   )}
                   <TouchableOpacity
                     style={styles.detailButton}
                     onPress={() => setSelected(null)}
                   >
-                    <Text style={styles.detailButtonText}>Close</Text>
+                    <Text style={styles.detailButtonText}>{t("common.close")}</Text>
                   </TouchableOpacity>
                 </>
               )}

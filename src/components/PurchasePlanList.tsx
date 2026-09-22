@@ -28,6 +28,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { KeyboardAwareModalOverlay } from "./KeyboardAwareModalOverlay";
 import SliderRow from "./SliderRow";
 import PurchasePlanChart from "./PurchasePlanChart";
@@ -61,10 +62,7 @@ import {
   movePlanInOrder,
   orderPurchasePlans,
   pickOpportunityDebt,
-  PLAN_ALLOCATION_LABELS,
   PLAN_ALLOCATION_MODES,
-  PLAN_PRIORITY_METHOD_HINTS,
-  PLAN_PRIORITY_METHOD_LABELS,
   PLAN_PRIORITY_METHODS,
   projectPurchasePlans,
   suggestCombinedMonthly,
@@ -105,8 +103,13 @@ export const iconForPlanCategory = (category: SavingsGoalCategory): string =>
 export const parsePlanAmount = (text: string): number =>
   parseMoneyInput(text, { allowNegative: true }) ?? 0;
 
-export const formatPlanMonthYear = (date: Date): string =>
-  date.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+export const formatPlanMonthYear = (date: Date, locale?: string): string => {
+  try {
+    return date.toLocaleDateString(locale, { month: "short", year: "numeric" });
+  } catch {
+    return date.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  }
+};
 
 /**
  * The goals this list manages: everything except the emergency fund
@@ -155,10 +158,13 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   debts,
   showChart = false,
 }) => {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
   const styles = React.useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
+  const monthYear = useCallback((date: Date) => formatPlanMonthYear(date, locale), [locale]);
 
   const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
   const [contributeText, setContributeText] = useState("");
@@ -281,10 +287,10 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
     [showChart, ordered, combinedMonthly, settings.allocation, summary],
   );
   const formatChartMonth = useCallback((monthsFromNow: number) => {
-    if (monthsFromNow === 0) return "Now";
+    if (monthsFromNow === 0) return t("bridge.planner.setAside.chartNow");
     const date = new Date();
-    return formatPlanMonthYear(new Date(date.getFullYear(), date.getMonth() + monthsFromNow, 1));
-  }, []);
+    return monthYear(new Date(date.getFullYear(), date.getMonth() + monthsFromNow, 1));
+  }, [monthYear, t]);
 
   const projectionById = useMemo(() => {
     const map = new Map<string, PlanProjection>();
@@ -314,24 +320,24 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
         triggerHaptic("selection");
         onGoalsChanged(updated);
       } catch (error) {
-        setReorderError(describeError(error, "Couldn't save the new order."));
+        setReorderError(describeError(error, t("bridge.planner.errors.reorder")));
       }
     },
-    [onGoalsChanged, ordered],
+    [onGoalsChanged, ordered, t],
   );
 
-  const fitLine =
+  const fitLine: string | null =
     !cashFlow || fit === "unknown"
       ? cashFlow && cashFlow.monthsTracked === 0 && combinedMonthly > 0
-        ? "Track a full month of income and spending and this will say whether the amount fits."
+        ? t("bridge.planner.fit.trackFirst")
         : null
       : fit === "fits"
-        ? `Fits: about ${formatCurrency(cashFlow.freeCashFlow)}/mo is free after your average spending.`
+        ? t("bridge.planner.fit.fits", { amount: formatCurrency(cashFlow.freeCashFlow) })
         : fit === "tight"
-          ? `Tight: this takes most of the ~${formatCurrency(cashFlow.freeCashFlow)}/mo free after your average spending.`
+          ? t("bridge.planner.fit.tight", { amount: formatCurrency(cashFlow.freeCashFlow) })
           : cashFlow.freeCashFlow > 0
-            ? `Over: more than the ~${formatCurrency(cashFlow.freeCashFlow)}/mo free after your average spending.`
-            : "Over: your average spending already exceeds your income, so any set-aside comes from somewhere else.";
+            ? t("bridge.planner.fit.over", { amount: formatCurrency(cashFlow.freeCashFlow) })
+            : t("bridge.planner.fit.overNoFreeCash");
 
   /** Open the contribute dialog, optionally with an amount prefilled (nudges). */
   const openContribute = useCallback((goal: SavingsGoal, presetAmount?: number) => {
@@ -376,9 +382,9 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
     } catch (error) {
       // Dialog stays open with the typed values so the user can retry.
       triggerHaptic("error");
-      setActionError(describeError(error, "Couldn't save this plan."));
+      setActionError(describeError(error, t("bridge.planner.errors.save")));
     }
-  }, [closeContribute, contributeGoal, contributeText, onGoalsChanged, usesText, yearsText]);
+  }, [closeContribute, contributeGoal, contributeText, onGoalsChanged, t, usesText, yearsText]);
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -393,9 +399,9 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
       // Back out of the confirm; the plan dialog underneath shows why.
       triggerHaptic("error");
       setDeleteTarget(null);
-      setActionError(describeError(error, "Couldn't delete this plan."));
+      setActionError(describeError(error, t("bridge.planner.errors.delete")));
     }
-  }, [deleteTarget, onGoalsChanged]);
+  }, [deleteTarget, onGoalsChanged, t]);
 
   if (plans.length === 0 && !emptyText) return null;
 
@@ -409,15 +415,15 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
           <View style={styles.summaryCard}>
             <View style={styles.summaryTopRow}>
               <View style={styles.summaryCol}>
-                <Text style={styles.summaryLabel}>SAVED</Text>
+                <Text style={styles.summaryLabel}>{t("bridge.planner.summary.saved")}</Text>
                 <Text style={styles.summaryBig}>{formatCurrency(summary.totalSaved)}</Text>
               </View>
               <View style={styles.summaryCol}>
-                <Text style={styles.summaryLabel}>STILL TO GO</Text>
+                <Text style={styles.summaryLabel}>{t("bridge.planner.summary.stillToGo")}</Text>
                 <Text style={styles.summaryBig}>{formatCurrency(summary.totalRemaining)}</Text>
               </View>
               <View style={styles.summaryColRight}>
-                <Text style={styles.summaryLabel}>TOTAL</Text>
+                <Text style={styles.summaryLabel}>{t("bridge.planner.summary.total")}</Text>
                 <Text style={styles.summaryBig}>{formatCurrency(summary.totalTarget)}</Text>
               </View>
             </View>
@@ -434,27 +440,29 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               />
             </View>
             <Text style={styles.summaryMeta}>
-              {`${summary.planCount} plan${summary.planCount === 1 ? "" : "s"}`}
-              {summary.fundedCount > 0 ? ` · ${summary.fundedCount} funded` : ""}
+              {t("bridge.planner.summary.plans", { count: summary.planCount })}
+              {summary.fundedCount > 0
+                ? t("bridge.planner.summary.funded", { count: summary.fundedCount })
+                : ""}
               {projection.allFundedDate
                 ? projection.allFundedInMonths === 0
-                  ? " · all funded"
-                  : ` · all funded by ${formatPlanMonthYear(projection.allFundedDate)}`
+                  ? t("bridge.planner.summary.allFundedNow")
+                  : t("bridge.planner.summary.allFundedBy", {
+                      date: monthYear(projection.allFundedDate),
+                    })
                 : combinedMonthly > 0
-                  ? " · not all funded within 20 years at this pace"
-                  : " · set a monthly amount below to see when"}
+                  ? t("bridge.planner.summary.notFundedInHorizon")
+                  : t("bridge.planner.summary.setAmountToSee")}
             </Text>
             {lateCount > 0 ? (
               <Text style={[styles.summaryMeta, { color: colors.warning }]}>
-                {`${lateCount} plan${lateCount === 1 ? "" : "s"} would miss ${
-                  lateCount === 1 ? "its" : "their"
-                } need-by date at this pace.`}
+                {t("bridge.planner.summary.late", { count: lateCount })}
               </Text>
             ) : null}
           </View>
 
           {/* ── Order ── */}
-          <Text style={styles.controlLabel}>ORDER</Text>
+          <Text style={styles.controlLabel}>{t("bridge.planner.order.label")}</Text>
           <View style={styles.chipRow}>
             {PLAN_PRIORITY_METHODS.map((method) => (
               <TouchableOpacity
@@ -470,21 +478,23 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                     settings.method === method && styles.chipTextActive,
                   ]}
                 >
-                  {PLAN_PRIORITY_METHOD_LABELS[method]}
+                  {t(`bridge.planner.order.methods.${method}`)}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.hintText}>{PLAN_PRIORITY_METHOD_HINTS[settings.method]}</Text>
+          <Text style={styles.hintText}>{t(`bridge.planner.order.hints.${settings.method}`)}</Text>
 
           {/* ── Combined set-aside + how it flows ── */}
           <SliderRow
-            label="Set aside for all plans"
+            label={t("bridge.planner.setAside.label")}
             value={combinedMonthly}
             min={0}
             max={sliderMax}
             step={5}
-            displayValue={`${formatCurrency(combinedMonthly)}/mo`}
+            displayValue={t("bridge.planner.setAside.perMonth", {
+              amount: formatCurrency(combinedMonthly),
+            })}
             onValueChange={(value) => changeSettings({ combinedMonthly: value })}
             onAdjust={(delta) =>
               changeSettings({
@@ -524,15 +534,13 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                     settings.allocation === mode && styles.chipTextActive,
                   ]}
                 >
-                  {PLAN_ALLOCATION_LABELS[mode]}
+                  {t(`bridge.planner.allocation.modes.${mode}`)}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
           <Text style={styles.hintText}>
-            {settings.allocation === "rollover"
-              ? "The whole amount goes to the first plan; when it's funded, the money rolls into the next - like a debt snowball."
-              : "The amount is split evenly across every unfunded plan, and a finished plan's share moves to the rest."}
+            {t(`bridge.planner.allocation.hints.${settings.allocation}`)}
           </Text>
           {chartModel ? (
             <PurchasePlanChart
@@ -563,25 +571,29 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             const projected = projectionById.get(goal.id);
             const late =
               projected && projected.lateByMonths !== null && projected.lateByMonths > 0;
-            const projectionLine = funded
+            const needByLabel = goal.targetDate
+              ? monthYear(new Date(`${goal.targetDate.slice(0, 7)}-15`))
+              : t("bridge.planner.row.itsDate");
+            const projectionLine: string | null = funded
               ? null
               : !projected || combinedMonthly <= 0
                 ? null
                 : projected.readyDate
-                  ? `Ready ${formatPlanMonthYear(projected.readyDate)}${
-                      projected.monthlyNow > 0
-                        ? ` · ${formatCurrency(projected.monthlyNow)}/mo now`
-                        : " · waits its turn"
-                    }${
-                      late
-                        ? ` · ${
-                            projected.lateByMonths === Infinity
-                              ? "misses"
-                              : `${projected.lateByMonths} mo late for`
-                          } ${goal.targetDate ? formatPlanMonthYear(new Date(`${goal.targetDate.slice(0, 7)}-15`)) : "its date"}`
-                        : ""
-                    }`
-                  : "Not funded within 20 years at this pace";
+                  ? t("bridge.planner.row.ready", { date: monthYear(projected.readyDate) }) +
+                    (projected.monthlyNow > 0
+                      ? t("bridge.planner.row.monthlyNow", {
+                          amount: formatCurrency(projected.monthlyNow),
+                        })
+                      : t("bridge.planner.row.waitsTurn")) +
+                    (late
+                      ? projected.lateByMonths === Infinity
+                        ? t("bridge.planner.row.misses", { date: needByLabel })
+                        : t("bridge.planner.row.lateFor", {
+                            count: projected.lateByMonths ?? 0,
+                            date: needByLabel,
+                          })
+                      : "")
+                  : t("bridge.planner.row.notFundedInHorizon");
             const opportunity =
               !funded && opportunityDebt && projected && projected.monthlyNow > 0
                 ? calcDebtOpportunityCost(opportunityDebt, projected.monthlyNow)
@@ -595,7 +607,9 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               ? null
               : calcPlanNudges(ordered, goal.id, combinedMonthly, settings.allocation);
             const describeSooner = (months: number): string =>
-              months === Infinity ? "makes it happen" : `${months} mo sooner`;
+              months === Infinity
+                ? t("bridge.planner.nudges.makesItHappen")
+                : t("bridge.planner.nudges.sooner", { count: months });
             // Arrows stop at the list ends and at the funded boundary (funded
             // plans always sit last, so a swap across it would change nothing).
             const canMoveUp = canMovePlanInOrder(ordered, index, -1);
@@ -611,7 +625,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                   onPress={() => openContribute(goal)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={`Add funds to ${goal.name}`}
+                  accessibilityLabel={t("bridge.planner.row.a11yAddFunds", { name: goal.name })}
                 >
                   <Text style={styles.planIcon}>
                     {iconForPlanCategory(goal.category)}
@@ -633,12 +647,17 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                     </View>
                     <Text style={styles.planMeta}>
                       {funded
-                        ? "Funded - ready to buy 🎉"
-                        : `${formatCurrency(goal.currentAmount)} of ${formatCurrency(goal.targetAmount)}${
-                            planRequired && planRequired > 0
-                              ? ` · ${formatCurrency(planRequired)}/mo to hit ${formatPlanMonthYear(new Date(`${goal.targetDate?.slice(0, 7)}-15`))}`
-                              : ""
-                          }`}
+                        ? t("bridge.planner.row.fundedMeta")
+                        : t("bridge.planner.row.progressMeta", {
+                            current: formatCurrency(goal.currentAmount),
+                            target: formatCurrency(goal.targetAmount),
+                          }) +
+                          (planRequired && planRequired > 0
+                            ? t("bridge.planner.row.requiredSuffix", {
+                                amount: formatCurrency(planRequired),
+                                date: monthYear(new Date(`${goal.targetDate?.slice(0, 7)}-15`)),
+                              })
+                            : "")}
                     </Text>
                     {projectionLine ? (
                       <Text
@@ -678,7 +697,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                       onPress={() => void movePlan(goal.id, -1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       accessibilityRole="button"
-                      accessibilityLabel={`Move ${goal.name} up`}
+                      accessibilityLabel={t("bridge.planner.row.moveUp", { name: goal.name })}
                     >
                       <Text style={styles.arrowText}>▲</Text>
                     </TouchableOpacity>
@@ -688,7 +707,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                       onPress={() => void movePlan(goal.id, 1)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       accessibilityRole="button"
-                      accessibilityLabel={`Move ${goal.name} down`}
+                      accessibilityLabel={t("bridge.planner.row.moveDown", { name: goal.name })}
                     >
                       <Text style={styles.arrowText}>▼</Text>
                     </TouchableOpacity>
@@ -706,10 +725,13 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                         })
                       }
                       accessibilityRole="button"
-                      accessibilityLabel={`Add ${formatCurrency(nudges.extraMonthly.amount)} a month to all plans`}
+                      accessibilityLabel={t("bridge.planner.nudges.extraMonthlyA11y", { amount: formatCurrency(nudges.extraMonthly.amount) })}
                     >
                       <Text style={styles.nudgeText}>
-                        {`+${formatCurrency(nudges.extraMonthly.amount)}/mo · ${describeSooner(nudges.extraMonthly.monthsSooner)}`}
+                        {t("bridge.planner.nudges.extraMonthly", {
+                          amount: formatCurrency(nudges.extraMonthly.amount),
+                          sooner: describeSooner(nudges.extraMonthly.monthsSooner),
+                        })}
                       </Text>
                     </TouchableOpacity>
                   ) : null}
@@ -718,12 +740,17 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                       style={styles.nudgeChip}
                       onPress={() => openContribute(goal, nudges.lumpSum!.amount)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Add ${formatCurrency(nudges.lumpSum.amount)} to ${goal.name} now`}
+                      accessibilityLabel={t("bridge.planner.nudges.lumpSumA11y", { amount: formatCurrency(nudges.lumpSum.amount), name: goal.name })}
                     >
                       <Text style={styles.nudgeText}>
                         {nudges.lumpSum.finishes
-                          ? `Finish it: ${formatCurrency(nudges.lumpSum.amount)} now`
-                          : `+${formatCurrency(nudges.lumpSum.amount)} now · ${describeSooner(nudges.lumpSum.monthsSooner)}`}
+                          ? t("bridge.planner.nudges.finishIt", {
+                              amount: formatCurrency(nudges.lumpSum.amount),
+                            })
+                          : t("bridge.planner.nudges.lumpSumNow", {
+                              amount: formatCurrency(nudges.lumpSum.amount),
+                              sooner: describeSooner(nudges.lumpSum.monthsSooner),
+                            })}
                       </Text>
                     </TouchableOpacity>
                   ) : null}
@@ -751,7 +778,10 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             </Text>
             <Text style={styles.dialogMessage}>
               {contributeGoal
-                ? `${formatCurrency(contributeGoal.currentAmount)} of ${formatCurrency(contributeGoal.targetAmount)} saved.`
+                ? t("bridge.planner.contribute.savedOf", {
+                    current: formatCurrency(contributeGoal.currentAmount),
+                    target: formatCurrency(contributeGoal.targetAmount),
+                  })
                 : ""}
             </Text>
             {actionError ? (
@@ -761,7 +791,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             ) : null}
             <TextInput
               style={styles.input}
-              placeholder="Amount to add"
+              placeholder={t("bridge.planner.contribute.amountPlaceholder")}
               placeholderTextColor={colors.textMuted}
               keyboardType="numbers-and-punctuation"
               value={contributeText}
@@ -769,14 +799,12 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               maxLength={12}
               autoFocus
             />
-            <Text style={styles.inputHint}>
-              Use a negative amount to correct a mistake.
-            </Text>
-            <Text style={styles.inputLabel}>COST PER USE (OPTIONAL)</Text>
+            <Text style={styles.inputHint}>{t("bridge.planner.contribute.negativeHint")}</Text>
+            <Text style={styles.inputLabel}>{t("bridge.planner.contribute.costPerUseLabel")}</Text>
             <View style={styles.inputRow}>
               <TextInput
                 style={[styles.input, styles.inputHalf]}
-                placeholder="Uses per month"
+                placeholder={t("bridge.planner.contribute.usesPlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
                 value={usesText}
@@ -785,7 +813,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               />
               <TextInput
                 style={[styles.input, styles.inputHalf]}
-                placeholder="Years you'll keep it"
+                placeholder={t("bridge.planner.contribute.yearsPlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
                 value={yearsText}
@@ -806,10 +834,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                   {describeCostPerUse(value, uses, years, formatCurrency)}
                 </Text>
               ) : (
-                <Text style={styles.inputHint}>
-                  How often you'll use it, and for how long, turns the price
-                  into a cost per use.
-                </Text>
+                <Text style={styles.inputHint}>{t("bridge.planner.contribute.costPerUseHint")}</Text>
               );
             })()}
             <View style={styles.dialogActions}>
@@ -818,7 +843,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 onPress={closeContribute}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                  Cancel
+                  {t("common.cancel")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -826,7 +851,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 onPress={handleContribute}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                  Save
+                  {t("common.save")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -837,7 +862,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               }}
             >
               <Text style={[styles.deleteLinkText, { color: colors.danger }]}>
-                Delete this plan
+                {t("bridge.planner.contribute.deleteLink")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -853,10 +878,13 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
       >
         <View style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Delete plan?</Text>
+            <Text style={styles.dialogTitle}>{t("bridge.planner.deleteDialog.title")}</Text>
             <Text style={styles.dialogMessage}>
               {deleteTarget
-                ? `"${deleteTarget.name}" and its ${formatCurrency(deleteTarget.currentAmount)} saved-so-far record will be removed. The money itself stays wherever you keep it.`
+                ? t("bridge.planner.deleteDialog.message", {
+                    name: deleteTarget.name,
+                    amount: formatCurrency(deleteTarget.currentAmount),
+                  })
                 : ""}
             </Text>
             <View style={styles.dialogActions}>
@@ -865,7 +893,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 onPress={() => setDeleteTarget(null)}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                  Keep it
+                  {t("bridge.planner.deleteDialog.keep")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -873,7 +901,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
                 onPress={handleDelete}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>
-                  Delete
+                  {t("common.delete")}
                 </Text>
               </TouchableOpacity>
             </View>

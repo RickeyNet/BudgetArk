@@ -23,6 +23,7 @@ import {
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { generateUUID } from "../utils/uuid";
@@ -40,7 +41,6 @@ import {
   AssetAccount,
   AssetAccountCategory,
   ASSET_ACCOUNT_CATEGORIES,
-  ASSET_ACCOUNT_CATEGORY_LABELS,
   categorySupportsHoldings,
   categoryIsPureHoldings,
   CachedQuote,
@@ -178,6 +178,7 @@ type TickerDraft = {
 };
 
 const BridgeScreen: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency, preference, rates } = useCurrency();
@@ -1054,29 +1055,25 @@ const BridgeScreen: React.FC = () => {
       setQuotesLastFetchedAt(result.cache.lastFetchedAt);
       setHoldings(await getHoldings());
       if (result.outcome === "unavailable") {
-        setPriceRefreshNotice(
-          "Couldn't update prices right now. Check your connection and try again in a few minutes."
-        );
+        setPriceRefreshNotice(t("bridge.screen.prices.notices.unavailable"));
       } else if (result.outcome === "rate-limited") {
-        setPriceRefreshNotice("Prices were already updated today.");
+        setPriceRefreshNotice(t("bridge.screen.prices.notices.rateLimited"));
       } else if (result.outcome === "partial") {
         // The price service fetches a limited batch per minute; the rest are
         // warming up server-side. The button stays enabled for the follow-up.
         const count = result.pending?.length ?? 0;
         setPriceRefreshNotice(
           count > 0
-            ? `Updated most prices - still fetching ${count} ${count === 1 ? "ticker" : "tickers"}. Tap again in a few minutes to finish.`
-            : "Updated most prices - tap again in a few minutes to finish."
+            ? t("bridge.screen.prices.notices.partial", { count })
+            : t("bridge.screen.prices.notices.partialUnknown")
         );
       }
     } catch {
-      setPriceRefreshNotice(
-        "Couldn't update prices right now. Check your connection and try again in a few minutes."
-      );
+      setPriceRefreshNotice(t("bridge.screen.prices.notices.unavailable"));
     } finally {
       setIsRefreshingPrices(false);
     }
-  }, [holdingsSettings.enabled, isRefreshingPrices]);
+  }, [holdingsSettings.enabled, isRefreshingPrices, t]);
 
   const enableHoldings = useCallback(async () => {
     const settings = await setHoldingsEnabled(true);
@@ -1152,8 +1149,8 @@ const BridgeScreen: React.FC = () => {
     <View>
       <View style={styles.titleSection}>
         <Text style={styles.appLabel}>BudgetArk</Text>
-        <Text style={styles.screenTitle}>The Bridge</Text>
-        <Text style={styles.screenSubtitle}>Net worth, accounts, and progress.</Text>
+        <Text style={styles.screenTitle}>{t("bridge.screen.header.title")}</Text>
+        <Text style={styles.screenSubtitle}>{t("bridge.screen.header.subtitle")}</Text>
       </View>
 
       {/* Card keep-alive warning also surfaces here (the initial tab) so an
@@ -1211,16 +1208,14 @@ const BridgeScreen: React.FC = () => {
       <View ref={anchorBridgeAccounts} collapsable={false} style={styles.accountsCard}>
         <View style={styles.topHairline} />
         <View style={styles.accountsHeaderRow}>
-          <Text style={styles.accountsTitle}>Accounts</Text>
+          <Text style={styles.accountsTitle}>{t("bridge.screen.accounts.title")}</Text>
           <TouchableOpacity onPress={openAddAssetModal}>
-            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add</Text>
+            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>{t("bridge.screen.accounts.add")}</Text>
           </TouchableOpacity>
         </View>
 
         {assetAccounts.length === 0 && !emergencyFundGoal ? (
-          <Text style={styles.accountsEmpty}>
-            Track your checking, savings, 401k, HSA, and other account balances here.
-          </Text>
+          <Text style={styles.accountsEmpty}>{t("bridge.screen.accounts.empty")}</Text>
         ) : (
           <>
             {accountDonutSlices.length > 0 ? (
@@ -1228,17 +1223,16 @@ const BridgeScreen: React.FC = () => {
                 <DonutChart data={accountDonutSlices} size={120} strokeWidth={20} />
                 <View style={styles.accountsSummaryText}>
                   <Text style={[styles.accountsSummaryLabel, { color: colors.textDim }]}>
-                    Total
+                    {t("bridge.screen.accounts.total")}
                   </Text>
                   <Text style={[styles.accountsSummaryValue, { color: colors.success }]}>
                     {formatCurrency(trackedAccountsTotal)}
                   </Text>
                   <Text style={[styles.accountsSummaryMeta, { color: colors.textMuted }]}>
-                    across {assetAccounts.length}{" "}
-                    {assetAccounts.length === 1 ? "account" : "accounts"}
+                    {t("bridge.screen.accounts.across", { count: assetAccounts.length })}
                     {/* A linked EF is already inside the account balances -
                         only a goal-tracked EF is an extra line item. */}
-                    {emergencyFundGoal && !efSource.linked ? " + Emergency Fund" : ""}
+                    {emergencyFundGoal && !efSource.linked ? t("bridge.screen.accounts.plusEmergencyFund") : ""}
                   </Text>
                 </View>
               </View>
@@ -1247,7 +1241,7 @@ const BridgeScreen: React.FC = () => {
             {assetAccounts.length > 0 ? (
               <View style={styles.changePeriodRow}>
                 <Text style={[styles.changePeriodLabel, { color: colors.textMuted }]}>
-                  Change
+                  {t("bridge.screen.accounts.changeLabel")}
                 </Text>
                 <View style={styles.changePeriodChips}>
                   {ACCOUNT_CHANGE_PERIODS.map((option) => {
@@ -1265,7 +1259,9 @@ const BridgeScreen: React.FC = () => {
                         onPress={() => setChangePeriod(option.key)}
                         activeOpacity={0.7}
                         accessibilityRole="button"
-                        accessibilityLabel={`Show ${option.label} change`}
+                        accessibilityLabel={t("bridge.screen.accounts.changeChipA11y", {
+                          period: t(`bridge.screen.accounts.periods.${option.key}`),
+                        })}
                       >
                         <Text
                           style={[
@@ -1273,7 +1269,7 @@ const BridgeScreen: React.FC = () => {
                             { color: isSelected ? colors.accent : colors.textDim },
                           ]}
                         >
-                          {option.label}
+                          {t(`bridge.screen.accounts.periods.${option.key}`)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -1283,7 +1279,7 @@ const BridgeScreen: React.FC = () => {
             ) : null}
             {assetAccounts.length > 0 && !hasAnyChangeData ? (
               <Text style={[styles.changeTrackingHint, { color: colors.textMuted }]}>
-                Tracking starts today - rise/drop appears after the next visit.
+                {t("bridge.screen.accounts.trackingHint")}
               </Text>
             ) : null}
 
@@ -1304,19 +1300,17 @@ const BridgeScreen: React.FC = () => {
                   <Text style={styles.accountIconGlyph}>🛡️</Text>
                 </View>
                 <View style={styles.accountRowLeft}>
-                  <Text style={styles.accountName} numberOfLines={1}>Emergency Fund</Text>
+                  <Text style={styles.accountName} numberOfLines={1}>{t("bridge.screen.accounts.emergencyFund")}</Text>
                   <Text style={styles.accountCategory}>
                     {efSource.linked
-                      ? `From ${efSource.accounts.length} savings ${
-                          efSource.accounts.length === 1 ? "account" : "accounts"
-                        }${
+                      ? `${t("bridge.screen.accounts.efFromAccounts", { count: efSource.accounts.length })}${
                           emergencyFundGoal.targetAmount > 0
                             ? ` • ${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
                             : ""
                         }`
                       : emergencyFundGoal.targetAmount > 0
                         ? `${formatCurrency(emergencyFundGoal.currentAmount)} / ${formatCurrency(emergencyFundGoal.targetAmount)}`
-                        : "Savings Goal"}
+                        : t("bridge.screen.accounts.savingsGoal")}
                   </Text>
                 </View>
                 <Text style={[styles.accountBalance, { color: colors.teal }]}>
@@ -1340,7 +1334,7 @@ const BridgeScreen: React.FC = () => {
                       {isCollapsed ? "▶" : "▼"}
                     </Text>
                     <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
-                      {iconForCategory(group.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[group.category]}
+                      {iconForCategory(group.category)} {t(`bridge.screen.accounts.categories.${group.category}`)}
                     </Text>
                     <View style={styles.accountRowRight}>
                       <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
@@ -1402,16 +1396,16 @@ const BridgeScreen: React.FC = () => {
                 onPress={promptEnableHoldings}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel="Enable Live Holdings to see shared holdings"
+                accessibilityLabel={t("bridge.screen.holdingsNudge.a11y")}
               >
                 <Text style={[styles.holdingsNudgeTitle, { color: colors.text }]}>
-                  📈 Holdings shared with you
+                  {t("bridge.screen.holdingsNudge.title")}
                 </Text>
                 <Text style={[styles.holdingsNudgeText, { color: colors.textDim }]}>
-                  {syncedHoldingsCount} {syncedHoldingsCount === 1 ? "position" : "positions"} synced from your partner. Turn on Live Holdings to see them and include their value in your net worth.
+                  {t("bridge.screen.holdingsNudge.body", { count: syncedHoldingsCount })}
                 </Text>
                 <Text style={[styles.holdingsNudgeCta, { color: colors.accent }]}>
-                  Enable Live Holdings ›
+                  {t("bridge.screen.holdingsNudge.cta")}
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -1421,7 +1415,9 @@ const BridgeScreen: React.FC = () => {
               const isCollapsed = collapsedAccountCategories.has(section.category);
               const sectionColor = assetCategoryColors[section.category];
               const addLabel =
-                section.category === "hsa" ? "+ Add HSA account" : "+ Add broker";
+                section.category === "hsa"
+                  ? t("bridge.screen.accounts.addHsaAccount")
+                  : t("bridge.screen.accounts.addBroker");
               return (
                 <View key={section.category}>
                   <TouchableOpacity
@@ -1434,7 +1430,7 @@ const BridgeScreen: React.FC = () => {
                       {isCollapsed ? "▶" : "▼"}
                     </Text>
                     <Text style={[styles.accountCategoryHeaderText, { color: colors.text }]}>
-                      {iconForCategory(section.category)} {ASSET_ACCOUNT_CATEGORY_LABELS[section.category]}
+                      {iconForCategory(section.category)} {t(`bridge.screen.accounts.categories.${section.category}`)}
                     </Text>
                     <View style={styles.accountRowRight}>
                       <Text style={[styles.accountCategoryHeaderTotal, { color: colors.success }]}>
@@ -1481,9 +1477,9 @@ const BridgeScreen: React.FC = () => {
                               <TouchableOpacity
                                 onPress={() => openEditAssetModal(broker)}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Edit ${broker.name}`}
+                                accessibilityLabel={t("bridge.screen.accounts.editA11y", { name: broker.name })}
                               >
-                                <Text style={[styles.brokerEditBtn, { color: colors.accent }]}>Edit</Text>
+                                <Text style={[styles.brokerEditBtn, { color: colors.accent }]}>{t("bridge.screen.accounts.edit")}</Text>
                               </TouchableOpacity>
                             </View>
 
@@ -1494,7 +1490,7 @@ const BridgeScreen: React.FC = () => {
                                 {showCashRow ? (
                                   <View style={[styles.accountRow, styles.brokerHoldingRow]}>
                                     <View style={styles.accountRowLeft}>
-                                      <Text style={styles.accountName} numberOfLines={1}>Cash</Text>
+                                      <Text style={styles.accountName} numberOfLines={1}>{t("bridge.screen.accounts.cash")}</Text>
                                     </View>
                                     <Text style={[styles.accountBalance, { color: colors.success }]}>
                                       {formatCurrency(broker.balance)}
@@ -1506,7 +1502,7 @@ const BridgeScreen: React.FC = () => {
                                     ? null
                                     : (
                                       <Text style={[styles.accountCategory, styles.brokerHoldingRow]}>
-                                        No holdings yet - tap Edit to add tickers.
+                                        {t("bridge.screen.accounts.noHoldings")}
                                       </Text>
                                     )
                                   : brokerH.map((h) => {
@@ -1518,13 +1514,13 @@ const BridgeScreen: React.FC = () => {
                                       // funds always have one (entered or anchored).
                                       const hasValue = kind === "ticker" ? !!quotes[symbol] : true;
                                       const label =
-                                        kind === "ticker" ? symbol : h.name || symbol || "Fund";
+                                        kind === "ticker" ? symbol : h.name || symbol || t("bridge.screen.accounts.fund");
                                       const subtitle =
                                         kind === "ticker"
-                                          ? `${h.shares} ${h.shares === 1 ? "share" : "shares"}`
+                                          ? t("bridge.screen.accounts.shares", { count: h.shares })
                                           : kind === "proxy"
-                                            ? `Tracks ${symbol}`
-                                            : "Manual value";
+                                            ? t("bridge.screen.accounts.tracks", { symbol })
+                                            : t("bridge.screen.accounts.manualValue");
                                       return (
                                         <TouchableOpacity
                                           key={h.id}
@@ -1572,14 +1568,16 @@ const BridgeScreen: React.FC = () => {
                 <View style={styles.priceUpdateRow}>
                   <Text style={[styles.holdingsAsOf, { color: colors.textMuted }]}>
                     {quotesAsOf
-                      ? `Prices as of ${new Date(quotesAsOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-                      : "Prices not fetched yet"}
+                      ? t("bridge.screen.prices.asOf", {
+                          date: new Date(quotesAsOf).toLocaleDateString(i18n.language, { month: "short", day: "numeric" }),
+                        })
+                      : t("bridge.screen.prices.notFetched")}
                   </Text>
                   <TouchableOpacity
                     onPress={refreshPricesManually}
                     disabled={!priceRefreshDue || isRefreshingPrices}
                     accessibilityRole="button"
-                    accessibilityLabel="Update prices now"
+                    accessibilityLabel={t("bridge.screen.prices.updateA11y")}
                   >
                     <Text
                       style={[
@@ -1588,9 +1586,9 @@ const BridgeScreen: React.FC = () => {
                       ]}
                     >
                       {isRefreshingPrices
-                        ? "Updating..."
+                        ? t("bridge.screen.prices.updating")
                         : priceRefreshDue
-                          ? "Update prices"
+                          ? t("bridge.screen.prices.update")
                           : nextRefreshLabel}
                     </Text>
                   </TouchableOpacity>
@@ -1613,28 +1611,24 @@ const BridgeScreen: React.FC = () => {
       <View style={styles.accountsCard}>
         <View style={styles.topHairline} />
         <View style={styles.accountsHeaderRow}>
-          <Text style={styles.accountsTitle}>Purchase Plans</Text>
+          <Text style={styles.accountsTitle}>{t("bridge.screen.plans.title")}</Text>
           <TouchableOpacity
             onPress={() => navigation.navigate("Utilities")}
             accessibilityRole="button"
-            accessibilityLabel="Plan a new purchase on the Charts tab"
+            accessibilityLabel={t("bridge.screen.plans.planA11y")}
           >
-            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Plan</Text>
+            <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>{t("bridge.screen.plans.add")}</Text>
           </TouchableOpacity>
         </View>
         {filterPurchasePlans(savingsGoals).length > 0 ? (
-          <Text style={styles.accountsEmpty}>
-            Tap a plan to add the money you&apos;ve set aside.
-          </Text>
+          <Text style={styles.accountsEmpty}>{t("bridge.screen.plans.hint")}</Text>
         ) : null}
         <PurchasePlanList
           savingsGoals={savingsGoals}
           onGoalsChanged={handlePlanGoalsChanged}
           cashFlow={planCashFlow}
           debts={debts}
-          emptyText={
-            "Saving up for something? Tap + Plan to build a sinking fund on the Charts tab - it'll be tracked here and count toward your net worth."
-          }
+          emptyText={t("bridge.screen.plans.empty")}
         />
       </View>
 
@@ -1643,7 +1637,7 @@ const BridgeScreen: React.FC = () => {
         onPress={() => setShowAchievements(true)}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel="Open Ship's Log achievements"
+        accessibilityLabel={t("bridge.screen.shipsLog.a11y")}
       >
         <View style={styles.shipsLogPreview}>
           {ACHIEVEMENT_DEFS.slice(0, 4).map((def) => (
@@ -1658,9 +1652,12 @@ const BridgeScreen: React.FC = () => {
           ))}
         </View>
         <View style={styles.shipsLogTextBlock}>
-          <Text style={styles.shipsLogTitle}>Ship's Log</Text>
+          <Text style={styles.shipsLogTitle}>{t("bridge.screen.shipsLog.title")}</Text>
           <Text style={styles.shipsLogSubtitle}>
-            {`${Object.keys(achievementUnlocked).length}/${totalAchievements} earned`}
+            {t("bridge.screen.shipsLog.earned", {
+              count: Object.keys(achievementUnlocked).length,
+              total: totalAchievements,
+            })}
           </Text>
         </View>
         <Text style={[styles.shipsLogChevron, { color: colors.accent }]}>›</Text>
@@ -1671,13 +1668,13 @@ const BridgeScreen: React.FC = () => {
         onPress={() => setShowAnnualReport(true)}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel="Open your annual financial report"
+        accessibilityLabel={t("bridge.screen.annualReport.a11y")}
       >
         <Text style={styles.annualReportGlyph}>📅</Text>
         <View style={styles.annualReportTextBlock}>
-          <Text style={styles.annualReportTitle}>Annual Report</Text>
+          <Text style={styles.annualReportTitle}>{t("bridge.screen.annualReport.title")}</Text>
           <Text style={styles.annualReportSubtitle}>
-            Your {new Date().getFullYear()} year in review
+            {t("bridge.screen.annualReport.subtitle", { year: new Date().getFullYear() })}
           </Text>
         </View>
         <Text style={[styles.shipsLogChevron, { color: colors.accent }]}>›</Text>
@@ -1715,23 +1712,25 @@ const BridgeScreen: React.FC = () => {
       >
         <KeyboardAwareModalOverlay style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{editingAsset ? "Edit Account" : "Add Account"}</Text>
+            <Text style={styles.modalTitle}>
+              {editingAsset ? t("bridge.screen.assetModal.editTitle") : t("bridge.screen.assetModal.addTitle")}
+            </Text>
             <Text style={styles.modalSub}>
               {assetCategory === "hsa"
-                ? "Track your HSA cash balance and any stocks or ETFs it holds."
+                ? t("bridge.screen.assetModal.subHsa")
                 : categoryIsPureHoldings(assetCategory)
-                  ? "Add the broker and the stocks or ETFs it holds. Its value comes from the holdings."
-                  : "Track a balance that will feed your net worth history."}
+                  ? t("bridge.screen.assetModal.subHoldings")
+                  : t("bridge.screen.assetModal.subBalance")}
             </Text>
 
             <TextInput
               style={styles.modalInput}
               placeholder={
                 categoryIsPureHoldings(assetCategory)
-                  ? "Broker name (e.g. Fidelity)"
+                  ? t("bridge.screen.assetModal.namePlaceholderBroker")
                   : assetCategory === "hsa"
-                    ? "HSA provider (e.g. Fidelity)"
-                    : "Account name"
+                    ? t("bridge.screen.assetModal.namePlaceholderHsa")
+                    : t("bridge.screen.assetModal.namePlaceholder")
               }
               placeholderTextColor={colors.textMuted}
               value={assetName}
@@ -1742,7 +1741,11 @@ const BridgeScreen: React.FC = () => {
               <>
                 <TextInput
                   style={styles.modalInput}
-                  placeholder={assetCategory === "hsa" ? "Cash balance" : "Balance"}
+                  placeholder={
+                    assetCategory === "hsa"
+                      ? t("bridge.screen.assetModal.balancePlaceholderHsa")
+                      : t("bridge.screen.assetModal.balancePlaceholder")
+                  }
                   placeholderTextColor={colors.textMuted}
                   keyboardType="decimal-pad"
                   value={assetBalance}
@@ -1750,12 +1753,12 @@ const BridgeScreen: React.FC = () => {
                 />
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="APY % (optional) - e.g. 4.5"
+                  placeholder={t("bridge.screen.assetModal.apyPlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   keyboardType="decimal-pad"
                   value={assetApy}
                   onChangeText={setAssetApy}
-                  accessibilityLabel="Annual percentage yield"
+                  accessibilityLabel={t("bridge.screen.assetModal.apyA11y")}
                 />
               </>
             ) : null}
@@ -1781,7 +1784,7 @@ const BridgeScreen: React.FC = () => {
                         { color: isSelected ? colors.accent : colors.textDim },
                       ]}
                     >
-                      {ASSET_ACCOUNT_CATEGORY_LABELS[category]}
+                      {t(`bridge.screen.accounts.categories.${category}`)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -1795,7 +1798,7 @@ const BridgeScreen: React.FC = () => {
                 activeOpacity={0.7}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: assetIsEmergencyFund }}
-                accessibilityLabel="This account is my emergency fund"
+                accessibilityLabel={t("bridge.screen.assetModal.efToggleA11y")}
               >
                 <View
                   style={[
@@ -1811,21 +1814,15 @@ const BridgeScreen: React.FC = () => {
                   ) : null}
                 </View>
                 <View style={styles.efToggleTextWrap}>
-                  <Text style={styles.efToggleLabel}>🛡️ Emergency fund</Text>
-                  <Text style={styles.efToggleHint}>
-                    Count this balance as your Emergency Fund. With accounts
-                    designated, the fund tracks their combined balance (bank
-                    syncing keeps it current) instead of manual contributions.
-                  </Text>
+                  <Text style={styles.efToggleLabel}>{t("bridge.screen.assetModal.efToggleLabel")}</Text>
+                  <Text style={styles.efToggleHint}>{t("bridge.screen.assetModal.efToggleHint")}</Text>
                 </View>
               </TouchableOpacity>
             ) : null}
 
             {categorySupportsHoldings(assetCategory) ? (
               <View style={styles.tickerEditor}>
-                <Text style={styles.modalHint}>
-                  Add stocks/ETFs by ticker (AAPL) or crypto by pair (BTC/USD). For a 401k fund with no ticker (e.g. Spartan 500 Index Pool), use Add 401k fund. Symbols are sent to the price service only when you tap Update prices - add them all first, then pull prices once.
-                </Text>
+                <Text style={styles.modalHint}>{t("bridge.screen.assetModal.tickerHint")}</Text>
                 <ScrollView
                   style={styles.tickerList}
                   keyboardShouldPersistTaps="handled"
@@ -1840,7 +1837,7 @@ const BridgeScreen: React.FC = () => {
                           <View style={styles.tickerFundTopRow}>
                             <TextInput
                               style={[styles.modalInput, styles.tickerFundNameInput]}
-                              placeholder="Fund name (e.g. Spartan 500 Index Pool)"
+                              placeholder={t("bridge.screen.assetModal.fundNamePlaceholder")}
                               placeholderTextColor={colors.textMuted}
                               autoCapitalize="words"
                               value={row.name}
@@ -1849,7 +1846,7 @@ const BridgeScreen: React.FC = () => {
                             <TouchableOpacity
                               onPress={() => removeTickerRow(row.key)}
                               accessibilityRole="button"
-                              accessibilityLabel="Remove fund"
+                              accessibilityLabel={t("bridge.screen.assetModal.removeFund")}
                             >
                               <Text style={[styles.tickerRemove, { color: colors.danger }]}>✕</Text>
                             </TouchableOpacity>
@@ -1857,7 +1854,7 @@ const BridgeScreen: React.FC = () => {
                           <View style={styles.tickerFundBottomRow}>
                             <TextInput
                               style={[styles.modalInput, styles.tickerFundProxyInput]}
-                              placeholder="Track index (optional, e.g. VOO)"
+                              placeholder={t("bridge.screen.assetModal.proxyPlaceholder")}
                               placeholderTextColor={colors.textMuted}
                               autoCapitalize="characters"
                               autoCorrect={false}
@@ -1866,7 +1863,7 @@ const BridgeScreen: React.FC = () => {
                             />
                             <TextInput
                               style={[styles.modalInput, styles.tickerFundValueInput]}
-                              placeholder="Current value"
+                              placeholder={t("bridge.screen.assetModal.valuePlaceholder")}
                               placeholderTextColor={colors.textMuted}
                               keyboardType="decimal-pad"
                               value={row.value}
@@ -1875,8 +1872,8 @@ const BridgeScreen: React.FC = () => {
                           </View>
                           <Text style={styles.tickerFundHint}>
                             {tracksIndex
-                              ? `Rides ${proxy} between updates - re-enter the value from each statement to re-anchor.`
-                              : "No index - holds the value you enter until you change it."}
+                              ? t("bridge.screen.assetModal.fundHintProxy", { symbol: proxy })
+                              : t("bridge.screen.assetModal.fundHintManual")}
                           </Text>
                         </View>
                       );
@@ -1885,7 +1882,7 @@ const BridgeScreen: React.FC = () => {
                       <View key={row.key} style={styles.tickerRow}>
                         <TextInput
                           style={[styles.modalInput, styles.tickerSymbolInput]}
-                          placeholder="AAPL or BTC/USD"
+                          placeholder={t("bridge.screen.assetModal.tickerPlaceholder")}
                           placeholderTextColor={colors.textMuted}
                           autoCapitalize="characters"
                           autoCorrect={false}
@@ -1894,7 +1891,7 @@ const BridgeScreen: React.FC = () => {
                         />
                         <TextInput
                           style={[styles.modalInput, styles.tickerNumInput]}
-                          placeholder="Shares"
+                          placeholder={t("bridge.screen.assetModal.sharesPlaceholder")}
                           placeholderTextColor={colors.textMuted}
                           keyboardType="decimal-pad"
                           value={row.shares}
@@ -1902,7 +1899,7 @@ const BridgeScreen: React.FC = () => {
                         />
                         <TextInput
                           style={[styles.modalInput, styles.tickerNumInput]}
-                          placeholder="Cost"
+                          placeholder={t("bridge.screen.assetModal.costPlaceholder")}
                           placeholderTextColor={colors.textMuted}
                           keyboardType="decimal-pad"
                           value={row.costBasis}
@@ -1911,7 +1908,7 @@ const BridgeScreen: React.FC = () => {
                         <TouchableOpacity
                           onPress={() => removeTickerRow(row.key)}
                           accessibilityRole="button"
-                          accessibilityLabel="Remove ticker"
+                          accessibilityLabel={t("bridge.screen.assetModal.removeTicker")}
                         >
                           <Text style={[styles.tickerRemove, { color: colors.danger }]}>✕</Text>
                         </TouchableOpacity>
@@ -1921,10 +1918,10 @@ const BridgeScreen: React.FC = () => {
                 </ScrollView>
                 <View style={styles.tickerAddRow}>
                   <TouchableOpacity onPress={addTickerRow} style={styles.tickerAddBtn}>
-                    <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add ticker</Text>
+                    <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>{t("bridge.screen.assetModal.addTicker")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={addFundRow} style={styles.tickerAddBtn}>
-                    <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>+ Add 401k fund</Text>
+                    <Text style={[styles.accountsAddBtn, { color: colors.accent }]}>{t("bridge.screen.assetModal.addFund")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1933,14 +1930,14 @@ const BridgeScreen: React.FC = () => {
             <View style={styles.modalActions}>
               {editingAsset ? (
                 <TouchableOpacity style={styles.modalCancelBtn} onPress={() => deleteAsset(editingAsset)}>
-                  <Text style={[styles.modalCancelText, { color: colors.danger }]}>Delete</Text>
+                  <Text style={[styles.modalCancelText, { color: colors.danger }]}>{t("common.delete")}</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity style={styles.modalCancelBtn} onPress={closeAssetModal}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveAsset}>
-                <Text style={styles.modalSaveText}>Save</Text>
+                <Text style={styles.modalSaveText}>{t("common.save")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1955,9 +1952,11 @@ const BridgeScreen: React.FC = () => {
       >
         <KeyboardAwareModalOverlay style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Emergency Fund</Text>
+            <Text style={styles.modalTitle}>{t("bridge.screen.efModal.title")}</Text>
             <Text style={styles.modalSub}>
-              Current balance: {formatCurrency(emergencyFundGoal?.currentAmount ?? 0)}
+              {t("bridge.screen.efModal.currentBalance", {
+                amount: formatCurrency(emergencyFundGoal?.currentAmount ?? 0),
+              })}
               {emergencyFundGoal?.targetAmount
                 ? ` / ${formatCurrency(emergencyFundGoal.targetAmount)}`
                 : ""}
@@ -1965,26 +1964,24 @@ const BridgeScreen: React.FC = () => {
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Amount to add (or negative to withdraw)"
+              placeholder={t("bridge.screen.efModal.amountPlaceholder")}
               placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
               value={efContribAmount}
               onChangeText={setEfContribAmount}
             />
 
-            <Text style={styles.modalHint}>
-              Enter a positive number to contribute, or negative to withdraw.
-            </Text>
+            <Text style={styles.modalHint}>{t("bridge.screen.efModal.hint")}</Text>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
                 onPress={() => setShowEfContribModal(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={handleEfContribution}>
-                <Text style={styles.modalSaveText}>Save</Text>
+                <Text style={styles.modalSaveText}>{t("common.save")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2013,10 +2010,10 @@ const BridgeScreen: React.FC = () => {
                 style={styles.modalCancelBtn}
                 onPress={() => setShowHoldingsDisclosure(false)}
               >
-                <Text style={styles.modalCancelText}>Not now</Text>
+                <Text style={styles.modalCancelText}>{t("bridge.screen.disclosure.notNow")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={enableHoldings}>
-                <Text style={styles.modalSaveText}>Enable</Text>
+                <Text style={styles.modalSaveText}>{t("bridge.screen.disclosure.enable")}</Text>
               </TouchableOpacity>
             </View>
           </View>

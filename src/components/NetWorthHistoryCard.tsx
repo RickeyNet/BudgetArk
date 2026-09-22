@@ -21,6 +21,7 @@ import type { NetWorthSnapshot } from "../types";
 import type { ThemeColors } from "../theme/themes";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
+import { useTranslation } from "react-i18next";
 import { formatDayLabel } from "../utils/dateFormat";
 
 type NetWorthHistoryCardProps = {
@@ -37,15 +38,26 @@ type RangeId = "7D" | "30D" | "ALL";
 
 type RangeOption = {
   id: RangeId;
-  label: string;
   days?: number;
 };
 
+// Chip labels live in the locale tree under bridge.reports.history.ranges.<id>.
 const RANGE_OPTIONS: readonly RangeOption[] = [
-  { id: "7D", label: "7D", days: 7 },
-  { id: "30D", label: "30D", days: 30 },
-  { id: "ALL", label: "All" },
+  { id: "7D", days: 7 },
+  { id: "30D", days: 30 },
+  { id: "ALL" },
 ] as const;
+
+/** Axis day label in the app language (falls back to the shared util). */
+const formatAxisDay = (iso: string, locale: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return formatDayLabel(iso);
+  try {
+    return date.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  } catch {
+    return formatDayLabel(iso);
+  }
+};
 
 const H = 182;
 const PAD_L = 50;
@@ -64,6 +76,8 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
   formatCompactCurrency,
   colors,
 }) => {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
   const [rangeId, setRangeId] = useState<RangeId>("30D");
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = Math.max(240, Math.min(320, windowWidth - 68));
@@ -147,15 +161,20 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
 
   const trend = useMemo(() => {
     if (visibleSnapshots.length === 0) {
-      return { amount: 0, label: "Change" };
+      return { amount: 0, label: t("bridge.reports.history.change") };
     }
     const first = visibleSnapshots[0].netWorth;
     const last = visibleSnapshots[visibleSnapshots.length - 1].netWorth;
     return {
       amount: last - first,
-      label: rangeId === "ALL" ? "Since start" : `${rangeId} change`,
+      label:
+        rangeId === "ALL"
+          ? t("bridge.reports.history.sinceStart")
+          : t("bridge.reports.history.rangeChange", {
+              range: t(`bridge.reports.history.ranges.${rangeId}`),
+            }),
     };
-  }, [rangeId, visibleSnapshots]);
+  }, [rangeId, t, visibleSnapshots]);
 
   const xLabels = useMemo(() => {
     if (visibleSnapshots.length === 0) return [];
@@ -167,22 +186,22 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
       return [
         {
           x: PAD_L + chartInnerWidth / 2,
-          label: formatDayLabel(first.capturedAt),
+          label: formatAxisDay(first.capturedAt, locale),
           anchor: "middle" as const,
         },
       ];
     }
 
     return [
-      { x: PAD_L, label: formatDayLabel(first.capturedAt), anchor: "start" as const },
+      { x: PAD_L, label: formatAxisDay(first.capturedAt, locale), anchor: "start" as const },
       {
         x: PAD_L + chartInnerWidth / 2,
-        label: formatDayLabel(middle.capturedAt),
+        label: formatAxisDay(middle.capturedAt, locale),
         anchor: "middle" as const,
       },
-      { x: chartWidth - PAD_R, label: formatDayLabel(last.capturedAt), anchor: "end" as const },
+      { x: chartWidth - PAD_R, label: formatAxisDay(last.capturedAt, locale), anchor: "end" as const },
     ];
-  }, [chartInnerWidth, chartWidth, visibleSnapshots]);
+  }, [chartInnerWidth, chartWidth, locale, visibleSnapshots]);
 
   return (
     <View
@@ -196,9 +215,12 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
     >
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
-          <Text style={[styles.title, { color: colors.text }]}>Net Worth</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t("bridge.reports.history.title")}</Text>
           <Text style={[styles.subtext, { color: colors.textDim }]}>
-            Assets {formatCurrency(totalAssets)} · Debt {formatCurrency(totalDebt)}
+            {t("bridge.reports.history.subtext", {
+              assets: formatCurrency(totalAssets),
+              debt: formatCurrency(totalDebt),
+            })}
           </Text>
         </View>
 
@@ -235,7 +257,7 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
                     { color: isSelected ? colors.accent : colors.textDim },
                   ]}
                 >
-                  {option.label}
+                  {t(`bridge.reports.history.ranges.${option.id}`)}
                 </Text>
               </TouchableOpacity>
             );
@@ -319,12 +341,12 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
         </View>
       ) : (
         <View style={styles.emptyWrap}>
-          <Text style={[styles.emptyText, { color: colors.textDim }]}>Tracking starts when first snapshot saves.</Text>
+          <Text style={[styles.emptyText, { color: colors.textDim }]}>{t("bridge.reports.history.empty")}</Text>
         </View>
       )}
 
       <Text style={[styles.footerHint, { color: colors.textMuted }]}>
-        Daily snapshots. History starts now.
+        {t("bridge.reports.history.footer")}
       </Text>
     </View>
   );
