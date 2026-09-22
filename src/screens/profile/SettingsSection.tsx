@@ -58,6 +58,8 @@ import { getAppLockRecord } from "../../storage/appLockStorage";
 import AppLockSetupModal from "../../components/AppLockSetupModal";
 import type { PairingState } from "../../sync/types";
 import OptionPickerModal from "../../components/OptionPickerModal";
+import { useLanguage, type LanguageOption } from "../../i18n/LanguageProvider";
+import { LANGUAGE_NATIVE_NAMES } from "../../i18n/pickLanguage";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
 import TrackingRemindersModal from "../../components/TrackingRemindersModal";
 import type { TrackingReminderSettings } from "../../utils/trackingReminderPlanner";
@@ -167,6 +169,40 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
   } = useCurrency();
 
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+
+  // App language sits right beside Currency: both are "how the app reads"
+  // preferences and users look for them together.
+  const {
+    languageId,
+    resolvedLanguage,
+    options: languageOptions,
+    setLanguageId,
+  } = useLanguage();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  // "Automatic (Deutsch)" tells the user what auto resolved to; a fixed
+  // choice shows the language in its own name.
+  const languageName =
+    languageId === "auto"
+      ? t("profile.settings.language.autoWithResolved", {
+          language: LANGUAGE_NATIVE_NAMES[resolvedLanguage],
+        })
+      : LANGUAGE_NATIVE_NAMES[languageId];
+  const languageOptionText = useCallback(
+    (option: LanguageOption): { name: string; description: string } =>
+      option.id === "auto"
+        ? {
+            name: t("profile.settings.language.options.auto.name"),
+            description: t("profile.settings.language.options.auto.description"),
+          }
+        : { name: option.nativeName ?? option.id, description: "" },
+    [t],
+  );
+  const handleLanguageSelect = useCallback(
+    async (option: LanguageOption) => {
+      await setLanguageId(option.id);
+    },
+    [setLanguageId],
+  );
 
   /**
    * Pending currency change awaiting the convert/relabel choice. Set when the
@@ -650,6 +686,35 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
 
           <TouchableOpacity
             style={styles.groupedRow}
+            onPress={() => setShowLanguageModal(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("profile.settings.language.a11yLabel", { current: languageName })}
+            accessibilityHint={t("profile.settings.language.a11yHint")}
+          >
+            <View>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                {t("profile.settings.language.label")}
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                {languageName}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
             onPress={togglePrivacyMode}
           >
             <View style={{ flex: 1 }}>
@@ -870,6 +935,51 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             </Text>
           </View>
         )}
+      />
+
+      {/* ── Language Selection Modal ── */}
+      <OptionPickerModal
+        visible={showLanguageModal}
+        title={t("profile.settings.language.pickerTitle")}
+        options={languageOptions}
+        keyOf={(option) => option.id}
+        isSelected={(option) => languageId === option.id}
+        onSelect={handleLanguageSelect}
+        onClose={() => setShowLanguageModal(false)}
+        accessibilityLabelOf={(option) => {
+          const text = languageOptionText(option);
+          return text.description ? `${text.name}. ${text.description}` : text.name;
+        }}
+        header={
+          <Text
+            style={[
+              styles.settingsRowSubtext,
+              { color: colors.textDim, marginBottom: 12 },
+            ]}
+          >
+            {t("profile.settings.language.note")}
+          </Text>
+        }
+        renderOption={(option) => {
+          const text = languageOptionText(option);
+          return (
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.themeOptionText, { color: colors.text }]}>
+                {text.name}
+              </Text>
+              {text.description ? (
+                <Text
+                  style={[
+                    styles.settingsRowSubtext,
+                    { color: colors.textDim, marginTop: 4 },
+                  ]}
+                >
+                  {text.description}
+                </Text>
+              ) : null}
+            </View>
+          );
+        }}
       />
 
       {/* ── Currency change: convert amounts or just relabel ── */}

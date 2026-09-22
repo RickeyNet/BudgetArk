@@ -11,6 +11,21 @@
 
 export const profileSettings = {
   sectionTitle: "SETTINGS",
+  language: {
+    label: "Language",
+    pickerTitle: "Language",
+    a11yLabel: "Language, currently {{current}}",
+    a11yHint: "Opens the app language options",
+    /** Shown as the subtext when "Automatic" is selected. */
+    autoWithResolved: "Automatic ({{language}})",
+    options: {
+      auto: {
+        name: "Automatic",
+        description: "Follow the phone's language. Falls back to English when the phone language isn't available yet.",
+      },
+    },
+    note: "Some content - lessons, the US tax tools, and release notes - is still English only.",
+  },
   notNow: "Not now",
   currency: {
     label: "Currency",

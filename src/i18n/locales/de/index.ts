@@ -15,6 +15,11 @@ import { onboarding } from "./onboarding";
 import { categories } from "./categories";
 import { buckets } from "./buckets";
 import { categoryPicker } from "./categoryPicker";
+import { datePicker } from "./datePicker";
+import { debtsScreen } from "./debtsScreen";
+import { debtsForm } from "./debtsForm";
+import { debtsCard } from "./debtsCard";
+import { debtsMoments } from "./debtsMoments";
 import { budgetScreen } from "./budgetScreen";
 import { budgetEntry } from "./budgetEntry";
 import { budgetInbox } from "./budgetInbox";
@@ -49,5 +54,12 @@ export const de: Localized<typeof en> = {
     spending: budgetSpending,
     tools: budgetTools,
     cards: budgetCards,
+  },
+  datePicker,
+  debts: {
+    screen: debtsScreen,
+    form: debtsForm,
+    card: debtsCard,
+    moments: debtsMoments,
   },
 };

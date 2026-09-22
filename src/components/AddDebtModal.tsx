@@ -31,6 +31,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import {
   DEBT_CLASS_OPTIONS,
   DEBT_OWNER_OPTIONS,
@@ -58,7 +59,6 @@ import type { ThemeColors } from "../theme/themes";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { useValueChanged } from "../hooks/useValueChanged";
-import { formatYearMonthLabel } from "../utils/dateFormat";
 import MonthYearPicker from "./MonthYearPicker";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
 
@@ -76,12 +76,32 @@ export interface DebtBankLinkExtras {
   updateBalance: boolean;
 }
 
-/** " · as of Jun 25" for a link's lastExternalBalanceAt, or "" when unknown. */
-const formatBankAsOf = (iso: string | undefined): string => {
-  if (!iso) return "";
+/** "Jun 25" (in the app language) for a link's lastExternalBalanceAt, or null when unknown. */
+const formatBankAsOfDate = (iso: string | undefined, locale: string): string | null => {
+  if (!iso) return null;
   const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return ` · as of ${parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  if (Number.isNaN(parsed.getTime())) return null;
+  try {
+    return parsed.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  } catch {
+    return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+};
+
+/** "Jul 2026" (in the app language) for a "YYYY-MM" goal month. */
+const formatGoalMonth = (yearMonth: string, locale: string): string => {
+  const [yearStr, monthStr] = yearMonth.split("-");
+  const year = Number(yearStr);
+  const monthIndex = Number(monthStr) - 1;
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    return yearMonth;
+  }
+  const date = new Date(year, monthIndex, 1);
+  try {
+    return date.toLocaleDateString(locale, { month: "short", year: "numeric" });
+  } catch {
+    return date.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  }
 };
 
 /* ─── Props Interface ─── */
@@ -166,6 +186,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
   editDebt,
   onEdit,
 }) => {
+  const { t, i18n } = useTranslation();
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -287,6 +308,10 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     [bankLink, bankUpdateBalance]
   );
 
+  const bankAsOfDate = bankLink
+    ? formatBankAsOfDate(bankLink.lastExternalBalanceAt, i18n.language)
+    : null;
+
   /** Calculate required payment for goal date */
   const goalPaymentInfo = React.useMemo(() => {
     if (!goalMonth) return null;
@@ -313,15 +338,18 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     void ensureCardKeepAlivePermissions().then((permitted) => {
       if (permitted) return;
       Alert.alert(
-        "Notifications are off",
-        "Keep-alive tracking still works - you'll see warnings inside the app. To also get reminder notifications, turn them on in your phone's Settings.",
+        t("debts.form.alerts.notificationsOff.title"),
+        t("debts.form.alerts.notificationsOff.message"),
         [
-          { text: "OK", style: "cancel" },
-          { text: "Open Settings", onPress: () => void Linking.openSettings() },
+          { text: t("common.ok"), style: "cancel" },
+          {
+            text: t("debts.form.alerts.notificationsOff.openSettings"),
+            onPress: () => void Linking.openSettings(),
+          },
         ]
       );
     });
-  }, [keepAliveEnabled]);
+  }, [keepAliveEnabled, t]);
 
   /**
    * Validates and submits the form.
@@ -485,21 +513,21 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
             automaticallyAdjustKeyboardInsets
           >
             {/* ── Header ── */}
-            <Text style={styles.title}>{isEditing ? "Edit Debt" : "Add New Debt"}</Text>
+            <Text style={styles.title}>
+              {isEditing ? t("debts.form.title.edit") : t("debts.form.title.add")}
+            </Text>
             <Text style={styles.subtitle}>
-              {isEditing
-                ? "Update the details of this debt"
-                : "Enter the details of the debt you want to track"}
+              {isEditing ? t("debts.form.subtitle.edit") : t("debts.form.subtitle.add")}
             </Text>
 
             {/* ── Form Fields ── */}
             <View style={styles.fieldGroup}>
               {/* Debt Name */}
               <View style={styles.field}>
-                <Text style={styles.label}>DEBT NAME</Text>
+                <Text style={styles.label}>{t("debts.form.name.label")}</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g., Chase Visa, Student Loan"
+                  placeholder={t("debts.form.name.placeholder")}
                   placeholderTextColor={colors.textMuted}
                   value={name}
                   onChangeText={(text) => setName(sanitizeTextInput(text))}
@@ -510,7 +538,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
               {/* Total Balance - read-only while a connected account owns it */}
               <View style={styles.field}>
-                <Text style={styles.label}>TOTAL BALANCE</Text>
+                <Text style={styles.label}>{t("debts.form.balance.label")}</Text>
                 {bankBalance !== null && bankLink ? (
                   <>
                     <View style={[styles.input, styles.bankBalanceBox]}>
@@ -519,16 +547,18 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                       </Text>
                     </View>
                     <Text style={styles.dueDayHint}>
-                      From {bankLink.externalName}
-                      {formatBankAsOf(bankLink.lastExternalBalanceAt)}. Updates
-                      after every bank sync - switch "Balance from bank" off
-                      below to type it yourself.
+                      {t("debts.form.balance.fromBank", {
+                        account: bankLink.externalName,
+                        asOf: bankAsOfDate
+                          ? t("debts.form.balance.asOf", { date: bankAsOfDate })
+                          : "",
+                      })}
                     </Text>
                   </>
                 ) : (
                   <TextInput
                     style={styles.input}
-                    placeholder="0.00"
+                    placeholder={t("debts.form.balance.placeholder")}
                     placeholderTextColor={colors.textMuted}
                     value={balance}
                     onChangeText={setBalance}
@@ -538,7 +568,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.label}>OWNER</Text>
+                <Text style={styles.label}>{t("debts.form.owner.label")}</Text>
                 <View style={styles.ownerRow}>
                   {DEBT_OWNER_OPTIONS.map((option) => {
                     const selected = owner === option.id;
@@ -560,7 +590,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                             { color: selected ? colors.accent : colors.textDim },
                           ]}
                         >
-                          {option.label}
+                          {t(`debts.form.owner.options.${option.id}`)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -569,7 +599,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.label}>DEBT TYPE</Text>
+                <Text style={styles.label}>{t("debts.form.type.label")}</Text>
                 <View style={styles.ownerRow}>
                   {DEBT_CLASS_OPTIONS.map((option) => {
                     const selected = debtClass === option.id;
@@ -591,7 +621,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                             { color: selected ? colors.accent : colors.textDim },
                           ]}
                         >
-                          {option.label}
+                          {t(`debts.form.type.options.${option.id}`)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -602,10 +632,10 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               {/* APR and Min Payment (side-by-side) */}
               <View style={styles.row}>
                 <View style={[styles.field, { flex: 1 }]}>
-                  <Text style={styles.label}>APR (%)</Text>
+                  <Text style={styles.label}>{t("debts.form.apr.label")}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="0.0"
+                    placeholder={t("debts.form.apr.placeholder")}
                     placeholderTextColor={colors.textMuted}
                     value={rate}
                     onChangeText={setRate}
@@ -614,10 +644,10 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 </View>
 
                 <View style={[styles.field, { flex: 1 }]}>
-                  <Text style={styles.label}>MIN PAYMENT</Text>
+                  <Text style={styles.label}>{t("debts.form.minPayment.label")}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="0.00"
+                    placeholder={t("debts.form.minPayment.placeholder")}
                     placeholderTextColor={colors.textMuted}
                     value={minPayment}
                     onChangeText={setMinPayment}
@@ -627,11 +657,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.label}>MINIMUM PAYMENT DUE DAY</Text>
-                <Text style={styles.dueDayHint}>
-                  Day of each month your minimum is due. Day 29-31 falls back to
-                  the last day in shorter months.
-                </Text>
+                <Text style={styles.label}>{t("debts.form.dueDay.label")}</Text>
+                <Text style={styles.dueDayHint}>{t("debts.form.dueDay.hint")}</Text>
                 <View style={styles.dueDayModeRow}>
                   <TouchableOpacity
                     style={[
@@ -646,7 +673,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                         paymentDueDay === null && styles.dueDayModeBtnTextActive,
                       ]}
                     >
-                      Use default (day {DEFAULT_DEBT_PAYMENT_DUE_DAY})
+                      {t("debts.form.dueDay.useDefault", { day: DEFAULT_DEBT_PAYMENT_DUE_DAY })}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -666,7 +693,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                         paymentDueDay !== null && styles.dueDayModeBtnTextActive,
                       ]}
                     >
-                      Set custom day
+                      {t("debts.form.dueDay.custom")}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -697,28 +724,31 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
               {/* Goal Date (optional) */}
               <View style={styles.field}>
-                <Text style={styles.label}>PAYOFF GOAL DATE (OPTIONAL)</Text>
+                <Text style={styles.label}>{t("debts.form.goal.label")}</Text>
                 <TouchableOpacity
                   style={styles.input}
                   onPress={() => setShowMonthPicker(true)}
                 >
                   <Text style={{ color: goalMonth ? colors.text : colors.textMuted, fontSize: 15 }}>
-                    {goalMonth ? formatYearMonthLabel(goalMonth) : "Select month"}
+                    {goalMonth ? formatGoalMonth(goalMonth, i18n.language) : t("debts.form.goal.selectMonth")}
                   </Text>
                 </TouchableOpacity>
                 {goalMonth ? (
                   <TouchableOpacity onPress={() => setGoalMonth("")}>
-                    <Text style={[styles.goalHint, { color: colors.textMuted }]}>Clear goal month</Text>
+                    <Text style={[styles.goalHint, { color: colors.textMuted }]}>{t("debts.form.goal.clear")}</Text>
                   </TouchableOpacity>
                 ) : null}
                 {goalPaymentInfo && isFinite(goalPaymentInfo.required) && (
-                  <Text style={[styles.goalHint, { color: colors.accent }]}> 
-                    Pay {formatCurrency(goalPaymentInfo.required)}/mo to be debt-free in {goalPaymentInfo.months} months
+                  <Text style={[styles.goalHint, { color: colors.accent }]}>
+                    {t("debts.form.goal.payHint", {
+                      amount: formatCurrency(goalPaymentInfo.required),
+                      count: goalPaymentInfo.months,
+                    })}
                   </Text>
                 )}
                 {goalPaymentInfo && !isFinite(goalPaymentInfo.required) && (
                   <Text style={[styles.goalHint, { color: colors.danger }]}>
-                    Goal date is too soon - not achievable
+                    {t("debts.form.goal.tooSoon")}
                   </Text>
                 )}
               </View>
@@ -726,21 +756,12 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               {/* ── Connected bank account (credit cards only) ── */}
               {isCreditCard && (
                 <View style={styles.field}>
-                  <Text style={styles.label}>CONNECTED BANK ACCOUNT (OPTIONAL)</Text>
+                  <Text style={styles.label}>{t("debts.form.bank.label")}</Text>
                   {accountLinks.length === 0 ? (
-                    <Text style={styles.dueDayHint}>
-                      Connect your bank (Profile → Bank Connections) and this
-                      card can keep its own balance current - and, with the
-                      keep-alive watch on, stamp its last use from your
-                      purchases.
-                    </Text>
+                    <Text style={styles.dueDayHint}>{t("debts.form.bank.emptyHint")}</Text>
                   ) : (
                     <>
-                      <Text style={styles.dueDayHint}>
-                        Pick the bank account that is this card. Its balance
-                        lands here after every sync, and with the keep-alive
-                        watch on, purchases stamp the last-used date for you.
-                      </Text>
+                      <Text style={styles.dueDayHint}>{t("debts.form.bank.pickHint")}</Text>
                       <View style={styles.keepAliveLinkList}>
                         <TouchableOpacity
                           style={[
@@ -756,7 +777,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                                 styles.dueDayModeBtnTextActive,
                             ]}
                           >
-                            Not connected
+                            {t("debts.form.bank.notConnected")}
                           </Text>
                         </TouchableOpacity>
                         {accountLinks.map((link) => {
@@ -786,7 +807,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                       {bankLink && (
                         <>
                           <Text style={styles.keepAliveSubLabel}>
-                            BALANCE UPDATES
+                            {t("debts.form.bank.updatesLabel")}
                           </Text>
                           <TouchableOpacity
                             style={[
@@ -803,8 +824,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                               ]}
                             >
                               {bankUpdateBalance
-                                ? "Balance from bank: On"
-                                : "Balance from bank: Off"}
+                                ? t("debts.form.bank.balanceOn")
+                                : t("debts.form.bank.balanceOff")}
                             </Text>
                           </TouchableOpacity>
                         </>
@@ -817,12 +838,8 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               {/* ── Card Keep-Alive (credit cards only) ── */}
               {isCreditCard && (
                 <View style={styles.field}>
-                  <Text style={styles.label}>CARD KEEP-ALIVE (OPTIONAL)</Text>
-                  <Text style={styles.dueDayHint}>
-                    Issuers can close a card that sits unused. Get warned
-                    before this card's inactivity window runs out. Closed this
-                    card on purpose? Just turn the watch off.
-                  </Text>
+                  <Text style={styles.label}>{t("debts.form.keepAlive.label")}</Text>
+                  <Text style={styles.dueDayHint}>{t("debts.form.keepAlive.hint")}</Text>
                   <TouchableOpacity
                     style={[
                       styles.dueDayModeBtn,
@@ -837,15 +854,15 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                       ]}
                     >
                       {keepAliveEnabled
-                        ? "Keep-alive watch: On"
-                        : "Keep-alive watch: Off"}
+                        ? t("debts.form.keepAlive.on")
+                        : t("debts.form.keepAlive.off")}
                     </Text>
                   </TouchableOpacity>
 
                   {keepAliveEnabled && (
                     <>
                       <Text style={styles.keepAliveSubLabel}>
-                        ALLOWED INACTIVITY (ISSUERS VARY)
+                        {t("debts.form.keepAlive.windowLabel")}
                       </Text>
                       <View style={styles.ownerRow}>
                         {KEEP_ALIVE_WINDOW_CHOICES.map((months) => {
@@ -865,7 +882,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                                   selected && styles.dueDayModeBtnTextActive,
                                 ]}
                               >
-                                {months} mo
+                                {t("debts.form.keepAlive.windowChip", { count: months })}
                               </Text>
                             </TouchableOpacity>
                           );
@@ -873,7 +890,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                       </View>
 
                       <Text style={styles.keepAliveSubLabel}>
-                        START WARNING ME
+                        {t("debts.form.keepAlive.leadLabel")}
                       </Text>
                       <View style={styles.ownerRow}>
                         {KEEP_ALIVE_LEAD_CHOICES.map((days) => {
@@ -893,7 +910,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                                   selected && styles.dueDayModeBtnTextActive,
                                 ]}
                               >
-                                {days} days out
+                                {t("debts.form.keepAlive.leadChip", { count: days })}
                               </Text>
                             </TouchableOpacity>
                           );
@@ -901,14 +918,14 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                       </View>
 
                       <Text style={styles.keepAliveSubLabel}>
-                        LAST-USED TRACKING
+                        {t("debts.form.keepAlive.lastUsedLabel")}
                       </Text>
                       <Text style={styles.dueDayHint}>
                         {bankLink
-                          ? `Stamps itself from ${bankLink.externalName} purchases. Tap "I used it" on the card anytime to stamp by hand.`
+                          ? t("debts.form.keepAlive.lastUsedLinked", { account: bankLink.externalName })
                           : accountLinks.length > 0
-                            ? 'Tap "I used it" on the card after a purchase - or pick a connected account above and it stamps itself.'
-                            : 'Tap "I used it" on the card after a purchase. Set up a bank connection (Profile → Bank Connections) and the date stamps itself from your transactions.'}
+                            ? t("debts.form.keepAlive.lastUsedWithLinks")
+                            : t("debts.form.keepAlive.lastUsedNoLinks")}
                       </Text>
                     </>
                   )}
@@ -930,7 +947,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               style={styles.cancelButton}
               onPress={onClose}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -941,7 +958,9 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
               onPress={handleSubmit}
               disabled={!isValid}
             >
-              <Text style={styles.addButtonText}>{isEditing ? "Save Changes" : "Add Debt"}</Text>
+              <Text style={styles.addButtonText}>
+                {isEditing ? t("debts.form.buttons.saveChanges") : t("debts.form.buttons.addDebt")}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -953,7 +972,7 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
         onSelect={setGoalMonth}
         onClose={() => setShowMonthPicker(false)}
         confirm
-        title="Set payoff goal date"
+        title={t("debts.form.goal.pickerTitle")}
         minYear={new Date().getFullYear()}
       />
     </Modal>

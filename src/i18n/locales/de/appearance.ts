@@ -51,19 +51,4 @@ export const appearance: Localized<typeof en> = {
       xlarge: { name: "Sehr groß", description: "Größter Text - maximale Lesbarkeit." },
     },
   },
-  language: {
-    label: "Sprache",
-    pickerTitle: "Sprache",
-    a11yLabel: "Sprache, aktuell {{current}}",
-    a11yHint: "Öffnet die Sprachoptionen der App",
-    autoWithResolved: "Automatisch ({{language}})",
-    options: {
-      auto: {
-        name: "Automatisch",
-        description:
-          "Folgt der Sprache des Telefons. Fällt auf Englisch zurück, wenn die Telefonsprache noch nicht verfügbar ist.",
-      },
-    },
-    note: "Einige Inhalte - Lektionen, die US-Steuertools und Versionshinweise - gibt es bisher nur auf Englisch.",
-  },
 };

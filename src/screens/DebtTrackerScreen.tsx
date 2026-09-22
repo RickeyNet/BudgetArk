@@ -122,6 +122,8 @@ import {
   type PayoffStrategy,
 } from "../utils/debtTrackerMath";
 import { describeError } from "../utils/errorMessage";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -153,34 +155,38 @@ const ESSENTIAL_CATEGORIES = [
 
 const KEEL_MAX_TARGET = 2000;
 
-const formatPayoffMonths = (months: number): string => {
-  if (!Number.isFinite(months)) return "Not solvable";
-  if (months <= 0) return "0 months";
+const formatPayoffMonths = (t: TFunction, months: number): string => {
+  if (!Number.isFinite(months)) return t("debts.screen.payoff.notSolvable");
+  if (months <= 0) return t("debts.screen.payoff.zeroMonths");
   const years = Math.floor(months / 12);
   const remainingMonths = months % 12;
-  if (years <= 0) return `${remainingMonths} mo`;
-  if (remainingMonths <= 0) return `${years} yr`;
-  return `${years} yr ${remainingMonths} mo`;
+  if (years <= 0) return t("debts.screen.payoff.months", { count: remainingMonths });
+  if (remainingMonths <= 0) return t("debts.screen.payoff.years", { count: years });
+  return t("debts.screen.payoff.yearsMonths", { years, months: remainingMonths });
 };
 
-const getMilestoneCongratsMessage = (key: DebtMilestoneKey): string => {
-  if (key === "keel") return "Great start. Your foundation is in place.";
-  if (key === "hull") return "Strong work. All non-mortgage debt is cleared.";
-  if (key === "deck") return "Excellent discipline. Your emergency fund is fully funded.";
-  if (key === "supplies") return "Nice consistency. Your retirement investing is on track.";
-  if (key === "gather_animals") return "Well done. Your children's future is being built.";
-  if (key === "moorings") return "Incredible. Your home is paid off.";
-  if (key === "sail") return "You did it. Your Ark is complete. Build wealth and give generously.";
-  return "Congratulations! Another milestone complete. Keep going.";
-};
+const MILESTONE_CONGRATS_KEYS = {
+  keel: "debts.screen.milestones.congrats.keel",
+  hull: "debts.screen.milestones.congrats.hull",
+  deck: "debts.screen.milestones.congrats.deck",
+  supplies: "debts.screen.milestones.congrats.supplies",
+  gather_animals: "debts.screen.milestones.congrats.gather_animals",
+  moorings: "debts.screen.milestones.congrats.moorings",
+  sail: "debts.screen.milestones.congrats.sail",
+} as const satisfies Partial<Record<DebtMilestoneKey, string>>;
 
-const getMilestoneBuildActionLabel = (key: DebtMilestoneKey): string => {
-  if (key === "supplies") return "Invest";
-  if (key === "gather_animals") return "Gather";
-  if (key === "moorings") return "Secure";
-  if (key === "sail") return "Launch";
-  return "Build";
-};
+const getMilestoneCongratsMessage = (t: TFunction, key: DebtMilestoneKey): string =>
+  t(MILESTONE_CONGRATS_KEYS[key as keyof typeof MILESTONE_CONGRATS_KEYS] ?? "debts.screen.milestones.congrats.default");
+
+const MILESTONE_ACTION_KEYS = {
+  supplies: "debts.screen.milestones.action.supplies",
+  gather_animals: "debts.screen.milestones.action.gather_animals",
+  moorings: "debts.screen.milestones.action.moorings",
+  sail: "debts.screen.milestones.action.sail",
+} as const satisfies Partial<Record<DebtMilestoneKey, string>>;
+
+const getMilestoneBuildActionLabel = (t: TFunction, key: DebtMilestoneKey): string =>
+  t(MILESTONE_ACTION_KEYS[key as keyof typeof MILESTONE_ACTION_KEYS] ?? "debts.screen.milestones.action.default");
 
 const getNewlyPaidOffDebt = (
   previousDebts: Debt[],
@@ -278,6 +284,7 @@ const DebtTrackerScreen: React.FC = () => {
     useNavigation<BottomTabNavigationProp<RootTabParamList>>();
   const route = useRoute<RouteProp<RootTabParamList, "DebtTracker">>();
 
+  const { t } = useTranslation();
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -501,11 +508,11 @@ const DebtTrackerScreen: React.FC = () => {
     } catch (error) {
       triggerHaptic("error");
       Alert.alert(
-        "Couldn't save",
-        describeError(error, "The card's last-used date wasn't updated. Please try again."),
+        t("debts.screen.alerts.couldntSave"),
+        describeError(error, t("debts.screen.alerts.keepAliveUse")),
       );
     }
-  }, []);
+  }, [t]);
 
   /** "Later" on the keep-alive banner: mute that card for this month. */
   const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
@@ -515,11 +522,11 @@ const DebtTrackerScreen: React.FC = () => {
     } catch (error) {
       triggerHaptic("error");
       Alert.alert(
-        "Couldn't save",
-        describeError(error, "The reminder wasn't muted. Please try again."),
+        t("debts.screen.alerts.couldntSave"),
+        describeError(error, t("debts.screen.alerts.keepAliveMute")),
       );
     }
-  }, []);
+  }, [t]);
 
   const filteredDebts = React.useMemo(() => {
     return ownerFilter === "all"
@@ -636,9 +643,9 @@ const DebtTrackerScreen: React.FC = () => {
   const formatPayoffInterest = useCallback(
     (plan: { monthsToPayoff: number; totalInterestPaid: number }): string =>
       Number.isFinite(plan.monthsToPayoff)
-        ? `${formatCurrency(plan.totalInterestPaid)} int.`
-        : "— int.",
-    [formatCurrency]
+        ? t("debts.screen.payoff.interest", { amount: formatCurrency(plan.totalInterestPaid) })
+        : t("debts.screen.payoff.interestDash"),
+    [formatCurrency, t]
   );
   /**
    * "Save $X • N mo faster" line under each method card. An unsolvable base
@@ -653,28 +660,28 @@ const DebtTrackerScreen: React.FC = () => {
     ): string => {
       if (!Number.isFinite(base.monthsToPayoff)) {
         return Number.isFinite(whatIf.monthsToPayoff)
-          ? "Makes payoff possible"
-          : "Still not enough to pay off";
+          ? t("debts.screen.payoff.makesPossible")
+          : t("debts.screen.payoff.stillNotEnough");
       }
       const saved = Math.max(0, base.totalInterestPaid - whatIf.totalInterestPaid);
       const faster = Math.max(0, base.monthsToPayoff - whatIf.monthsToPayoff);
-      return `Save ${formatCurrency(saved)} • ${faster} mo faster`;
+      return t("debts.screen.payoff.savings", { amount: formatCurrency(saved), months: faster });
     },
-    [formatCurrency]
+    [formatCurrency, t]
   );
 
   const payoffRecommendation = React.useMemo(() => {
     if (!avalancheWhatIf.isPayoffPossible || !snowballWhatIf.isPayoffPossible) {
-      return "Increase payments until both plans are solvable.";
+      return t("debts.screen.payoff.rec.increase");
     }
     if (avalancheWhatIf.totalInterestPaid < snowballWhatIf.totalInterestPaid) {
-      return "Lowest interest: Avalanche.";
+      return t("debts.screen.payoff.rec.avalanche");
     }
     if (snowballWhatIf.totalInterestPaid < avalancheWhatIf.totalInterestPaid) {
-      return "Lowest interest: Snowball.";
+      return t("debts.screen.payoff.rec.snowball");
     }
-    return "Tie - both methods cost the same interest.";
-  }, [avalancheWhatIf, snowballWhatIf]);
+    return t("debts.screen.payoff.rec.tie");
+  }, [avalancheWhatIf, snowballWhatIf, t]);
 
   /**
    * Points the chosen connected-account link at this debt ("this bank
@@ -884,7 +891,7 @@ const DebtTrackerScreen: React.FC = () => {
     setEditingDebt(null);
     if (prior) {
       pushUndo({
-        message: `Edited "${prior.name}"`,
+        message: t("debts.screen.undo.edited", { name: prior.name }),
         onUndo: async () => {
           const reverted = await updateDebt(debtId, prior);
           setDebts(reverted);
@@ -902,7 +909,7 @@ const DebtTrackerScreen: React.FC = () => {
       triggerHaptic("success");
     }
     void notifyAchievementCheck();
-  }, [applyBankLink, debts, notifyAchievementCheck, presentAfterDismiss, pushUndo]);
+  }, [applyBankLink, debts, notifyAchievementCheck, presentAfterDismiss, pushUndo, t]);
 
   /** Delete a debt */
   const handleDelete = useCallback(async (debtId: string) => {
@@ -923,7 +930,7 @@ const DebtTrackerScreen: React.FC = () => {
     setPendingDeleteDebt(null);
     triggerHaptic("warning");
     pushUndo({
-      message: `Deleted "${deletedName}"`,
+      message: t("debts.screen.undo.deleted", { name: deletedName }),
       onUndo: async () => {
         const restored = await restoreDebt(debtId);
         setDebts(restored);
@@ -931,7 +938,7 @@ const DebtTrackerScreen: React.FC = () => {
         void notifyAchievementCheck();
       },
     });
-  }, [pendingDeleteDebt, pushUndo, notifyAchievementCheck]);
+  }, [pendingDeleteDebt, pushUndo, notifyAchievementCheck, t]);
 
   // Payment bulk-delete/undo (inside PaymentHistoryModal) re-adjusts debt
   // balances, so pull fresh debts + resnapshot net worth when it reports a
@@ -1064,7 +1071,7 @@ const DebtTrackerScreen: React.FC = () => {
         type: "expense",
         category: "Savings",
         amount: delta,
-        description: delta > 0 ? "Logged from Build Your Ark" : "Correction from Build Your Ark",
+        description: delta > 0 ? t("debts.screen.savingsEntry.logged") : t("debts.screen.savingsEntry.correction"),
         // Local calendar day in the canonical noon-UTC form (the UTC day
         // from toISOString() filed evening entries into the wrong month).
         date: buildEntryDateISO(localYearMonth(now), now.getDate()),
@@ -1077,7 +1084,7 @@ const DebtTrackerScreen: React.FC = () => {
       setSavingsDraft("");
       void notifyAchievementCheck();
     },
-    [efSource.linked, notifyAchievementCheck, savingsReserve]
+    [efSource.linked, notifyAchievementCheck, savingsReserve, t]
   );
 
   /** Sort debts based on payoff strategy.
@@ -1202,15 +1209,13 @@ const DebtTrackerScreen: React.FC = () => {
     <View>
       <View style={styles.titleSection}>
         <Text style={styles.appLabel}>BudgetArk</Text>
-        <Text style={styles.screenTitle}>Debt Tracker</Text>
-        <Text style={styles.screenSubtitle}>
-          Track your progress. Crush your debt.
-        </Text>
+        <Text style={styles.screenTitle}>{t("debts.screen.header.title")}</Text>
+        <Text style={styles.screenSubtitle}>{t("debts.screen.header.subtitle")}</Text>
         <TouchableOpacity
           style={styles.searchIconBtn}
           onPress={openSearch}
           activeOpacity={0.7}
-          accessibilityLabel="Search debts, payments, and budget entries"
+          accessibilityLabel={t("debts.screen.header.searchA11y")}
         >
           <Text style={styles.searchIconGlyph}>🔍</Text>
         </TouchableOpacity>
@@ -1219,9 +1224,9 @@ const DebtTrackerScreen: React.FC = () => {
       <View ref={anchorSummary} collapsable={false} style={styles.summaryCard}>
         <View style={styles.summaryRow}>
           <View style={styles.summaryLeft}>
-            <Text style={styles.summaryLabel}>TOTAL REMAINING</Text>
+            <Text style={styles.summaryLabel}>{t("debts.screen.summary.totalRemaining")}</Text>
             <Text style={styles.summaryAmount}>{formatCurrency(totalDebt)}</Text>
-            <Text style={styles.paidText}>{formatCurrency(totalPaid)} paid off</Text>
+            <Text style={styles.paidText}>{t("debts.screen.summary.paidOff", { amount: formatCurrency(totalPaid) })}</Text>
           </View>
           {/* Tap ring → payment history */}
           <TouchableOpacity
@@ -1229,7 +1234,7 @@ const DebtTrackerScreen: React.FC = () => {
             onPress={() => setShowHistory(true)}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel={`Payoff ${overallPercent} percent. Tap to view payment history.`}
+            accessibilityLabel={t("debts.screen.summary.ringA11y", { percent: overallPercent })}
           >
             <View style={styles.summaryRingInner}>
               <ProgressRing
@@ -1249,7 +1254,7 @@ const DebtTrackerScreen: React.FC = () => {
             </View>
             <View style={[styles.summaryRingHint, { backgroundColor: `${colors.accent}20` }]}>
               <Text style={[styles.summaryRingHintText, { color: colors.accent }]}>
-                🕐 View history
+                {t("debts.screen.summary.viewHistory")}
               </Text>
             </View>
           </TouchableOpacity>
@@ -1258,10 +1263,10 @@ const DebtTrackerScreen: React.FC = () => {
         {/* Owner summary row doubles as filter - tap to filter */}
         <View style={styles.ownerSummaryRow}>
           {([
-            { id: "all" as DebtOwnerFilter, label: "All", value: totalMine + totalPartner + totalJoint },
-            { id: "mine" as DebtOwnerFilter, label: "Mine", value: totalMine },
-            { id: "partner" as DebtOwnerFilter, label: "Partner", value: totalPartner },
-            { id: "joint" as DebtOwnerFilter, label: "Joint", value: totalJoint },
+            { id: "all" as DebtOwnerFilter, label: t("debts.screen.owner.all"), value: totalMine + totalPartner + totalJoint },
+            { id: "mine" as DebtOwnerFilter, label: t("debts.screen.owner.mine"), value: totalMine },
+            { id: "partner" as DebtOwnerFilter, label: t("debts.screen.owner.partner"), value: totalPartner },
+            { id: "joint" as DebtOwnerFilter, label: t("debts.screen.owner.joint"), value: totalJoint },
           ]).map((item) => {
             const isSelected = ownerFilter === item.id;
             return (
@@ -1293,17 +1298,26 @@ const DebtTrackerScreen: React.FC = () => {
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.milestonesInlineText}>
-              Step {Math.max(currentMilestoneIndex + 1, 1)}/{computedMilestones.length || 7} • {(currentMilestone?.title || "Keel").toUpperCase()}
-              {currentMilestoneKey === "deck" ? ` • ${runwayMonths.toFixed(1)} mo runway` : ""}
+              {t("debts.screen.milestoneBar.step", {
+                step: Math.max(currentMilestoneIndex + 1, 1),
+                total: computedMilestones.length || 7,
+                title: (currentMilestone?.title || "Keel").toUpperCase(),
+              })}
+              {currentMilestoneKey === "deck"
+                ? t("debts.screen.milestoneBar.runway", { months: runwayMonths.toFixed(1) })
+                : ""}
               {currentMilestoneKey === "supplies" && activeSavingsGoal
-                ? ` • ${activeSavingsGoal.name} ${Math.round(Math.min(activeSavingsGoal.currentAmount / Math.max(activeSavingsGoal.targetAmount, 1), 1) * 100)}%`
+                ? t("debts.screen.milestoneBar.goal", {
+                    name: activeSavingsGoal.name,
+                    percent: Math.round(Math.min(activeSavingsGoal.currentAmount / Math.max(activeSavingsGoal.targetAmount, 1), 1) * 100),
+                  })
                 : ""}
             </Text>
             <Text style={styles.milestonesSubText}>
-              {strategy === "custom" ? "Custom order" : strategy === "avalanche" ? "Avalanche" : "Snowball"} • Tap to plan
+              {t("debts.screen.milestoneBar.tapToPlan", { strategy: t(`debts.screen.strategy.labels.${strategy}`) })}
             </Text>
           </View>
-          <Text style={styles.milestoneArkLabel}>Build Your Ark →</Text>
+          <Text style={styles.milestoneArkLabel}>{t("debts.screen.milestoneBar.ark")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -1362,13 +1376,9 @@ const DebtTrackerScreen: React.FC = () => {
 
       {/* Section header - just title + sort hint */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Debts</Text>
+        <Text style={styles.sectionTitle}>{t("debts.screen.sections.debts")}</Text>
         <Text style={[styles.strategyHint, { marginBottom: 0 }]}>
-          {strategy === "avalanche"
-            ? "Avalanche order"
-            : strategy === "snowball"
-            ? "Snowball order"
-            : "Custom order"}
+          {t(`debts.screen.strategy.order.${strategy}`)}
         </Text>
       </View>
     </View>
@@ -1378,15 +1388,13 @@ const DebtTrackerScreen: React.FC = () => {
   const emptyState = (
     <View style={styles.emptyWrap}>
       <Text style={styles.emptyEmoji}>🧭</Text>
-      <Text style={styles.emptyTitle}>Build Your Ark</Text>
-      <Text style={styles.emptySub}>
-        Add debt accounts when you are ready, or map your milestone targets first.
-      </Text>
+      <Text style={styles.emptyTitle}>{t("debts.screen.empty.title")}</Text>
+      <Text style={styles.emptySub}>{t("debts.screen.empty.sub")}</Text>
       <TouchableOpacity
         style={[styles.emptyActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}
         onPress={openMilestonesModal}
       >
-        <Text style={[styles.emptyActionText, { color: colors.text }]}>Set Up Milestones</Text>
+        <Text style={[styles.emptyActionText, { color: colors.text }]}>{t("debts.screen.empty.setUp")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -1565,10 +1573,8 @@ const DebtTrackerScreen: React.FC = () => {
             keyboard. */}
         <SheetKeyboardAvoider style={styles.msFullOverlay}>
           <View style={[styles.msFullBox, { paddingTop: Math.max(insets.top, 20) + 12, paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <Text style={styles.msFullTitle}>Build Your Ark Milestones</Text>
-            <Text style={styles.msFullMessage}>
-              Keel to Hull to Deck to Supplies to Sail. Follow each stage at your pace.
-            </Text>
+            <Text style={styles.msFullTitle}>{t("debts.screen.milestones.title")}</Text>
+            <Text style={styles.msFullMessage}>{t("debts.screen.milestones.message")}</Text>
             <ScrollView
               style={styles.msFullList}
               contentContainerStyle={styles.msFullListContent}
@@ -1591,7 +1597,7 @@ const DebtTrackerScreen: React.FC = () => {
                         <View style={styles.msStepHeaderRow}>
                           <Text style={styles.msStepName}>{step.title}</Text>
                           <View style={[styles.msStepBadge, { backgroundColor: `${colors.success}20` }]}> 
-                            <Text style={[styles.msStepBadgeText, { color: colors.success }]}>Complete</Text>
+                            <Text style={[styles.msStepBadgeText, { color: colors.success }]}>{t("debts.screen.milestones.complete")}</Text>
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -1603,16 +1609,16 @@ const DebtTrackerScreen: React.FC = () => {
                       <View style={styles.msStepHeaderRow}>
                         <Text style={styles.msStepName}>{step.title}</Text>
                         <View style={[styles.msStepBadge, { backgroundColor: `${colors.success}20` }]}> 
-                          <Text style={[styles.msStepBadgeText, { color: colors.success }]}>Completed</Text>
+                          <Text style={[styles.msStepBadgeText, { color: colors.success }]}>{t("debts.screen.milestones.completed")}</Text>
                         </View>
                       </View>
-                      <Text style={styles.msStepDescription}>{getMilestoneCongratsMessage(step.key)}</Text>
+                      <Text style={styles.msStepDescription}>{getMilestoneCongratsMessage(t, step.key)}</Text>
                       <View style={styles.msStepActionRow}>
                         <TouchableOpacity
                           style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                           onPress={() => handleToggleMilestoneComplete(step)}
                         >
-                          <Text style={styles.msStepActionText}>Rebuild</Text>
+                          <Text style={styles.msStepActionText}>{t("debts.screen.milestones.rebuild")}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1640,7 +1646,7 @@ const DebtTrackerScreen: React.FC = () => {
                       <Text style={styles.msStepName}>{step.title}</Text>
                       {isCurrent && (
                         <View style={[styles.msStepBadge, { backgroundColor: `${colors.accent}20` }]}> 
-                          <Text style={[styles.msStepBadgeText, { color: colors.accent }]}>Current</Text>
+                          <Text style={[styles.msStepBadgeText, { color: colors.accent }]}>{t("debts.screen.milestones.current")}</Text>
                         </View>
                       )}
                     </View>
@@ -1650,7 +1656,7 @@ const DebtTrackerScreen: React.FC = () => {
                       <View style={styles.msTargetEditorRow}>
                         <TextInput
                           style={styles.msTargetInput}
-                          placeholder="Target"
+                          placeholder={t("debts.screen.milestones.targetPlaceholder")}
                           placeholderTextColor={colors.textMuted}
                           keyboardType="decimal-pad"
                           value={targetDraftByStep[step.key] || ""}
@@ -1660,7 +1666,7 @@ const DebtTrackerScreen: React.FC = () => {
                           style={[styles.msTargetSaveBtn, { backgroundColor: colors.bg }]}
                           onPress={() => handleSaveMilestoneTarget(step.key)}
                         >
-                          <Text style={styles.msTargetSaveText}>Save Target</Text>
+                          <Text style={styles.msTargetSaveText}>{t("debts.screen.milestones.saveTarget")}</Text>
                         </TouchableOpacity>
                       </View>
                     ) : null}
@@ -1696,8 +1702,8 @@ const DebtTrackerScreen: React.FC = () => {
                     </View>
                     {step.key === "hull" && payoffActiveDebts.length > 0 && !step.isCompleted ? (
                       <View style={styles.msPayoffSection}>
-                        <Text style={styles.msPayoffTitle}>Compare Payoff Strategies</Text>
-                        <Text style={styles.msPayoffLabel}>EXTRA MONTHLY PAYMENT</Text>
+                        <Text style={styles.msPayoffTitle}>{t("debts.screen.milestones.compareTitle")}</Text>
+                        <Text style={styles.msPayoffLabel}>{t("debts.screen.milestones.extraLabel")}</Text>
                         <TextInput
                           style={styles.msPayoffInput}
                           keyboardType="decimal-pad"
@@ -1727,17 +1733,17 @@ const DebtTrackerScreen: React.FC = () => {
                         </View>
                         {/* Avalanche */}
                         <View style={[styles.msPayoffCard, { borderColor: strategy === "avalanche" ? colors.accent : colors.cardBorder }]}>
-                          <Text style={styles.msPayoffCardTitle}>Avalanche</Text>
-                          <Text style={styles.msPayoffCardHint}>Highest APR first</Text>
+                          <Text style={styles.msPayoffCardTitle}>{t("debts.screen.strategy.labels.avalanche")}</Text>
+                          <Text style={styles.msPayoffCardHint}>{t("debts.screen.milestones.avalancheHint")}</Text>
                           <View style={styles.msPayoffMetricRow}>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.msPayoffMetricLabel}>Current</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(avalancheBase.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricLabel}>{t("debts.screen.milestones.currentColumn")}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(t, avalancheBase.monthsToPayoff)}</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(avalancheBase)}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.msPayoffMetricLabel}>+{formatCurrency(hullExtraAmount)}/mo</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(avalancheWhatIf.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricLabel}>{t("debts.screen.milestones.perMonth", { amount: formatCurrency(hullExtraAmount) })}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(t, avalancheWhatIf.monthsToPayoff)}</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(avalancheWhatIf)}</Text>
                             </View>
                           </View>
@@ -1749,23 +1755,23 @@ const DebtTrackerScreen: React.FC = () => {
                             onPress={() => handleChangeStrategy("avalanche")}
                           >
                             <Text style={[styles.msPayoffUseBtnText, strategy === "avalanche" && { color: colors.accent }]}>
-                              {strategy === "avalanche" ? "Current Method" : "Use Avalanche"}
+                              {strategy === "avalanche" ? t("debts.screen.milestones.currentMethod") : t("debts.screen.milestones.useAvalanche")}
                             </Text>
                           </TouchableOpacity>
                         </View>
                         {/* Snowball */}
                         <View style={[styles.msPayoffCard, { borderColor: strategy === "snowball" ? colors.accent : colors.cardBorder }]}>
-                          <Text style={styles.msPayoffCardTitle}>Snowball</Text>
-                          <Text style={styles.msPayoffCardHint}>Smallest balance first</Text>
+                          <Text style={styles.msPayoffCardTitle}>{t("debts.screen.strategy.labels.snowball")}</Text>
+                          <Text style={styles.msPayoffCardHint}>{t("debts.screen.milestones.snowballHint")}</Text>
                           <View style={styles.msPayoffMetricRow}>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.msPayoffMetricLabel}>Current</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(snowballBase.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricLabel}>{t("debts.screen.milestones.currentColumn")}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(t, snowballBase.monthsToPayoff)}</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(snowballBase)}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.msPayoffMetricLabel}>+{formatCurrency(hullExtraAmount)}/mo</Text>
-                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(snowballWhatIf.monthsToPayoff)}</Text>
+                              <Text style={styles.msPayoffMetricLabel}>{t("debts.screen.milestones.perMonth", { amount: formatCurrency(hullExtraAmount) })}</Text>
+                              <Text style={styles.msPayoffMetricValue}>{formatPayoffMonths(t, snowballWhatIf.monthsToPayoff)}</Text>
                               <Text style={styles.msPayoffMetricValue}>{formatPayoffInterest(snowballWhatIf)}</Text>
                             </View>
                           </View>
@@ -1777,7 +1783,7 @@ const DebtTrackerScreen: React.FC = () => {
                             onPress={() => handleChangeStrategy("snowball")}
                           >
                             <Text style={[styles.msPayoffUseBtnText, strategy === "snowball" && { color: colors.accent }]}>
-                              {strategy === "snowball" ? "Current Method" : "Use Snowball"}
+                              {strategy === "snowball" ? t("debts.screen.milestones.currentMethod") : t("debts.screen.milestones.useSnowball")}
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -1791,22 +1797,19 @@ const DebtTrackerScreen: React.FC = () => {
                     !step.isCompleted &&
                     efSource.linked ? (
                       <Text style={[styles.msPayoffMetricLabel, { marginBottom: 4 }]}>
-                        🛡️ Tracked from your{" "}
-                        {efSource.accounts.length === 1
-                          ? "designated emergency-fund savings account"
-                          : `${efSource.accounts.length} designated emergency-fund savings accounts`}{" "}
-                        ({formatCurrency(effectiveReserve)}). Update those
-                        balances on the Bridge - bank syncing keeps them
-                        current automatically.
+                        {t("debts.screen.milestones.trackedLinked", {
+                          count: efSource.accounts.length,
+                          amount: formatCurrency(effectiveReserve),
+                        })}
                       </Text>
                     ) : null}
                     {(step.key === "keel" || step.key === "deck") &&
                     !step.isCompleted &&
                     !efSource.linked ? (
                       <View style={styles.msSavingsLogSection}>
-                        <Text style={styles.msSavingsLogLabel}>Set Savings</Text>
+                        <Text style={styles.msSavingsLogLabel}>{t("debts.screen.milestones.setSavings")}</Text>
                         <Text style={[styles.msPayoffMetricLabel, { marginBottom: 4 }]}>
-                          Current: {formatCurrency(savingsReserve)}
+                          {t("debts.screen.milestones.currentAmount", { amount: formatCurrency(savingsReserve) })}
                         </Text>
                         <View style={styles.msSavingsLogRow}>
                           <TextInput
@@ -1826,7 +1829,7 @@ const DebtTrackerScreen: React.FC = () => {
                               }
                             }}
                           >
-                            <Text style={[styles.msSavingsLogBtnText, { color: colors.white }]}>Set</Text>
+                            <Text style={[styles.msSavingsLogBtnText, { color: colors.white }]}>{t("debts.screen.milestones.set")}</Text>
                           </TouchableOpacity>
                         </View>
                         <View style={styles.msTargetQuickRow}>
@@ -1849,14 +1852,14 @@ const DebtTrackerScreen: React.FC = () => {
                           style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                           onPress={() => toggleMilestoneExpanded(step.key)}
                         >
-                          <Text style={styles.msStepActionText}>Collapse</Text>
+                          <Text style={styles.msStepActionText}>{t("debts.screen.milestones.collapse")}</Text>
                         </TouchableOpacity>
                       ) : null}
                       <TouchableOpacity
                         style={[styles.msStepActionBtn, { borderColor: colors.cardBorder, backgroundColor: colors.bg }]}
                         onPress={() => handleSetCurrentMilestone(step.key)}
                       >
-                        <Text style={styles.msStepActionText}>{getMilestoneBuildActionLabel(step.key)}</Text>
+                        <Text style={styles.msStepActionText}>{getMilestoneBuildActionLabel(t, step.key)}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -1874,7 +1877,7 @@ const DebtTrackerScreen: React.FC = () => {
                             { color: step.isCompleted ? colors.success : colors.accent },
                           ]}
                         >
-                          {step.isCompleted ? "Mark In Progress" : "Mark Complete"}
+                          {step.isCompleted ? t("debts.screen.milestones.markInProgress") : t("debts.screen.milestones.markComplete")}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -1883,10 +1886,8 @@ const DebtTrackerScreen: React.FC = () => {
               })}
               {allMilestonesCompleted ? (
                 <View style={[styles.msJourneyCompleteCard, { borderColor: colors.success, backgroundColor: `${colors.success}12` }]}>
-                  <Text style={[styles.msJourneyCompleteTitle, { color: colors.success }]}>Ark Complete</Text>
-                  <Text style={styles.msJourneyCompleteMessage}>
-                    You have finished your Ark. Now set sail and find new lands.
-                  </Text>
+                  <Text style={[styles.msJourneyCompleteTitle, { color: colors.success }]}>{t("debts.screen.milestones.arkComplete")}</Text>
+                  <Text style={styles.msJourneyCompleteMessage}>{t("debts.screen.milestones.arkCompleteMessage")}</Text>
                 </View>
               ) : null}
             </ScrollView>
@@ -1894,7 +1895,7 @@ const DebtTrackerScreen: React.FC = () => {
               style={styles.msFullDoneBtn}
               onPress={() => setShowMilestonesModal(false)}
             >
-              <Text style={styles.msFullDoneText}>Done</Text>
+              <Text style={styles.msFullDoneText}>{t("common.done")}</Text>
             </TouchableOpacity>
           </View>
         </SheetKeyboardAvoider>
@@ -1908,22 +1909,22 @@ const DebtTrackerScreen: React.FC = () => {
       >
         <View style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Delete Debt</Text>
+            <Text style={styles.dialogTitle}>{t("debts.screen.deleteDialog.title")}</Text>
             <Text style={styles.dialogMessage}>
-              Delete {pendingDeleteDebt?.name}? This cannot be undone.
+              {t("debts.screen.deleteDialog.message", { name: pendingDeleteDebt?.name ?? "" })}
             </Text>
             <View style={styles.dialogActions}>
               <TouchableOpacity
                 style={[styles.dialogButton, styles.dialogCancelButton]}
                 onPress={() => setPendingDeleteDebt(null)}
               >
-                <Text style={styles.dialogCancelText}>Cancel</Text>
+                <Text style={styles.dialogCancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.dialogButton, styles.dialogDeleteButton]}
                 onPress={confirmDelete}
               >
-                <Text style={styles.dialogDeleteText}>Delete</Text>
+                <Text style={styles.dialogDeleteText}>{t("common.delete")}</Text>
               </TouchableOpacity>
             </View>
           </View>

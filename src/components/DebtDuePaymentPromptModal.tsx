@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import type { Debt } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -39,6 +40,7 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
   onDismissForMonth,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
@@ -65,16 +67,15 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
             { marginBottom: Math.max(insets.bottom, 16) },
           ]}
         >
-          <Text style={styles.eyebrow}>MINIMUM DUE TODAY</Text>
+          <Text style={styles.eyebrow}>{t("debts.moments.duePrompt.eyebrow")}</Text>
           <Text style={styles.title}>{debt.name}</Text>
           <Text style={styles.body}>
-            Did you make this month's minimum payment of{" "}
-            {formatCurrency(debt.minPayment)}? (Due on day {dueDay} of each month.)
+            {t("debts.moments.duePrompt.body", {
+              amount: formatCurrency(debt.minPayment),
+              day: dueDay,
+            })}
           </Text>
-          <Text style={styles.hint}>
-            Logging here updates your debt balance and counts toward Budget under Debt
-            Payments.
-          </Text>
+          <Text style={styles.hint}>{t("debts.moments.duePrompt.hint")}</Text>
 
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -82,7 +83,7 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>
-              Yes, I paid {formatCurrency(logAmount)}
+              {t("debts.moments.duePrompt.confirm", { amount: formatCurrency(logAmount) })}
             </Text>
           </TouchableOpacity>
 
@@ -91,11 +92,11 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
             onPress={() => onDismissForMonth(debt.id)}
             activeOpacity={0.85}
           >
-            <Text style={styles.secondaryBtnText}>Not yet this month</Text>
+            <Text style={styles.secondaryBtnText}>{t("debts.moments.duePrompt.notYet")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.textBtn} onPress={onClose} activeOpacity={0.7}>
-            <Text style={styles.textBtnLabel}>Remind me later</Text>
+            <Text style={styles.textBtnLabel}>{t("debts.moments.duePrompt.later")}</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -3,7 +3,7 @@
  * File: src/screens/profile/AppearanceSection.tsx
  *
  * The APPEARANCE card (theme, design style, ambient backgrounds, layout
- * density, text size, language) and its OptionPickerModal pickers. The
+ * density, text size) and its OptionPickerModal pickers. The
  * theme picker's visibility stays in ProfileScreen because the feature
  * spotlight deep link (openSection: "theme") opens it from there; the other
  * pickers are local. Also registers the coachmark anchor for the appearance
@@ -25,8 +25,6 @@ import { useBackgroundEffects } from "../../theme/BackgroundEffectsProvider";
 import { useSurfaceStyle } from "../../theme/SurfaceStyleProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useCoachmarkAnchor } from "../../onboarding/CoachmarkAnchorContext";
-import { useLanguage, type LanguageOption } from "../../i18n/LanguageProvider";
-import { LANGUAGE_NATIVE_NAMES } from "../../i18n/pickLanguage";
 import { en } from "../../i18n/locales/en";
 import { useProfileStyles } from "./profileStyles";
 
@@ -71,12 +69,6 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
     textSizePresets,
     setTextSizeId,
   } = useDensity();
-  const {
-    languageId,
-    resolvedLanguage,
-    options: languageOptions,
-    setLanguageId,
-  } = useLanguage();
   const styles = useProfileStyles(tokens, colors);
   const anchorAppearance = useCoachmarkAnchor("profile-appearance-card", {
     scrollRef,
@@ -85,7 +77,6 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
   const [showSurfaceStyleModal, setShowSurfaceStyleModal] = useState(false);
   const [showDensityModal, setShowDensityModal] = useState(false);
   const [showTextSizeModal, setShowTextSizeModal] = useState(false);
-  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   /** Translated preset name/description, English preset text as fallback. */
   const presetText = useCallback(
@@ -100,17 +91,6 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
       const base = `appearance.${axis}.presets.${preset.id}` as "appearance.density.presets.compact";
       return { name: t(`${base}.name`), description: t(`${base}.description`) };
     },
-    [t],
-  );
-
-  const languageOptionText = useCallback(
-    (option: LanguageOption): { name: string; description: string } =>
-      option.id === "auto"
-        ? {
-            name: t("appearance.language.options.auto.name"),
-            description: t("appearance.language.options.auto.description"),
-          }
-        : { name: option.nativeName ?? option.id, description: "" },
     [t],
   );
 
@@ -149,13 +129,6 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
     [setTextSizeId],
   );
 
-  const handleLanguageSelect = useCallback(
-    async (option: LanguageOption) => {
-      await setLanguageId(option.id);
-    },
-    [setLanguageId],
-  );
-
   /** Get current theme display name */
   const currentTheme = presets.find((p) => p.id === themeId);
   const currentSurfaceStyle = surfaceStylePresets.find(
@@ -173,15 +146,6 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
   const textSizeName = currentTextSize
     ? presetText("textSize", currentTextSize).name
     : t("appearance.textSize.presets.default.name");
-  // "Automatic (Deutsch)" tells the user what auto resolved to; a fixed
-  // choice shows the language in its own name.
-  const languageName =
-    languageId === "auto"
-      ? t("appearance.language.autoWithResolved", {
-          language: LANGUAGE_NATIVE_NAMES[resolvedLanguage],
-        })
-      : LANGUAGE_NATIVE_NAMES[languageId];
-
   const glassDefaultTheme =
     storedSurfaceStyleId == null &&
     (themeId === "deep_space" || themeId === "deep_sea")
@@ -352,34 +316,6 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
             </Text>
           </TouchableOpacity>
 
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => setShowLanguageModal(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t("appearance.language.a11yLabel", { current: languageName })}
-            accessibilityHint={t("appearance.language.a11yHint")}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("appearance.language.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {languageName}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -552,50 +488,6 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
         }}
       />
 
-      {/* ── Language Selection Modal ── */}
-      <OptionPickerModal
-        visible={showLanguageModal}
-        title={t("appearance.language.pickerTitle")}
-        options={languageOptions}
-        keyOf={(option) => option.id}
-        isSelected={(option) => languageId === option.id}
-        onSelect={handleLanguageSelect}
-        onClose={() => setShowLanguageModal(false)}
-        accessibilityLabelOf={(option) => {
-          const text = languageOptionText(option);
-          return text.description ? `${text.name}. ${text.description}` : text.name;
-        }}
-        header={
-          <Text
-            style={[
-              styles.settingsRowSubtext,
-              { color: colors.textDim, marginBottom: 12 },
-            ]}
-          >
-            {t("appearance.language.note")}
-          </Text>
-        }
-        renderOption={(option) => {
-          const text = languageOptionText(option);
-          return (
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.themeOptionText, { color: colors.text }]}>
-                {text.name}
-              </Text>
-              {text.description ? (
-                <Text
-                  style={[
-                    styles.settingsRowSubtext,
-                    { color: colors.textDim, marginTop: 4 },
-                  ]}
-                >
-                  {text.description}
-                </Text>
-              ) : null}
-            </View>
-          );
-        }}
-      />
     </>
   );
 };

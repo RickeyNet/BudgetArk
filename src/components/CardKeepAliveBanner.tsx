@@ -19,6 +19,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Debt } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -35,8 +36,13 @@ interface CardKeepAliveBannerProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const formatDeadline = (deadline: Date): string =>
-  deadline.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const formatDeadline = (deadline: Date, locale: string): string => {
+  try {
+    return deadline.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  } catch {
+    return deadline.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+};
 
 const CardKeepAliveBanner: React.FC<CardKeepAliveBannerProps> = ({
   debts,
@@ -45,6 +51,7 @@ const CardKeepAliveBanner: React.FC<CardKeepAliveBannerProps> = ({
   onDismiss,
   style,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -57,24 +64,23 @@ const CardKeepAliveBanner: React.FC<CardKeepAliveBannerProps> = ({
 
   const summaryLine = useMemo(() => {
     if (!top) return "";
-    if (warnings.length === 1) return "1 card needs a small purchase soon";
-    return `${warnings.length} cards need a small purchase soon`;
-  }, [top, warnings.length]);
+    return t("debts.moments.keepAlive.summary", { count: warnings.length });
+  }, [t, top, warnings.length]);
 
   const nextLine = useMemo(() => {
     if (!top) return "";
-    const when = formatDeadline(top.deadline);
+    const when = formatDeadline(top.deadline, i18n.language);
     if (top.status === "overdue") {
-      return `${top.debt.name} · deadline passed (${when}) - use it soon`;
+      return t("debts.moments.keepAlive.overdue", { name: top.debt.name, when });
     }
     const days =
       top.daysUntil === 0
-        ? "today"
+        ? t("debts.moments.keepAlive.today")
         : top.daysUntil === 1
-          ? "tomorrow"
-          : `in ${top.daysUntil} days`;
-    return `${top.debt.name} · use by ${when} · ${days}`;
-  }, [top]);
+          ? t("debts.moments.keepAlive.tomorrow")
+          : t("debts.moments.keepAlive.inDays", { count: top.daysUntil });
+    return t("debts.moments.keepAlive.useBy", { name: top.debt.name, when, days });
+  }, [i18n.language, t, top]);
 
   if (!top) return null;
 
@@ -89,7 +95,7 @@ const CardKeepAliveBanner: React.FC<CardKeepAliveBannerProps> = ({
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
           <Text style={[styles.eyebrow, { color: isUrgent ? colors.warning : colors.accent }]}>
-            CARD KEEP-ALIVE
+            {t("debts.moments.keepAlive.eyebrow")}
           </Text>
           <Text style={styles.title}>{summaryLine}</Text>
         </View>
@@ -101,14 +107,12 @@ const CardKeepAliveBanner: React.FC<CardKeepAliveBannerProps> = ({
       </Text>
 
       <View style={styles.footerRow}>
-        <Text style={styles.hint}>
-          Idle cards can be closed by their issuer
-        </Text>
+        <Text style={styles.hint}>{t("debts.moments.keepAlive.hint")}</Text>
         <TouchableOpacity
           onPress={() => onDismiss(top.debt)}
           hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
         >
-          <Text style={styles.laterAction}>Later</Text>
+          <Text style={styles.laterAction}>{t("debts.moments.keepAlive.later")}</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>

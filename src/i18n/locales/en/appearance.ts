@@ -3,7 +3,7 @@
  * File: src/i18n/locales/en/appearance.ts
  *
  * The APPEARANCE card and its pickers (theme, design style, ambient
- * backgrounds, density, text size, language). Preset names/descriptions
+ * backgrounds, density, text size). Preset names/descriptions
  * are keyed by the preset ID so the section can translate a preset it only
  * knows by id; theme names (The Ark, Forest Gold, ...) are proper nouns and
  * deliberately stay untranslated.
@@ -51,20 +51,5 @@ export const appearance = {
       large: { name: "Large", description: "Bigger text for easier reading." },
       xlarge: { name: "Extra Large", description: "Largest text - maximum readability." },
     },
-  },
-  language: {
-    label: "Language",
-    pickerTitle: "Language",
-    a11yLabel: "Language, currently {{current}}",
-    a11yHint: "Opens the app language options",
-    /** Shown as the subtext when "Automatic" is selected. */
-    autoWithResolved: "Automatic ({{language}})",
-    options: {
-      auto: {
-        name: "Automatic",
-        description: "Follow the phone's language. Falls back to English when the phone language isn't available yet.",
-      },
-    },
-    note: "Some content - lessons, the US tax tools, and release notes - is still English only.",
   },
 } as const;

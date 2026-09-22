@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import type { Debt } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -49,6 +50,7 @@ const DebtPaymentCelebrationModal: React.FC<DebtPaymentCelebrationModalProps> = 
   tipNudge = null,
   onTipJar,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const insets = useSafeAreaInsets();
@@ -66,14 +68,14 @@ const DebtPaymentCelebrationModal: React.FC<DebtPaymentCelebrationModalProps> = 
         <ConfettiBurst active={visible} />
         <View style={[styles.card, { marginBottom: Math.max(insets.bottom, 16) }]}>
           <Text style={styles.emoji}>🎉</Text>
-          <Text style={styles.kicker}>PAYMENT LOGGED</Text>
-          <Text style={styles.title}>Nice work</Text>
+          <Text style={styles.kicker}>{t("debts.moments.payment.kicker")}</Text>
+          <Text style={styles.title}>{t("debts.moments.payment.title")}</Text>
           <Text style={styles.subtitle}>
-            {formatCurrency(amount)} logged toward {debt.name}.
+            {t("debts.moments.payment.subtitle", { amount: formatCurrency(amount), name: debt.name })}
           </Text>
 
           <View style={[styles.balanceCard, { borderColor: colors.cardBorder }]}>
-            <Text style={styles.balanceLabel}>BALANCE NOW</Text>
+            <Text style={styles.balanceLabel}>{t("debts.moments.payment.balanceNow")}</Text>
             <Text style={styles.balanceValue}>{formatCurrency(debt.balance)}</Text>
           </View>
 
@@ -87,7 +89,7 @@ const DebtPaymentCelebrationModal: React.FC<DebtPaymentCelebrationModalProps> = 
             activeOpacity={0.85}
           >
             <Text style={[styles.buttonText, { color: colors.accentButtonText }]}>
-              Keep Going
+              {t("debts.moments.payment.keepGoing")}
             </Text>
           </TouchableOpacity>
         </View>
