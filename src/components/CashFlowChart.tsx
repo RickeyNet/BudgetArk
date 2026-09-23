@@ -5,11 +5,13 @@
  * Monthly income-vs-expense grouped bars with a "net wick" connecting the
  * two tops and a net trend line across months - the candlestick-style cash
  * flow panel from the ui concept. Presentational only; the caller derives
- * the monthly series.
+ * the monthly series. Dragging a finger across the chart reads one month
+ * (income / expenses / net) in place of the subtitle.
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
+  PanResponder,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -28,6 +30,7 @@ import { useTranslation } from "react-i18next";
 import type { ThemeColors } from "../theme/themes";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
+import { scrubIndexForX } from "../utils/chartScrub";
 
 export type CashFlowPoint = {
   label: string;
@@ -56,6 +59,8 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = Math.max(260, Math.min(340, windowWidth - 64));
+  /** Index of the month under a finger while scrubbing. */
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
 
   const model = useMemo(() => {
     if (data.length === 0) return null;
@@ -77,6 +82,8 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
       const expenseY = toY(d.expense);
       return {
         label: d.label,
+        income: d.income,
+        expense: d.expense,
         cx,
         incomeX: cx - barW - gap / 2,
         expenseX: cx + gap / 2,
@@ -92,8 +99,39 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
       .map((g, i) => `${i === 0 ? "M" : "L"}${g.cx},${g.netY}`)
       .join(" ");
 
-    return { groups, baseY, ceil, netPath };
+    return { groups, baseY, ceil, netPath, groupW };
   }, [data, chartWidth]);
+
+  const groupCount = model?.groups.length ?? 0;
+  const groupW = model?.groupW ?? 0;
+  const panResponder = useMemo(() => {
+    // Group centres sit at groupW * (i + 0.5), i.e. evenly spaced across
+    // (chartWidth - groupW) starting at groupW / 2 - the shared helper's
+    // "padded, evenly spaced" model, so the nearest centre wins.
+    const indexAt = (x: number) =>
+      scrubIndexForX(x, chartWidth - groupW, groupCount, groupW / 2);
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => groupCount > 0,
+      onMoveShouldSetPanResponder: () => groupCount > 0,
+      // Keep the gesture so the Bridge scroll view cannot steal a scrub that
+      // drifts vertically.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (event) => setScrubIndex(indexAt(event.nativeEvent.locationX)),
+      onPanResponderMove: (event) => setScrubIndex(indexAt(event.nativeEvent.locationX)),
+      onPanResponderRelease: () => setScrubIndex(null),
+      onPanResponderTerminate: () => setScrubIndex(null),
+    });
+  }, [chartWidth, groupCount, groupW]);
+
+  const scrubbed = model && scrubIndex != null ? (model.groups[scrubIndex] ?? null) : null;
+  const scrubText = scrubbed
+    ? t("bridge.reports.cashFlowChart.scrub", {
+        label: scrubbed.label,
+        income: formatCompactCurrency(scrubbed.income),
+        expense: formatCompactCurrency(scrubbed.expense),
+        net: formatCompactCurrency(scrubbed.income - scrubbed.expense),
+      })
+    : null;
 
   return (
     <View style={styles.card}>
@@ -101,7 +139,9 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.title}>{t("bridge.reports.cashFlowChart.title")}</Text>
-          <Text style={styles.subtitle}>{t("bridge.reports.cashFlowChart.subtitle")}</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {scrubText ?? t("bridge.reports.cashFlowChart.subtitle")}
+          </Text>
         </View>
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
@@ -117,6 +157,12 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
 
       {model ? (
         <View style={styles.chartWrap}>
+          <View
+            style={{ width: chartWidth, height: H }}
+            accessible
+            accessibilityLabel={t("bridge.reports.cashFlowChart.chartA11y")}
+            {...panResponder.panHandlers}
+          >
           <Svg width={chartWidth} height={H}>
             <Defs>
               <LinearGradient id="cfIncome" x1="0" y1="0" x2="0" y2="1">
@@ -197,16 +243,38 @@ const CashFlowChart: React.FC<CashFlowChartProps> = ({
               fill="none"
               opacity={0.5}
             />
-            {model.groups.map((g) => (
-              <Circle
-                key={`${g.label}-net`}
-                cx={g.cx}
-                cy={g.netY}
-                r={2}
-                fill={colors.accent}
-              />
-            ))}
+            {scrubbed ? (
+              <>
+                <Rect
+                  x={scrubbed.cx - model.groupW / 2}
+                  y={PAD_T}
+                  width={model.groupW}
+                  height={CHART_H}
+                  fill={colors.accent}
+                  opacity={0.08}
+                />
+                <Line
+                  x1={scrubbed.cx}
+                  y1={PAD_T}
+                  x2={scrubbed.cx}
+                  y2={model.baseY}
+                  stroke={colors.textDim}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  opacity={0.8}
+                />
+                <Circle
+                  cx={scrubbed.cx}
+                  cy={scrubbed.netY}
+                  r={4.5}
+                  fill={colors.card}
+                  stroke={colors.accent}
+                  strokeWidth={2}
+                />
+              </>
+            ) : null}
           </Svg>
+          </View>
           <View style={[styles.xLabels, { width: chartWidth }]}>
             {model.groups.map((g) => (
               <Text key={g.label} style={styles.xLabel}>

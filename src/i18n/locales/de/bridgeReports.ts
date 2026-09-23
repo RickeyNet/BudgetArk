@@ -68,6 +68,8 @@ export const bridgeReports: Localized<typeof en> = {
     subtitle: "Einnahmen vs. Ausgaben",
     legendIn: "Ein",
     legendOut: "Aus",
+    scrub: "{{label}} · Ein {{income}} · Aus {{expense}} · Netto {{net}}",
+    chartA11y: "Cashflow-Diagramm. Fahr darüber, um Einnahmen, Ausgaben und Netto eines Monats zu lesen.",
     empty: "Erfasse ein paar Monate Einnahmen und Ausgaben, um den Cashflow zu sehen.",
   },
   trackingStrip: {

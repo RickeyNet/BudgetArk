@@ -70,6 +70,8 @@ export const bridgeReports: LocalizedPlural<typeof en> = {
     subtitle: "Доходи та витрати",
     legendIn: "Надходження",
     legendOut: "Витрати",
+    scrub: "{{label}} · Надходження {{income}} · Витрати {{expense}} · Підсумок {{net}}",
+    chartA11y: "Графік грошового потоку. Проведи по ньому, щоб дізнатися доходи, витрати й підсумок за місяць.",
     empty: "Додай кілька місяців доходів і витрат, щоб побачити грошовий потік.",
   },
   trackingStrip: {

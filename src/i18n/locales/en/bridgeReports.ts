@@ -66,6 +66,8 @@ export const bridgeReports = {
     subtitle: "Income vs Expenses",
     legendIn: "In",
     legendOut: "Out",
+    scrub: "{{label}} · In {{income}} · Out {{expense}} · Net {{net}}",
+    chartA11y: "Cash flow chart. Drag along it to read a month's income, expenses and net.",
     empty: "Add a few months of income and expenses to see cash flow.",
   },
   trackingStrip: {

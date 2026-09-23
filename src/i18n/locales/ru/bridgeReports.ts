@@ -70,6 +70,8 @@ export const bridgeReports: LocalizedPlural<typeof en> = {
     subtitle: "Доходы и расходы",
     legendIn: "Приход",
     legendOut: "Расход",
+    scrub: "{{label}} · Приход {{income}} · Расход {{expense}} · Итог {{net}}",
+    chartA11y: "График денежного потока. Проведи по нему, чтобы узнать доходы, расходы и итог за месяц.",
     empty: "Добавь несколько месяцев доходов и расходов, чтобы увидеть денежный поток.",
   },
   trackingStrip: {
