@@ -21,12 +21,16 @@ describe("pickSupportedLanguage", () => {
     expect(pickSupportedLanguage(["de_CH"])).toBe("de");
     expect(pickSupportedLanguage(["DE"])).toBe("de");
     expect(pickSupportedLanguage([" de "])).toBe("de");
+    expect(pickSupportedLanguage(["ru-RU"])).toBe("ru");
+    expect(pickSupportedLanguage(["uk-UA"])).toBe("uk");
+    expect(pickSupportedLanguage(["uk"])).toBe("uk");
     expect(pickSupportedLanguage(["en-GB"])).toBe("en");
   });
 
   it("honours the phone's preference order, skipping unsupported languages", () => {
     expect(pickSupportedLanguage(["fr-FR", "de-DE", "en-US"])).toBe("de");
-    expect(pickSupportedLanguage(["uk-UA", "ru-RU", "en-US"])).toBe("en");
+    expect(pickSupportedLanguage(["uk-UA", "ru-RU", "en-US"])).toBe("uk");
+    expect(pickSupportedLanguage(["ja-JP", "ru-RU", "en-US"])).toBe("ru");
   });
 
   it("falls back to English when nothing matches or the list is empty", () => {
@@ -50,7 +54,9 @@ describe("type guards", () => {
     expect(isSupportedLanguage("en")).toBe(true);
     expect(isSupportedLanguage("de")).toBe(true);
     expect(isSupportedLanguage("auto")).toBe(false);
-    expect(isSupportedLanguage("ru")).toBe(false);
+    expect(isSupportedLanguage("ru")).toBe(true);
+    expect(isSupportedLanguage("uk")).toBe(true);
+    expect(isSupportedLanguage("pl")).toBe(false);
     expect(isSupportedLanguage(null)).toBe(false);
     expect(isAppLanguageId("auto")).toBe(true);
     expect(isAppLanguageId("de")).toBe(true);

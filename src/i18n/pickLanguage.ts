@@ -12,7 +12,7 @@
  * tag resolves to English rather than throwing or rendering raw keys.
  */
 
-export const SUPPORTED_LANGUAGES = ["en", "de"] as const;
+export const SUPPORTED_LANGUAGES = ["en", "de", "ru", "uk"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 export const DEFAULT_LANGUAGE: SupportedLanguage = "en";
@@ -25,6 +25,8 @@ export const DEFAULT_APP_LANGUAGE_ID: AppLanguageId = "auto";
 export const LANGUAGE_NATIVE_NAMES: Readonly<Record<SupportedLanguage, string>> = {
   en: "English",
   de: "Deutsch",
+  ru: "Русский",
+  uk: "Українська",
 };
 
 export const isSupportedLanguage = (value: unknown): value is SupportedLanguage =>

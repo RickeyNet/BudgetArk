@@ -116,3 +116,120 @@ survives.
 | On / Off | Ein / Aus |
 | Learn more | Mehr erfahren |
 | Got it | Verstanden |
+
+## Russian and Ukrainian
+
+Both use CLDR plurals one / few / many / other: every English `x_one` needs
+`x_one`, `x_few`, `x_many` AND `x_other` (typed `LocalizedPlural<typeof en>`
+in `locales/types.ts`; the parity test checks it). `_one` = 1, 21, 31...;
+`_few` = 2-4, 22-24...; `_many` = 0, 5-20, 25-30...; `_other` = fractions.
+Write all four even when two coincide.
+
+Tone: informal **ты** / **ти**, matching the German "du". Imperatives for
+buttons. Ukrainian is written as Ukrainian, never as transliterated Russian:
+use рахунок / картка / витрати / застосунок / налаштування, apostrophes
+(зв'язати), і/ї/є correctly. Keep both short - Cyrillic runs long on chips
+and tab labels. Product names (SimpleFIN, Teller, YNAB, Mint, Monarch,
+Robinhood, Amazon, BudgetArk), theme names and category ids never change.
+Currency and number formatting come from the code; only words move.
+
+| English | Russian | Ukrainian |
+| --- | --- | --- |
+| Debts (tab) | Долги | Борги |
+| Budget (tab) | Бюджет | Бюджет |
+| Bridge (tab, the ship's bridge) | Мостик | Місток |
+| Charts (tab, nautical charts) | Карты | Карти |
+| Profile (tab) | Профиль | Профіль |
+| Ark (the app metaphor) | Ковчег | Ковчег |
+| debt / debts | долг / долги | борг / борги |
+| payment | платёж | платіж |
+| budget entry / entry | запись | запис |
+| expense / income | расход / доход | витрата / дохід |
+| recurring (bill) | регулярный (регулярный счёт) | регулярний (регулярний рахунок) |
+| bill | счёт | рахунок |
+| category | категория | категорія |
+| spending limit / limit | лимит расходов / лимит | ліміт витрат / ліміт |
+| account | счёт | рахунок |
+| asset account | счёт активов | рахунок активів |
+| checking / savings account | текущий / сберегательный счёт | поточний / ощадний рахунок |
+| credit card | кредитная карта | кредитна картка |
+| balance | баланс | баланс |
+| net worth | чистые активы | чисті активи |
+| emergency fund | резервный фонд | резервний фонд |
+| savings goal | цель накоплений | ціль заощаджень |
+| milestone | этап | етап |
+| payoff strategy (avalanche / snowball) | стратегия погашения (лавина / снежный ком) | стратегія погашення (лавина / снігова куля) |
+| interest rate / APR | процентная ставка / годовая ставка | відсоткова ставка / річна ставка |
+| minimum payment | минимальный платёж | мінімальний платіж |
+| partner sync | синхронизация с партнёром | синхронізація з партнером |
+| pair / paired / unpair | связать / связано / отвязать | зв'язати / зв'язано / від'єднати |
+| sync now | Синхронизировать | Синхронізувати |
+| backup / back up | резервная копия / создать копию | резервна копія / створити копію |
+| restore | восстановить | відновити |
+| export / import | экспорт / импорт | експорт / імпорт |
+| reset all data | Сбросить все данные | Скинути всі дані |
+| receipt (photo) | чек | чек |
+| business expense | деловой расход | бізнес-витрата |
+| bank connection | подключение банка | підключення банку |
+| review inbox | Входящие на проверку | Вхідні на перевірку |
+| merchant | продавец | продавець |
+| achievement / badge | достижение / значок | досягнення / значок |
+| lesson | урок | урок |
+| streak | серия | серія |
+| privacy mode | режим приватности | режим приватності |
+| app lock / PIN | блокировка приложения / PIN | блокування застосунку / PIN |
+| notifications / reminder | уведомления / напоминание | сповіщення / нагадування |
+| release notes / what's new | что нового | що нового |
+| update (OTA) | обновление | оновлення |
+| tip jar | копилка для чаевых | скарбничка на чайові |
+| currency / exchange rate | валюта / курс валют | валюта / курс валют |
+| holdings (stocks) | ценные бумаги | цінні папери |
+| purchase planner / sinking fund | планировщик покупок / накопление на цель | планувальник покупок / накопичення на ціль |
+| take-home pay | зарплата на руки | зарплата на руки |
+| person / people | человек / люди | людина / люди |
+| safe to spend | Можно потратить | Можна витратити |
+| carry over / rollover | перенести / перенос | перенести / перенесення |
+| Done / Cancel / Save / Delete | Готово / Отмена / Сохранить / Удалить | Готово / Скасувати / Зберегти / Видалити |
+| On / Off | Вкл. / Выкл. | Увімк. / Вимк. |
+| Learn more / Got it | Подробнее / Понятно | Докладніше / Зрозуміло |
+| Keel / Hull / Deck / Supplies / Gather the animals / Anchor / Sail (milestones) | Киль / Корпус / Палуба / Припасы / Собрать животных / Якорь / Парус | Кіль / Корпус / Палуба / Припаси / Зібрати тварин / Якір / Вітрило |
+| Build Your Ark | Построй свой Ковчег | Побудуй свій Ковчег |
+| Ship's Log | Судовой журнал | Судновий журнал |
+| Debt Tracker | Учёт долгов | Облік боргів |
+| Live Holdings | Живые котировки | Живі котирування |
+| Quick Entry (widget) | Быстрая запись | Швидкий запис |
+| Owed to You / loan / lent | Тебе должны / заём / одолжено | Тобі винні / позика / позичено |
+| business / businesses | бизнес / Бизнесы | бізнес / Бізнеси |
+| custom category / built-in | своя категория / встроенная | власна категорія / вбудована |
+| bucket (50/30/20 group) | корзина | кошик |
+| Needs / Wants / Savings | Нужды / Желания / Сбережения | Потреби / Бажання / Заощадження |
+| transaction (bank) | операция | операція |
+| connection / provider | подключение / провайдер | підключення / провайдер |
+| map / mapping (accounts) | привязать / привязка | прив'язати / прив'язка |
+| merchant rule / auto-approve | правило продавца / автоодобрение | правило продавця / автосхвалення |
+| Approve / Skip (inbox) | Подтвердить / Пропустить | Підтвердити / Пропустити |
+| Insights | Аналитика | Аналітика |
+| Cash Flow / Monthly Review / Until Payday | Денежный поток / Итоги месяца / До зарплаты | Грошовий потік / Підсумки місяця / До зарплати |
+| Tracking reminders | Напоминания об учёте | Нагадування про облік |
+| automatic backups / Merge / Replace | автоматические копии / Объединить / Заменить | автоматичні копії / Об'єднати / Замінити |
+| Onboarding (guide) / feature tour | Знакомство / Тур по функциям | Знайомство / Тур функціями |
+| tip tiers (small / medium / generous) | Небольшие / Средние / Щедрые чаевые | Невеликі / Середні / Щедрі чайові |
+| NEW badge / Keep going | НОВОЕ / Продолжить | НОВЕ / Продовжити |
+| keep-alive watch (cards) | контроль активности | контроль активності |
+| Captain's Course / chapter | Курс капитана / глава | Курс капітана / розділ |
+| Subscription Detective / Personal Inflation | Детектив подписок / Личная инфляция | Детектив підписок / Особиста інфляція |
+| What-If tool | «А что, если» | «А що, якби» |
+| break-even / closing costs / lifetime interest | точка окупаемости / расходы на оформление / проценты за весь срок | точка окупності / витрати на оформлення / відсотки за весь термін |
+| filing status / head of household | статус подачи / глава семьи | статус подання / голова сім'ї |
+| Ambient backgrounds / Solid / Glass | Фоновые эффекты / Сплошной / Стекло | Фонові ефекти / Суцільний / Скло |
+| density Compact / Comfortable / Spacious | Компактная / Обычная / Просторная | Компактна / Звичайна / Простора |
+| categories: Grocery / Utilities / Giving / Other / Debt Payments | Продукты / Коммунальные / Пожертвования / Прочее / Платежи по долгам | Продукти / Комунальні / Пожертви / Інше / Платежі за боргами |
+| units: yr / mo / min / hr / ago | г. / мес / мин / ч / назад | р. / міс / хв / год / тому |
+| APR (card lines) / est. | % годовых / ≈ | % річних / ≈ |
+| Spending Pace | Темп трат | Темп витрат |
+| Purchase Plans / Plan a Purchase | Планы покупок / Планирование покупки | Плани покупок / Планування покупки |
+| Mine / Partner / Joint (debt owner) | Мои / Партнёра / Общие | Мої / Партнера / Спільні |
+| starter cushion | стартовая подушка | стартова подушка |
+| Log actual / Applies to bill / Always do this | Записать факт / Относится к счёту / Всегда так | Записати факт / Стосується рахунку / Завжди так |
+| net worth snapshot / starting balance | снимок чистых активов / начальный баланс | знімок чистих активів / початковий баланс |
+| high-yield (savings) account | накопительный счёт | накопичувальний рахунок |

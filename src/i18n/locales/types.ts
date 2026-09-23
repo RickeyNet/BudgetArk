@@ -15,3 +15,15 @@
 export type Localized<T> = {
   readonly [K in keyof T]: T[K] extends string ? string : Localized<T[K]>;
 };
+
+/**
+ * Languages whose CLDR cardinal plurals are one / few / many / other
+ * (Russian, Ukrainian). Every English `x_one` key expands to `x_one`,
+ * `x_few` and `x_many` (and `x_other` stays), so a fragment that forgets a
+ * form is a typecheck error, exactly like a missing key.
+ */
+export type LocalizedPlural<T> = {
+  readonly [K in keyof T as K extends `${infer B}_one`
+    ? `${B}_one` | `${B}_few` | `${B}_many`
+    : K]: T[K] extends string ? string : LocalizedPlural<T[K]>;
+};

@@ -8,11 +8,11 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
     version: "1.11.0",
-    title: "Willkommen an Bord",
+    title: "Welcome Aboard, in Your Language",
     releasedAt: "2026-09-22",
     highlights: [
-      "BudgetArk now speaks German. Every tab, every sheet, the onboarding, achievements, the feature tour, the setup guides and the check-in reminders have a full German translation. It follows your phone's language automatically; to override it, open Profile and pick a language right beside Currency. Lessons and the US tax tools stay in English for now, and they say so.",
-      "Search understands both languages: typing Lebensmittel finds your Grocery entries, and the English name keeps working. Your stored categories, exports and partner sync never change - only what you see on screen does.",
+      "BudgetArk now speaks German, Russian and Ukrainian. Every tab, every sheet, the onboarding, achievements, the feature tour, the setup guides and the check-in reminders are fully translated, with proper one / few / many plurals for Russian and Ukrainian. It follows your phone's language automatically; to override it, open Profile and pick a language right beside Currency. Lessons and the US tax tools stay in English for now, and they say so.",
+      "Search understands every language: typing Lebensmittel, Продукты or Продукти finds your Grocery entries, and the English name keeps working. Your stored categories, exports and partner sync never change - only what you see on screen does.",
       "This is a store update, not an over-the-air one: the language detection needs a native module, so it arrives with the 1.11.0 build from the App Store or Play Store.",
     ],
   },

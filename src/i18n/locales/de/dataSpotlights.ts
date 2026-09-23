@@ -12,9 +12,9 @@ import type { dataSpotlights as en } from "../en/dataSpotlights";
 
 export const dataSpotlights: Localized<typeof en> = {
   "german-language": {
-    title: "BudgetArk spricht Deutsch",
+    title: "BudgetArk spricht deine Sprache",
     blurb:
-      "Jeder Tab, jedes Sheet und jede Erinnerung gibt es jetzt auf Deutsch. Die Sprache folgt automatisch deinem Handy, oder du wählst sie selbst im Profil, direkt neben der Währung.",
+      "Jeder Tab, jedes Sheet und jede Erinnerung gibt es jetzt auf Deutsch, Russisch und Ukrainisch. Die Sprache folgt automatisch deinem Handy, oder du wählst sie selbst im Profil, direkt neben der Währung.",
     cta: "Sprache wählen",
   },
   "bill-fulfillment": {

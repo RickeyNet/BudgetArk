@@ -23,6 +23,8 @@ import { initReactI18next } from "react-i18next";
 import { getLocales } from "expo-localization";
 import { en } from "./locales/en";
 import { de } from "./locales/de";
+import { ru } from "./locales/ru";
+import { uk } from "./locales/uk";
 import {
   DEFAULT_LANGUAGE,
   pickSupportedLanguage,
@@ -42,12 +44,15 @@ export const getDeviceLanguageTags = (): string[] => {
 export const getDeviceLanguage = (): SupportedLanguage =>
   pickSupportedLanguage(getDeviceLanguageTags());
 
-// i18next's plural resolver needs Intl.PluralRules (Hermes ships it on both
-// platforms; without it every `count` key would silently fall back to the
-// `_other` form). Surface a missing implementation loudly in dev builds so
-// it is caught on the first device run rather than in a German review.
-if (__DEV__ && (typeof Intl === "undefined" || typeof Intl.PluralRules === "undefined")) {
-  console.warn("[i18n] Intl.PluralRules is unavailable - plural keys will not resolve correctly.");
+// i18next's plural resolver needs Intl.PluralRules. Without it, i18next
+// falls back to a one/other rule, which is wrong for Russian and Ukrainian
+// (one / few / many) and shows "1 entries" in English. Hermes' Intl does
+// not ship PluralRules on every version, so polyfill it when missing (the
+// polyfill is full CLDR, pure JS, and a no-op where the API exists).
+if (typeof Intl === "undefined" || typeof Intl.PluralRules === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("intl-pluralrules");
+  if (__DEV__) console.warn("[i18n] Intl.PluralRules polyfilled (missing on this runtime).");
 }
 
 // eslint-disable-next-line import/no-named-as-default-member -- i18next's documented API is `i18n.use(plugin).init(...)` on the default instance; react-i18next binds to that same instance.
@@ -55,6 +60,8 @@ void i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
     de: { translation: de },
+    ru: { translation: ru },
+    uk: { translation: uk },
   },
   // Start in the phone's language so the first paint is already right for
   // an "Automatic" user; LanguageProvider switches if a fixed choice is stored.
