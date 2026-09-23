@@ -60,7 +60,8 @@ export const bridgeReports: Localized<typeof en> = {
     sinceStart: "Seit Beginn",
     rangeChange: "Veränderung {{range}}",
     empty: "Die Aufzeichnung beginnt mit der ersten Momentaufnahme.",
-    footer: "Tägliche Momentaufnahmen. Der Verlauf beginnt jetzt.",
+    footer: "Tägliche Momentaufnahmen. Der Verlauf beginnt jetzt. Fahr mit dem Finger über die Linie, um den Wert eines Tages zu sehen.",
+    chartA11y: "Nettovermögen-Diagramm. Fahr darüber, um das Nettovermögen eines Tages zu lesen.",
   },
   cashFlowChart: {
     title: "Monatlicher Cashflow",

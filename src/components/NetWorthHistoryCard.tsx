@@ -8,7 +8,14 @@
  */
 
 import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import {
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -23,6 +30,7 @@ import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 import { useTranslation } from "react-i18next";
 import { formatDayLabel } from "../utils/dateFormat";
+import { scrubIndexForX } from "../utils/chartScrub";
 
 type NetWorthHistoryCardProps = {
   snapshots: NetWorthSnapshot[];
@@ -33,6 +41,13 @@ type NetWorthHistoryCardProps = {
   formatCompactCurrency: (value: number) => string;
   colors: ThemeColors;
 };
+
+const H = 182;
+const PAD_L = 50;
+const PAD_R = 12;
+const PAD_T = 12;
+const PAD_B = 28;
+const CHART_H = H - PAD_T - PAD_B;
 
 type RangeId = "7D" | "30D" | "ALL";
 
@@ -59,12 +74,16 @@ const formatAxisDay = (iso: string, locale: string): string => {
   }
 };
 
-const H = 182;
-const PAD_L = 50;
-const PAD_R = 12;
-const PAD_T = 12;
-const PAD_B = 28;
-const CHART_H = H - PAD_T - PAD_B;
+/** Full day label (with year) for the scrub readout. */
+const formatScrubDay = (iso: string, locale: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return formatDayLabel(iso);
+  try {
+    return date.toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return formatDayLabel(iso);
+  }
+};
 
 
 const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
@@ -79,6 +98,8 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const [rangeId, setRangeId] = useState<RangeId>("30D");
+  /** Index into the plotted points while a finger is on the chart. */
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const { width: windowWidth } = useWindowDimensions();
   const chartWidth = Math.max(240, Math.min(320, windowWidth - 68));
   const chartInnerWidth = chartWidth - PAD_L - PAD_R;
@@ -159,6 +180,34 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
     };
   }, [chartInnerWidth, plottedSnapshots]);
 
+  const pointCount = chartModel?.points.length ?? 0;
+  const panResponder = useMemo(() => {
+    const indexAt = (x: number) => scrubIndexForX(x, chartInnerWidth, pointCount, PAD_L);
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => pointCount > 0,
+      onMoveShouldSetPanResponder: () => pointCount > 0,
+      // Keep the gesture once we have it so the parent ScrollView does not
+      // steal a horizontal scrub that drifts vertically.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (event) => setScrubIndex(indexAt(event.nativeEvent.locationX)),
+      onPanResponderMove: (event) => setScrubIndex(indexAt(event.nativeEvent.locationX)),
+      onPanResponderRelease: () => setScrubIndex(null),
+      onPanResponderTerminate: () => setScrubIndex(null),
+    });
+  }, [chartInnerWidth, pointCount]);
+
+  const scrubbed =
+    chartModel && scrubIndex != null ? (chartModel.points[scrubIndex] ?? null) : null;
+  const scrubLabel = scrubbed ? formatCompactCurrency(scrubbed.snapshot.netWorth) : "";
+  // SVG cannot measure text, so estimate the label width to keep it inside
+  // the plot area when the finger is near either edge.
+  const scrubLabelHalf = Math.max(14, scrubLabel.length * 3.3);
+  const scrubLabelX = scrubbed
+    ? Math.min(chartWidth - PAD_R - scrubLabelHalf, Math.max(PAD_L + scrubLabelHalf, scrubbed.x))
+    : 0;
+  const scrubLabelAbove = scrubbed ? scrubbed.y - 12 >= PAD_T + 8 : true;
+  const scrubLabelY = scrubbed ? (scrubLabelAbove ? scrubbed.y - 12 : scrubbed.y + 18) : 0;
+
   const trend = useMemo(() => {
     if (visibleSnapshots.length === 0) {
       return { amount: 0, label: t("bridge.reports.history.change") };
@@ -224,17 +273,28 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
           </Text>
         </View>
 
-        <Text style={[styles.netWorthValue, { color: valueColor }]}>
-          {netWorth >= 0 ? "" : "-"}
-          {formatCurrency(Math.abs(netWorth))}
+        <Text
+          style={[
+            styles.netWorthValue,
+            { color: scrubbed ? (scrubbed.snapshot.netWorth >= 0 ? colors.success : colors.danger) : valueColor },
+          ]}
+        >
+          {(scrubbed ? scrubbed.snapshot.netWorth : netWorth) >= 0 ? "" : "-"}
+          {formatCurrency(Math.abs(scrubbed ? scrubbed.snapshot.netWorth : netWorth))}
         </Text>
       </View>
 
       <View style={styles.metaRow}>
-        <Text style={[styles.trendText, { color: trend.amount >= 0 ? colors.success : colors.danger }]}>
-          {trend.label} {trend.amount >= 0 ? "+" : "-"}
-          {formatCurrency(Math.abs(trend.amount))}
-        </Text>
+        {scrubbed ? (
+          <Text style={[styles.trendText, { color: colors.text }]} numberOfLines={1}>
+            {formatScrubDay(scrubbed.snapshot.capturedAt, locale)}
+          </Text>
+        ) : (
+          <Text style={[styles.trendText, { color: trend.amount >= 0 ? colors.success : colors.danger }]}>
+            {trend.label} {trend.amount >= 0 ? "+" : "-"}
+            {formatCurrency(Math.abs(trend.amount))}
+          </Text>
+        )}
         <View style={styles.rangeRow}>
           {RANGE_OPTIONS.map((option) => {
             const isSelected = rangeId === option.id;
@@ -267,6 +327,12 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
 
       {chartModel ? (
         <View style={styles.chartWrap}>
+          <View
+            style={{ width: chartWidth, height: H }}
+            accessible
+            accessibilityLabel={t("bridge.reports.history.chartA11y")}
+            {...panResponder.panHandlers}
+          >
           <Svg width={chartWidth} height={H} viewBox={`0 0 ${chartWidth} ${H}`}>
             <Defs>
               <LinearGradient id="netWorthArea" x1="0" y1="0" x2="0" y2="1">
@@ -310,20 +376,35 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
             <Path d={chartModel.areaPath} fill="url(#netWorthArea)" />
             <Path d={chartModel.linePath} stroke={chartColor} strokeWidth={3} fill="none" />
 
-            {chartModel.points.map((point, index) => {
-              const isLast = index === chartModel.points.length - 1;
-              return (
-                <Circle
-                  key={`${point.snapshot.dayKey}-${index}`}
-                  cx={point.x}
-                  cy={point.y}
-                  r={isLast ? 4 : 2.8}
-                  fill={isLast ? chartColor : colors.card}
-                  stroke={chartColor}
-                  strokeWidth={2}
+            {scrubbed ? (
+              <>
+                <Path
+                  d={`M${scrubbed.x},${PAD_T} L${scrubbed.x},${H - PAD_B}`}
+                  stroke={colors.textDim}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  opacity={0.8}
                 />
-              );
-            })}
+                <Circle
+                  cx={scrubbed.x}
+                  cy={scrubbed.y}
+                  r={5}
+                  fill={colors.card}
+                  stroke={chartColor}
+                  strokeWidth={2.5}
+                />
+                <SvgText
+                  x={scrubLabelX}
+                  y={scrubLabelY}
+                  fill={colors.text}
+                  fontSize={11}
+                  fontWeight="700"
+                  textAnchor="middle"
+                >
+                  {scrubLabel}
+                </SvgText>
+              </>
+            ) : null}
 
             {xLabels.map((label) => (
               <SvgText
@@ -338,6 +419,7 @@ const NetWorthHistoryCard: React.FC<NetWorthHistoryCardProps> = ({
               </SvgText>
             ))}
           </Svg>
+          </View>
         </View>
       ) : (
         <View style={styles.emptyWrap}>

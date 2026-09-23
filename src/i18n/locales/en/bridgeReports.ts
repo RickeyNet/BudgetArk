@@ -58,7 +58,8 @@ export const bridgeReports = {
     sinceStart: "Since start",
     rangeChange: "{{range}} change",
     empty: "Tracking starts when first snapshot saves.",
-    footer: "Daily snapshots. History starts now.",
+    footer: "Daily snapshots. History starts now. Drag along the line to see a day's value.",
+    chartA11y: "Net worth chart. Drag along it to read a day's net worth.",
   },
   cashFlowChart: {
     title: "Monthly Cash Flow",
