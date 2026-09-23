@@ -17,7 +17,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useTheme } from "../theme/ThemeProvider";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
@@ -28,7 +31,6 @@ import {
   buildSavingsGrowthMarks,
   calcDebtRedirectImpact,
   calcRedirectSliderMax,
-  formatWhatIfMonths,
   WHAT_IF_DEFAULT_RETURN_RATE,
   WHAT_IF_LOOKBACK_MONTHS,
 } from "../utils/whatIfSpending";
@@ -36,6 +38,20 @@ import type { CategorySpendOption } from "../utils/whatIfSpending";
 import type { PayoffMethod } from "../utils/calculations";
 import { getCategoryIcon } from "../data/categoryIcons";
 import type { CustomCategory, Debt } from "../types";
+
+/**
+ * Localized twin of utils/whatIfSpending.formatWhatIfMonths ("1 yr 2 mo").
+ * Lives here so the pure util stays locale-free.
+ */
+const formatMonths = (t: TFunction, months: number): string => {
+  if (!Number.isFinite(months)) return t("charts.insights.whatIf.months.notSolvable");
+  if (months <= 0) return t("charts.insights.whatIf.months.zero");
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  if (years <= 0) return t("charts.insights.whatIf.months.mo", { count: remainingMonths });
+  if (remainingMonths <= 0) return t("charts.insights.whatIf.months.yr", { count: years });
+  return t("charts.insights.whatIf.months.yrMo", { years, months: remainingMonths });
+};
 
 interface WhatIfSpendingCardProps {
   /** Per-category monthly averages from buildCategorySpendOptions. */
@@ -50,6 +66,7 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
   debts,
   customCategories,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -125,8 +142,8 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
         {/* ── "What If I Stopped Spending on X" Tool ── */}
         <TouchableOpacity style={tool.toolHeader} onPress={toggleWhatIf} activeOpacity={0.7}>
           <View>
-            <Text style={tool.toolTitle}>What If I Stopped Spending on…</Text>
-            <Text style={tool.toolHint}>Redirect a category toward debt or savings</Text>
+            <Text style={tool.toolTitle}>{t("charts.insights.whatIf.title")}</Text>
+            <Text style={tool.toolHint}>{t("charts.insights.whatIf.hint")}</Text>
           </View>
           <Text style={tool.toolChevron}>{whatIfOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
@@ -135,17 +152,15 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
           <View style={tool.toolBody}>
             {options.length === 0 ? (
               <View style={tool.efCard}>
-                <Text style={tool.refiEmptyText}>
-                  Log a few months of expenses in the Budget tab, then come back to see what redirecting a category could do.
-                </Text>
+                <Text style={tool.refiEmptyText}>{t("charts.insights.whatIf.empty")}</Text>
               </View>
             ) : (
               <>
                 {/* Category picker */}
                 <View style={tool.efCard}>
-                  <Text style={tool.efSectionTitle}>Pick a category</Text>
+                  <Text style={tool.efSectionTitle}>{t("charts.insights.whatIf.pickCategory")}</Text>
                   <Text style={tool.efAutoHint}>
-                    Monthly averages from your last {WHAT_IF_LOOKBACK_MONTHS} months of entries
+                    {t("charts.insights.whatIf.averagesHint", { months: WHAT_IF_LOOKBACK_MONTHS })}
                   </Text>
                   <View style={tool.chipWrap}>
                     {options.map((option) => {
@@ -163,7 +178,7 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                               isSelected && tool.chipTextActive,
                             ]}
                           >
-                            {getCategoryIcon(option.category, customCategories)} {option.category}
+                            {getCategoryIcon(option.category, customCategories)} {categoryLabel(t, option.category)}
                           </Text>
                           <Text
                             style={[
@@ -171,7 +186,7 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                               isSelected && tool.chipTextActive,
                             ]}
                           >
-                            {formatCurrency(option.monthlyAverage)}/mo
+                            {t("charts.insights.whatIf.perMonth", { amount: formatCurrency(option.monthlyAverage) })}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -184,7 +199,7 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                     {/* Redirect amount */}
                     <View style={tool.slidersCard}>
                       <SliderRow
-                        label="Monthly Amount to Redirect"
+                        label={t("charts.insights.whatIf.sliderLabel")}
                         value={whatIfAmount}
                         min={0}
                         max={whatIfSliderMax}
@@ -198,7 +213,10 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                         }
                       >
                         <Text style={tool.efAutoHint}>
-                          You average {formatCurrency(selectedWhatIfOption.monthlyAverage)}/mo on {selectedWhatIfOption.category}
+                          {t("charts.insights.whatIf.youAverage", {
+                            amount: formatCurrency(selectedWhatIfOption.monthlyAverage),
+                            category: categoryLabel(t, selectedWhatIfOption.category),
+                          })}
                         </Text>
                       </SliderRow>
                     </View>
@@ -206,7 +224,7 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                     {/* Debt payoff impact */}
                     {whatIfDebtImpact && (
                       <View style={tool.efCard}>
-                        <Text style={tool.efSectionTitle}>Put it toward debt</Text>
+                        <Text style={tool.efSectionTitle}>{t("charts.insights.whatIf.towardDebt")}</Text>
                         <View style={styles.whatIfMethodRow}>
                           {(["avalanche", "snowball"] as const).map((method) => (
                             <TouchableOpacity
@@ -223,38 +241,42 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                                   whatIfMethod === method && styles.whatIfMethodBtnTextActive,
                                 ]}
                               >
-                                {method === "avalanche" ? "Avalanche" : "Snowball"}
+                                {t(`charts.insights.whatIf.methods.${method}`)}
                               </Text>
                             </TouchableOpacity>
                           ))}
                         </View>
                         <View style={tool.refiSummaryRow}>
                           <View style={tool.refiSummaryItem}>
-                            <Text style={tool.refiSummaryLabel}>Current plan</Text>
+                            <Text style={tool.refiSummaryLabel}>{t("charts.insights.whatIf.currentPlan")}</Text>
                             <Text style={tool.refiSummaryValue}>
-                              {formatWhatIfMonths(whatIfDebtImpact.baseline.monthsToPayoff)}
+                              {formatMonths(t, whatIfDebtImpact.baseline.monthsToPayoff)}
                             </Text>
                           </View>
                           <View style={tool.refiSummaryItem}>
-                            <Text style={tool.refiSummaryLabel}>Redirecting</Text>
+                            <Text style={tool.refiSummaryLabel}>{t("charts.insights.whatIf.redirecting")}</Text>
                             <Text style={[tool.refiSummaryValue, { color: colors.accent }]}>
-                              {formatWhatIfMonths(whatIfDebtImpact.redirect.monthsToPayoff)}
+                              {formatMonths(t, whatIfDebtImpact.redirect.monthsToPayoff)}
                             </Text>
                           </View>
                         </View>
                         {whatIfDebtImpact.monthsSaved === Infinity ? (
                           <Text style={[tool.efTimeEstimate, { color: colors.success }]}>
-                            This extra payment turns an unpayable plan into a real payoff date.
+                            {t("charts.insights.whatIf.unpayableFixed")}
                           </Text>
                         ) : !whatIfDebtImpact.redirect.isPayoffPossible ? (
                           <Text style={tool.efTimeEstimate}>
-                            Minimums plus this extra still don&apos;t cover the interest - try a larger amount.
+                            {t("charts.insights.whatIf.stillUnpayable")}
                           </Text>
                         ) : whatIfDebtImpact.monthsSaved > 0 ? (
                           <Text style={[tool.efTimeEstimate, { color: colors.success }]}>
-                            Debt-free {formatWhatIfMonths(whatIfDebtImpact.monthsSaved)} sooner
+                            {t("charts.insights.whatIf.sooner", {
+                              duration: formatMonths(t, whatIfDebtImpact.monthsSaved),
+                            })}
                             {whatIfDebtImpact.interestSaved >= 1
-                              ? ` · saves ${formatCurrency(Math.round(whatIfDebtImpact.interestSaved))} in interest`
+                              ? t("charts.insights.whatIf.savesInterest", {
+                                  amount: formatCurrency(Math.round(whatIfDebtImpact.interestSaved)),
+                                })
                               : ""}
                           </Text>
                         ) : null}
@@ -264,17 +286,17 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                     {/* Savings growth */}
                     <View style={tool.efCard}>
                       <Text style={tool.efSectionTitle}>
-                        {whatIfDebtImpact ? "…or grow it in savings" : "Grow it in savings"}
+                        {whatIfDebtImpact
+                          ? t("charts.insights.whatIf.growSavingsOr")
+                          : t("charts.insights.whatIf.growSavings")}
                       </Text>
                       {whatIfActiveDebts.length === 0 && (
-                        <Text style={tool.efAutoHint}>
-                          No active debts to pay down - showing savings growth only.
-                        </Text>
+                        <Text style={tool.efAutoHint}>{t("charts.insights.whatIf.noDebts")}</Text>
                       )}
                       {whatIfSavingsMarks.map((mark) => (
                         <View key={mark.years} style={styles.whatIfGrowthRow}>
                           <Text style={styles.whatIfGrowthLabel}>
-                            In {mark.years} {mark.years === 1 ? "year" : "years"}
+                            {t("charts.insights.whatIf.inYears", { count: mark.years })}
                           </Text>
                           <View style={styles.whatIfGrowthValueWrap}>
                             <Text style={styles.whatIfGrowthValue}>
@@ -282,22 +304,20 @@ const WhatIfSpendingCard: React.FC<WhatIfSpendingCardProps> = ({
                             </Text>
                             {mark.growth > 0 && (
                               <Text style={styles.whatIfGrowthSub}>
-                                +{formatCurrency(mark.growth)} from returns
+                                {t("charts.insights.whatIf.fromReturns", { amount: formatCurrency(mark.growth) })}
                               </Text>
                             )}
                           </View>
                         </View>
                       ))}
                       <Text style={tool.efAutoHint}>
-                        Assumes a {WHAT_IF_DEFAULT_RETURN_RATE}% average annual return, compounded monthly.
+                        {t("charts.insights.whatIf.assumesReturn", { rate: WHAT_IF_DEFAULT_RETURN_RATE })}
                       </Text>
                     </View>
 
                     {/* Educational note */}
                     <View style={tool.insightCard}>
-                      <Text style={tool.insightText}>
-                        These are estimates, not guarantees - spending rarely drops to zero, and market returns vary. Even redirecting half a category can move your timeline meaningfully.
-                      </Text>
+                      <Text style={tool.insightText}>{t("charts.insights.whatIf.note")}</Text>
                     </View>
                   </>
                 )}

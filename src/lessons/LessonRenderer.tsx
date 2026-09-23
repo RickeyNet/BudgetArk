@@ -14,6 +14,7 @@
 
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -131,25 +132,32 @@ const Callout: React.FC<
 const CalculatorEmbed: React.FC<
   SectionStyleProps & { section: CalculatorEmbedSection }
 > = ({ section, styles }) => {
-  const label = CALCULATOR_LABELS[section.calc] ?? "Calculator";
+  const { t } = useTranslation();
+  // Calculator ids come from lesson data; unknown ids fall back to the
+  // generic label rather than rendering a raw key.
+  const label = isKnownCalculator(section.calc)
+    ? t(`charts.lessons.renderer.calculators.${section.calc}`)
+    : t("charts.lessons.renderer.calculators.fallback");
   return (
     <View style={styles.calcEmbed}>
-      <Text style={styles.calcEmbedEyebrow}>TRY IT</Text>
+      <Text style={styles.calcEmbedEyebrow}>{t("charts.lessons.renderer.tryIt")}</Text>
       <Text style={styles.calcEmbedLabel}>{label}</Text>
-      <Text style={styles.calcEmbedHint}>
-        Open the matching tool under TOOLS on the Charts tab.
-      </Text>
+      <Text style={styles.calcEmbedHint}>{t("charts.lessons.renderer.calcHint")}</Text>
     </View>
   );
 };
 
-const CALCULATOR_LABELS: Record<string, string> = {
-  "loan-amortization": "Loan / Mortgage Calculator",
-  "compound-interest": "Compound Interest Calculator",
-  "refinance-break-even": "Refinance Break-Even Calculator",
-  "emergency-fund": "Emergency Fund Calculator",
-  "payoff-comparison": "Debt Payoff Strategy",
-};
+const KNOWN_CALCULATORS = [
+  "loan-amortization",
+  "compound-interest",
+  "refinance-break-even",
+  "emergency-fund",
+  "payoff-comparison",
+] as const;
+type KnownCalculator = (typeof KNOWN_CALCULATORS)[number];
+
+const isKnownCalculator = (calc: string): calc is KnownCalculator =>
+  (KNOWN_CALCULATORS as readonly string[]).includes(calc);
 
 const pickToneColor = (tone: CalloutTone, colors: ThemeColors): string => {
   switch (tone) {

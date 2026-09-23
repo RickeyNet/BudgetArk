@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -99,6 +100,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
   milestonePlan,
   onGoalsChanged,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -329,7 +331,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
     } catch (error) {
       // Keep the form (and what the user typed) so they can retry.
       triggerHaptic("error");
-      setSaveError(describeError(error, "Couldn't start this fund. Please try again."));
+      setSaveError(describeError(error, t("charts.planning.plannerCard.errors.start")));
     }
   }, [
     alreadySaved,
@@ -340,6 +342,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
     onGoalsChanged,
     price,
     resetForm,
+    t,
     usefulLifeYears,
     usesPerMonth,
   ]);
@@ -359,25 +362,25 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
         ? colors.warningDim
         : colors.dangerDim;
 
-  const fitLine =
+  const freeCash = formatCurrency(cashFlow.freeCashFlow);
+  const fitLine: string | null =
     fit === "fits"
-      ? `Fits comfortably: about ${formatCurrency(cashFlow.freeCashFlow)}/mo is left over after your average spending, and this uses half or less.`
+      ? t("charts.planning.plannerCard.fit.fits", { amount: freeCash })
       : fit === "tight"
-        ? `Tight: this claims most of the ~${formatCurrency(cashFlow.freeCashFlow)}/mo left after your average spending. Doable, but there's little room for surprises.`
+        ? t("charts.planning.plannerCard.fit.tight", { amount: freeCash })
         : fit === "over"
           ? cashFlow.freeCashFlow > 0
-            ? `Over budget: this is more than the ~${formatCurrency(cashFlow.freeCashFlow)}/mo left after your average spending - it WILL cut into other spending or goals. Try a smaller amount or a later date.`
-            : "Your average spending already meets or exceeds your income, so any set-aside will cut into existing spending or goals. Consider trimming a category first (the What-If tool above can help)."
+            ? t("charts.planning.plannerCard.fit.over", { amount: freeCash })
+            : t("charts.planning.plannerCard.fit.overNoFreeCash")
           : null;
+  const monthYear = (date: Date) => formatPlanMonthYear(date, i18n.language);
 
   return (
     <>
       <TouchableOpacity style={tool.toolHeader} onPress={toggleOpen} activeOpacity={0.7}>
         <View>
-          <Text style={tool.toolTitle}>Plan a Purchase</Text>
-          <Text style={tool.toolHint}>
-            Sinking funds that fit around your Ark milestones
-          </Text>
+          <Text style={tool.toolTitle}>{t("charts.planning.plannerCard.title")}</Text>
+          <Text style={tool.toolHint}>{t("charts.planning.plannerCard.hint")}</Text>
         </View>
         <Text style={tool.toolChevron}>{open ? "▾" : "›"}</Text>
       </TouchableOpacity>
@@ -387,11 +390,8 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
           {/* Existing plans - tracked day-to-day on the Bridge, editable here too */}
           {plans.length > 0 && (
             <View style={tool.efCard}>
-              <Text style={tool.efSectionTitle}>Your plans</Text>
-              <Text style={tool.efAutoHint}>
-                Tap a plan to add funds. Plans live on your Bridge and count
-                toward net worth.
-              </Text>
+              <Text style={tool.efSectionTitle}>{t("charts.planning.plannerCard.yourPlans")}</Text>
+              <Text style={tool.efAutoHint}>{t("charts.planning.plannerCard.yourPlansHint")}</Text>
               <PurchasePlanList
                 savingsGoals={savingsGoals}
                 onGoalsChanged={onGoalsChanged}
@@ -405,15 +405,15 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
           {/* New plan */}
           {!showForm ? (
             <TouchableOpacity style={styles.newPlanBtn} onPress={toggleForm}>
-              <Text style={styles.newPlanBtnText}>+ Plan a new purchase</Text>
+              <Text style={styles.newPlanBtnText}>{t("charts.planning.plannerCard.newPlan")}</Text>
             </TouchableOpacity>
           ) : (
             <>
               <View style={tool.efCard}>
-                <Text style={tool.efSectionTitle}>What are you saving for?</Text>
+                <Text style={tool.efSectionTitle}>{t("charts.planning.plannerCard.form.what")}</Text>
                 <TextInput
                   style={tool.input}
-                  placeholder="e.g. New laptop"
+                  placeholder={t("charts.planning.plannerCard.form.namePlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   value={itemName}
                   onChangeText={(text) => setItemName(sanitizeTextInput(text))}
@@ -421,10 +421,10 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                 />
                 <View style={tool.inputRow}>
                   <View style={tool.inputHalf}>
-                    <Text style={tool.inputLabel}>Price</Text>
+                    <Text style={tool.inputLabel}>{t("charts.planning.plannerCard.form.price")}</Text>
                     <TextInput
                       style={tool.input}
-                      placeholder="0"
+                      placeholder={t("charts.planning.plannerCard.form.zeroPlaceholder")}
                       placeholderTextColor={colors.textMuted}
                       keyboardType="decimal-pad"
                       value={priceText}
@@ -433,10 +433,10 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                     />
                   </View>
                   <View style={tool.inputHalf}>
-                    <Text style={tool.inputLabel}>Already saved</Text>
+                    <Text style={tool.inputLabel}>{t("charts.planning.plannerCard.form.alreadySaved")}</Text>
                     <TextInput
                       style={tool.input}
-                      placeholder="0"
+                      placeholder={t("charts.planning.plannerCard.form.zeroPlaceholder")}
                       placeholderTextColor={colors.textMuted}
                       keyboardType="decimal-pad"
                       value={savedText}
@@ -458,7 +458,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                         <Text
                           style={[tool.chipText, isSelected && tool.chipTextActive]}
                         >
-                          {option.icon} {option.label}
+                          {option.icon} {t(`charts.planning.plannerCard.categories.${option.key}`)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -472,7 +472,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                   <View style={tool.efCard}>
                     <View style={tool.sliderGroup}>
                       <SliderRow
-                        label="Set aside each month"
+                        label={t("charts.planning.plannerCard.setAside.label")}
                         value={monthly}
                         min={0}
                         max={sliderMax}
@@ -489,19 +489,23 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                         style={styles.needByRow}
                         onPress={() => setShowNeedByPicker(true)}
                       >
-                        <Text style={styles.needByLabel}>Need it by</Text>
+                        <Text style={styles.needByLabel}>{t("charts.planning.plannerCard.needBy.label")}</Text>
                         <Text style={styles.needByValue}>
                           {needBy
-                            ? formatPlanMonthYear(new Date(`${needBy}-15`))
-                            : "No date - whenever it's funded"}
+                            ? monthYear(new Date(`${needBy}-15`))
+                            : t("charts.planning.plannerCard.needBy.none")}
                         </Text>
                       </TouchableOpacity>
                       {requiredMonthly !== null && requiredMonthly > 0 && (
                         <Text style={tool.efAutoHint}>
-                          That date needs {formatCurrency(requiredMonthly)}/mo
                           {monthly > 0 && monthly < requiredMonthly
-                            ? ` - your current ${formatCurrency(monthly)}/mo won't make it in time.`
-                            : "."}
+                            ? t("charts.planning.plannerCard.needBy.requiredShort", {
+                                required: formatCurrency(requiredMonthly),
+                                monthly: formatCurrency(monthly),
+                              })
+                            : t("charts.planning.plannerCard.needBy.required", {
+                                required: formatCurrency(requiredMonthly),
+                              })}
                         </Text>
                       )}
                     </View>
@@ -511,48 +515,50 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                   <View style={tool.efCard}>
                     <Text style={tool.efSectionTitle}>
                       {timeline.monthsToReady === 0
-                        ? "You could buy this today"
+                        ? t("charts.planning.plannerCard.timeline.today")
                         : timeline.readyDate
-                          ? `Ready ${formatPlanMonthYear(timeline.readyDate)} (${formatWhatIfMonths(timeline.monthsToReady)})`
-                          : "Pick a monthly amount to see a date"}
+                          ? t("charts.planning.plannerCard.timeline.ready", {
+                              date: monthYear(timeline.readyDate),
+                              duration: formatWhatIfMonths(timeline.monthsToReady),
+                            })
+                          : t("charts.planning.plannerCard.timeline.pickAmount")}
                     </Text>
                     {fitLine && <Text style={styles.fitText}>{fitLine}</Text>}
                     {fit === "unknown" && cashFlow.monthsTracked === 0 && monthly > 0 && (
-                      <Text style={tool.efAutoHint}>
-                        Log a few months of income and expenses in the Budget tab
-                        and this tool can check the pace against your real cash
-                        flow.
-                      </Text>
+                      <Text style={tool.efAutoHint}>{t("charts.planning.plannerCard.fit.trackFirst")}</Text>
                     )}
                   </View>
 
                   {/* Cost analysis */}
                   {price > 0 ? (
                     <View style={tool.efCard}>
-                      <Text style={tool.efSectionTitle}>What it really costs</Text>
+                      <Text style={tool.efSectionTitle}>{t("charts.planning.plannerCard.cost.title")}</Text>
 
                       {/* Cost per use */}
                       {(() => {
                         const perUse = calcCostPerUse(price, usesPerMonth, usefulLifeYears);
                         return perUse !== null ? (
                           <Text style={styles.fitText}>
-                            {`That's ${describeCostPerUse(perUse, usesPerMonth, usefulLifeYears, formatCurrency)}.`}
+                            {t("charts.planning.plannerCard.cost.perUse", {
+                              description: describeCostPerUse(perUse, usesPerMonth, usefulLifeYears, formatCurrency),
+                            })}
                           </Text>
                         ) : (
-                          <Text style={tool.efAutoHint}>
-                            How often will you use it? Slide up from zero to see the
-                            price per use - a good test for the wants column.
-                          </Text>
+                          <Text style={tool.efAutoHint}>{t("charts.planning.plannerCard.cost.perUseHint")}</Text>
                         );
                       })()}
                       <View style={tool.sliderGroup}>
                         <SliderRow
-                          label="Times you'll use it per month"
+                          label={t("charts.planning.plannerCard.cost.usesLabel")}
                           value={usesPerMonth}
                           min={0}
                           max={60}
                           step={1}
-                          displayValue={usesPerMonth === 0 ? "not tracked" : `${usesPerMonth}x`}
+                          displayValue={
+                            usesPerMonth === 0
+                              ? t("charts.planning.plannerCard.cost.notTracked")
+                              : t("charts.planning.plannerCard.cost.usesValue", { count: usesPerMonth })
+                          }
                           onValueChange={(value) => setUsesPerMonth(Math.round(value))}
                           onAdjust={(delta) =>
                             setUsesPerMonth((p) => Math.max(0, Math.min(60, p + delta)))
@@ -575,7 +581,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                                   usefulLifeYears === years && tool.chipTextActive,
                                 ]}
                               >
-                                {years} yr{years === 1 ? "" : "s"}
+                                {t("charts.planning.plannerCard.cost.years", { count: years })}
                               </Text>
                             </TouchableOpacity>
                           ))}
@@ -583,31 +589,34 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                       ) : null}
 
                       <Text style={[tool.efSectionTitle, styles.analysisSubTitle]}>
-                        Hours of work
+                        {t("charts.planning.plannerCard.hours.title")}
                       </Text>
                       {/* Hours of work */}
                       {hoursOfWork && hourlyRate ? (
                         <Text style={styles.fitText}>
-                          {`${formatCurrency(price)} is ${describeHoursOfWork(hoursOfWork)} at ${formatCurrency(Math.round(hourlyRate * 100) / 100)}/hr take-home${
+                          {t(
                             analysis.hourlyOverride === null
-                              ? ` (from your average income of ${formatCurrency(cashFlow.avgIncome)}/mo)`
-                              : ""
-                          }.`}
+                              ? "charts.planning.plannerCard.hours.lineFromIncome"
+                              : "charts.planning.plannerCard.hours.line",
+                            {
+                              price: formatCurrency(price),
+                              hours: describeHoursOfWork(hoursOfWork),
+                              rate: formatCurrency(Math.round(hourlyRate * 100) / 100),
+                              income: formatCurrency(cashFlow.avgIncome),
+                            }
+                          )}
                         </Text>
                       ) : (
-                        <Text style={tool.efAutoHint}>
-                          Log your income in the Budget tab, or type your take-home
-                          per hour below, to see this price in hours of work.
-                        </Text>
+                        <Text style={tool.efAutoHint}>{t("charts.planning.plannerCard.hours.hint")}</Text>
                       )}
                       <View style={tool.sliderGroup}>
                         <SliderRow
-                          label="Hours you work per week"
+                          label={t("charts.planning.plannerCard.hours.perWeekLabel")}
                           value={analysis.hoursPerWeek}
                           min={1}
                           max={80}
                           step={1}
-                          displayValue={`${analysis.hoursPerWeek} hrs`}
+                          displayValue={t("charts.planning.plannerCard.hours.perWeekValue", { count: analysis.hoursPerWeek })}
                           onValueChange={(value) =>
                             changeAnalysis({ hoursPerWeek: Math.round(value) })
                           }
@@ -623,12 +632,12 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                       </View>
                       <Text style={tool.inputLabel}>
                         {hourlyFromIncome
-                          ? "Or type your take-home per hour (leave blank to use your income)"
-                          : "Your take-home per hour"}
+                          ? t("charts.planning.plannerCard.hours.overrideLabelWithIncome")
+                          : t("charts.planning.plannerCard.hours.overrideLabel")}
                       </Text>
                       <TextInput
                         style={tool.input}
-                        placeholder="e.g. 28.50"
+                        placeholder={t("charts.planning.plannerCard.hours.overridePlaceholder")}
                         placeholderTextColor={colors.textMuted}
                         keyboardType="decimal-pad"
                         value={hourlyText}
@@ -646,16 +655,16 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
 
                       {/* Finance vs save */}
                       <Text style={[tool.efSectionTitle, styles.analysisSubTitle]}>
-                        Finance it vs. save for it
+                        {t("charts.planning.plannerCard.finance.title")}
                       </Text>
                       <View style={tool.sliderGroup}>
                         <SliderRow
-                          label="APR if you financed it"
+                          label={t("charts.planning.plannerCard.finance.aprLabel")}
                           value={financeApr}
                           min={0}
                           max={40}
                           step={0.5}
-                          displayValue={`${financeApr.toFixed(1)}%`}
+                          displayValue={t("charts.planning.plannerCard.finance.aprValue", { rate: financeApr.toFixed(1) })}
                           onValueChange={(value) => changeAnalysis({ financeApr: value })}
                           onAdjust={(delta) =>
                             changeAnalysis({
@@ -682,7 +691,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                                 analysis.financeTermMonths === term && tool.chipTextActive,
                               ]}
                             >
-                              {term} mo
+                              {t("charts.planning.plannerCard.finance.termChip", { count: term })}
                             </Text>
                           </TouchableOpacity>
                         ))}
@@ -690,38 +699,48 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                       {finance ? (
                         <>
                           <Text style={styles.fitText}>
-                            {`Financing ${formatCurrency(finance.financed)} at ${financeApr.toFixed(1)}% over ${finance.termMonths} months: ${formatCurrency(Math.round(finance.monthlyPayment))}/mo, ${formatCurrency(Math.round(finance.totalInterest))} in interest (${formatCurrency(Math.round(finance.totalPaid))} total).`}
+                            {t("charts.planning.plannerCard.finance.summary", {
+                              amount: formatCurrency(finance.financed),
+                              rate: financeApr.toFixed(1),
+                              months: finance.termMonths,
+                              payment: formatCurrency(Math.round(finance.monthlyPayment)),
+                              interest: formatCurrency(Math.round(finance.totalInterest)),
+                              total: formatCurrency(Math.round(finance.totalPaid)),
+                            })}
                           </Text>
                           {finance.saveMonths !== null && financeReady ? (
                             <Text style={styles.fitText}>
                               {finance.saveMonths === 0
-                                ? "You already have the money - saving wins outright."
-                                : `Saving instead gets it ${formatPlanMonthYear(financeReady)}, ${formatWhatIfMonths(finance.saveMonths)} later, and keeps the ${formatCurrency(Math.round(finance.totalInterest))}${
-                                    finance.interestPerMonthSooner !== null
-                                      ? ` - about ${formatCurrency(Math.round(finance.interestPerMonthSooner))} for every month of waiting the loan would skip`
-                                      : ""
-                                  }.${
-                                    finance.extraPerMonthVsSaving > 0
-                                      ? ` The loan payment is also ${formatCurrency(Math.round(finance.extraPerMonthVsSaving))}/mo more than your set-aside, for ${finance.termMonths} months.`
-                                      : ""
-                                  }`}
+                                ? t("charts.planning.plannerCard.finance.alreadyHave")
+                                : t("charts.planning.plannerCard.finance.savingWins", {
+                                    date: monthYear(financeReady),
+                                    later: formatWhatIfMonths(finance.saveMonths),
+                                    interest: formatCurrency(Math.round(finance.totalInterest)),
+                                    perMonthClause:
+                                      finance.interestPerMonthSooner !== null
+                                        ? t("charts.planning.plannerCard.finance.perMonthClause", {
+                                            amount: formatCurrency(Math.round(finance.interestPerMonthSooner)),
+                                          })
+                                        : "",
+                                  }) +
+                                  (finance.extraPerMonthVsSaving > 0
+                                    ? t("charts.planning.plannerCard.finance.extraClause", {
+                                        amount: formatCurrency(Math.round(finance.extraPerMonthVsSaving)),
+                                        months: finance.termMonths,
+                                      })
+                                    : "")}
                             </Text>
                           ) : (
-                            <Text style={tool.efAutoHint}>
-                              Pick a monthly set-aside above to compare the wait
-                              against the interest.
-                            </Text>
+                            <Text style={tool.efAutoHint}>{t("charts.planning.plannerCard.finance.pickAmount")}</Text>
                           )}
                           {guidance.tone !== "go" && guidance.stepTitle ? (
                             <Text style={[styles.fitText, { color: toneColor }]}>
-                              {`A new loan while you're on the ${guidance.stepTitle} step moves your Ark backwards - that interest is money the step needs.`}
+                              {t("charts.planning.plannerCard.finance.arkWarning", { step: guidance.stepTitle })}
                             </Text>
                           ) : null}
                         </>
                       ) : (
-                        <Text style={tool.efAutoHint}>
-                          Nothing to finance - what you've saved already covers it.
-                        </Text>
+                        <Text style={tool.efAutoHint}>{t("charts.planning.plannerCard.finance.nothingToFinance")}</Text>
                       )}
                     </View>
                   ) : null}
@@ -730,21 +749,24 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                   <View style={[styles.arkCard, { backgroundColor: toneBg }]}>
                     <Text style={[styles.arkTitle, { color: toneColor }]}>
                       {guidance.stepTitle
-                        ? `Your Ark: ${guidance.stepTitle} step`
-                        : "Sinking-fund thinking"}
+                        ? t("charts.planning.plannerCard.ark.title", { step: guidance.stepTitle })
+                        : t("charts.planning.plannerCard.ark.sinkingFund")}
                     </Text>
                     <Text style={styles.arkText}>{guidance.message}</Text>
                     {debtImpact &&
                       guidance.tone !== "go" &&
                       debtImpact.baseline.isPayoffPossible && (
                         <Text style={styles.arkText}>
-                          Trade-off: {formatCurrency(monthly)}/mo toward your debts
-                          instead would make you debt-free{" "}
-                          {formatWhatIfMonths(debtImpact.monthsSaved)} sooner
-                          {debtImpact.interestSaved >= 1
-                            ? ` and save ${formatCurrency(Math.round(debtImpact.interestSaved))} in interest`
-                            : ""}
-                          .
+                          {t("charts.planning.plannerCard.ark.tradeoff", {
+                            amount: formatCurrency(monthly),
+                            sooner: formatWhatIfMonths(debtImpact.monthsSaved),
+                            interestClause:
+                              debtImpact.interestSaved >= 1
+                                ? t("charts.planning.plannerCard.ark.interestClause", {
+                                    amount: formatCurrency(Math.round(debtImpact.interestSaved)),
+                                  })
+                                : "",
+                          })}
                         </Text>
                       )}
                   </View>
@@ -757,13 +779,13 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
                     onPress={handleStartFund}
                     disabled={!canSave}
                   >
-                    <Text style={styles.startBtnText}>Start this fund</Text>
+                    <Text style={styles.startBtnText}>{t("charts.planning.plannerCard.buttons.start")}</Text>
                   </TouchableOpacity>
                 </>
               )}
 
               <TouchableOpacity style={styles.cancelFormBtn} onPress={toggleForm}>
-                <Text style={styles.cancelFormText}>Cancel</Text>
+                <Text style={styles.cancelFormText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -775,7 +797,7 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
         visible={showNeedByPicker}
         value={needBy}
         confirm
-        title="Need it by"
+        title={t("charts.planning.plannerCard.needBy.pickerTitle")}
         minYear={new Date().getFullYear()}
         onSelect={setNeedBy}
         onClose={() => setShowNeedByPicker(false)}

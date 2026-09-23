@@ -17,6 +17,11 @@ import { buckets } from "./buckets";
 import { categoryPicker } from "./categoryPicker";
 import { datePicker } from "./datePicker";
 import { achievements } from "./achievements";
+import { chartsScreen } from "./chartsScreen";
+import { chartsTax } from "./chartsTax";
+import { chartsPlanning } from "./chartsPlanning";
+import { chartsInsights } from "./chartsInsights";
+import { lessonsShell } from "./lessonsShell";
 import { bridgeScreen } from "./bridgeScreen";
 import { bridgePlanner } from "./bridgePlanner";
 import { bridgeReports } from "./bridgeReports";
@@ -73,5 +78,12 @@ export const en = {
     planner: bridgePlanner,
     reports: bridgeReports,
     projection: bridgeProjection,
+  },
+  charts: {
+    screen: chartsScreen,
+    tax: chartsTax,
+    planning: chartsPlanning,
+    insights: chartsInsights,
+    lessons: lessonsShell,
   },
 } as const;

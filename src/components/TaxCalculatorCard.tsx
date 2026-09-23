@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import CodeChipGrid, { type CodeChipStyles } from "./CodeChipGrid";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { useToolStyles } from "../theme/toolStyles";
@@ -50,26 +51,41 @@ const usd = (value: number, decimals = 0): string =>
     maximumFractionDigits: decimals,
   })}`;
 
-const pct = (fraction: number): string => `${(fraction * 100).toFixed(1)}%`;
-
-const PERIOD_NOUN: Record<number, string> = {
-  52: "week",
-  26: "two weeks",
-  24: "half-month",
-  12: "month",
+/** "22.0%" in English, "22,0 %" in German - one decimal either way. */
+const makePct = (locale: string) => {
+  let formatter: Intl.NumberFormat;
+  try {
+    formatter = new Intl.NumberFormat(locale, {
+      style: "percent",
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+  } catch {
+    formatter = new Intl.NumberFormat("en-US", {
+      style: "percent",
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+  }
+  return (fraction: number): string => formatter.format(fraction);
 };
 
+/** Pay-period ids the locale tree knows nouns for (see chartsTax.takeHome.periodNoun). */
+type PayPeriods = (typeof PAY_FREQUENCY_OPTIONS)[number]["value"];
+
 const TaxCalculatorCard: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const tool = useToolStyles();
+  const pct = useMemo(() => makePct(i18n.language), [i18n.language]);
 
   const [open, setOpen] = useState(false);
   const [grossText, setGrossText] = useState("");
   const [status, setStatus] = useState<FilingStatus>("single");
   const [stateCode, setStateCode] = useState("");
-  const [payPeriods, setPayPeriods] = useState<number>(26);
+  const [payPeriods, setPayPeriods] = useState<PayPeriods>(26);
   const [k401Text, setK401Text] = useState("");
   const [hsaText, setHsaText] = useState("");
   const [premiumText, setPremiumText] = useState("");
@@ -136,13 +152,13 @@ const TaxCalculatorCard: React.FC = () => {
     if (!result || result.grossAnnual <= 0) return [];
     const g = result.grossAnnual;
     return [
-      { key: "home", label: "Take-home", value: result.takeHomeAnnual / g, color: colors.success },
-      { key: "saved", label: "Pre-tax savings", value: (result.pretax401k + result.pretaxCafeteria) / g, color: colors.accent },
-      { key: "fed", label: "Federal", value: result.federalTax / g, color: colors.warning },
-      { key: "state", label: "State", value: result.stateTax / g, color: colors.danger },
-      { key: "fica", label: "FICA", value: result.fica.total / g, color: colors.textMuted },
+      { key: "home", label: t("charts.tax.takeHome.segments.home"), value: result.takeHomeAnnual / g, color: colors.success },
+      { key: "saved", label: t("charts.tax.takeHome.segments.saved"), value: (result.pretax401k + result.pretaxCafeteria) / g, color: colors.accent },
+      { key: "fed", label: t("charts.tax.takeHome.segments.fed"), value: result.federalTax / g, color: colors.warning },
+      { key: "state", label: t("charts.tax.takeHome.segments.state"), value: result.stateTax / g, color: colors.danger },
+      { key: "fica", label: t("charts.tax.takeHome.segments.fica"), value: result.fica.total / g, color: colors.textMuted },
     ].filter((s) => s.value > 0.001);
-  }, [result, colors]);
+  }, [result, colors, t]);
 
   const breakdownRow = (label: string, value: string, dim = false) => (
     <View style={styles.breakRow} key={label}>
@@ -159,13 +175,11 @@ const TaxCalculatorCard: React.FC = () => {
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel="Take-Home Pay"
+        accessibilityLabel={t("charts.tax.takeHome.title")}
       >
         <View>
-          <Text style={tool.toolTitle}>Take-Home Pay</Text>
-          <Text style={tool.toolHint}>
-            Estimate US federal, state, and payroll tax on a salary
-          </Text>
+          <Text style={tool.toolTitle}>{t("charts.tax.takeHome.title")}</Text>
+          <Text style={tool.toolHint}>{t("charts.tax.takeHome.hint")}</Text>
         </View>
         <Text style={tool.toolChevron}>{open ? "▾" : "›"}</Text>
       </TouchableOpacity>
@@ -174,18 +188,18 @@ const TaxCalculatorCard: React.FC = () => {
         <View style={styles.toolBody}>
           {/* Income + filing status + frequency */}
           <View style={tool.efCard}>
-            <Text style={tool.efSectionTitle}>Your income</Text>
-            <Text style={styles.inputLabel}>Gross annual salary (USD)</Text>
+            <Text style={tool.efSectionTitle}>{t("charts.tax.takeHome.income.sectionTitle")}</Text>
+            <Text style={styles.inputLabel}>{t("charts.tax.takeHome.income.grossLabel")}</Text>
             <TextInput
               style={tool.input}
-              placeholder="e.g. 75000"
+              placeholder={t("charts.tax.takeHome.income.grossPlaceholder")}
               placeholderTextColor={colors.textMuted}
               keyboardType="decimal-pad"
               value={grossText}
               onChangeText={setGrossText}
               maxLength={12}
             />
-            <Text style={styles.inputLabel}>Filing status</Text>
+            <Text style={styles.inputLabel}>{t("charts.tax.takeHome.income.filingStatusLabel")}</Text>
             <View style={tool.chipWrap}>
               {FILING_STATUS_OPTIONS.map((opt) => (
                 <TouchableOpacity
@@ -197,12 +211,12 @@ const TaxCalculatorCard: React.FC = () => {
                   accessibilityState={{ selected: status === opt.value }}
                 >
                   <Text style={[tool.chipText, status === opt.value && tool.chipTextActive]}>
-                    {opt.label}
+                    {t(`charts.tax.filingStatus.${opt.value}`)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.inputLabel}>Paid every</Text>
+            <Text style={styles.inputLabel}>{t("charts.tax.takeHome.income.paidEveryLabel")}</Text>
             <View style={tool.chipWrap}>
               {PAY_FREQUENCY_OPTIONS.map((opt) => (
                 <TouchableOpacity
@@ -214,7 +228,7 @@ const TaxCalculatorCard: React.FC = () => {
                   accessibilityState={{ selected: payPeriods === opt.value }}
                 >
                   <Text style={[tool.chipText, payPeriods === opt.value && tool.chipTextActive]}>
-                    {opt.label}
+                    {t(`charts.tax.takeHome.payFrequency.${opt.value}`)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -223,7 +237,7 @@ const TaxCalculatorCard: React.FC = () => {
 
           {/* State */}
           <View style={tool.efCard}>
-            <Text style={tool.efSectionTitle}>State</Text>
+            <Text style={tool.efSectionTitle}>{t("charts.tax.takeHome.state.sectionTitle")}</Text>
             <CodeChipGrid
               options={STATE_TAX_2026}
               selected={stateCode}
@@ -233,20 +247,20 @@ const TaxCalculatorCard: React.FC = () => {
             {selectedState ? (
               <Text style={styles.efAutoHint}>
                 {selectedState.name}
-                {selectedState.type === "none" ? " - no state income tax on wages" : ""}
+                {selectedState.type === "none" ? t("charts.tax.takeHome.state.noWageTax") : ""}
                 {selectedState.note ? `. ${selectedState.note}` : ""}
               </Text>
             ) : (
-              <Text style={styles.efAutoHint}>Pick your state to see the estimate.</Text>
+              <Text style={styles.efAutoHint}>{t("charts.tax.takeHome.state.pickPrompt")}</Text>
             )}
           </View>
 
           {/* Pre-tax deductions */}
           <View style={tool.efCard}>
-            <Text style={tool.efSectionTitle}>Pre-tax deductions (optional)</Text>
+            <Text style={tool.efSectionTitle}>{t("charts.tax.takeHome.deductions.sectionTitle")}</Text>
             <View style={tool.inputRow}>
               <View style={tool.inputHalf}>
-                <Text style={styles.inputLabel}>401(k) % of pay</Text>
+                <Text style={styles.inputLabel}>{t("charts.tax.takeHome.deductions.k401Label")}</Text>
                 <TextInput
                   style={tool.input}
                   placeholder="0"
@@ -258,7 +272,7 @@ const TaxCalculatorCard: React.FC = () => {
                 />
               </View>
               <View style={tool.inputHalf}>
-                <Text style={styles.inputLabel}>HSA per year</Text>
+                <Text style={styles.inputLabel}>{t("charts.tax.takeHome.deductions.hsaLabel")}</Text>
                 <TextInput
                   style={tool.input}
                   placeholder="0"
@@ -270,7 +284,7 @@ const TaxCalculatorCard: React.FC = () => {
                 />
               </View>
               <View style={tool.inputHalf}>
-                <Text style={styles.inputLabel}>Health / month</Text>
+                <Text style={styles.inputLabel}>{t("charts.tax.takeHome.deductions.healthLabel")}</Text>
                 <TextInput
                   style={tool.input}
                   placeholder="0"
@@ -282,10 +296,7 @@ const TaxCalculatorCard: React.FC = () => {
                 />
               </View>
             </View>
-            <Text style={styles.efAutoHint}>
-              Traditional 401(k) lowers income tax; HSA and health premiums lower
-              payroll (FICA) tax too.
-            </Text>
+            <Text style={styles.efAutoHint}>{t("charts.tax.takeHome.deductions.hint")}</Text>
           </View>
 
           {/* Result */}
@@ -293,18 +304,23 @@ const TaxCalculatorCard: React.FC = () => {
             <>
               <View style={styles.resultCard}>
                 <Text style={styles.resultLabel}>
-                  TAKE-HOME PER {PERIOD_NOUN[payPeriods]?.toUpperCase() ?? "PERIOD"}
+                  {t("charts.tax.takeHome.result.perPeriodLabel", {
+                    period: t(`charts.tax.takeHome.periodNoun.${payPeriods}`).toUpperCase(),
+                  })}
                 </Text>
                 <Text style={styles.resultValue}>{usd(result.takeHomePerPeriod, 2)}</Text>
                 <Text style={styles.resultSub}>
-                  {usd(result.takeHomeAnnual)} / year · {usd(result.takeHomeAnnual / 12)} / month
+                  {t("charts.tax.takeHome.result.perYearAndMonth", {
+                    year: usd(result.takeHomeAnnual),
+                    month: usd(result.takeHomeAnnual / 12),
+                  })}
                 </Text>
               </View>
 
               {/* Where each dollar goes */}
               {segments.length > 0 && (
                 <View style={tool.efCard}>
-                  <Text style={tool.efSectionTitle}>Where each dollar goes</Text>
+                  <Text style={tool.efSectionTitle}>{t("charts.tax.takeHome.segments.sectionTitle")}</Text>
                   <View style={styles.dollarBar}>
                     {segments.map((s) => (
                       <View
@@ -327,31 +343,33 @@ const TaxCalculatorCard: React.FC = () => {
               )}
 
               <View style={tool.efCard}>
-                <Text style={tool.efSectionTitle}>Yearly breakdown</Text>
-                {breakdownRow("Gross salary", usd(result.grossAnnual))}
+                <Text style={tool.efSectionTitle}>{t("charts.tax.takeHome.breakdown.sectionTitle")}</Text>
+                {breakdownRow(t("charts.tax.takeHome.breakdown.gross"), usd(result.grossAnnual))}
                 {result.pretax401k > 0 &&
-                  breakdownRow("401(k) contribution", `-${usd(result.pretax401k)}`)}
+                  breakdownRow(t("charts.tax.takeHome.breakdown.k401"), `-${usd(result.pretax401k)}`)}
                 {result.pretaxCafeteria > 0 &&
-                  breakdownRow("HSA + health premiums", `-${usd(result.pretaxCafeteria)}`)}
-                {breakdownRow("Federal income tax", `-${usd(result.federalTax)}`)}
+                  breakdownRow(t("charts.tax.takeHome.breakdown.cafeteria"), `-${usd(result.pretaxCafeteria)}`)}
+                {breakdownRow(t("charts.tax.takeHome.breakdown.federal"), `-${usd(result.federalTax)}`)}
                 {breakdownRow(
-                  `${selectedState?.name ?? "State"} income tax`,
+                  t("charts.tax.takeHome.breakdown.stateTax", {
+                    state: selectedState?.name ?? t("charts.tax.takeHome.breakdown.stateFallback"),
+                  }),
                   `-${usd(result.stateTax)}`
                 )}
-                {breakdownRow("Social Security", `-${usd(result.fica.socialSecurity)}`)}
+                {breakdownRow(t("charts.tax.takeHome.breakdown.socialSecurity"), `-${usd(result.fica.socialSecurity)}`)}
                 {breakdownRow(
-                  "Medicare",
+                  t("charts.tax.takeHome.breakdown.medicare"),
                   `-${usd(result.fica.medicare + result.fica.additionalMedicare)}`
                 )}
                 <View style={styles.breakDivider} />
-                {breakdownRow("Take-home", usd(result.takeHomeAnnual))}
+                {breakdownRow(t("charts.tax.takeHome.breakdown.takeHome"), usd(result.takeHomeAnnual))}
                 {breakdownRow(
-                  "Effective tax rate",
+                  t("charts.tax.takeHome.breakdown.effectiveRate"),
                   pct(result.effectiveRate),
                   true
                 )}
                 {breakdownRow(
-                  "Federal marginal bracket",
+                  t("charts.tax.takeHome.breakdown.marginalBracket"),
                   pct(result.marginalFederalRate),
                   true
                 )}
@@ -359,7 +377,7 @@ const TaxCalculatorCard: React.FC = () => {
 
               {/* Compare states */}
               <View style={tool.efCard}>
-                <Text style={tool.efSectionTitle}>What if you moved?</Text>
+                <Text style={tool.efSectionTitle}>{t("charts.tax.takeHome.compare.sectionTitle")}</Text>
                 <CodeChipGrid
                   options={compareOptions}
                   selected={compareCode}
@@ -369,13 +387,19 @@ const TaxCalculatorCard: React.FC = () => {
                 />
                 {compareResult && (
                   <Text style={styles.compareText}>
-                    Same salary in {findStateTax(compareCode)?.name}:{" "}
-                    {usd(compareResult.takeHomeAnnual)} take-home -{" "}
+                    {t("charts.tax.takeHome.compare.lead", {
+                      state: findStateTax(compareCode)?.name ?? compareCode,
+                      amount: usd(compareResult.takeHomeAnnual),
+                    })}
                     {compareResult.takeHomeAnnual > result.takeHomeAnnual
-                      ? `${usd(compareResult.takeHomeAnnual - result.takeHomeAnnual)} MORE per year.`
+                      ? t("charts.tax.takeHome.compare.more", {
+                          amount: usd(compareResult.takeHomeAnnual - result.takeHomeAnnual),
+                        })
                       : compareResult.takeHomeAnnual < result.takeHomeAnnual
-                        ? `${usd(result.takeHomeAnnual - compareResult.takeHomeAnnual)} LESS per year.`
-                        : "the same."}
+                        ? t("charts.tax.takeHome.compare.less", {
+                            amount: usd(result.takeHomeAnnual - compareResult.takeHomeAnnual),
+                          })
+                        : t("charts.tax.takeHome.compare.same")}
                   </Text>
                 )}
               </View>
@@ -385,11 +409,7 @@ const TaxCalculatorCard: React.FC = () => {
           {/* Disclaimer + data source */}
           <View style={styles.insightCard}>
             <Text style={styles.insightText}>
-              Estimate only - actual tax depends on credits, deductions, local
-              taxes, and other factors not modeled here. Not tax advice.
-              Computed entirely on your phone from bundled {TAX_DATA_YEAR} tables
-              (IRS Rev. Proc. 2025-32; Tax Foundation state data) - nothing you
-              type leaves the device.
+              {t("charts.tax.takeHome.disclaimer", { year: TAX_DATA_YEAR })}
             </Text>
           </View>
         </View>

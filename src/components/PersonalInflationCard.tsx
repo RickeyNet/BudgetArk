@@ -10,7 +10,9 @@
  */
 import React, { useCallback, useMemo, useState } from "react";
 import { LayoutAnimation, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
@@ -37,6 +39,7 @@ const PersonalInflationCard: React.FC<PersonalInflationCardProps> = ({
   entries,
   customCategories,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -60,11 +63,14 @@ const PersonalInflationCard: React.FC<PersonalInflationCardProps> = ({
     <>
       <TouchableOpacity style={tool.toolHeader} onPress={toggle} activeOpacity={0.7}>
         <View>
-          <Text style={tool.toolTitle}>Personal Inflation Rate</Text>
+          <Text style={tool.toolTitle}>{t("charts.insights.inflation.title")}</Text>
           <Text style={tool.toolHint}>
             {result.status === "ok"
-              ? `Your prices ${formatRate(result.rate)} vs ${formatRate(result.headlineRate)} headline`
-              : "Your own prices, year over year, vs the headline CPI"}
+              ? t("charts.insights.inflation.hintRates", {
+                  rate: formatRate(result.rate),
+                  headline: formatRate(result.headlineRate),
+                })
+              : t("charts.insights.inflation.hintIdle")}
           </Text>
         </View>
         <Text style={tool.toolChevron}>{open ? "▾" : "›"}</Text>
@@ -75,36 +81,46 @@ const PersonalInflationCard: React.FC<PersonalInflationCardProps> = ({
           {result.status === "insufficient" ? (
             <View style={tool.efCard}>
               <Text style={tool.refiEmptyText}>
-                This needs at least {INFLATION_MIN_TRACKED_MONTHS} tracked months in each of the
-                last two years, on categories you spent on in both. So far: {result.currentMonths}{" "}
-                {result.currentMonths === 1 ? "month" : "months"} in the last {INFLATION_WINDOW_MONTHS},{" "}
-                {result.priorMonths} in the {INFLATION_WINDOW_MONTHS} before. Keep logging and it fills in.
+                {t("charts.insights.inflation.insufficient", {
+                  count: result.currentMonths,
+                  min: INFLATION_MIN_TRACKED_MONTHS,
+                  window: INFLATION_WINDOW_MONTHS,
+                  prior: result.priorMonths,
+                })}
               </Text>
             </View>
           ) : (
             <>
               <View style={tool.resultCard}>
-                <Text style={tool.resultLabel}>YOUR INFLATION RATE</Text>
+                <Text style={tool.resultLabel}>{t("charts.insights.inflation.resultLabel")}</Text>
                 <Text style={[tool.resultValue, { color: rateColor }]}>{formatRate(result.rate)}</Text>
                 <Text style={tool.resultSub}>
-                  {verdict === "above"
-                    ? `Running hotter than the ${formatRate(result.headlineRate)} headline`
-                    : verdict === "below"
-                      ? `Running cooler than the ${formatRate(result.headlineRate)} headline`
-                      : `In line with the ${formatRate(result.headlineRate)} headline`}
+                  {t(
+                    verdict === "above"
+                      ? "charts.insights.inflation.above"
+                      : verdict === "below"
+                        ? "charts.insights.inflation.below"
+                        : "charts.insights.inflation.inLine",
+                    { headline: formatRate(result.headlineRate) },
+                  )}
                 </Text>
                 <Text style={styles.basketLine}>
-                  {formatCurrency(result.priorMonthly)}/mo → {formatCurrency(result.currentMonthly)}/mo on the
-                  same {result.categories.length}{" "}
-                  {result.categories.length === 1 ? "category" : "categories"}
+                  {t("charts.insights.inflation.basket", {
+                    count: result.categories.length,
+                    prior: formatCurrency(result.priorMonthly),
+                    current: formatCurrency(result.currentMonthly),
+                  })}
                 </Text>
               </View>
 
               <View style={tool.efCard}>
-                <Text style={tool.efSectionTitle}>By category</Text>
+                <Text style={tool.efSectionTitle}>{t("charts.insights.inflation.byCategory")}</Text>
                 <Text style={tool.efAutoHint}>
-                  Average per tracked month: last {INFLATION_WINDOW_MONTHS} months ({result.currentMonths}{" "}
-                  tracked) vs the {INFLATION_WINDOW_MONTHS} before ({result.priorMonths} tracked)
+                  {t("charts.insights.inflation.averageHint", {
+                    window: INFLATION_WINDOW_MONTHS,
+                    current: result.currentMonths,
+                    prior: result.priorMonths,
+                  })}
                 </Text>
                 {result.categories.map((row) => {
                   const rowVerdict = row.rate > 0.05 ? "up" : row.rate < -0.05 ? "down" : "flat";
@@ -112,10 +128,13 @@ const PersonalInflationCard: React.FC<PersonalInflationCardProps> = ({
                     <View key={row.category} style={styles.row}>
                       <View style={styles.rowLeft}>
                         <Text style={styles.rowTitle} numberOfLines={1}>
-                          {getCategoryIcon(row.category, customCategories)} {row.category}
+                          {getCategoryIcon(row.category, customCategories)} {categoryLabel(t, row.category)}
                         </Text>
                         <Text style={styles.rowMeta}>
-                          {formatCurrency(row.priorMonthly)} → {formatCurrency(row.currentMonthly)}/mo
+                          {t("charts.insights.inflation.rowMeta", {
+                            prior: formatCurrency(row.priorMonthly),
+                            current: formatCurrency(row.currentMonthly),
+                          })}
                         </Text>
                       </View>
                       <Text
@@ -138,18 +157,19 @@ const PersonalInflationCard: React.FC<PersonalInflationCardProps> = ({
                 })}
                 {result.newSpendingMonthly > 0 ? (
                   <Text style={tool.efAutoHint}>
-                    Plus {formatCurrency(result.newSpendingMonthly)}/mo in categories you didn&apos;t have
-                    last year - new spending, not inflation, so it stays out of the rate.
+                    {t("charts.insights.inflation.newSpending", {
+                      amount: formatCurrency(result.newSpendingMonthly),
+                    })}
                   </Text>
                 ) : null}
               </View>
 
               <View style={tool.insightCard}>
                 <Text style={tool.insightText}>
-                  Headline figure: {HEADLINE_CPI_LABEL}, as of {HEADLINE_CPI_AS_OF}, bundled with the app -
-                  nothing is fetched. Your rate mixes price changes with how much you bought, so a
-                  category that jumped may be a habit change as much as a price rise. Debt payments and
-                  savings are transfers, not prices, and are left out.
+                  {t("charts.insights.inflation.note", {
+                    label: HEADLINE_CPI_LABEL,
+                    asOf: HEADLINE_CPI_AS_OF,
+                  })}
                 </Text>
               </View>
             </>

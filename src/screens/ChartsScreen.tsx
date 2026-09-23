@@ -30,6 +30,7 @@ import Svg, { Defs, LinearGradient, Stop, Path, Text as SvgText } from "react-na
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { describeError } from "../utils/errorMessage";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useTabCoachmark } from "../onboarding/useTabCoachmark";
@@ -126,22 +127,9 @@ const TOPIC_GLYPHS: Record<LessonTopic, string> = {
   mindset: "🧠",
 };
 
-const TOPIC_LABELS: Record<LessonTopic, string> = {
-  budgeting: "Budgeting",
-  debt: "Debt",
-  saving: "Saving",
-  investing: "Investing",
-  taxes: "Taxes",
-  insurance: "Insurance",
-  real_estate: "Real Estate",
-  retirement: "Retirement",
-  mindset: "Mindset",
-};
-
 /* ── Slider Config ── */
 
 type SliderConfig = {
-  label: string;
   min: number;
   max: number;
   step: number;
@@ -152,11 +140,11 @@ type CalcSliderKey = "lumpSum" | "contribution" | "returnRate" | "years";
 const SLIDERS: Record<CalcSliderKey, SliderConfig> = {
   // Starting lump sum: what you already have, invested once and left alone.
   // 0 keeps the classic contributions-only projection.
-  lumpSum: { label: "Starting Lump Sum", min: 0, max: 500000, step: 1000 },
+  lumpSum: { min: 0, max: 500000, step: 1000 },
   // Contribution may be 0 so a lump sum can be viewed on its own.
-  contribution: { label: "Monthly Contribution", min: 0, max: 50000, step: 50 },
-  returnRate: { label: "Annual Return", min: 1, max: 30, step: 0.5 },
-  years: { label: "Time Horizon", min: 1, max: 50, step: 1 },
+  contribution: { min: 0, max: 50000, step: 50 },
+  returnRate: { min: 1, max: 30, step: 0.5 },
+  years: { min: 1, max: 50, step: 1 },
 };
 
 const YEAR_PRESETS = [10, 20, 30] as const;
@@ -170,19 +158,20 @@ type RefiKey =
   | "refiClosingCosts";
 
 const REFI_SLIDERS: Record<RefiKey, SliderConfig> = {
-  refiCurrentTerm: { label: "Years Remaining", min: 1, max: 30, step: 1 },
-  refiNewRate: { label: "New Rate (APR)", min: 0.5, max: 30, step: 0.125 },
-  refiNewTerm: { label: "New Term (years)", min: 1, max: 30, step: 1 },
-  refiClosingCosts: { label: "Closing Costs", min: 0, max: 30_000, step: 100 },
+  refiCurrentTerm: { min: 1, max: 30, step: 1 },
+  refiNewRate: { min: 0.5, max: 30, step: 0.125 },
+  refiNewTerm: { min: 1, max: 30, step: 1 },
+  refiClosingCosts: { min: 0, max: 30_000, step: 100 },
 };
 
 /* ── Return Rate Presets ── */
 
+// Labels live at charts.screen.compound.presets.<id>.
 const RATE_PRESETS = [
-  { label: "Savings", rate: 2, hint: "High-yield savings account" },
-  { label: "Bonds", rate: 4, hint: "US Treasury / bond funds" },
-  { label: "S&P 500", rate: 7, hint: "Historical avg, inflation-adjusted" },
-  { label: "Aggressive", rate: 10, hint: "S&P 500 nominal (before inflation)" },
+  { id: "savings", rate: 2 }, // high-yield savings account
+  { id: "bonds", rate: 4 }, // US Treasury / bond funds
+  { id: "sp500", rate: 7 }, // historical avg, inflation-adjusted
+  { id: "aggressive", rate: 10 }, // S&P 500 nominal (before inflation)
 ] as const;
 
 /* ── Mini Area Chart ── */
@@ -198,6 +187,7 @@ interface AreaChartProps {
 
 const AreaChart: React.FC<AreaChartProps> = React.memo(
   ({ data, accentColor, successColor, textDim, textMuted, formatCompactCurrency }) => {
+    const { t } = useTranslation();
     const W = 340;
     const H = 180;
     const padL = 50;
@@ -289,7 +279,7 @@ const AreaChart: React.FC<AreaChartProps> = React.memo(
             fontSize={9}
             textAnchor="middle"
           >
-            {tick}yr
+            {t("charts.screen.compound.chart.axisYear", { count: tick })}
           </SvgText>
         ))}
       </Svg>
@@ -301,6 +291,7 @@ AreaChart.displayName = "AreaChart";
 /* ── Main Screen ── */
 
 const ChartsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const { colors, showAmbientBackground } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency, formatCompactCurrency } = useCurrency();
@@ -720,7 +711,7 @@ const ChartsScreen: React.FC = () => {
           if (cancelled) return;
           if (__DEV__) console.error("Failed to load Charts tool data:", error);
           setToolsLoadError(
-            describeError(error, "Couldn't load your data. Reopen this tab to try again."),
+            describeError(error, t("charts.screen.errors.loadFailed")),
           );
         }
       };
@@ -728,7 +719,7 @@ const ChartsScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [])
+    }, [t])
   );
 
   const efMonthlyExpenses = resolveEmergencyFundExpenses(
@@ -775,13 +766,13 @@ const ChartsScreen: React.FC = () => {
     const displayValue = isCurrency
       ? formatCurrency(value)
       : isRate
-        ? `${value}%`
-        : `${value} yr`;
+        ? t("charts.screen.units.percent", { value })
+        : t("charts.screen.units.years", { value });
 
     return (
       <SliderRow
         key={key}
-        label={cfg.label}
+        label={t(`charts.screen.refi.sliders.${key}`)}
         value={value}
         min={cfg.min}
         max={cfg.max}
@@ -807,13 +798,13 @@ const ChartsScreen: React.FC = () => {
       key === "contribution" || key === "lumpSum"
         ? formatCurrency(value)
         : key === "returnRate"
-          ? `${value}%`
-          : `${value} yr`;
+          ? t("charts.screen.units.percent", { value })
+          : t("charts.screen.units.years", { value });
 
     return (
       <SliderRow
         key={key}
-        label={cfg.label}
+        label={t(`charts.screen.compound.sliders.${key}`)}
         value={value}
         min={cfg.min}
         max={cfg.max}
@@ -835,7 +826,7 @@ const ChartsScreen: React.FC = () => {
           <View style={styles.ratePresetRow}>
             {RATE_PRESETS.map((preset) => (
               <TouchableOpacity
-                key={preset.label}
+                key={preset.id}
                 style={[
                   styles.ratePresetBtn,
                   returnRate === preset.rate && styles.ratePresetBtnActive,
@@ -848,7 +839,7 @@ const ChartsScreen: React.FC = () => {
                     returnRate === preset.rate && styles.ratePresetLabelActive,
                   ]}
                 >
-                  {preset.label}
+                  {t(`charts.screen.compound.presets.${preset.id}`)}
                 </Text>
                 <Text
                   style={[
@@ -856,7 +847,7 @@ const ChartsScreen: React.FC = () => {
                     returnRate === preset.rate && styles.ratePresetRateActive,
                   ]}
                 >
-                  {preset.rate}%
+                  {t("charts.screen.units.percent", { value: preset.rate })}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -892,10 +883,8 @@ const ChartsScreen: React.FC = () => {
         {/* Header */}
         <View style={styles.titleSection}>
           <Text style={styles.appLabel}>BudgetArk</Text>
-          <Text style={styles.screenTitle}>Charts</Text>
-          <Text style={styles.screenSubtitle}>
-            Learn the seas. Plot your course.
-          </Text>
+          <Text style={styles.screenTitle}>{t("charts.screen.header.title")}</Text>
+          <Text style={styles.screenSubtitle}>{t("charts.screen.header.subtitle")}</Text>
         </View>
 
         {/* ── Captain's Course ──
@@ -904,7 +893,7 @@ const ChartsScreen: React.FC = () => {
          */}
         <View style={styles.courseCard}>
           <View style={styles.courseHeaderRow}>
-            <Text style={styles.courseEyebrow}>⭐ CAPTAIN'S COURSE</Text>
+            <Text style={styles.courseEyebrow}>{t("charts.screen.course.eyebrow")}</Text>
             <Text style={styles.courseProgressLabel}>
               {overallProgress.completed} / {overallProgress.total}
             </Text>
@@ -927,14 +916,21 @@ const ChartsScreen: React.FC = () => {
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.resumeLabel}>
-                  {overallProgress.completed === 0 ? "START HERE" : "RESUME"}
+                  {overallProgress.completed === 0
+                    ? t("charts.screen.course.startHere")
+                    : t("charts.screen.course.resume")}
                 </Text>
                 <Text style={styles.resumeTitle} numberOfLines={2}>
                   {resumeChapter.number}.{resumeStub.number} {resumeStub.title}
                 </Text>
                 <Text style={styles.resumeSub}>
-                  Ch {resumeChapter.number} · {resumeChapter.title}
-                  {resumeStub.readMin ? ` · ${resumeStub.readMin} min` : ""}
+                  {t("charts.screen.course.chapterRef", {
+                    number: resumeChapter.number,
+                    title: resumeChapter.title,
+                  })}
+                  {resumeStub.readMin
+                    ? t("charts.screen.course.readMin", { count: resumeStub.readMin })
+                    : ""}
                 </Text>
               </View>
               <Text style={styles.resumeChevron}>›</Text>
@@ -948,10 +944,12 @@ const ChartsScreen: React.FC = () => {
               activeOpacity={0.7}
             >
               <Text style={styles.topicFilterStripText} numberOfLines={1}>
-                {TOPIC_GLYPHS[topicFilter]} {TOPIC_LABELS[topicFilter]} lessons
-                only
+                {t("charts.screen.course.filterOnly", {
+                  glyph: TOPIC_GLYPHS[topicFilter],
+                  topic: t(`charts.screen.topics.labels.${topicFilter}`),
+                })}
               </Text>
-              <Text style={styles.topicFilterStripClear}>Show all ✕</Text>
+              <Text style={styles.topicFilterStripClear}>{t("charts.screen.course.showAll")}</Text>
             </TouchableOpacity>
           )}
 
@@ -969,12 +967,15 @@ const ChartsScreen: React.FC = () => {
                     <Text style={styles.chapterGlyph}>{chapter.glyph}</Text>
                     <View style={styles.chapterBody}>
                       <Text style={styles.chapterTitle}>
-                        Ch {chapter.number} · {chapter.title}
+                        {t("charts.screen.course.chapterRef", {
+                          number: chapter.number,
+                          title: chapter.title,
+                        })}
                       </Text>
                       <Text style={styles.chapterSubtitle}>{chapter.subtitle}</Text>
                     </View>
                     {isComingSoon ? (
-                      <Text style={styles.chapterComingSoon}>Coming soon</Text>
+                      <Text style={styles.chapterComingSoon}>{t("charts.screen.course.comingSoon")}</Text>
                     ) : (
                       <Text style={styles.chapterCount}>
                         {completed}/{total}
@@ -1011,8 +1012,8 @@ const ChartsScreen: React.FC = () => {
                               </Text>
                               <Text style={styles.lessonMeta}>
                                 {stub.readMin
-                                  ? `${stub.readMin} min`
-                                  : "Coming soon"}
+                                  ? t("charts.screen.course.lessonReadMin", { count: stub.readMin })
+                                  : t("charts.screen.course.comingSoon")}
                               </Text>
                             </View>
                             {lessonCompleted ? (
@@ -1035,10 +1036,8 @@ const ChartsScreen: React.FC = () => {
          * tapping the active chip (or the "Show all" strip) clears it.
          */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeaderTitle}>TOPICS</Text>
-          <Text style={styles.sectionHeaderHint}>
-            Tap to filter the course by subject
-          </Text>
+          <Text style={styles.sectionHeaderTitle}>{t("charts.screen.topics.sectionTitle")}</Text>
+          <Text style={styles.sectionHeaderHint}>{t("charts.screen.topics.hint")}</Text>
         </View>
         <ScrollView
           horizontal
@@ -1061,7 +1060,7 @@ const ChartsScreen: React.FC = () => {
                     isActive && styles.topicChipLabelActive,
                   ]}
                 >
-                  {TOPIC_LABELS[topic]}
+                  {t(`charts.screen.topics.labels.${topic}`)}
                 </Text>
               </TouchableOpacity>
             );
@@ -1070,15 +1069,15 @@ const ChartsScreen: React.FC = () => {
 
         {/* ── Tools ── existing calculators */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeaderTitle}>TOOLS</Text>
-          <Text style={styles.sectionHeaderHint}>Calculators & utilities</Text>
+          <Text style={styles.sectionHeaderTitle}>{t("charts.screen.tools.sectionTitle")}</Text>
+          <Text style={styles.sectionHeaderHint}>{t("charts.screen.tools.hint")}</Text>
         </View>
 
         {/* ── Compound Interest Calculator Tool ── */}
         <TouchableOpacity ref={anchorUtilitiesTool} style={tool.toolHeader} onPress={toggleCalc} activeOpacity={0.7}>
           <View>
-            <Text style={tool.toolTitle}>Compound Interest Calculator</Text>
-            <Text style={tool.toolHint}>Project your investment growth over time</Text>
+            <Text style={tool.toolTitle}>{t("charts.screen.compound.title")}</Text>
+            <Text style={tool.toolHint}>{t("charts.screen.compound.hint")}</Text>
           </View>
           <Text style={tool.toolChevron}>{calcOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
@@ -1087,12 +1086,17 @@ const ChartsScreen: React.FC = () => {
           <View style={tool.toolBody}>
             {/* Result Card */}
             <View style={tool.resultCard}>
-              <Text style={tool.resultLabel}>PROJECTED VALUE</Text>
+              <Text style={tool.resultLabel}>{t("charts.screen.compound.projectedValue")}</Text>
               <Text style={tool.resultValue}>{formatCurrency(totalValue)}</Text>
               <Text style={[tool.resultSub, styles.calcResultSub]} numberOfLines={2}>
                 {lumpSum > 0
-                  ? `${formatCurrency(lumpSum)} now + ${formatCurrency(contribution)}/mo · after ${years} years at ${returnRate}%`
-                  : `in today's dollars · after ${years} years at ${returnRate}%`}
+                  ? t("charts.screen.compound.subLump", {
+                      lump: formatCurrency(lumpSum),
+                      monthly: formatCurrency(contribution),
+                      years,
+                      rate: returnRate,
+                    })
+                  : t("charts.screen.compound.subPlain", { years, rate: returnRate })}
               </Text>
             </View>
 
@@ -1118,7 +1122,7 @@ const ChartsScreen: React.FC = () => {
                     onPress={() => setYears(preset)}
                   >
                     <Text style={[tool.presetBtnText, years === preset && tool.presetBtnTextActive]}>
-                      {preset}yr
+                      {t("charts.screen.units.yearPreset", { count: preset })}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -1128,22 +1132,26 @@ const ChartsScreen: React.FC = () => {
             {/* Lump sum vs. monthly comparison */}
             {showComparison && (
               <View style={tool.breakdownCard}>
-                <Text style={tool.breakdownTitle}>Lump Sum vs. Monthly</Text>
+                <Text style={tool.breakdownTitle}>{t("charts.screen.compound.comparison.title")}</Text>
                 <View style={tool.refiSummaryRow}>
                   <View style={tool.refiSummaryItem}>
-                    <Text style={tool.refiSummaryLabel}>{formatCurrency(lumpSum)} once</Text>
+                    <Text style={tool.refiSummaryLabel}>
+                      {t("charts.screen.compound.comparison.once", { amount: formatCurrency(lumpSum) })}
+                    </Text>
                     <Text style={[tool.refiSummaryValue, { color: colors.accent }]}>
                       {formatCurrency(comparison.lumpOnly.endValue)}
                     </Text>
                   </View>
                   <View style={tool.refiSummaryItem}>
-                    <Text style={tool.refiSummaryLabel}>{formatCurrency(contribution)}/mo</Text>
+                    <Text style={tool.refiSummaryLabel}>
+                      {t("charts.screen.compound.comparison.perMonth", { amount: formatCurrency(contribution) })}
+                    </Text>
                     <Text style={[tool.refiSummaryValue, { color: colors.success }]}>
                       {formatCurrency(comparison.monthlyOnly.endValue)}
                     </Text>
                   </View>
                   <View style={tool.refiSummaryItem}>
-                    <Text style={tool.refiSummaryLabel}>Both</Text>
+                    <Text style={tool.refiSummaryLabel}>{t("charts.screen.compound.comparison.both")}</Text>
                     <Text style={tool.refiSummaryValue}>
                       {formatCurrency(comparison.both.endValue)}
                     </Text>
@@ -1151,8 +1159,12 @@ const ChartsScreen: React.FC = () => {
                 </View>
                 <Text style={tool.ratioText}>
                   {comparison.crossoverYear !== null
-                    ? `The monthly plan overtakes the lump sum in year ${comparison.crossoverYear} - but it also puts in ${formatCurrency(comparison.monthlyOnly.putIn)} against ${formatCurrency(lumpSum)}. Doing both is the real win.`
-                    : `Over ${years} years the lump sum stays ahead of the monthly plan on its own. Doing both is the real win.`}
+                    ? t("charts.screen.compound.comparison.crossover", {
+                        year: comparison.crossoverYear,
+                        putIn: formatCurrency(comparison.monthlyOnly.putIn),
+                        lump: formatCurrency(lumpSum),
+                      })
+                    : t("charts.screen.compound.comparison.noCrossover", { years })}
                 </Text>
               </View>
             )}
@@ -1161,7 +1173,7 @@ const ChartsScreen: React.FC = () => {
             {returnRate > 0 && (
               <View style={tool.insightCard}>
                 <Text style={tool.insightText}>
-                  At {returnRate}%, your money doubles roughly every ~{doublingYears} years (Rule of 72)
+                  {t("charts.screen.compound.rule72", { rate: returnRate, years: doublingYears })}
                 </Text>
               </View>
             )}
@@ -1173,32 +1185,24 @@ const ChartsScreen: React.FC = () => {
               activeOpacity={0.7}
             >
               <Text style={[styles.whyCardToggleText, { color: colors.accent }]}>
-                {showWhyCard ? "Hide: Why 7%?" : "Why 7%?"}
+                {showWhyCard ? t("charts.screen.compound.whyHide") : t("charts.screen.compound.whyShow")}
               </Text>
             </TouchableOpacity>
 
             {showWhyCard && (
               <View style={styles.whyCard}>
-                <Text style={styles.whyCardTitle}>S&P 500 and Inflation</Text>
-                <Text style={styles.whyCardBody}>
-                  The S&P 500 is an index of the 500 largest US companies. It has returned an average of ~10% per year since 1926.
-                </Text>
-                <Text style={styles.whyCardBody}>
-                  However, inflation (the rising cost of goods) historically averages ~3% per year. That means $100 today buys less in the future.
-                </Text>
-                <Text style={styles.whyCardBody}>
-                  When we subtract inflation (10% - 3%), the real return is about 7%. This calculator uses inflation-adjusted returns by default, so the projected value represents what your money can actually buy in today's dollars.
-                </Text>
+                <Text style={styles.whyCardTitle}>{t("charts.screen.compound.why.title")}</Text>
+                <Text style={styles.whyCardBody}>{t("charts.screen.compound.why.p1")}</Text>
+                <Text style={styles.whyCardBody}>{t("charts.screen.compound.why.p2")}</Text>
+                <Text style={styles.whyCardBody}>{t("charts.screen.compound.why.p3")}</Text>
                 <View style={styles.whyCardDivider} />
-                <Text style={styles.whyCardFooter}>
-                  Past performance does not guarantee future results. Actual returns vary year to year.
-                </Text>
+                <Text style={styles.whyCardFooter}>{t("charts.screen.compound.why.footer")}</Text>
               </View>
             )}
 
             {/* Chart */}
             <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>Growth Over Time</Text>
+              <Text style={styles.chartTitle}>{t("charts.screen.compound.chart.title")}</Text>
               <View style={styles.chartWrap}>
                 <AreaChart
                   data={timeline}
@@ -1212,31 +1216,35 @@ const ChartsScreen: React.FC = () => {
               <View style={styles.legendRow}>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: colors.accent }]} />
-                  <Text style={styles.legendText}>Total Value</Text>
+                  <Text style={styles.legendText}>{t("charts.screen.compound.chart.totalValue")}</Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: colors.success, borderRadius: 2 }]} />
-                  <Text style={styles.legendText}>Contributions</Text>
+                  <Text style={styles.legendText}>{t("charts.screen.compound.chart.contributions")}</Text>
                 </View>
               </View>
             </View>
 
             {/* Breakdown */}
             <View style={tool.breakdownCard}>
-              <Text style={tool.breakdownTitle}>Breakdown</Text>
+              <Text style={tool.breakdownTitle}>{t("charts.screen.compound.breakdown.title")}</Text>
               <View style={tool.breakdownRow}>
                 <View style={tool.breakdownItem}>
                   <Text style={[tool.breakdownValue, { color: colors.success }]}>
                     {formatCurrency(totalContributed)}
                   </Text>
-                  <Text style={tool.breakdownLabel}>{lumpSum > 0 ? "You Put In" : "You Contribute"}</Text>
+                  <Text style={tool.breakdownLabel}>
+                    {lumpSum > 0
+                      ? t("charts.screen.compound.breakdown.putIn")
+                      : t("charts.screen.compound.breakdown.contribute")}
+                  </Text>
                 </View>
                 <View style={tool.breakdownDivider} />
                 <View style={tool.breakdownItem}>
                   <Text style={[tool.breakdownValue, { color: colors.accent }]}>
                     {formatCurrency(totalInterest)}
                   </Text>
-                  <Text style={tool.breakdownLabel}>Interest Earned</Text>
+                  <Text style={tool.breakdownLabel}>{t("charts.screen.compound.breakdown.interest")}</Text>
                 </View>
               </View>
               {totalContributed > 0 && (
@@ -1257,8 +1265,9 @@ const ChartsScreen: React.FC = () => {
               )}
               {totalContributed > 0 && (
                 <Text style={tool.ratioText}>
-                  Your money earned {((totalInterest / totalContributed) * 100).toFixed(0)}% more
-                  through compound interest
+                  {t("charts.screen.compound.breakdown.ratio", {
+                    percent: ((totalInterest / totalContributed) * 100).toFixed(0),
+                  })}
                 </Text>
               )}
             </View>
@@ -1271,10 +1280,8 @@ const ChartsScreen: React.FC = () => {
         {/* ── Refinance Break-Even Calculator Tool ── */}
         <TouchableOpacity style={tool.toolHeader} onPress={toggleRefi} activeOpacity={0.7}>
           <View>
-            <Text style={tool.toolTitle}>Refinance Break-Even Calculator</Text>
-            <Text style={tool.toolHint}>
-              See if refinancing actually saves you money
-            </Text>
+            <Text style={tool.toolTitle}>{t("charts.screen.refi.title")}</Text>
+            <Text style={tool.toolHint}>{t("charts.screen.refi.hint")}</Text>
           </View>
           <Text style={tool.toolChevron}>{refiOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
@@ -1283,47 +1290,44 @@ const ChartsScreen: React.FC = () => {
           <View style={tool.toolBody}>
             {/* Result card - break-even */}
             <View style={tool.resultCard}>
-              <Text style={tool.resultLabel}>BREAK-EVEN</Text>
+              <Text style={tool.resultLabel}>{t("charts.screen.refi.breakEven")}</Text>
               {!hasRefiSelection ? (
                 <>
                   <Text style={[tool.resultValue, { color: colors.textDim }]}>
                     --
                   </Text>
-                  <Text style={tool.resultSub}>
-                    Pick at least one debt below to see the comparison.
-                  </Text>
+                  <Text style={tool.resultSub}>{t("charts.screen.refi.pickOne")}</Text>
                 </>
               ) : refiBreakEvenMonths !== null && isFinite(refiBreakEvenMonths) ? (
                 <>
                   <Text style={tool.resultValue}>
-                    {Math.ceil(refiBreakEvenMonths)} mo
+                    {t("charts.screen.refi.months", { count: Math.ceil(refiBreakEvenMonths) })}
                   </Text>
                   <Text style={tool.resultSub}>
                     {refiBreakEvenMonths >= 12
-                      ? `~${(refiBreakEvenMonths / 12).toFixed(1)} years to recover ${formatCurrency(refiClosingCosts)} in closing costs`
-                      : `${formatCurrency(refiClosingCosts)} in closing costs recovered in under a year`}
+                      ? t("charts.screen.refi.recoverYears", {
+                          years: (refiBreakEvenMonths / 12).toFixed(1),
+                          amount: formatCurrency(refiClosingCosts),
+                        })
+                      : t("charts.screen.refi.recoverUnderYear", {
+                          amount: formatCurrency(refiClosingCosts),
+                        })}
                   </Text>
                 </>
               ) : (
                 <>
                   <Text style={[tool.resultValue, { color: colors.danger }]}>--</Text>
-                  <Text style={tool.resultSub}>
-                    New payment isn't lower than current - no break-even.
-                  </Text>
+                  <Text style={tool.resultSub}>{t("charts.screen.refi.noBreakEven")}</Text>
                 </>
               )}
             </View>
 
             {/* Current loan - debt multi-select */}
             <View style={styles.refiPrefillCard}>
-              <Text style={styles.refiSectionLabel}>CURRENT LOAN</Text>
-              <Text style={styles.refiPrefillTitle}>
-                Pick the debts you want to refinance
-              </Text>
+              <Text style={styles.refiSectionLabel}>{t("charts.screen.refi.currentLoan")}</Text>
+              <Text style={styles.refiPrefillTitle}>{t("charts.screen.refi.pickDebts")}</Text>
               {refiDebts.length === 0 ? (
-                <Text style={tool.refiEmptyText}>
-                  Add a debt in the Debt Tracker to use this calculator.
-                </Text>
+                <Text style={tool.refiEmptyText}>{t("charts.screen.refi.noDebts")}</Text>
               ) : (
                 refiDebts.map((debt) => {
                   const isSelected = refiSelectedDebtIds.has(debt.id);
@@ -1358,8 +1362,11 @@ const ChartsScreen: React.FC = () => {
                           {debt.name}
                         </Text>
                         <Text style={styles.refiDebtMeta}>
-                          {formatCurrency(debt.balance)} · {debt.rate}% APR
-                          {debt.goalDate ? " · goal set" : ""}
+                          {t("charts.screen.refi.debtMeta", {
+                            balance: formatCurrency(debt.balance),
+                            rate: debt.rate,
+                          })}
+                          {debt.goalDate ? t("charts.screen.refi.goalSet") : ""}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -1371,10 +1378,10 @@ const ChartsScreen: React.FC = () => {
             {/* Current loan derived summary + years-remaining slider */}
             {hasRefiSelection && (
               <View style={tool.slidersCard}>
-                <Text style={styles.refiSectionLabel}>CURRENT LOAN SUMMARY</Text>
+                <Text style={styles.refiSectionLabel}>{t("charts.screen.refi.summaryTitle")}</Text>
                 <View style={tool.refiSummaryRow}>
                   <View style={tool.refiSummaryItem}>
-                    <Text style={tool.refiSummaryLabel}>Combined balance</Text>
+                    <Text style={tool.refiSummaryLabel}>{t("charts.screen.refi.combinedBalance")}</Text>
                     <Text style={tool.refiSummaryValue}>
                       {formatCurrency(refiBalance)}
                     </Text>
@@ -1382,24 +1389,27 @@ const ChartsScreen: React.FC = () => {
                   <View style={tool.breakdownDivider} />
                   <View style={tool.refiSummaryItem}>
                     <Text style={tool.refiSummaryLabel}>
-                      {selectedRefiDebts.length > 1 ? "Weighted APR" : "APR"}
+                      {selectedRefiDebts.length > 1
+                        ? t("charts.screen.refi.weightedApr")
+                        : t("charts.screen.refi.apr")}
                     </Text>
                     <Text style={tool.refiSummaryValue}>
-                      {refiCurrentRate.toFixed(2)}%
+                      {t("charts.screen.units.percent", { value: refiCurrentRate.toFixed(2) })}
                     </Text>
                   </View>
                 </View>
                 <Text style={styles.refiSummaryHint}>
-                  {selectedRefiDebts.length} of {refiDebts.length} debts selected
-                  {selectedRefiDebts.length > 1
-                    ? " · weighted by balance"
-                    : ""}
+                  {t("charts.screen.refi.selected", {
+                    selected: selectedRefiDebts.length,
+                    total: refiDebts.length,
+                  })}
+                  {selectedRefiDebts.length > 1 ? t("charts.screen.refi.weightedByBalance") : ""}
                 </Text>
                 {renderRefiSlider("refiCurrentTerm", refiCurrentTerm)}
                 <Text style={styles.refiPrefillHint}>
                   {refiAllSelectedHaveGoalDate
-                    ? "Years remaining auto-filled from each debt's goal date. Adjust freely if the goal dates aren't exact."
-                    : "Set a goal date on each debt in the tracker to auto-fill years remaining."}
+                    ? t("charts.screen.refi.autoFilledHint")
+                    : t("charts.screen.refi.setGoalHint")}
                 </Text>
               </View>
             )}
@@ -1407,7 +1417,7 @@ const ChartsScreen: React.FC = () => {
             {/* New loan sliders */}
             {hasRefiSelection && (
               <View style={tool.slidersCard}>
-                <Text style={styles.refiSectionLabel}>NEW LOAN</Text>
+                <Text style={styles.refiSectionLabel}>{t("charts.screen.refi.newLoan")}</Text>
                 {renderRefiSlider("refiNewRate", refiNewRate)}
                 {renderRefiSlider("refiNewTerm", refiNewTerm)}
                 {renderRefiSlider("refiClosingCosts", refiClosingCosts)}
@@ -1417,7 +1427,7 @@ const ChartsScreen: React.FC = () => {
             {/* Monthly payment breakdown */}
             {hasRefiSelection && (<>
             <View style={tool.breakdownCard}>
-              <Text style={tool.breakdownTitle}>Monthly Payment</Text>
+              <Text style={tool.breakdownTitle}>{t("charts.screen.refi.monthlyPayment")}</Text>
               <View style={tool.breakdownRow}>
                 <View style={tool.breakdownItem}>
                   <Text style={[tool.breakdownValue, { color: colors.textDim }]}>
@@ -1425,7 +1435,7 @@ const ChartsScreen: React.FC = () => {
                       ? formatCurrency(refiCurrentMonthlyPayment)
                       : "--"}
                   </Text>
-                  <Text style={tool.breakdownLabel}>Current</Text>
+                  <Text style={tool.breakdownLabel}>{t("charts.screen.refi.current")}</Text>
                 </View>
                 <View style={tool.breakdownDivider} />
                 <View style={tool.breakdownItem}>
@@ -1434,7 +1444,7 @@ const ChartsScreen: React.FC = () => {
                       ? formatCurrency(refiNewMonthlyPayment)
                       : "--"}
                   </Text>
-                  <Text style={tool.breakdownLabel}>New</Text>
+                  <Text style={tool.breakdownLabel}>{t("charts.screen.refi.new")}</Text>
                 </View>
               </View>
               <Text
@@ -1453,29 +1463,31 @@ const ChartsScreen: React.FC = () => {
                 ]}
               >
                 {refiMonthlyDelta > 0
-                  ? `Saves ${formatCurrency(refiMonthlyDelta)}/mo`
+                  ? t("charts.screen.refi.savesPerMonth", { amount: formatCurrency(refiMonthlyDelta) })
                   : refiMonthlyDelta < 0
-                    ? `Costs ${formatCurrency(Math.abs(refiMonthlyDelta))}/mo more`
-                    : "Same monthly payment"}
+                    ? t("charts.screen.refi.costsPerMonth", {
+                        amount: formatCurrency(Math.abs(refiMonthlyDelta)),
+                      })
+                    : t("charts.screen.refi.samePayment")}
               </Text>
             </View>
 
             {/* Lifetime interest comparison */}
             <View style={tool.breakdownCard}>
-              <Text style={tool.breakdownTitle}>Lifetime Interest</Text>
+              <Text style={tool.breakdownTitle}>{t("charts.screen.refi.lifetimeInterest")}</Text>
               <View style={tool.breakdownRow}>
                 <View style={tool.breakdownItem}>
                   <Text style={[tool.breakdownValue, { color: colors.textDim }]}>
                     {formatCurrency(refiCurrentTotalInterest)}
                   </Text>
-                  <Text style={tool.breakdownLabel}>Keep current</Text>
+                  <Text style={tool.breakdownLabel}>{t("charts.screen.refi.keepCurrent")}</Text>
                 </View>
                 <View style={tool.breakdownDivider} />
                 <View style={tool.breakdownItem}>
                   <Text style={[tool.breakdownValue, { color: colors.accent }]}>
                     {formatCurrency(refiNewTotalInterest)}
                   </Text>
-                  <Text style={tool.breakdownLabel}>Refinance</Text>
+                  <Text style={tool.breakdownLabel}>{t("charts.screen.refi.refinance")}</Text>
                 </View>
               </View>
               <Text
@@ -1494,10 +1506,12 @@ const ChartsScreen: React.FC = () => {
                 ]}
               >
                 {refiInterestDelta > 0
-                  ? `Saves ${formatCurrency(refiInterestDelta)} over the life of the loan`
+                  ? t("charts.screen.refi.savesLifetime", { amount: formatCurrency(refiInterestDelta) })
                   : refiInterestDelta < 0
-                    ? `Pays ${formatCurrency(Math.abs(refiInterestDelta))} more in interest overall`
-                    : "Same lifetime interest"}
+                    ? t("charts.screen.refi.paysMore", {
+                        amount: formatCurrency(Math.abs(refiInterestDelta)),
+                      })
+                    : t("charts.screen.refi.sameLifetime")}
               </Text>
             </View>
 
@@ -1505,7 +1519,7 @@ const ChartsScreen: React.FC = () => {
             {refiBreakEvenMonths !== null && (
               <View style={tool.insightCard}>
                 <Text style={tool.insightText}>
-                  Net savings over the new {refiNewTerm}-year term:{" "}
+                  {t("charts.screen.refi.netSavings", { years: refiNewTerm })}
                   <Text
                     style={{
                       color:
@@ -1529,9 +1543,7 @@ const ChartsScreen: React.FC = () => {
                   { backgroundColor: `${colors.warning}15` },
                 ]}
               >
-                <Text style={tool.insightText}>
-                  Heads up: the new term is longer than what's left on your current loan. Lower monthly payments here partly come from spreading the balance over more months - check the lifetime interest above to see if that trade-off is worth it.
-                </Text>
+                <Text style={tool.insightText}>{t("charts.screen.refi.extendsWarning")}</Text>
               </View>
             )}
             </>)}
@@ -1541,8 +1553,8 @@ const ChartsScreen: React.FC = () => {
         {/* ── Emergency Fund Calculator Tool ── */}
         <TouchableOpacity style={tool.toolHeader} onPress={toggleEf} activeOpacity={0.7}>
           <View>
-            <Text style={tool.toolTitle}>Emergency Fund Calculator</Text>
-            <Text style={tool.toolHint}>Track your safety net progress</Text>
+            <Text style={tool.toolTitle}>{t("charts.screen.ef.title")}</Text>
+            <Text style={tool.toolHint}>{t("charts.screen.ef.hint")}</Text>
           </View>
           <Text style={tool.toolChevron}>{efOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
@@ -1551,7 +1563,7 @@ const ChartsScreen: React.FC = () => {
           <View style={tool.toolBody}>
             {/* Monthly expenses */}
             <View style={tool.efCard}>
-              <Text style={tool.efSectionTitle}>Your Monthly Expenses</Text>
+              <Text style={tool.efSectionTitle}>{t("charts.screen.ef.expensesTitle")}</Text>
               {toolsLoadError ? (
                 <Text style={[tool.efAutoHint, { color: colors.danger }]}>
                   {toolsLoadError}
@@ -1559,16 +1571,14 @@ const ChartsScreen: React.FC = () => {
               ) : null}
               {efDataLoaded && avgExpenses > 0 ? (
                 <Text style={tool.efAutoHint}>
-                  Based on your budget: {formatCurrency(avgExpenses)}/mo average
+                  {t("charts.screen.ef.basedOn", { amount: formatCurrency(avgExpenses) })}
                 </Text>
               ) : efDataLoaded ? (
-                <Text style={tool.efAutoHint}>
-                  No budget data yet - enter your monthly expenses below
-                </Text>
+                <Text style={tool.efAutoHint}>{t("charts.screen.ef.noData")}</Text>
               ) : null}
               <TextInput
                 style={tool.input}
-                placeholder={avgExpenses > 0 ? String(avgExpenses) : "Monthly expenses"}
+                placeholder={avgExpenses > 0 ? String(avgExpenses) : t("charts.screen.ef.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
                 value={efExpenseOverride}
@@ -1581,7 +1591,7 @@ const ChartsScreen: React.FC = () => {
                 {/* 3-month target */}
                 <View style={tool.efCard}>
                   <View style={styles.efTargetHeader}>
-                    <Text style={styles.efTargetTitle}>3-Month Fund</Text>
+                    <Text style={styles.efTargetTitle}>{t("charts.screen.ef.threeMonth")}</Text>
                     <Text style={[styles.efTargetAmount, { color: colors.accent }]}>
                       {formatCurrency(efThreeMonth)}
                     </Text>
@@ -1599,7 +1609,7 @@ const ChartsScreen: React.FC = () => {
                   </View>
                   <View style={styles.efProgressRow}>
                     <Text style={styles.efProgressLabel}>
-                      {formatCurrency(currentEfAmount)} saved
+                      {t("charts.screen.ef.saved", { amount: formatCurrency(currentEfAmount) })}
                     </Text>
                     <Text style={styles.efProgressLabel}>
                       {Math.round(efThreeProgress * 100)}%
@@ -1607,12 +1617,15 @@ const ChartsScreen: React.FC = () => {
                   </View>
                   {efThreeProgress < 1 && efMonthsToThree > 0 && (
                     <Text style={tool.efTimeEstimate}>
-                      ~{efMonthsToThree} {efMonthsToThree === 1 ? "month" : "months"} to reach at {formatCurrency(efMonthlySavings)}/mo
+                      {t("charts.screen.ef.monthsToReach", {
+                        count: efMonthsToThree,
+                        amount: formatCurrency(efMonthlySavings),
+                      })}
                     </Text>
                   )}
                   {efThreeProgress >= 1 && (
                     <Text style={[tool.efTimeEstimate, { color: colors.success }]}>
-                      3-month fund reached!
+                      {t("charts.screen.ef.threeReached")}
                     </Text>
                   )}
                 </View>
@@ -1620,7 +1633,7 @@ const ChartsScreen: React.FC = () => {
                 {/* 6-month target */}
                 <View style={tool.efCard}>
                   <View style={styles.efTargetHeader}>
-                    <Text style={styles.efTargetTitle}>6-Month Fund</Text>
+                    <Text style={styles.efTargetTitle}>{t("charts.screen.ef.sixMonth")}</Text>
                     <Text style={[styles.efTargetAmount, { color: colors.accent }]}>
                       {formatCurrency(efSixMonth)}
                     </Text>
@@ -1638,7 +1651,7 @@ const ChartsScreen: React.FC = () => {
                   </View>
                   <View style={styles.efProgressRow}>
                     <Text style={styles.efProgressLabel}>
-                      {formatCurrency(currentEfAmount)} saved
+                      {t("charts.screen.ef.saved", { amount: formatCurrency(currentEfAmount) })}
                     </Text>
                     <Text style={styles.efProgressLabel}>
                       {Math.round(efSixProgress * 100)}%
@@ -1646,12 +1659,15 @@ const ChartsScreen: React.FC = () => {
                   </View>
                   {efSixProgress < 1 && efMonthsToSix > 0 && (
                     <Text style={tool.efTimeEstimate}>
-                      ~{efMonthsToSix} {efMonthsToSix === 1 ? "month" : "months"} to reach at {formatCurrency(efMonthlySavings)}/mo
+                      {t("charts.screen.ef.monthsToReach", {
+                        count: efMonthsToSix,
+                        amount: formatCurrency(efMonthlySavings),
+                      })}
                     </Text>
                   )}
                   {efSixProgress >= 1 && (
                     <Text style={[tool.efTimeEstimate, { color: colors.success }]}>
-                      6-month fund reached!
+                      {t("charts.screen.ef.sixReached")}
                     </Text>
                   )}
                 </View>
@@ -1659,7 +1675,7 @@ const ChartsScreen: React.FC = () => {
                 {/* Monthly savings slider */}
                 <View style={tool.slidersCard}>
                   <SliderRow
-                    label="Monthly Savings"
+                    label={t("charts.screen.ef.monthlySavings")}
                     value={efMonthlySavings}
                     min={50}
                     max={10000}
@@ -1674,9 +1690,7 @@ const ChartsScreen: React.FC = () => {
 
                 {/* Educational note */}
                 <View style={tool.insightCard}>
-                  <Text style={tool.insightText}>
-                    A common target is 3-6 months of living expenses in cash. That can cover job loss, medical emergencies, or unexpected repairs without new debt. Your situation may differ.
-                  </Text>
+                  <Text style={tool.insightText}>{t("charts.screen.ef.note")}</Text>
                 </View>
               </>
             )}

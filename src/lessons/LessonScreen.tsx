@@ -23,6 +23,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -32,7 +33,6 @@ import type {
   LearningProgress,
   Lesson,
   LessonStub,
-  LessonTopic,
 } from "../types";
 import { CHAPTERS } from "../data/lessonChapters";
 import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
@@ -82,18 +82,6 @@ interface CelebrationSnapshot {
   nextStub: LessonStub | null;
 }
 
-const TOPIC_PILL_LABELS: Record<LessonTopic, string> = {
-  budgeting: "Budgeting",
-  debt: "Debt",
-  saving: "Saving",
-  investing: "Investing",
-  taxes: "Taxes",
-  insurance: "Insurance",
-  real_estate: "Real Estate",
-  retirement: "Retirement",
-  mindset: "Mindset",
-};
-
 const LessonScreen: React.FC<LessonScreenProps> = ({
   visible,
   stub,
@@ -102,11 +90,15 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
   onOpenAction,
   onOpenTool,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const scrollRef = useRef<ScrollView>(null);
+  // Lesson prose is authored in English only (src/data/lessons); tell a
+  // non-English reader so the switch from German chrome isn't a surprise.
+  const showEnglishOnlyNote = i18n.language !== "en";
   const { runCheck: runAchievementsCheck } = useAchievements();
   const [progress, setProgress] = useState<LearningProgress | null>(null);
 
@@ -265,12 +257,14 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
             style={styles.headerBtn}
             onPress={onClose}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={t("charts.lessons.reader.backA11y")}
           >
             <Text style={styles.headerBtnText}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerCrumb}>
-              Ch {chapter.number} · Lesson {stub.number}
+              {t("charts.lessons.reader.crumb", { chapter: chapter.number, lesson: stub.number })}
             </Text>
           </View>
           <View style={styles.headerBtn} />
@@ -291,10 +285,19 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
             </Text>
             <Text style={styles.heroTitle}>{stub.title}</Text>
             <Text style={styles.heroMeta}>
-              {stub.readMin ? `${stub.readMin} min read` : "Coming soon"}
+              {stub.readMin
+                ? t("charts.lessons.reader.readMin", { count: stub.readMin })
+                : t("charts.lessons.reader.comingSoonMeta")}
               {stub.topics.length > 0 ? " · " : ""}
-              {stub.topics.map((t) => TOPIC_PILL_LABELS[t]).join(", ")}
+              {stub.topics
+                .map((topic) => t(`charts.lessons.reader.topics.${topic}`))
+                .join(", ")}
             </Text>
+            {showEnglishOnlyNote ? (
+              <Text style={styles.englishOnly}>
+                {t("charts.lessons.reader.englishOnly")}
+              </Text>
+            ) : null}
           </View>
 
           {stubHasBody && lesson ? (
@@ -307,7 +310,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
 
               {lesson.whyItMatters ? (
                 <View style={styles.whyCard}>
-                  <Text style={styles.whyEyebrow}>WHY THIS MATTERS</Text>
+                  <Text style={styles.whyEyebrow}>{t("charts.lessons.reader.whyEyebrow")}</Text>
                   <Text style={styles.whyText}>{lesson.whyItMatters}</Text>
                 </View>
               ) : null}
@@ -316,7 +319,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
 
               {lesson.keyTakeaway ? (
                 <View style={styles.takeawayCard}>
-                  <Text style={styles.takeawayEyebrow}>KEY TAKEAWAY</Text>
+                  <Text style={styles.takeawayEyebrow}>{t("charts.lessons.reader.takeawayEyebrow")}</Text>
                   <Text style={styles.takeawayText}>{lesson.keyTakeaway}</Text>
                 </View>
               ) : null}
@@ -336,7 +339,9 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
                     isCompleted && styles.completeBtnTextDone,
                   ]}
                 >
-                  {isCompleted ? "✓ Completed" : "Mark complete"}
+                  {isCompleted
+                    ? t("charts.lessons.reader.completed")
+                    : t("charts.lessons.reader.markComplete")}
                 </Text>
               </TouchableOpacity>
 
@@ -346,7 +351,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
                   onPress={handleAction}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.actionBtnEyebrow}>TRY IT</Text>
+                  <Text style={styles.actionBtnEyebrow}>{t("charts.lessons.reader.tryIt")}</Text>
                   <Text style={styles.actionBtnLabel}>
                     {lesson.action.label}
                   </Text>
@@ -355,7 +360,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
 
               {lesson.resources && lesson.resources.length > 0 ? (
                 <View style={styles.resourcesSection}>
-                  <Text style={styles.resourcesHeader}>GO DEEPER</Text>
+                  <Text style={styles.resourcesHeader}>{t("charts.lessons.reader.goDeeper")}</Text>
                   <View style={styles.resourcesList}>
                     {lesson.resources.map((res, idx) => (
                       <ResourceCard
@@ -375,10 +380,11 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
             /* "Coming soon" placeholder for stubs without a body. */
             <View style={styles.comingSoonCard}>
               <Text style={styles.comingSoonGlyph}>🚧</Text>
-              <Text style={styles.comingSoonTitle}>Lesson in progress</Text>
+              <Text style={styles.comingSoonTitle}>
+                {t("charts.lessons.reader.comingSoon.title")}
+              </Text>
               <Text style={styles.comingSoonBody}>
-                {chapter.title} ships in a future update. The chapter outline
-                is here so you can see the full course path. Check back soon.
+                {t("charts.lessons.reader.comingSoon.body", { chapter: chapter.title })}
               </Text>
             </View>
           )}
@@ -406,7 +412,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
                     !prevStub && styles.navBtnTextDisabled,
                   ]}
                 >
-                  Previous
+                  {t("charts.lessons.reader.previous")}
                 </Text>
                 <Text
                   style={[
@@ -433,7 +439,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
                     !nextStub && styles.navBtnTextDisabled,
                   ]}
                 >
-                  Next
+                  {t("charts.lessons.reader.next")}
                 </Text>
                 <Text
                   style={[
@@ -537,6 +543,13 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(12),
       color: colors.textMuted,
       textAlign: "center",
+    },
+    englishOnly: {
+      fontSize: scale(12),
+      color: colors.textMuted,
+      textAlign: "center",
+      fontStyle: "italic",
+      marginTop: 6,
     },
     disclaimer: {
       fontSize: scale(11),
