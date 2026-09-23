@@ -28,6 +28,7 @@ import {
 } from "./tombstones";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { generateUUID } from "../utils/uuid";
+import { t } from "../i18n/translate";
 
 /** Also listed in debtStorage.RESET_KEYS - keep in lockstep. */
 const STORAGE_KEY = "@budgetark_businesses";
@@ -189,11 +190,11 @@ const validateName = (
   excludeId?: string
 ): { ok: true; name: string } | { ok: false; error: string } => {
   const name = sanitizeTextInput(rawName).trim();
-  if (!name) return { ok: false, error: "Enter a business name." };
+  if (!name) return { ok: false, error: t("helpers.misc.businesses.nameRequired") };
   if (name.length > MAX_BUSINESS_NAME_LENGTH) {
     return {
       ok: false,
-      error: `Keep it under ${MAX_BUSINESS_NAME_LENGTH} characters.`,
+      error: t("helpers.misc.validation.tooLong", { max: MAX_BUSINESS_NAME_LENGTH }),
     };
   }
   const lower = name.toLowerCase();
@@ -201,7 +202,7 @@ const validateName = (
     (b) => !b.deletedAt && b.id !== excludeId && b.name.toLowerCase() === lower
   );
   if (clash) {
-    return { ok: false, error: `"${name}" already exists.` };
+    return { ok: false, error: t("helpers.misc.validation.alreadyExists", { name }) };
   }
   return { ok: true, name };
 };
@@ -214,7 +215,7 @@ export const addBusiness = async (
   if (live.length >= MAX_BUSINESSES) {
     return {
       ok: false,
-      error: `You can have up to ${MAX_BUSINESSES} businesses.`,
+      error: t("helpers.misc.businesses.limit", { max: MAX_BUSINESSES }),
     };
   }
   const checked = validateName(rawName, all);
@@ -240,7 +241,7 @@ export const updateBusiness = async (
 ): Promise<BusinessMutationResult> => {
   const all = await readStore();
   const target = all.find((b) => b.id === id && !b.deletedAt);
-  if (!target) return { ok: false, error: "Business not found." };
+  if (!target) return { ok: false, error: t("helpers.misc.businesses.notFound") };
 
   let name = target.name;
   if (patch.name !== undefined) {

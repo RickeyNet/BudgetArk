@@ -15,6 +15,9 @@ module.exports = {
   roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.test.ts"],
   clearMocks: true,
+  // Initialises the global i18next instance with the English tree so pure
+  // helpers that translate via src/i18n/translate.ts return real sentences.
+  setupFiles: ["<rootDir>/src/i18n/jestSetup.ts"],
   moduleNameMapper: {
     // quick-crypto is a native (Nitro) module; Node's crypto implements the
     // same OpenSSL-backed API, so tests run the real math. See the shim.

@@ -89,7 +89,7 @@ import { LESSON_TOPICS } from "../types";
 import SliderRow from "../components/SliderRow";
 import { useToolStyles } from "../theme/toolStyles";
 import { CHAPTERS } from "../data/lessonChapters";
-import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
+import { learningDisclaimer } from "../data/learningDisclaimer";
 import {
   getChapterProgress,
   getOverallProgress,
@@ -906,7 +906,7 @@ const ChartsScreen: React.FC = () => {
               ]}
             />
           </View>
-          <Text style={styles.courseDisclaimer}>{LEARNING_DISCLAIMER}</Text>
+          <Text style={styles.courseDisclaimer}>{learningDisclaimer()}</Text>
 
           {resumeStub && resumeChapter && (
             <TouchableOpacity

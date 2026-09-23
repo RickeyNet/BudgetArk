@@ -28,6 +28,8 @@ private let quickAddBaseURL = URL(string: "budgetark://quick-add")!
 
 private struct QuickAddCategory: Identifiable {
   let name: String
+  /// Display label in the device language; `name` stays the deep-link id.
+  let label: String
   let emoji: String
   var id: String { name }
   /// Names are static ASCII identifiers from the app's built-in category
@@ -35,15 +37,31 @@ private struct QuickAddCategory: Identifiable {
   var url: URL { URL(string: "budgetark://quick-add?category=\(name)")! }
 }
 
+// MARK: - Language
+//
+// The extension has no JS runtime and (deliberately) no App Group, so it
+// cannot read the in-app language setting. It follows the DEVICE language
+// instead: German phones get German labels, everything else English. The
+// German strings mirror src/i18n/locales/de/{categories,widgets}.ts - keep
+// them in step when those change. Only the DISPLAY label is localized; the
+// deep-link `name` stays the ASCII category id parseQuickAddUri expects.
+
+private let isGerman: Bool =
+  (Locale.preferredLanguages.first ?? "").lowercased().hasPrefix("de")
+
+private func localized(_ en: String, de: String) -> String {
+  isGerman ? de : en
+}
+
 /// Everyday-spend set - keep identical to WIDGET_CATEGORIES in
 /// src/widgets/QuickEntryWidget.tsx.
 private let widgetCategories: [QuickAddCategory] = [
-  QuickAddCategory(name: "Grocery", emoji: "🛒"),
-  QuickAddCategory(name: "Restaurant", emoji: "🍴"),
-  QuickAddCategory(name: "Transportation", emoji: "🚗"),
-  QuickAddCategory(name: "Shopping", emoji: "🛍️"),
-  QuickAddCategory(name: "Entertainment", emoji: "🎬"),
-  QuickAddCategory(name: "Other", emoji: "🏷️"),
+  QuickAddCategory(name: "Grocery", label: localized("Grocery", de: "Lebensmittel"), emoji: "🛒"),
+  QuickAddCategory(name: "Restaurant", label: localized("Restaurant", de: "Restaurant"), emoji: "🍴"),
+  QuickAddCategory(name: "Transportation", label: localized("Transportation", de: "Transport"), emoji: "🚗"),
+  QuickAddCategory(name: "Shopping", label: localized("Shopping", de: "Einkaufen"), emoji: "🛍️"),
+  QuickAddCategory(name: "Entertainment", label: localized("Entertainment", de: "Unterhaltung"), emoji: "🎬"),
+  QuickAddCategory(name: "Other", label: localized("Other", de: "Sonstiges"), emoji: "🏷️"),
 ]
 
 // MARK: - Palette (fixed dark - matches PALETTE in QuickEntryWidget.tsx;
@@ -105,7 +123,7 @@ private struct CategoryButton: View {
       VStack(spacing: 2) {
         Text(category.emoji)
           .font(.system(size: 20))
-        Text(category.name)
+        Text(category.label)
           .font(.system(size: 10))
           .foregroundColor(Palette.dim)
           .lineLimit(1)
@@ -125,10 +143,10 @@ private struct MediumGridView: View {
     VStack(spacing: 6) {
       Link(destination: quickAddBaseURL) {
         HStack(spacing: 0) {
-          Text("⚓ Quick Entry")
+          Text(localized("⚓ Quick Entry", de: "⚓ Schnelleintrag"))
             .font(.system(size: 12, weight: .bold))
             .foregroundColor(Palette.accent)
-          Text("  ·  log an expense")
+          Text(localized("  ·  log an expense", de: "  ·  Ausgabe erfassen"))
             .font(.system(size: 11))
             .foregroundColor(Palette.dim)
           Spacer(minLength: 0)
@@ -153,10 +171,10 @@ private struct SmallView: View {
     VStack(spacing: 4) {
       Text("⚓")
         .font(.system(size: 30))
-      Text("Quick Entry")
+      Text(localized("Quick Entry", de: "Schnelleintrag"))
         .font(.system(size: 14, weight: .bold))
         .foregroundColor(Palette.accent)
-      Text("log an expense")
+      Text(localized("log an expense", de: "Ausgabe erfassen"))
         .font(.system(size: 11))
         .foregroundColor(Palette.dim)
     }
@@ -189,9 +207,12 @@ struct QuickEntryWidget: Widget {
     StaticConfiguration(kind: kind, provider: QuickEntryProvider()) { _ in
       QuickEntryWidgetView()
     }
-    .configurationDisplayName("Quick Entry")
+    .configurationDisplayName(localized("Quick Entry", de: "Schnelleintrag"))
     .description(
-      "Log an expense in one tap - pick a category and BudgetArk opens straight to the amount."
+      localized(
+        "Log an expense in one tap - pick a category and BudgetArk opens straight to the amount.",
+        de: "Ausgabe mit einem Tipp erfassen - Kategorie wählen, BudgetArk öffnet direkt die Betragseingabe."
+      )
     )
     .supportedFamilies([.systemSmall, .systemMedium])
     // The widget draws its own padding (matching the Android layout), so

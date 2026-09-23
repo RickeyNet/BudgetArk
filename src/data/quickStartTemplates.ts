@@ -11,9 +11,14 @@
  * budget that already looks like one. Every number stays editable - the
  * templates are a first draft, never a lock. No custom categories are
  * created; the built-in list already covers each template.
+ *
+ * Title / tagline / description live in src/i18n/locales/{en,de}/dataTemplates.ts
+ * keyed by template id and are resolved lazily through getters (see
+ * src/i18n/translate.ts) so the cards read in the active language.
  */
 
 import type { BudgetCategory } from "../types";
+import { t } from "../i18n/translate";
 
 export type QuickStartTemplateId = "single" | "couple" | "debt-heavy" | "zero-based";
 
@@ -36,10 +41,15 @@ export const QUICK_START_TEMPLATES: readonly QuickStartTemplate[] = [
   {
     id: "single",
     emoji: "🧑",
-    title: "Single",
-    tagline: "One income, balanced 50/30/20",
-    description:
-      "Needs around half, wants under a third, and a fifth toward savings and retirement. The everyday default.",
+    get title() {
+      return t("data.templates.single.title");
+    },
+    get tagline() {
+      return t("data.templates.single.tagline");
+    },
+    get description() {
+      return t("data.templates.single.description");
+    },
     allocations: {
       Housing: 30,
       Grocery: 10,
@@ -60,10 +70,15 @@ export const QUICK_START_TEMPLATES: readonly QuickStartTemplate[] = [
   {
     id: "couple",
     emoji: "🧑‍🤝‍🧑",
-    title: "Couple / household",
-    tagline: "Shared costs, a travel line, room for two",
-    description:
-      "Groceries and insurance sized for two, a travel budget, and savings split between a cushion and retirement. Pair phones later to share it.",
+    get title() {
+      return t("data.templates.couple.title");
+    },
+    get tagline() {
+      return t("data.templates.couple.tagline");
+    },
+    get description() {
+      return t("data.templates.couple.description");
+    },
     allocations: {
       Housing: 28,
       Grocery: 12,
@@ -84,10 +99,15 @@ export const QUICK_START_TEMPLATES: readonly QuickStartTemplate[] = [
   {
     id: "debt-heavy",
     emoji: "⛓️",
-    title: "Paying down debt",
-    tagline: "Lean wants, a quarter of pay free for payoff",
-    description:
-      "Wants trimmed hard so about 27% of take-home is left for debt payments, which the Debts tab plans for you. Pairs with Build Your Ark.",
+    get title() {
+      return t("data.templates.debt-heavy.title");
+    },
+    get tagline() {
+      return t("data.templates.debt-heavy.tagline");
+    },
+    get description() {
+      return t("data.templates.debt-heavy.description");
+    },
     allocations: {
       Housing: 30,
       Grocery: 10,
@@ -107,10 +127,15 @@ export const QUICK_START_TEMPLATES: readonly QuickStartTemplate[] = [
   {
     id: "zero-based",
     emoji: "🎯",
-    title: "Zero-based",
-    tagline: "Every dollar gets a job",
-    description:
-      "Limits across every category add up to exactly your take-home pay, giving included. Nothing is left unassigned.",
+    get title() {
+      return t("data.templates.zero-based.title");
+    },
+    get tagline() {
+      return t("data.templates.zero-based.tagline");
+    },
+    get description() {
+      return t("data.templates.zero-based.description");
+    },
     allocations: {
       Housing: 30,
       Grocery: 10,
@@ -135,4 +160,4 @@ export const QUICK_START_TEMPLATES: readonly QuickStartTemplate[] = [
 export const quickStartTemplateById = (
   id: QuickStartTemplateId | null | undefined
 ): QuickStartTemplate | null =>
-  id ? (QUICK_START_TEMPLATES.find((t) => t.id === id) ?? null) : null;
+  id ? (QUICK_START_TEMPLATES.find((template) => template.id === id) ?? null) : null;

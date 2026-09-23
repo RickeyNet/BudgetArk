@@ -132,9 +132,9 @@ import {
 import DonutChart, { type DonutSlice } from "../components/DonutChart";
 import { KeyboardAwareModalOverlay } from "../components/KeyboardAwareModalOverlay";
 import {
-  HOLDINGS_DISCLOSURE_TITLE,
-  HOLDINGS_DISCLOSURE_INTRO,
-  HOLDINGS_DISCLOSURE_POINTS,
+  holdingsDisclosureTitle,
+  holdingsDisclosureIntro,
+  holdingsDisclosurePoints,
 } from "../data/holdingsDisclosure";
 
 /** Emoji glyph per asset category for the account-row icon chip. */
@@ -578,7 +578,8 @@ const BridgeScreen: React.FC = () => {
    */
   const nextRefreshLabel = useMemo(
     () => formatNextQuoteRefresh(quotesLastFetchedAt, new Date().getTime()),
-    [quotesLastFetchedAt]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
+    [quotesLastFetchedAt, t]
   );
 
   /** Most recent price timestamp across cached quotes, for the "as of" label. */
@@ -1996,10 +1997,10 @@ const BridgeScreen: React.FC = () => {
       >
         <KeyboardAwareModalOverlay style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{HOLDINGS_DISCLOSURE_TITLE}</Text>
-            <Text style={styles.modalSub}>{HOLDINGS_DISCLOSURE_INTRO}</Text>
+            <Text style={styles.modalTitle}>{holdingsDisclosureTitle()}</Text>
+            <Text style={styles.modalSub}>{holdingsDisclosureIntro()}</Text>
 
-            {HOLDINGS_DISCLOSURE_POINTS.map((point) => (
+            {holdingsDisclosurePoints().map((point) => (
               <Text key={point} style={styles.disclosureItem}>
                 • {point}
               </Text>

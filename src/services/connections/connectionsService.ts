@@ -31,6 +31,7 @@ import { decodeSetupToken } from "./simplefinParser";
 import { fetchTellerData } from "./tellerClient";
 import { INITIAL_BACKFILL_DAYS } from "./syncGate";
 import type { NormalizedAccount } from "./types";
+import { t } from "../../i18n/translate";
 
 export type SetupResult =
   | { ok: true; connectionId: string; accounts: NormalizedAccount[] }
@@ -60,8 +61,7 @@ const encryptionUnavailableResult = async (): Promise<{
   if (await isEncryptionAvailable()) return null;
   return {
     ok: false,
-    message:
-      "This device can't securely store bank credentials (secure keystore unavailable), so the connection wasn't saved. This can affect rooted or sideloaded installs.",
+    message: t("helpers.misc.connections.keystoreUnavailable"),
   };
 };
 
@@ -143,7 +143,7 @@ export const discoverSimplefinAccounts = async (
   if (secrets?.provider !== "simplefin") {
     return {
       ok: false,
-      message: "This connection's stored credentials are missing. Remove and re-add it.",
+      message: t("helpers.misc.connections.credentialsMissing"),
     };
   }
   const fetched = await fetchSimplefinAccounts(secrets.accessUrl, {
@@ -185,7 +185,7 @@ export const createTellerConnection = async (opts: {
 
   const applicationId = opts.applicationId.trim();
   if (!applicationId) {
-    return { ok: false, message: "Enter your Teller application id first." };
+    return { ok: false, message: t("helpers.misc.connections.teller.appIdRequired") };
   }
   if (
     !opts.certificatePem.includes("-----BEGIN CERTIFICATE-----") ||
@@ -193,8 +193,7 @@ export const createTellerConnection = async (opts: {
   ) {
     return {
       ok: false,
-      message:
-        "Those files don't look like the certificate.pem and private_key.pem from your teller.zip.",
+      message: t("helpers.misc.connections.teller.badPemFiles"),
     };
   }
   const connection = newConnection("teller");
@@ -247,7 +246,7 @@ export const addTellerEnrollment = async (
   if (secrets?.provider !== "teller") {
     return {
       ok: false,
-      message: "This connection's stored credentials are missing. Remove and re-add it.",
+      message: t("helpers.misc.connections.credentialsMissing"),
     };
   }
   const fetched = await fetchTellerData(secrets, {
@@ -256,7 +255,7 @@ export const addTellerEnrollment = async (
   if (!fetched.ok) {
     return {
       ok: false,
-      message: fetched.message ?? "Teller connected but listing accounts failed.",
+      message: fetched.message ?? t("helpers.misc.connections.teller.listAccountsFailed"),
     };
   }
   return { ok: true, connectionId, accounts: fetched.accounts };

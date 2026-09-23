@@ -21,6 +21,7 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import {
@@ -57,6 +58,7 @@ interface PairingModalProps {
 const TIMEOUT_SECONDS = 60;
 
 const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -144,7 +146,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
         () => {
           if (cancelledRef.current) return;
           setStatus("error");
-          setError("Pairing timed out. Try again.");
+          setError(t("modals.guard.pairing.errors.timedOut"));
         },
         (ip, port, closeFn) => {
           serverCloseRef.current = closeFn;
@@ -161,14 +163,14 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       if (cancelledRef.current) return;
       if (timerRef.current) clearInterval(timerRef.current);
       setStatus("error");
-      setError(err instanceof Error ? err.message : "Pairing failed");
+      setError(err instanceof Error ? err.message : t("modals.guard.pairing.errors.failed"));
     }
-  }, []);
+  }, [t]);
 
   const startJoiner = useCallback(async () => {
     const normalized = normalizePairingCode(joinCode);
     if (normalized.length !== CODE_LENGTH) {
-      setError(`Please enter the ${CODE_LENGTH}-character code from your partner's device.`);
+      setError(t("modals.guard.pairing.errors.codeLength", { length: CODE_LENGTH }));
       return;
     }
 
@@ -179,7 +181,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       const manual = showManualIp ? parseAddress(manualIp) : undefined;
       if (showManualIp && !manual) {
         setStatus("error");
-        setError("Enter a valid address (e.g. 192.168.1.5:12345)");
+        setError(t("modals.guard.pairing.errors.invalidAddress"));
         return;
       }
       const result = await joinPairing(normalized, manual ?? undefined);
@@ -187,9 +189,9 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       setStatus("verify");
     } catch (err) {
       setStatus("error");
-      setError(err instanceof Error ? err.message : "Failed to connect");
+      setError(err instanceof Error ? err.message : t("modals.guard.pairing.errors.connectFailed"));
     }
-  }, [joinCode, showManualIp, manualIp]);
+  }, [joinCode, showManualIp, manualIp, t]);
 
   const confirmFingerprint = useCallback(async () => {
     if (!pending) return;
@@ -202,13 +204,13 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
       // plaintext. Its error message names the storage key, so translate.
       setError(
         err instanceof EncryptionUnavailableError
-          ? "BudgetArk couldn't store the pairing key securely on this device (secure keystore unavailable). Nothing was saved - try again after restarting the app."
+          ? t("modals.guard.pairing.errors.keystoreUnavailable")
           : err instanceof Error
             ? err.message
-            : "Failed to save pairing"
+            : t("modals.guard.pairing.errors.saveFailed")
       );
     }
-  }, [pending, onPaired]);
+  }, [pending, onPaired, t]);
 
   const rejectFingerprint = useCallback(() => {
     // No commit ran - nothing to undo. Close the modal so the user can
@@ -237,29 +239,23 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                 ? { paddingBottom: insets.bottom + 24 }
                 : null,
             ]}>
-              <Text style={styles.title}>Pair with Partner</Text>
-              <Text style={styles.subtitle}>
-                Both devices must be on the same WiFi network.
-              </Text>
+              <Text style={styles.title}>{t("modals.guard.pairing.title")}</Text>
+              <Text style={styles.subtitle}>{t("modals.guard.pairing.subtitle")}</Text>
 
               {/* Role selection */}
               {!role && (
                 <View style={styles.roleContainer}>
                   <TouchableOpacity style={styles.roleButton} onPress={startInitiator}>
-                    <Text style={styles.roleButtonTitle}>Show Code</Text>
-                    <Text style={styles.roleButtonHint}>
-                      Generate a code for your partner to enter
-                    </Text>
+                    <Text style={styles.roleButtonTitle}>{t("modals.guard.pairing.roles.show.title")}</Text>
+                    <Text style={styles.roleButtonHint}>{t("modals.guard.pairing.roles.show.hint")}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={styles.roleButton}
                     onPress={() => setRole("joiner")}
                   >
-                    <Text style={styles.roleButtonTitle}>Enter Code</Text>
-                    <Text style={styles.roleButtonHint}>
-                      Enter the code from your partner's device
-                    </Text>
+                    <Text style={styles.roleButtonTitle}>{t("modals.guard.pairing.roles.enter.title")}</Text>
+                    <Text style={styles.roleButtonHint}>{t("modals.guard.pairing.roles.enter.hint")}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -274,16 +270,15 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                     </Text>
                   ) : serverPort > 0 ? (
                     <Text style={styles.ipHintText}>
-                      Port: {serverPort} - check your IP in WiFi settings{"\n"}
-                      and share your IP:{serverPort} with your partner
+                      {t("modals.guard.pairing.portHint", { port: serverPort })}
                     </Text>
                   ) : null}
                   <Text style={styles.countdownText}>
                     {status === "waiting"
-                      ? `Waiting for partner... ${countdown}s`
+                      ? t("modals.guard.pairing.waiting", { seconds: countdown })
                       : status === "error"
                       ? ""
-                      : "Connecting..."}
+                      : t("modals.guard.pairing.connecting")}
                   </Text>
                   {status === "waiting" && (
                     <ActivityIndicator
@@ -317,7 +312,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                   />
                   <TouchableOpacity onPress={() => setShowManualIp((v) => !v)}>
                     <Text style={styles.manualToggle}>
-                      {showManualIp ? "Use automatic discovery" : "Can't find device? Enter IP manually"}
+                      {showManualIp ? t("modals.guard.pairing.discovery.useAutomatic") : t("modals.guard.pairing.discovery.enterManually")}
                     </Text>
                   </TouchableOpacity>
                   {showManualIp && (
@@ -347,7 +342,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
                     }
                   >
                     <Text style={styles.connectButtonText}>
-                      {status === "connecting" ? "Connecting..." : "Connect"}
+                      {status === "connecting" ? t("modals.guard.pairing.connecting") : t("modals.guard.pairing.connect")}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -356,23 +351,20 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
               {/* Verify fingerprint - both devices land here after key exchange */}
               {status === "verify" && pending && (
                 <View style={styles.verifyContainer}>
-                  <Text style={styles.verifyHeading}>Verify your partner</Text>
-                  <Text style={styles.verifyHint}>
-                    Both devices should show the same code below. If they don't,
-                    cancel and try pairing again.
-                  </Text>
+                  <Text style={styles.verifyHeading}>{t("modals.guard.pairing.verify.heading")}</Text>
+                  <Text style={styles.verifyHint}>{t("modals.guard.pairing.verify.hint")}</Text>
                   <Text style={styles.fingerprintDisplay}>{pending.fingerprint}</Text>
                   <TouchableOpacity
                     style={styles.connectButton}
                     onPress={confirmFingerprint}
                   >
-                    <Text style={styles.connectButtonText}>Codes match - finish pairing</Text>
+                    <Text style={styles.connectButtonText}>{t("modals.guard.pairing.verify.match")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.verifyRejectButton}
                     onPress={rejectFingerprint}
                   >
-                    <Text style={styles.verifyRejectText}>Codes don't match</Text>
+                    <Text style={styles.verifyRejectText}>{t("modals.guard.pairing.verify.mismatch")}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -382,7 +374,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ visible, onClose, onPaired 
 
               {/* Cancel */}
               <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
             </View>
           </View>

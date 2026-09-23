@@ -23,10 +23,11 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import {
-  BUDGET_BUCKET_LABELS,
   BUDGET_BUCKET_ORDER,
   DEFAULT_CUSTOM_CATEGORY_BUCKET,
 } from "../data/categoryBuckets";
@@ -54,6 +55,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
   onClose,
 }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { customCategories, add, remove, hiddenBuiltIns, setBuiltInHidden } =
@@ -94,12 +96,12 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
   const handleDelete = useCallback(
     (id: string, label: string) => {
       Alert.alert(
-        "Delete category?",
-        `"${label}" will be removed from the picker. Existing entries keep this category, they just lose the custom icon.`,
+        t("modals.data.categories.confirmDelete.title"),
+        t("modals.data.categories.confirmDelete.body", { name: label }),
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text: "Delete",
+            text: t("common.delete"),
             style: "destructive",
             onPress: () => {
               void remove(id);
@@ -108,18 +110,20 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
         ],
       );
     },
-    [remove],
+    [remove, t],
   );
 
   const handleHideBuiltIn = useCallback(
     (label: string) => {
       Alert.alert(
-        "Hide category?",
-        `"${label}" leaves the pickers, the Limits sheet and the bulk tools on this phone. Entries already filed under it keep it and still show wherever they have spending. Restore it here any time.`,
+        t("modals.data.categories.confirmHide.title"),
+        t("modals.data.categories.confirmHide.body", {
+          name: categoryLabel(t, label),
+        }),
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text: "Hide",
+            text: t("modals.data.categories.hide"),
             style: "destructive",
             onPress: () => {
               void setBuiltInHidden(label, true);
@@ -128,7 +132,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
         ],
       );
     },
-    [setBuiltInHidden],
+    [setBuiltInHidden, t],
   );
 
   const canAdd = name.trim().length > 0 && !saving;
@@ -148,22 +152,21 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets
           >
-            <Text style={styles.title}>Custom Categories</Text>
+            <Text style={styles.title}>{t("modals.data.categories.title")}</Text>
             <Text style={styles.subtitle}>
-              Add your own budget categories. They work everywhere built-in ones
-              do - entries, limits, charts, and reports.
+              {t("modals.data.categories.subtitle")}
             </Text>
 
             {/* ── Add form ── */}
             <View style={styles.field}>
-              <Text style={styles.label}>NAME</Text>
+              <Text style={styles.label}>{t("modals.data.categories.nameLabel")}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Hobbies, Pets, Childcare"
+                placeholder={t("modals.data.categories.namePlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 value={name}
-                onChangeText={(t) => {
-                  setName(t);
+                onChangeText={(text) => {
+                  setName(text);
                   if (error) setError(null);
                 }}
                 maxLength={MAX_CATEGORY_NAME_LENGTH}
@@ -171,7 +174,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>ICON</Text>
+              <Text style={styles.label}>{t("modals.data.categories.iconLabel")}</Text>
               <View style={styles.emojiGrid}>
                 {EMOJI_CHOICES.map((glyph) => (
                   <TouchableOpacity
@@ -182,7 +185,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
                     ]}
                     onPress={() => setIcon(glyph)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Pick icon ${glyph}`}
+                    accessibilityLabel={t("modals.data.categories.pickIconA11y", { glyph })}
                   >
                     <Text style={styles.emojiText}>{glyph}</Text>
                   </TouchableOpacity>
@@ -191,7 +194,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>50/30/20 BUCKET</Text>
+              <Text style={styles.label}>{t("modals.data.categories.bucketLabel")}</Text>
               <View style={styles.bucketRow}>
                 {BUDGET_BUCKET_ORDER.map((bucket) => {
                   const selected = defaultBucket === bucket;
@@ -213,7 +216,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
                           { color: selected ? colors.accent : colors.textDim },
                         ]}
                       >
-                        {BUDGET_BUCKET_LABELS[bucket]}
+                        {t(`buckets.${bucket}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -229,17 +232,21 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
               disabled={!canAdd}
             >
               <Text style={styles.addButtonText}>
-                {saving ? "Adding…" : "Add Category"}
+                {saving
+                  ? t("modals.data.categories.adding")
+                  : t("modals.data.categories.addButton")}
               </Text>
             </TouchableOpacity>
 
             {/* ── Existing list ── */}
             <Text style={[styles.label, styles.listHeader]}>
-              YOUR CATEGORIES ({customCategories.length})
+              {t("modals.data.categories.yourCategories", {
+                count: customCategories.length,
+              })}
             </Text>
             {customCategories.length === 0 ? (
               <Text style={styles.emptyText}>
-                No custom categories yet. Add one above.
+                {t("modals.data.categories.emptyCustom")}
               </Text>
             ) : (
               customCategories.map((cat) => (
@@ -249,15 +256,17 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
                     {cat.name}
                   </Text>
                   <Text style={styles.rowBucket}>
-                    {BUDGET_BUCKET_LABELS[cat.defaultBucket ?? DEFAULT_CUSTOM_CATEGORY_BUCKET]}
+                    {t(`buckets.${cat.defaultBucket ?? DEFAULT_CUSTOM_CATEGORY_BUCKET}`)}
                   </Text>
                   <TouchableOpacity
                     onPress={() => handleDelete(cat.id, cat.name)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Delete ${cat.name}`}
+                    accessibilityLabel={t("modals.data.categories.deleteA11y", {
+                      name: cat.name,
+                    })}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={styles.rowDelete}>Delete</Text>
+                    <Text style={styles.rowDelete}>{t("common.delete")}</Text>
                   </TouchableOpacity>
                 </View>
               ))
@@ -265,42 +274,52 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
 
             {/* ── Built-in list: hide / restore ── */}
             <Text style={[styles.label, styles.listHeader]}>
-              BUILT-IN CATEGORIES
+              {t("modals.data.categories.builtInLabel")}
             </Text>
             <Text style={styles.emptyText}>
-              Hide the ones you never use. Hidden categories leave the pickers
-              on this phone; existing entries keep them.
+              {t("modals.data.categories.builtInHelp")}
             </Text>
             {SELECTABLE_BUILT_IN_CATEGORIES.map((cat) => {
               const hidden = hiddenBuiltIns.has(cat);
               const protectedName = (
                 PROTECTED_BUILT_IN_CATEGORIES as readonly string[]
               ).includes(cat);
+              const catName = categoryLabel(t, cat);
               return (
                 <View key={cat} style={[styles.row, hidden && styles.rowHidden]}>
                   <Text style={styles.rowIcon}>{getCategoryIcon(cat)}</Text>
                   <Text style={styles.rowName} numberOfLines={1}>
-                    {cat}
+                    {catName}
                   </Text>
                   {protectedName ? (
-                    <Text style={styles.rowBucket}>Always shown</Text>
+                    <Text style={styles.rowBucket}>
+                      {t("modals.data.categories.alwaysShown")}
+                    </Text>
                   ) : hidden ? (
                     <TouchableOpacity
                       onPress={() => void setBuiltInHidden(cat, false)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Restore ${cat}`}
+                      accessibilityLabel={t("modals.data.categories.restoreA11y", {
+                        name: catName,
+                      })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.rowRestore}>Restore</Text>
+                      <Text style={styles.rowRestore}>
+                        {t("modals.data.categories.restore")}
+                      </Text>
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
                       onPress={() => handleHideBuiltIn(cat)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Hide ${cat}`}
+                      accessibilityLabel={t("modals.data.categories.hideA11y", {
+                        name: catName,
+                      })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.rowDelete}>Hide</Text>
+                      <Text style={styles.rowDelete}>
+                        {t("modals.data.categories.hide")}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -317,7 +336,7 @@ const ManageCategoriesModal: React.FC<ManageCategoriesModalProps> = ({
             ]}
           >
             <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
-              <Text style={styles.doneText}>Done</Text>
+              <Text style={styles.doneText}>{t("common.done")}</Text>
             </TouchableOpacity>
           </View>
         </View>

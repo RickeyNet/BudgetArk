@@ -23,6 +23,15 @@ screens.
   `common.*` for Done / Cancel / Save / Delete / OK / On / Off / Yes / No.
 - Text inside `if (__DEV__)` console calls stays English (rule 14 - it is
   developer output, never shown to users).
+- Plain modules (src/utils, src/sync, src/services, src/notifications,
+  src/data) cannot use hooks: they import `t` / `currentLanguage()` from
+  `src/i18n/translate.ts` (the global instance). Never evaluate `t` at
+  module load - export a function or an object getter so the language is
+  read at call time. A component that memoizes such a helper's output must
+  list its own `t` in the dependency array (with a justified
+  `react-hooks/exhaustive-deps` disable, since the linter cannot see the
+  dependency). Jest initialises the global instance with the English tree
+  (`src/i18n/jestSetup.ts`), so util tests keep asserting English text.
 
 ## Never translate
 

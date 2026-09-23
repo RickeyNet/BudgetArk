@@ -21,12 +21,14 @@ import {
   View,
 } from "react-native";
 import { File as ExpoFile, Paths } from "expo-file-system";
+import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { useBusinesses } from "../people/PeopleProvider";
+import { useCategoryLabel } from "../i18n/categoryLabel";
 import {
   buildBusinessReportCsv,
   computeBusinessReport,
@@ -51,6 +53,8 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { t } = useTranslation();
+  const categoryLabel = useCategoryLabel();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -108,18 +112,18 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
       // Plaintext expense data - deleted once the share sheet closes.
       await shareLocalFileThenDelete(file, {
         mimeType: "text/csv",
-        dialogTitle: "Export Business Expenses",
+        dialogTitle: t("modals.people.businessReport.shareTitle"),
         UTI: "public.comma-separated-values-text",
       });
     } catch (error: any) {
       Alert.alert(
-        "Export failed",
-        error?.message || "Could not create the CSV file."
+        t("modals.people.report.exportFailed.title"),
+        error?.message || t("modals.people.report.exportFailed.csv")
       );
     } finally {
       setExporting(false);
     }
-  }, [exporting, report]);
+  }, [exporting, report, t]);
 
   const runZipExport = useCallback(async () => {
     setExportingZip(true);
@@ -127,15 +131,15 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
       const result = await buildReceiptZip(report, entries);
       if (!result.file) {
         Alert.alert(
-          "No photos on this device",
-          "Every receipt photo for this year lives on your partner's device - photos never sync, so export the zip from there."
+          t("modals.people.businessReport.receipts.noneOnDevice.title"),
+          t("modals.people.businessReport.receipts.noneOnDevice.message")
         );
         return;
       }
       try {
         await shareLocalFile(result.file.uri, {
           mimeType: "application/zip",
-          dialogTitle: "Export Receipt Photos",
+          dialogTitle: t("modals.people.businessReport.receipts.shareTitle"),
           UTI: "public.zip-archive",
         });
       } finally {
@@ -145,41 +149,49 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
       }
       if (result.missing > 0) {
         Alert.alert(
-          "Some photos skipped",
-          `${result.missing} ${result.missing === 1 ? "photo lives" : "photos live"} on your partner's device (or couldn't be read) and ${result.missing === 1 ? "was" : "were"} not included.`
+          t("modals.people.businessReport.receipts.skipped.title"),
+          t("modals.people.businessReport.receipts.skipped.message", {
+            count: result.missing,
+          })
         );
       }
     } catch (error: any) {
       Alert.alert(
-        "Export failed",
-        error?.message || "Could not create the zip file."
+        t("modals.people.report.exportFailed.title"),
+        error?.message || t("modals.people.report.exportFailed.zip")
       );
     } finally {
       setExportingZip(false);
     }
-  }, [entries, report]);
+  }, [entries, report, t]);
 
   const handleExportReceipts = useCallback(() => {
     if (exportingZip) return;
     const planned = countPlannedReceipts(report, entries);
     if (planned === 0) {
       Alert.alert(
-        "No receipts",
-        `No business expenses in ${report.year} have receipt photos.`
+        t("modals.people.businessReport.receipts.none.title"),
+        t("modals.people.businessReport.receipts.none.message", { year: report.year })
       );
       return;
     }
     // Photos are encrypted at rest and never leave the device otherwise -
     // make the decrypt-and-share step an explicit, informed choice.
     Alert.alert(
-      "Export receipt photos?",
-      `This creates an unencrypted zip of up to ${planned} receipt ${planned === 1 ? "photo" : "photos"} for ${report.year}, named to match the CSV rows, for sharing (e.g. with your accountant). It isn't protected by BudgetArk's encryption once shared.`,
+      t("modals.people.businessReport.receipts.confirm.title"),
+      t("modals.people.businessReport.receipts.confirm.message", {
+        count: planned,
+        year: report.year,
+      }),
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Export", onPress: () => void runZipExport() },
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("modals.people.businessReport.receipts.confirm.export"),
+          onPress: () => void runZipExport(),
+        },
       ]
     );
-  }, [entries, exportingZip, report, runZipExport]);
+  }, [entries, exportingZip, report, runZipExport, t]);
 
   const hasData = report.perBusiness.length > 0;
   const hasReceipts = report.perBusiness.some((g) => g.receiptCount > 0);
@@ -197,11 +209,8 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
           >
-            <Text style={styles.title}>Business Expenses</Text>
-            <Text style={styles.subtitle}>
-              Everything tagged to a business, by calendar year. Recurring
-              bills count once per month they hit, same as the Budget screen.
-            </Text>
+            <Text style={styles.title}>{t("modals.people.businessReport.title")}</Text>
+            <Text style={styles.subtitle}>{t("modals.people.businessReport.subtitle")}</Text>
 
             {/* ── Year stepper ── */}
             <View style={styles.yearRow}>
@@ -209,7 +218,7 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                 onPress={() => setYear((y) => y - 1)}
                 hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
                 accessibilityRole="button"
-                accessibilityLabel="Previous year"
+                accessibilityLabel={t("modals.people.report.previousYear")}
               >
                 <Text style={styles.yearArrow}>←</Text>
               </TouchableOpacity>
@@ -218,7 +227,7 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                 onPress={() => setYear((y) => y + 1)}
                 hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
                 accessibilityRole="button"
-                accessibilityLabel="Next year"
+                accessibilityLabel={t("modals.people.report.nextYear")}
               >
                 <Text style={styles.yearArrow}>→</Text>
               </TouchableOpacity>
@@ -228,7 +237,7 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
             {hasData && (
               <View style={styles.grandTotalCard}>
                 <Text style={styles.grandTotalLabel}>
-                  TOTAL BUSINESS EXPENSES · {year}
+                  {t("modals.people.businessReport.grandTotal", { year })}
                 </Text>
                 <Text style={styles.grandTotalValue}>
                   {formatCurrency(report.grandTotal)}
@@ -238,12 +247,10 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
 
             {/* ── Per-business cards ── */}
             {!loaded ? (
-              <Text style={styles.emptyText}>Loading…</Text>
+              <Text style={styles.emptyText}>{t("modals.people.report.loading")}</Text>
             ) : !hasData ? (
               <Text style={styles.emptyText}>
-                No business expenses in {year}. Tag an expense to a business
-                when adding it on the Budget tab (create businesses under
-                Profile → Businesses).
+                {t("modals.people.businessReport.empty", { year })}
               </Text>
             ) : (
               report.perBusiness.map((group) => (
@@ -251,23 +258,22 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                   <View style={styles.businessHeader}>
                     <Text style={styles.businessName} numberOfLines={1}>
                       💼 {group.name}
-                      {group.deleted ? "  (deleted)" : ""}
+                      {group.deleted ? `  ${t("modals.people.report.deletedSuffix")}` : ""}
                     </Text>
                     <Text style={styles.businessTotal}>
                       {formatCurrency(group.total)}
                     </Text>
                   </View>
                   <Text style={styles.businessMeta}>
-                    {group.entryCount}{" "}
-                    {group.entryCount === 1 ? "expense" : "expenses"}
+                    {t("modals.people.report.expenses", { count: group.entryCount })}
                     {group.receiptCount > 0
-                      ? ` · ${group.receiptCount} with receipt`
+                      ? ` · ${t("modals.people.businessReport.withReceipt", { count: group.receiptCount })}`
                       : ""}
                   </Text>
                   {group.byCategory.map(({ category, total }) => (
                     <View key={category} style={styles.categoryRow}>
                       <Text style={styles.categoryName} numberOfLines={1}>
-                        {category}
+                        {categoryLabel(category)}
                       </Text>
                       <Text style={styles.categoryTotal}>
                         {formatCurrency(total)}
@@ -288,15 +294,15 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
                 onPress={handleExportReceipts}
                 disabled={exportingZip}
                 accessibilityRole="button"
-                accessibilityLabel="Export receipt photos as a zip archive"
+                accessibilityLabel={t("modals.people.businessReport.receipts.buttonA11y")}
               >
                 <Text style={styles.zipButtonText}>
                   {exportingZip
-                    ? "Preparing zip…"
-                    : "🧾 Export Receipt Photos (ZIP)"}
+                    ? t("modals.people.businessReport.receipts.preparing")
+                    : t("modals.people.businessReport.receipts.button")}
                 </Text>
                 <Text style={styles.zipButtonHint}>
-                  File names match the CSV rows (date_business_amount.jpg).
+                  {t("modals.people.businessReport.receipts.hint")}
                 </Text>
               </TouchableOpacity>
             )}
@@ -311,7 +317,7 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
             ]}
           >
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeText}>Close</Text>
+              <Text style={styles.closeText}>{t("common.close")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -322,7 +328,7 @@ const BusinessReportModal: React.FC<BusinessReportModalProps> = ({
               disabled={!hasData || exporting}
             >
               <Text style={styles.exportText}>
-                {exporting ? "Exporting…" : "Export CSV"}
+                {exporting ? t("modals.people.report.exporting") : t("modals.people.report.exportCsv")}
               </Text>
             </TouchableOpacity>
           </View>

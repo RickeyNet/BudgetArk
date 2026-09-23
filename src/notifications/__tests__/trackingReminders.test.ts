@@ -5,7 +5,7 @@
  * Security rule 11 regression guard: notifications may never carry amounts,
  * account/category names, or balances on the lock screen. Every notification
  * this module schedules must have content pulled verbatim from the vetted
- * generic message pools (CHECK_IN_MESSAGES / MONTH_START_MESSAGES in
+ * generic message pools (checkInMessages / monthStartMessages in
  * trackingReminderPlanner.ts, already unit-tested there) - this test proves
  * the SCHEDULER wiring never lets real entry data leak into what actually
  * reaches Notifications.scheduleNotificationAsync, using a fixture with a
@@ -24,8 +24,8 @@
  * before any later top-level const in this file would have run.
  */
 import {
-  CHECK_IN_MESSAGES,
-  MONTH_START_MESSAGES,
+  checkInMessages,
+  monthStartMessages,
   DEFAULT_TRACKING_REMINDER_SETTINGS,
 } from "../../utils/trackingReminderPlanner";
 import { makeBudgetEntry } from "../../__tests__/fixtures";
@@ -81,7 +81,7 @@ const SettingsStorage = jest.requireMock(
 ) as { getTrackingReminderSettings: jest.Mock };
 
 const SECRET = "ZZZ-SECRET-CATEGORY-DO-NOT-LEAK";
-const ALL_MESSAGE_PAIRS = [...CHECK_IN_MESSAGES, ...MONTH_START_MESSAGES];
+const ALL_MESSAGE_PAIRS = [...checkInMessages(), ...monthStartMessages()];
 
 beforeEach(() => {
   jest.clearAllMocks();

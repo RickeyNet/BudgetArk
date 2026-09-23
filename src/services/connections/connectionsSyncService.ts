@@ -62,6 +62,7 @@ import {
 } from "./reviewInboxService";
 import { notifyDataChanged } from "../../storage/dataChangeNotifier";
 import { computeFetchWindow, isSyncDue, planGapBackfill } from "./syncGate";
+import { t } from "../../i18n/translate";
 import type {
   NormalizedAccount,
   NormalizedTransaction,
@@ -101,7 +102,7 @@ const fetchForConnection = async (
     return {
       ok: false,
       error: "invalid-credentials",
-      message: "This connection's credentials are missing. Remove and re-add it.",
+      message: t("helpers.misc.connections.credentialsMissing"),
     };
   }
 
@@ -466,7 +467,7 @@ export const syncConnections = async (
           newPendingCount: 0,
           updatedPendingCount: 0,
           balancesUpdated: 0,
-          errorMessage: "Something went wrong syncing this connection.",
+          errorMessage: t("helpers.misc.connections.syncFailed"),
         });
       }
     }

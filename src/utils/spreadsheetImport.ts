@@ -49,6 +49,7 @@ import {
   KEEP_ALIVE_MAX_WINDOW_MONTHS,
 } from "./cardKeepAlive";
 import { normalizePaymentUrl } from "./paymentUrl";
+import { t } from "../i18n/translate";
 import { MAX_PEOPLE,
   ASSET_ACCOUNT_CATEGORIES,
   PAYMENT_URL_MAX_LENGTH,
@@ -321,7 +322,7 @@ const sheetToRows = (sheet: XLSX.WorkSheet | undefined): Record<string, unknown>
   });
   if (rows.length > MAX_ROWS_PER_SHEET) {
     throw new Error(
-      `Spreadsheet has too many rows (${rows.length}). Maximum is ${MAX_ROWS_PER_SHEET}.`
+      t("helpers.import.spreadsheet.tooManyRows", { rows: rows.length, max: MAX_ROWS_PER_SHEET })
     );
   }
   return rows.filter((r) => !isTotalRow(r));
@@ -398,24 +399,24 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     (allowsNegative ? true : amount > 0);
 
   if (!type) {
-    return skipRow('Type must be "income" or "expense"');
+    return skipRow(t("helpers.import.spreadsheet.row.typeInvalid"));
   }
   if (!category) {
     return skipRow(
       categoryRaw
-        ? `Category "${categoryRaw}" is not a recognized category`
-        : "Category is missing"
+        ? t("helpers.import.spreadsheet.row.categoryUnknown", { category: categoryRaw })
+        : t("helpers.import.spreadsheet.row.categoryMissing")
     );
   }
   if (!amountValid) {
     return skipRow(
       allowsNegative
-        ? "Amount is missing or out of range"
-        : "Amount must be a positive number of at least 0.01"
+        ? t("helpers.import.spreadsheet.row.amountOutOfRange")
+        : t("helpers.import.spreadsheet.row.amountPositive")
     );
   }
   if (!dateIso) {
-    return skipRow("Date is missing or could not be read");
+    return skipRow(t("helpers.import.spreadsheet.row.dateMissing"));
   }
 
   // Projected recurring copies are removed up front by isDerivedArtifactRow,
@@ -540,7 +541,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     ? parseLoanRepaymentsCell(repaymentsRaw, generateUUID, now)
     : undefined;
   if (parsedRepayments === null) {
-    return skipRow('Repayments must be "YYYY-MM-DD:amount" pairs separated by ";"');
+    return skipRow(t("helpers.import.spreadsheet.row.repaymentsFormat"));
   }
   const loanRepayments =
     lentTo && parsedRepayments && parsedRepayments.length > 0 ? parsedRepayments : undefined;
@@ -599,8 +600,8 @@ const rowToBudgetLimit = (row: Record<string, unknown>): RowResult<Record<string
   if (!category) {
     return skipRow(
       categoryRaw
-        ? `Category "${categoryRaw}" is not a recognized category`
-        : "Category is missing"
+        ? t("helpers.import.spreadsheet.row.categoryUnknown", { category: categoryRaw })
+        : t("helpers.import.spreadsheet.row.categoryMissing")
     );
   }
   if (
@@ -608,7 +609,7 @@ const rowToBudgetLimit = (row: Record<string, unknown>): RowResult<Record<string
     monthlyLimit < 0.01 ||
     monthlyLimit > VALIDATOR_LIMITS.MAX_MONEY
   ) {
-    return skipRow("Monthly limit must be a positive number of at least 0.01");
+    return skipRow(t("helpers.import.spreadsheet.row.monthlyLimitPositive"));
   }
   // Preserve `updatedAt` so a paired sync doesn't treat every imported limit
   // as "freshly edited" and clobber the partner's data via LWW. Importer
@@ -634,23 +635,23 @@ const rowToDebt = (row: Record<string, unknown>): RowResult<Record<string, unkno
   // -500 via parseAmount; it must be skipped here, because the strict
   // sanitizer downstream rejects the entire file over one bad row.
   if (!name) {
-    return skipRow("Name is missing");
+    return skipRow(t("helpers.import.spreadsheet.row.nameMissing"));
   }
   if (!Number.isFinite(balance) || balance < 0 || balance > VALIDATOR_LIMITS.MAX_MONEY) {
-    return skipRow("Balance must be a number of 0 or more");
+    return skipRow(t("helpers.import.spreadsheet.row.balanceNonNegative"));
   }
   if (
     !Number.isFinite(originalBalance) ||
     originalBalance < 0.01 ||
     originalBalance > VALIDATOR_LIMITS.MAX_MONEY
   ) {
-    return skipRow("Original balance must be a positive number of at least 0.01");
+    return skipRow(t("helpers.import.spreadsheet.row.originalBalancePositive"));
   }
   if (!Number.isFinite(rate) || rate < 0 || rate > VALIDATOR_LIMITS.MAX_RATE) {
-    return skipRow(`Rate / APR must be between 0 and ${VALIDATOR_LIMITS.MAX_RATE}`);
+    return skipRow(t("helpers.import.spreadsheet.row.rateRange", { max: VALIDATOR_LIMITS.MAX_RATE }));
   }
   if (!Number.isFinite(minPayment) || minPayment < 0 || minPayment > VALIDATOR_LIMITS.MAX_MONEY) {
-    return skipRow("Minimum payment must be a number of 0 or more");
+    return skipRow(t("helpers.import.spreadsheet.row.minPaymentNonNegative"));
   }
 
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
@@ -745,13 +746,13 @@ const rowToPayment = (row: Record<string, unknown>): RowResult<Record<string, un
   // "(50)" amount comes back negative from parseAmount and must be skipped
   // rather than poisoning the whole file in the strict sanitizer.
   if (!debtId) {
-    return skipRow("Debt ID is missing (the payment isn't linked to a debt)");
+    return skipRow(t("helpers.import.spreadsheet.row.debtIdMissing"));
   }
   if (!Number.isFinite(amount) || amount < 0.01 || amount > VALIDATOR_LIMITS.MAX_MONEY) {
-    return skipRow("Amount must be a positive number of at least 0.01");
+    return skipRow(t("helpers.import.spreadsheet.row.amountPositive"));
   }
   if (!dateIso) {
-    return skipRow("Date is missing or could not be read");
+    return skipRow(t("helpers.import.spreadsheet.row.dateMissing"));
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const updatedAtIso = parseDate(get(row, "UpdatedAt", "Updated At"));
@@ -794,11 +795,11 @@ const rowToSavingsGoal = (row: Record<string, unknown>): RowResult<Record<string
   // currentAmount in [0, MAX_MONEY]. Out-of-range rows are skipped so the
   // strict downstream sanitizer can't abort the whole import over them.
   if (!name) {
-    return skipRow("Name is missing");
+    return skipRow(t("helpers.import.spreadsheet.row.nameMissing"));
   }
   if (!category) {
     return skipRow(
-      `Category must be one of: ${[...VALID_SAVINGS_CATEGORIES].join(", ")}`
+      t("helpers.import.spreadsheet.row.categoryOneOf", { list: [...VALID_SAVINGS_CATEGORIES].join(", ") })
     );
   }
   if (
@@ -806,14 +807,14 @@ const rowToSavingsGoal = (row: Record<string, unknown>): RowResult<Record<string
     targetAmount < 0.01 ||
     targetAmount > VALIDATOR_LIMITS.MAX_MONEY
   ) {
-    return skipRow("Target amount must be a positive number of at least 0.01");
+    return skipRow(t("helpers.import.spreadsheet.row.targetAmountPositive"));
   }
   if (
     !Number.isFinite(currentAmount) ||
     currentAmount < 0 ||
     currentAmount > VALIDATOR_LIMITS.MAX_MONEY
   ) {
-    return skipRow("Current amount must be a number of 0 or more");
+    return skipRow(t("helpers.import.spreadsheet.row.currentAmountNonNegative"));
   }
 
   // The synthetic Emergency Fund row is removed up front by
@@ -885,15 +886,15 @@ const rowToAssetAccount = (row: Record<string, unknown>): RowResult<Record<strin
   // accounting-style "(500)" balance parses negative and must be skipped,
   // not handed to the strict sanitizer which would abort the whole file.
   if (!name) {
-    return skipRow("Name is missing");
+    return skipRow(t("helpers.import.spreadsheet.row.nameMissing"));
   }
   if (!category) {
     return skipRow(
-      `Category must be one of: ${[...VALID_ASSET_CATEGORIES].join(", ")}`
+      t("helpers.import.spreadsheet.row.categoryOneOf", { list: [...VALID_ASSET_CATEGORIES].join(", ") })
     );
   }
   if (!Number.isFinite(balance) || balance < 0 || balance > VALIDATOR_LIMITS.MAX_MONEY) {
-    return skipRow("Balance must be a number of 0 or more");
+    return skipRow(t("helpers.import.spreadsheet.row.balanceNonNegative"));
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
@@ -949,10 +950,10 @@ const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, un
   const accountId = parseString(get(row, "AccountId", "Account ID", "Account Id"), 80) || undefined;
 
   if (costBasis !== undefined && !isMoneyInRange(costBasis)) {
-    return skipRow("Cost basis must be a number of 0 or more");
+    return skipRow(t("helpers.import.spreadsheet.row.costBasisNonNegative"));
   }
   if (symbolRaw && !isValidSymbol(symbol)) {
-    return skipRow(`Symbol "${symbolRaw}" is not a valid ticker`);
+    return skipRow(t("helpers.import.spreadsheet.row.symbolInvalid", { symbol: symbolRaw }));
   }
 
   let shape: Record<string, unknown>;
@@ -960,23 +961,23 @@ const rowToHolding = (row: Record<string, unknown>): RowResult<Record<string, un
     // Proxy-tracked. isHoldingItem requires the anchor price too; a proxy
     // that was never priced can't be represented, so the row is skipped
     // rather than guessed into a different kind.
-    if (!symbolRaw) return skipRow("Proxy holding needs a Symbol (the proxy ticker)");
-    if (!name) return skipRow("Proxy holding needs a Name");
-    if (!isMoneyInRange(anchorValue)) return skipRow("Anchor value must be a number of 0 or more");
+    if (!symbolRaw) return skipRow(t("helpers.import.spreadsheet.row.proxyNeedsSymbol"));
+    if (!name) return skipRow(t("helpers.import.spreadsheet.row.proxyNeedsName"));
+    if (!isMoneyInRange(anchorValue)) return skipRow(t("helpers.import.spreadsheet.row.anchorValueNonNegative"));
     if (anchorPrice === undefined || !isMoneyInRange(anchorPrice) || anchorPrice <= 0) {
-      return skipRow("Proxy holding needs a positive AnchorPrice");
+      return skipRow(t("helpers.import.spreadsheet.row.proxyNeedsAnchorPrice"));
     }
     shape = { symbol, shares: isMoneyInRange(shares) ? shares : 0, name, anchorValue, anchorPrice };
   } else if (manualValue !== undefined) {
     // Manual fixed value: a named position with no ticker.
-    if (!name) return skipRow("Manual-value holding needs a Name");
-    if (!isMoneyInRange(manualValue)) return skipRow("Manual value must be a number of 0 or more");
+    if (!name) return skipRow(t("helpers.import.spreadsheet.row.manualNeedsName"));
+    if (!isMoneyInRange(manualValue)) return skipRow(t("helpers.import.spreadsheet.row.manualValueNonNegative"));
     shape = { symbol: "", shares: isMoneyInRange(shares) ? shares : 0, name, manualValue };
   } else {
     // Plain ticker (the legacy shape).
-    if (!symbolRaw) return skipRow("Symbol is missing");
+    if (!symbolRaw) return skipRow(t("helpers.import.spreadsheet.row.symbolMissing"));
     if (!isMoneyInRange(shares) || shares <= 0) {
-      return skipRow("Shares must be a positive number");
+      return skipRow(t("helpers.import.spreadsheet.row.sharesPositive"));
     }
     shape = { symbol, shares, ...(name ? { name } : {}) };
   }
@@ -999,7 +1000,7 @@ const rowToBusiness = (row: Record<string, unknown>): RowResult<Record<string, u
   // Cap mirrors MAX_BUSINESS_NAME_LENGTH / isBusinessItem (40).
   const name = parseString(get(row, "Name"), 40);
   if (!name) {
-    return skipRow("Name is missing");
+    return skipRow(t("helpers.import.spreadsheet.row.nameMissing"));
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
@@ -1018,7 +1019,7 @@ const rowToPerson = (row: Record<string, unknown>): RowResult<Record<string, unk
   // Cap mirrors MAX_PERSON_NAME_LENGTH / isPersonItem (40).
   const name = parseString(get(row, "Name"), 40);
   if (!name) {
-    return skipRow("Name is missing");
+    return skipRow(t("helpers.import.spreadsheet.row.nameMissing"));
   }
   const id = parseString(get(row, "ID", "Id"), 80) || generateUUID();
   const createdAt = parseDate(get(row, "CreatedAt", "Created At")) || new Date().toISOString();
@@ -1125,13 +1126,13 @@ export const importSpreadsheet = async (
 
   const file = picked.assets[0];
   if (!file?.uri) {
-    throw new Error("No file selected.");
+    throw new Error(t("helpers.import.file.noFileSelected"));
   }
 
   const fileSize = typeof file.size === "number" ? file.size : 0;
   if (fileSize > MAX_FILE_BYTES) {
     throw new Error(
-      `File is too large (${(fileSize / 1024 / 1024).toFixed(1)} MB). Maximum is 5 MB.`
+      t("helpers.import.spreadsheet.tooLarge", { mb: (fileSize / 1024 / 1024).toFixed(1) })
     );
   }
 
@@ -1156,12 +1157,12 @@ export const importSpreadsheet = async (
     }
   } catch {
     throw new Error(
-      "Could not read the spreadsheet. The file may be corrupt or in an unsupported format."
+      t("helpers.import.spreadsheet.unreadable")
     );
   }
 
   if (!workbook.SheetNames.length) {
-    throw new Error("The spreadsheet is empty.");
+    throw new Error(t("helpers.import.spreadsheet.empty"));
   }
 
   // For CSV: treat the only sheet as Budget Entries regardless of its name.
@@ -1223,7 +1224,7 @@ export const importSpreadsheet = async (
     peopleRows.length === 0
   ) {
     throw new Error(
-      'No recognized sheets found. Expected a "Budget Entries" sheet (or one of: Budget Limits, Debts, Payments, Savings Goals, Asset Accounts, Holdings).'
+      t("helpers.import.spreadsheet.noSheets")
     );
   }
 
@@ -1275,7 +1276,7 @@ export const importSpreadsheet = async (
 
   if (totalEntitiesValid === 0) {
     throw new Error(
-      "No valid rows found. Check that headers match the documented schema and Date / Amount / Type / Category are filled in."
+      t("helpers.import.spreadsheet.noValidRows")
     );
   }
 

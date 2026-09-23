@@ -1,5 +1,17 @@
 # BudgetArk Release Notes
 
+## v1.11.0 - Willkommen an Bord (2026-09-22)
+
+**Store build required.** `expo-localization` is a native module, so `runtimeVersion` moves 1.10.0 → 1.11.0; 1.10.x bundles cannot receive this over the air. No storage, sync, export or protocol change: category names, route keys, ids and every persisted value stay exactly as they were - only rendered text changes.
+
+- **German localization (user request; Russian and Ukrainian requested too, German first).** i18next + react-i18next with a typed key tree: English fragments in `src/i18n/locales/en/*.ts` are the source of truth, German twins are typed `Localized<typeof en>`, so a missing or extra German key fails `npm run typecheck`, and an unknown `t()` key fails it too. Every screen, modal and card across the five tabs, onboarding, achievements, the feature tour, provider setup guides, quick-start templates, the mission statement and the three data disclosures are translated (3,178 keys). Informal "du" throughout; glossary in `src/i18n/GLOSSARY.md`.
+- **Language setting.** Profile → Settings gets a Language row right beside Currency: Automatic (follows the phone, falls back to English), English, Deutsch. Stored device-locally as `@budgetark_language_id`, read at boot with the appearance keys, survives Reset All Data, never synced or exported. Switching re-renders every tab, re-issues pending check-in / keep-alive notifications in the new language and refreshes the Android widget.
+- **Helper sentences and bundled data follow the language.** Pure helpers (import skip reasons, milestone titles - Kiel, Rumpf, Deck -, purchase-planner guidance, sync activity, "rates updated" labels, connection errors, notification copy) translate through `src/i18n/translate.ts`; achievement, spotlight, coachmark, guide and template copy resolves lazily through getters so consumers are untouched. Jest initialises the English tree (`src/i18n/jestSetup.ts`), so every existing English test fixture still holds; rule-11 notification tests now run in German too.
+- **Search in either language.** Global search matches the translated category label and debt owner/type labels alongside the stored English value.
+- **Widgets.** The Android Quick Entry widget renders translated category labels after applying the stored language; the iOS WidgetKit target (no JS runtime, no App Group) follows the device language with inline German strings.
+- **Stays English by design:** lessons (with an "English only" note in the reader), the US-only tax tools' content, release notes, theme names, product names, spreadsheet sheet/column names and other file or storage contracts.
+- **Tests:** 160 suites, 2,467 tests (1.10.4 shipped 157 / 2,439). New: `src/i18n/__tests__/{pickLanguage,locales,translate}.test.ts`, German blocks in the planner, sync-activity, search and guide-search suites, "resolves prose not a key" checks for every data table.
+
 ## v1.10.4 - Every Cent Counts (2026-09-16)
 
 **OTA-shippable.** Pure JS; `runtimeVersion` stays 1.10.0, so every 1.10.0 store build receives this over the air. No storage, sync, or export change.

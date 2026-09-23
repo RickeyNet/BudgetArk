@@ -9,6 +9,8 @@
  * reference rate is a bundled constant, not a fetched quote (rule 4).
  */
 
+import { t } from "../i18n/translate";
+
 /** Largest APY accepted anywhere (percent). Mirrors isAssetAccountItem. */
 export const MAX_APY_PERCENT = 100;
 
@@ -71,7 +73,10 @@ export const describeApy = (
   apyPercent: number,
   money: (amount: number) => string,
 ): string =>
-  `${formatApy(apyPercent)} APY · ~${money(calcAnnualInterest(balance, apyPercent))}/yr`;
+  t("helpers.planning.apy.line", {
+    apy: formatApy(apyPercent),
+    amount: money(calcAnnualInterest(balance, apyPercent)),
+  });
 
 /**
  * The comparison line for a savings account, or null when the account
@@ -87,7 +92,5 @@ export const describeApyGap = (
 ): string | null => {
   const gap = calcApyGap(balance, apyPercent, referenceApy);
   if (gap < MIN_APY_GAP_TO_SHOW) return null;
-  return `A typical ${formatApy(referenceApy)} high-yield account would add about ${money(
-    gap,
-  )}/yr`;
+  return t("helpers.planning.apy.gap", { apy: formatApy(referenceApy), amount: money(gap) });
 };

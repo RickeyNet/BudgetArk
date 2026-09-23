@@ -31,6 +31,8 @@ import {
   type Debt,
   type Payment,
 } from "../types";
+import { t } from "../i18n/translate";
+import { categoryLabel } from "../i18n/categoryLabel";
 
 /* ─── Filter model ─── */
 
@@ -66,33 +68,27 @@ export const DEFAULT_SEARCH_FILTERS: SearchFilters = {
   amountMax: undefined,
 };
 
-export const SEARCH_SCOPE_OPTIONS: readonly {
-  id: SearchScope;
-  label: string;
-}[] = [
-  { id: "all", label: "Everything" },
-  { id: "debts", label: "Debts" },
-  { id: "payments", label: "Payments" },
-  { id: "entries", label: "Budget" },
+// Option ids only: the search sheet translates each id itself
+// (`budget.tools.search.{scope,datePreset,entryType}.<id>`), so no English
+// label lives here.
+export const SEARCH_SCOPE_OPTIONS: readonly { id: SearchScope }[] = [
+  { id: "all" },
+  { id: "debts" },
+  { id: "payments" },
+  { id: "entries" },
 ];
 
-export const SEARCH_DATE_PRESET_OPTIONS: readonly {
-  id: SearchDatePreset;
-  label: string;
-}[] = [
-  { id: "any", label: "Any time" },
-  { id: "30d", label: "Last 30 days" },
-  { id: "90d", label: "Last 90 days" },
-  { id: "year", label: "This year" },
+export const SEARCH_DATE_PRESET_OPTIONS: readonly { id: SearchDatePreset }[] = [
+  { id: "any" },
+  { id: "30d" },
+  { id: "90d" },
+  { id: "year" },
 ];
 
-export const SEARCH_ENTRY_TYPE_OPTIONS: readonly {
-  id: SearchEntryType;
-  label: string;
-}[] = [
-  { id: "all", label: "Income + expenses" },
-  { id: "income", label: "Income" },
-  { id: "expense", label: "Expenses" },
+export const SEARCH_ENTRY_TYPE_OPTIONS: readonly { id: SearchEntryType }[] = [
+  { id: "all" },
+  { id: "income" },
+  { id: "expense" },
 ];
 
 /** Per-group display cap so a bank-synced history can't render 500 rows. */
@@ -147,11 +143,18 @@ const tokenize = (query: string): string[] =>
 const matchesTokens = (haystack: string, tokens: readonly string[]): boolean =>
   tokens.every((token) => haystack.includes(token));
 
+// Haystacks carry the raw stored value AND its translated label so a query
+// in either language matches (German "Lebensmittel" and English "Grocery"
+// both find a Grocery entry; the stored name never changes).
 const debtClassLabel = (debt: Debt): string =>
-  DEBT_CLASS_OPTIONS.find((o) => o.id === debt.debtClass)?.label ?? "";
+  `${DEBT_CLASS_OPTIONS.find((o) => o.id === debt.debtClass)?.label ?? ""} ${
+    debt.debtClass ? t(`debts.form.type.options.${debt.debtClass}`) : ""
+  }`;
 
 const debtOwnerLabel = (debt: Debt): string =>
-  DEBT_OWNER_OPTIONS.find((o) => o.id === debt.owner)?.label ?? "";
+  `${DEBT_OWNER_OPTIONS.find((o) => o.id === debt.owner)?.label ?? ""} ${
+    debt.owner ? t(`debts.form.owner.options.${debt.owner}`) : ""
+  }`;
 
 const debtHaystack = (debt: Debt): string =>
   `${debt.name} ${debtOwnerLabel(debt)} ${debtClassLabel(debt)} ${debt.balance}`.toLowerCase();
@@ -160,7 +163,7 @@ const paymentHaystack = (payment: Payment, debtName: string): string =>
   `${debtName} ${payment.amount} ${payment.date.slice(0, 10)}`.toLowerCase();
 
 const entryHaystack = (entry: BudgetEntry): string =>
-  `${entry.description ?? ""} ${entry.category} ${entry.merchant ?? ""} ${
+  `${entry.description ?? ""} ${entry.category} ${categoryLabel(t, entry.category)} ${entry.merchant ?? ""} ${
     entry.type
   } ${entry.amount} ${entry.date.slice(0, 10)}`.toLowerCase();
 

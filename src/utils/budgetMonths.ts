@@ -13,6 +13,8 @@
  * on purpose (see its header) - that one stays separate.
  */
 
+import { currentLanguage } from "../i18n/translate";
+
 /** Local "YYYY-MM" for a date (default: now). */
 export const getMonthKey = (date: Date = new Date()): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -47,9 +49,9 @@ export const getBudgetMonthKeys = (now: Date = new Date()): string[] => {
 export const getMonthDateFromKey = (monthKey: string): Date =>
   new Date(`${monthKey}-01T00:00:00`);
 
-/** "March 2026" in the device locale. */
+/** "March 2026" in the active app language. */
 export const formatMonthKeyLabel = (monthKey: string): string =>
-  getMonthDateFromKey(monthKey).toLocaleDateString(undefined, {
+  getMonthDateFromKey(monthKey).toLocaleDateString(currentLanguage(), {
     month: "long",
     year: "numeric",
   });

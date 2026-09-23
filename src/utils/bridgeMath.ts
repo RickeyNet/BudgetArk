@@ -41,6 +41,7 @@ import {
   type HoldingValueOptions,
 } from "./holdingsMath";
 import { entriesForMonth } from "./billFulfillment";
+import { t } from "../i18n/translate";
 
 /** How many trailing months the Bridge cash-flow panel shows by default. */
 export const TRAILING_CASH_FLOW_MONTHS = 6;
@@ -274,7 +275,7 @@ export const formatNextQuoteRefresh = (
   const msLeft = last + intervalMs - now;
   if (msLeft <= 0) return "";
   const hours = Math.ceil(msLeft / (60 * 60 * 1000));
-  if (hours < 24) return `Next update in ${hours}h`;
+  if (hours < 24) return t("helpers.planning.nextQuote.hours", { hours });
   const days = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
-  return `Next update in ${days}d`;
+  return t("helpers.planning.nextQuote.days", { days });
 };

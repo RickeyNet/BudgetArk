@@ -21,6 +21,7 @@
 
 import { base64ToUtf8, basicAuthHeader } from "./base64";
 import { sanitizeTextInput } from "../../utils/sanitize";
+import { t } from "../../i18n/translate";
 
 import {
   NormalizedAccount,
@@ -48,14 +49,13 @@ export const decodeSetupToken = (
 ): { ok: true; claimUrl: string } | { ok: false; message: string } => {
   const trimmed = token.trim();
   if (!trimmed) {
-    return { ok: false, message: "Paste your SimpleFIN setup token first." };
+    return { ok: false, message: t("helpers.misc.connections.simplefin.tokenRequired") };
   }
   const decoded = base64ToUtf8(trimmed);
   if (!decoded || !/^https:\/\/\S+$/.test(decoded.trim())) {
     return {
       ok: false,
-      message:
-        "That doesn't look like a SimpleFIN setup token. Copy the whole token from your SimpleFIN Bridge app page and try again.",
+      message: t("helpers.misc.connections.simplefin.tokenInvalid"),
     };
   }
   return { ok: true, claimUrl: decoded.trim() };

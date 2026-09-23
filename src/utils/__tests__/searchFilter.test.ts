@@ -18,6 +18,8 @@ import {
   searchRecords,
   type SearchFilters,
 } from "../searchFilter";
+import i18next, { changeLanguage } from "i18next";
+import { de } from "../../i18n/locales/de";
 
 const NOW = new Date("2026-07-20T12:00:00");
 
@@ -341,5 +343,28 @@ describe("collectEntryCategories", () => {
       makeEntry({ category: "Ghost", deletedAt: "2026-06-01T00:00:00" }),
     ]);
     expect(categories).toEqual(["Coffee Shops", "Grocery", "Salary"]);
+  });
+});
+
+describe("translated labels in the haystack", () => {
+  beforeAll(() => {
+    i18next.addResourceBundle("de", "translation", de, true, true);
+  });
+  afterEach(async () => {
+    await changeLanguage("en");
+  });
+
+  it("matches the German category label while German is active", async () => {
+    await changeLanguage("de");
+    const grocery = makeEntry({ category: "Grocery" });
+    const other = makeEntry({ category: "Shopping" });
+    const data = { entries: [grocery, other] };
+    expect(search(data, filters({ query: "lebensmittel" })).entries).toEqual([grocery]);
+  });
+
+  it("still matches the stored English category name while German is active", async () => {
+    await changeLanguage("de");
+    const grocery = makeEntry({ category: "Grocery" });
+    expect(search({ entries: [grocery] }, filters({ query: "grocery" })).entries).toEqual([grocery]);
   });
 });

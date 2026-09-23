@@ -6,6 +6,12 @@
  * where to find it. Pure string matching over the COACHMARKS content -
  * no React Native imports, fully unit-testable in Node.
  *
+ * COACHMARKS exposes its copy through getters that resolve in the ACTIVE
+ * language at read time (see coachmarkContent.ts), and this function reads
+ * every field fresh on each call - never from a module-load snapshot - so a
+ * German user typing "Beleg" finds the receipts step. Callers that memoize
+ * results must include `t` in their dependencies.
+ *
  * Matching: the query is lowercased and split on whitespace; a step
  * matches only when EVERY token appears somewhere in its haystack
  * (title + body + detail + location + keywords + tab label). Results are

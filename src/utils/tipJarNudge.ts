@@ -16,6 +16,8 @@
  * was tipped - the app never learns that (see TipJarModal).
  */
 
+import { t } from "../i18n/translate";
+
 export type WinKind = "debt-payment" | "debt-payoff" | "bill-paid";
 
 export interface WinEvent {
@@ -119,22 +121,23 @@ export const tipNudgeCopyFor = (win: WinEvent): TipNudgeCopy => {
   switch (win.kind) {
     case "debt-payoff":
       return {
-        title: label ? `${label} is gone. That's the whole idea.` : "One debt gone. That's the whole idea.",
-        body:
-          "BudgetArk stays free and ad-free, with no account and nothing leaving your phone, because people who hit moments like this chip in. A tip is optional and unlocks nothing - the app is already all yours.",
+        title: label
+          ? t("helpers.insights.tipNudge.debtPayoff.titleWithLabel", { label })
+          : t("helpers.insights.tipNudge.debtPayoff.title"),
+        body: t("helpers.insights.tipNudge.debtPayoff.body"),
       };
     case "bill-paid":
       return {
-        title: label ? `${label} settled, budget line adjusted` : "Bill settled, budget line adjusted",
-        body:
-          "BudgetArk is free and ad-free with nothing leaving your phone. If it makes bill day easier, an optional tip keeps it that way. Nothing to unlock.",
+        title: label
+          ? t("helpers.insights.tipNudge.billPaid.titleWithLabel", { label })
+          : t("helpers.insights.tipNudge.billPaid.title"),
+        body: t("helpers.insights.tipNudge.billPaid.body"),
       };
     case "debt-payment":
     default:
       return {
-        title: "Another chip off the balance",
-        body:
-          "BudgetArk is free, ad-free, and keeps everything on your phone. If it's helping, an optional tip keeps it sailing - nothing to unlock.",
+        title: t("helpers.insights.tipNudge.debtPayment.title"),
+        body: t("helpers.insights.tipNudge.debtPayment.body"),
       };
   }
 };

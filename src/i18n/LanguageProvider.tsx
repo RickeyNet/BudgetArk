@@ -16,9 +16,12 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { Platform } from "react-native";
 import i18n, { getDeviceLanguageTags } from "./index";
 import * as EncryptedStorage from "../storage/encryptedStorage";
 import { LANGUAGE_KEY, getAppearanceBoot } from "../theme/appearanceBoot";
+import { rescheduleTrackingReminders } from "../notifications/trackingReminders";
+import { rescheduleCardKeepAliveReminders } from "../notifications/cardKeepAliveReminders";
 import {
   DEFAULT_APP_LANGUAGE_ID,
   LANGUAGE_NATIVE_NAMES,
@@ -51,6 +54,27 @@ type LanguageContextValue = Readonly<{
 }>;
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
+
+/**
+ * Re-renders the Android Quick Entry widget so its category labels follow
+ * the new language. Inline requires keep the android-widget module (and the
+ * widget tree) out of the iOS bundle, matching index.js. Best effort.
+ */
+const refreshAndroidWidget = (): void => {
+  if (Platform.OS !== "android") return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { requestWidgetUpdate } = require("react-native-android-widget");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { QuickEntryWidget } = require("../widgets/QuickEntryWidget");
+    void requestWidgetUpdate({
+      widgetName: "QuickEntry",
+      renderWidget: () => React.createElement(QuickEntryWidget),
+    });
+  } catch {
+    // No widget placed, or module unavailable: nothing to refresh.
+  }
+};
 
 const applyLanguage = async (setting: AppLanguageId): Promise<SupportedLanguage> => {
   const resolved = resolveAppLanguage(setting, getDeviceLanguageTags());
@@ -93,8 +117,17 @@ export const LanguageProvider: React.FC<React.PropsWithChildren> = ({ children }
   const setLanguageId = useCallback(async (id: AppLanguageId) => {
     if (!isAppLanguageId(id)) return;
     setLanguageIdState(id);
-    setResolvedLanguage(await applyLanguage(id));
+    const before = i18n.language;
+    const resolved = await applyLanguage(id);
+    setResolvedLanguage(resolved);
     await EncryptedStorage.setItem(LANGUAGE_KEY, id);
+    if (resolved !== before) {
+      // Pending notifications were rendered in the old language at schedule
+      // time; both reschedulers are idempotent, best-effort and never throw.
+      void rescheduleTrackingReminders();
+      void rescheduleCardKeepAliveReminders();
+      refreshAndroidWidget();
+    }
   }, []);
 
   const value = useMemo<LanguageContextValue>(

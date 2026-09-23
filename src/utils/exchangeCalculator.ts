@@ -13,6 +13,7 @@
 import { CURRENCY_PREFERENCE_OPTIONS } from "../types";
 import type { RatesSnapshot } from "./exchangeRates";
 import { parseMoneyInput } from "./parseMoneyInput";
+import { t } from "../i18n/translate";
 
 /** One selectable currency in the converter's From/To chip rows. */
 export interface ExchangeCurrency {
@@ -117,22 +118,22 @@ export const describeRatesSnapshot = (
   nowMs: number
 ): string => {
   if (snapshot.source === "static") {
-    return "Built-in approximate rates - couldn't reach the rate service";
+    return t("helpers.planning.rates.static");
   }
   const fetchedMs = new Date(snapshot.fetchedAt).getTime();
   const ageMs = nowMs - fetchedMs;
   if (!Number.isFinite(ageMs) || ageMs < 0) {
-    return "Rates updated just now";
+    return t("helpers.planning.rates.justNow");
   }
   const minutes = Math.floor(ageMs / 60_000);
-  if (minutes < 1) return "Rates updated just now";
+  if (minutes < 1) return t("helpers.planning.rates.justNow");
   if (minutes < 60) {
-    return `Rates updated ${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
+    return t("helpers.planning.rates.minutesAgo", { count: minutes });
   }
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return `Rates updated ${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+    return t("helpers.planning.rates.hoursAgo", { count: hours });
   }
   const days = Math.floor(hours / 24);
-  return `Rates updated ${days} ${days === 1 ? "day" : "days"} ago`;
+  return t("helpers.planning.rates.daysAgo", { count: days });
 };

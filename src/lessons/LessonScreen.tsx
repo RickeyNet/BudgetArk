@@ -35,7 +35,7 @@ import type {
   LessonStub,
 } from "../types";
 import { CHAPTERS } from "../data/lessonChapters";
-import { LEARNING_DISCLAIMER } from "../data/learningDisclaimer";
+import { learningDisclaimer } from "../data/learningDisclaimer";
 import {
   getLessonById,
   getNextLessonStub,
@@ -302,7 +302,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
 
           {stubHasBody && lesson ? (
             <>
-              <Text style={styles.disclaimer}>{LEARNING_DISCLAIMER}</Text>
+              <Text style={styles.disclaimer}>{learningDisclaimer()}</Text>
 
               {lesson.summary ? (
                 <Text style={styles.summary}>{lesson.summary}</Text>

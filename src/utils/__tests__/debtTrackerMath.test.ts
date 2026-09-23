@@ -122,7 +122,7 @@ describe("computeMilestoneProgress", () => {
     expect(computeMilestoneProgress(milestoneInput({ plan: null }))).toEqual([]);
   });
 
-  it("carries the stored step fields through untouched", () => {
+  it("carries the stored step state through and localizes the display text", () => {
     const plan = makePlan(["keel"], { keel: { isCompleted: true, targetAmount: 2000 } });
     const [step] = computeMilestoneProgress(
       milestoneInput({ plan, effectiveReserve: 500 })
@@ -130,7 +130,15 @@ describe("computeMilestoneProgress", () => {
 
     // Completion is the user's own checkbox - progress never overrides it.
     expect(step.key).toBe("keel");
-    expect(step.title).toBe("keel");
+    // Title/description/nextAction come from the translation tree keyed by
+    // milestone id, not from the stored (English seed) plan text.
+    expect(step.title).toBe("Keel");
+    expect(step.description).toBe(
+      "Save a starter emergency fund so your plan has a stable base."
+    );
+    expect(step.nextAction).toBe(
+      "Set aside your first cushion target before pushing harder elsewhere."
+    );
     expect(step.isCompleted).toBe(true);
     expect(step.targetAmount).toBe(2000);
     expect(step.progress).toBeCloseTo(0.25);

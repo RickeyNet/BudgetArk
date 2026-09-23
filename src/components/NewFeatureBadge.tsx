@@ -10,16 +10,18 @@
 
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 
 const NewFeatureBadge: React.FC = () => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   return (
     <View style={[styles.pill, { backgroundColor: colors.accent }]}>
       <Text
         style={[styles.text, { color: colors.accentButtonText ?? colors.white }]}
       >
-        NEW
+        {t("modals.engage.newBadge")}
       </Text>
     </View>
   );

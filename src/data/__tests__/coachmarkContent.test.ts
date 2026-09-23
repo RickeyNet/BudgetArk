@@ -63,6 +63,22 @@ describe("coachmark guide content", () => {
     }
   });
 
+  it("resolves its copy through the translation tree (never a raw key)", () => {
+    for (const tabId of COACHMARK_TAB_IDS) {
+      expect(COACHMARKS[tabId].intro).not.toMatch(/^data\./);
+    }
+    for (const { step } of allSteps) {
+      expect(step.title).not.toMatch(/^data\./);
+      expect(step.body).not.toMatch(/^data\./);
+      expect(step.detail).not.toMatch(/^data\./);
+      expect(step.location).not.toMatch(/^data\./);
+      expect((step.keywords ?? []).length).toBeGreaterThan(0);
+    }
+    expect(COACHMARKS.Budget.steps.find((s) => s.id === "budget-receipts")?.title).toBe(
+      "Receipts and business expenses"
+    );
+  });
+
   it("documents the recently shipped features", () => {
     const ids = new Set(allSteps.map(({ step }) => step.id));
     expect(ids.has("debts-keepalive")).toBe(true);

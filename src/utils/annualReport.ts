@@ -13,6 +13,7 @@
  */
 
 import {
+  BUDGET_CATEGORIES,
   BudgetCategory,
   BudgetEntry,
   CategoryBudgetLimit,
@@ -20,6 +21,7 @@ import {
   Payment,
 } from "../types";
 import { entriesForMonth } from "./billFulfillment";
+import { t } from "../i18n/translate";
 
 /**
  * Categories that represent money moved *into* savings rather than spending.
@@ -315,32 +317,54 @@ export const formatAnnualReportShareText = (
   formatCurrency: (n: number) => string
 ): string => {
   const lines: string[] = [];
-  lines.push(`⚓ My ${data.year} BudgetArk Report`);
+  lines.push(t("helpers.planning.annualReport.title", { year: data.year }));
   lines.push("");
-  lines.push(`💳 Debt paid: ${formatCurrency(data.debtPaid)}`);
-  lines.push(`🐖 Set aside: ${formatCurrency(data.totalContributed)}`);
+  lines.push(
+    t("helpers.planning.annualReport.debtPaid", { amount: formatCurrency(data.debtPaid) })
+  );
+  lines.push(
+    t("helpers.planning.annualReport.setAside", {
+      amount: formatCurrency(data.totalContributed),
+    })
+  );
 
   if (data.netWorth.change != null) {
     const change = data.netWorth.change;
     const sign = change > 0 ? "+" : change < 0 ? "−" : "";
-    lines.push(`📈 Net worth: ${sign}${formatCurrency(Math.abs(change))}`);
+    lines.push(
+      t("helpers.planning.annualReport.netWorth", {
+        amount: `${sign}${formatCurrency(Math.abs(change))}`,
+      })
+    );
   }
 
   if (data.savingsRate != null) {
-    lines.push(`💰 Savings rate: ${Math.round(data.savingsRate)}%`);
+    lines.push(
+      t("helpers.planning.annualReport.savingsRate", { rate: Math.round(data.savingsRate) })
+    );
   }
 
   if (data.monthsWithLimits > 0) {
     lines.push(
-      `🎯 Months under budget: ${data.monthsUnderBudget}/${data.monthsWithLimits}`
+      t("helpers.planning.annualReport.monthsUnderBudget", {
+        under: data.monthsUnderBudget,
+        total: data.monthsWithLimits,
+      })
     );
   }
 
   if (data.biggestCategory) {
-    lines.push(`🏷️ Top category: ${data.biggestCategory.category}`);
+    // Built-in category names are persisted keys; show the display name.
+    const category = data.biggestCategory.category;
+    const isBuiltIn = (BUDGET_CATEGORIES as readonly string[]).includes(category);
+    lines.push(
+      t("helpers.planning.annualReport.topCategory", {
+        category: isBuiltIn ? t(`categories.${category as BudgetCategory}`) : category,
+      })
+    );
   }
 
   lines.push("");
-  lines.push("Tracked offline with BudgetArk.");
+  lines.push(t("helpers.planning.annualReport.footer"));
   return lines.join("\n");
 };

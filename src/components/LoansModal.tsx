@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -31,6 +32,7 @@ import {
   type LoanLine,
 } from "../utils/loans";
 import { formatDayLabel } from "../utils/dateFormat";
+import { useCategoryLabel } from "../i18n/categoryLabel";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { toLocalDateKey } from "../utils/paycheckCycle";
 import { generateUUID } from "../utils/uuid";
@@ -47,6 +49,8 @@ interface LoansModalProps {
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
+  const { t } = useTranslation();
+  const categoryLabel = useCategoryLabel();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -88,14 +92,14 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
       } catch (err) {
         if (cancelled) return;
         setEntries([]);
-        setError(describeError(err, "Couldn't load your loans."));
+        setError(describeError(err, t("modals.people.loans.errors.load")));
       }
       setLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [visible]);
+  }, [t, visible]);
 
   const ledger = useMemo(() => buildLoanLedger(entries), [entries]);
   const hiddenSettledCount = useMemo(
@@ -125,18 +129,20 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
       if (busy) return;
       const amount = parseMoneyInput(draftAmount) ?? 0;
       if (!(amount > 0)) {
-        setError("Enter the amount they paid.");
+        setError(t("modals.people.loans.errors.amountRequired"));
         return;
       }
       if (amount > line.outstanding + 0.001) {
         setError(
-          `That's more than the ${formatCurrency(line.outstanding)} still owed.`
+          t("modals.people.loans.errors.overpay", {
+            amount: formatCurrency(line.outstanding),
+          })
         );
         return;
       }
       const dateKey = draftDate.trim();
       if (!DATE_KEY_RE.test(dateKey) || !Number.isFinite(Date.parse(dateKey))) {
-        setError("Date must look like 2026-09-15.");
+        setError(t("modals.people.loans.errors.dateFormat"));
         return;
       }
       setBusy(true);
@@ -150,7 +156,7 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
           createdAt: new Date().toISOString(),
         });
         if (!updated) {
-          setError("Couldn't record that payment - reopen and try again.");
+          setError(t("modals.people.loans.errors.recordFailedReopen"));
           triggerHaptic("error");
         } else {
           await reload();
@@ -159,12 +165,12 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
         }
       } catch (err) {
         triggerHaptic("error");
-        setError(describeError(err, "Couldn't record the payment."));
+        setError(describeError(err, t("modals.people.loans.errors.recordFailed")));
       } finally {
         setBusy(false);
       }
     },
-    [busy, draftAmount, draftDate, draftNote, formatCurrency, reload]
+    [busy, draftAmount, draftDate, draftNote, formatCurrency, reload, t]
   );
 
   const handleRemovePayment = useCallback(
@@ -178,18 +184,18 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
         triggerHaptic("selection");
       } catch (err) {
         triggerHaptic("error");
-        setError(describeError(err, "Couldn't remove the payment."));
+        setError(describeError(err, t("modals.people.loans.errors.removeFailed")));
       } finally {
         setBusy(false);
       }
     },
-    [busy, reload]
+    [busy, reload, t]
   );
 
   const renderLoan = (line: LoanLine) => {
     const { entry } = line;
     const formOpen = formLoanId === entry.id;
-    const title = entry.description?.trim() || entry.category;
+    const title = entry.description?.trim() || categoryLabel(entry.category);
     return (
       <View key={entry.id} style={styles.loanRow}>
         <View style={styles.loanHeader}>
@@ -198,19 +204,27 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
               {title}
             </Text>
             <Text style={styles.loanMeta}>
-              {formatDayLabel(entry.date)} · lent {formatCurrency(entry.amount)}
-              {line.repaid > 0 ? ` · ${formatCurrency(line.repaid)} back` : ""}
+              {t("modals.people.loans.loanMeta", {
+                date: formatDayLabel(entry.date),
+                amount: formatCurrency(entry.amount),
+              })}
+              {line.repaid > 0
+                ? ` · ${t("modals.people.loans.repaidBack", { amount: formatCurrency(line.repaid) })}`
+                : ""}
             </Text>
           </View>
           <Text style={[styles.loanOutstanding, line.settled && styles.loanSettled]}>
-            {line.settled ? "Paid back" : formatCurrency(line.outstanding)}
+            {line.settled ? t("modals.people.loans.paidBack") : formatCurrency(line.outstanding)}
           </Text>
         </View>
 
         {(entry.loanRepayments ?? []).map((repayment) => (
           <View key={repayment.id} style={styles.repaymentRow}>
             <Text style={styles.repaymentText} numberOfLines={1}>
-              ↳ {formatDayLabel(repayment.date)} · {formatCurrency(repayment.amount)}
+              {t("modals.people.loans.repaymentLine", {
+                date: formatDayLabel(repayment.date),
+                amount: formatCurrency(repayment.amount),
+              })}
               {repayment.note ? ` · ${repayment.note}` : ""}
             </Text>
             <TouchableOpacity
@@ -218,7 +232,7 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
               disabled={busy}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel={`Remove the ${formatCurrency(repayment.amount)} payment`}
+              accessibilityLabel={t("modals.people.loans.removeRepaymentA11y", { amount: formatCurrency(repayment.amount) })}
             >
               <Text style={styles.repaymentRemove}>✕</Text>
             </TouchableOpacity>
@@ -231,9 +245,9 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
             onPress={() => openForm(line)}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel={`Log a payment from ${entry.lentTo ?? "the borrower"}`}
+            accessibilityLabel={t("modals.people.loans.logPaymentA11y", { name: entry.lentTo ?? t("modals.people.loans.borrowerFallback") })}
           >
-            <Text style={styles.secondaryButtonText}>Log payment</Text>
+            <Text style={styles.secondaryButtonText}>{t("modals.people.loans.logPayment")}</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -241,24 +255,24 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
           <View style={styles.form}>
             <View style={styles.formRow}>
               <View style={styles.formField}>
-                <Text style={styles.formLabel}>AMOUNT</Text>
+                <Text style={styles.formLabel}>{t("modals.people.loans.form.amount")}</Text>
                 <TextInput
                   style={styles.input}
                   value={draftAmount}
                   onChangeText={setDraftAmount}
                   keyboardType="decimal-pad"
-                  placeholder="0.00"
+                  placeholder={t("modals.people.loans.form.amountPlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   returnKeyType="done"
                 />
               </View>
               <View style={styles.formField}>
-                <Text style={styles.formLabel}>RECEIVED ON</Text>
+                <Text style={styles.formLabel}>{t("modals.people.loans.form.receivedOn")}</Text>
                 <TextInput
                   style={styles.input}
                   value={draftDate}
                   onChangeText={setDraftDate}
-                  placeholder="YYYY-MM-DD"
+                  placeholder={t("modals.people.loans.form.datePlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -266,12 +280,12 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
                 />
               </View>
             </View>
-            <Text style={styles.formLabel}>NOTE (OPTIONAL)</Text>
+            <Text style={styles.formLabel}>{t("modals.people.loans.form.note")}</Text>
             <TextInput
               style={styles.input}
               value={draftNote}
               onChangeText={setDraftNote}
-              placeholder="Cash, Venmo, ..."
+              placeholder={t("modals.people.loans.form.notePlaceholder")}
               placeholderTextColor={colors.textMuted}
               maxLength={LOAN_REPAYMENT_NOTE_MAX_LENGTH}
               returnKeyType="done"
@@ -284,7 +298,7 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
                 accessibilityRole="button"
               >
                 <Text style={styles.primaryButtonText}>
-                  {busy ? "Saving..." : "Save payment"}
+                  {busy ? t("modals.people.loans.form.saving") : t("modals.people.loans.form.save")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -292,10 +306,12 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
                 onPress={() => setDraftAmount(String(line.outstanding))}
                 disabled={busy}
                 accessibilityRole="button"
-                accessibilityLabel="Fill in the full amount still owed"
+                accessibilityLabel={t("modals.people.loans.form.paidInFullA11y")}
               >
                 <Text style={styles.secondaryButtonText}>
-                  Paid in full · {formatCurrency(line.outstanding)}
+                  {t("modals.people.loans.form.paidInFull", {
+                    amount: formatCurrency(line.outstanding),
+                  })}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -304,7 +320,7 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
                 disabled={busy}
                 accessibilityRole="button"
               >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                <Text style={styles.secondaryButtonText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -324,13 +340,17 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
             🤝 {balance.name}
           </Text>
           <Text style={[styles.borrowerOutstanding, settled && styles.loanSettled]}>
-            {settled ? "All paid back" : formatCurrency(balance.outstanding)}
+            {settled ? t("modals.people.loans.allPaidBack") : formatCurrency(balance.outstanding)}
           </Text>
         </View>
         <Text style={styles.borrowerMeta}>
-          {formatCurrency(balance.lent)} lent across {balance.loans.length}{" "}
-          {balance.loans.length === 1 ? "loan" : "loans"}
-          {balance.repaid > 0 ? ` · ${formatCurrency(balance.repaid)} paid back` : ""}
+          {t("modals.people.loans.borrowerMeta", {
+            count: balance.loans.length,
+            lent: formatCurrency(balance.lent),
+          })}
+          {balance.repaid > 0
+            ? ` · ${t("modals.people.loans.borrowerRepaid", { amount: formatCurrency(balance.repaid) })}`
+            : ""}
         </Text>
         {loans.map(renderLoan)}
       </View>
@@ -347,37 +367,32 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
       contentContainerStyle={styles.sheetContent}
       footer={
         <TouchableOpacity style={sheet.closeButton} onPress={onClose}>
-          <Text style={sheet.closeText}>Close</Text>
+          <Text style={sheet.closeText}>{t("common.close")}</Text>
         </TouchableOpacity>
       }
     >
-      <Text style={sheet.title}>Owed to You</Text>
-      <Text style={sheet.subtitle}>
-        Money you've lent out. Mark an expense "lent to" someone when you log
-        it (or in the Review Inbox), then record what they pay back here.
-      </Text>
+      <Text style={sheet.title}>{t("modals.people.loans.title")}</Text>
+      <Text style={sheet.subtitle}>{t("modals.people.loans.subtitle")}</Text>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {hasLoans ? (
         <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>STILL OWED TO YOU</Text>
+          <Text style={styles.totalLabel}>{t("modals.people.loans.stillOwed")}</Text>
           <Text style={styles.totalValue}>{formatCurrency(ledger.totalOutstanding)}</Text>
           <Text style={styles.totalSub}>
-            {formatCurrency(ledger.totalLent)} lent · {formatCurrency(ledger.totalRepaid)}{" "}
-            paid back
+            {t("modals.people.loans.totalSub", {
+              lent: formatCurrency(ledger.totalLent),
+              repaid: formatCurrency(ledger.totalRepaid),
+            })}
           </Text>
         </View>
       ) : null}
 
       {!loaded ? (
-        <Text style={styles.emptyText}>Loading…</Text>
+        <Text style={styles.emptyText}>{t("modals.people.loans.loading")}</Text>
       ) : !hasLoans ? (
-        <Text style={styles.emptyText}>
-          Nothing lent out yet. When you add an expense on the Budget tab, fill
-          in "Lent to someone?" with the person's name and it will show up
-          here.
-        </Text>
+        <Text style={styles.emptyText}>{t("modals.people.loans.empty")}</Text>
       ) : (
         <>
           {ledger.borrowers.map(renderBorrower)}
@@ -389,10 +404,8 @@ const LoansModal: React.FC<LoansModalProps> = ({ visible, onClose }) => {
             >
               <Text style={styles.toggleText}>
                 {showSettled
-                  ? "Hide paid-back loans"
-                  : `Show ${hiddenSettledCount} paid-back ${
-                      hiddenSettledCount === 1 ? "loan" : "loans"
-                    }`}
+                  ? t("modals.people.loans.hideSettled")
+                  : t("modals.people.loans.showSettled", { count: hiddenSettledCount })}
               </Text>
             </TouchableOpacity>
           ) : null}

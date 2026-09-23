@@ -147,6 +147,7 @@ const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
   theme: "deep-sea-theme",
   appLock: "app-lock",
   data: "bank-statement-import",
+  language: "german-language",
 };
 
 const ProfileScreen: React.FC = () => {
@@ -377,6 +378,9 @@ const ProfileScreen: React.FC = () => {
           break;
         case "data":
           dataSectionRef.current?.openBankStatementImport();
+          break;
+        case "language":
+          settingsSectionRef.current?.openLanguage();
           break;
       }
       dismissNewBadge(SECTION_FEATURE_IDS[section]);

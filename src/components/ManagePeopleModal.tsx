@@ -23,6 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { describeError } from "../utils/errorMessage";
 import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
@@ -43,6 +44,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -72,13 +74,13 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
         setEntryCounts(counts);
       } catch (error) {
         if (cancelled) return;
-        setError(describeError(error, "Couldn't load your people. Close and try again."));
+        setError(describeError(error, t("modals.people.people.errors.load")));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [visible]);
+  }, [t, visible]);
 
   const resetForm = useCallback(() => {
     setName("");
@@ -106,11 +108,11 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
       }
     } catch (error) {
       // A storage failure must not leave the button stuck on "Saving...".
-      setError(describeError(error, "Couldn't save. Please try again."));
+      setError(describeError(error, t("modals.people.manage.errors.save")));
     } finally {
       setSaving(false);
     }
-  }, [addPerson, editingId, name, resetForm, saving, updatePerson]);
+  }, [addPerson, editingId, name, resetForm, saving, t, updatePerson]);
 
   const handleStartRename = useCallback((person: Person) => {
     setEditingId(person.id);
@@ -123,15 +125,15 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
       const count = entryCounts[id] ?? 0;
       const entryNote =
         count > 0
-          ? ` ${count} ${count === 1 ? "entry keeps" : "entries keep"} the assignment and will show as "(deleted person)".`
+          ? ` ${t("modals.people.people.deleteConfirm.entryNote", { count })}`
           : "";
       Alert.alert(
-        "Delete person?",
-        `"${label}" will be removed from the picker.${entryNote}`,
+        t("modals.people.people.deleteConfirm.title"),
+        `${t("modals.people.people.deleteConfirm.message", { name: label })}${entryNote}`,
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text: "Delete",
+            text: t("common.delete"),
             style: "destructive",
             onPress: () => {
               void (async () => {
@@ -140,7 +142,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
                   if (editingId === id) resetForm();
                 } catch (error) {
                   setError(
-                    describeError(error, "Couldn't delete this person. Please try again."),
+                    describeError(error, t("modals.people.people.errors.delete")),
                   );
                 }
               })();
@@ -149,7 +151,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
         ],
       );
     },
-    [deletePerson, editingId, entryCounts, resetForm],
+    [deletePerson, editingId, entryCounts, resetForm, t],
   );
 
   const canSubmit = name.trim().length > 0 && !saving;
@@ -163,30 +165,26 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
       footer={
         <>
           <TouchableOpacity style={sheet.doneButton} onPress={handleClose}>
-            <Text style={sheet.doneText}>Done</Text>
+            <Text style={sheet.doneText}>{t("common.done")}</Text>
           </TouchableOpacity>
         </>
       }
     >
-            <Text style={sheet.title}>People</Text>
-            <Text style={sheet.subtitle}>
-              Add the people in your household (or anyone you track spending
-              for). Assign expenses to them when adding entries or approving
-              imported transactions, so it's clear who spent what.
-            </Text>
+            <Text style={sheet.title}>{t("modals.people.people.title")}</Text>
+            <Text style={sheet.subtitle}>{t("modals.people.people.subtitle")}</Text>
 
             {/* ── Add / rename form ── */}
             <View style={styles.field}>
               <Text style={styles.label}>
-                {editingId ? "RENAME PERSON" : "NAME"}
+                {editingId ? t("modals.people.people.renameLabel") : t("modals.people.manage.name")}
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Sam, Alex, the kids"
+                placeholder={t("modals.people.people.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 value={name}
-                onChangeText={(t) => {
-                  setName(t);
+                onChangeText={(text) => {
+                  setName(text);
                   if (error) setError(null);
                 }}
                 maxLength={MAX_PERSON_NAME_LENGTH}
@@ -201,7 +199,7 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
                   style={styles.cancelEditButton}
                   onPress={resetForm}
                 >
-                  <Text style={styles.cancelEditText}>Cancel</Text>
+                  <Text style={styles.cancelEditText}>{t("common.cancel")}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -211,22 +209,20 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
               >
                 <Text style={styles.addButtonText}>
                   {saving
-                    ? "Saving…"
+                    ? t("modals.people.manage.saving")
                     : editingId
-                      ? "Save Name"
-                      : "Add Person"}
+                      ? t("modals.people.manage.saveName")
+                      : t("modals.people.people.add")}
                 </Text>
               </TouchableOpacity>
             </View>
 
             {/* ── Existing list ── */}
             <Text style={[styles.label, styles.listHeader]}>
-              YOUR PEOPLE ({people.length})
+              {t("modals.people.people.listHeader", { count: people.length })}
             </Text>
             {people.length === 0 ? (
-              <Text style={styles.emptyText}>
-                No people yet. Add one above.
-              </Text>
+              <Text style={styles.emptyText}>{t("modals.people.people.empty")}</Text>
             ) : (
               people.map((person) => {
                 const count = entryCounts[person.id] ?? 0;
@@ -239,25 +235,25 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
                       </Text>
                       <Text style={styles.rowCount}>
                         {count === 0
-                          ? "No assigned entries"
-                          : `${count} assigned ${count === 1 ? "entry" : "entries"}`}
+                          ? t("modals.people.people.noEntries")
+                          : t("modals.people.people.entries", { count })}
                       </Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => handleStartRename(person)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Rename ${person.name}`}
+                      accessibilityLabel={t("modals.people.manage.renameA11y", { name: person.name })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.rowRename}>Rename</Text>
+                      <Text style={styles.rowRename}>{t("modals.people.manage.rename")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleDelete(person.id, person.name)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Delete ${person.name}`}
+                      accessibilityLabel={t("modals.people.manage.deleteA11y", { name: person.name })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.rowDelete}>Delete</Text>
+                      <Text style={styles.rowDelete}>{t("common.delete")}</Text>
                     </TouchableOpacity>
                   </View>
                 );

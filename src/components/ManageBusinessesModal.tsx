@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { describeError } from "../utils/errorMessage";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
@@ -42,6 +43,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -71,13 +73,13 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
         setEntryCounts(counts);
       } catch (error) {
         if (cancelled) return;
-        setError(describeError(error, "Couldn't load your businesses. Close and try again."));
+        setError(describeError(error, t("modals.people.businesses.errors.load")));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [visible]);
+  }, [t, visible]);
 
   const resetForm = useCallback(() => {
     setName("");
@@ -105,11 +107,11 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
       }
     } catch (error) {
       // A storage failure must not leave the button stuck on "Saving...".
-      setError(describeError(error, "Couldn't save. Please try again."));
+      setError(describeError(error, t("modals.people.manage.errors.save")));
     } finally {
       setSaving(false);
     }
-  }, [addBusiness, editingId, name, resetForm, saving, updateBusiness]);
+  }, [addBusiness, editingId, name, resetForm, saving, t, updateBusiness]);
 
   const handleStartRename = useCallback((business: Business) => {
     setEditingId(business.id);
@@ -122,15 +124,15 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
       const count = entryCounts[id] ?? 0;
       const entryNote =
         count > 0
-          ? ` ${count} ${count === 1 ? "entry keeps" : "entries keep"} the tag and will show as "(deleted business)" in reports.`
+          ? ` ${t("modals.people.businesses.deleteConfirm.entryNote", { count })}`
           : "";
       Alert.alert(
-        "Delete business?",
-        `"${label}" will be removed from the picker.${entryNote}`,
+        t("modals.people.businesses.deleteConfirm.title"),
+        `${t("modals.people.businesses.deleteConfirm.message", { name: label })}${entryNote}`,
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text: "Delete",
+            text: t("common.delete"),
             style: "destructive",
             onPress: () => {
               void (async () => {
@@ -139,7 +141,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
                   if (editingId === id) resetForm();
                 } catch (error) {
                   setError(
-                    describeError(error, "Couldn't delete this business. Please try again."),
+                    describeError(error, t("modals.people.businesses.errors.delete")),
                   );
                 }
               })();
@@ -148,7 +150,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
         ],
       );
     },
-    [deleteBusiness, editingId, entryCounts, resetForm],
+    [deleteBusiness, editingId, entryCounts, resetForm, t],
   );
 
   const canSubmit = name.trim().length > 0 && !saving;
@@ -162,30 +164,26 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
       footer={
         <>
           <TouchableOpacity style={sheet.doneButton} onPress={handleClose}>
-            <Text style={sheet.doneText}>Done</Text>
+            <Text style={sheet.doneText}>{t("common.done")}</Text>
           </TouchableOpacity>
         </>
       }
     >
-            <Text style={sheet.title}>Businesses</Text>
-            <Text style={sheet.subtitle}>
-              Add the businesses you spend for (a company, side gig, or
-              freelance client). Tag expenses to them when adding entries, then
-              pull a per-business report at tax time.
-            </Text>
+            <Text style={sheet.title}>{t("modals.people.businesses.title")}</Text>
+            <Text style={sheet.subtitle}>{t("modals.people.businesses.subtitle")}</Text>
 
             {/* ── Add / rename form ── */}
             <View style={styles.field}>
               <Text style={styles.label}>
-                {editingId ? "RENAME BUSINESS" : "NAME"}
+                {editingId ? t("modals.people.businesses.renameLabel") : t("modals.people.manage.name")}
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Acme LLC, Etsy shop, Consulting"
+                placeholder={t("modals.people.businesses.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 value={name}
-                onChangeText={(t) => {
-                  setName(t);
+                onChangeText={(text) => {
+                  setName(text);
                   if (error) setError(null);
                 }}
                 maxLength={MAX_BUSINESS_NAME_LENGTH}
@@ -200,7 +198,7 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
                   style={styles.cancelEditButton}
                   onPress={resetForm}
                 >
-                  <Text style={styles.cancelEditText}>Cancel</Text>
+                  <Text style={styles.cancelEditText}>{t("common.cancel")}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -210,22 +208,20 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
               >
                 <Text style={styles.addButtonText}>
                   {saving
-                    ? "Saving…"
+                    ? t("modals.people.manage.saving")
                     : editingId
-                      ? "Save Name"
-                      : "Add Business"}
+                      ? t("modals.people.manage.saveName")
+                      : t("modals.people.businesses.add")}
                 </Text>
               </TouchableOpacity>
             </View>
 
             {/* ── Existing list ── */}
             <Text style={[styles.label, styles.listHeader]}>
-              YOUR BUSINESSES ({businesses.length})
+              {t("modals.people.businesses.listHeader", { count: businesses.length })}
             </Text>
             {businesses.length === 0 ? (
-              <Text style={styles.emptyText}>
-                No businesses yet. Add one above.
-              </Text>
+              <Text style={styles.emptyText}>{t("modals.people.businesses.empty")}</Text>
             ) : (
               businesses.map((business) => {
                 const count = entryCounts[business.id] ?? 0;
@@ -238,25 +234,25 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
                       </Text>
                       <Text style={styles.rowCount}>
                         {count === 0
-                          ? "No tagged entries"
-                          : `${count} tagged ${count === 1 ? "entry" : "entries"}`}
+                          ? t("modals.people.businesses.noEntries")
+                          : t("modals.people.businesses.entries", { count })}
                       </Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => handleStartRename(business)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Rename ${business.name}`}
+                      accessibilityLabel={t("modals.people.manage.renameA11y", { name: business.name })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.rowRename}>Rename</Text>
+                      <Text style={styles.rowRename}>{t("modals.people.manage.rename")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleDelete(business.id, business.name)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Delete ${business.name}`}
+                      accessibilityLabel={t("modals.people.manage.deleteA11y", { name: business.name })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={styles.rowDelete}>Delete</Text>
+                      <Text style={styles.rowDelete}>{t("common.delete")}</Text>
                     </TouchableOpacity>
                   </View>
                 );

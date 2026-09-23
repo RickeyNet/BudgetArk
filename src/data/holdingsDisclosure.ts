@@ -4,16 +4,18 @@
  *
  * Single source of truth for the consent text shown before the Live Holdings
  * feature is first enabled. Rendered both from the Bridge teaser and the
- * Profile settings toggle so the two can never drift.
+ * Profile settings toggle so the two can never drift. The words live in
+ * src/i18n/locales/{en,de}/dataDisclosures.ts (rule-4 consent copy: both
+ * languages must say exactly the same thing) and are read at call time.
  */
 
-export const HOLDINGS_DISCLOSURE_TITLE = "Before you turn this on";
+import { t } from "../i18n/translate";
 
-export const HOLDINGS_DISCLOSURE_INTRO =
-  "Live Holdings sends a little data off your device. Here's exactly what:";
+const POINTS = ["stored", "symbolsOnly", "thirdParty"] as const;
 
-export const HOLDINGS_DISCLOSURE_POINTS: readonly string[] = [
-  "Your tickers and share counts are stored on this device and sync to your paired partner, just like your accounts.",
-  "To show prices, only your ticker symbols are sent to BudgetArk's quote service about once a day. Your share counts, balances, and identity are never sent.",
-  "Prices come from a third-party market data provider.",
-];
+export const holdingsDisclosureTitle = (): string => t("data.disclosures.holdings.title");
+
+export const holdingsDisclosureIntro = (): string => t("data.disclosures.holdings.intro");
+
+export const holdingsDisclosurePoints = (): readonly string[] =>
+  POINTS.map((id) => t(`data.disclosures.holdings.points.${id}`));

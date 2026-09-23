@@ -38,6 +38,7 @@ import { useCustomCategories } from "../../categories/CustomCategoriesProvider";
 import {
   importData,
   importFromString,
+  isPasswordRequiredError,
   type ImportResult,
 } from "../../utils/importData";
 import {
@@ -358,7 +359,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             message,
           });
         } catch (error: any) {
-          if (error?.message?.includes("password-encrypted")) {
+          if (isPasswordRequiredError(error)) {
             // Need password - stash the request and show the password prompt;
             // confirmImportPassword re-runs it with the entered password.
             setPendingImport({ importFn, label });

@@ -21,6 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -68,6 +69,7 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
   onClose,
   onRedoOnboarding,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -77,7 +79,8 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
   const [expandedTab, setExpandedTab] = useState<string | null>(null);
 
   const trimmed = query.trim();
-  const results = useMemo(() => searchGuide(trimmed), [trimmed]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t: guide text is translated; re-run the search after a language switch
+  const results = useMemo(() => searchGuide(trimmed), [trimmed, t]);
 
   return (
     <SheetModal
@@ -93,25 +96,26 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
               onRedoOnboarding();
             }}
           >
-            <Text style={styles.redoText}>Redo onboarding</Text>
+            <Text style={styles.redoText}>
+              {t("modals.engage.guide.redoOnboarding")}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={sheet.doneButton} onPress={onClose}>
-            <Text style={sheet.doneText}>Done</Text>
+            <Text style={sheet.doneText}>{t("common.done")}</Text>
           </TouchableOpacity>
         </>
       }
     >
-            <Text style={sheet.title}>Onboarding</Text>
+            <Text style={sheet.title}>{t("modals.engage.guide.title")}</Text>
             <Text style={sheet.subtitle}>
-              Everything in BudgetArk - browse by tab, or search for what you
-              want to do.
+              {t("modals.engage.guide.intro")}
             </Text>
 
             {/* ── Search ── */}
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
-                placeholder={'Search - try "receipt" or "credit card"'}
+                placeholder={t("modals.engage.guide.searchPlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 value={query}
                 onChangeText={(text) => setQuery(sanitizeTextInput(text))}
@@ -123,6 +127,8 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
                   style={styles.clearBtn}
                   onPress={() => setQuery("")}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("modals.engage.guide.clearSearchA11y")}
                 >
                   <Text style={styles.clearBtnText}>✕</Text>
                 </TouchableOpacity>
@@ -144,10 +150,11 @@ const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
                 </View>
               ) : (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>No matches</Text>
+                  <Text style={styles.emptyTitle}>
+                    {t("modals.engage.guide.noMatches.title")}
+                  </Text>
                   <Text style={styles.emptyBody}>
-                    Try a different word - like "backup", "notification",
-                    "recurring", or the name of a tab.
+                    {t("modals.engage.guide.noMatches.body")}
                   </Text>
                 </View>
               )

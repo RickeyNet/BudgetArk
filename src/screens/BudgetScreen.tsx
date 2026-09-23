@@ -304,7 +304,8 @@ const BudgetScreen: React.FC = () => {
     const nextReviewData = buildMonthlyReview(reviewEntries, limitsByMonth, 6, people);
     setReviewPreviewData(nextReviewData);
     return nextReviewData;
-  }, [people]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
+  }, [people, t]);
 
   // Bumped when partner sync / bank sync / an import writes storage while
   // this tab is mounted; it's a dep of the focus loader below, so the loader
@@ -393,8 +394,8 @@ const BudgetScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration)
-    }, [people, refreshNetWorthSnapshots, reloadTick])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadTick re-runs the loader after a background write (see its declaration); t re-runs it after a language switch
+    }, [people, refreshNetWorthSnapshots, reloadTick, t])
   );
 
   // Category limits are the ONLY month-scoped collection, so they reload on

@@ -6,7 +6,9 @@
  * collections), the description string, and the fail-closed parses.
  */
 
+import i18next, { changeLanguage } from "i18next";
 import type { SyncDiff } from "../types";
+import { de } from "../../i18n/locales/de";
 import {
   describeSyncActivity,
   parseSyncActivityLog,
@@ -70,6 +72,22 @@ describe("describeSyncActivity", () => {
       })
     ).toBe("12 entries (1 removed), 1 payment, 1 person (1 removed)");
     expect(describeSyncActivity({})).toBe("nothing new");
+  });
+
+  it("follows the active language, including German plurals", async () => {
+    i18next.addResourceBundle("de", "translation", de);
+    await changeLanguage("de");
+    try {
+      expect(
+        describeSyncActivity({
+          budgetEntries: { upserts: 11, deletes: 1 },
+          payments: { upserts: 1, deletes: 0 },
+        })
+      ).toBe("12 Buchungen (1 entfernt), 1 Zahlung");
+      expect(describeSyncActivity({})).toBe("nichts Neues");
+    } finally {
+      await changeLanguage("en");
+    }
   });
 });
 

@@ -29,6 +29,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -82,6 +83,7 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
   const [mapping, setMapping] = useState<Partial<BankCsvMapping>>({});
@@ -136,9 +138,7 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
       const accountId = statementAccountIdFor(label);
       const { transactions, skipped, zeroRows } = parseStatementRows(file, mapping, accountId);
       if (transactions.length === 0) {
-        onError(
-          "No transactions could be read with these columns. Check that the date and amount columns are right.",
-        );
+        onError(t("modals.data.import.errors.noneRead"));
         setBusy(false);
         return;
       }
@@ -148,39 +148,47 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
       }
       const parts: string[] = [];
       if (summary.added > 0)
-        parts.push(`${summary.added} added to the Review Inbox`);
+        parts.push(t("modals.data.import.summary.added", { count: summary.added }));
       if (summary.autoApproved > 0)
-        parts.push(`${summary.autoApproved} auto-approved by your rules`);
+        parts.push(
+          t("modals.data.import.summary.autoApproved", { count: summary.autoApproved }),
+        );
       if (summary.autoDismissed > 0)
-        parts.push(`${summary.autoDismissed} skipped by your rules`);
+        parts.push(
+          t("modals.data.import.summary.autoDismissed", { count: summary.autoDismissed }),
+        );
       if (summary.alreadyKnown > 0)
-        parts.push(`${summary.alreadyKnown} already imported`);
-      let message =
+        parts.push(
+          t("modals.data.import.summary.alreadyKnown", { count: summary.alreadyKnown }),
+        );
+      let message: string =
         parts.length > 0
-          ? `${label}: ${parts.join(", ")}.`
-          : `${label}: nothing new to import - every row was already here.`;
+          ? t("modals.data.import.summary.withParts", { label, parts: parts.join(", ") })
+          : t("modals.data.import.summary.nothingNew", { label });
       if (summary.flaggedDuplicates > 0) {
-        message += `\n\n${summary.flaggedDuplicates} look like transactions you already have - they are flagged in the inbox so you can skip them.`;
+        message += `\n\n${t("modals.data.import.summary.flaggedDuplicates", { count: summary.flaggedDuplicates })}`;
       }
       if (summary.deferredForCapacity > 0) {
-        message += `\n\n${summary.deferredForCapacity} did not fit (the inbox holds 500 at a time). Approve or clear some, then import this file again to pick up the rest.`;
+        message += `\n\n${t("modals.data.import.summary.deferred", { count: summary.deferredForCapacity })}`;
       }
       const readIssues: string[] = [];
       if (skipped.length > 0)
-        readIssues.push(`${skipped.length} row${skipped.length === 1 ? "" : "s"} skipped (unreadable date or amount)`);
+        readIssues.push(
+          t("modals.data.import.summary.rowsSkipped", { count: skipped.length }),
+        );
       if (zeroRows > 0)
-        readIssues.push(`${zeroRows} zero-amount row${zeroRows === 1 ? "" : "s"} left out`);
+        readIssues.push(t("modals.data.import.summary.zeroRows", { count: zeroRows }));
       if (readIssues.length > 0) message += `\n\n${readIssues.join("; ")}.`;
       triggerHaptic("success");
       onImported(message);
       onClose();
     } catch (error: any) {
       triggerHaptic("error");
-      onError(error?.message || "Something went wrong importing the statement.");
+      onError(error?.message || t("modals.data.import.errors.generic"));
     } finally {
       setBusy(false);
     }
-  }, [file, mapping, busy, accountLabel, rememberLayout, signature, onImported, onError, onClose]);
+  }, [file, mapping, busy, accountLabel, rememberLayout, signature, onImported, onError, onClose, t]);
 
   const fieldRow = (label: string, field: ColumnField, value: string | undefined) => (
     <View style={styles.fieldRow}>
@@ -189,10 +197,14 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
         style={[styles.fieldValue, !value && styles.fieldValueEmpty]}
         onPress={() => setPicking(field)}
         accessibilityRole="button"
-        accessibilityLabel={`${label}: ${value ?? "choose a column"}`}
+        accessibilityLabel={
+          value
+            ? t("modals.data.import.fieldA11y", { label, value })
+            : t("modals.data.import.fieldA11yEmpty", { label })
+        }
       >
         <Text style={[styles.fieldValueText, !value && styles.fieldValueTextEmpty]} numberOfLines={1}>
-          {value || "Choose column"}
+          {value || t("modals.data.import.chooseColumn")}
         </Text>
       </TouchableOpacity>
     </View>
@@ -207,38 +219,27 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets
           >
-            <Text style={styles.title}>Import bank statement</Text>
-            <Text style={styles.subtitle}>
-              Tell BudgetArk which columns to read. It has made a guess -
-              check the preview below and fix anything that looks wrong.
-            </Text>
+            <Text style={styles.title}>{t("modals.data.import.title")}</Text>
+            <Text style={styles.subtitle}>{t("modals.data.import.subtitle")}</Text>
 
-            <Text style={styles.sectionLabel}>ACCOUNT LABEL</Text>
+            <Text style={styles.sectionLabel}>{t("modals.data.import.accountLabelSection")}</Text>
             <TextInput
               style={styles.input}
               value={accountLabel}
               onChangeText={setAccountLabel}
-              placeholder="Bank statement"
+              placeholder={t("modals.data.import.accountLabelPlaceholder")}
               placeholderTextColor={colors.textMuted}
               maxLength={40}
               returnKeyType="done"
             />
-            <Text style={styles.hint}>
-              Shown on each row in the Review Inbox so you can tell this
-              import apart from your bank sync. Keep the same label when you
-              re-import a file from this bank - matching labels let BudgetArk
-              skip the rows you already imported.
-            </Text>
+            <Text style={styles.hint}>{t("modals.data.import.accountLabelHint")}</Text>
 
-            <Text style={styles.sectionLabel}>COLUMNS</Text>
+            <Text style={styles.sectionLabel}>{t("modals.data.import.columnsSection")}</Text>
             {file?.headerless ? (
-              <Text style={styles.hint}>
-                This file has no header row, so columns are numbered. Match
-                them up using the preview.
-              </Text>
+              <Text style={styles.hint}>{t("modals.data.import.headerlessHint")}</Text>
             ) : null}
-            {fieldRow("Date", "date", mapping.dateColumn)}
-            {fieldRow("Description", "description", mapping.descriptionColumn)}
+            {fieldRow(t("modals.data.import.field.date"), "date", mapping.dateColumn)}
+            {fieldRow(t("modals.data.import.field.description"), "description", mapping.descriptionColumn)}
 
             <View style={styles.layoutToggle}>
               <TouchableOpacity
@@ -246,7 +247,7 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
                 onPress={() => setLayout("signed")}
               >
                 <Text style={[styles.layoutText, mapping.layout !== "split" && styles.layoutTextActive]}>
-                  One amount column
+                  {t("modals.data.import.layout.signed")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -254,19 +255,19 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
                 onPress={() => setLayout("split")}
               >
                 <Text style={[styles.layoutText, mapping.layout === "split" && styles.layoutTextActive]}>
-                  Separate debit / credit
+                  {t("modals.data.import.layout.split")}
                 </Text>
               </TouchableOpacity>
             </View>
 
             {mapping.layout === "split" ? (
               <>
-                {fieldRow("Money out (debit)", "debit", mapping.debitColumn)}
-                {fieldRow("Money in (credit)", "credit", mapping.creditColumn)}
+                {fieldRow(t("modals.data.import.field.debit"), "debit", mapping.debitColumn)}
+                {fieldRow(t("modals.data.import.field.credit"), "credit", mapping.creditColumn)}
               </>
             ) : (
               <>
-                {fieldRow("Amount", "amount", mapping.amountColumn)}
+                {fieldRow(t("modals.data.import.field.amount"), "amount", mapping.amountColumn)}
                 <TouchableOpacity
                   style={styles.signRow}
                   onPress={() =>
@@ -279,20 +280,20 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
                     {mapping.positiveIsOutflow ? <Text style={styles.checkboxMark}>✓</Text> : null}
                   </View>
                   <Text style={styles.signText}>
-                    Positive numbers are charges (typical for credit cards)
+                    {t("modals.data.import.positiveIsOutflow")}
                   </Text>
                 </TouchableOpacity>
               </>
             )}
 
-            <Text style={styles.sectionLabel}>PREVIEW</Text>
+            <Text style={styles.sectionLabel}>{t("modals.data.import.previewSection")}</Text>
             {preview && preview.transactions.length > 0 ? (
               <View style={styles.previewCard}>
                 {preview.transactions.slice(0, PREVIEW_ROWS).map((tx, i) => (
                   <View key={`${tx.providerTxId}-${i}`} style={styles.previewRow}>
                     <View style={styles.previewTextWrap}>
                       <Text style={styles.previewDesc} numberOfLines={1}>
-                        {tx.description || "(no description)"}
+                        {tx.description || t("modals.data.import.noDescription")}
                       </Text>
                       <Text style={styles.previewDate}>{tx.postedAt.slice(0, 10)}</Text>
                     </View>
@@ -308,18 +309,21 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
                   </View>
                 ))}
                 <Text style={styles.previewFooter}>
-                  {preview.transactions.length} transaction
-                  {preview.transactions.length === 1 ? "" : "s"} ready
+                  {t("modals.data.import.previewReady", {
+                    count: preview.transactions.length,
+                  })}
                   {preview.skipped.length > 0
-                    ? ` · ${preview.skipped.length} unreadable row${preview.skipped.length === 1 ? "" : "s"} skipped`
+                    ? t("modals.data.import.previewSkipped", {
+                        count: preview.skipped.length,
+                      })
                     : ""}
                 </Text>
               </View>
             ) : (
               <Text style={styles.hint}>
                 {complete
-                  ? "No transactions read with these columns yet. Try a different date or amount column."
-                  : "Pick a date, a description and an amount column to see a preview."}
+                  ? t("modals.data.import.noPreviewComplete")
+                  : t("modals.data.import.noPreviewIncomplete")}
               </Text>
             )}
 
@@ -333,21 +337,23 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
                 {rememberLayout ? <Text style={styles.checkboxMark}>✓</Text> : null}
               </View>
               <Text style={styles.signText}>
-                Remember these columns for next time (this bank)
+                {t("modals.data.import.remember")}
               </Text>
             </TouchableOpacity>
           </ScrollView>
 
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={busy}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.importBtn, (!complete || busy) && styles.importBtnDisabled]}
               onPress={handleImport}
               disabled={!complete || busy}
             >
-              <Text style={styles.importText}>{busy ? "Importing…" : "Import"}</Text>
+              <Text style={styles.importText}>
+                {busy ? t("modals.data.import.importing") : t("modals.data.import.importButton")}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -363,7 +369,7 @@ const BankStatementImportModal: React.FC<BankStatementImportModalProps> = ({
         <View style={styles.pickerOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setPicking(null)} />
           <View style={styles.pickerCard}>
-            <Text style={styles.pickerTitle}>Choose the column</Text>
+            <Text style={styles.pickerTitle}>{t("modals.data.import.pickerTitle")}</Text>
             <ScrollView style={styles.pickerScroll}>
               {headers.map((header) => (
                 <TouchableOpacity

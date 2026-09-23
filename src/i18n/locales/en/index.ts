@@ -22,6 +22,23 @@ import { chartsTax } from "./chartsTax";
 import { chartsPlanning } from "./chartsPlanning";
 import { chartsInsights } from "./chartsInsights";
 import { lessonsShell } from "./lessonsShell";
+import { modalsConnections } from "./modalsConnections";
+import { modalsGuard } from "./modalsGuard";
+import { modalsData } from "./modalsData";
+import { modalsPeople } from "./modalsPeople";
+import { modalsEngage } from "./modalsEngage";
+import { helpersImport } from "./helpersImport";
+import { helpersNotifications } from "./helpersNotifications";
+import { helpersInsights } from "./helpersInsights";
+import { helpersPlanning } from "./helpersPlanning";
+import { helpersMisc } from "./helpersMisc";
+import { dataAchievements } from "./dataAchievements";
+import { dataSpotlights } from "./dataSpotlights";
+import { dataCoachmarks } from "./dataCoachmarks";
+import { dataGuides } from "./dataGuides";
+import { dataTemplates } from "./dataTemplates";
+import { dataDisclosures } from "./dataDisclosures";
+import { widgets } from "./widgets";
 import { bridgeScreen } from "./bridgeScreen";
 import { bridgePlanner } from "./bridgePlanner";
 import { bridgeReports } from "./bridgeReports";
@@ -86,4 +103,27 @@ export const en = {
     insights: chartsInsights,
     lessons: lessonsShell,
   },
+  modals: {
+    connections: modalsConnections,
+    guard: modalsGuard,
+    data: modalsData,
+    people: modalsPeople,
+    engage: modalsEngage,
+  },
+  helpers: {
+    import: helpersImport,
+    notifications: helpersNotifications,
+    insights: helpersInsights,
+    planning: helpersPlanning,
+    misc: helpersMisc,
+  },
+  data: {
+    achievements: dataAchievements,
+    spotlights: dataSpotlights,
+    coachmarks: dataCoachmarks,
+    guides: dataGuides,
+    templates: dataTemplates,
+    disclosures: dataDisclosures,
+  },
+  widgets,
 } as const;

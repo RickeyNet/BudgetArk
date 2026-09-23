@@ -117,7 +117,8 @@ const AchievementsScreen: React.FC<AchievementsScreenProps> = ({
       }
       return `${Math.floor(cur)} / ${p.target}`;
     },
-    [formatCompactCurrency]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
+    [formatCompactCurrency, t]
   );
 
   const sortedDefs = useMemo(() => {

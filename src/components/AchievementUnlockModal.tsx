@@ -18,6 +18,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import Medal from "./Medal";
 import ConfettiBurst from "./ConfettiBurst";
 import type { AchievementDef } from "../data/achievementDefs";
@@ -31,14 +32,12 @@ interface AchievementUnlockModalProps {
   onAdvance: () => void;
 }
 
-const tierLabel = (tier: AchievementDef["tier"]): string =>
-  tier.charAt(0).toUpperCase() + tier.slice(1);
-
 const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
   achievement,
   remainingCount,
   onAdvance,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // useAnimatedValue instead of useRef(new Animated.Value()).current so no
@@ -90,7 +89,10 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
     outputRange: [1, 1.08],
   });
 
-  const primaryLabel = remainingCount > 1 ? "Next badge" : "Keep Going";
+  const primaryLabel =
+    remainingCount > 1
+      ? t("modals.engage.unlock.nextBadge")
+      : t("modals.engage.unlock.keepGoing");
 
   return (
     <Modal
@@ -103,7 +105,7 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
         <ConfettiBurst active={visible} />
 
         <View style={styles.content}>
-          <Text style={styles.kicker}>BADGE UNLOCKED</Text>
+          <Text style={styles.kicker}>{t("modals.engage.unlock.kicker")}</Text>
           <Animated.View style={{ transform: [{ scale: medalScale }] }}>
             <Medal
               tier={achievement.tier}
@@ -111,13 +113,17 @@ const AchievementUnlockModal: React.FC<AchievementUnlockModalProps> = ({
               size={140}
             />
           </Animated.View>
-          <Text style={styles.tier}>{tierLabel(achievement.tier)}</Text>
+          <Text style={styles.tier}>
+            {t(`achievements.tiers.${achievement.tier}`)}
+          </Text>
           <Text style={styles.title}>{achievement.title}</Text>
           <Text style={styles.subtitle}>{achievement.description}</Text>
 
           {remainingCount > 1 && (
             <Text style={styles.queueHint}>
-              +{remainingCount - 1} more to celebrate
+              {t("modals.engage.unlock.moreToCelebrate", {
+                count: remainingCount - 1,
+              })}
             </Text>
           )}
 

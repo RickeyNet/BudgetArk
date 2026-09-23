@@ -74,18 +74,18 @@ import {
   setHoldingsEnabled,
 } from "../../storage/holdingsSettingsStorage";
 import {
-  HOLDINGS_DISCLOSURE_TITLE,
-  HOLDINGS_DISCLOSURE_INTRO,
-  HOLDINGS_DISCLOSURE_POINTS,
+  holdingsDisclosureTitle,
+  holdingsDisclosureIntro,
+  holdingsDisclosurePoints,
 } from "../../data/holdingsDisclosure";
 import {
   getExchangeRatesSettings,
   acknowledgeExchangeRatesDisclosure,
 } from "../../storage/exchangeRatesSettingsStorage";
 import {
-  EXCHANGE_RATES_DISCLOSURE_TITLE,
-  EXCHANGE_RATES_DISCLOSURE_INTRO,
-  EXCHANGE_RATES_DISCLOSURE_POINTS,
+  exchangeRatesDisclosureTitle,
+  exchangeRatesDisclosureIntro,
+  exchangeRatesDisclosurePoints,
 } from "../../data/exchangeRatesDisclosure";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
@@ -132,6 +132,8 @@ const reminderRowSubtext = (
 export type SettingsSectionHandle = {
   /** Opens the App Lock set/change/disable modal (spotlight deep link). */
   openAppLock: () => void;
+  /** Opens the Language picker (spotlight deep link). */
+  openLanguage: () => void;
 };
 
 type SettingsSectionProps = {
@@ -240,6 +242,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
 
   useImperativeHandle(ref, () => ({
     openAppLock: () => setShowAppLockSetup(true),
+    openLanguage: () => setShowLanguageModal(true),
   }), []);
 
   /** Haptic feedback toggle */
@@ -686,15 +689,21 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
 
           <TouchableOpacity
             style={styles.groupedRow}
-            onPress={() => setShowLanguageModal(true)}
+            onPress={() => {
+              onDismissNewBadge("german-language");
+              setShowLanguageModal(true);
+            }}
             accessibilityRole="button"
             accessibilityLabel={t("profile.settings.language.a11yLabel", { current: languageName })}
             accessibilityHint={t("profile.settings.language.a11yHint")}
           >
             <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.language.label")}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                  {t("profile.settings.language.label")}
+                </Text>
+                {newFeatureIds.has("german-language") && <NewFeatureBadge />}
+              </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
@@ -1234,12 +1243,12 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>
-              {EXCHANGE_RATES_DISCLOSURE_TITLE}
+              {exchangeRatesDisclosureTitle()}
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              {EXCHANGE_RATES_DISCLOSURE_INTRO}
+              {exchangeRatesDisclosureIntro()}
             </Text>
-            {EXCHANGE_RATES_DISCLOSURE_POINTS.map((point) => (
+            {exchangeRatesDisclosurePoints().map((point) => (
               <Text
                 key={point}
                 style={[
@@ -1287,12 +1296,12 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>
-              {HOLDINGS_DISCLOSURE_TITLE}
+              {holdingsDisclosureTitle()}
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              {HOLDINGS_DISCLOSURE_INTRO}
+              {holdingsDisclosureIntro()}
             </Text>
-            {HOLDINGS_DISCLOSURE_POINTS.map((point) => (
+            {holdingsDisclosurePoints().map((point) => (
               <Text
                 key={point}
                 style={[

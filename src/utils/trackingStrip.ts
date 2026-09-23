@@ -18,6 +18,7 @@
 
 import type { BudgetEntry, CategoryBudgetLimit } from "../types";
 import { describeFulfillment, entriesForMonth } from "./billFulfillment";
+import { t } from "../i18n/translate";
 
 export interface TrackingStripRow {
   id: string;
@@ -100,8 +101,8 @@ export const buildTrackingStrip = ({
 
 /** "today" / "yesterday" / "3 days ago" - the strip's habit line. */
 export const describeDaysSince = (days: number | null): string => {
-  if (days === null) return "nothing logged yet";
-  if (days === 0) return "logged today";
-  if (days === 1) return "last entry yesterday";
-  return `last entry ${days} days ago`;
+  if (days === null) return t("helpers.planning.daysSince.none");
+  if (days === 0) return t("helpers.planning.daysSince.today");
+  if (days === 1) return t("helpers.planning.daysSince.yesterday");
+  return t("helpers.planning.daysSince.daysAgo", { days });
 };

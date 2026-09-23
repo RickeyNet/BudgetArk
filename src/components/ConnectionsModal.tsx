@@ -25,8 +25,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
-  ASSET_ACCOUNT_CATEGORY_LABELS,
   type AssetAccount,
   type AssetAccountCategory,
   type BankConnection,
@@ -57,6 +57,7 @@ import type { LinkPreferenceChange } from "../services/connections/linkPreferenc
 import { suggestAssetCategory } from "../services/connections/assetCategoryHint";
 import { generateUUID } from "../utils/uuid";
 import { useValueChanged } from "../hooks/useValueChanged";
+import type { TFunction } from "i18next";
 
 interface ConnectionsModalProps {
   visible: boolean;
@@ -81,17 +82,17 @@ const PROVIDER_GLYPHS: Record<string, string> = {
   teller: "🔗",
 };
 
-const timeAgo = (iso?: string): string => {
-  if (!iso) return "never";
+const timeAgo = (t: TFunction, iso?: string): string => {
+  if (!iso) return t("modals.connections.timeAgo.never");
   const ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  if (!Number.isFinite(ms) || ms < 0) return t("modals.connections.timeAgo.justNow");
   const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t("modals.connections.timeAgo.justNow");
+  if (minutes < 60) return t("modals.connections.timeAgo.minutes", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("modals.connections.timeAgo.hours", { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("modals.connections.timeAgo.days", { count: days });
 };
 
 const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
@@ -102,6 +103,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   onFinishSetup,
   onRediscover,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { connections, isSyncing, refresh, syncNow } = useConnections();
@@ -158,12 +160,12 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
       .catch((error: unknown) => {
         if (cancelled) return;
         setLinksLoaded(true);
-        setLinkError(describeError(error, "Couldn't load this connection's accounts."));
+        setLinkError(describeError(error, t("modals.connections.detail.errors.loadAccounts")));
       });
     return () => {
       cancelled = true;
     };
-  }, [selectedId, isSyncing]);
+  }, [selectedId, isSyncing, t]);
 
   useEffect(() => {
     if (visible) void refresh();
@@ -194,10 +196,10 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         const all = await updateLink(linkId, { personId });
         setLinks(all.filter((link) => link.connectionId === selectedId));
       } catch (error) {
-        setLinkError(describeError(error, "Couldn't save who this card belongs to."));
+        setLinkError(describeError(error, t("modals.connections.detail.errors.savePerson")));
       }
     },
-    [selectedId],
+    [selectedId, t],
   );
 
   const applyPreference = useCallback(
@@ -212,12 +214,12 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         // A seeded balance changed an account; keep the picker's copy fresh.
         setAssetAccounts(await getAssetAccounts());
       } catch (error) {
-        setLinkError(describeError(error, "Couldn't save this account's settings."));
+        setLinkError(describeError(error, t("modals.connections.detail.errors.savePreferences")));
       } finally {
         setSavingLinkId(null);
       }
     },
-    [savingLinkId, selectedId],
+    [savingLinkId, selectedId, t],
   );
 
   const openNewAccountForm = useCallback((link: ExternalAccountLink) => {
@@ -248,13 +250,13 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         await addAssetAccount(account);
       } catch (error) {
         // Nothing was created - keep the typed name so the user can retry.
-        setLinkError(describeError(error, "Couldn't create the Bridge account."));
+        setLinkError(describeError(error, t("modals.connections.detail.errors.createAccount")));
         return;
       }
       setNewAccountName("");
       await applyPreference(link.id, { assetAccountId: account.id });
     },
-    [applyPreference, newAccountCategory, newAccountName, savingLinkId],
+    [applyPreference, newAccountCategory, newAccountName, savingLinkId, t],
   );
 
   const handleBack = useCallback(() => {
@@ -283,40 +285,34 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
 
   const statusLine = (connection: BankConnection): { text: string; tone: string } => {
     if (connection.authStatus === "needs-reauth") {
-      return { text: "Reconnect needed", tone: colors.warning };
+      return { text: t("modals.connections.status.reconnectNeeded"), tone: colors.warning };
     }
     if (connection.authStatus === "error") {
       return {
-        text: connection.lastErrorMessage ?? "Last sync failed",
+        text: connection.lastErrorMessage ?? t("modals.connections.status.lastSyncFailed"),
         tone: colors.danger,
       };
     }
     if ((connection.providerWarnings?.length ?? 0) > 0) {
       return {
-        text: "A bank needs attention on your SimpleFIN Bridge",
+        text: t("modals.connections.status.bridgeAttention"),
         tone: colors.warning,
       };
     }
     return {
-      text: `Last synced ${timeAgo(connection.lastSyncedAt)}`,
+      text: t("modals.connections.status.lastSynced", { when: timeAgo(t, connection.lastSyncedAt) }),
       tone: colors.textMuted,
     };
   };
 
   const renderList = () => (
     <>
-      <Text style={styles.title}>Bank Connections</Text>
-      <Text style={styles.subtitle}>
-        Connections fetch transactions and balances directly from your
-        providers using credentials stored on this device.
-      </Text>
+      <Text style={styles.title}>{t("modals.connections.list.title")}</Text>
+      <Text style={styles.subtitle}>{t("modals.connections.list.subtitle")}</Text>
 
       {connections.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>
-            No connections yet. Connect a bank to import transactions and keep
-            balances current automatically.
-          </Text>
+          <Text style={styles.emptyText}>{t("modals.connections.list.empty")}</Text>
         </View>
       ) : (
         <View style={styles.groupedCard}>
@@ -347,7 +343,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
       )}
 
       <TouchableOpacity style={styles.primaryButton} onPress={onAddConnection}>
-        <Text style={styles.primaryButtonText}>+ Add Connection</Text>
+        <Text style={styles.primaryButtonText}>{t("modals.connections.list.addConnection")}</Text>
       </TouchableOpacity>
       {connections.length > 0 ? (
         <TouchableOpacity
@@ -358,7 +354,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           {isSyncing ? (
             <ActivityIndicator size="small" color={colors.textDim} />
           ) : (
-            <Text style={styles.secondaryButtonText}>Sync All Now</Text>
+            <Text style={styles.secondaryButtonText}>{t("modals.connections.list.syncAll")}</Text>
           )}
         </TouchableOpacity>
       ) : null}
@@ -370,7 +366,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     return (
       <>
         <TouchableOpacity onPress={handleBack} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.backLink}>‹ All connections</Text>
+          <Text style={styles.backLink}>{t("modals.connections.detail.back")}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>
           {PROVIDER_GLYPHS[connection.provider] ?? "🏦"} {connection.name}
@@ -382,53 +378,38 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
 
         {connection.authStatus === "needs-reauth" ? (
           <View style={styles.warningBanner}>
-            <Text style={styles.warningText}>
-              This connection needs to be re-authorized. Remove it and add it
-              again to reconnect.
-            </Text>
+            <Text style={styles.warningText}>{t("modals.connections.detail.reauthBanner")}</Text>
           </View>
         ) : null}
 
         {(connection.providerWarnings?.length ?? 0) > 0 ? (
           <View style={styles.warningBanner}>
-            <Text style={styles.warningText}>
-              Your SimpleFIN Bridge reports that a bank behind this connection
-              needs a fresh login. Its transactions stop arriving until you
-              reconnect it:
-            </Text>
+            <Text style={styles.warningText}>{t("modals.connections.detail.bridgeWarningIntro")}</Text>
             {connection.providerWarnings?.map((warning) => (
               <Text key={warning} style={styles.warningText}>
                 • {warning}
               </Text>
             ))}
-            <Text style={styles.warningText}>
-              Sign in at beta-bridge.simplefin.org and reconnect that bank.
-              Once it's back, the next sync re-imports the transactions it
-              missed on its own.
-            </Text>
+            <Text style={styles.warningText}>{t("modals.connections.detail.bridgeWarningOutro")}</Text>
           </View>
         ) : null}
 
         {connection.provider === "simplefin" && linksLoaded && links.length === 0 ? (
           <View style={styles.warningBanner}>
-            <Text style={styles.warningText}>
-              Setup didn't finish - no accounts are mapped yet, so nothing
-              imports. Your setup token was already claimed, so you can finish
-              without a new one.
-            </Text>
+            <Text style={styles.warningText}>{t("modals.connections.detail.unfinishedSetup")}</Text>
             <TouchableOpacity
               style={styles.warningButton}
               onPress={() => onFinishSetup(connection.id)}
             >
-              <Text style={styles.warningButtonText}>Finish Account Setup</Text>
+              <Text style={styles.warningButtonText}>{t("modals.connections.detail.finishSetup")}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
 
-        <Text style={styles.sectionLabel}>LINKED ACCOUNTS</Text>
+        <Text style={styles.sectionLabel}>{t("modals.connections.detail.linkedAccounts")}</Text>
         <View style={styles.groupedCard}>
           {links.length === 0 ? (
-            <Text style={styles.emptyText}>No accounts mapped.</Text>
+            <Text style={styles.emptyText}>{t("modals.connections.detail.noAccounts")}</Text>
           ) : (
             links.map((link, index) => {
               const target = link.assetAccountId
@@ -442,14 +423,20 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                   <View style={styles.rowTextWrap}>
                     <Text style={styles.rowTitle}>{link.externalName}</Text>
                     <Text style={styles.rowSubtext}>
-                      {link.importTransactions ? "Imports transactions" : "Import off"}
+                      {link.importTransactions
+                        ? t("modals.connections.detail.importsOn")
+                        : t("modals.connections.detail.importsOff")}
                       {link.assetAccountId
-                        ? ` · updates ${target?.name ?? "balance"}`
+                        ? t("modals.connections.detail.updatesAccount", {
+                            name: target?.name ?? t("modals.connections.detail.balanceFallback"),
+                          })
                         : link.debtId
-                          ? " · updates a card on Debts"
-                          : " · balance not tracked"}
+                          ? t("modals.connections.detail.updatesDebtCard")
+                          : t("modals.connections.detail.balanceNotTracked")}
                       {typeof link.lastExternalBalance === "number"
-                        ? ` · ${formatBankBalance(link.lastExternalBalance, link.currency)}`
+                        ? t("modals.connections.detail.balanceValue", {
+                            amount: formatBankBalance(link.lastExternalBalance, link.currency),
+                          })
                         : ""}
                     </Text>
                   </View>
@@ -478,23 +465,23 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                       <Text style={styles.checkboxCheck}>✓</Text>
                     ) : null}
                   </View>
-                  <Text style={styles.checkboxLabel}>Import transactions</Text>
+                  <Text style={styles.checkboxLabel}>{t("modals.connections.mapping.importTransactions")}</Text>
                 </TouchableOpacity>
 
                 {link.importTransactions && people.length > 0 ? (
                   <View style={styles.personPickerWrap}>
-                    <Text style={styles.personPickerLabel}>Whose card is this?</Text>
+                    <Text style={styles.personPickerLabel}>{t("modals.connections.mapping.whoseCard")}</Text>
                     <TagPillPicker
                       options={people}
                       value={link.personId}
                       onChange={(id) => void assignPerson(link.id, id ?? null)}
-                      noneLabel="No one"
+                      noneLabel={t("modals.connections.mapping.noOne")}
                     />
                   </View>
                 ) : null}
 
                 <View style={styles.personPickerWrap}>
-                  <Text style={styles.personPickerLabel}>Balance updates</Text>
+                  <Text style={styles.personPickerLabel}>{t("modals.connections.mapping.balanceUpdates")}</Text>
                   <View style={styles.pillWrap}>
                     <TouchableOpacity
                       style={[styles.pill, !link.assetAccountId && styles.pillActive]}
@@ -507,7 +494,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                           !link.assetAccountId && styles.pillTextActive,
                         ]}
                       >
-                        None
+                        {t("modals.connections.mapping.none")}
                       </Text>
                     </TouchableOpacity>
                     {mappableAccounts.map((asset) => (
@@ -538,14 +525,14 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                       onPress={() => openNewAccountForm(link)}
                       disabled={saving}
                     >
-                      <Text style={styles.pillText}>+ New account</Text>
+                      <Text style={styles.pillText}>{t("modals.connections.mapping.newAccount")}</Text>
                     </TouchableOpacity>
                   </View>
                   {newAccountFor === link.id ? (
                     <View style={styles.newAccountForm}>
                       <TextInput
                         style={styles.input}
-                        placeholder="Account name"
+                        placeholder={t("modals.connections.mapping.accountNamePlaceholder")}
                         placeholderTextColor={colors.textMuted}
                         value={newAccountName}
                         onChangeText={setNewAccountName}
@@ -567,7 +554,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                                 newAccountCategory === category && styles.pillTextActive,
                               ]}
                             >
-                              {ASSET_ACCOUNT_CATEGORY_LABELS[category]}
+                              {t(`bridge.screen.accounts.categories.${category}`)}
                             </Text>
                           </TouchableOpacity>
                         ))}
@@ -580,21 +567,14 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                         disabled={!newAccountName.trim() || saving}
                         onPress={() => void createAndMap(link)}
                       >
-                        <Text style={styles.smallButtonText}>Create & map</Text>
+                        <Text style={styles.smallButtonText}>{t("modals.connections.mapping.createAndMap")}</Text>
                       </TouchableOpacity>
                       {newAccountCategory === "savings" ? (
-                        <Text style={styles.hint}>
-                          Savings accounts can be marked as your emergency fund
-                          from the Bridge tab once created.
-                        </Text>
+                        <Text style={styles.hint}>{t("modals.connections.mapping.savingsHint")}</Text>
                       ) : null}
                       {newAccountCategory === "retirement" ||
                       newAccountCategory === "investment" ? (
-                        <Text style={styles.hint}>
-                          The bank's balance becomes this account's value on
-                          the Bridge. If you also add its stocks or funds
-                          there, they count on top of it.
-                        </Text>
+                        <Text style={styles.hint}>{t("modals.connections.mapping.investmentHint")}</Text>
                       ) : null}
                     </View>
                   ) : null}
@@ -610,7 +590,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             style={styles.secondaryButton}
             onPress={() => onAddBank(connection.id)}
           >
-            <Text style={styles.secondaryButtonText}>+ Add another bank</Text>
+            <Text style={styles.secondaryButtonText}>{t("modals.connections.detail.addAnotherBank")}</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -621,7 +601,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             style={styles.secondaryButton}
             onPress={() => onRediscover(connection.id)}
           >
-            <Text style={styles.secondaryButtonText}>+ Check for New Accounts</Text>
+            <Text style={styles.secondaryButtonText}>{t("modals.connections.detail.checkNewAccounts")}</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -633,7 +613,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           {isSyncing ? (
             <ActivityIndicator size="small" color={colors.textDim} />
           ) : (
-            <Text style={styles.secondaryButtonText}>Sync Now</Text>
+            <Text style={styles.secondaryButtonText}>{t("modals.connections.detail.syncNow")}</Text>
           )}
         </TouchableOpacity>
 
@@ -651,14 +631,10 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
               disabled={isSyncing}
             >
               <Text style={styles.secondaryButtonText}>
-                Re-import the last {MAX_GAP_BACKFILL_DAYS} days
+                {t("modals.connections.detail.reimport", { count: MAX_GAP_BACKFILL_DAYS })}
               </Text>
             </TouchableOpacity>
-            <Text style={styles.hint}>
-              Use this if a bank was disconnected for a while and its
-              transactions are missing. Anything you already reviewed stays
-              as it is.
-            </Text>
+            <Text style={styles.hint}>{t("modals.connections.detail.reimportHint")}</Text>
           </>
         ) : null}
 
@@ -666,7 +642,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           style={styles.dangerButton}
           onPress={() => setConfirmingRemove(true)}
         >
-          <Text style={styles.dangerButtonText}>Remove Connection</Text>
+          <Text style={styles.dangerButtonText}>{t("modals.connections.detail.remove")}</Text>
         </TouchableOpacity>
       </>
     );
@@ -679,7 +655,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           {selected ? renderDetail(selected) : renderList()}
         </ScrollView>
         <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-          <Text style={styles.closeButtonText}>Close</Text>
+          <Text style={styles.closeButtonText}>{t("common.close")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -691,19 +667,15 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
       >
         <View style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Remove this connection?</Text>
-            <Text style={styles.dialogBody}>
-              Its credentials are deleted from this device and syncing stops.
-              Budget entries you already approved stay. Unreviewed inbox items
-              from this connection are discarded.
-            </Text>
+            <Text style={styles.dialogTitle}>{t("modals.connections.removeDialog.title")}</Text>
+            <Text style={styles.dialogBody}>{t("modals.connections.removeDialog.body")}</Text>
             <View style={styles.dialogActions}>
               <TouchableOpacity
                 style={styles.dialogCancel}
                 onPress={() => setConfirmingRemove(false)}
                 disabled={removing}
               >
-                <Text style={styles.dialogCancelText}>Keep</Text>
+                <Text style={styles.dialogCancelText}>{t("modals.connections.removeDialog.keep")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.dialogRemove, removing && styles.buttonDisabled]}
@@ -711,7 +683,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                 disabled={removing}
               >
                 <Text style={styles.dialogRemoveText}>
-                  {removing ? "Removing..." : "Remove"}
+                  {removing ? t("modals.connections.removeDialog.removing") : t("modals.connections.removeDialog.remove")}
                 </Text>
               </TouchableOpacity>
             </View>

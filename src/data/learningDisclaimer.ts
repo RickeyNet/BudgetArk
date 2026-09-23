@@ -1,5 +1,8 @@
 /**
- * Shown on Captain's Course / lesson surfaces. Keeps wording in one place.
+ * Shown on Captain's Course / lesson surfaces. Keeps wording in one place:
+ * the text lives in src/i18n/locales/{en,de}/dataDisclosures.ts and is read
+ * at call time so it follows the active language.
  */
-export const LEARNING_DISCLAIMER =
-  "BudgetArk lessons reflect one app's approach to personal money management. The author is not a licensed financial advisor, accountant, or attorney. This is general education and opinion, not advice for your situation. For big decisions, talk to a qualified professional.";
+import { t } from "../i18n/translate";
+
+export const learningDisclaimer = (): string => t("data.disclosures.learningDisclaimer");

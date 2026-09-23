@@ -11,6 +11,7 @@
  */
 
 import type { DebtClass } from "../types";
+import { t } from "../i18n/translate";
 
 /* ── Input bounds (match importData.ts limits) ── */
 const MAX_BALANCE = 1_000_000_000;  // $1B
@@ -279,17 +280,21 @@ export const describeUnsolvablePayoff = (
 ): string => {
   const underwater = findUnderwaterDebts(debts);
   if (underwater.length === 0) {
-    return `Minimum payments barely outpace interest - clearing these would take over ${Math.floor(maxMonths / 12)} years. Add an extra payment to make it solvable.`;
+    return t("helpers.planning.unsolvable.capped", { years: Math.floor(maxMonths / 12) });
   }
   if (underwater.length === 1) {
     const [debt] = underwater;
     if (debt.minPayment <= 0) {
-      return `${debt.name} has no minimum payment logged, so it never shrinks. Set its minimum or add an extra payment.`;
+      return t("helpers.planning.unsolvable.noMinimum", { name: debt.name });
     }
-    return `${debt.name}'s ${formatMoney(debt.minPayment)} minimum doesn't cover its ~${formatMoney(debt.monthlyInterest)}/mo interest, so it never shrinks. Raise its minimum or add an extra payment.`;
+    return t("helpers.planning.unsolvable.underwater", {
+      name: debt.name,
+      minimum: formatMoney(debt.minPayment),
+      interest: formatMoney(debt.monthlyInterest),
+    });
   }
   const names = underwater.map((debt) => debt.name).join(", ");
-  return `${names}: their minimum payments don't cover their monthly interest, so they never shrink. Raise those minimums or add an extra payment.`;
+  return t("helpers.planning.unsolvable.several", { names });
 };
 
 /**

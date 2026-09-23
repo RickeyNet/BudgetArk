@@ -14,6 +14,7 @@
  */
 
 import type { BudgetEntry } from "../types";
+import { t } from "../i18n/translate";
 
 export type ReminderCadenceDays = 1 | 3 | 7;
 
@@ -66,54 +67,56 @@ export interface PlannedReminder {
   fireDate: Date;
 }
 
+type NotificationCopy = { readonly title: string; readonly body: string };
+
 /**
  * Friendly rotating copy so repeated nudges don't read like a broken robot.
  * Deliberately content-free: no names, no amounts, nothing sensitive on the
- * lock screen.
+ * lock screen. Resolved through the global translator at plan time, so the
+ * pool reflects the language active when the scheduler last replanned.
  */
-export const CHECK_IN_MESSAGES: readonly { title: string; body: string }[] = [
+export const checkInMessages = (): readonly NotificationCopy[] => [
   {
-    title: "Time for a quick check-in",
-    body: "Have a minute? Log your latest spending while it's fresh.",
+    title: t("helpers.notifications.tracking.checkIn.quick.title"),
+    body: t("helpers.notifications.tracking.checkIn.quick.body"),
   },
   {
-    title: "Keep your Ark on course",
-    body: "Jot down any expenses from the last few days.",
+    title: t("helpers.notifications.tracking.checkIn.onCourse.title"),
+    body: t("helpers.notifications.tracking.checkIn.onCourse.body"),
   },
   {
-    title: "Quick expense check-in",
-    body: "Any spending to track? It only takes a moment.",
+    title: t("helpers.notifications.tracking.checkIn.expense.title"),
+    body: t("helpers.notifications.tracking.checkIn.expense.body"),
   },
   {
-    title: "A tidy ledger builds a sturdy Ark",
-    body: "Add your recent expenses to keep your budget honest.",
+    title: t("helpers.notifications.tracking.checkIn.tidyLedger.title"),
+    body: t("helpers.notifications.tracking.checkIn.tidyLedger.body"),
   },
   {
-    title: "Don't let spending drift by",
-    body: "Take 30 seconds to log anything you've spent.",
+    title: t("helpers.notifications.tracking.checkIn.drift.title"),
+    body: t("helpers.notifications.tracking.checkIn.drift.body"),
   },
 ];
 
 /** Month-start copy, rotated by month so January doesn't read like December. */
-export const MONTH_START_MESSAGES: readonly { title: string; body: string }[] =
-  [
-    {
-      title: "A new month begins",
-      body: "Set this month's budget goals and review how last month went.",
-    },
-    {
-      title: "Chart this month's course",
-      body: "Look back at last month's spending and set your goals for the month ahead.",
-    },
-    {
-      title: "Fresh month, fresh start",
-      body: "Take a few minutes to plan this month's budget and check last month's review.",
-    },
-  ];
+export const monthStartMessages = (): readonly NotificationCopy[] => [
+  {
+    title: t("helpers.notifications.tracking.monthStart.newMonth.title"),
+    body: t("helpers.notifications.tracking.monthStart.newMonth.body"),
+  },
+  {
+    title: t("helpers.notifications.tracking.monthStart.chartCourse.title"),
+    body: t("helpers.notifications.tracking.monthStart.chartCourse.body"),
+  },
+  {
+    title: t("helpers.notifications.tracking.monthStart.freshStart.title"),
+    body: t("helpers.notifications.tracking.monthStart.freshStart.body"),
+  },
+];
 
 const dayKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
+    date.getDate(),
   ).padStart(2, "0")}`;
 
 /**
@@ -125,8 +128,8 @@ const dayKey = (date: Date): string =>
 export const lastTrackedAt = (entries: readonly BudgetEntry[]): Date | null => {
   let latest = Number.NEGATIVE_INFINITY;
   for (const entry of entries) {
-    const t = Date.parse(entry.createdAt);
-    if (Number.isFinite(t) && t > latest) latest = t;
+    const parsed = Date.parse(entry.createdAt);
+    if (Number.isFinite(parsed) && parsed > latest) latest = parsed;
   }
   return Number.isFinite(latest) ? new Date(latest) : null;
 };
@@ -144,18 +147,24 @@ export interface PlanTrackingRemindersInput {
  */
 const planMonthStarts = (now: Date, hour: ReminderHour, windowEnd: Date) => {
   const planned: PlannedReminder[] = [];
+  const messages = monthStartMessages();
   // Start from this month's 1st; the past-check below drops it when gone.
   for (let offset = 0; offset <= 2; offset++) {
-    const fire = new Date(now.getFullYear(), now.getMonth() + offset, 1, hour, 0, 0);
+    const fire = new Date(
+      now.getFullYear(),
+      now.getMonth() + offset,
+      1,
+      hour,
+      0,
+      0,
+    );
     if (fire.getTime() <= now.getTime()) continue;
     if (fire.getTime() > windowEnd.getTime()) break;
     const message =
-      MONTH_START_MESSAGES[
-        (fire.getFullYear() * 12 + fire.getMonth()) % MONTH_START_MESSAGES.length
-      ];
+      messages[(fire.getFullYear() * 12 + fire.getMonth()) % messages.length];
     planned.push({
       identifier: `budgetark-monthstart-${fire.getFullYear()}-${String(
-        fire.getMonth() + 1
+        fire.getMonth() + 1,
       ).padStart(2, "0")}`,
       title: message.title,
       body: message.body,
@@ -175,7 +184,7 @@ const planCheckIns = (
   entries: readonly BudgetEntry[],
   settings: TrackingReminderSettings,
   now: Date,
-  windowEnd: Date
+  windowEnd: Date,
 ) => {
   const { cadenceDays, hour } = settings;
 
@@ -189,13 +198,20 @@ const planCheckIns = (
     anchor.getDate() + cadenceDays,
     hour,
     0,
-    0
+    0,
   );
   if (fire.getTime() <= now.getTime()) {
     // Already overdue - nudge at the next occurrence of the chosen hour
     // (today if it hasn't passed, otherwise tomorrow), not up to a full
     // cadence later.
-    fire = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0);
+    fire = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      hour,
+      0,
+      0,
+    );
     if (fire.getTime() <= now.getTime()) {
       fire = new Date(
         now.getFullYear(),
@@ -203,12 +219,13 @@ const planCheckIns = (
         now.getDate() + 1,
         hour,
         0,
-        0
+        0,
       );
     }
   }
 
   const planned: PlannedReminder[] = [];
+  const messages = checkInMessages();
   while (
     fire.getTime() <= windowEnd.getTime() &&
     planned.length < MAX_SCHEDULED_REMINDERS
@@ -216,9 +233,7 @@ const planCheckIns = (
     // Rotate copy deterministically by calendar day so a reschedule doesn't
     // reshuffle the message a user already saw in their notification list.
     const message =
-      CHECK_IN_MESSAGES[
-        Math.floor(fire.getTime() / 86_400_000) % CHECK_IN_MESSAGES.length
-      ];
+      messages[Math.floor(fire.getTime() / 86_400_000) % messages.length];
     planned.push({
       identifier: `budgetark-checkin-${dayKey(fire)}`,
       title: message.title,
@@ -231,7 +246,7 @@ const planCheckIns = (
       fire.getDate() + cadenceDays,
       hour,
       0,
-      0
+      0,
     );
   }
   return planned;
@@ -245,7 +260,7 @@ const planCheckIns = (
  * notifications in one day reads as nagging.
  */
 export const planTrackingReminders = (
-  input: PlanTrackingRemindersInput
+  input: PlanTrackingRemindersInput,
 ): PlannedReminder[] => {
   const { entries, settings } = input;
   if (!settings.enabled) return [];
@@ -257,7 +272,7 @@ export const planTrackingReminders = (
     now.getDate() + REMINDER_WINDOW_DAYS,
     23,
     59,
-    59
+    59,
   );
 
   const monthStarts = settings.monthStartEnabled
@@ -267,7 +282,7 @@ export const planTrackingReminders = (
 
   const checkIns = settings.checkInsEnabled
     ? planCheckIns(entries, settings, now, windowEnd).filter(
-        (r) => !monthStartDays.has(dayKey(r.fireDate))
+        (r) => !monthStartDays.has(dayKey(r.fireDate)),
       )
     : [];
 

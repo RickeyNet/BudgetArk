@@ -20,6 +20,7 @@ import {
   View,
 } from "react-native";
 import { File as ExpoFile, Paths } from "expo-file-system";
+import { useTranslation } from "react-i18next";
 import SheetModal, { useSheetStyles } from "./SheetModal";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -28,6 +29,7 @@ import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { usePeople } from "../people/PeopleProvider";
+import { useCategoryLabel } from "../i18n/categoryLabel";
 import {
   buildPersonReportCsv,
   computePersonReport,
@@ -46,6 +48,8 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { t } = useTranslation();
+  const categoryLabel = useCategoryLabel();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -103,18 +107,18 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
       // Plaintext spending data - deleted once the share sheet closes.
       await shareLocalFileThenDelete(file, {
         mimeType: "text/csv",
-        dialogTitle: "Export Person Spending",
+        dialogTitle: t("modals.people.personReport.shareTitle"),
         UTI: "public.comma-separated-values-text",
       });
     } catch (error: any) {
       Alert.alert(
-        "Export failed",
-        error?.message || "Could not create the CSV file."
+        t("modals.people.report.exportFailed.title"),
+        error?.message || t("modals.people.report.exportFailed.csv")
       );
     } finally {
       setExporting(false);
     }
-  }, [exporting, report]);
+  }, [exporting, report, t]);
 
   const hasData = report.perPerson.length > 0;
 
@@ -126,7 +130,7 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
       footer={
         <>
           <TouchableOpacity style={sheet.closeButton} onPress={onClose}>
-            <Text style={sheet.closeText}>Close</Text>
+            <Text style={sheet.closeText}>{t("common.close")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -137,17 +141,14 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
             disabled={!hasData || exporting}
           >
             <Text style={styles.exportText}>
-              {exporting ? "Exporting…" : "Export CSV"}
+              {exporting ? t("modals.people.report.exporting") : t("modals.people.report.exportCsv")}
             </Text>
           </TouchableOpacity>
         </>
       }
     >
-            <Text style={sheet.title}>Person Spending</Text>
-            <Text style={sheet.subtitle}>
-              Everything assigned to a person, by calendar year. Recurring
-              bills count once per month they hit, same as the Budget screen.
-            </Text>
+            <Text style={sheet.title}>{t("modals.people.personReport.title")}</Text>
+            <Text style={sheet.subtitle}>{t("modals.people.personReport.subtitle")}</Text>
 
             {/* ── Year stepper ── */}
             <View style={styles.yearRow}>
@@ -155,7 +156,7 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
                 onPress={() => setYear((y) => y - 1)}
                 hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
                 accessibilityRole="button"
-                accessibilityLabel="Previous year"
+                accessibilityLabel={t("modals.people.report.previousYear")}
               >
                 <Text style={styles.yearArrow}>←</Text>
               </TouchableOpacity>
@@ -164,7 +165,7 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
                 onPress={() => setYear((y) => y + 1)}
                 hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
                 accessibilityRole="button"
-                accessibilityLabel="Next year"
+                accessibilityLabel={t("modals.people.report.nextYear")}
               >
                 <Text style={styles.yearArrow}>→</Text>
               </TouchableOpacity>
@@ -174,7 +175,7 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
             {hasData && (
               <View style={styles.grandTotalCard}>
                 <Text style={styles.grandTotalLabel}>
-                  TOTAL ASSIGNED SPENDING · {year}
+                  {t("modals.people.personReport.grandTotal", { year })}
                 </Text>
                 <Text style={styles.grandTotalValue}>
                   {formatCurrency(report.grandTotal)}
@@ -184,12 +185,10 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
 
             {/* ── Per-person cards ── */}
             {!loaded ? (
-              <Text style={styles.emptyText}>Loading…</Text>
+              <Text style={styles.emptyText}>{t("modals.people.report.loading")}</Text>
             ) : !hasData ? (
               <Text style={styles.emptyText}>
-                No assigned spending in {year}. Assign an expense to a person
-                when adding it on the Budget tab (add people under Profile →
-                People).
+                {t("modals.people.personReport.empty", { year })}
               </Text>
             ) : (
               report.perPerson.map((group) => (
@@ -197,20 +196,19 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
                   <View style={styles.personHeader}>
                     <Text style={styles.personName} numberOfLines={1}>
                       👤 {group.name}
-                      {group.deleted ? "  (deleted)" : ""}
+                      {group.deleted ? `  ${t("modals.people.report.deletedSuffix")}` : ""}
                     </Text>
                     <Text style={styles.personTotal}>
                       {formatCurrency(group.total)}
                     </Text>
                   </View>
                   <Text style={styles.personMeta}>
-                    {group.entryCount}{" "}
-                    {group.entryCount === 1 ? "expense" : "expenses"}
+                    {t("modals.people.report.expenses", { count: group.entryCount })}
                   </Text>
                   {group.byCategory.map(({ category, total }) => (
                     <View key={category} style={styles.categoryRow}>
                       <Text style={styles.categoryName} numberOfLines={1}>
-                        {category}
+                        {categoryLabel(category)}
                       </Text>
                       <Text style={styles.categoryTotal}>
                         {formatCurrency(total)}

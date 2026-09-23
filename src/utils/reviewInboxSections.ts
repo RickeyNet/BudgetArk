@@ -21,6 +21,7 @@
 
 import type { CategoryName, PendingTransaction } from "../types";
 import { formatDayLabel } from "./dateFormat";
+import { t } from "../i18n/translate";
 
 export interface InboxSection {
   title: string;
@@ -35,8 +36,12 @@ export interface InboxSection {
   bulkCategorizable?: boolean;
 }
 
-export const DUPLICATES_SECTION_TITLE = "Possibly already in your budget";
-export const TRANSFERS_SECTION_TITLE = "Likely transfers";
+/**
+ * Section titles are read lazily (functions, not constants) so they pick
+ * up the active language at build time rather than at module load.
+ */
+export const duplicatesSectionTitle = (): string => t("helpers.insights.inbox.duplicates");
+export const transfersSectionTitle = (): string => t("helpers.insights.inbox.transfers");
 
 export const buildInboxSections = (
   pendingTransactions: readonly PendingTransaction[]
@@ -64,14 +69,14 @@ export const buildInboxSections = (
     }));
   if (duplicates.length > 0) {
     result.push({
-      title: DUPLICATES_SECTION_TITLE,
+      title: duplicatesSectionTitle(),
       data: duplicates,
       bulkSkippable: true,
     });
   }
   if (transfers.length > 0) {
     result.push({
-      title: TRANSFERS_SECTION_TITLE,
+      title: transfersSectionTitle(),
       data: transfers,
       bulkSkippable: true,
     });
@@ -80,7 +85,7 @@ export const buildInboxSections = (
 };
 
 
-export const MERCHANT_NO_KEY_TITLE = "Other transactions";
+export const merchantNoKeyTitle = (): string => t("helpers.insights.inbox.otherTransactions");
 
 /** Newest posted first; ties keep input order. */
 const byDateDesc = (items: PendingTransaction[]): PendingTransaction[] =>
@@ -131,13 +136,13 @@ export const buildInboxSectionsByMerchant = (
     }));
 
   if (noMerchant.length > 0) {
-    result.push({ title: MERCHANT_NO_KEY_TITLE, data: byDateDesc(noMerchant) });
+    result.push({ title: merchantNoKeyTitle(), data: byDateDesc(noMerchant) });
   }
   if (duplicates.length > 0) {
-    result.push({ title: DUPLICATES_SECTION_TITLE, data: duplicates, bulkSkippable: true });
+    result.push({ title: duplicatesSectionTitle(), data: duplicates, bulkSkippable: true });
   }
   if (transfers.length > 0) {
-    result.push({ title: TRANSFERS_SECTION_TITLE, data: transfers, bulkSkippable: true });
+    result.push({ title: transfersSectionTitle(), data: transfers, bulkSkippable: true });
   }
   return result;
 };

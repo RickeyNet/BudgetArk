@@ -570,6 +570,7 @@ const DebtTrackerScreen: React.FC = () => {
         retirementInvestingMonthly,
         formatCurrency,
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
     [
       debts,
       effectiveReserve,
@@ -578,6 +579,7 @@ const DebtTrackerScreen: React.FC = () => {
       monthlyEssentialsEstimate,
       retirementInvestingMonthly,
       savingsGoals,
+      t,
     ]
   );
 
@@ -632,7 +634,8 @@ const DebtTrackerScreen: React.FC = () => {
       avalancheBase.isPayoffPossible
         ? null
         : describeUnsolvablePayoff(payoffActiveDebts, formatCurrency),
-    [avalancheBase.isPayoffPossible, payoffActiveDebts, formatCurrency]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
+    [avalancheBase.isPayoffPossible, payoffActiveDebts, formatCurrency, t]
   );
   /**
    * Interest line under a method column. An unsolvable plan's
@@ -1301,7 +1304,7 @@ const DebtTrackerScreen: React.FC = () => {
               {t("debts.screen.milestoneBar.step", {
                 step: Math.max(currentMilestoneIndex + 1, 1),
                 total: computedMilestones.length || 7,
-                title: (currentMilestone?.title || "Keel").toUpperCase(),
+                title: (currentMilestone?.title || t("helpers.planning.milestones.steps.keel.title")).toUpperCase(),
               })}
               {currentMilestoneKey === "deck"
                 ? t("debts.screen.milestoneBar.runway", { months: runwayMonths.toFixed(1) })

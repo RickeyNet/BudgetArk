@@ -114,6 +114,16 @@ describe("selectNewBadgeIds", () => {
 });
 
 describe("FEATURE_SPOTLIGHTS data", () => {
+  it("resolves title, blurb and CTA label through the translation tree", () => {
+    for (const spotlight of FEATURE_SPOTLIGHTS) {
+      expect(spotlight.title).not.toMatch(/^data\./);
+      expect(spotlight.blurb).not.toMatch(/^data\./);
+      if (spotlight.cta) expect(spotlight.cta.label).not.toMatch(/^data\./);
+    }
+    const tipJar = FEATURE_SPOTLIGHTS.find((s) => s.id === "tip-jar");
+    expect(tipJar?.title).toBe("Tip Jar");
+  });
+
   it("has unique ids", () => {
     const ids = FEATURE_SPOTLIGHTS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -132,6 +142,7 @@ describe("FEATURE_SPOTLIGHTS data", () => {
           "appLock",
           "owedToYou",
           "data",
+          "language",
         ]).toContain(s.cta.section);
       }
     }

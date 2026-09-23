@@ -12,11 +12,14 @@ describe("CONNECTION_GUIDES", () => {
     const guide = CONNECTION_GUIDES[provider];
     expect(guide.provider).toBe(provider);
     expect(guide.name.length).toBeGreaterThan(0);
+    // Prose resolves through i18n at read time: a leaked key would start with "data.".
+    expect(guide.tagline).not.toMatch(/^data\./);
     expect(guide.tagline.length).toBeGreaterThan(0);
     expect(guide.cost.length).toBeGreaterThan(0);
     // A first-timer needs real, ordered steps and at least one tip.
     expect(guide.steps.length).toBeGreaterThanOrEqual(3);
     guide.steps.forEach((step) => {
+      expect(step.title).not.toMatch(/^data\./);
       expect(step.title.trim().length).toBeGreaterThan(0);
       expect(step.detail.trim().length).toBeGreaterThan(0);
     });

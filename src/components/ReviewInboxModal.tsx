@@ -282,7 +282,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       groupByMerchant
         ? buildInboxSectionsByMerchant(pendingTransactions)
         : buildInboxSections(pendingTransactions),
-    [groupByMerchant, pendingTransactions]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
+    [groupByMerchant, pendingTransactions, t]
   );
 
   // Warning lines for charges far above the merchant's usual, or large

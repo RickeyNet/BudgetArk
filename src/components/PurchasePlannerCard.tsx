@@ -144,7 +144,8 @@ const PurchasePlannerCard: React.FC<PurchasePlannerCardProps> = ({
   const fit = assessPurchaseFit(monthly, cashFlow);
   const guidance = useMemo(
     () => buildArkPurchaseGuidance(milestonePlan),
-    [milestonePlan]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
+    [milestonePlan, t]
   );
   const requiredMonthly = useMemo(
     () => (needBy ? calcRequiredMonthly(price, alreadySaved, needBy) : null),

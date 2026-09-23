@@ -9,6 +9,12 @@
  *
  * Adding a badge: append a new entry. Removing one: delete it and bump
  * ACHIEVEMENTS_STORAGE_VERSION if you also need to invalidate prior unlocks.
+ *
+ * Copy lives in src/i18n/locales/{en,de}/dataAchievements.ts under
+ * `data.achievements.badges.<id>`. `title` / `description` / `hint` are
+ * getters that resolve through the global `t` at read time (never at
+ * module load: i18n may not be initialised yet, and a language switch must
+ * re-translate). Consumers keep reading plain `def.title`.
  */
 
 import type {
@@ -25,6 +31,7 @@ import type {
   LearningProgress,
   NetWorthSnapshot,
 } from "../types";
+import { t } from "../i18n/translate";
 import { entriesForMonth } from "../utils/billFulfillment";
 import { resolveEmergencyFundAmount } from "../utils/emergencyFund";
 import { CHAPTERS } from "./lessonChapters";
@@ -182,27 +189,45 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "first_steps",
     glyph: "⚓", // ⚓
     tier: "bronze",
-    title: "First Steps",
-    description: "Logged your first debt and set sail.",
-    hint: "Add a debt to the Debt Tracker.",
+    get title() {
+      return t("data.achievements.badges.first_steps.title");
+    },
+    get description() {
+      return t("data.achievements.badges.first_steps.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.first_steps.hint");
+    },
     check: (ctx) => ctx.debts.length > 0,
   },
   {
     id: "patched_the_hull",
     glyph: "🔨", // 🔨
     tier: "bronze",
-    title: "Patched the Hull",
-    description: "Recorded your first debt payment.",
-    hint: "Record a payment toward any debt.",
+    get title() {
+      return t("data.achievements.badges.patched_the_hull.title");
+    },
+    get description() {
+      return t("data.achievements.badges.patched_the_hull.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.patched_the_hull.hint");
+    },
     check: (ctx) => ctx.payments.length > 0,
   },
   {
     id: "half_mast",
     glyph: "🚩", // 🚩
     tier: "silver",
-    title: "Half Mast",
-    description: "Paid off half of your original non-mortgage debt total.",
-    hint: "Pay down 50% of your starting debt.",
+    get title() {
+      return t("data.achievements.badges.half_mast.title");
+    },
+    get description() {
+      return t("data.achievements.badges.half_mast.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.half_mast.hint");
+    },
     revocable: true,
     check: (ctx) => {
       const nonMortgage = ctx.debts.filter((d) => d.debtClass !== "house");
@@ -225,9 +250,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "debt_free_captain",
     glyph: "🏴‍☠️", // 🏴‍☠️
     tier: "gold",
-    title: "Debt-Free Captain",
-    description: "All non-mortgage debts cleared. The crew salutes you.",
-    hint: "Clear every debt except your mortgage.",
+    get title() {
+      return t("data.achievements.badges.debt_free_captain.title");
+    },
+    get description() {
+      return t("data.achievements.badges.debt_free_captain.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.debt_free_captain.hint");
+    },
     revocable: true,
     check: (ctx) => {
       const nonMortgage = ctx.debts.filter((d) => d.debtClass !== "house");
@@ -245,9 +276,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "galley_stocked",
     glyph: "🍞", // 🍞
     tier: "silver",
-    title: "Galley Stocked",
-    description: "Your emergency fund reached $1,000.",
-    hint: "Save $1,000 for emergencies.",
+    get title() {
+      return t("data.achievements.badges.galley_stocked.title");
+    },
+    get description() {
+      return t("data.achievements.badges.galley_stocked.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.galley_stocked.hint");
+    },
     revocable: true,
     check: (ctx) => {
       // Designated EF savings accounts win over the goal's stored amount
@@ -273,9 +310,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "sextant_sharp",
     glyph: "🧭", // 🧭
     tier: "silver",
-    title: "Sextant Sharp",
-    description: "Hit your first savings goal target.",
-    hint: "Complete any savings goal.",
+    get title() {
+      return t("data.achievements.badges.sextant_sharp.title");
+    },
+    get description() {
+      return t("data.achievements.badges.sextant_sharp.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.sextant_sharp.hint");
+    },
     check: (ctx) =>
       ctx.savingsGoals.some(
         (g) => g.targetAmount > 0 && g.currentAmount >= g.targetAmount,
@@ -300,9 +343,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "treasure_i",
     glyph: "🪙", // 🪙
     tier: "bronze",
-    title: "Treasure Hoard I",
-    description: "Net worth crossed $10,000.",
-    hint: "Grow net worth above $10k.",
+    get title() {
+      return t("data.achievements.badges.treasure_i.title");
+    },
+    get description() {
+      return t("data.achievements.badges.treasure_i.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.treasure_i.hint");
+    },
     revocable: true,
     check: (ctx) => latestNetWorth(ctx) >= 10_000,
     progress: (ctx) => ({
@@ -315,9 +364,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "treasure_ii",
     glyph: "💎", // 💎
     tier: "silver",
-    title: "Treasure Hoard II",
-    description: "Net worth crossed $25,000.",
-    hint: "Grow net worth above $25k.",
+    get title() {
+      return t("data.achievements.badges.treasure_ii.title");
+    },
+    get description() {
+      return t("data.achievements.badges.treasure_ii.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.treasure_ii.hint");
+    },
     revocable: true,
     check: (ctx) => latestNetWorth(ctx) >= 25_000,
     progress: (ctx) => ({
@@ -330,9 +385,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "treasure_iii",
     glyph: "👑", // 👑
     tier: "gold",
-    title: "Treasure Hoard III",
-    description: "Net worth crossed $100,000.",
-    hint: "Grow net worth above $100k.",
+    get title() {
+      return t("data.achievements.badges.treasure_iii.title");
+    },
+    get description() {
+      return t("data.achievements.badges.treasure_iii.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.treasure_iii.hint");
+    },
     revocable: true,
     check: (ctx) => latestNetWorth(ctx) >= 100_000,
     progress: (ctx) => ({
@@ -345,9 +406,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "galleons_hold",
     glyph: "💰", // 💰
     tier: "legendary",
-    title: "Galleon's Hold",
-    description: "Net worth crossed $1,000,000. A true treasure ship.",
-    hint: "Grow net worth above $1M.",
+    get title() {
+      return t("data.achievements.badges.galleons_hold.title");
+    },
+    get description() {
+      return t("data.achievements.badges.galleons_hold.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.galleons_hold.hint");
+    },
     revocable: true,
     check: (ctx) => latestNetWorth(ctx) >= 1_000_000,
     progress: (ctx) => ({
@@ -360,18 +427,30 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "ark_builder",
     glyph: "🛠️", // 🛠️
     tier: "gold",
-    title: "Ark Builder",
-    description: "Completed your first milestone step.",
-    hint: "Finish a Hull/Deck/Supplies milestone.",
+    get title() {
+      return t("data.achievements.badges.ark_builder.title");
+    },
+    get description() {
+      return t("data.achievements.badges.ark_builder.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.ark_builder.hint");
+    },
     check: (ctx) => ctx.milestonePlan.steps.some((s) => s.isCompleted),
   },
   {
     id: "first_mate",
     glyph: "🤝", // 🤝
     tier: "silver",
-    title: "First Mate",
-    description: "Paired with a partner for cross-device sync.",
-    hint: "Pair with your partner from Profile → Sync.",
+    get title() {
+      return t("data.achievements.badges.first_mate.title");
+    },
+    get description() {
+      return t("data.achievements.badges.first_mate.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.first_mate.hint");
+    },
     revocable: false,
     check: (ctx) => ctx.isPaired,
   },
@@ -379,32 +458,51 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "doubloon_streak",
     glyph: "🔥", // 🔥
     tier: "gold",
-    title: "Doubloon Streak",
-    description: "12 consecutive months of savings contributions.",
-    hint: "Add a Savings entry every month for a year.",
+    get title() {
+      return t("data.achievements.badges.doubloon_streak.title");
+    },
+    get description() {
+      return t("data.achievements.badges.doubloon_streak.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.doubloon_streak.hint");
+    },
     check: (ctx) => consecutiveSavingsMonths(ctx) >= 12,
     progress: (ctx) => ({
       current: consecutiveSavingsMonths(ctx),
       target: 12,
-      format: (c, t) => `${c} / ${t} mo`,
+      format: (current, target) =>
+        t("data.achievements.progress.months", { current, target }),
     }),
   },
   {
     id: "cartographer",
     glyph: "🗺️", // 🗺️
     tier: "bronze",
-    title: "Cartographer",
-    description: "Charted a course - exported your data at least once.",
-    hint: "Export your data from Profile → Data.",
+    get title() {
+      return t("data.achievements.badges.cartographer.title");
+    },
+    get description() {
+      return t("data.achievements.badges.cartographer.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.cartographer.hint");
+    },
     check: (ctx) => ctx.stats.exportCount > 0,
   },
   {
     id: "crows_nest",
     glyph: "🔭", // 🔭
     tier: "bronze",
-    title: "Crow's Nest",
-    description: "Kept watch - opened the Monthly Review three times.",
-    hint: "Open the Monthly Review from the Budget screen 3 times.",
+    get title() {
+      return t("data.achievements.badges.crows_nest.title");
+    },
+    get description() {
+      return t("data.achievements.badges.crows_nest.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.crows_nest.hint");
+    },
     check: (ctx) => ctx.stats.monthlyReviewOpens >= 3,
     progress: (ctx) => ({
       current: ctx.stats.monthlyReviewOpens,
@@ -415,46 +513,72 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "steady_crew",
     glyph: "⚖️", // ⚖️
     tier: "silver",
-    title: "Steady Crew",
-    description: "Three months running with every category under budget.",
-    hint: "Stay under all category limits 3 months in a row.",
+    get title() {
+      return t("data.achievements.badges.steady_crew.title");
+    },
+    get description() {
+      return t("data.achievements.badges.steady_crew.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.steady_crew.hint");
+    },
     check: (ctx) => longestConsecutiveRun(underBudgetMonths(ctx)) >= 3,
     progress: (ctx) => ({
       current: longestConsecutiveRun(underBudgetMonths(ctx)),
       target: 3,
-      format: (c, t) => `${c} / ${t} mo`,
+      format: (current, target) =>
+        t("data.achievements.progress.months", { current, target }),
     }),
   },
   {
     id: "lighthouse_keeper",
     glyph: "🗼", // 🗼
     tier: "silver",
-    title: "Lighthouse Keeper",
-    description: "Opened the app 30 days in a row.",
-    hint: "Keep a 30-day app-open streak.",
+    get title() {
+      return t("data.achievements.badges.lighthouse_keeper.title");
+    },
+    get description() {
+      return t("data.achievements.badges.lighthouse_keeper.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.lighthouse_keeper.hint");
+    },
     check: (ctx) => ctx.stats.longestAppOpenStreak >= 30,
     progress: (ctx) => ({
       current: ctx.stats.longestAppOpenStreak,
       target: 30,
-      format: (c, t) => `${c} / ${t} days`,
+      format: (current, target) =>
+        t("data.achievements.progress.days", { current, target }),
     }),
   },
   {
     id: "all_sails_set",
     glyph: "⛵", // ⛵
     tier: "gold",
-    title: "All Sails Set",
-    description: "Held every budget category under its limit for a month.",
-    hint: "Keep all category limits for one full month.",
+    get title() {
+      return t("data.achievements.badges.all_sails_set.title");
+    },
+    get description() {
+      return t("data.achievements.badges.all_sails_set.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.all_sails_set.hint");
+    },
     check: (ctx) => underBudgetMonths(ctx).length > 0,
   },
   {
     id: "first_voyage",
     glyph: "📖",
     tier: "bronze",
-    title: "First Voyage",
-    description: "Completed your first Charts lesson.",
-    hint: "Finish a lesson in the Captain's Course.",
+    get title() {
+      return t("data.achievements.badges.first_voyage.title");
+    },
+    get description() {
+      return t("data.achievements.badges.first_voyage.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.first_voyage.hint");
+    },
     check: (ctx) =>
       Object.keys(ctx.learningProgress.completedLessons).length > 0,
   },
@@ -462,9 +586,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "course_plotter",
     glyph: "⭐",
     tier: "silver",
-    title: "Course Plotter",
-    description: "Finished Chapter 1: Setting Sail.",
-    hint: "Complete every lesson in Chapter 1.",
+    get title() {
+      return t("data.achievements.badges.course_plotter.title");
+    },
+    get description() {
+      return t("data.achievements.badges.course_plotter.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.course_plotter.hint");
+    },
     check: (ctx) => {
       const ch1 = CHAPTERS.find((c) => c.id === "ch1");
       if (!ch1) return false;
@@ -489,9 +619,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "hull_hand",
     glyph: "⚒️",
     tier: "silver",
-    title: "Hull Hand",
-    description: "Finished Chapter 2: Patching the Hull.",
-    hint: "Complete every lesson in Chapter 2.",
+    get title() {
+      return t("data.achievements.badges.hull_hand.title");
+    },
+    get description() {
+      return t("data.achievements.badges.hull_hand.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.hull_hand.hint");
+    },
     check: (ctx) => {
       const ch2 = CHAPTERS.find((c) => c.id === "ch2");
       if (!ch2) return false;
@@ -516,9 +652,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "anchored_in_knowledge",
     glyph: "⚓",
     tier: "gold",
-    title: "Anchored in Knowledge",
-    description: "Completed every lesson in every shipped chapter.",
-    hint: "Finish the entire Captain's Course.",
+    get title() {
+      return t("data.achievements.badges.anchored_in_knowledge.title");
+    },
+    get description() {
+      return t("data.achievements.badges.anchored_in_knowledge.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.anchored_in_knowledge.hint");
+    },
     /* Requires ALL chapters to be available (no "coming soon" placeholders
      * left) AND every authored lesson read. While Ch 3-5 are still coming
      * soon this badge sits dormant - the user has to wait for the content
@@ -549,9 +691,15 @@ export const ACHIEVEMENT_DEFS: readonly AchievementDef[] = [
     id: "admiral",
     glyph: "🏅", // 🏅
     tier: "legendary",
-    title: "Admiral",
-    description: "Completed every milestone. The Ark is built.",
-    hint: "Complete every step in the milestone plan.",
+    get title() {
+      return t("data.achievements.badges.admiral.title");
+    },
+    get description() {
+      return t("data.achievements.badges.admiral.description");
+    },
+    get hint() {
+      return t("data.achievements.badges.admiral.hint");
+    },
     revocable: true,
     check: (ctx) =>
       ctx.milestonePlan.steps.length > 0 &&

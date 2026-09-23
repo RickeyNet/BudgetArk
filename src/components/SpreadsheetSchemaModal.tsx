@@ -8,6 +8,8 @@
  */
 
 import React, { useMemo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   Modal,
   View,
@@ -41,132 +43,128 @@ interface SheetSpec {
   footer?: string;
 }
 
-const SHEETS: SheetSpec[] = [
+/** Sheet titles and column names are file identifiers - only the notes are localized. */
+const buildSheets = (t: TFunction): SheetSpec[] => [
   {
     title: "Budget Entries",
-    description:
-      "The core sheet - required for both CSV and Excel imports. CSVs only contain this sheet.",
+    description: t("modals.data.schema.sheets.entries.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated UUID if missing. Keep it for round-trip safety." },
-      { name: "Date", required: true, notes: "ISO YYYY-MM-DD, full ISO timestamp, US M/D/YYYY, or Excel native date." },
-      { name: "Type", required: true, notes: "Must be income or expense (case-insensitive)." },
-      { name: "Category", required: true, notes: "Must match an allowed category exactly (see list below)." },
-      { name: "Amount", required: true, notes: "Positive number. Strips $ and commas. Treats (50.00) as -50.00." },
-      { name: "Description", required: false, notes: "Optional note. Up to 220 characters." },
-      { name: "Recurring", required: false, notes: "yes / no / true / false / 1 / 0." },
-      { name: "LinkedAccountId", required: false, notes: "Asset account UUID for savings entries." },
-      { name: "BusinessId", required: false, notes: "UUID from the Businesses sheet for business-tagged expenses. Round-trips." },
-      { name: "Business", required: false, notes: "Readable business name. Export-only - ignored on import." },
-      { name: "PersonId", required: false, notes: "UUID from the People sheet for expenses assigned to a person (the first of them when shared). Round-trips." },
-      { name: "PersonIds", required: false, notes: "Every person a shared expense is assigned to, as ;-separated UUIDs. Round-trips." },
-      { name: "Person", required: false, notes: "Readable person name(s). Export-only - ignored on import." },
-      { name: "Private", required: false, notes: "yes marks a private entry that never syncs to your partner. Round-trips." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.entries.columns.id") },
+      { name: "Date", required: true, notes: t("modals.data.schema.sheets.entries.columns.date") },
+      { name: "Type", required: true, notes: t("modals.data.schema.sheets.entries.columns.type") },
+      { name: "Category", required: true, notes: t("modals.data.schema.sheets.entries.columns.category") },
+      { name: "Amount", required: true, notes: t("modals.data.schema.sheets.entries.columns.amount") },
+      { name: "Description", required: false, notes: t("modals.data.schema.sheets.entries.columns.description") },
+      { name: "Recurring", required: false, notes: t("modals.data.schema.sheets.entries.columns.recurring") },
+      { name: "LinkedAccountId", required: false, notes: t("modals.data.schema.sheets.entries.columns.linkedAccountId") },
+      { name: "BusinessId", required: false, notes: t("modals.data.schema.sheets.entries.columns.businessId") },
+      { name: "Business", required: false, notes: t("modals.data.schema.sheets.entries.columns.business") },
+      { name: "PersonId", required: false, notes: t("modals.data.schema.sheets.entries.columns.personId") },
+      { name: "PersonIds", required: false, notes: t("modals.data.schema.sheets.entries.columns.personIds") },
+      { name: "Person", required: false, notes: t("modals.data.schema.sheets.entries.columns.person") },
+      { name: "Private", required: false, notes: t("modals.data.schema.sheets.entries.columns.private") },
     ],
-    footer:
-      "Receipt photos never round-trip through spreadsheets - photo files stay on the device that took them.",
+    footer: t("modals.data.schema.sheets.entries.footer"),
   },
   {
     title: "Budget Limits",
     xlsxOnly: true,
-    description: "Per-category monthly spending caps. Imported limits land in the current month.",
+    description: t("modals.data.schema.sheets.limits.description"),
     columns: [
-      { name: "Category", required: true, notes: "One of the allowed categories." },
-      { name: "MonthlyLimit", required: true, notes: "Positive number." },
+      { name: "Category", required: true, notes: t("modals.data.schema.sheets.limits.columns.category") },
+      { name: "MonthlyLimit", required: true, notes: t("modals.data.schema.sheets.limits.columns.monthlyLimit") },
     ],
   },
   {
     title: "Debts",
     xlsxOnly: true,
-    description: "Existing debts (cards, loans, etc.).",
+    description: t("modals.data.schema.sheets.debts.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated if missing." },
-      { name: "Name", required: true, notes: "Up to 80 characters." },
-      { name: "Balance", required: true, notes: "Current remaining balance, ≥ 0." },
-      { name: "OriginalBalance", required: true, notes: "Starting balance, ≥ 0.01." },
-      { name: "Rate", required: true, notes: "APR as a percentage, 0-200." },
-      { name: "MinPayment", required: true, notes: "Minimum monthly payment, ≥ 0." },
-      { name: "Owner", required: false, notes: "mine / partner / joint. Defaults to mine." },
-      { name: "DebtClass", required: false, notes: "personal_credit / car / house. (Legacy car_house splits to house when the name mentions a mortgage, otherwise car.)" },
-      { name: "DebtClassSource", required: false, notes: "manual / inferred." },
-      { name: "GoalDate", required: false, notes: "Optional payoff target date." },
-      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.debts.columns.id") },
+      { name: "Name", required: true, notes: t("modals.data.schema.sheets.debts.columns.name") },
+      { name: "Balance", required: true, notes: t("modals.data.schema.sheets.debts.columns.balance") },
+      { name: "OriginalBalance", required: true, notes: t("modals.data.schema.sheets.debts.columns.originalBalance") },
+      { name: "Rate", required: true, notes: t("modals.data.schema.sheets.debts.columns.rate") },
+      { name: "MinPayment", required: true, notes: t("modals.data.schema.sheets.debts.columns.minPayment") },
+      { name: "Owner", required: false, notes: t("modals.data.schema.sheets.debts.columns.owner") },
+      { name: "DebtClass", required: false, notes: t("modals.data.schema.sheets.debts.columns.debtClass") },
+      { name: "DebtClassSource", required: false, notes: t("modals.data.schema.sheets.debts.columns.debtClassSource") },
+      { name: "GoalDate", required: false, notes: t("modals.data.schema.sheets.debts.columns.goalDate") },
+      { name: "CreatedAt", required: false, notes: t("modals.data.schema.sheets.debts.columns.createdAt") },
     ],
   },
   {
     title: "Payments",
     xlsxOnly: true,
-    description: "Individual payments applied to a debt.",
+    description: t("modals.data.schema.sheets.payments.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated if missing." },
-      { name: "DebtID", required: true, notes: "Must match a row's ID in the Debts sheet." },
-      { name: "Amount", required: true, notes: "Positive number, ≥ 0.01." },
-      { name: "Date", required: true, notes: "ISO date or US M/D/YYYY." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.payments.columns.id") },
+      { name: "DebtID", required: true, notes: t("modals.data.schema.sheets.payments.columns.debtId") },
+      { name: "Amount", required: true, notes: t("modals.data.schema.sheets.payments.columns.amount") },
+      { name: "Date", required: true, notes: t("modals.data.schema.sheets.payments.columns.date") },
     ],
   },
   {
     title: "Savings Goals",
     xlsxOnly: true,
-    description: "Tracked savings goals.",
+    description: t("modals.data.schema.sheets.savingsGoals.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated if missing." },
-      { name: "Name", required: true, notes: "Up to 80 characters." },
-      { name: "Category", required: true, notes: "emergency_fund / travel / home / car / education / other." },
-      { name: "TargetAmount", required: true, notes: "Positive number." },
-      { name: "CurrentAmount", required: true, notes: "Number, ≥ 0." },
-      { name: "TargetDate", required: false, notes: "Optional target date." },
-      { name: "Priority", required: false, notes: "Purchase planner 'My order' rank (0 = first). Blank when never ranked. Round-trips." },
-      { name: "UsesPerMonth", required: false, notes: "Cost-per-use input: expected uses per month (1-10,000). Blank when not tracked." },
-      { name: "UsefulLifeYears", required: false, notes: "Cost-per-use input: years you expect to keep it (up to 100). Blank when not tracked." },
-      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
-      { name: "UpdatedAt", required: false, notes: "ISO timestamp of last edit. Round-tripped so partner sync keeps the newer copy." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.savingsGoals.columns.id") },
+      { name: "Name", required: true, notes: t("modals.data.schema.sheets.savingsGoals.columns.name") },
+      { name: "Category", required: true, notes: t("modals.data.schema.sheets.savingsGoals.columns.category") },
+      { name: "TargetAmount", required: true, notes: t("modals.data.schema.sheets.savingsGoals.columns.targetAmount") },
+      { name: "CurrentAmount", required: true, notes: t("modals.data.schema.sheets.savingsGoals.columns.currentAmount") },
+      { name: "TargetDate", required: false, notes: t("modals.data.schema.sheets.savingsGoals.columns.targetDate") },
+      { name: "Priority", required: false, notes: t("modals.data.schema.sheets.savingsGoals.columns.priority") },
+      { name: "UsesPerMonth", required: false, notes: t("modals.data.schema.sheets.savingsGoals.columns.usesPerMonth") },
+      { name: "UsefulLifeYears", required: false, notes: t("modals.data.schema.sheets.savingsGoals.columns.usefulLifeYears") },
+      { name: "CreatedAt", required: false, notes: t("modals.data.schema.sheets.savingsGoals.columns.createdAt") },
+      { name: "UpdatedAt", required: false, notes: t("modals.data.schema.sheets.savingsGoals.columns.updatedAt") },
     ],
   },
   {
     title: "Asset Accounts",
     xlsxOnly: true,
-    description: "Persistent account balances (savings, retirement, HSA, investment).",
+    description: t("modals.data.schema.sheets.assetAccounts.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated if missing." },
-      { name: "Name", required: true, notes: "Up to 80 characters." },
-      { name: "Category", required: true, notes: "savings / retirement / hsa / investment / other." },
-      { name: "Balance", required: true, notes: "Number, ≥ 0." },
-      { name: "EmergencyFund", required: false, notes: "yes marks a savings account designated as your emergency fund. Round-trips." },
-      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.assetAccounts.columns.id") },
+      { name: "Name", required: true, notes: t("modals.data.schema.sheets.assetAccounts.columns.name") },
+      { name: "Category", required: true, notes: t("modals.data.schema.sheets.assetAccounts.columns.category") },
+      { name: "Balance", required: true, notes: t("modals.data.schema.sheets.assetAccounts.columns.balance") },
+      { name: "EmergencyFund", required: false, notes: t("modals.data.schema.sheets.assetAccounts.columns.emergencyFund") },
+      { name: "CreatedAt", required: false, notes: t("modals.data.schema.sheets.assetAccounts.columns.createdAt") },
     ],
   },
   {
     title: "Businesses",
     xlsxOnly: true,
-    description:
-      "Businesses that expense entries can be tagged with (via BusinessId). Only live businesses are exported.",
+    description: t("modals.data.schema.sheets.businesses.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated if missing. Budget entries reference this via BusinessId." },
-      { name: "Name", required: true, notes: "Up to 40 characters." },
-      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.businesses.columns.id") },
+      { name: "Name", required: true, notes: t("modals.data.schema.sheets.businesses.columns.name") },
+      { name: "CreatedAt", required: false, notes: t("modals.data.schema.sheets.businesses.columns.createdAt") },
     ],
   },
   {
     title: "People",
     xlsxOnly: true,
-    description:
-      "People that spending can be assigned to (via PersonId). Only live people are exported.",
+    description: t("modals.data.schema.sheets.people.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated if missing. Budget entries reference this via PersonId." },
-      { name: "Name", required: true, notes: "Up to 40 characters." },
-      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.people.columns.id") },
+      { name: "Name", required: true, notes: t("modals.data.schema.sheets.people.columns.name") },
+      { name: "CreatedAt", required: false, notes: t("modals.data.schema.sheets.people.columns.createdAt") },
     ],
   },
   {
     title: "Holdings",
     xlsxOnly: true,
-    description:
-      "Stock / ETF positions. Prices are fetched on-device and never imported - only the position is.",
+    description: t("modals.data.schema.sheets.holdings.description"),
     columns: [
-      { name: "ID", required: false, notes: "Auto-generated if missing." },
-      { name: "Symbol", required: true, notes: "Ticker, e.g. AAPL or VTI. Up to 12 chars (letters, digits, . and -)." },
-      { name: "Shares", required: true, notes: "Positive number. Fractional shares allowed." },
-      { name: "CostBasis", required: false, notes: "Total dollars invested, ≥ 0. Used for gain/loss." },
-      { name: "CreatedAt", required: false, notes: "ISO timestamp; defaults to now." },
+      { name: "ID", required: false, notes: t("modals.data.schema.sheets.holdings.columns.id") },
+      { name: "Symbol", required: true, notes: t("modals.data.schema.sheets.holdings.columns.symbol") },
+      { name: "Shares", required: true, notes: t("modals.data.schema.sheets.holdings.columns.shares") },
+      { name: "CostBasis", required: false, notes: t("modals.data.schema.sheets.holdings.columns.costBasis") },
+      { name: "CreatedAt", required: false, notes: t("modals.data.schema.sheets.holdings.columns.createdAt") },
     ],
   },
 ];
@@ -176,11 +174,13 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
   onClose,
 }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const styles = useMemo(
     () => makeStyles(colors, insets.bottom),
     [colors, insets.bottom]
   );
+  const sheets = useMemo(() => buildSheets(t), [t]);
 
   if (!visible) return null;
 
@@ -194,60 +194,39 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
       <View style={styles.overlay}>
         <View style={styles.card}>
           <ScrollView contentContainerStyle={styles.cardContent}>
-            <Text style={styles.title}>Spreadsheet Format</Text>
-            <Text style={styles.subtitle}>
-              Headers are matched case-insensitively. CSV files contain only the
-              Budget Entries sheet. Excel files can contain any of the sheets
-              below.
-            </Text>
+            <Text style={styles.title}>{t("modals.data.schema.title")}</Text>
+            <Text style={styles.subtitle}>{t("modals.data.schema.subtitle")}</Text>
 
             <View style={styles.tipBox}>
-              <Text style={styles.tipLabel}>TIP</Text>
+              <Text style={styles.tipLabel}>{t("modals.data.schema.tipLabel")}</Text>
               <Text style={styles.tipText}>
-                Easiest way to learn the format: tap{" "}
-                <Text style={styles.tipBold}>Export Spreadsheet</Text> (XLSX),
-                open the file in Excel or Google Sheets, edit, then re-import.
-                IDs round-trip so existing rows update in place. Even with an
-                empty app, the export is a ready-made blank template - every
-                sheet has the correct headers, just no rows yet.
+                {t("modals.data.schema.tipBefore")}
+                <Text style={styles.tipBold}>{t("modals.data.schema.tipAction")}</Text>
+                {t("modals.data.schema.tipAfter")}
               </Text>
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Coming from YNAB, Mint or Monarch?</Text>
-              <Text style={styles.subtle}>
-                Import their transaction CSV as-is. BudgetArk recognizes the file
-                by its headers and maps the columns for you.
-              </Text>
-              <Text style={styles.bullet}>• YNAB: Payee, Outflow, Inflow (Category, Memo)</Text>
-              <Text style={styles.bullet}>• Mint: Description, Amount, Transaction Type (Category, Notes)</Text>
-              <Text style={styles.bullet}>• Monarch: Merchant, Amount, Original Statement (Category, Notes)</Text>
-              <Text style={styles.bullet}>
-                • Categories map to BudgetArk&apos;s by keyword (Groceries → Grocery); anything
-                else arrives as a custom category under its own name.
-              </Text>
-              <Text style={styles.bullet}>
-                • Transfers between your own accounts are left out - they aren&apos;t income or
-                spending. The import summary says how many.
-              </Text>
+              <Text style={styles.sectionTitle}>{t("modals.data.schema.presets.title")}</Text>
+              <Text style={styles.subtle}>{t("modals.data.schema.presets.body")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.presets.ynab")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.presets.mint")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.presets.monarch")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.presets.categories")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.presets.transfers")}</Text>
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Limits</Text>
-              <Text style={styles.bullet}>• File size: 5 MB max</Text>
-              <Text style={styles.bullet}>• Up to 5,000 rows per sheet</Text>
-              <Text style={styles.bullet}>• Up to 6,000 records total per import</Text>
-              <Text style={styles.bullet}>
-                • Rows missing required fields are silently skipped (you'll see
-                a count after import).
-              </Text>
+              <Text style={styles.sectionTitle}>{t("modals.data.schema.limits.title")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.limits.fileSize")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.limits.rowsPerSheet")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.limits.recordsTotal")}</Text>
+              <Text style={styles.bullet}>{t("modals.data.schema.limits.skipped")}</Text>
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Allowed Categories</Text>
-              <Text style={styles.subtle}>
-                Used for both Budget Entries and Budget Limits. Match exactly.
-              </Text>
+              <Text style={styles.sectionTitle}>{t("modals.data.schema.allowedCategories.title")}</Text>
+              <Text style={styles.subtle}>{t("modals.data.schema.allowedCategories.body")}</Text>
               <View style={styles.chipRow}>
                 {BUDGET_CATEGORIES.map((c) => (
                   <View key={c} style={styles.chip}>
@@ -257,18 +236,18 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
               </View>
             </View>
 
-            {SHEETS.map((sheet) => (
+            {sheets.map((sheet) => (
               <View key={sheet.title} style={styles.section}>
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sectionTitle}>{sheet.title}</Text>
                   {sheet.csvOnly && (
                     <View style={[styles.tag, { backgroundColor: colors.accent }]}>
-                      <Text style={styles.tagText}>CSV</Text>
+                      <Text style={styles.tagText}>{t("modals.data.schema.csvTag")}</Text>
                     </View>
                   )}
                   {sheet.xlsxOnly && (
                     <View style={[styles.tag, { backgroundColor: colors.success }]}>
-                      <Text style={styles.tagText}>Excel only</Text>
+                      <Text style={styles.tagText}>{t("modals.data.schema.excelOnlyTag")}</Text>
                     </View>
                   )}
                 </View>
@@ -283,7 +262,9 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
                           col.required ? styles.required : styles.optional,
                         ]}
                       >
-                        {col.required ? "Required" : "Optional"}
+                        {col.required
+                          ? t("modals.data.schema.required")
+                          : t("modals.data.schema.optional")}
                       </Text>
                     </View>
                     <Text style={styles.colNotes}>{col.notes}</Text>
@@ -294,7 +275,7 @@ const SpreadsheetSchemaModal: React.FC<SpreadsheetSchemaModalProps> = ({
             ))}
 
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <Text style={styles.closeText}>Close</Text>
+              <Text style={styles.closeText}>{t("common.close")}</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>

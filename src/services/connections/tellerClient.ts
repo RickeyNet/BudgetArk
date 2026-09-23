@@ -21,6 +21,7 @@ import {
   ProviderFetchResult,
 } from "./types";
 import { tellerGet } from "./tellerMtlsClient";
+import { t } from "../../i18n/translate";
 import {
   parseTellerAccounts,
   parseTellerBalance,
@@ -37,19 +38,18 @@ const errorForStatus = (
   if (status === 401 || status === 403) {
     return {
       error: "auth-expired",
-      message:
-        "Teller rejected this connection's credentials. Re-enroll the bank to keep syncing.",
+      message: t("helpers.misc.connections.teller.authRejected"),
     };
   }
   if (status === 429) {
     return {
       error: "rate-limited",
-      message: "Teller's request limit was reached. Try again later.",
+      message: t("helpers.misc.connections.teller.rateLimited"),
     };
   }
   return {
     error: "provider-error",
-    message: `Teller returned an unexpected response (HTTP ${status}).`,
+    message: t("helpers.misc.connections.teller.unexpectedResponse", { status }),
   };
 };
 
@@ -72,14 +72,13 @@ const getJson = async (
       return {
         ok: false,
         error: "invalid-credentials",
-        message:
-          "Teller refused the client certificate. Re-import the certificate and key from your teller.zip.",
+        message: t("helpers.misc.connections.teller.certificateRefused"),
       };
     }
     return {
       ok: false,
       error: "network",
-      message: "Couldn't reach Teller. Check your connection and try again.",
+      message: t("helpers.misc.connections.teller.unreachable"),
     };
   }
   if (result.response.statusCode < 200 || result.response.statusCode >= 300) {
@@ -91,7 +90,7 @@ const getJson = async (
     return {
       ok: false,
       error: "provider-error",
-      message: "Teller's response couldn't be parsed.",
+      message: t("helpers.misc.connections.teller.unparsable"),
     };
   }
 };
@@ -109,7 +108,7 @@ export const fetchTellerData = async (
     return {
       ok: false,
       error: "auth-expired",
-      message: "No Teller enrollments yet. Connect a bank through Teller first.",
+      message: t("helpers.misc.connections.teller.noEnrollments"),
     };
   }
 

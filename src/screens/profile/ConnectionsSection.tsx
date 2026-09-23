@@ -29,9 +29,9 @@ import { useTranslation } from "react-i18next";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { AssetAccount, RootTabParamList } from "../../types";
 import {
-  CONNECTIONS_DISCLOSURE_TITLE,
-  CONNECTIONS_DISCLOSURE_INTRO,
-  CONNECTIONS_DISCLOSURE_POINTS,
+  connectionsDisclosureTitle,
+  connectionsDisclosureIntro,
+  connectionsDisclosurePoints,
 } from "../../data/connectionsDisclosure";
 import {
   getConnectionsSettings,
@@ -363,12 +363,12 @@ const ConnectionsSection = forwardRef<
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>
-              {CONNECTIONS_DISCLOSURE_TITLE}
+              {connectionsDisclosureTitle()}
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              {CONNECTIONS_DISCLOSURE_INTRO}
+              {connectionsDisclosureIntro()}
             </Text>
-            {CONNECTIONS_DISCLOSURE_POINTS.map((point) => (
+            {connectionsDisclosurePoints().map((point) => (
               <Text
                 key={point}
                 style={[

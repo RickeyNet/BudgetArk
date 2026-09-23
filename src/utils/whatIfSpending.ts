@@ -22,6 +22,7 @@ import type {
   PayoffSimulationResult,
 } from "./calculations";
 import { entriesForMonth } from "./billFulfillment";
+import { t } from "../i18n/translate";
 
 /* ── Category spend averages (from budget history) ── */
 
@@ -178,13 +179,13 @@ export const buildSavingsGrowthMarks = (
  * Tracker's formatPayoffMonths so the two surfaces read the same.
  */
 export const formatWhatIfMonths = (months: number): string => {
-  if (!Number.isFinite(months)) return "Not solvable";
-  if (months <= 0) return "0 months";
+  if (!Number.isFinite(months)) return t("charts.insights.whatIf.months.notSolvable");
+  if (months <= 0) return t("charts.insights.whatIf.months.zero");
   const years = Math.floor(months / 12);
   const remainingMonths = months % 12;
-  if (years <= 0) return `${remainingMonths} mo`;
-  if (remainingMonths <= 0) return `${years} yr`;
-  return `${years} yr ${remainingMonths} mo`;
+  if (years <= 0) return t("charts.insights.whatIf.months.mo", { count: remainingMonths });
+  if (remainingMonths <= 0) return t("charts.insights.whatIf.months.yr", { count: years });
+  return t("charts.insights.whatIf.months.yrMo", { years, months: remainingMonths });
 };
 
 /**

@@ -14,6 +14,7 @@
 
 import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -48,6 +49,7 @@ const PinPad: React.FC<PinPadProps> = ({
   onSubmit,
   disabled,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -78,7 +80,7 @@ const PinPad: React.FC<PinPadProps> = ({
     <View style={styles.container}>
       <View
         style={styles.dotsRow}
-        accessibilityLabel={`${value.length} of ${dotCount} PIN digits entered`}
+        accessibilityLabel={t("modals.guard.pin.dotsA11y", { entered: value.length, total: dotCount })}
       >
         {Array.from({ length: dotCount }, (_, i) => (
           <View
@@ -117,7 +119,7 @@ const PinPad: React.FC<PinPadProps> = ({
                     onPress={pressSubmit}
                     disabled={disabled || !canSubmit}
                     accessibilityRole="button"
-                    accessibilityLabel="Confirm PIN"
+                    accessibilityLabel={t("modals.guard.pin.confirmA11y")}
                   >
                     <Text
                       style={[
@@ -145,7 +147,7 @@ const PinPad: React.FC<PinPadProps> = ({
                     onPress={pressBackspace}
                     disabled={disabled}
                     accessibilityRole="button"
-                    accessibilityLabel="Delete last digit"
+                    accessibilityLabel={t("modals.guard.pin.deleteA11y")}
                   >
                     <Text style={[styles.keyText, { color: colors.text }]}>
                       ⌫
@@ -167,7 +169,7 @@ const PinPad: React.FC<PinPadProps> = ({
                   onPress={() => pressDigit(key)}
                   disabled={disabled}
                   accessibilityRole="button"
-                  accessibilityLabel={`Digit ${key}`}
+                  accessibilityLabel={t("modals.guard.pin.digitA11y", { digit: key })}
                 >
                   <Text style={[styles.keyText, { color: colors.text }]}>
                     {key}

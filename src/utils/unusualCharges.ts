@@ -11,6 +11,7 @@
  */
 
 import type { BudgetEntry, PendingTransaction } from "../types";
+import { t } from "../i18n/translate";
 
 /** Approved charges from the merchant before "usual" means anything. */
 export const UNUSUAL_MIN_HISTORY = 3;
@@ -93,5 +94,5 @@ export const describeUnusualCharge = (
   money: (amount: number) => string,
 ): string =>
   flag.kind === "first-time"
-    ? "First charge from this merchant - worth a look"
-    : `${flag.ratio}× the usual ${money(flag.usual)} - worth a look`;
+    ? t("helpers.insights.unusual.firstTime")
+    : t("helpers.insights.unusual.aboveUsual", { ratio: flag.ratio, usual: money(flag.usual) });
