@@ -33,4 +33,6 @@ export const common: Localized<typeof en> = {
   gotIt: "Verstanden",
   opens: "Öffnet",
   unknown: "Unbekannt",
+  undo: "RÜCKGÄNGIG",
+  undoLastAction: "Letzte Aktion rückgängig machen",
 };

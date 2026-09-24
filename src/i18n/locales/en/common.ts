@@ -32,4 +32,7 @@ export const common = {
   opens: "Opens",
   /** Placeholder for a missing or unparseable timestamp. */
   unknown: "Unknown",
+  /** Undo toast button (UndoProvider) - shouted like the debts card. */
+  undo: "UNDO",
+  undoLastAction: "Undo last action",
 } as const;

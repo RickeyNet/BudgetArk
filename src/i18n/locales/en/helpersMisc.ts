@@ -103,4 +103,8 @@ export const helpersMisc = {
       unreachable: "Couldn't reach SimpleFIN. Check your connection and try again.",
     },
   },
+  /** Partner sync orchestrator errors surfaced on the Profile tab. */
+  sync: {
+    notPaired: "Not paired with a partner",
+  },
 } as const;

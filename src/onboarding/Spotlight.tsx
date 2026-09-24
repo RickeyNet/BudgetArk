@@ -21,6 +21,7 @@ import {
   useAnimatedValue,
   useWindowDimensions,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -69,6 +70,7 @@ const Spotlight: React.FC<SpotlightProps> = ({
   onSkipAll,
 }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
 
@@ -208,8 +210,11 @@ const Spotlight: React.FC<SpotlightProps> = ({
   if (!visible || !step) return null;
 
   const isLast = stepIndex >= totalSteps - 1;
-  const counterText = `${stepIndex + 1} of ${totalSteps}`;
-  const nextLabel = isLast ? "Got it" : "Next";
+  const counterText = t("onboarding.coachmark.counter", {
+    current: stepIndex + 1,
+    total: totalSteps,
+  });
+  const nextLabel = isLast ? t("common.gotIt") : t("common.next");
 
   return (
     // Deliberately NOT a <Modal>: the guided tour chains one spotlight per
@@ -314,7 +319,7 @@ const Spotlight: React.FC<SpotlightProps> = ({
         >
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <Text style={styles.eyebrow}>ONBOARDING</Text>
+              <Text style={styles.eyebrow}>{t("onboarding.coachmark.eyebrow")}</Text>
               <Text style={styles.counter}>{counterText}</Text>
             </View>
             {step.emoji ? (
@@ -341,18 +346,18 @@ const Spotlight: React.FC<SpotlightProps> = ({
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Text style={[styles.learnMore, { color: colors.accent }]}>
-                    Learn more
+                    {t("common.learnMore")}
                   </Text>
                 </TouchableOpacity>
               )
             ) : null}
             <View style={styles.buttonRow}>
               <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-                <Text style={styles.skipBtnText}>Skip all</Text>
+                <Text style={styles.skipBtnText}>{t("onboarding.coachmark.skipAll")}</Text>
               </TouchableOpacity>
               {onBack && stepIndex > 0 && (
                 <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
-                  <Text style={styles.backBtnText}>Back</Text>
+                  <Text style={styles.backBtnText}>{t("common.back")}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>

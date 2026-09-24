@@ -37,6 +37,7 @@ import {
   useAnimatedValue,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { fabBottomOffset } from "../navigation/tabBarLayout";
@@ -63,6 +64,7 @@ type ActiveUndo = PushUndoOptions & { key: number };
 
 export const UndoProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
   const [active, setActive] = useState<ActiveUndo | null>(null);
@@ -200,9 +202,9 @@ export const UndoProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
               onPress={handleUndoPress}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
-              accessibilityLabel="Undo last action"
+              accessibilityLabel={t("common.undoLastAction")}
             >
-              <Text style={[styles.undo, { color: colors.accent }]}>UNDO</Text>
+              <Text style={[styles.undo, { color: colors.accent }]}>{t("common.undo")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={dismiss}

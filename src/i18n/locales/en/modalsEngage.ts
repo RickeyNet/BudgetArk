@@ -3,7 +3,8 @@
  * File: src/i18n/locales/en/modalsEngage.ts
  *
  * Covers: TipJarModal, TrackingRemindersModal, FeatureSpotlightModal,
- * OnboardingGuideModal, AchievementUnlockModal, NewFeatureBadge.
+ * OnboardingGuideModal, AchievementUnlockModal, NewFeatureBadge, and the
+ * App.tsx update-ready / what's-new dialogs.
  * Spotlight copy (FEATURE_SPOTLIGHTS), coachmark content and badge
  * names/descriptions come from src/data and are keyed separately when
  * that data pass happens; only the chrome around them lives here.
@@ -115,4 +116,20 @@ export const modalsEngage = {
     keepGoing: "Keep Going",
   },
   newBadge: "NEW",
+  /** App-root OTA "update ready" dialog (App.tsx). */
+  updateReady: {
+    title: "Update Ready",
+    defaultMessage: "A new update is ready to install.",
+    moreInReleaseNotes: "+{{n}} more in Release Notes",
+    published: "Published {{when}}",
+    later: "Later",
+    installNow: "Install Now",
+  },
+  /** App-root "what's new in this version" prompt (App.tsx). */
+  whatsNew: {
+    title: "New in v{{version}}",
+    more: "+{{n}} more",
+    seeWhatsNew: "See what's new",
+    maybeLater: "Maybe later",
+  },
 } as const;

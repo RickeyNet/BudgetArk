@@ -114,4 +114,18 @@ export const modalsEngage: Localized<typeof en> = {
     keepGoing: "Weiter so",
   },
   newBadge: "NEU",
+  updateReady: {
+    title: "Update bereit",
+    defaultMessage: "Ein neues Update ist bereit zur Installation.",
+    moreInReleaseNotes: "+{{n}} weitere in den Versionshinweisen",
+    published: "Veröffentlicht {{when}}",
+    later: "Später",
+    installNow: "Jetzt installieren",
+  },
+  whatsNew: {
+    title: "Neu in v{{version}}",
+    more: "+{{n}} weitere",
+    seeWhatsNew: "Neuigkeiten ansehen",
+    maybeLater: "Vielleicht später",
+  },
 };

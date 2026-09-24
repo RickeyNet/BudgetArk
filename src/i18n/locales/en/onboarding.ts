@@ -118,4 +118,10 @@ export const onboarding = {
         "Your setup is saved, but the starter limits couldn't be written. You can set limits any time from the Budget tab's Limits sheet.",
     },
   },
+  /** Chrome around a coachmark step (onboarding/Spotlight.tsx); the step copy itself is data.coachmarks. */
+  coachmark: {
+    eyebrow: "ONBOARDING",
+    counter: "{{current}} of {{total}}",
+    skipAll: "Skip all",
+  },
 } as const;

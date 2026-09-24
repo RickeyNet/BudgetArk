@@ -36,6 +36,7 @@ import CardKeepAliveReminderHost from "./src/components/CardKeepAliveReminderHos
 import QuickAddLinkHost from "./src/components/QuickAddLinkHost";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
 import { LanguageProvider } from "./src/i18n/LanguageProvider";
+import { useTranslation } from "react-i18next";
 import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
 import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
@@ -109,6 +110,7 @@ type UpdatePrompt = {
  */
 const AppContent: React.FC = () => {
   const { colors, themeId, backgroundEffectsEnabled } = useTheme();
+  const { t } = useTranslation();
   const { startGuidedTour } = useCoachmarks();
   const navigationRef = useMemo(() => createNavigationContainerRef<RootTabParamList>(), []);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
@@ -569,7 +571,7 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>{t("modals.engage.updateReady.title")}</Text>
             <ScrollView
               style={styles.dialogScroll}
               contentContainerStyle={styles.dialogScrollContent}
@@ -594,18 +596,22 @@ const AppContent: React.FC = () => {
                   ))}
                   {pendingUpdate.releaseNote.highlights.length > 4 ? (
                     <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                      +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                      {t("modals.engage.updateReady.moreInReleaseNotes", {
+                        n: pendingUpdate.releaseNote.highlights.length - 4,
+                      })}
                     </Text>
                   ) : null}
                 </>
               ) : (
                 <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                  {pendingUpdate?.message ?? "A new update is ready to install."}
+                  {pendingUpdate?.message ?? t("modals.engage.updateReady.defaultMessage")}
                 </Text>
               )}
               {pendingUpdate?.createdAt && (
                 <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
-                  Published {formatDateTime(pendingUpdate.createdAt)}
+                  {t("modals.engage.updateReady.published", {
+                    when: formatDateTime(pendingUpdate.createdAt),
+                  })}
                 </Text>
               )}
             </ScrollView>
@@ -614,13 +620,13 @@ const AppContent: React.FC = () => {
                 style={[styles.dialogButton, { backgroundColor: colors.bg }]}
                 onPress={() => setPendingUpdate(null)}
               >
-                <Text style={[styles.dialogButtonText, { color: colors.text }]}>Later</Text>
+                <Text style={[styles.dialogButtonText, { color: colors.text }]}>{t("modals.engage.updateReady.later")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.dialogButton, { backgroundColor: colors.accent }]}
                 onPress={handleInstallUpdate}
               >
-                <Text style={[styles.dialogButtonText, { color: colors.white }]}>Install Now</Text>
+                <Text style={[styles.dialogButtonText, { color: colors.white }]}>{t("modals.engage.updateReady.installNow")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -643,7 +649,7 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{latestRelease.version}</Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>{t("modals.engage.whatsNew.title", { version: latestRelease.version })}</Text>
             <ScrollView
               style={styles.dialogScroll}
               contentContainerStyle={styles.dialogScrollContent}
@@ -657,7 +663,7 @@ const AppContent: React.FC = () => {
               ))}
               {latestRelease.highlights.length > 3 && (
                 <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                  +{latestRelease.highlights.length - 3} more
+                  {t("modals.engage.whatsNew.more", { n: latestRelease.highlights.length - 3 })}
                 </Text>
               )}
             </ScrollView>
@@ -665,13 +671,13 @@ const AppContent: React.FC = () => {
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
               onPress={handleOpenReleaseHistory}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.white }]}>See what's new</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.white }]}>{t("modals.engage.whatsNew.seeWhatsNew")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: "transparent" }]}
               onPress={handleDismissReleaseNotesPrompt}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.textMuted }]}>Maybe later</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.textMuted }]}>{t("modals.engage.whatsNew.maybeLater")}</Text>
             </TouchableOpacity>
           </View>
         </View>

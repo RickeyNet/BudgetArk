@@ -21,6 +21,7 @@ import {
 } from "./diffEngine";
 import type { SyncResult, SyncStatus, SyncDiff } from "./types";
 import { summarizeIncomingDiff } from "./syncActivity";
+import { t } from "../i18n/translate";
 
 export type SyncStatusCallback = (status: SyncStatus) => void;
 
@@ -247,7 +248,7 @@ export const syncNow = async (
       recordsSent: 0,
       recordsReceived: 0,
       timestamp: new Date().toISOString(),
-      error: "Not paired with a partner",
+      error: t("helpers.misc.sync.notPaired"),
     };
   }
 

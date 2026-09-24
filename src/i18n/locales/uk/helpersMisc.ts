@@ -131,4 +131,7 @@ export const helpersMisc: LocalizedPlural<typeof en> = {
       unreachable: "Не вдалося зв'язатися з SimpleFIN. Перевір з'єднання й спробуй знову.",
     },
   },
+  sync: {
+    notPaired: "Не зв'язано з партнером",
+  },
 };

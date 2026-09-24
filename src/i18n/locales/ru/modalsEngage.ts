@@ -114,4 +114,18 @@ export const modalsEngage: LocalizedPlural<typeof en> = {
     keepGoing: "Продолжить",
   },
   newBadge: "НОВОЕ",
+  updateReady: {
+    title: "Обновление готово",
+    defaultMessage: "Новое обновление готово к установке.",
+    moreInReleaseNotes: "+ещё {{n}} в разделе «Что нового»",
+    published: "Опубликовано {{when}}",
+    later: "Позже",
+    installNow: "Установить сейчас",
+  },
+  whatsNew: {
+    title: "Новое в v{{version}}",
+    more: "+ещё {{n}}",
+    seeWhatsNew: "Посмотреть, что нового",
+    maybeLater: "Может, позже",
+  },
 };

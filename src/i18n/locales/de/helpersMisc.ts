@@ -106,4 +106,7 @@ export const helpersMisc: Localized<typeof en> = {
       unreachable: "SimpleFIN ist nicht erreichbar. Prüfe deine Internetverbindung und versuch es erneut.",
     },
   },
+  sync: {
+    notPaired: "Nicht mit einem Partner gekoppelt",
+  },
 };

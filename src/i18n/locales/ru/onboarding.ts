@@ -120,4 +120,9 @@ export const onboarding: LocalizedPlural<typeof en> = {
         "Настройка сохранена, но стартовые лимиты записать не удалось. Лимиты можно задать в любой момент в листе «Лимиты» на вкладке «Бюджет».",
     },
   },
+  coachmark: {
+    eyebrow: "ЗНАКОМСТВО",
+    counter: "{{current}} из {{total}}",
+    skipAll: "Пропустить все",
+  },
 };

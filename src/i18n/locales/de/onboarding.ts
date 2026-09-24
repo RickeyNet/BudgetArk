@@ -120,4 +120,9 @@ export const onboarding: Localized<typeof en> = {
         "Deine Einrichtung ist gespeichert, aber die Start-Limits konnten nicht geschrieben werden. Limits kannst du jederzeit im Budget-Tab unter Limits setzen.",
     },
   },
+  coachmark: {
+    eyebrow: "EINFÜHRUNG",
+    counter: "{{current}} von {{total}}",
+    skipAll: "Alle überspringen",
+  },
 };

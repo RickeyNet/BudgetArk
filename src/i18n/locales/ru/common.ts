@@ -32,4 +32,6 @@ export const common: LocalizedPlural<typeof en> = {
   gotIt: "Понятно",
   opens: "Открывает",
   unknown: "Неизвестно",
+  undo: "ОТМЕНИТЬ",
+  undoLastAction: "Отменить последнее действие",
 };
