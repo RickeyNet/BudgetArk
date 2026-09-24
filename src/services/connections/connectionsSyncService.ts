@@ -55,8 +55,9 @@ import { planDebtBalanceUpdates } from "./debtBalances";
 import { rescheduleCardKeepAliveReminders } from "../../notifications/cardKeepAliveReminders";
 import { fetchSimplefinAccounts } from "./simplefinClient";
 import { fetchTellerData } from "./tellerClient";
-import { planIngest } from "./ingest";
+import { planIngest, planStalePending } from "./ingest";
 import {
+  applyEntryAmountCorrections,
   autoApproveInboxByRules,
   reconcileInboxWithDecisions,
 } from "./reviewInboxService";
@@ -348,6 +349,11 @@ const syncOneConnection = async (
     now: new Date(opts.nowMs).toISOString(),
   });
 
+  // Settled-amount corrections go BEFORE the ledger aliases that would
+  // stop the planner from re-finding the twin (idempotent, so a crash in
+  // between re-applies next pass - see applyEntryAmountCorrections).
+  await applyEntryAmountCorrections(plan.amountCorrections);
+
   const ledgerWrites = { ...plan.ledgerAliases, ...plan.autoDismissed };
   if (Object.keys(ledgerWrites).length > 0) {
     await recordLedgerEntries(ledgerWrites);
@@ -373,6 +379,36 @@ const syncOneConnection = async (
   );
   if (staleIds.length > 0) {
     await removePendingTransactions(staleIds);
+  }
+
+  // Pending rows the bank stopped reporting (see planStalePending): judged
+  // against the inbox as it stands AFTER this pass's ingest, so a row the
+  // planner just updated or migrated is never overwritten with its stale
+  // copy. Same crash-safe order as approval: ledger, bookkeeping, removal.
+  const inboxAfterIngest = new Map(inbox.map((item) => [item.id, item]));
+  for (const item of [...plan.newInboxItems, ...plan.updatedInboxItems]) {
+    inboxAfterIngest.set(item.id, item);
+  }
+  for (const id of staleIds) inboxAfterIngest.delete(id);
+  const stale = planStalePending({
+    provider: connection.provider,
+    connectionId: connection.id,
+    inbox: Array.from(inboxAfterIngest.values()),
+    fetched: result.transactions,
+    fetchedAccountIds: new Set(result.accounts.map((a) => a.externalAccountId)),
+    windowStartMs: (backfilledFrom
+      ? Date.parse(backfilledFrom)
+      : window.startDate.getTime()),
+    now: new Date(opts.nowMs).toISOString(),
+  });
+  if (Object.keys(stale.ledgerWrites).length > 0) {
+    await recordLedgerEntries(stale.ledgerWrites);
+  }
+  if (stale.updatedInboxItems.length > 0) {
+    await upsertPendingTransactions(stale.updatedInboxItems);
+  }
+  if (stale.retireIds.length > 0) {
+    await removePendingTransactions(stale.retireIds);
   }
 
   // Auto-approve sweep: items covered by an "approve" merchant rule become

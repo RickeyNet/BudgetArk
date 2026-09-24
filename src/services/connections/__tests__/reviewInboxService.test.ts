@@ -37,6 +37,7 @@ import {
   makeSavingsGoal,
 } from "../../../__tests__/fixtures";
 import { inboxPaymentId } from "../../../utils/inboxDebtPayments";
+import { pendingFingerprintFor } from "../ingest";
 import { minimumDuePaymentId } from "../../../utils/debtPaymentDedupe";
 import {
   applyPendingPaymentToDebt,
@@ -51,6 +52,7 @@ import {
   reconcileInboxWithDecisions,
   removeMerchantRule,
   approvePendingGroup,
+  applyEntryAmountCorrections,
 } from "../reviewInboxService";
 import * as reviewInboxStorage from "../../../storage/reviewInboxStorage";
 
@@ -887,6 +889,33 @@ describe("reconcileInboxWithDecisions", () => {
     expect(ledger["simplefin:ACT-1:C"]).toBeUndefined();
   });
 
+  it("retires a posted row whose pending twin was approved for a different amount and corrects the entry", async () => {
+    const pendingKey = "simplefin:ACT-1:PENDING-1";
+    const posted = makePendingTransaction({
+      id: "simplefin:ACT-1:POSTED-1",
+      providerTxId: "POSTED-1",
+      amount: -30,
+      postedAt: "2026-06-29T00:00:00.000Z",
+    });
+    seed(INBOX_KEY, [posted]);
+    seed(LEDGER_KEY, {
+      [pendingKey]: {
+        status: "approved",
+        budgetEntryId: "entry-1",
+        at: "2026-06-27T00:00:00.000Z",
+        pendingFingerprint: pendingFingerprintFor("ACT-1", -25, "2026-06-27T00:00:00.000Z"),
+      },
+    });
+    seed(ENTRIES_KEY, [
+      makeBudgetEntry({ id: "entry-1", amount: 25, externalTxId: pendingKey, source: "bank" }),
+    ]);
+
+    expect(await reconcileInboxWithDecisions()).toBe(1);
+    expect(readInbox()).toEqual([]);
+    expect(readLedger()[posted.id]).toMatchObject({ status: "approved", aliasOf: pendingKey });
+    expect(entriesNow()[0].amount).toBe(30);
+  });
+
   it("is a no-op on an empty inbox and when nothing was decided elsewhere", async () => {
     expect(await reconcileInboxWithDecisions()).toBe(0);
     seed(INBOX_KEY, [makePendingTransaction({ id: "simplefin:ACT-1:C", providerTxId: "C" })]);
@@ -1379,5 +1408,27 @@ describe("approvePendingGroup", () => {
     seed(INBOX_KEY, [makePendingTransaction({ id: "a", merchant: "COSTCO" })]);
     const count = await approvePendingGroup(["a", "missing"], "Grocery");
     expect(count).toBe(1);
+  });
+});
+
+describe("applyEntryAmountCorrections", () => {
+  it("rewrites only entries still carrying the pending amount, and skips unknown ids", async () => {
+    seed(ENTRIES_KEY, [
+      makeBudgetEntry({ id: "entry-1", amount: 25 }),
+      makeBudgetEntry({ id: "entry-2", amount: 40 }), // user edited it since
+    ]);
+    const applied = await applyEntryAmountCorrections([
+      { budgetEntryId: "entry-1", fromAmount: 25, toAmount: 30 },
+      { budgetEntryId: "entry-2", fromAmount: 25, toAmount: 30 },
+      { budgetEntryId: "entry-missing", fromAmount: 25, toAmount: 30 },
+    ]);
+    expect(applied).toBe(1);
+    const entries = entriesNow();
+    expect(entries.find((e: { id: string }) => e.id === "entry-1").amount).toBe(30);
+    expect(entries.find((e: { id: string }) => e.id === "entry-2").amount).toBe(40);
+  });
+
+  it("is a no-op for an empty list", async () => {
+    expect(await applyEntryAmountCorrections([])).toBe(0);
   });
 });

@@ -27,6 +27,7 @@ import {
   addBudgetEntry,
   getBudgetEntries,
   getBudgetEntriesIncludingDeleted,
+  updateBudgetEntry,
 } from "../../storage/budgetStorage";
 import { entryMonthKey, isBillCandidate } from "../../utils/billFulfillment";
 import { isEntryActiveInMonth } from "../../utils/recurrence";
@@ -57,7 +58,11 @@ import {
 import { generateUUID } from "../../utils/uuid";
 import { sanitizeTextInput } from "../../utils/sanitize";
 import { entryPersonIds, personAssignmentFields } from "../../utils/entryPeople";
-import { pendingFingerprintFor, planInboxReconciliation } from "./ingest";
+import {
+  pendingFingerprintFor,
+  planInboxReconciliation,
+  type EntryAmountCorrection,
+} from "./ingest";
 import {
   matchMerchantRule,
   renameForRule,
@@ -295,6 +300,39 @@ export const dismissPendingTransactions = async (
 };
 
 /**
+ * Rewrite entries approved from a PENDING row whose posted twin settled
+ * for a different amount (a tip, a hold replaced by the real charge). Each
+ * correction applies only while the live entry still carries the pending
+ * amount it was created with - an amount the user edited since (a split,
+ * a fix) is theirs and stays. Idempotent, so callers run it BEFORE the
+ * ledger write that would stop the planner from finding the twin again:
+ * a crash in between just re-plans and re-applies next pass. Returns how
+ * many entries changed. Best-effort: never throws.
+ */
+export const applyEntryAmountCorrections = async (
+  corrections: readonly EntryAmountCorrection[],
+): Promise<number> => {
+  if (corrections.length === 0) return 0;
+  let applied = 0;
+  try {
+    const entries = await getBudgetEntries();
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    for (const correction of corrections) {
+      const entry = byId.get(correction.budgetEntryId);
+      if (!entry || entry.amount !== correction.fromAmount) continue;
+      if (!(correction.toAmount > 0)) continue;
+      await updateBudgetEntry(entry.id, {
+        amount: roundToCents(correction.toAmount),
+      });
+      applied += 1;
+    }
+  } catch (error) {
+    if (__DEV__) console.error("Entry amount correction failed:", error);
+  }
+  return applied;
+};
+
+/**
  * Retire inbox rows that were decided elsewhere after they were fetched -
  * a partner's approved entry or dismissed-transaction decision that arrived
  * over sync, or this device's own ledger after a crash between the ledger
@@ -322,6 +360,7 @@ export const reconcileInboxWithDecisions = async (): Promise<number> => {
     now: new Date().toISOString(),
   });
   if (plan.removeIds.length === 0) return 0;
+  await applyEntryAmountCorrections(plan.amountCorrections);
   await recordLedgerEntries(plan.ledgerWrites);
   await removePendingTransactions(plan.removeIds);
   return plan.removeIds.length;

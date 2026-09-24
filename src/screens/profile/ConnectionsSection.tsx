@@ -41,10 +41,7 @@ import { useConnections } from "../../connections/ConnectionsProvider";
 import ConnectionsModal from "../../components/ConnectionsModal";
 import AddConnectionModal from "../../components/AddConnectionModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
-import {
-  startConnectionsMonitoring,
-  syncConnections,
-} from "../../services/connections/connectionsSyncService";
+import { syncConnections } from "../../services/connections/connectionsSyncService";
 import { getTellerAddBankInfo } from "../../services/connections/connectionsService";
 import { getAssetAccounts } from "../../storage/assetAccountStorage";
 import { triggerHaptic } from "../../utils/haptics";
@@ -114,9 +111,8 @@ const ConnectionsSection = forwardRef<
     void getConnectionsSettings().then((settings) =>
       setConnectionsDisclosureAcked(settings.disclosureAcknowledged),
     );
-    // Foreground auto-sync trigger for bank connections (idempotent; the
-    // service enforces per-connection cooldowns, so this is cheap).
-    startConnectionsMonitoring();
+    // The foreground auto-sync trigger lives on ConnectionsProvider (always
+    // mounted) - this lazily-mounted section must not be what arms it.
   }, []);
 
   const openConnections = useCallback(() => {
