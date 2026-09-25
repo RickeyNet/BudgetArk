@@ -144,7 +144,7 @@ const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
   owedToYou: "owed-to-you",
   tipJar: "tip-jar",
   trackingReminders: "tracking-reminders",
-  theme: "deep-sea-theme",
+  theme: "theme-fleet",
   appLock: "app-lock",
   data: "bank-statement-import",
   language: "german-language",

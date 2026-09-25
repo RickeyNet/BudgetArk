@@ -79,6 +79,25 @@ describe("selectUnseenSpotlights", () => {
     const allIds = ALL.map((s) => s.id);
     expect(selectUnseenSpotlights(ALL, allIds, "1.9.0")).toEqual([]);
   });
+
+  it("treats a merged spotlight as seen when any superseded id was seen", () => {
+    const merged = spotlight({
+      id: "merged",
+      supersedes: ["old-a", "old-b"],
+    });
+    const list = [merged, OTA_FEATURE];
+    expect(selectUnseenSpotlights(list, [], "1.9.0").map((s) => s.id)).toEqual([
+      "merged",
+      "ota-feature",
+    ]);
+    expect(
+      selectUnseenSpotlights(list, ["old-b"], "1.9.0").map((s) => s.id)
+    ).toEqual(["ota-feature"]);
+    // Unrelated legacy ids don't count.
+    expect(
+      selectUnseenSpotlights(list, ["old-c"], "1.9.0").map((s) => s.id)
+    ).toEqual(["merged", "ota-feature"]);
+  });
 });
 
 describe("selectReplaySpotlights", () => {
@@ -111,6 +130,12 @@ describe("selectNewBadgeIds", () => {
     const result = selectNewBadgeIds(ALL, ["badge-only"], "1.8.0");
     expect(result).toEqual(["ota-feature"]);
   });
+
+  it("treats a merged spotlight as acked when any superseded id was acked", () => {
+    const merged = spotlight({ id: "merged", supersedes: ["old-a"] });
+    expect(selectNewBadgeIds([merged], [], "1.9.0")).toEqual(["merged"]);
+    expect(selectNewBadgeIds([merged], ["old-a"], "1.9.0")).toEqual([]);
+  });
 });
 
 describe("FEATURE_SPOTLIGHTS data", () => {
@@ -127,6 +152,31 @@ describe("FEATURE_SPOTLIGHTS data", () => {
   it("has unique ids", () => {
     const ids = FEATURE_SPOTLIGHTS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("never lists a superseded id as a live spotlight", () => {
+    const live = new Set(FEATURE_SPOTLIGHTS.map((s) => s.id));
+    for (const s of FEATURE_SPOTLIGHTS) {
+      for (const legacyId of s.supersedes ?? []) {
+        expect(live.has(legacyId)).toBe(false);
+      }
+    }
+  });
+
+  it("merges the 1.9.0 theme slides into one that covers the old ids", () => {
+    const fleet = FEATURE_SPOTLIGHTS.find((s) => s.id === "theme-fleet");
+    expect(fleet?.supersedes).toEqual([
+      "deep-sea-theme",
+      "slate-classic-themes",
+      "four-themes",
+    ]);
+    // A user who saw the old 1.9.0 carousel owes nothing for the merge.
+    const unseen = selectUnseenSpotlights(
+      FEATURE_SPOTLIGHTS,
+      ["deep-sea-theme", "slate-classic-themes", "four-themes"],
+      undefined
+    );
+    expect(unseen.map((s) => s.id)).not.toContain("theme-fleet");
   });
 
   it("only uses known Profile sections in CTAs", () => {

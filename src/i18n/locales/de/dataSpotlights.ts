@@ -112,22 +112,10 @@ export const dataSpotlights: Localized<typeof en> = {
       "Schalte die App-Sperre ein, und BudgetArk fragt bei jedem Öffnen nach einer 4- bis 8-stelligen PIN - so kann niemand, der dein Handy ausleiht, in deinen Finanzen stöbern. Die PIN bleibt auf diesem Gerät - nie synchronisiert, exportiert oder gesichert.",
     cta: "App-Sperre einrichten",
   },
-  "deep-sea-theme": {
-    title: "Neues Design: Deep Sea",
+  "theme-fleet": {
+    title: "Sieben neue Designs für deine Arche",
     blurb:
-      "Tiefseeblau mit biolumineszentem Schimmer und eigenem Ambiente-Hintergrund - Lichtstrahlen, die von der Oberfläche herabfallen, mit treibendem Plankton. Es reiht sich unter Darstellung neben Deep Space und Deep Forest ein.",
-    cta: "Deep Sea ausprobieren",
-  },
-  "slate-classic-themes": {
-    title: "Zwei neue Designs: Slate & Classic",
-    blurb:
-      "Slate kombiniert Graphitgrau mit einem senfgelben Akzent für einen ruhigen, fokussierten Look. Classic ist eine ernst gemeinte Hommage an die Silber-und-Türkis-Desktops von 1998, Marineblau inklusive. Beide warten unter Darstellung.",
-    cta: "Anprobieren",
-  },
-  "four-themes": {
-    title: "Vier neue Looks für deine Arche",
-    blurb:
-      "Lighthouse ist ein echtes Hochkontrast-Design - jede Farbe auf maximale Lesbarkeit geprüft. Chart Room ist eine Seekarte mit Karten in Landtönen auf Meerblau, Harbor Dawn ein pfirsichfarbener Sonnenaufgang über Seeschaum-Karten und Ledger das klassische grüne Buchhaltungspapier. Alle unter Darstellung.",
+      "Deep Sea, Slate, Classic, Lighthouse, Chart Room, Harbor Dawn und Ledger sind zur Flotte gestoßen - von Tiefseeblau mit biolumineszentem Schimmer über ein Hochkontrast-Design mit geprüfter Lesbarkeit, eine Seekarte und einen pfirsichfarbenen Sonnenaufgang bis zum klassischen grünen Buchhaltungspapier. Alle unter Darstellung ausprobieren.",
     cta: "Designs ansehen",
   },
   "subscription-detective": {

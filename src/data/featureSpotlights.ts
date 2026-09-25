@@ -48,6 +48,13 @@ export type SpotlightCta =
 export type FeatureSpotlight = {
   /** Stable id - persisted in seen/acked storage, never rename after release. */
   id: string;
+  /**
+   * Ids of earlier spotlights this one replaced (slides merged after
+   * release). A user who has seen or acked ANY of them is treated as having
+   * seen/acked this one, so a merge never re-debuts or re-badges a feature.
+   * The old ids stay in storage untouched.
+   */
+  supersedes?: readonly string[];
   /** Version the feature debuted in; shown on the slide's "NEW IN x.y.z" pill. */
   sinceVersion: string;
   /**
@@ -364,52 +371,22 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     },
   },
   {
-    id: "deep-sea-theme",
+    id: "theme-fleet",
     sinceVersion: "1.9.0",
-    icon: "🌊",
-    get title() {
-      return t("data.spotlights.deep-sea-theme.title");
-    },
-    get blurb() {
-      return t("data.spotlights.deep-sea-theme.blurb");
-    },
-    cta: {
-      get label() {
-        return t("data.spotlights.deep-sea-theme.cta");
-      },
-      kind: "profile-section", section: "theme",
-    },
-  },
-  {
-    id: "slate-classic-themes",
-    sinceVersion: "1.9.0",
+    // Replaces the three 1.9.0 theme slides (Deep Sea / Slate & Classic /
+    // the four-themes batch) with one. Anyone who saw or acked those must
+    // not be shown this one as new - hence `supersedes`.
+    supersedes: ["deep-sea-theme", "slate-classic-themes", "four-themes"],
     icon: "🎨",
     get title() {
-      return t("data.spotlights.slate-classic-themes.title");
+      return t("data.spotlights.theme-fleet.title");
     },
     get blurb() {
-      return t("data.spotlights.slate-classic-themes.blurb");
+      return t("data.spotlights.theme-fleet.blurb");
     },
     cta: {
       get label() {
-        return t("data.spotlights.slate-classic-themes.cta");
-      },
-      kind: "profile-section", section: "theme",
-    },
-  },
-  {
-    id: "four-themes",
-    sinceVersion: "1.9.0",
-    icon: "🗺️",
-    get title() {
-      return t("data.spotlights.four-themes.title");
-    },
-    get blurb() {
-      return t("data.spotlights.four-themes.blurb");
-    },
-    cta: {
-      get label() {
-        return t("data.spotlights.four-themes.cta");
+        return t("data.spotlights.theme-fleet.cta");
       },
       kind: "profile-section", section: "theme",
     },
@@ -568,6 +545,17 @@ export const isSpotlightAvailable = (
   );
 };
 
+/**
+ * Whether a stored id set (seen or acked) covers a spotlight - directly, or
+ * through any spotlight it superseded.
+ */
+const isSpotlightCovered = (
+  spotlight: FeatureSpotlight,
+  ids: ReadonlySet<string>
+): boolean =>
+  ids.has(spotlight.id) ||
+  (spotlight.supersedes?.some((legacyId) => ids.has(legacyId)) ?? false);
+
 /** Carousel slides still owed to this user, in declaration order. */
 export const selectUnseenSpotlights = (
   spotlights: readonly FeatureSpotlight[],
@@ -578,7 +566,7 @@ export const selectUnseenSpotlights = (
   return spotlights.filter(
     (spotlight) =>
       !spotlight.badgeOnly &&
-      !seen.has(spotlight.id) &&
+      !isSpotlightCovered(spotlight, seen) &&
       isSpotlightAvailable(spotlight, currentRuntimeVersion)
   );
 };
@@ -609,7 +597,7 @@ export const selectNewBadgeIds = (
   return spotlights
     .filter(
       (spotlight) =>
-        !acked.has(spotlight.id) &&
+        !isSpotlightCovered(spotlight, acked) &&
         isSpotlightAvailable(spotlight, currentRuntimeVersion)
     )
     .map((spotlight) => spotlight.id);

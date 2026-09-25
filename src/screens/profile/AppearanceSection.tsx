@@ -175,7 +175,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
           <TouchableOpacity
             style={styles.groupedRow}
             onPress={() => {
-              onDismissNewBadge("deep-sea-theme");
+              onDismissNewBadge("theme-fleet");
               onOpenThemeModal();
             }}
           >
@@ -184,7 +184,7 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   {t("appearance.theme.label")}
                 </Text>
-                {newFeatureIds.has("deep-sea-theme") && <NewFeatureBadge />}
+                {newFeatureIds.has("theme-fleet") && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}

@@ -92,19 +92,9 @@ export const dataSpotlights = {
     blurb: "Turn on App Lock and BudgetArk asks for a 4-8 digit PIN whenever it opens, so someone borrowing your phone can't browse your finances. The PIN stays on this device - never synced, exported, or backed up.",
     cta: "Set up App Lock",
   },
-  "deep-sea-theme": {
-    title: "New theme: Deep Sea",
-    blurb: "Abyssal blues with a bioluminescent glow, plus its own ambient background - light rays filtering down from the surface with drifting plankton. It joins Deep Space and Deep Forest under Appearance.",
-    cta: "Try Deep Sea",
-  },
-  "slate-classic-themes": {
-    title: "Two new themes: Slate & Classic",
-    blurb: "Slate pairs graphite greys with a mustard-yellow accent for a calm, focused look. Classic is a straight-faced throwback to the silver-and-teal desktops of 1998, navy accents and all. Both are waiting under Appearance.",
-    cta: "Try them on",
-  },
-  "four-themes": {
-    title: "Four new looks for your Ark",
-    blurb: "Lighthouse is a true high-contrast theme - every color audited for maximum readability. Chart Room is a nautical chart with land-tone cards on sea blue, Harbor Dawn a peach sunrise over seafoam cards, and Ledger the classic green accounting paper. All under Appearance.",
+  "theme-fleet": {
+    title: "Seven new themes for your Ark",
+    blurb: "Deep Sea, Slate, Classic, Lighthouse, Chart Room, Harbor Dawn and Ledger have joined the fleet - from abyssal blues with a bioluminescent glow to a high-contrast theme audited for readability, a nautical chart, a peach sunrise and classic green accounting paper. Try them all under Appearance.",
     cta: "Browse themes",
   },
   "subscription-detective": {
