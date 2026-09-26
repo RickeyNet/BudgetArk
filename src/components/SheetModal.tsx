@@ -37,6 +37,16 @@ import type { DensityTokens } from "../theme/density";
 
 export const makeSheetStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
+  /** The card chrome shared by the full-height and fit-to-content sheets. */
+  const sheetFrame = {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: tokens.radius + 8,
+    borderTopRightRadius: tokens.radius + 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderBottomWidth: 0,
+    overflow: "hidden" as const,
+  };
   return StyleSheet.create({
     overlay: {
       flex: 1,
@@ -44,35 +54,33 @@ export const makeSheetStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       justifyContent: "flex-end",
     },
     modalSheet: {
+      ...sheetFrame,
       flex: 1,
       // Leaves the status bar / a sliver of the parent visible above the sheet.
       marginTop: Platform.OS === "ios" ? 44 : 32,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: tokens.radius + 8,
-      borderTopRightRadius: tokens.radius + 8,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderBottomWidth: 0,
-      overflow: "hidden",
+    },
+    /**
+     * fitContent: the sheet hugs its children (a short option list, a
+     * confirmation) instead of stretching to the top margin. Deliberately a
+     * separate style rather than an override layered on `modalSheet`: the
+     * card must carry no `flex` at all so Yoga sizes it from its content -
+     * the same shape as PaymentHistoryModal's proven auto-height card. The
+     * cap keeps an unexpectedly tall body from pushing the footer off-screen.
+     */
+    modalSheetFit: {
+      ...sheetFrame,
+      maxHeight: "85%",
     },
     scrollArea: {
       flex: 1,
     },
     /**
-     * fitContent: the sheet hugs its children (a short option list, a
-     * confirmation) instead of stretching to the top margin. Spelled out as
-     * grow/shrink/basis rather than `flex: 0` so the override of the base
-     * `flex: 1` is unambiguous, and stretched across the overlay so a
-     * narrow child can't shrink the sheet's width.
+     * fitContent body: a plain padded column, no ScrollView (see prop doc).
+     * Shrinkable so, if the body ever hits the sheet's cap, the footer
+     * stays pinned instead of being pushed out of the card.
      */
-    modalSheetFit: {
-      flexGrow: 0,
-      flexShrink: 1,
-      flexBasis: "auto",
-      alignSelf: "stretch",
-    },
-    /** fitContent body: a plain padded column, no ScrollView (see prop doc). */
     fitContent: {
+      flexShrink: 1,
       padding: tokens.padLg,
       paddingBottom: 40,
     },
@@ -197,7 +205,7 @@ const SheetModal: React.FC<SheetModalProps> = ({
   );
 
   const inner = (
-    <View style={[sheet.modalSheet, fitContent && sheet.modalSheetFit]}>
+    <View style={fitContent ? sheet.modalSheetFit : sheet.modalSheet}>
       {body}
       {footer ? (
         <View
