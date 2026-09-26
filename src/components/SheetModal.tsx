@@ -60,16 +60,21 @@ export const makeSheetStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     /**
      * fitContent: the sheet hugs its children (a short option list, a
-     * confirmation) instead of stretching to the top margin. Capped so a
-     * long list still scrolls rather than pushing the footer off-screen.
+     * confirmation) instead of stretching to the top margin. Spelled out as
+     * grow/shrink/basis rather than `flex: 0` so the override of the base
+     * `flex: 1` is unambiguous, and stretched across the overlay so a
+     * narrow child can't shrink the sheet's width.
      */
     modalSheetFit: {
-      flex: 0,
-      maxHeight: "85%",
-    },
-    scrollAreaFit: {
       flexGrow: 0,
       flexShrink: 1,
+      flexBasis: "auto",
+      alignSelf: "stretch",
+    },
+    /** fitContent body: a plain padded column, no ScrollView (see prop doc). */
+    fitContent: {
+      padding: tokens.padLg,
+      paddingBottom: 40,
     },
     scrollContent: {
       padding: tokens.padLg,
@@ -151,8 +156,11 @@ interface SheetModalProps {
   footer?: React.ReactNode;
   /**
    * Size the sheet to its content instead of the default full height. For
-   * short menus and confirmations - a two-row picker should not cover the
-   * screen. Long content still scrolls under an 85% cap.
+   * SHORT content only - a two-to-four-row menu, a confirmation - that must
+   * fit on screen unscrolled: children render in a plain padded View, not a
+   * ScrollView, because a ScrollView inside an auto-height parent has no
+   * bounded height to measure against and can collapse to nothing. Long or
+   * variable content keeps the default full-height scrolling sheet.
    */
   fitContent?: boolean;
   children: React.ReactNode;
@@ -172,9 +180,11 @@ const SheetModal: React.FC<SheetModalProps> = ({
   const sheet = useSheetStyles();
   const insets = useSafeAreaInsets();
 
-  const body = scroll ? (
+  const body = fitContent ? (
+    <View style={[sheet.fitContent, contentContainerStyle]}>{children}</View>
+  ) : scroll ? (
     <ScrollView
-      style={[sheet.scrollArea, fitContent && sheet.scrollAreaFit]}
+      style={sheet.scrollArea}
       contentContainerStyle={[sheet.scrollContent, contentContainerStyle]}
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
