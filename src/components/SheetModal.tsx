@@ -58,6 +58,19 @@ export const makeSheetStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     scrollArea: {
       flex: 1,
     },
+    /**
+     * fitContent: the sheet hugs its children (a short option list, a
+     * confirmation) instead of stretching to the top margin. Capped so a
+     * long list still scrolls rather than pushing the footer off-screen.
+     */
+    modalSheetFit: {
+      flex: 0,
+      maxHeight: "85%",
+    },
+    scrollAreaFit: {
+      flexGrow: 0,
+      flexShrink: 1,
+    },
     scrollContent: {
       padding: tokens.padLg,
       paddingBottom: 40,
@@ -136,6 +149,12 @@ interface SheetModalProps {
   contentContainerStyle?: StyleProp<ViewStyle>;
   /** Buttons for the pinned footer row; omit for no footer. */
   footer?: React.ReactNode;
+  /**
+   * Size the sheet to its content instead of the default full height. For
+   * short menus and confirmations - a two-row picker should not cover the
+   * screen. Long content still scrolls under an 85% cap.
+   */
+  fitContent?: boolean;
   children: React.ReactNode;
 }
 
@@ -147,6 +166,7 @@ const SheetModal: React.FC<SheetModalProps> = ({
   scrollProps,
   contentContainerStyle,
   footer,
+  fitContent = false,
   children,
 }) => {
   const sheet = useSheetStyles();
@@ -154,7 +174,7 @@ const SheetModal: React.FC<SheetModalProps> = ({
 
   const body = scroll ? (
     <ScrollView
-      style={sheet.scrollArea}
+      style={[sheet.scrollArea, fitContent && sheet.scrollAreaFit]}
       contentContainerStyle={[sheet.scrollContent, contentContainerStyle]}
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
@@ -167,7 +187,7 @@ const SheetModal: React.FC<SheetModalProps> = ({
   );
 
   const inner = (
-    <View style={sheet.modalSheet}>
+    <View style={[sheet.modalSheet, fitContent && sheet.modalSheetFit]}>
       {body}
       {footer ? (
         <View

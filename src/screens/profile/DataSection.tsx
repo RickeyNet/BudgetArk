@@ -1240,6 +1240,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         <SheetModal
           visible={hub !== null}
           onRequestClose={() => setHub(null)}
+          fitContent
           footer={
             <TouchableOpacity
               style={sheet.closeButton}
