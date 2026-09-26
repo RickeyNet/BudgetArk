@@ -2,11 +2,15 @@
  * BudgetArk - Data Section
  * File: src/screens/profile/DataSection.tsx
  *
- * The DATA card (export, import, spreadsheet export/import, reset) and every
- * modal in those flows: export confirmation + blocking spinner, import
- * source/mode/password, spreadsheet format/mode/schema, paste import, and
- * the reset confirmation. Owns all flow-local state (passwords, paste text,
- * in-flight guards) so typing in these modals re-renders only this section.
+ * The DATA card (Export, Import, Automatic Backups, Reset) and every modal
+ * in those flows. Export and Import are single rows that open a hub sheet
+ * listing the concrete options (encrypted backup / spreadsheet; backup file /
+ * pasted backup / spreadsheet / bank statement) - six rows collapsed to two,
+ * so the card reads as four actions instead of a wall of import variants.
+ * Beyond the hubs: export confirmation + blocking spinner, import
+ * mode/password, spreadsheet format/mode/schema, paste import, and the reset
+ * confirmation. Owns all flow-local state (passwords, paste text, in-flight
+ * guards) so typing in these modals re-renders only this section.
  * The reset itself stays in ProfileScreen (it clears pairing, user, and
  * reminder state owned there); exposes openExport() through a ref so the
  * backup reminder banner can start an export.
@@ -65,10 +69,56 @@ import { getAutoBackupSettings } from "../../storage/autoBackupSettingsStorage";
 import AutoBackupModal from "../../components/AutoBackupModal";
 import { KeyboardAwareModalOverlay } from "../../components/KeyboardAwareModalOverlay";
 import SpreadsheetSchemaModal from "../../components/SpreadsheetSchemaModal";
+import SheetModal, { useSheetStyles } from "../../components/SheetModal";
+import { usePresentAfterDismiss } from "../../hooks/usePresentAfterDismiss";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
+
+/**
+ * Rows of the Export / Import hub sheets, in display order. Translation
+ * keys are spelled out as literals (not built from the menu + id) so the
+ * typed key tree checks every one.
+ */
+const HUB_OPTIONS = {
+  export: [
+    {
+      id: "backup",
+      title: "profile.data.exportMenu.backup.title",
+      subtitle: "profile.data.exportMenu.backup.subtitle",
+    },
+    {
+      id: "spreadsheet",
+      title: "profile.data.exportMenu.spreadsheet.title",
+      subtitle: "profile.data.exportMenu.spreadsheet.subtitle",
+    },
+  ],
+  import: [
+    {
+      id: "backupFile",
+      title: "profile.data.importMenu.backupFile.title",
+      subtitle: "profile.data.importMenu.backupFile.subtitle",
+    },
+    {
+      id: "backupPaste",
+      title: "profile.data.importMenu.backupPaste.title",
+      subtitle: "profile.data.importMenu.backupPaste.subtitle",
+    },
+    {
+      id: "spreadsheet",
+      title: "profile.data.importMenu.spreadsheet.title",
+      subtitle: "profile.data.importMenu.spreadsheet.subtitle",
+    },
+    {
+      id: "bankStatement",
+      title: "profile.data.importMenu.bankStatement.title",
+      subtitle: "profile.data.importMenu.bankStatement.subtitle",
+    },
+  ],
+} as const;
+type HubRow = (typeof HUB_OPTIONS)[keyof typeof HUB_OPTIONS][number];
+type HubOption = HubRow["id"];
 
 export type DataSectionHandle = {
   /** Opens the export confirmation modal (used by the backup banner). */
@@ -140,8 +190,14 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     /** Whether the reset confirmation modal is visible */
     const [showResetModal, setShowResetModal] = useState(false);
 
-    /** Whether the import source-choice modal is visible */
-    const [showImportModal, setShowImportModal] = useState(false);
+    /**
+     * Which hub sheet is open: the Export row's option list, the Import
+     * row's, or neither. Every option closes the hub first and presents its
+     * own modal / picker after the dismiss animation (see openFromHub).
+     */
+    const [hub, setHub] = useState<"export" | "import" | null>(null);
+    const presentAfterDismiss = usePresentAfterDismiss();
+    const sheet = useSheetStyles();
 
     /**
      * Bank-statement CSV import: the parsed file + its remembered mapping,
@@ -289,20 +345,28 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       t,
     ]);
 
-    /**
-     * First step: show a themed modal to choose import source.
-     */
+    /** Import row: open the hub listing the four import sources. */
     const handleImportData = useCallback(() => {
-      setShowImportModal(true);
+      setHub("import");
     }, []);
 
     /**
-     * File-picker path: show a themed merge/replace modal.
+     * Close the hub, then run the chosen option once the sheet's dismiss
+     * animation has finished - the iOS silent-present rule. Options that
+     * open a document picker (bank statement) already wait out the
+     * teardown themselves, so they pass `immediate`.
      */
-    const handleImportFromFile = useCallback(() => {
-      setShowImportModal(false);
-      setShowImportModeModal(true);
-    }, []);
+    const openFromHub = useCallback(
+      (present: () => void, opts: { immediate?: boolean } = {}) => {
+        setHub(null);
+        if (opts.immediate) {
+          present();
+          return;
+        }
+        presentAfterDismiss(present);
+      },
+      [presentAfterDismiss],
+    );
 
     /**
      * Runs the actual import and shows the result.
@@ -676,6 +740,51 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       }
     }, [showInfo, t]);
 
+    /** Route a tapped hub row to its flow. Wiring lives here, copy in i18n. */
+    /** Rows for whichever hub is open (empty while closed / dismissing). */
+    const hubRows: readonly HubRow[] = hub ? HUB_OPTIONS[hub] : [];
+
+    const handleHubOption = useCallback(
+      (option: HubOption) => {
+        switch (option) {
+          case "backup":
+            openFromHub(handleExportData);
+            return;
+          case "spreadsheet":
+            // Same id in both menus; the open hub decides which flow.
+            openFromHub(
+              hub === "export"
+                ? handleExportSpreadsheet
+                : handleImportSpreadsheet,
+            );
+            return;
+          case "backupFile":
+            openFromHub(() => setShowImportModeModal(true));
+            return;
+          case "backupPaste":
+            openFromHub(() => {
+              setPasteText("");
+              setShowPasteModal(true);
+            });
+            return;
+          case "bankStatement":
+            // Waits out the modal teardown itself before the document picker.
+            openFromHub(() => void handleImportBankStatement(), {
+              immediate: true,
+            });
+            return;
+        }
+      },
+      [
+        hub,
+        openFromHub,
+        handleExportData,
+        handleExportSpreadsheet,
+        handleImportSpreadsheet,
+        handleImportBankStatement,
+      ],
+    );
+
     useImperativeHandle(
       ref,
       () => ({
@@ -730,9 +839,11 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           >
             <TouchableOpacity
               style={styles.groupedRow}
-              onPress={handleExportData}
+              onPress={() => setHub("export")}
+              accessibilityRole="button"
+              accessibilityLabel={t("profile.data.rows.export.title")}
             >
-              <View>
+              <View style={styles.rowTextWrap}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   {t("profile.data.rows.export.title")}
                 </Text>
@@ -759,8 +870,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             <TouchableOpacity
               style={styles.groupedRow}
               onPress={handleImportData}
+              accessibilityRole="button"
+              accessibilityLabel={t("profile.data.rows.import.title")}
             >
-              <View>
+              <View style={styles.rowTextWrap}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   {t("profile.data.rows.import.title")}
                 </Text>
@@ -796,90 +909,6 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
                   {autoBackupSummary}
-                </Text>
-              </View>
-              <Text
-                style={[styles.settingsRowArrow, { color: colors.textDim }]}
-              >
-                →
-              </Text>
-            </TouchableOpacity>
-
-            <View
-              style={[
-                styles.groupedDivider,
-                { backgroundColor: colors.cardBorder },
-              ]}
-            />
-
-            <TouchableOpacity
-              style={styles.groupedRow}
-              onPress={handleExportSpreadsheet}
-            >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.data.rows.exportSpreadsheet.title")}
-                </Text>
-                <Text
-                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-                >
-                  {t("profile.data.rows.exportSpreadsheet.subtitle")}
-                </Text>
-              </View>
-              <Text
-                style={[styles.settingsRowArrow, { color: colors.textDim }]}
-              >
-                →
-              </Text>
-            </TouchableOpacity>
-
-            <View
-              style={[
-                styles.groupedDivider,
-                { backgroundColor: colors.cardBorder },
-              ]}
-            />
-
-            <TouchableOpacity
-              style={styles.groupedRow}
-              onPress={handleImportSpreadsheet}
-            >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.data.rows.importSpreadsheet.title")}
-                </Text>
-                <Text
-                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-                >
-                  {t("profile.data.rows.importSpreadsheet.subtitle")}
-                </Text>
-              </View>
-              <Text
-                style={[styles.settingsRowArrow, { color: colors.textDim }]}
-              >
-                →
-              </Text>
-            </TouchableOpacity>
-
-            <View
-              style={[
-                styles.groupedDivider,
-                { backgroundColor: colors.cardBorder },
-              ]}
-            />
-
-            <TouchableOpacity
-              style={styles.groupedRow}
-              onPress={handleImportBankStatement}
-            >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.data.rows.importBankStatement.title")}
-                </Text>
-                <Text
-                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-                >
-                  {t("profile.data.rows.importBankStatement.subtitle")}
                 </Text>
               </View>
               <Text
@@ -1204,58 +1233,78 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         </Modal>
 
         {/* ── Import Source Modal ── */}
-        <Modal
-          visible={showImportModal}
-          animationType="fade"
-          transparent
-          onRequestClose={() => setShowImportModal(false)}
-        >
-          <View style={styles.dialogOverlay}>
-            <View
-              style={[
-                styles.dialogBox,
-                { backgroundColor: colors.card, borderColor: colors.cardBorder },
-              ]}
+        {/* ── Export / Import hubs ──
+            One sheet component, two option lists. Each option closes the
+            sheet and hands off through openFromHub so the follow-up modal
+            or picker never presents mid-dismiss. */}
+        <SheetModal
+          visible={hub !== null}
+          onRequestClose={() => setHub(null)}
+          footer={
+            <TouchableOpacity
+              style={sheet.closeButton}
+              onPress={() => setHub(null)}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.cancel")}
             >
-              <Text style={[styles.dialogTitle, { color: colors.text }]}>
-                {t("profile.data.import.source.title")}
-              </Text>
-              <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                {t("profile.data.import.source.message")}
-              </Text>
-              <View style={styles.dialogActions}>
-                <TouchableOpacity
-                  style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
-                  onPress={() => setShowImportModal(false)}
-                >
-                  <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                    {t("common.cancel")}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
-                  onPress={handleImportFromFile}
-                >
-                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    {t("profile.data.import.source.pickFile")}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
-                  onPress={() => {
-                    setShowImportModal(false);
-                    setPasteText("");
-                    setShowPasteModal(true);
-                  }}
-                >
-                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    {t("profile.data.import.source.pasteText")}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              <Text style={sheet.closeText}>{t("common.cancel")}</Text>
+            </TouchableOpacity>
+          }
+        >
+          <Text style={sheet.title}>
+            {hub === "export"
+              ? t("profile.data.exportMenu.title")
+              : t("profile.data.importMenu.title")}
+          </Text>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.card, borderColor: colors.cardBorder },
+            ]}
+          >
+            {hubRows.map(
+              (option, index) => (
+                <React.Fragment key={option.id}>
+                  {index > 0 && (
+                    <View
+                      style={[
+                        styles.groupedDivider,
+                        { backgroundColor: colors.cardBorder },
+                      ]}
+                    />
+                  )}
+                  <TouchableOpacity
+                    style={styles.groupedRow}
+                    onPress={() => handleHubOption(option.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(option.title)}
+                  >
+                    <View style={styles.rowTextWrap}>
+                      <Text
+                        style={[styles.settingsRowText, { color: colors.text }]}
+                      >
+                        {t(option.title)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingsRowSubtext,
+                          { color: colors.textDim },
+                        ]}
+                      >
+                        {t(option.subtitle)}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[styles.settingsRowArrow, { color: colors.textDim }]}
+                    >
+                      →
+                    </Text>
+                  </TouchableOpacity>
+                </React.Fragment>
+              ),
+            )}
           </View>
-        </Modal>
+        </SheetModal>
 
         {/* ── Import Mode Modal (file path) ── */}
         <Modal

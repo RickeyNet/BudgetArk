@@ -10,22 +10,43 @@
 export const profileData = {
   sectionTitle: "DATA",
   rows: {
-    export: { title: "Export", subtitle: "Encrypted backup to file" },
-    import: { title: "Import", subtitle: "From file or clipboard" },
+    export: { title: "Export", subtitle: "Encrypted backup or spreadsheet" },
+    import: {
+      title: "Import",
+      subtitle: "Backup, spreadsheet or bank statement",
+    },
     autoBackup: { title: "Automatic Backups" },
-    exportSpreadsheet: {
-      title: "Export Spreadsheet",
+    reset: { title: "Reset All Data" },
+  },
+  exportMenu: {
+    title: "Export",
+    backup: {
+      title: "Encrypted Backup",
+      subtitle: "Everything, as a password-protected file",
+    },
+    spreadsheet: {
+      title: "Spreadsheet",
       subtitle: "CSV or Excel for Google Sheets / Excel",
     },
-    importSpreadsheet: {
-      title: "Import Spreadsheet",
+  },
+  importMenu: {
+    title: "Import",
+    backupFile: {
+      title: "Backup from File",
+      subtitle: "Restore a BudgetArk export",
+    },
+    backupPaste: {
+      title: "Paste Backup Text",
+      subtitle: "JSON copied from an export",
+    },
+    spreadsheet: {
+      title: "Spreadsheet",
       subtitle: "From a CSV or Excel file",
     },
-    importBankStatement: {
-      title: "Import Bank Statement",
+    bankStatement: {
+      title: "Bank Statement",
       subtitle: "A CSV from your bank → Review Inbox",
     },
-    reset: { title: "Reset All Data" },
   },
   autoBackup: {
     loading: "Loading...",
@@ -107,12 +128,6 @@ export const profileData = {
       message: "This export was encrypted with a password. Enter the password to decrypt it.",
       placeholder: "Enter password",
       confirm: "Decrypt & Import",
-    },
-    source: {
-      title: "Import Data",
-      message: "Choose an import source.",
-      pickFile: "Pick File",
-      pasteText: "Paste Text",
     },
     mode: {
       title: "Import from File",

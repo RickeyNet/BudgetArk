@@ -150,7 +150,7 @@ export const modalsData: Localized<typeof en> = {
       "Spaltenüberschriften werden ohne Beachtung der Groß-/Kleinschreibung erkannt. CSV-Dateien enthalten nur das Blatt „Budget Entries“. Excel-Dateien können jedes der Blätter unten enthalten.",
     tipLabel: "TIPP",
     tipBefore: "Am einfachsten lernst du das Format so: Tippe auf ",
-    tipAction: "Tabelle exportieren",
+    tipAction: "Exportieren → Tabelle",
     tipAfter:
       " (XLSX), öffne die Datei in Excel oder Google Sheets, bearbeite sie und importiere sie wieder. IDs bleiben erhalten, bestehende Zeilen werden also an Ort und Stelle aktualisiert. Selbst bei leerer App ist der Export eine fertige Vorlage - jedes Blatt hat die richtigen Überschriften, nur noch keine Zeilen.",
     presets: {

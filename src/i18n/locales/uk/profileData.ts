@@ -14,22 +14,46 @@ import type { profileData as en } from "../en/profileData";
 export const profileData: LocalizedPlural<typeof en> = {
   sectionTitle: "ДАНІ",
   rows: {
-    export: { title: "Експорт", subtitle: "Зашифрована копія у файл" },
-    import: { title: "Імпорт", subtitle: "З файлу або буфера обміну" },
+    export: {
+      title: "Експорт",
+      subtitle: "Зашифрована копія або таблиця",
+    },
+    import: {
+      title: "Імпорт",
+      subtitle: "Копія, таблиця або банківська виписка",
+    },
     autoBackup: { title: "Автоматичні копії" },
-    exportSpreadsheet: {
-      title: "Експорт таблиці",
+    reset: { title: "Скинути всі дані" },
+  },
+  exportMenu: {
+    title: "Експорт",
+    backup: {
+      title: "Зашифрована копія",
+      subtitle: "Усе, у файлі з паролем",
+    },
+    spreadsheet: {
+      title: "Таблиця",
       subtitle: "CSV або Excel для Google Таблиць / Excel",
     },
-    importSpreadsheet: {
-      title: "Імпорт таблиці",
+  },
+  importMenu: {
+    title: "Імпорт",
+    backupFile: {
+      title: "Копія з файлу",
+      subtitle: "Відновити експорт BudgetArk",
+    },
+    backupPaste: {
+      title: "Вставити текст копії",
+      subtitle: "JSON, скопійований з експорту",
+    },
+    spreadsheet: {
+      title: "Таблиця",
       subtitle: "З файлу CSV або Excel",
     },
-    importBankStatement: {
-      title: "Імпорт банківської виписки",
+    bankStatement: {
+      title: "Банківська виписка",
       subtitle: "CSV з банку → Вхідні на перевірку",
     },
-    reset: { title: "Скинути всі дані" },
   },
   autoBackup: {
     loading: "Завантаження...",
@@ -135,12 +159,6 @@ export const profileData: LocalizedPlural<typeof en> = {
       message: "Цей експорт зашифровано паролем. Введи пароль, щоб розшифрувати його.",
       placeholder: "Введи пароль",
       confirm: "Розшифрувати й імпортувати",
-    },
-    source: {
-      title: "Імпорт даних",
-      message: "Обери джерело імпорту.",
-      pickFile: "Вибрати файл",
-      pasteText: "Вставити текст",
     },
     mode: {
       title: "Імпорт із файлу",

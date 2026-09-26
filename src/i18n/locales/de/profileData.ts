@@ -13,22 +13,46 @@ import type { profileData as en } from "../en/profileData";
 export const profileData: Localized<typeof en> = {
   sectionTitle: "DATEN",
   rows: {
-    export: { title: "Exportieren", subtitle: "Verschlüsselte Sicherung als Datei" },
-    import: { title: "Importieren", subtitle: "Aus Datei oder Zwischenablage" },
+    export: {
+      title: "Exportieren",
+      subtitle: "Verschlüsselte Sicherung oder Tabelle",
+    },
+    import: {
+      title: "Importieren",
+      subtitle: "Sicherung, Tabelle oder Kontoauszug",
+    },
     autoBackup: { title: "Automatische Sicherungen" },
-    exportSpreadsheet: {
-      title: "Tabelle exportieren",
+    reset: { title: "Alle Daten zurücksetzen" },
+  },
+  exportMenu: {
+    title: "Exportieren",
+    backup: {
+      title: "Verschlüsselte Sicherung",
+      subtitle: "Alles, als passwortgeschützte Datei",
+    },
+    spreadsheet: {
+      title: "Tabelle",
       subtitle: "CSV oder Excel für Google Sheets / Excel",
     },
-    importSpreadsheet: {
-      title: "Tabelle importieren",
+  },
+  importMenu: {
+    title: "Importieren",
+    backupFile: {
+      title: "Sicherung aus Datei",
+      subtitle: "Einen BudgetArk-Export wiederherstellen",
+    },
+    backupPaste: {
+      title: "Sicherungstext einfügen",
+      subtitle: "JSON aus einem Export kopiert",
+    },
+    spreadsheet: {
+      title: "Tabelle",
       subtitle: "Aus einer CSV- oder Excel-Datei",
     },
-    importBankStatement: {
-      title: "Kontoauszug importieren",
+    bankStatement: {
+      title: "Kontoauszug",
       subtitle: "CSV deiner Bank → Prüfposteingang",
     },
-    reset: { title: "Alle Daten zurücksetzen" },
   },
   autoBackup: {
     loading: "Lädt...",
@@ -113,12 +137,6 @@ export const profileData: Localized<typeof en> = {
         "Dieser Export wurde mit einem Passwort verschlüsselt. Gib das Passwort ein, um ihn zu entschlüsseln.",
       placeholder: "Passwort eingeben",
       confirm: "Entschlüsseln & importieren",
-    },
-    source: {
-      title: "Daten importieren",
-      message: "Wähle eine Importquelle.",
-      pickFile: "Datei wählen",
-      pasteText: "Text einfügen",
     },
     mode: {
       title: "Aus Datei importieren",

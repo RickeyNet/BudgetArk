@@ -150,7 +150,7 @@ export const modalsData = {
       "Headers are matched case-insensitively. CSV files contain only the Budget Entries sheet. Excel files can contain any of the sheets below.",
     tipLabel: "TIP",
     tipBefore: "Easiest way to learn the format: tap ",
-    tipAction: "Export Spreadsheet",
+    tipAction: "Export → Spreadsheet",
     tipAfter:
       " (XLSX), open the file in Excel or Google Sheets, edit, then re-import. IDs round-trip so existing rows update in place. Even with an empty app, the export is a ready-made blank template - every sheet has the correct headers, just no rows yet.",
     presets: {

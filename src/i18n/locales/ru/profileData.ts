@@ -14,22 +14,46 @@ import type { profileData as en } from "../en/profileData";
 export const profileData: LocalizedPlural<typeof en> = {
   sectionTitle: "ДАННЫЕ",
   rows: {
-    export: { title: "Экспорт", subtitle: "Зашифрованная копия в файл" },
-    import: { title: "Импорт", subtitle: "Из файла или буфера обмена" },
+    export: {
+      title: "Экспорт",
+      subtitle: "Зашифрованная копия или таблица",
+    },
+    import: {
+      title: "Импорт",
+      subtitle: "Копия, таблица или банковская выписка",
+    },
     autoBackup: { title: "Автоматические копии" },
-    exportSpreadsheet: {
-      title: "Экспорт таблицы",
+    reset: { title: "Сбросить все данные" },
+  },
+  exportMenu: {
+    title: "Экспорт",
+    backup: {
+      title: "Зашифрованная копия",
+      subtitle: "Всё, в файле с паролем",
+    },
+    spreadsheet: {
+      title: "Таблица",
       subtitle: "CSV или Excel для Google Таблиц / Excel",
     },
-    importSpreadsheet: {
-      title: "Импорт таблицы",
+  },
+  importMenu: {
+    title: "Импорт",
+    backupFile: {
+      title: "Копия из файла",
+      subtitle: "Восстановить экспорт BudgetArk",
+    },
+    backupPaste: {
+      title: "Вставить текст копии",
+      subtitle: "JSON, скопированный из экспорта",
+    },
+    spreadsheet: {
+      title: "Таблица",
       subtitle: "Из файла CSV или Excel",
     },
-    importBankStatement: {
-      title: "Импорт банковской выписки",
+    bankStatement: {
+      title: "Банковская выписка",
       subtitle: "CSV из банка → Входящие на проверку",
     },
-    reset: { title: "Сбросить все данные" },
   },
   autoBackup: {
     loading: "Загрузка...",
@@ -135,12 +159,6 @@ export const profileData: LocalizedPlural<typeof en> = {
       message: "Этот экспорт зашифрован паролем. Введи пароль, чтобы расшифровать его.",
       placeholder: "Введи пароль",
       confirm: "Расшифровать и импортировать",
-    },
-    source: {
-      title: "Импорт данных",
-      message: "Выбери источник импорта.",
-      pickFile: "Выбрать файл",
-      pasteText: "Вставить текст",
     },
     mode: {
       title: "Импорт из файла",
