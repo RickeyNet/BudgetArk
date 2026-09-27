@@ -241,11 +241,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   /** "Lent to someone?" - free text, "" = not a loan (see BudgetEntry.lentTo). */
   const [draftLentTo, setDraftLentTo] = useState("");
   const [rememberRule, setRememberRule] = useState(false);
-  // "Applies to bill" and "Add to a purchase plan" fold away by default so
-  // the editor stays short; the picked bill/debt is still summarised on the
-  // collapsed header, so nothing a rule prefilled is hidden silently.
+  // "Applies to bill", "Add to a purchase plan" and "Lent to someone" fold
+  // away by default so the editor stays short; the picked bill/debt or name
+  // is still summarised on the collapsed header, so nothing a rule prefilled
+  // is hidden silently.
   const [showBillSection, setShowBillSection] = useState(false);
   const [showPlanSection, setShowPlanSection] = useState(false);
+  const [showLentSection, setShowLentSection] = useState(false);
   // "By vendor" grouping: fold every transaction from one merchant into a
   // single section so a big multi-month import is triaged vendor by vendor.
   const [groupByMerchant, setGroupByMerchant] = useState(false);
@@ -395,6 +397,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setRememberRule(false);
       setShowBillSection(false);
       setShowPlanSection(false);
+      setShowLentSection(false);
       return item.id;
     });
   }, []);
@@ -945,6 +948,34 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 </TouchableOpacity>
               </View>
             ) : null}
+            {item.suggestedType === "expense" &&
+            (people.length > 0 || draftPersonIds.length > 0) ? (
+              <>
+                <Text style={styles.label}>{t("budget.inbox.form.peopleLabel")}</Text>
+                <MultiTagPillPicker
+                    options={people}
+                    values={draftPersonIds}
+                    onChange={setDraftPersonIds}
+                    noneLabel={t("budget.inbox.form.unassigned")}
+                    glyph="👤"
+                    deletedLabel={t("budget.inbox.row.deletedPerson")}
+                  />
+              </>
+            ) : null}
+            {item.suggestedType === "expense" &&
+            (businesses.length > 0 || draftBusinessId) ? (
+              <>
+                <Text style={styles.label}>{t("budget.inbox.form.businessLabel")}</Text>
+                <TagPillPicker
+                    options={businesses}
+                    value={draftBusinessId}
+                    onChange={setDraftBusinessId}
+                    noneLabel={t("budget.inbox.form.personal")}
+                    glyph="💼"
+                    deletedLabel={t("budget.inbox.row.deletedBusiness")}
+                  />
+              </>
+            ) : null}
             {applyToOptions.length > 0 ? (
               <>
                 <TouchableOpacity
@@ -955,7 +986,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   accessibilityState={{ expanded: showBillSection }}
                   accessibilityLabel={t("budget.inbox.form.appliesToBill")}
                 >
-                  <Text style={styles.label} numberOfLines={1}>
+                  <Text style={styles.foldLabel} numberOfLines={1}>
                     {t("budget.inbox.form.appliesToBill")}
                     {!showBillSection && pickedApplyTo ? ` · 🧾 ${pickedApplyTo.name}` : ""}
                   </Text>
@@ -977,67 +1008,6 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 ) : null}
               </>
             ) : null}
-            {item.suggestedType === "expense" &&
-            (businesses.length > 0 || draftBusinessId) ? (
-              <>
-                <Text style={styles.label}>{t("budget.inbox.form.businessLabel")}</Text>
-                <TagPillPicker
-                    options={businesses}
-                    value={draftBusinessId}
-                    onChange={setDraftBusinessId}
-                    noneLabel={t("budget.inbox.form.personal")}
-                    glyph="💼"
-                    deletedLabel={t("budget.inbox.row.deletedBusiness")}
-                  />
-              </>
-            ) : null}
-            {item.suggestedType === "expense" &&
-            (people.length > 0 || draftPersonIds.length > 0) ? (
-              <>
-                <Text style={styles.label}>{t("budget.inbox.form.peopleLabel")}</Text>
-                <MultiTagPillPicker
-                    options={people}
-                    values={draftPersonIds}
-                    onChange={setDraftPersonIds}
-                    noneLabel={t("budget.inbox.form.unassigned")}
-                    glyph="👤"
-                    deletedLabel={t("budget.inbox.row.deletedPerson")}
-                  />
-              </>
-            ) : null}
-            {item.suggestedType === "expense" ? (
-              <>
-                <Text style={styles.label}>{t("budget.inbox.form.lentToLabel")}</Text>
-                <Text style={styles.planHint}>{t("budget.inbox.form.lentToHint")}</Text>
-                <TextInput
-                  style={styles.nameInput}
-                  value={draftLentTo}
-                  onChangeText={setDraftLentTo}
-                  placeholder={t("budget.inbox.form.lentToPlaceholder")}
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={LENT_TO_MAX_LENGTH}
-                  autoCapitalize="words"
-                  returnKeyType="done"
-                />
-                {lentToChips.length > 0 ? (
-                  <View style={styles.planChipRow}>
-                    {lentToChips.map((name) => (
-                      <TouchableOpacity
-                        key={name}
-                        style={styles.planChip}
-                        onPress={() => setDraftLentTo(name)}
-                        accessibilityRole="button"
-                        accessibilityLabel={t("budget.inbox.form.lentToChip", { name })}
-                      >
-                        <Text style={styles.planChipText} numberOfLines={1}>
-                          🤝 {name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : null}
-              </>
-            ) : null}
             {planChoices.length > 0 ? (
               <>
                 <TouchableOpacity
@@ -1048,7 +1018,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   accessibilityState={{ expanded: showPlanSection }}
                   accessibilityLabel={t("budget.inbox.form.planLabel")}
                 >
-                  <Text style={styles.label}>{t("budget.inbox.form.planLabel")}</Text>
+                  <Text style={styles.foldLabel}>{t("budget.inbox.form.planLabel")}</Text>
                   <Text style={styles.foldChevron}>{showPlanSection ? "▾" : "›"}</Text>
                 </TouchableOpacity>
                 {showPlanSection ? (
@@ -1079,6 +1049,56 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                         );
                       })}
                     </View>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+            {item.suggestedType === "expense" ? (
+              <>
+                <TouchableOpacity
+                  style={styles.foldHeader}
+                  onPress={() => setShowLentSection((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showLentSection }}
+                  accessibilityLabel={t("budget.inbox.form.lentToLabel")}
+                >
+                  <Text style={styles.foldLabel} numberOfLines={1}>
+                    {t("budget.inbox.form.lentToLabel")}
+                    {!showLentSection && draftLentTo.trim() ? ` · 🤝 ${draftLentTo.trim()}` : ""}
+                  </Text>
+                  <Text style={styles.foldChevron}>{showLentSection ? "▾" : "›"}</Text>
+                </TouchableOpacity>
+                {showLentSection ? (
+                  <>
+                    <Text style={styles.planHint}>{t("budget.inbox.form.lentToHint")}</Text>
+                    <TextInput
+                      style={styles.nameInput}
+                      value={draftLentTo}
+                      onChangeText={setDraftLentTo}
+                      placeholder={t("budget.inbox.form.lentToPlaceholder")}
+                      placeholderTextColor={colors.textMuted}
+                      maxLength={LENT_TO_MAX_LENGTH}
+                      autoCapitalize="words"
+                      returnKeyType="done"
+                    />
+                    {lentToChips.length > 0 ? (
+                      <View style={styles.planChipRow}>
+                        {lentToChips.map((name) => (
+                          <TouchableOpacity
+                            key={name}
+                            style={styles.planChip}
+                            onPress={() => setDraftLentTo(name)}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("budget.inbox.form.lentToChip", { name })}
+                          >
+                            <Text style={styles.planChipText} numberOfLines={1}>
+                              🤝 {name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
                   </>
                 ) : null}
               </>
@@ -1651,17 +1671,31 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.5,
       marginTop: 8,
     },
+    // Outlined like an input so the fold reads as a drop-down, not a label.
     foldHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       gap: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginTop: 4,
+    },
+    foldLabel: {
+      flex: 1,
+      fontSize: 11,
+      color: colors.textDim,
+      fontWeight: "600",
+      letterSpacing: 0.5,
     },
     foldChevron: {
       fontSize: 16,
       color: colors.textMuted,
       fontWeight: "600",
-      marginTop: 8,
     },
     nameInput: {
       borderWidth: 1,
