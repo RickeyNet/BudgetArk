@@ -22,7 +22,6 @@ import {
   Text,
   TouchableOpacity,
   Modal,
-  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -58,13 +57,6 @@ type ConnectionsSectionProps = {
   newFeatureIds: ReadonlySet<string>;
   onDismissNewBadge: (featureId: string) => void;
 };
-
-/**
- * How long Android's Modal dialog takes to tear down after `visible` flips
- * false (slide-out animation plus a frame of slack, with margin - a wedge
- * here costs a force-close). iOS sequences via Modal.onDismiss instead.
- */
-const ANDROID_MODAL_TEARDOWN_MS = 700;
 
 const ConnectionsSection = forwardRef<
   ConnectionsSectionHandle,
@@ -168,35 +160,23 @@ const ConnectionsSection = forwardRef<
   }, []);
 
   /**
-   * Wizard teardown sequencing - the third fix in this family, so it is
-   * deliberately belt-and-braces. Nothing that can re-render the modal
-   * stack may run while the wizard sheet is still going away: the
-   * post-setup sync's provider refresh, the manager's refresh on Cancel,
-   * anything. Mutations inside the still-visible Connections manager
-   * during that window wedged the Android UI thread (whole-app freeze on
-   * the "Connected" screen, Done unresponsive), and re-rendering the
-   * presented stack mid-dismissal is the iOS silent-present failure.
-   *
-   *  - iOS: RN's Modal keeps the sheet mounted until the native dismissal
-   *    finishes and reports it via onDismiss (an iOS-only callback), so
-   *    the queued work runs from there.
-   *  - Android: the dialog is torn down natively over a few hundred ms
-   *    with no callback, and InteractionManager doesn't know about it (it
-   *    fires as soon as the Done button's press animation ends - INSIDE
-   *    the teardown, which is exactly when a fast-failing first sync's
-   *    refresh used to land). A timer past the animation stands in.
+   * Wizard teardown sequencing. The wizard used to be a second native
+   * Modal presented on top of the (still visible) manager Modal, and that
+   * stacked presentation froze the whole app on the wizard's Done screen
+   * on Android no matter how the follow-up work was deferred (provider
+   * refresh via syncNow, then InteractionManager, then a 700 ms timer -
+   * three fixes, same freeze). The wizard is now an in-tree overlay inside
+   * the manager (see AddConnectionModal's header), so there is no native
+   * dismissal to race any more; `afterDismiss` simply runs from the
+   * wizard's onDismissed once its JS slide-out completes, on both
+   * platforms. Kept as a deferral (rather than running inline on Done) so
+   * the post-setup sync's provider-wide refresh lands on a settled
+   * manager instead of re-rendering it mid-animation.
    *
    * The queued callback is replaced, never stacked, so a repeat Done tap
-   * runs one sync; the timer is cleared on unmount.
+   * runs one sync.
    */
   const afterWizardDismissed = useRef<(() => void) | null>(null);
-  const teardownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (teardownTimer.current) clearTimeout(teardownTimer.current);
-    },
-    [],
-  );
 
   const runAfterWizardDismissed = useCallback(() => {
     const pending = afterWizardDismissed.current;
@@ -204,22 +184,13 @@ const ConnectionsSection = forwardRef<
     pending?.();
   }, []);
 
-  const closeWizard = useCallback(
-    (afterDismiss: () => void) => {
-      setShowAddConnection(false);
-      setAddBankInfo(null);
-      setResumeSimplefinId(null);
-      setRediscoverSimplefinId(null);
-      afterWizardDismissed.current = afterDismiss;
-      if (Platform.OS === "ios") return; // handleWizardDismissed picks it up
-      if (teardownTimer.current) clearTimeout(teardownTimer.current);
-      teardownTimer.current = setTimeout(() => {
-        teardownTimer.current = null;
-        runAfterWizardDismissed();
-      }, ANDROID_MODAL_TEARDOWN_MS);
-    },
-    [runAfterWizardDismissed],
-  );
+  const closeWizard = useCallback((afterDismiss: () => void) => {
+    setShowAddConnection(false);
+    setAddBankInfo(null);
+    setResumeSimplefinId(null);
+    setRediscoverSimplefinId(null);
+    afterWizardDismissed.current = afterDismiss;
+  }, []);
 
   /**
    * Post-wizard sync kick. Deliberately calls the sync SERVICE directly
@@ -254,7 +225,7 @@ const ConnectionsSection = forwardRef<
     });
   }, [closeWizard, refreshConnections]);
 
-  /** iOS: the wizard sheet finished dismissing - safe to run the queued work. */
+  /** The wizard sheet finished sliding out - safe to run the queued work. */
   const handleWizardDismissed = runAfterWizardDismissed;
 
   return (
@@ -397,7 +368,10 @@ const ConnectionsSection = forwardRef<
         </View>
       </Modal>
 
-      {/* ── Bank Connections manager + wizard ── */}
+      {/* ── Bank Connections manager, with the wizard as its overlay ──
+          The wizard lives inside the manager's Modal tree on purpose: every
+          way to open it starts from the manager, and presenting it as a
+          sibling Modal on top was the freeze (see AddConnectionModal). */}
       <ConnectionsModal
         visible={showConnectionsModal}
         onClose={() => setShowConnectionsModal(false)}
@@ -405,21 +379,26 @@ const ConnectionsSection = forwardRef<
         onAddBank={(connectionId) => void openAddBank(connectionId)}
         onFinishSetup={(connectionId) => void openFinishSetup(connectionId)}
         onRediscover={(connectionId) => void openRediscover(connectionId)}
-      />
-      <AddConnectionModal
-        visible={showAddConnection}
-        onClose={handleWizardClose}
-        onComplete={handleConnectionComplete}
-        onDismissed={handleWizardDismissed}
-        assetAccounts={wizardAssetAccounts}
-        addBank={addBankInfo ?? undefined}
-        resumeSimplefin={
-          resumeSimplefinId ? { connectionId: resumeSimplefinId } : undefined
-        }
-        rediscoverSimplefin={
-          rediscoverSimplefinId
-            ? { connectionId: rediscoverSimplefinId }
-            : undefined
+        onOverlayRequestClose={showAddConnection ? handleWizardClose : undefined}
+        overlay={
+          <AddConnectionModal
+            visible={showAddConnection}
+            onClose={handleWizardClose}
+            onComplete={handleConnectionComplete}
+            onDismissed={handleWizardDismissed}
+            assetAccounts={wizardAssetAccounts}
+            addBank={addBankInfo ?? undefined}
+            resumeSimplefin={
+              resumeSimplefinId
+                ? { connectionId: resumeSimplefinId }
+                : undefined
+            }
+            rediscoverSimplefin={
+              rediscoverSimplefinId
+                ? { connectionId: rediscoverSimplefinId }
+                : undefined
+            }
+          />
         }
       />
     </>

@@ -75,6 +75,20 @@ interface ConnectionsModalProps {
    * after setup. Opens the wizard's rediscover step to map only the new ones.
    */
   onRediscover: (connectionId: string) => void;
+  /**
+   * The add-connection wizard, rendered INSIDE this Modal's tree as an
+   * overlay rather than presented as a second native Modal beside it -
+   * stacking two native modals is what froze the app on the wizard's Done
+   * screen (see AddConnectionModal's header). Rendered last, above the
+   * list and Close button.
+   */
+  overlay?: React.ReactNode;
+  /**
+   * While the overlay is showing, the hardware back button (this Modal's
+   * onRequestClose - a native dialog swallows the key before BackHandler
+   * sees it) goes here instead of closing the manager.
+   */
+  onOverlayRequestClose?: () => void;
 }
 
 const PROVIDER_GLYPHS: Record<string, string> = {
@@ -102,6 +116,8 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   onAddBank,
   onFinishSetup,
   onRediscover,
+  overlay,
+  onOverlayRequestClose,
 }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -649,7 +665,11 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onOverlayRequestClose ?? handleClose}
+    >
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {selected ? renderDetail(selected) : renderList()}
@@ -657,6 +677,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
           <Text style={styles.closeButtonText}>{t("common.close")}</Text>
         </TouchableOpacity>
+        {overlay}
       </View>
 
       <Modal

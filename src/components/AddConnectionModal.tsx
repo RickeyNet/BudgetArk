@@ -8,11 +8,26 @@
  *
  * Layout follows AddBudgetEntryModal's sheet (scrollable body, pinned button
  * row); errors render inline under the active field, never as Alerts.
+ *
+ * Deliberately NOT a React Native Modal. The wizard only ever opens on top
+ * of the (still visible) Connections manager, which is itself a Modal, and
+ * presenting a second native dialog/view controller over it is the one
+ * configuration in this app that repeatedly froze the whole app on the
+ * wizard's Done screen (Android dialog teardown wedge; the iOS stacked-
+ * presentation failure). Three rounds of re-sequencing the JS work around
+ * that native dismissal didn't cure it, so the wizard now renders as an
+ * absolutely-positioned overlay INSIDE the manager's own tree - same fix
+ * as the onboarding walkthrough - with a plain JS slide animation. There
+ * is no native presentation left to race, and `onDismissed` fires from
+ * the animation's completion on both platforms. The hardware back button
+ * reaches the manager's onRequestClose, which ConnectionsSection routes to
+ * this wizard while it is showing.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Modal,
+  Animated,
+  Easing,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,7 +35,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
+  useWindowDimensions,
 } from "react-native";
+import { useValueChanged } from "../hooks/useValueChanged";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import {
@@ -84,11 +102,10 @@ interface AddConnectionModalProps {
   /** Called after a connection is fully set up (links saved). */
   onComplete: (connectionId: string) => void;
   /**
-   * iOS only: fires after the sheet's dismissal animation fully completes
-   * (RN Modal onDismiss). The post-setup sync is kicked from here so its
-   * state churn can't race the native dismissal - re-rendering the modal
-   * stack mid-dismissal freezes it (the same family as the silent-present
-   * failure this codebase keeps hitting).
+   * Fires once the sheet's slide-out animation has finished and the wizard
+   * has unmounted its content (both platforms). The post-setup sync is
+   * kicked from here so its provider-wide refresh lands on a settled
+   * manager rather than mid-animation.
    */
   onDismissed?: () => void;
   assetAccounts: AssetAccount[];
@@ -131,6 +148,63 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+
+  /* ── Presentation (in-tree overlay, see the file header) ── */
+
+  // `rendered` keeps the content mounted through the slide-out so the
+  // last step doesn't vanish on the Done tap; it flips false from the
+  // animation's completion, which is also where onDismissed fires.
+  const [rendered, setRendered] = useState(visible);
+  if (useValueChanged(visible) && visible && !rendered) setRendered(true);
+  // useAnimatedValue instead of useRef(new Animated.Value()).current so no
+  // ref is read during render (react-hooks/refs), matching the other sheets.
+  const progress = useAnimatedValue(visible ? 1 : 0);
+  const onDismissedRef = useRef(onDismissed);
+  useEffect(() => {
+    onDismissedRef.current = onDismissed;
+  }, [onDismissed]);
+  /** True while a slide-out is in flight and its onDismissed still owed. */
+  const dismissPending = useRef(false);
+
+  useEffect(() => {
+    if (!visible && !rendered) return; // nothing showing, nothing to hide
+    dismissPending.current = !visible;
+    const animation = Animated.timing(progress, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? 280 : 220,
+      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start(({ finished }) => {
+      if (visible || !finished) return;
+      dismissPending.current = false;
+      setRendered(false);
+      onDismissedRef.current?.();
+    });
+    return () => animation.stop();
+  }, [visible, rendered, progress]);
+
+  // Unmounting mid-slide-out (tab switch right after Done) must still hand
+  // the queued post-setup work back, or the first sync never runs.
+  useEffect(
+    () => () => {
+      if (dismissPending.current) {
+        dismissPending.current = false;
+        onDismissedRef.current?.();
+      }
+    },
+    [],
+  );
+
+  const sheetTranslateY = useMemo(
+    () =>
+      progress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [windowHeight, 0],
+      }),
+    [progress, windowHeight],
+  );
 
   const [step, setStep] = useState<WizardStep>("provider");
   const [busy, setBusy] = useState(false);
@@ -925,59 +999,65 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     }
   })();
 
+  if (!rendered) return null;
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleClose}
-      onDismiss={onDismissed}
-    >
-      <SheetKeyboardAvoider style={styles.overlay}>
-        <View style={styles.modalSheet}>
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
-          >
-            {step === "provider" && renderProviderStep()}
-            {step === "simplefinToken" && renderSimplefinStep()}
-            {step === "tellerSetup" && renderTellerSetupStep()}
-            {step === "tellerEnroll" && renderTellerEnrollStep()}
-            {step === "mapAccounts" && renderMapAccountsStep()}
-            {step === "done" && renderDoneStep()}
-          </ScrollView>
-
-          <View
-            style={[
-              styles.buttonRow,
-              Platform.OS === "android" && insets.bottom > 0
-                ? { paddingBottom: insets.bottom + 12 }
-                : null,
-            ]}
-          >
-            {step !== "done" ? (
-              <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
-                <Text style={styles.cancelText}>{t("common.cancel")}</Text>
-              </TouchableOpacity>
-            ) : null}
-            {!primaryAction.hidden ? (
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  primaryAction.disabled && styles.buttonDisabled,
-                ]}
-                onPress={primaryAction.onPress}
-                disabled={primaryAction.disabled}
-              >
-                <Text style={styles.primaryButtonText}>{primaryAction.label}</Text>
-              </TouchableOpacity>
-            ) : null}
+    <View style={styles.host}>
+      <Animated.View style={[styles.backdrop, { opacity: progress }]} />
+      <Animated.View
+        style={[
+          styles.slide,
+          { transform: [{ translateY: sheetTranslateY }] },
+        ]}
+      >
+        <SheetKeyboardAvoider style={styles.overlay}>
+          <View style={styles.modalSheet}>
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+            >
+              {step === "provider" && renderProviderStep()}
+              {step === "simplefinToken" && renderSimplefinStep()}
+              {step === "tellerSetup" && renderTellerSetupStep()}
+              {step === "tellerEnroll" && renderTellerEnrollStep()}
+              {step === "mapAccounts" && renderMapAccountsStep()}
+              {step === "done" && renderDoneStep()}
+            </ScrollView>
+  
+            <View
+              style={[
+                styles.buttonRow,
+                Platform.OS === "android" && insets.bottom > 0
+                  ? { paddingBottom: insets.bottom + 12 }
+                  : null,
+              ]}
+            >
+              {step !== "done" ? (
+                <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+                  <Text style={styles.cancelText}>{t("common.cancel")}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {!primaryAction.hidden ? (
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    primaryAction.disabled && styles.buttonDisabled,
+                  ]}
+                  onPress={primaryAction.onPress}
+                  disabled={primaryAction.disabled}
+                >
+                  <Text style={styles.primaryButtonText}>{primaryAction.label}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
-        </View>
-      </SheetKeyboardAvoider>
+        </SheetKeyboardAvoider>
+      </Animated.View>
 
+      {/* Real Modals, but nested as children of the manager's Modal - the
+          supported configuration - not presented beside it. */}
       <TellerConnectModal
         visible={showTellerConnect}
         applicationId={tellerAppId.trim()}
@@ -996,15 +1076,34 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         onClose={() => setGuideProvider(null)}
         onStartSetup={startProviderSetup}
       />
-    </Modal>
+    </View>
   );
 };
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    // Covers the manager and swallows its touches while the wizard is up
+    // (a plain View's default pointerEvents), like a modal backdrop would.
+    host: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 10,
+      elevation: 10,
+    },
+    backdrop: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: colors.overlayStrong,
+    },
+    slide: { flex: 1 },
     overlay: {
       flex: 1,
-      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     modalSheet: {
