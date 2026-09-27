@@ -13,15 +13,19 @@
  * of the (still visible) Connections manager, which is itself a Modal, and
  * presenting a second native dialog/view controller over it is the one
  * configuration in this app that repeatedly froze the whole app on the
- * wizard's Done screen (Android dialog teardown wedge; the iOS stacked-
- * presentation failure). Three rounds of re-sequencing the JS work around
- * that native dismissal didn't cure it, so the wizard now renders as an
- * absolutely-positioned overlay INSIDE the manager's own tree - same fix
- * as the onboarding walkthrough - with a plain JS slide animation. There
- * is no native presentation left to race, and `onDismissed` fires from
- * the animation's completion on both platforms. The hardware back button
- * reaches the manager's onRequestClose, which ConnectionsSection routes to
- * this wizard while it is showing.
+ * wizard's Done screen: the ✅ step rendered inside that stacked dialog
+ * and then nothing responded - Done did nothing, force-close required
+ * (four Android reports). No JS runs after that screen paints (no timers,
+ * effects or provider refresh are scheduled by the done step), so the
+ * wedge is native, in the stacked dialog. Three rounds of re-sequencing
+ * the post-Done JS work never touched that, so the wizard now renders as
+ * an absolutely-positioned overlay INSIDE the manager's own tree - same
+ * fix as the onboarding walkthrough - with a plain JS slide animation.
+ * Its buttons live in the manager's own dialog (whose touches demonstrably
+ * work), there is no second native presentation left, and `onDismissed`
+ * fires from the animation's completion on both platforms. The hardware
+ * back button reaches the manager's onRequestClose, which
+ * ConnectionsSection routes to this wizard while it is showing.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";

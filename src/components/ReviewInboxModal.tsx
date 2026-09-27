@@ -23,7 +23,7 @@
  * order); the host screen refreshes its entry list via `onChanged`.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -107,6 +107,7 @@ import {
   groupDefaultCategory,
   type InboxSection,
 } from "../utils/reviewInboxSections";
+import { anchoredScrollOffset } from "../utils/inboxScrollAnchor";
 
 interface ReviewInboxModalProps {
   visible: boolean;
@@ -126,6 +127,31 @@ interface ReviewInboxModalProps {
 }
 
 const DEFAULT_CATEGORY: CategoryName = "Other";
+
+/**
+ * measureInWindow never calls back for a view that is already gone; cap the
+ * wait so an approve/skip can never hang on the measurement.
+ */
+const MEASURE_TIMEOUT_MS = 100;
+
+/** Window y of a mounted view, or null when it can't be measured in time. */
+const windowTopAsync = (view: View | null | undefined): Promise<number | null> =>
+  new Promise((resolve) => {
+    if (!view) {
+      resolve(null);
+      return;
+    }
+    const timer = setTimeout(() => resolve(null), MEASURE_TIMEOUT_MS);
+    try {
+      view.measureInWindow((_x, y) => {
+        clearTimeout(timer);
+        resolve(Number.isFinite(y) ? y : null);
+      });
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
 
 /** "Sep 3" for the already-logged notice; falls back to the raw date text. */
 const formatPaymentDay = (iso: string, locale: string): string => {
@@ -157,6 +183,40 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     refresh,
     syncNow,
   } = useConnections();
+
+  // Keeping the user's place when a card leaves the list. Approve/Skip
+  // remove the card (and its tall expanded editor), so the content shrinks
+  // under the current scroll offset and the list used to jump - see
+  // utils/inboxScrollAnchor. Before the action we measure where the card's
+  // top sits in the viewport; once the shrunken list has rendered we scroll
+  // so the next card takes that exact place.
+  const listRef = useRef<SectionList<PendingTransaction, InboxSection>>(null);
+  const cardRefs = useRef(new Map<string, View>());
+  const scrollOffsetRef = useRef(0);
+  /** Offset to apply after the next pendingTransactions render; null = none. */
+  const pendingScrollOffsetRef = useRef<number | null>(null);
+
+  const captureScrollAnchor = useCallback(async (itemId: string) => {
+    const scrollHost = listRef.current?.getScrollResponder()?.getNativeScrollRef?.();
+    const [cardTop, listTop] = await Promise.all([
+      windowTopAsync(cardRefs.current.get(itemId)),
+      windowTopAsync(scrollHost as View | null | undefined),
+    ]);
+    pendingScrollOffsetRef.current =
+      cardTop == null || listTop == null
+        ? null
+        : anchoredScrollOffset(scrollOffsetRef.current, cardTop - listTop);
+  }, []);
+
+  useEffect(() => {
+    const offset = pendingScrollOffsetRef.current;
+    if (offset == null) return;
+    pendingScrollOffsetRef.current = null;
+    // scrollTo on the underlying ScrollView is offset-based, so it doesn't
+    // depend on VirtualizedList's cell frames, which are stale right after
+    // a removal.
+    listRef.current?.getScrollResponder()?.scrollTo({ y: offset, animated: false });
+  }, [pendingTransactions]);
 
   const [links, setLinks] = useState<ExternalAccountLink[]>([]);
   /** Live merchant rules, so the "make it a rule" nudge knows what's covered. */
@@ -345,6 +405,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     ) => {
       setBusyId(item.id);
       setActionError(null);
+      await captureScrollAnchor(item.id);
       try {
         await approvePendingTransaction({
           pendingId: item.id,
@@ -380,19 +441,21 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           if (nudge) setInboxNudge(nudge);
         }
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
         setActionError(describeError(error, t("budget.inbox.errors.approve")));
       } finally {
         setBusyId(null);
       }
     },
-    [billNameById, noteWin, onChanged, refresh, t],
+    [billNameById, captureScrollAnchor, noteWin, onChanged, refresh, t],
   );
 
   const handleSkip = useCallback(
     async (item: PendingTransaction, remember: boolean) => {
       setBusyId(item.id);
       setActionError(null);
+      await captureScrollAnchor(item.id);
       try {
         // "Always" + Skip = ignore this merchant on every future sync (and
         // clear its other inbox items right now).
@@ -405,19 +468,21 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         triggerHaptic("selection");
         setExpandedId(null);
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
         setActionError(describeError(error, t("budget.inbox.errors.skip")));
       } finally {
         setBusyId(null);
       }
     },
-    [refresh, t],
+    [captureScrollAnchor, refresh, t],
   );
 
   const handleTransferToPlan = useCallback(
     async (item: PendingTransaction, goal: SavingsGoal) => {
       setBusyId(item.id);
       setActionError(null);
+      await captureScrollAnchor(item.id);
       try {
         const goals = await applyPendingTransferToPlan(item.id, goal.id);
         if (goals) {
@@ -428,13 +493,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         triggerHaptic("success");
         setExpandedId(null);
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
         setActionError(describeError(error, t("budget.inbox.errors.addToPlan")));
       } finally {
         setBusyId(null);
       }
     },
-    [onChanged, refresh, t],
+    [captureScrollAnchor, onChanged, refresh, t],
   );
 
   /**
@@ -447,6 +513,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setBusyId(item.id);
       setActionError(null);
       setActionNotice(null);
+      await captureScrollAnchor(item.id);
       try {
         const result = await applyPendingPaymentToDebt(item.id, debtId, {
           rememberRule: remember,
@@ -483,13 +550,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           if (nudge) setInboxNudge(nudge);
         }
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
         setActionError(describeError(error, t("budget.inbox.errors.logDebtPayment")));
       } finally {
         setBusyId(null);
       }
     },
-    [formatCurrency, i18n.language, noteWin, onChanged, refresh, t],
+    [captureScrollAnchor, formatCurrency, i18n.language, noteWin, onChanged, refresh, t],
   );
 
   const handleSkipSection = useCallback(
@@ -709,7 +777,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         : null;
     const planChoices = expanded && isExpense ? plans : [];
     return (
-      <View style={styles.itemCard}>
+      <View
+        style={styles.itemCard}
+        ref={(node) => {
+          if (node) cardRefs.current.set(item.id, node);
+          else cardRefs.current.delete(item.id);
+        }}
+      >
         <TouchableOpacity
           style={styles.itemHeader}
           onPress={() => toggleExpand(item)}
@@ -1151,9 +1225,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </View>
           ) : (
             <SectionList
+              ref={listRef}
               sections={sections}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
+              onScroll={(event) => {
+                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
               renderSectionHeader={({ section }) => {
                 const categorizing =
                   section.bulkCategorizable &&

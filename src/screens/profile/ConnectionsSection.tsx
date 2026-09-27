@@ -162,16 +162,18 @@ const ConnectionsSection = forwardRef<
   /**
    * Wizard teardown sequencing. The wizard used to be a second native
    * Modal presented on top of the (still visible) manager Modal, and that
-   * stacked presentation froze the whole app on the wizard's Done screen
-   * on Android no matter how the follow-up work was deferred (provider
-   * refresh via syncNow, then InteractionManager, then a 700 ms timer -
-   * three fixes, same freeze). The wizard is now an in-tree overlay inside
-   * the manager (see AddConnectionModal's header), so there is no native
-   * dismissal to race any more; `afterDismiss` simply runs from the
-   * wizard's onDismissed once its JS slide-out completes, on both
-   * platforms. Kept as a deferral (rather than running inline on Done) so
-   * the post-setup sync's provider-wide refresh lands on a settled
-   * manager instead of re-rendering it mid-animation.
+   * stacked presentation froze the whole app the moment the wizard's Done
+   * screen rendered on Android - Done never responded - no matter how the
+   * follow-up work was deferred (provider refresh via syncNow, then
+   * InteractionManager, then a 700 ms timer - three fixes, same freeze,
+   * because none of that JS ever ran before the freeze). The wizard is
+   * now an in-tree overlay inside the manager (see AddConnectionModal's
+   * header), so there is no native dialog of its own any more;
+   * `afterDismiss` simply runs from the wizard's onDismissed once its JS
+   * slide-out completes, on both platforms. Kept as a deferral (rather
+   * than running inline on Done) so the post-setup sync's provider-wide
+   * refresh lands on a settled manager instead of re-rendering it
+   * mid-animation.
    *
    * The queued callback is replaced, never stacked, so a repeat Done tap
    * runs one sync.
