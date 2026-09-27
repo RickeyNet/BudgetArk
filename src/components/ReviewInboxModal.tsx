@@ -241,6 +241,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   /** "Lent to someone?" - free text, "" = not a loan (see BudgetEntry.lentTo). */
   const [draftLentTo, setDraftLentTo] = useState("");
   const [rememberRule, setRememberRule] = useState(false);
+  // "Applies to bill" and "Add to a purchase plan" fold away by default so
+  // the editor stays short; the picked bill/debt is still summarised on the
+  // collapsed header, so nothing a rule prefilled is hidden silently.
+  const [showBillSection, setShowBillSection] = useState(false);
+  const [showPlanSection, setShowPlanSection] = useState(false);
   // "By vendor" grouping: fold every transaction from one merchant into a
   // single section so a big multi-month import is triaged vendor by vendor.
   const [groupByMerchant, setGroupByMerchant] = useState(false);
@@ -388,6 +393,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       );
       setDraftLentTo("");
       setRememberRule(false);
+      setShowBillSection(false);
+      setShowPlanSection(false);
       return item.id;
     });
   }, []);
@@ -761,6 +768,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       draftCategory === "Debt Payments"
         ? [...debtOptions, ...billOptions]
         : [...billOptions, ...debtOptions];
+    // Shown on the folded "Applies to bill" header so a rule-prefilled pick
+    // (which changes what Approve does) is visible without opening it.
+    const pickedApplyTo = draftRecurringId
+      ? applyToOptions.find((option) => option.id === draftRecurringId)
+      : undefined;
     // A merchant that has charged once a month for three months with no
     // bill on file: offer to create one (hidden once a bill is picked).
     const billSuggestion =
@@ -935,16 +947,33 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             ) : null}
             {applyToOptions.length > 0 ? (
               <>
-                <Text style={styles.label}>{t("budget.inbox.form.appliesToBill")}</Text>
-                <TagPillPicker
-                  options={applyToOptions}
-                  value={draftRecurringId}
-                  onChange={setDraftRecurringId}
-                  noneLabel={t("budget.inbox.form.notABill")}
-                  glyph="🧾"
-                />
-                {draftDebtId ? (
-                  <Text style={styles.planHint}>{t("budget.inbox.form.debtHint")}</Text>
+                <TouchableOpacity
+                  style={styles.foldHeader}
+                  onPress={() => setShowBillSection((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showBillSection }}
+                  accessibilityLabel={t("budget.inbox.form.appliesToBill")}
+                >
+                  <Text style={styles.label} numberOfLines={1}>
+                    {t("budget.inbox.form.appliesToBill")}
+                    {!showBillSection && pickedApplyTo ? ` · 🧾 ${pickedApplyTo.name}` : ""}
+                  </Text>
+                  <Text style={styles.foldChevron}>{showBillSection ? "▾" : "›"}</Text>
+                </TouchableOpacity>
+                {showBillSection ? (
+                  <>
+                    <TagPillPicker
+                      options={applyToOptions}
+                      value={draftRecurringId}
+                      onChange={setDraftRecurringId}
+                      noneLabel={t("budget.inbox.form.notABill")}
+                      glyph="🧾"
+                    />
+                    {draftDebtId ? (
+                      <Text style={styles.planHint}>{t("budget.inbox.form.debtHint")}</Text>
+                    ) : null}
+                  </>
                 ) : null}
               </>
             ) : null}
@@ -1011,33 +1040,47 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             ) : null}
             {planChoices.length > 0 ? (
               <>
-                <Text style={styles.label}>{t("budget.inbox.form.planLabel")}</Text>
-                <Text style={styles.planHint}>{t("budget.inbox.form.planHint")}</Text>
-                <View style={styles.planChipRow}>
-                  {planChoices.map((goal) => {
-                    const remaining = remainingForPlan(goal);
-                    return (
-                      <TouchableOpacity
-                        key={goal.id}
-                        style={[styles.planChip, busy && styles.buttonDisabled]}
-                        onPress={() => void handleTransferToPlan(item, goal)}
-                        disabled={busy}
-                        accessibilityRole="button"
-                        accessibilityLabel={t("budget.inbox.form.planChipA11y", {
-                          amount: formatCurrency(Math.abs(item.amount)),
-                          plan: goal.name,
-                        })}
-                      >
-                        <Text style={styles.planChipText} numberOfLines={1}>
-                          {goal.name}
-                          {remaining > 0
-                            ? t("budget.inbox.form.planToGo", { amount: formatCurrency(remaining) })
-                            : t("budget.inbox.form.planFunded")}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <TouchableOpacity
+                  style={styles.foldHeader}
+                  onPress={() => setShowPlanSection((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showPlanSection }}
+                  accessibilityLabel={t("budget.inbox.form.planLabel")}
+                >
+                  <Text style={styles.label}>{t("budget.inbox.form.planLabel")}</Text>
+                  <Text style={styles.foldChevron}>{showPlanSection ? "▾" : "›"}</Text>
+                </TouchableOpacity>
+                {showPlanSection ? (
+                  <>
+                    <Text style={styles.planHint}>{t("budget.inbox.form.planHint")}</Text>
+                    <View style={styles.planChipRow}>
+                      {planChoices.map((goal) => {
+                        const remaining = remainingForPlan(goal);
+                        return (
+                          <TouchableOpacity
+                            key={goal.id}
+                            style={[styles.planChip, busy && styles.buttonDisabled]}
+                            onPress={() => void handleTransferToPlan(item, goal)}
+                            disabled={busy}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("budget.inbox.form.planChipA11y", {
+                              amount: formatCurrency(Math.abs(item.amount)),
+                              plan: goal.name,
+                            })}
+                          >
+                            <Text style={styles.planChipText} numberOfLines={1}>
+                              {goal.name}
+                              {remaining > 0
+                                ? t("budget.inbox.form.planToGo", { amount: formatCurrency(remaining) })
+                                : t("budget.inbox.form.planFunded")}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
               </>
             ) : null}
             {item.merchant ? (
@@ -1606,6 +1649,18 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
       fontWeight: "600",
       letterSpacing: 0.5,
+      marginTop: 8,
+    },
+    foldHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    foldChevron: {
+      fontSize: 16,
+      color: colors.textMuted,
+      fontWeight: "600",
       marginTop: 8,
     },
     nameInput: {
