@@ -24,6 +24,8 @@ describe("pickSupportedLanguage", () => {
     expect(pickSupportedLanguage(["ru-RU"])).toBe("ru");
     expect(pickSupportedLanguage(["uk-UA"])).toBe("uk");
     expect(pickSupportedLanguage(["uk"])).toBe("uk");
+    expect(pickSupportedLanguage(["sv-SE"])).toBe("sv");
+    expect(pickSupportedLanguage(["sv-FI"])).toBe("sv");
     expect(pickSupportedLanguage(["en-GB"])).toBe("en");
   });
 
@@ -31,11 +33,12 @@ describe("pickSupportedLanguage", () => {
     expect(pickSupportedLanguage(["fr-FR", "de-DE", "en-US"])).toBe("de");
     expect(pickSupportedLanguage(["uk-UA", "ru-RU", "en-US"])).toBe("uk");
     expect(pickSupportedLanguage(["ja-JP", "ru-RU", "en-US"])).toBe("ru");
+    expect(pickSupportedLanguage(["nb-NO", "sv-SE", "en-US"])).toBe("sv");
   });
 
   it("falls back to English when nothing matches or the list is empty", () => {
     expect(pickSupportedLanguage([])).toBe(DEFAULT_LANGUAGE);
-    expect(pickSupportedLanguage(["ja-JP", "sv-SE"])).toBe(DEFAULT_LANGUAGE);
+    expect(pickSupportedLanguage(["ja-JP", "nb-NO"])).toBe(DEFAULT_LANGUAGE);
     expect(pickSupportedLanguage([null, undefined, ""])).toBe(DEFAULT_LANGUAGE);
   });
 });
@@ -56,6 +59,7 @@ describe("type guards", () => {
     expect(isSupportedLanguage("auto")).toBe(false);
     expect(isSupportedLanguage("ru")).toBe(true);
     expect(isSupportedLanguage("uk")).toBe(true);
+    expect(isSupportedLanguage("sv")).toBe(true);
     expect(isSupportedLanguage("pl")).toBe(false);
     expect(isSupportedLanguage(null)).toBe(false);
     expect(isAppLanguageId("auto")).toBe(true);

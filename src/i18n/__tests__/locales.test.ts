@@ -2,8 +2,8 @@
  * BudgetArk - Locale consistency tests
  * File: src/i18n/__tests__/locales.test.ts
  *
- * The type system already forces German to have exactly the English key
- * tree. These tests cover what types cannot: every leaf is a non-empty
+ * The type system already forces every translation to have exactly the
+ * English key tree. These tests cover what types cannot: every leaf is a non-empty
  * string, every `{{placeholder}}` in an English string appears in its
  * German twin (a dropped placeholder renders "Text Size, currently " with
  * nothing after it), and plural-form keys stay paired. Imports only the
@@ -14,6 +14,7 @@ import { en } from "../locales/en";
 import { de } from "../locales/de";
 import { ru } from "../locales/ru";
 import { uk } from "../locales/uk";
+import { sv } from "../locales/sv";
 
 type Tree = { readonly [key: string]: string | Tree };
 
@@ -30,7 +31,7 @@ const flatten = (tree: Tree, prefix = ""): Record<string, string> => {
 const placeholders = (s: string): string[] =>
   Array.from(s.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g), (m) => m[1]).sort();
 
-const LOCALES: Record<string, Tree> = { en, de, ru, uk };
+const LOCALES: Record<string, Tree> = { en, de, ru, uk, sv };
 const enFlat = flatten(en);
 
 /** CLDR cardinal categories i18next resolves per language (besides `other`). */
@@ -39,6 +40,7 @@ const PLURAL_FORMS: Record<string, readonly string[]> = {
   de: ["one"],
   ru: ["one", "few", "many"],
   uk: ["one", "few", "many"],
+  sv: ["one"],
 };
 
 /** English key set expanded to the plural forms `lang` needs. */

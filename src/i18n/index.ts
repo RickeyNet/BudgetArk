@@ -25,6 +25,7 @@ import { en } from "./locales/en";
 import { de } from "./locales/de";
 import { ru } from "./locales/ru";
 import { uk } from "./locales/uk";
+import { sv } from "./locales/sv";
 import {
   DEFAULT_LANGUAGE,
   pickSupportedLanguage,
@@ -62,6 +63,7 @@ void i18n.use(initReactI18next).init({
     de: { translation: de },
     ru: { translation: ru },
     uk: { translation: uk },
+    sv: { translation: sv },
   },
   // Start in the phone's language so the first paint is already right for
   // an "Automatic" user; LanguageProvider switches if a fixed choice is stored.

@@ -14,7 +14,7 @@ export const dataSpotlights: Localized<typeof en> = {
   "german-language": {
     title: "BudgetArk spricht deine Sprache",
     blurb:
-      "Jeder Tab, jedes Sheet und jede Erinnerung gibt es jetzt auf Deutsch, Russisch und Ukrainisch. Die Sprache folgt automatisch deinem Handy, oder du wählst sie selbst im Profil, direkt neben der Währung.",
+      "Jeder Tab, jedes Sheet und jede Erinnerung gibt es jetzt auf Deutsch, Russisch, Ukrainisch und Schwedisch. Die Sprache folgt automatisch deinem Handy, oder du wählst sie selbst im Profil, direkt neben der Währung.",
     cta: "Sprache wählen",
   },
   "bill-fulfillment": {

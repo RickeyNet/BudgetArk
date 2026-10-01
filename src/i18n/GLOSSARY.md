@@ -233,3 +233,118 @@ Currency and number formatting come from the code; only words move.
 | Log actual / Applies to bill / Always do this | Записать факт / Относится к счёту / Всегда так | Записати факт / Стосується рахунку / Завжди так |
 | net worth snapshot / starting balance | снимок чистых активов / начальный баланс | знімок чистих активів / початковий баланс |
 | high-yield (savings) account | накопительный счёт | накопичувальний рахунок |
+
+## Swedish
+
+Swedish plurals are one / other, exactly like English and German: fragments
+are typed `Localized<typeof en>` in `locales/sv/`. Tone: informal **du**
+(the only register in Swedish consumer apps), imperatives for buttons
+("Spara", not "Du sparar"). Sentence case everywhere - Swedish never
+capitalises title words ("Bygg din ark", not "Bygg Din Ark"). Compounds are
+written as one word (särskrivning is a spelling error: "sparkonto", never
+"spar konto"). Keep it short: Swedish runs ~15% longer than English. Use
+the ASCII hyphen "-" as a dash like the other locales, plain "..." never "…"
+unless English has it, and keep product names (SimpleFIN, Teller, YNAB,
+Mint, Monarch, Robinhood, Amazon, BudgetArk), theme names and category ids
+unchanged. Currency and number formatting come from the code.
+
+| English | Swedish |
+| --- | --- |
+| Debts (tab) | Skulder |
+| Budget (tab) | Budget |
+| Bridge (tab, the ship's bridge) | Bryggan |
+| Charts (tab, nautical charts) | Sjökort |
+| Profile (tab) | Profil |
+| Ark (the app metaphor) | Arken (din ark) |
+| debt / debts | skuld / skulder |
+| payment | betalning |
+| budget entry / entry | post (plural: poster) |
+| expense / income | utgift / inkomst |
+| recurring (bill) | återkommande (återkommande post) |
+| bill | räkning |
+| category | kategori |
+| spending limit / limit | utgiftsgräns / gräns |
+| account | konto |
+| asset account | tillgångskonto |
+| checking / savings account | lönekonto / sparkonto |
+| credit card | kreditkort |
+| balance | saldo |
+| net worth | nettoförmögenhet |
+| emergency fund | buffert |
+| savings goal | sparmål |
+| milestone | milstolpe |
+| payoff strategy (avalanche / snowball) | återbetalningsstrategi (lavin / snöboll) |
+| interest rate / APR | ränta / effektiv ränta |
+| minimum payment | minimibetalning |
+| partner sync | partnersynk |
+| pair / paired / unpair | koppla ihop / ihopkopplad / koppla från |
+| sync now | Synka nu |
+| backup / back up | säkerhetskopia / säkerhetskopiera |
+| restore | återställ |
+| export / import | exportera / importera |
+| reset all data | Nollställ all data |
+| receipt (photo) | kvitto |
+| business expense | företagsutgift |
+| bank connection | bankkoppling |
+| review inbox | granskningsinkorg (short: inkorg) |
+| merchant | handlare |
+| achievement / badge | utmärkelse / märke |
+| lesson | lektion |
+| streak | svit |
+| privacy mode | sekretessläge |
+| app lock / PIN | applås / PIN-kod |
+| notifications / reminder | aviseringar / påminnelse |
+| release notes / what's new | versionsinformation / nyheter |
+| update (OTA) | uppdatering |
+| tip jar | dricksburk |
+| currency / exchange rate | valuta / växelkurs |
+| holdings (stocks) | innehav |
+| purchase planner / sinking fund | inköpsplanerare / målsparande |
+| take-home pay | nettolön |
+| person / people | person / personer |
+| safe to spend | Kvar att spendera |
+| carry over / rollover | för över / överföring |
+| Done / Cancel / Save / Delete | Klar / Avbryt / Spara / Ta bort |
+| On / Off | På / Av |
+| Learn more / Got it | Läs mer / Uppfattat |
+| Keel / Hull / Deck / Supplies / Gather the animals / Anchor / Sail (milestones) | Köl / Skrov / Däck / Förråd / Samla djuren / Ankare / Segel |
+| Build Your Ark | Bygg din ark |
+| Ship's Log | Loggbok |
+| Debt Tracker | Skuldkoll |
+| Live Holdings | Innehav i realtid |
+| Quick Entry (widget) | Snabbregistrering |
+| Owed to You / loan / lent | Att få tillbaka / lån / utlånat |
+| business / businesses | företag / Företag |
+| custom category / built-in | egen kategori / inbyggd |
+| bucket (50/30/20 group) | hink |
+| Needs / Wants / Savings | Behov / Önskemål / Sparande |
+| transaction (bank) | transaktion |
+| connection / provider | koppling / leverantör |
+| map / mapping (accounts) | matcha / matchning |
+| merchant rule / auto-approve | handlarregel / autogodkänn |
+| Approve / Skip (inbox) | Godkänn / Hoppa över |
+| Insights | Insikter |
+| Cash Flow / Monthly Review / Until Payday | Kassaflöde / Månadsöversikt / Till lönen |
+| Tracking reminders | Loggpåminnelser |
+| automatic backups / Merge / Replace | automatiska säkerhetskopior / Slå ihop / Ersätt |
+| Onboarding (guide) / feature tour | Introduktion / Funktionsrundtur |
+| tip tiers (small / medium / generous) | Liten / Mellan / Generös dricks |
+| NEW badge / Keep going | NYTT / Fortsätt |
+| keep-alive watch (cards) | aktivitetsbevakning |
+| Captain's Course / chapter | Kaptenskursen / kapitel |
+| Subscription Detective / Personal Inflation | Prenumerationsdetektiven / Personlig inflation |
+| What-If tool | Tänk om |
+| break-even / closing costs / lifetime interest | brytpunkt / uppläggningskostnader / total ränta över löptiden |
+| filing status / head of household | deklarationsstatus / familjeförsörjare |
+| Ambient backgrounds / Solid / Glass | Bakgrundseffekter / Enfärgad / Glas |
+| density Compact / Comfortable / Spacious | Kompakt / Bekväm / Luftig |
+| categories: Grocery / Utilities / Giving / Other / Debt Payments | Matvaror / El & vatten / Gåvor / Övrigt / Skuldbetalningar |
+| units: yr / mo / min / hr / ago | år / mån / min / tim / sedan |
+| APR (card lines) / est. | % ränta / ca |
+| Spending Pace | Utgiftstakt |
+| Purchase Plans / Plan a Purchase | Inköpsplaner / Planera ett inköp |
+| Mine / Partner / Joint (debt owner) | Mina / Partnerns / Gemensamma |
+| starter cushion | startbuffert |
+| Log actual / Applies to bill / Always do this | Logga faktiskt belopp / Gäller räkningen / Gör alltid så |
+| net worth snapshot / starting balance | ögonblicksbild av nettoförmögenheten / ingående saldo |
+| high-yield (savings) account | sparkonto med hög ränta |

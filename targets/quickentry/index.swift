@@ -41,27 +41,29 @@ private struct QuickAddCategory: Identifiable {
 //
 // The extension has no JS runtime and (deliberately) no App Group, so it
 // cannot read the in-app language setting. It follows the DEVICE language
-// instead: German / Russian / Ukrainian phones get their labels, everything
-// else English. The strings mirror src/i18n/locales/{de,ru,uk}/
+// instead: German / Russian / Ukrainian / Swedish phones get their labels,
+// everything else English. The strings mirror src/i18n/locales/{de,ru,uk,sv}/
 // {categories,widgets}.ts - keep them in step when those change. Only the
 // DISPLAY label is localized; the deep-link `name` stays the ASCII category
 // id parseQuickAddUri expects.
 
-private enum WidgetLanguage { case en, de, ru, uk }
+private enum WidgetLanguage { case en, de, ru, uk, sv }
 
 private let widgetLanguage: WidgetLanguage = {
   let tag = (Locale.preferredLanguages.first ?? "").lowercased()
   if tag.hasPrefix("de") { return .de }
   if tag.hasPrefix("ru") { return .ru }
   if tag.hasPrefix("uk") { return .uk }
+  if tag.hasPrefix("sv") { return .sv }
   return .en
 }()
 
-private func localized(_ en: String, de: String, ru: String, uk: String) -> String {
+private func localized(_ en: String, de: String, ru: String, uk: String, sv: String) -> String {
   switch widgetLanguage {
   case .de: return de
   case .ru: return ru
   case .uk: return uk
+  case .sv: return sv
   case .en: return en
   }
 }
@@ -69,12 +71,12 @@ private func localized(_ en: String, de: String, ru: String, uk: String) -> Stri
 /// Everyday-spend set - keep identical to WIDGET_CATEGORIES in
 /// src/widgets/QuickEntryWidget.tsx.
 private let widgetCategories: [QuickAddCategory] = [
-  QuickAddCategory(name: "Grocery", label: localized("Grocery", de: "Lebensmittel", ru: "Продукты", uk: "Продукти"), emoji: "🛒"),
-  QuickAddCategory(name: "Restaurant", label: localized("Restaurant", de: "Restaurant", ru: "Рестораны", uk: "Ресторани"), emoji: "🍴"),
-  QuickAddCategory(name: "Transportation", label: localized("Transportation", de: "Transport", ru: "Транспорт", uk: "Транспорт"), emoji: "🚗"),
-  QuickAddCategory(name: "Shopping", label: localized("Shopping", de: "Einkaufen", ru: "Покупки", uk: "Покупки"), emoji: "🛍️"),
-  QuickAddCategory(name: "Entertainment", label: localized("Entertainment", de: "Unterhaltung", ru: "Развлечения", uk: "Розваги"), emoji: "🎬"),
-  QuickAddCategory(name: "Other", label: localized("Other", de: "Sonstiges", ru: "Прочее", uk: "Інше"), emoji: "🏷️"),
+  QuickAddCategory(name: "Grocery", label: localized("Grocery", de: "Lebensmittel", ru: "Продукты", uk: "Продукти", sv: "Matvaror"), emoji: "🛒"),
+  QuickAddCategory(name: "Restaurant", label: localized("Restaurant", de: "Restaurant", ru: "Рестораны", uk: "Ресторани", sv: "Restaurang"), emoji: "🍴"),
+  QuickAddCategory(name: "Transportation", label: localized("Transportation", de: "Transport", ru: "Транспорт", uk: "Транспорт", sv: "Transport"), emoji: "🚗"),
+  QuickAddCategory(name: "Shopping", label: localized("Shopping", de: "Einkaufen", ru: "Покупки", uk: "Покупки", sv: "Shopping"), emoji: "🛍️"),
+  QuickAddCategory(name: "Entertainment", label: localized("Entertainment", de: "Unterhaltung", ru: "Развлечения", uk: "Розваги", sv: "Nöje"), emoji: "🎬"),
+  QuickAddCategory(name: "Other", label: localized("Other", de: "Sonstiges", ru: "Прочее", uk: "Інше", sv: "Övrigt"), emoji: "🏷️"),
 ]
 
 // MARK: - Palette (fixed dark - matches PALETTE in QuickEntryWidget.tsx;
@@ -156,10 +158,10 @@ private struct MediumGridView: View {
     VStack(spacing: 6) {
       Link(destination: quickAddBaseURL) {
         HStack(spacing: 0) {
-          Text(localized("⚓ Quick Entry", de: "⚓ Schnelleintrag", ru: "⚓ Быстрая запись", uk: "⚓ Швидкий запис"))
+          Text(localized("⚓ Quick Entry", de: "⚓ Schnelleintrag", ru: "⚓ Быстрая запись", uk: "⚓ Швидкий запис", sv: "⚓ Snabbregistrering"))
             .font(.system(size: 12, weight: .bold))
             .foregroundColor(Palette.accent)
-          Text(localized("  ·  log an expense", de: "  ·  Ausgabe erfassen", ru: "  ·  добавить расход", uk: "  ·  додати витрату"))
+          Text(localized("  ·  log an expense", de: "  ·  Ausgabe erfassen", ru: "  ·  добавить расход", uk: "  ·  додати витрату", sv: "  ·  logga en utgift"))
             .font(.system(size: 11))
             .foregroundColor(Palette.dim)
           Spacer(minLength: 0)
@@ -184,10 +186,10 @@ private struct SmallView: View {
     VStack(spacing: 4) {
       Text("⚓")
         .font(.system(size: 30))
-      Text(localized("Quick Entry", de: "Schnelleintrag", ru: "Быстрая запись", uk: "Швидкий запис"))
+      Text(localized("Quick Entry", de: "Schnelleintrag", ru: "Быстрая запись", uk: "Швидкий запис", sv: "Snabbregistrering"))
         .font(.system(size: 14, weight: .bold))
         .foregroundColor(Palette.accent)
-      Text(localized("log an expense", de: "Ausgabe erfassen", ru: "добавить расход", uk: "додати витрату"))
+      Text(localized("log an expense", de: "Ausgabe erfassen", ru: "добавить расход", uk: "додати витрату", sv: "logga en utgift"))
         .font(.system(size: 11))
         .foregroundColor(Palette.dim)
     }
@@ -220,13 +222,14 @@ struct QuickEntryWidget: Widget {
     StaticConfiguration(kind: kind, provider: QuickEntryProvider()) { _ in
       QuickEntryWidgetView()
     }
-    .configurationDisplayName(localized("Quick Entry", de: "Schnelleintrag", ru: "Быстрая запись", uk: "Швидкий запис"))
+    .configurationDisplayName(localized("Quick Entry", de: "Schnelleintrag", ru: "Быстрая запись", uk: "Швидкий запис", sv: "Snabbregistrering"))
     .description(
       localized(
         "Log an expense in one tap - pick a category and BudgetArk opens straight to the amount.",
         de: "Ausgabe mit einem Tipp erfassen - Kategorie wählen, BudgetArk öffnet direkt die Betragseingabe.",
         ru: "Добавь расход одним касанием - выбери категорию, и BudgetArk сразу откроет ввод суммы.",
-        uk: "Додай витрату одним дотиком - обери категорію, і BudgetArk одразу відкриє введення суми."
+        uk: "Додай витрату одним дотиком - обери категорію, і BudgetArk одразу відкриє введення суми.",
+        sv: "Logga en utgift med ett tryck - välj kategori, så öppnar BudgetArk direkt på beloppet."
       )
     )
     .supportedFamilies([.systemSmall, .systemMedium])

@@ -872,8 +872,10 @@ describe("reconcileInboxWithDecisions", () => {
     const dismissedElsewhere = makePendingTransaction({ id: "simplefin:ACT-1:B", providerTxId: "B" });
     const stillOpen = makePendingTransaction({ id: "simplefin:ACT-1:C", providerTxId: "C" });
     seed(INBOX_KEY, [approvedElsewhere, dismissedElsewhere, stillOpen]);
+    // Relative to now: pruneLedger drops rows older than LEDGER_TTL_DAYS, so a
+    // fixed date here would expire and turn this into a date bomb.
     seed(LEDGER_KEY, {
-      "simplefin:ACT-1:B": { status: "dismissed", at: "2026-06-01T00:00:00.000Z" },
+      "simplefin:ACT-1:B": { status: "dismissed", at: new Date(Date.now() - 24 * 3600_000).toISOString() },
     });
     seed(ENTRIES_KEY, [
       makeBudgetEntry({ id: "entry-1", externalTxId: "simplefin:ACT-1:A", source: "bank" }),
