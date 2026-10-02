@@ -59,6 +59,15 @@ export const debtsForm: Localized<typeof en> = {
     hint: "Dagen i måneden minstebetalingen din forfaller. Dag 29-31 blir siste dag i kortere måneder.",
     useDefault: "Bruk standard (dag {{day}})",
     custom: "Velg egen dag",
+    weekdays: {
+      sun: "Søn",
+      mon: "Man",
+      tue: "Tir",
+      wed: "Ons",
+      thu: "Tor",
+      fri: "Fre",
+      sat: "Lør",
+    },
   },
   goal: {
     label: "MÅLDATO FOR NEDBETALING (VALGFRITT)",

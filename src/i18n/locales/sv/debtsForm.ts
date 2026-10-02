@@ -59,6 +59,15 @@ export const debtsForm: Localized<typeof en> = {
     hint: "Dag i månaden då din minimibetalning förfaller. Dag 29-31 blir sista dagen i kortare månader.",
     useDefault: "Använd standard (dag {{day}})",
     custom: "Välj egen dag",
+    weekdays: {
+      sun: "Sön",
+      mon: "Mån",
+      tue: "Tis",
+      wed: "Ons",
+      thu: "Tor",
+      fri: "Fre",
+      sat: "Lör",
+    },
   },
   goal: {
     label: "MÅLDATUM FÖR AVBETALNING (VALFRITT)",

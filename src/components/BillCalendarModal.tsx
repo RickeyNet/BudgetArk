@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { categoryLabel } from "../i18n/categoryLabel";
 import { formatMonthKeyLabel } from "../utils/budgetMonths";
-import { buildMonthDayGrid } from "../utils/entryDate";
+import { buildMonthDayRows } from "../utils/entryDate";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -51,7 +51,7 @@ interface BillCalendarModalProps {
   onEditEntry: (entry: BudgetEntry) => void;
 }
 
-/** Sunday-first, matching buildMonthDayGrid; labels come from the locale tree. */
+/** Sunday-first, matching buildMonthDayRows; labels come from the locale tree. */
 const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 interface GridCell {
@@ -60,23 +60,27 @@ interface GridCell {
   categories: CategoryName[];
 }
 
-const buildGridCells = (monthKey: string, bills: BillsByDay): GridCell[] => {
+const buildGridRows = (monthKey: string, bills: BillsByDay): GridCell[][] => {
   // Same Sunday-first layout as the entry form's day picker
-  // (utils/entryDate.buildMonthDayGrid), so a date sits in the same
-  // column in both.
-  const cells: GridCell[] = buildMonthDayGrid(monthKey).map((d) => {
-    if (d == null) return { day: null, total: 0, categories: [] };
-    const list = bills.byDay.get(d) ?? [];
-    const total = list.reduce((s, e) => s + e.amount, 0);
-    // Distinct category list, max 3 dots per cell so the row stays legible.
-    const cats: CategoryName[] = [];
-    for (const e of list) {
-      if (!cats.includes(e.category)) cats.push(e.category);
-      if (cats.length >= 3) break;
-    }
-    return { day: d, total, categories: cats };
-  });
-  return cells;
+  // (utils/entryDate.buildMonthDayRows), so a date sits in the same
+  // column in both. Rows of exactly seven, rendered as flex rows: a
+  // flex-wrap grid of percentage-width cells plus a pixel gap overflowed
+  // the row on phone widths, wrapped at six, and put every day one column
+  // left of its weekday letter.
+  return buildMonthDayRows(monthKey).map((week) =>
+    week.map((d): GridCell => {
+      if (d == null) return { day: null, total: 0, categories: [] };
+      const list = bills.byDay.get(d) ?? [];
+      const total = list.reduce((s, e) => s + e.amount, 0);
+      // Distinct category list, max 3 dots per cell so the row stays legible.
+      const cats: CategoryName[] = [];
+      for (const e of list) {
+        if (!cats.includes(e.category)) cats.push(e.category);
+        if (cats.length >= 3) break;
+      }
+      return { day: d, total, categories: cats };
+    })
+  );
 };
 
 const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
@@ -100,7 +104,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
     () => groupBillsByDay(entries, monthKey, { includeOneOff }),
     [entries, monthKey, includeOneOff]
   );
-  const cells = useMemo(() => buildGridCells(monthKey, bills), [monthKey, bills]);
+  const rows = useMemo(() => buildGridRows(monthKey, bills), [monthKey, bills]);
   const { paid, remaining } = useMemo(
     () => splitPaidVsRemaining(bills, monthKey),
     [bills, monthKey]
@@ -233,51 +237,61 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
             </View>
 
             <View style={styles.grid}>
-              {cells.map((cell, idx) => {
-                const isToday = cell.day != null && cell.day === today;
-                const isPast = cell.day != null && isCurrentMonth && cell.day < today;
-                const hasBills = cell.total > 0;
-                return (
-                  <Pressable
-                    key={idx}
-                    style={[
-                      styles.cell,
-                      hasBills && styles.cellHasBills,
-                      isToday && styles.cellToday,
-                      isPast && styles.cellPast,
-                      cell.day == null && styles.cellEmpty,
-                    ]}
-                    onPress={
-                      cell.day != null && hasBills
-                        ? () => setSelectedDay(cell.day)
-                        : undefined
-                    }
-                    disabled={cell.day == null || !hasBills}
-                  >
-                    {cell.day != null && (
-                      <>
-                        <Text style={styles.cellDay}>{cell.day}</Text>
-                        <View style={styles.cellDots}>
-                          {cell.categories.map((cat, dotIdx) => (
-                            <View
-                              key={`${cat}-${dotIdx}`}
-                              style={[
-                                styles.cellDot,
-                                { backgroundColor: colorForCategory(cat) },
-                              ]}
-                            />
-                          ))}
-                        </View>
-                        {hasBills && (
-                          <Text style={styles.cellAmount} numberOfLines={1}>
-                            {formatCurrency(cell.total)}
-                          </Text>
+              {rows.map((week, weekIdx) => (
+                <View key={weekIdx} style={styles.weekRow}>
+                  {week.map((cell, cellIdx) => {
+                    const isToday = cell.day != null && cell.day === today;
+                    const isPast = cell.day != null && isCurrentMonth && cell.day < today;
+                    const hasBills = cell.total > 0;
+                    return (
+                      <Pressable
+                        key={cellIdx}
+                        style={[
+                          styles.cell,
+                          hasBills && styles.cellHasBills,
+                          isToday && styles.cellToday,
+                          isPast && styles.cellPast,
+                          cell.day == null && styles.cellEmpty,
+                        ]}
+                        onPress={
+                          cell.day != null && hasBills
+                            ? () => setSelectedDay(cell.day)
+                            : undefined
+                        }
+                        disabled={cell.day == null || !hasBills}
+                        accessibilityRole={cell.day != null ? "button" : undefined}
+                        accessibilityLabel={
+                          cell.day != null
+                            ? `${t(`budget.tools.billCalendar.weekdays.${WEEKDAY_KEYS[cellIdx]}`)} ${cell.day}`
+                            : undefined
+                        }
+                      >
+                        {cell.day != null && (
+                          <>
+                            <Text style={styles.cellDay}>{cell.day}</Text>
+                            <View style={styles.cellDots}>
+                              {cell.categories.map((cat, dotIdx) => (
+                                <View
+                                  key={`${cat}-${dotIdx}`}
+                                  style={[
+                                    styles.cellDot,
+                                    { backgroundColor: colorForCategory(cat) },
+                                  ]}
+                                />
+                              ))}
+                            </View>
+                            {hasBills && (
+                              <Text style={styles.cellAmount} numberOfLines={1}>
+                                {formatCurrency(cell.total)}
+                              </Text>
+                            )}
+                          </>
                         )}
-                      </>
-                    )}
-                  </Pressable>
-                );
-              })}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
 
             <TouchableOpacity
@@ -484,10 +498,12 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 13,
       color: colors.text,
     },
+    // The header and every week share this row style (same gap, seven
+    // flex:1 children), so a weekday letter and its column of days are
+    // measured by the same flex layout and cannot drift apart.
     weekRow: {
       flexDirection: "row",
-      justifyContent: "space-around",
-      paddingHorizontal: 2,
+      gap: 4,
     },
     weekLabel: {
       flex: 1,
@@ -498,12 +514,10 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.5,
     },
     grid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
       gap: 4,
     },
     cell: {
-      width: "13.6%",
+      flex: 1,
       aspectRatio: 0.9,
       borderRadius: 8,
       borderWidth: 1,

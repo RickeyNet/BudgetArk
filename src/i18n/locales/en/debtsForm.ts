@@ -57,6 +57,15 @@ export const debtsForm = {
     hint: "Day of each month your minimum is due. Day 29-31 falls back to the last day in shorter months.",
     useDefault: "Use default (day {{day}})",
     custom: "Set custom day",
+    weekdays: {
+      sun: "Sun",
+      mon: "Mon",
+      tue: "Tue",
+      wed: "Wed",
+      thu: "Thu",
+      fri: "Fri",
+      sat: "Sat",
+    },
   },
   goal: {
     label: "PAYOFF GOAL DATE (OPTIONAL)",
