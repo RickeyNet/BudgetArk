@@ -77,16 +77,6 @@ export const budgetTools = {
       daysAgo: "{{count}}d ago",
       inDays: "in {{count}}d",
     },
-    /** Sunday-first single-letter weekday headers, matching the grid. */
-    weekdays: {
-      sun: "S",
-      mon: "M",
-      tue: "T",
-      wed: "W",
-      thu: "T",
-      fri: "F",
-      sat: "S",
-    },
     showOneOff: "Show one-off expenses too",
     emptyHint:
       "No recurring bills land in this month. Add a recurring expense from the Add Entry sheet and set its day-of-month to see it here.",

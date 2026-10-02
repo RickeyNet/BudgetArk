@@ -79,16 +79,6 @@ export const budgetTools: LocalizedPlural<typeof en> = {
       daysAgo: "{{count}} дн. назад",
       inDays: "через {{count}} дн.",
     },
-    /** Sunday-first single-letter weekday headers, matching the grid. */
-    weekdays: {
-      sun: "В",
-      mon: "П",
-      tue: "В",
-      wed: "С",
-      thu: "Ч",
-      fri: "П",
-      sat: "С",
-    },
     showOneOff: "Показывать и разовые расходы",
     emptyHint:
       "В этом месяце регулярных счетов нет. Добавь регулярный расход в форме новой записи и укажи день месяца, чтобы увидеть его здесь.",

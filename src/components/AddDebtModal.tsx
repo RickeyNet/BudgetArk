@@ -43,11 +43,8 @@ import {
 } from "../types";
 import { calcPaymentForGoalDate, calcMonthsUntilDate } from "../utils/calculations";
 import { DEFAULT_DEBT_PAYMENT_DUE_DAY } from "../utils/debtDueCalendar";
-import {
-  buildDueDayPickerRows,
-  lastDayOfYearMonth,
-  localYearMonth,
-} from "../utils/entryDate";
+import { localYearMonth } from "../utils/entryDate";
+import MonthDayCalendar from "./MonthDayCalendar";
 import {
   KEEP_ALIVE_DEFAULT_LEAD_DAYS,
   KEEP_ALIVE_DEFAULT_WINDOW_MONTHS,
@@ -135,9 +132,6 @@ interface AddDebtModalProps {
  * Clamp a stored payment-due-day to the valid 1-31 range, treating anything
  * else (undefined, floats, out-of-range) as "use the app default" (null).
  */
-// Sunday-first, matching utils/entryDate.buildDueDayPickerRows.
-const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-
 const sanitizeDueDay = (day: number | undefined): number | null =>
   typeof day === "number" && Number.isInteger(day) && day >= 1 && day <= 31
     ? day
@@ -705,61 +699,20 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
                     </Text>
                   </TouchableOpacity>
                 </View>
-                {paymentDueDay !== null && (() => {
-                  // A real calendar of the current month, the same seven-
-                  // column flex rows as the Bill Calendar and the entry form,
-                  // so "the 15th is a Tuesday this month" is one glance. Days
-                  // this month doesn't have (29-31 in short months) stay
-                  // pickable but muted - the due-day rule clamps them.
-                  const today = new Date();
-                  const yearMonth = localYearMonth(today);
-                  const todayDay = today.getDate();
-                  const monthEnd = lastDayOfYearMonth(yearMonth);
-                  return (
-                    <View style={styles.dueDayGrid}>
-                      <View style={styles.dueDayWeekRow}>
-                        {WEEKDAY_KEYS.map((key) => (
-                          <Text key={key} style={styles.dueDayWeekLabel}>
-                            {t(`debts.form.dueDay.weekdays.${key}`)}
-                          </Text>
-                        ))}
-                      </View>
-                      {buildDueDayPickerRows(yearMonth).map((week, weekIdx) => (
-                        <View key={weekIdx} style={styles.dueDayWeekRow}>
-                          {week.map((day, cellIdx) =>
-                            day == null ? (
-                              <View key={`blank-${cellIdx}`} style={styles.dueDayCell} />
-                            ) : (
-                              <TouchableOpacity
-                                key={day}
-                                style={[
-                                  styles.dueDayCell,
-                                  styles.dueDayBtn,
-                                  day > monthEnd && styles.dueDayBtnBeyond,
-                                  day === todayDay && styles.dueDayBtnToday,
-                                  paymentDueDay === day && styles.dueDayBtnActive,
-                                ]}
-                                onPress={() => setPaymentDueDay(day)}
-                                accessibilityRole="button"
-                                accessibilityLabel={`${t(`debts.form.dueDay.weekdays.${WEEKDAY_KEYS[cellIdx]}`)} ${day}`}
-                                accessibilityState={{ selected: paymentDueDay === day }}
-                              >
-                                <Text
-                                  style={[
-                                    styles.dueDayBtnText,
-                                    paymentDueDay === day && styles.dueDayBtnTextActive,
-                                  ]}
-                                >
-                                  {day}
-                                </Text>
-                              </TouchableOpacity>
-                            ),
-                          )}
-                        </View>
-                      ))}
-                    </View>
-                  );
-                })()}
+                {paymentDueDay !== null && (
+                  // This month's calendar, the same grid as the entry form
+                  // and the Bill Calendar, so "the 15th is a Tuesday" is one
+                  // glance. 29-31 stay pickable (dimmed in a short month);
+                  // the due-day rule clamps them to the last day.
+                  <View style={styles.dueDayGrid}>
+                    <MonthDayCalendar
+                      yearMonth={localYearMonth(new Date())}
+                      mode="dayOfMonth"
+                      selectedDay={paymentDueDay}
+                      onSelectDay={setPaymentDueDay}
+                    />
+                  </View>
+                )}
               </View>
 
               {/* Goal Date (optional) */}
@@ -1141,56 +1094,8 @@ const makeStyles = (colors: ThemeColors) =>
     dueDayModeBtnTextActive: {
       color: colors.accent,
     },
-    /* Due-day calendar: seven equal columns per row (header + weeks). The
-       header and every week share dueDayWeekRow, so a weekday label and its
-       column of days are measured by the same flex layout and can't drift. */
     dueDayGrid: {
-      gap: 6,
       marginTop: 10,
-    },
-    dueDayWeekRow: {
-      flexDirection: "row",
-      gap: 6,
-    },
-    dueDayWeekLabel: {
-      flex: 1,
-      textAlign: "center",
-      color: colors.textDim,
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 0.3,
-    },
-    dueDayCell: {
-      flex: 1,
-      aspectRatio: 1,
-    },
-    dueDayBtn: {
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.bg,
-    },
-    dueDayBtnActive: {
-      borderColor: colors.accent,
-      backgroundColor: `${colors.accent}20`,
-    },
-    dueDayBtnToday: {
-      borderColor: colors.textDim,
-      borderStyle: "dashed",
-    },
-    /* A day this month doesn't reach (29-31): still a valid due day. */
-    dueDayBtnBeyond: {
-      opacity: 0.5,
-    },
-    dueDayBtnText: {
-      color: colors.textDim,
-      fontSize: 12,
-      fontWeight: "600",
-    },
-    dueDayBtnTextActive: {
-      color: colors.accent,
     },
     keepAliveSubLabel: {
       fontSize: 10,

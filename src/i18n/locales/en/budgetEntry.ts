@@ -83,15 +83,6 @@ export const budgetEntry = {
     dayLabel: "DAY",
     today: "Today",
     todayA11y: "Set the date to today",
-    weekdays: {
-      sun: "Sun",
-      mon: "Mon",
-      tue: "Tue",
-      wed: "Wed",
-      thu: "Thu",
-      fri: "Fri",
-      sat: "Sat",
-    },
   },
   bill: {
     label: "APPLIES TO BILL",

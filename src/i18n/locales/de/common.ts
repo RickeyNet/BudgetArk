@@ -35,4 +35,13 @@ export const common: Localized<typeof en> = {
   unknown: "Unbekannt",
   undo: "RÜCKGÄNGIG",
   undoLastAction: "Letzte Aktion rückgängig machen",
+  weekdays: {
+    sun: "So",
+    mon: "Mo",
+    tue: "Di",
+    wed: "Mi",
+    thu: "Do",
+    fri: "Fr",
+    sat: "Sa",
+  },
 };

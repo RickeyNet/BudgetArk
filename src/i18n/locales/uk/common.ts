@@ -34,4 +34,13 @@ export const common: LocalizedPlural<typeof en> = {
   unknown: "Невідомо",
   undo: "СКАСУВАТИ",
   undoLastAction: "Скасувати останню дію",
+  weekdays: {
+    sun: "Нд",
+    mon: "Пн",
+    tue: "Вт",
+    wed: "Ср",
+    thu: "Чт",
+    fri: "Пт",
+    sat: "Сб",
+  },
 };

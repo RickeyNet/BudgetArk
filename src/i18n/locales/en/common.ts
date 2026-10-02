@@ -35,4 +35,14 @@ export const common = {
   /** Undo toast button (UndoProvider) - shouted like the debts card. */
   undo: "UNDO",
   undoLastAction: "Undo last action",
+  /** Sunday-first short weekday names for every calendar grid (MonthDayCalendar). */
+  weekdays: {
+    sun: "Sun",
+    mon: "Mon",
+    tue: "Tue",
+    wed: "Wed",
+    thu: "Thu",
+    fri: "Fri",
+    sat: "Sat",
+  },
 } as const;

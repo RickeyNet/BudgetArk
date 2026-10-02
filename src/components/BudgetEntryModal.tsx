@@ -76,6 +76,7 @@ import TagPillPicker from "./TagPillPicker";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import CategoryPillPicker from "./CategoryPillPicker";
+import MonthDayCalendar from "./MonthDayCalendar";
 import AttachmentSection from "./AttachmentSection";
 import MonthYearPicker from "./MonthYearPicker";
 import SheetKeyboardAvoider from "./SheetKeyboardAvoider";
@@ -84,7 +85,6 @@ import { normalizePaymentUrl } from "../utils/paymentUrl";
 import { clampTaxSetAsideRate } from "../utils/paycheckMath";
 import {
   buildEntryDateISO,
-  buildMonthDayRows,
   dayOfMonthFromIso,
   lastDayOfYearMonth,
 } from "../utils/entryDate";
@@ -113,9 +113,6 @@ const INCOME_TYPE_OPTIONS: readonly {
 const FREQUENCY_KEYS: Readonly<
   Record<number, "monthly" | "quarterly" | "semiannual" | "yearly" | undefined>
 > = { 1: "monthly", 3: "quarterly", 6: "semiannual", 12: "yearly" };
-
-// Sunday-first, matching WEEKDAY_SHORT_LABELS / buildMonthDayRows.
-const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 const LINKABLE_CATEGORIES: ReadonlySet<string> = new Set([
   "Savings",
@@ -1098,51 +1095,15 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
               </TouchableOpacity>
             )}
           </View>
-          {/* A real calendar, not a numbered strip: weekday headers and
-              the days aligned to their columns (utils/entryDate
-              .buildMonthDayRows, the same layout as the Bill Calendar),
-              so "Tuesday the 8th" is one glance. Today is outlined. */}
-          <View style={styles.calendarWeekRow}>
-            {WEEKDAY_KEYS.map((key) => (
-              <Text key={key} style={styles.calendarWeekLabel}>
-                {t(`budget.entry.date.weekdays.${key}`)}
-              </Text>
-            ))}
-          </View>
-          {buildMonthDayRows(yearMonth).map((week, weekIdx) => (
-            <View key={weekIdx} style={styles.calendarWeekRow}>
-              {week.map((day, cellIdx) =>
-                day == null ? (
-                  <View key={`blank-${cellIdx}`} style={styles.calendarCell} />
-                ) : (
-                  <TouchableOpacity
-                    key={day}
-                    style={[
-                      styles.calendarCell,
-                      styles.dayBtn,
-                      yearMonth === todayYearMonth() &&
-                        day === todayDay() &&
-                        styles.dayBtnToday,
-                      entryDay === day && styles.dayBtnActive,
-                    ]}
-                    onPress={() => setEntryDay(day)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${t(`budget.entry.date.weekdays.${WEEKDAY_KEYS[cellIdx]}`)} ${day}`}
-                    accessibilityState={{ selected: entryDay === day }}
-                  >
-                    <Text
-                      style={[
-                        styles.dayBtnText,
-                        entryDay === day && styles.dayBtnTextActive,
-                      ]}
-                    >
-                      {day}
-                    </Text>
-                  </TouchableOpacity>
-                ),
-              )}
-            </View>
-          ))}
+          {/* A real calendar, not a numbered strip, so "Tuesday the 8th"
+              is one glance. Shared with the recurring day picker below,
+              the debt form and the Bill Calendar (MonthDayCalendar). */}
+          <MonthDayCalendar
+            yearMonth={yearMonth}
+            mode="date"
+            selectedDay={entryDay}
+            onSelectDay={setEntryDay}
+          />
         </View>
       )}
 
@@ -1305,24 +1266,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.recurring.dayOfMonthLabel")}</Text>
           <Text style={styles.accountPickerHint}>{t("budget.entry.recurring.dayOfMonthHint")}</Text>
-          <View style={styles.dayGrid}>
-            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-              <TouchableOpacity
-                key={day}
-                style={[styles.dayBtn, entryDay === day && styles.dayBtnActive]}
-                onPress={() => setEntryDay(day)}
-              >
-                <Text
-                  style={[
-                    styles.dayBtnText,
-                    entryDay === day && styles.dayBtnTextActive,
-                  ]}
-                >
-                  {day}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* Laid out on the start month's weekdays; 29-31 stay pickable
+              (dimmed in a short month) since the recurrence clamps them. */}
+          <MonthDayCalendar
+            yearMonth={yearMonth}
+            mode="dayOfMonth"
+            selectedDay={entryDay}
+            onSelectDay={setEntryDay}
+          />
         </View>
       )}
 
@@ -1821,57 +1772,6 @@ const makeStyles = (colors: ThemeColors) =>
     helperText: {
       fontSize: 12,
       fontWeight: "500",
-    },
-
-    /* Day-of-month grid (7 cols, ~31 entries) */
-    dayGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 6,
-    },
-    dayBtn: {
-      width: "13%",
-      aspectRatio: 1,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.bg,
-    },
-    dayBtnActive: {
-      borderColor: colors.accent,
-      backgroundColor: `${colors.accent}20`,
-    },
-    dayBtnToday: {
-      borderColor: colors.textDim,
-      borderStyle: "dashed",
-    },
-    /* One-off DAY calendar: seven equal columns per row (header + weeks). */
-    calendarWeekRow: {
-      flexDirection: "row",
-      gap: 6,
-      marginBottom: 6,
-    },
-    calendarCell: {
-      flex: 1,
-      aspectRatio: 1,
-    },
-    calendarWeekLabel: {
-      flex: 1,
-      textAlign: "center",
-      color: colors.textDim,
-      fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 0.3,
-    },
-    dayBtnText: {
-      color: colors.textDim,
-      fontSize: 12,
-      fontWeight: "600",
-    },
-    dayBtnTextActive: {
-      color: colors.accent,
     },
 
     /* Recurring toggle */

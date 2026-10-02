@@ -35,4 +35,13 @@ export const common: Localized<typeof en> = {
   unknown: "Okänd",
   undo: "ÅNGRA",
   undoLastAction: "Ångra senaste åtgärden",
+  weekdays: {
+    sun: "Sön",
+    mon: "Mån",
+    tue: "Tis",
+    wed: "Ons",
+    thu: "Tor",
+    fri: "Fre",
+    sat: "Lör",
+  },
 };

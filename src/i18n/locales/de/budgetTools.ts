@@ -79,15 +79,6 @@ export const budgetTools: Localized<typeof en> = {
       daysAgo: "vor {{count}} T.",
       inDays: "in {{count}} T.",
     },
-    weekdays: {
-      sun: "S",
-      mon: "M",
-      tue: "D",
-      wed: "M",
-      thu: "D",
-      fri: "F",
-      sat: "S",
-    },
     showOneOff: "Auch einmalige Ausgaben anzeigen",
     emptyHint:
       "In diesem Monat fallen keine wiederkehrenden Rechnungen an. Lege im Buchungsformular eine wiederkehrende Ausgabe an und setze ihren Monatstag, um sie hier zu sehen.",

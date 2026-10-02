@@ -85,15 +85,6 @@ export const budgetEntry: Localized<typeof en> = {
     dayLabel: "DAG",
     today: "I dag",
     todayA11y: "Sett datoen til i dag",
-    weekdays: {
-      sun: "Søn",
-      mon: "Man",
-      tue: "Tir",
-      wed: "Ons",
-      thu: "Tor",
-      fri: "Fre",
-      sat: "Lør",
-    },
   },
   bill: {
     label: "GJELDER REGNINGEN",

@@ -25,7 +25,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { categoryLabel } from "../i18n/categoryLabel";
 import { formatMonthKeyLabel } from "../utils/budgetMonths";
-import { buildMonthDayRows } from "../utils/entryDate";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -40,6 +39,7 @@ import { getCategoryIcon } from "../data/categoryIcons";
 import { getRecurrenceTag } from "../utils/recurrence";
 import { isFulfillingEntry } from "../utils/billFulfillment";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
+import MonthDayCalendar, { MonthDayCalendarDayInfo } from "./MonthDayCalendar";
 
 interface BillCalendarModalProps {
   visible: boolean;
@@ -51,36 +51,24 @@ interface BillCalendarModalProps {
   onEditEntry: (entry: BudgetEntry) => void;
 }
 
-/** Sunday-first, matching buildMonthDayRows; labels come from the locale tree. */
-const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-
 interface GridCell {
-  day: number | null;
   total: number;
   categories: CategoryName[];
 }
 
-const buildGridRows = (monthKey: string, bills: BillsByDay): GridCell[][] => {
-  // Same Sunday-first layout as the entry form's day picker
-  // (utils/entryDate.buildMonthDayRows), so a date sits in the same
-  // column in both. Rows of exactly seven, rendered as flex rows: a
-  // flex-wrap grid of percentage-width cells plus a pixel gap overflowed
-  // the row on phone widths, wrapped at six, and put every day one column
-  // left of its weekday letter.
-  return buildMonthDayRows(monthKey).map((week) =>
-    week.map((d): GridCell => {
-      if (d == null) return { day: null, total: 0, categories: [] };
-      const list = bills.byDay.get(d) ?? [];
-      const total = list.reduce((s, e) => s + e.amount, 0);
-      // Distinct category list, max 3 dots per cell so the row stays legible.
-      const cats: CategoryName[] = [];
-      for (const e of list) {
-        if (!cats.includes(e.category)) cats.push(e.category);
-        if (cats.length >= 3) break;
-      }
-      return { day: d, total, categories: cats };
-    })
-  );
+/** Per-day totals and up to three category dots (so the cell stays legible). */
+const buildGridCells = (bills: BillsByDay): Map<number, GridCell> => {
+  const cells = new Map<number, GridCell>();
+  for (const [day, list] of bills.byDay) {
+    const total = list.reduce((s, e) => s + e.amount, 0);
+    const cats: CategoryName[] = [];
+    for (const e of list) {
+      if (!cats.includes(e.category)) cats.push(e.category);
+      if (cats.length >= 3) break;
+    }
+    cells.set(day, { total, categories: cats });
+  }
+  return cells;
 };
 
 const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
@@ -104,7 +92,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
     () => groupBillsByDay(entries, monthKey, { includeOneOff }),
     [entries, monthKey, includeOneOff]
   );
-  const rows = useMemo(() => buildGridRows(monthKey, bills), [monthKey, bills]);
+  const gridCells = useMemo(() => buildGridCells(bills), [bills]);
   const { paid, remaining } = useMemo(
     () => splitPaidVsRemaining(bills, monthKey),
     [bills, monthKey]
@@ -228,71 +216,48 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
               </View>
             )}
 
-            <View style={styles.weekRow}>
-              {WEEKDAY_KEYS.map((key) => (
-                <Text key={key} style={styles.weekLabel}>
-                  {t(`budget.tools.billCalendar.weekdays.${key}`)}
-                </Text>
-              ))}
-            </View>
-
-            <View style={styles.grid}>
-              {rows.map((week, weekIdx) => (
-                <View key={weekIdx} style={styles.weekRow}>
-                  {week.map((cell, cellIdx) => {
-                    const isToday = cell.day != null && cell.day === today;
-                    const isPast = cell.day != null && isCurrentMonth && cell.day < today;
-                    const hasBills = cell.total > 0;
-                    return (
-                      <Pressable
-                        key={cellIdx}
-                        style={[
-                          styles.cell,
-                          hasBills && styles.cellHasBills,
-                          isToday && styles.cellToday,
-                          isPast && styles.cellPast,
-                          cell.day == null && styles.cellEmpty,
-                        ]}
-                        onPress={
-                          cell.day != null && hasBills
-                            ? () => setSelectedDay(cell.day)
-                            : undefined
-                        }
-                        disabled={cell.day == null || !hasBills}
-                        accessibilityRole={cell.day != null ? "button" : undefined}
-                        accessibilityLabel={
-                          cell.day != null
-                            ? `${t(`budget.tools.billCalendar.weekdays.${WEEKDAY_KEYS[cellIdx]}`)} ${cell.day}`
-                            : undefined
-                        }
-                      >
-                        {cell.day != null && (
-                          <>
-                            <Text style={styles.cellDay}>{cell.day}</Text>
-                            <View style={styles.cellDots}>
-                              {cell.categories.map((cat, dotIdx) => (
-                                <View
-                                  key={`${cat}-${dotIdx}`}
-                                  style={[
-                                    styles.cellDot,
-                                    { backgroundColor: colorForCategory(cat) },
-                                  ]}
-                                />
-                              ))}
-                            </View>
-                            {hasBills && (
-                              <Text style={styles.cellAmount} numberOfLines={1}>
-                                {formatCurrency(cell.total)}
-                              </Text>
-                            )}
-                          </>
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
+            {/* The shared seven-column grid (MonthDayCalendar) keeps every
+                day under its weekday; only the cell body is ours. */}
+            <MonthDayCalendar
+              yearMonth={monthKey}
+              mode="date"
+              gap={4}
+              cellAspectRatio={0.9}
+              renderDay={({ day, weekdayLabel }: MonthDayCalendarDayInfo) => {
+                const cell = gridCells.get(day);
+                const hasBills = cell != null && cell.total > 0;
+                const isPast = isCurrentMonth && day < today;
+                return (
+                  <Pressable
+                    style={[
+                      styles.cell,
+                      hasBills && styles.cellHasBills,
+                      day === today && styles.cellToday,
+                      isPast && styles.cellPast,
+                    ]}
+                    onPress={hasBills ? () => setSelectedDay(day) : undefined}
+                    disabled={!hasBills}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${weekdayLabel} ${day}`}
+                  >
+                    <Text style={styles.cellDay}>{day}</Text>
+                    <View style={styles.cellDots}>
+                      {cell?.categories.map((cat, dotIdx) => (
+                        <View
+                          key={`${cat}-${dotIdx}`}
+                          style={[styles.cellDot, { backgroundColor: colorForCategory(cat) }]}
+                        />
+                      ))}
+                    </View>
+                    {hasBills && (
+                      <Text style={styles.cellAmount} numberOfLines={1}>
+                        {formatCurrency(cell.total)}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              }}
+            />
 
             <TouchableOpacity
               style={styles.toggleRow}
@@ -498,27 +463,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 13,
       color: colors.text,
     },
-    // The header and every week share this row style (same gap, seven
-    // flex:1 children), so a weekday letter and its column of days are
-    // measured by the same flex layout and cannot drift apart.
-    weekRow: {
-      flexDirection: "row",
-      gap: 4,
-    },
-    weekLabel: {
-      flex: 1,
-      textAlign: "center",
-      fontSize: 11,
-      fontWeight: "600",
-      color: colors.textDim,
-      letterSpacing: 0.5,
-    },
-    grid: {
-      gap: 4,
-    },
+    /* Fills the MonthDayCalendar cell wrapper, which sets the size. */
     cell: {
       flex: 1,
-      aspectRatio: 0.9,
       borderRadius: 8,
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -526,10 +473,6 @@ const makeStyles = (colors: ThemeColors) =>
       padding: 4,
       alignItems: "center",
       justifyContent: "flex-start",
-    },
-    cellEmpty: {
-      backgroundColor: "transparent",
-      borderColor: "transparent",
     },
     cellHasBills: {
       backgroundColor: `${colors.accent}15`,

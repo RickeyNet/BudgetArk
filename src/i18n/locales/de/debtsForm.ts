@@ -58,15 +58,6 @@ export const debtsForm: Localized<typeof en> = {
     hint: "Tag im Monat, an dem deine Mindestrate fällig ist. Tag 29-31 fällt in kürzeren Monaten auf den letzten Tag.",
     useDefault: "Standard verwenden (Tag {{day}})",
     custom: "Eigenen Tag wählen",
-    weekdays: {
-      sun: "So",
-      mon: "Mo",
-      tue: "Di",
-      wed: "Mi",
-      thu: "Do",
-      fri: "Fr",
-      sat: "Sa",
-    },
   },
   goal: {
     label: "ZIELDATUM FÜR TILGUNG (OPTIONAL)",

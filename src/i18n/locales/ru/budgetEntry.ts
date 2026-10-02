@@ -86,15 +86,6 @@ export const budgetEntry: LocalizedPlural<typeof en> = {
     dayLabel: "ДЕНЬ",
     today: "Сегодня",
     todayA11y: "Поставить сегодняшнюю дату",
-    weekdays: {
-      sun: "Вс",
-      mon: "Пн",
-      tue: "Вт",
-      wed: "Ср",
-      thu: "Чт",
-      fri: "Пт",
-      sat: "Сб",
-    },
   },
   bill: {
     label: "ОТНОСИТСЯ К СЧЁТУ",

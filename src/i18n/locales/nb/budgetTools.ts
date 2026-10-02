@@ -79,15 +79,6 @@ export const budgetTools: Localized<typeof en> = {
       daysAgo: "{{count}} d siden",
       inDays: "om {{count}} d",
     },
-    weekdays: {
-      sun: "S",
-      mon: "M",
-      tue: "T",
-      wed: "O",
-      thu: "T",
-      fri: "F",
-      sat: "L",
-    },
     showOneOff: "Vis engangsutgifter også",
     emptyHint:
       "Ingen gjentakende regninger lander denne måneden. Legg til en gjentakende utgift fra skjemaet Legg til post og angi dag i måneden for å se den her.",
