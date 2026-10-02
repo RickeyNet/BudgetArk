@@ -31,6 +31,11 @@ export const profileInfo = {
       description: "Rewatch the what's-new tour of recent features",
       a11yLabel: "Replay the feature tour",
     },
+    featureGuide: {
+      label: "Feature guide",
+      description: "Every feature by tab - where it lives and how to use it",
+      a11yLabel: "Open the feature guide",
+    },
   },
   support: {
     feedback: {

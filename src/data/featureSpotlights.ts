@@ -19,6 +19,13 @@
  * spotlight id, and are exposed here as getters that resolve through the
  * global `t` at read time - so the carousel follows the active language.
  * Ids, versions, icons and CTA targets stay in this file.
+ *
+ * The same list also feeds the FEATURE GUIDE (Profile → Help → Feature
+ * guide, FeatureGuideModal): a browsable, searchable directory of every
+ * feature on this install, grouped by the tab it lives on, each with a
+ * where-to-find breadcrumb and short how-to steps (`guide` in the
+ * translation entry, read by getSpotlightGuide). The carousel is the
+ * one-shot debut; the guide is the random-access reference for later.
  */
 
 import { compareVersions } from "../utils/versionGuard";
@@ -35,7 +42,31 @@ export type ProfileSpotlightSection =
   | "theme"
   | "appLock"
   | "data"
-  | "language";
+  | "language"
+  | "featureGuide";
+
+/**
+ * The tab a feature lives on - the feature guide's grouping. Declared in
+ * bottom-tab order so the guide reads like the app. "charts" is the
+ * Utilities route's display name (never rename the route key).
+ */
+export const FEATURE_AREAS = [
+  "debts",
+  "budget",
+  "bridge",
+  "charts",
+  "profile",
+] as const;
+
+export type FeatureArea = (typeof FEATURE_AREAS)[number];
+
+/** Guide copy for one feature: where to find it + numbered how-to steps. */
+export type FeatureGuide = {
+  /** Where-to-find breadcrumb, e.g. "Budget tab → + Add entry". */
+  where: string;
+  /** Short imperative steps, in order. */
+  steps: readonly string[];
+};
 
 export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
@@ -75,9 +106,35 @@ export type FeatureSpotlight = {
   /** Two sentences max - the carousel is a teaser, not the changelog. */
   blurb: string;
   cta?: SpotlightCta;
+  /**
+   * Tab the feature guide files it under. Derived from the CTA target when
+   * omitted (see spotlightArea); set it explicitly for features with no CTA
+   * or whose CTA lands somewhere other than their home.
+   */
+  area?: FeatureArea;
 };
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
+  {
+    // The guide itself debuts like any other feature: one slide pointing at
+    // the Help card, so existing users learn the directory exists.
+    id: "feature-guide",
+    sinceVersion: "1.11.0",
+    icon: "📖",
+    get title() {
+      return t("data.spotlights.feature-guide.title");
+    },
+    get blurb() {
+      return t("data.spotlights.feature-guide.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.feature-guide.cta");
+      },
+      kind: "profile-section",
+      section: "featureGuide",
+    },
+  },
   {
     // ONE slide for every language 1.11.0 ships (German, Russian, Ukrainian,
     // Swedish, Norwegian) - a new language extends the blurb, it never gets
@@ -142,6 +199,9 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   {
     id: "cash-flow-budget",
     sinceVersion: "1.9.0",
+    // No CTA (the card is the first thing on the Budget tab), so the guide
+    // needs telling where it lives.
+    area: "budget",
     icon: "💵",
     get title() {
       return t("data.spotlights.cash-flow-budget.title");
@@ -521,6 +581,7 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     sinceVersion: "1.9.0",
     requiresRuntimeVersion: "1.9.0",
     badgeOnly: true,
+    area: "profile",
     icon: "💛",
     get title() {
       return t("data.spotlights.tip-jar.title");
@@ -592,6 +653,88 @@ export const selectReplaySpotlights = (
       !spotlight.badgeOnly &&
       isSpotlightAvailable(spotlight, currentRuntimeVersion)
   );
+
+/**
+ * The tab a spotlight belongs to in the feature guide: the explicit `area`
+ * when set, otherwise where its CTA lands. Profile is the fallback for a
+ * spotlight with neither - every feature has a settings home at worst.
+ */
+export const spotlightArea = (spotlight: FeatureSpotlight): FeatureArea => {
+  if (spotlight.area) return spotlight.area;
+  switch (spotlight.cta?.kind) {
+    case "debt-tracker":
+      return "debts";
+    case "budget":
+    case "budget-add-entry":
+      return "budget";
+    case "bridge":
+      return "bridge";
+    case "charts":
+      return "charts";
+    default:
+      return "profile";
+  }
+};
+
+export type FeatureGuideGroup = {
+  area: FeatureArea;
+  spotlights: FeatureSpotlight[];
+};
+
+/**
+ * The feature guide's browse list: every spotlight that works on this
+ * install - badgeOnly ones included, the guide is a directory not a debut
+ * - grouped by tab in FEATURE_AREAS order, declaration order within a
+ * group. Empty groups are dropped.
+ */
+export const selectGuideGroups = (
+  spotlights: readonly FeatureSpotlight[],
+  currentRuntimeVersion: string | undefined
+): FeatureGuideGroup[] =>
+  FEATURE_AREAS.map((area) => ({
+    area,
+    spotlights: spotlights.filter(
+      (spotlight) =>
+        spotlightArea(spotlight) === area &&
+        isSpotlightAvailable(spotlight, currentRuntimeVersion)
+    ),
+  })).filter((group) => group.spotlights.length > 0);
+
+const GUIDE_STEP_KEY = /^step(\d+)$/;
+
+/**
+ * The guide copy for a spotlight, read from `data.spotlights.<id>.guide`
+ * in the ACTIVE language: `where` plus every `stepN` key in numeric order.
+ * The key is built from the id, so it goes through an untyped `t` - a
+ * spotlight without guide copy resolves to undefined rather than a raw key
+ * on screen, and featureSpotlights.test.ts asserts every live spotlight
+ * has one. Callers that memoize must list their `t` as a dependency.
+ */
+export const getSpotlightGuide = (
+  spotlight: FeatureSpotlight
+): FeatureGuide | undefined => {
+  const lookup = t as unknown as (key: string, options: object) => unknown;
+  const raw = lookup(`data.spotlights.${spotlight.id}.guide`, {
+    returnObjects: true,
+    defaultValue: null,
+  });
+  if (!raw || typeof raw !== "object") return undefined;
+  const record = raw as Record<string, unknown>;
+  const where = record.where;
+  if (typeof where !== "string" || where.length === 0) return undefined;
+  const steps = Object.entries(record)
+    .map(([key, value]) => {
+      const match = GUIDE_STEP_KEY.exec(key);
+      return match && typeof value === "string" && value.length > 0
+        ? { order: Number(match[1]), text: value }
+        : null;
+    })
+    .filter((step): step is { order: number; text: string } => step !== null)
+    .sort((a, b) => a.order - b.order)
+    .map((step) => step.text);
+  if (steps.length === 0) return undefined;
+  return { where, steps };
+};
 
 /** Ids whose Profile rows should show a NEW badge (until first tapped). */
 export const selectNewBadgeIds = (

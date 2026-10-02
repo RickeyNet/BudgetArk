@@ -410,17 +410,13 @@ const AppContent: React.FC = () => {
     void closeSpotlights();
   }, [closeSpotlights]);
 
-  const handleSpotlightCta = useCallback(
-    async (spotlight: FeatureSpotlight) => {
+  /**
+   * Follow a spotlight's CTA: the carousel's "Try it" and the feature
+   * guide's "Try it" share this. Callers dismiss their own Modal first.
+   */
+  const openSpotlightCta = useCallback(
+    (spotlight: FeatureSpotlight) => {
       const cta = spotlight.cta;
-      await closeSpotlights();
-
-      // Same deferral as handleOpenReleaseHistory: let the modal's fade-out
-      // finish before navigating, or iOS can silently drop the presentation.
-      await new Promise((resolve) => {
-        setTimeout(resolve, 220);
-      });
-
       if (!cta || !navigationRef.isReady()) return;
       try {
         if (cta.kind === "budget-add-entry") {
@@ -441,7 +437,22 @@ const AppContent: React.FC = () => {
         if (__DEV__) console.warn("Spotlight navigation failed:", e);
       }
     },
-    [closeSpotlights, navigationRef]
+    [navigationRef]
+  );
+
+  const handleSpotlightCta = useCallback(
+    async (spotlight: FeatureSpotlight) => {
+      await closeSpotlights();
+
+      // Same deferral as handleOpenReleaseHistory: let the modal's fade-out
+      // finish before navigating, or iOS can silently drop the presentation.
+      await new Promise((resolve) => {
+        setTimeout(resolve, 220);
+      });
+
+      openSpotlightCta(spotlight);
+    },
+    [closeSpotlights, openSpotlightCta]
   );
 
   const handleSpotlightOpenNotes = useCallback(async () => {
@@ -476,8 +487,8 @@ const AppContent: React.FC = () => {
   }, []);
 
   const featureTour = useMemo(
-    () => ({ replayFeatureTour }),
-    [replayFeatureTour]
+    () => ({ replayFeatureTour, openSpotlightCta }),
+    [replayFeatureTour, openSpotlightCta]
   );
 
   /** Storage read failed - offer retry rather than restarting onboarding */

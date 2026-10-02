@@ -5,11 +5,15 @@
  */
 
 import {
+  FEATURE_AREAS,
   FEATURE_SPOTLIGHTS,
+  getSpotlightGuide,
   isSpotlightAvailable,
+  selectGuideGroups,
   selectNewBadgeIds,
   selectReplaySpotlights,
   selectUnseenSpotlights,
+  spotlightArea,
   type FeatureSpotlight,
 } from "../featureSpotlights";
 
@@ -138,7 +142,103 @@ describe("selectNewBadgeIds", () => {
   });
 });
 
+describe("spotlightArea", () => {
+  it("prefers an explicit area over the CTA target", () => {
+    const s = spotlight({
+      id: "x",
+      area: "bridge",
+      cta: { label: "Go", kind: "charts" },
+    });
+    expect(spotlightArea(s)).toBe("bridge");
+  });
+
+  it("derives the area from where the CTA lands", () => {
+    expect(spotlightArea(spotlight({ id: "a", cta: { label: "", kind: "debt-tracker" } }))).toBe("debts");
+    expect(spotlightArea(spotlight({ id: "b", cta: { label: "", kind: "budget" } }))).toBe("budget");
+    expect(spotlightArea(spotlight({ id: "c", cta: { label: "", kind: "budget-add-entry" } }))).toBe("budget");
+    expect(spotlightArea(spotlight({ id: "d", cta: { label: "", kind: "bridge" } }))).toBe("bridge");
+    expect(spotlightArea(spotlight({ id: "e", cta: { label: "", kind: "charts" } }))).toBe("charts");
+    expect(
+      spotlightArea(spotlight({ id: "f", cta: { label: "", kind: "profile-section", section: "theme" } }))
+    ).toBe("profile");
+  });
+
+  it("falls back to profile for a spotlight with neither", () => {
+    expect(spotlightArea(OTA_FEATURE)).toBe("profile");
+  });
+});
+
+describe("selectGuideGroups", () => {
+  const debts = spotlight({ id: "debts-1", cta: { label: "", kind: "debt-tracker" } });
+  const budgetA = spotlight({ id: "budget-a", cta: { label: "", kind: "budget" } });
+  const budgetB = spotlight({ id: "budget-b", area: "budget" });
+  const nativeCharts = spotlight({
+    id: "charts-native",
+    requiresRuntimeVersion: "1.9.0",
+    cta: { label: "", kind: "charts" },
+  });
+  const badge = spotlight({ id: "badge", badgeOnly: true, area: "profile" });
+  // Declared out of tab order on purpose.
+  const list = [budgetA, nativeCharts, debts, badge, budgetB];
+
+  it("groups by tab in FEATURE_AREAS order, declaration order within", () => {
+    const groups = selectGuideGroups(list, "1.9.0");
+    expect(groups.map((g) => g.area)).toEqual(["debts", "budget", "charts", "profile"]);
+    expect(groups[1].spotlights.map((s) => s.id)).toEqual(["budget-a", "budget-b"]);
+  });
+
+  it("includes badgeOnly features - the guide is a directory, not a debut", () => {
+    const groups = selectGuideGroups(list, "1.9.0");
+    expect(groups.find((g) => g.area === "profile")?.spotlights.map((s) => s.id)).toEqual(["badge"]);
+  });
+
+  it("drops features the current store build cannot run, and empty groups", () => {
+    const groups = selectGuideGroups(list, "1.8.0");
+    expect(groups.map((g) => g.area)).toEqual(["debts", "budget", "profile"]);
+  });
+
+  it("never emits an area outside FEATURE_AREAS", () => {
+    for (const group of selectGuideGroups(FEATURE_SPOTLIGHTS, undefined)) {
+      expect(FEATURE_AREAS).toContain(group.area);
+    }
+  });
+});
+
+describe("getSpotlightGuide", () => {
+  it("returns undefined for a spotlight with no guide copy", () => {
+    expect(getSpotlightGuide(spotlight({ id: "not-a-real-spotlight" }))).toBeUndefined();
+  });
+
+  it("reads the breadcrumb and the numbered steps in order", () => {
+    const guide = getSpotlightGuide(
+      FEATURE_SPOTLIGHTS.find((s) => s.id === "receipt-photos") as FeatureSpotlight
+    );
+    expect(guide?.where).toMatch(/Budget/);
+    expect(guide?.steps.length).toBeGreaterThanOrEqual(2);
+    for (const step of guide?.steps ?? []) {
+      expect(step).not.toMatch(/^data\./);
+    }
+  });
+
+  it("every live spotlight has guide copy with a breadcrumb and 2-5 steps", () => {
+    for (const s of FEATURE_SPOTLIGHTS) {
+      const guide = getSpotlightGuide(s);
+      expect(guide).toBeDefined();
+      expect(guide?.where.length).toBeGreaterThan(0);
+      expect(guide?.steps.length).toBeGreaterThanOrEqual(2);
+      expect(guide?.steps.length).toBeLessThanOrEqual(5);
+    }
+  });
+});
+
 describe("FEATURE_SPOTLIGHTS data", () => {
+  it("debuts the feature guide itself with a CTA into the Help card", () => {
+    const guide = FEATURE_SPOTLIGHTS.find((s) => s.id === "feature-guide");
+    expect(guide?.sinceVersion).toBe("1.11.0");
+    expect(guide?.requiresRuntimeVersion).toBeUndefined();
+    expect(guide?.cta).toMatchObject({ kind: "profile-section", section: "featureGuide" });
+  });
+
   it("resolves title, blurb and CTA label through the translation tree", () => {
     for (const spotlight of FEATURE_SPOTLIGHTS) {
       expect(spotlight.title).not.toMatch(/^data\./);
@@ -201,6 +301,7 @@ describe("FEATURE_SPOTLIGHTS data", () => {
           "owedToYou",
           "data",
           "language",
+          "featureGuide",
         ]).toContain(s.cta.section);
       }
     }

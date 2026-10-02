@@ -19,6 +19,8 @@ import { useOnboardingGate } from "../../onboarding/OnboardingGateContext";
 import { useFeatureTour } from "../../components/FeatureTourContext";
 import { resetOnboardingStatus } from "../../storage/userStorage";
 import OnboardingGuideModal from "../../components/OnboardingGuideModal";
+import FeatureGuideModal from "../../components/FeatureGuideModal";
+import type { FeatureSpotlight } from "../../data/featureSpotlights";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
@@ -35,10 +37,24 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
   const styles = useProfileStyles(tokens, colors);
   const { replay: replayCoachmarks } = useCoachmarks();
   const { restartOnboarding } = useOnboardingGate();
-  const { replayFeatureTour } = useFeatureTour();
+  const { replayFeatureTour, openSpotlightCta } = useFeatureTour();
   const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
 
   const [showGuide, setShowGuide] = useState(false);
+  const [showFeatureGuide, setShowFeatureGuide] = useState(false);
+
+  /**
+   * "Try it" inside the feature guide: close the sheet and let its dismiss
+   * animation finish before following the CTA, which may present another
+   * Modal (the iOS silent-present rule, same as handleRedoOnboarding).
+   */
+  const handleTryFeature = useCallback(
+    (spotlight: FeatureSpotlight) => {
+      setShowFeatureGuide(false);
+      setTimeout(() => openSpotlightCta(spotlight), 350);
+    },
+    [openSpotlightCta]
+  );
 
   /**
    * Redo onboarding, triggered from inside the guide sheet. Close the
@@ -135,6 +151,36 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
               →
             </Text>
           </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => {
+              triggerHaptic("selection");
+              setShowFeatureGuide(true);
+            }}
+            accessibilityLabel={t("profile.info.help.featureGuide.a11yLabel")}
+          >
+            <View style={styles.rowTextWrap}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                {t("profile.info.help.featureGuide.label")}
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                {t("profile.info.help.featureGuide.description")}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -142,6 +188,13 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
         <OnboardingGuideModal
           onClose={() => setShowGuide(false)}
           onRedoOnboarding={handleRedoOnboarding}
+        />
+      ) : null}
+
+      {showFeatureGuide ? (
+        <FeatureGuideModal
+          onClose={() => setShowFeatureGuide(false)}
+          onTryFeature={handleTryFeature}
         />
       ) : null}
     </>

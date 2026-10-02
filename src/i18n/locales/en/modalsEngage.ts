@@ -95,6 +95,31 @@ export const modalsEngage = {
     fullReleaseNotesA11y: "Open full release notes",
     skipA11y: "Skip the feature tour",
     nextA11y: "Next feature",
+    browseGuide: "Browse every feature in the guide",
+    browseGuideA11y: "Open the feature guide",
+  },
+  /** Feature guide sheet (FeatureGuideModal): the browsable, searchable directory of every feature. */
+  featureGuide: {
+    title: "Feature guide",
+    intro:
+      "Everything BudgetArk can do, by tab. Tap a feature for where it lives and how to use it.",
+    searchPlaceholder: 'Search - try "receipt" or "payday"',
+    clearSearchA11y: "Clear search",
+    noMatches: {
+      title: "No matches",
+      body: 'Try a different word - like "bank", "bill", "goal", or the name of a tab.',
+    },
+    howTo: "How to use it",
+    newIn: "New in {{version}}",
+    expandA11y: "Show how to use {{title}}",
+    collapseA11y: "Hide the steps for {{title}}",
+    areas: {
+      debts: "Debts",
+      budget: "Budget",
+      bridge: "Bridge",
+      charts: "Charts",
+      profile: "Profile",
+    },
   },
   guide: {
     title: "Onboarding",
