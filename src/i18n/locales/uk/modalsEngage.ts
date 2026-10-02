@@ -91,6 +91,31 @@ export const modalsEngage: LocalizedPlural<typeof en> = {
     fullReleaseNotesA11y: "Відкрити повний список змін",
     skipA11y: "Пропустити огляд функцій",
     nextA11y: "Наступна функція",
+    browseGuide: "Переглянути всі функції в довіднику",
+    browseGuideA11y: "Відкрити довідник функцій",
+  },
+  /** Feature guide sheet (FeatureGuideModal): the browsable, searchable directory of every feature. */
+  featureGuide: {
+    title: "Довідник функцій",
+    intro:
+      "Усе, що вміє BudgetArk, за вкладками. Натисни функцію, щоб побачити, де вона є і як нею користуватися.",
+    searchPlaceholder: "Пошук - спробуй «чек» або «зарплата»",
+    clearSearchA11y: "Очистити пошук",
+    noMatches: {
+      title: "Нічого не знайдено",
+      body: "Спробуй інше слово - наприклад «банк», «рахунок», «ціль» або назву вкладки.",
+    },
+    howTo: "Як користуватися",
+    newIn: "Нове в {{version}}",
+    expandA11y: "Показати, як користуватися: {{title}}",
+    collapseA11y: "Сховати кроки: {{title}}",
+    areas: {
+      debts: "Борги",
+      budget: "Бюджет",
+      bridge: "Місток",
+      charts: "Карти",
+      profile: "Профіль",
+    },
   },
   guide: {
     title: "Знайомство із застосунком",

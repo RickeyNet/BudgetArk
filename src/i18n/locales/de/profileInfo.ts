@@ -34,6 +34,11 @@ export const profileInfo: Localized<typeof en> = {
       description: "Die Neuigkeiten-Tour zu aktuellen Funktionen noch einmal ansehen",
       a11yLabel: "Funktionstour erneut abspielen",
     },
+    featureGuide: {
+      label: "Funktionsübersicht",
+      description: "Jede Funktion nach Tab - wo sie liegt und wie du sie nutzt",
+      a11yLabel: "Funktionsübersicht öffnen",
+    },
   },
   support: {
     feedback: {

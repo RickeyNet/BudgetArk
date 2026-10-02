@@ -34,6 +34,11 @@ export const profileInfo: LocalizedPlural<typeof en> = {
       description: "Пересмотреть тур по новым функциям",
       a11yLabel: "Повторить тур по функциям",
     },
+    featureGuide: {
+      label: "Справочник функций",
+      description: "Все функции по вкладкам - где они и как ими пользоваться",
+      a11yLabel: "Открыть справочник функций",
+    },
   },
   support: {
     feedback: {

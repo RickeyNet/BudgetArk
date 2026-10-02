@@ -93,6 +93,31 @@ export const modalsEngage: Localized<typeof en> = {
     fullReleaseNotesA11y: "Alle Versionshinweise öffnen",
     skipA11y: "Funktionstour überspringen",
     nextA11y: "Nächste Funktion",
+    browseGuide: "Alle Funktionen in der Übersicht ansehen",
+    browseGuideA11y: "Funktionsübersicht öffnen",
+  },
+  /** Feature guide sheet (FeatureGuideModal): the browsable, searchable directory of every feature. */
+  featureGuide: {
+    title: "Funktionsübersicht",
+    intro:
+      "Alles, was BudgetArk kann, nach Tab. Tipp auf eine Funktion, um zu sehen, wo sie liegt und wie du sie nutzt.",
+    searchPlaceholder: 'Suchen - z. B. "Beleg" oder "Zahltag"',
+    clearSearchA11y: "Suche löschen",
+    noMatches: {
+      title: "Keine Treffer",
+      body: 'Versuch ein anderes Wort - z. B. "Bank", "Rechnung", "Ziel" oder den Namen eines Tabs.',
+    },
+    howTo: "So nutzt du es",
+    newIn: "Neu in {{version}}",
+    expandA11y: "Anleitung zu {{title}} anzeigen",
+    collapseA11y: "Schritte zu {{title}} ausblenden",
+    areas: {
+      debts: "Schulden",
+      budget: "Budget",
+      bridge: "Brücke",
+      charts: "Karten",
+      profile: "Profil",
+    },
   },
   guide: {
     title: "Einführung",

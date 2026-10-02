@@ -111,7 +111,7 @@ import ConnectionsSection, {
 import SettingsSection, {
   type SettingsSectionHandle,
 } from "./profile/SettingsSection";
-import HelpSection from "./profile/HelpSection";
+import HelpSection, { type HelpSectionHandle } from "./profile/HelpSection";
 import AboutSection from "./profile/AboutSection";
 
 /**
@@ -175,6 +175,7 @@ const ProfileScreen: React.FC = () => {
   const connectionsSectionRef = useRef<ConnectionsSectionHandle>(null);
   const peopleSectionRef = useRef<PeopleSectionHandle>(null);
   const settingsSectionRef = useRef<SettingsSectionHandle>(null);
+  const helpSectionRef = useRef<HelpSectionHandle>(null);
 
   /** Feature ids whose settings rows currently show a NEW badge. */
   const [newFeatureIds, setNewFeatureIds] = useState<ReadonlySet<string>>(
@@ -382,6 +383,9 @@ const ProfileScreen: React.FC = () => {
           break;
         case "language":
           settingsSectionRef.current?.openLanguage();
+          break;
+        case "featureGuide":
+          helpSectionRef.current?.openFeatureGuide();
           break;
       }
       dismissNewBadge(SECTION_FEATURE_IDS[section]);
@@ -776,7 +780,12 @@ const ProfileScreen: React.FC = () => {
         />
 
         {/* ── Help (how-to + replay onboarding) ── */}
-        <HelpSection scrollRef={scrollRef} />
+        <HelpSection
+          ref={helpSectionRef}
+          scrollRef={scrollRef}
+          newFeatureIds={newFeatureIds}
+          onFeatureOpened={dismissNewBadge}
+        />
 
         {/* ── About (release notes, github) ── */}
         <AboutSection

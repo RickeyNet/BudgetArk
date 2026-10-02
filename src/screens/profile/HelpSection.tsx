@@ -3,14 +3,23 @@
  * File: src/screens/profile/HelpSection.tsx
  *
  * The HELP card: an "Onboarding" row opening the searchable onboarding
- * guide (OnboardingGuideModal) which also hosts Redo onboarding, and a
- * "Feature tour" row replaying the feature-debut carousel on demand. This
- * section owns the redo sequence - close the sheet, then reset the
- * onboarding flag + coachmark state and flip the app gate - and registers
- * the help-card coachmark anchor.
+ * guide (OnboardingGuideModal) which also hosts Redo onboarding, a
+ * "Feature tour" row replaying the feature-debut carousel on demand, and a
+ * "Feature guide" row opening the browsable directory of every feature
+ * (FeatureGuideModal). This section owns the redo sequence - close the
+ * sheet, then reset the onboarding flag + coachmark state and flip the app
+ * gate - and registers the help-card coachmark anchor. The imperative
+ * handle lets the `openSection: "featureGuide"` deep link (the carousel's
+ * "browse every feature" link and the guide's own debut slide) open the
+ * guide from ProfileScreen's deferred effect.
  */
 
-import React, { useCallback, useState } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useState,
+} from "react";
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useCoachmarks } from "../../onboarding/CoachmarksProvider";
@@ -26,11 +35,24 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 
-type HelpSectionProps = {
-  scrollRef: React.RefObject<ScrollView | null>;
+export type HelpSectionHandle = {
+  /** Open the feature guide sheet (openSection deep link). */
+  openFeatureGuide: () => void;
 };
 
-const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
+type HelpSectionProps = {
+  scrollRef: React.RefObject<ScrollView | null>;
+  /** Ids still wearing a NEW badge; the guide shows the pill on their rows. */
+  newFeatureIds: ReadonlySet<string>;
+  /** Expanding a feature in the guide counts as seeing it - clears its badge. */
+  onFeatureOpened: (featureId: string) => void;
+};
+
+const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
+  scrollRef,
+  newFeatureIds,
+  onFeatureOpened,
+}, ref) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
@@ -42,6 +64,12 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
 
   const [showGuide, setShowGuide] = useState(false);
   const [showFeatureGuide, setShowFeatureGuide] = useState(false);
+
+  useImperativeHandle(
+    ref,
+    () => ({ openFeatureGuide: () => setShowFeatureGuide(true) }),
+    []
+  );
 
   /**
    * "Try it" inside the feature guide: close the sheet and let its dismiss
@@ -195,10 +223,14 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
         <FeatureGuideModal
           onClose={() => setShowFeatureGuide(false)}
           onTryFeature={handleTryFeature}
+          newFeatureIds={newFeatureIds}
+          onFeatureOpened={onFeatureOpened}
         />
       ) : null}
     </>
   );
-};
+});
+
+HelpSection.displayName = "HelpSection";
 
 export default HelpSection;

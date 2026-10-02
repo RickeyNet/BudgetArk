@@ -18,7 +18,7 @@ export const dataSpotlights = {
       where: "Profile tab → Help → Feature guide",
       step1: "Open the Profile tab and scroll to the Help card.",
       step2: "Tap Feature guide, then browse by tab or type a word like \"receipt\" or \"payday\".",
-      step3: "Tap a feature to see where it lives and the steps to use it. Try it jumps you straight there.",
+      step3: "Tap a feature to see where it lives and the steps to use it. The button under the steps jumps you straight there.",
     },
   },
   languages: {

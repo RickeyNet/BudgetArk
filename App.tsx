@@ -471,6 +471,23 @@ const AppContent: React.FC = () => {
     }
   }, [closeSpotlights, navigationRef]);
 
+  /** "Browse every feature" on the last slide: close, then open the guide on Profile. */
+  const handleSpotlightOpenGuide = useCallback(async () => {
+    await closeSpotlights();
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 220);
+    });
+
+    if (navigationRef.isReady()) {
+      try {
+        navigationRef.navigate("Profile", { openSection: "featureGuide" });
+      } catch (e) {
+        if (__DEV__) console.warn("Navigation to Profile failed:", e);
+      }
+    }
+  }, [closeSpotlights, navigationRef]);
+
   /**
    * Re-open the debut carousel on demand (Profile → Help → Feature tour).
    * Replays every carousel-worthy spotlight that works on this install,
@@ -704,6 +721,7 @@ const AppContent: React.FC = () => {
         onDone={handleSpotlightDone}
         onCtaPress={handleSpotlightCta}
         onOpenReleaseNotes={handleSpotlightOpenNotes}
+        onOpenFeatureGuide={handleSpotlightOpenGuide}
       />
     </View>
     </AppLockGate>

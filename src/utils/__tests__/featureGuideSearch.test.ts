@@ -72,7 +72,7 @@ describe("searchFeatureGuide", () => {
   });
 
   it("matches on the where-to-find breadcrumb", () => {
-    expect(ids("edit")).toEqual(["keep-alive"]);
+    expect(ids("tap a card")).toEqual(["keep-alive"]);
   });
 
   it("matches on blurb and steps", () => {

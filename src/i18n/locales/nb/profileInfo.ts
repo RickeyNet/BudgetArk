@@ -34,6 +34,11 @@ export const profileInfo: Localized<typeof en> = {
       description: "Se omvisningen i de nyeste funksjonene igjen",
       a11yLabel: "Spill av funksjonsomvisningen igjen",
     },
+    featureGuide: {
+      label: "Funksjonsguide",
+      description: "Hver funksjon per fane - hvor den ligger og hvordan du bruker den",
+      a11yLabel: "Åpne funksjonsguiden",
+    },
   },
   support: {
     feedback: {

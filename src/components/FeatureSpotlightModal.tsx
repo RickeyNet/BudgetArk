@@ -36,6 +36,8 @@ interface FeatureSpotlightModalProps {
   onCtaPress: (spotlight: FeatureSpotlight) => void;
   /** "Full release notes" link on the last slide. */
   onOpenReleaseNotes: () => void;
+  /** "Browse every feature" link on the last slide - opens the feature guide. */
+  onOpenFeatureGuide: () => void;
 }
 
 const FeatureSpotlightModal: React.FC<FeatureSpotlightModalProps> = ({
@@ -44,6 +46,7 @@ const FeatureSpotlightModal: React.FC<FeatureSpotlightModalProps> = ({
   onDone,
   onCtaPress,
   onOpenReleaseNotes,
+  onOpenFeatureGuide,
 }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -186,6 +189,19 @@ const FeatureSpotlightModal: React.FC<FeatureSpotlightModalProps> = ({
             </View>
           )}
 
+          {isLastPage ? (
+            <TouchableOpacity
+              style={styles.guideLink}
+              onPress={onOpenFeatureGuide}
+              accessibilityRole="button"
+              accessibilityLabel={t("modals.engage.spotlight.browseGuideA11y")}
+            >
+              <Text style={styles.linkText}>
+                📖 {t("modals.engage.spotlight.browseGuide")}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
           <View style={styles.actionsRow}>
             {isLastPage ? (
               <TouchableOpacity
@@ -305,6 +321,10 @@ const makeStyles = (colors: ThemeColors) =>
       width: 7,
       height: 7,
       borderRadius: 4,
+    },
+    guideLink: {
+      alignSelf: "center",
+      marginTop: 10,
     },
     actionsRow: {
       flexDirection: "row",

@@ -93,6 +93,31 @@ export const modalsEngage: Localized<typeof en> = {
     fullReleaseNotesA11y: "Åpne full versjonsinformasjon",
     skipA11y: "Hopp over funksjonsomvisningen",
     nextA11y: "Neste funksjon",
+    browseGuide: "Bla gjennom alle funksjoner i guiden",
+    browseGuideA11y: "Åpne funksjonsguiden",
+  },
+  /** Funksjonsguide-panelet (FeatureGuideModal): den søkbare katalogen over alle funksjoner. */
+  featureGuide: {
+    title: "Funksjonsguide",
+    intro:
+      "Alt BudgetArk kan gjøre, per fane. Trykk på en funksjon for å se hvor den ligger og hvordan du bruker den.",
+    searchPlaceholder: "Søk - prøv «kvittering» eller «lønning»",
+    clearSearchA11y: "Tøm søket",
+    noMatches: {
+      title: "Ingen treff",
+      body: "Prøv et annet ord - f.eks. «bank», «regning», «mål» eller navnet på en fane.",
+    },
+    howTo: "Slik bruker du den",
+    newIn: "Nytt i {{version}}",
+    expandA11y: "Vis hvordan du bruker {{title}}",
+    collapseA11y: "Skjul stegene for {{title}}",
+    areas: {
+      debts: "Gjeld",
+      budget: "Budsjett",
+      bridge: "Broen",
+      charts: "Sjøkart",
+      profile: "Profil",
+    },
   },
   guide: {
     title: "Introduksjon",

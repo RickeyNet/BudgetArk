@@ -93,6 +93,31 @@ export const modalsEngage: Localized<typeof en> = {
     fullReleaseNotesA11y: "Öppna fullständig versionsinformation",
     skipA11y: "Hoppa över funktionsrundturen",
     nextA11y: "Nästa funktion",
+    browseGuide: "Bläddra bland alla funktioner i guiden",
+    browseGuideA11y: "Öppna funktionsguiden",
+  },
+  /** Funktionsguiden (FeatureGuideModal): den bläddrings- och sökbara katalogen över alla funktioner. */
+  featureGuide: {
+    title: "Funktionsguide",
+    intro:
+      "Allt BudgetArk kan göra, per flik. Tryck på en funktion för att se var den finns och hur du använder den.",
+    searchPlaceholder: "Sök - prova ”kvitto” eller ”lön”",
+    clearSearchA11y: "Rensa sökningen",
+    noMatches: {
+      title: "Inga träffar",
+      body: "Prova ett annat ord - t.ex. ”bank”, ”räkning”, ”mål” eller namnet på en flik.",
+    },
+    howTo: "Så här använder du den",
+    newIn: "Nytt i {{version}}",
+    expandA11y: "Visa hur du använder {{title}}",
+    collapseA11y: "Dölj stegen för {{title}}",
+    areas: {
+      debts: "Skulder",
+      budget: "Budget",
+      bridge: "Bryggan",
+      charts: "Sjökort",
+      profile: "Profil",
+    },
   },
   guide: {
     title: "Introduktion",
