@@ -11,9 +11,9 @@ import type { LocalizedPlural } from "../types";
 import type { dataSpotlights as en } from "../en/dataSpotlights";
 
 export const dataSpotlights: LocalizedPlural<typeof en> = {
-  "german-language": {
+  languages: {
     title: "BudgetArk говорит на твоём языке",
-    blurb: "Каждая вкладка, панель и напоминание теперь есть на немецком, русском, украинском и шведском. Язык подстраивается под телефон автоматически, или выбери его сам в Профиле, рядом с валютой.",
+    blurb: "Каждая вкладка, панель и напоминание теперь есть на немецком, русском, украинском, шведском и норвежском. Язык подстраивается под телефон автоматически, или выбери его сам в Профиле, рядом с валютой.",
     cta: "Выбрать язык",
   },
   "bill-fulfillment": {

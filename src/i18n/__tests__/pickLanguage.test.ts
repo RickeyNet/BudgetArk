@@ -26,6 +26,7 @@ describe("pickSupportedLanguage", () => {
     expect(pickSupportedLanguage(["uk"])).toBe("uk");
     expect(pickSupportedLanguage(["sv-SE"])).toBe("sv");
     expect(pickSupportedLanguage(["sv-FI"])).toBe("sv");
+    expect(pickSupportedLanguage(["nb-NO"])).toBe("nb");
     expect(pickSupportedLanguage(["en-GB"])).toBe("en");
   });
 
@@ -33,12 +34,21 @@ describe("pickSupportedLanguage", () => {
     expect(pickSupportedLanguage(["fr-FR", "de-DE", "en-US"])).toBe("de");
     expect(pickSupportedLanguage(["uk-UA", "ru-RU", "en-US"])).toBe("uk");
     expect(pickSupportedLanguage(["ja-JP", "ru-RU", "en-US"])).toBe("ru");
-    expect(pickSupportedLanguage(["nb-NO", "sv-SE", "en-US"])).toBe("sv");
+    expect(pickSupportedLanguage(["fi-FI", "sv-SE", "en-US"])).toBe("sv");
+    expect(pickSupportedLanguage(["da-DK", "nb-NO", "en-US"])).toBe("nb");
+  });
+
+  it("serves Bokmål to Nynorsk and legacy \"no\" phones", () => {
+    expect(pickSupportedLanguage(["nn-NO"])).toBe("nb");
+    expect(pickSupportedLanguage(["no"])).toBe("nb");
+    expect(pickSupportedLanguage(["no-NO", "en-US"])).toBe("nb");
+    // A shipped language earlier in the list still wins over an alias.
+    expect(pickSupportedLanguage(["sv-SE", "nn-NO"])).toBe("sv");
   });
 
   it("falls back to English when nothing matches or the list is empty", () => {
     expect(pickSupportedLanguage([])).toBe(DEFAULT_LANGUAGE);
-    expect(pickSupportedLanguage(["ja-JP", "nb-NO"])).toBe(DEFAULT_LANGUAGE);
+    expect(pickSupportedLanguage(["ja-JP", "fi-FI"])).toBe(DEFAULT_LANGUAGE);
     expect(pickSupportedLanguage([null, undefined, ""])).toBe(DEFAULT_LANGUAGE);
   });
 });
@@ -60,6 +70,10 @@ describe("type guards", () => {
     expect(isSupportedLanguage("ru")).toBe(true);
     expect(isSupportedLanguage("uk")).toBe(true);
     expect(isSupportedLanguage("sv")).toBe(true);
+    expect(isSupportedLanguage("nb")).toBe(true);
+    // Aliases resolve on the device tag only - "nn"/"no" are not stored ids.
+    expect(isSupportedLanguage("nn")).toBe(false);
+    expect(isSupportedLanguage("no")).toBe(false);
     expect(isSupportedLanguage("pl")).toBe(false);
     expect(isSupportedLanguage(null)).toBe(false);
     expect(isAppLanguageId("auto")).toBe(true);

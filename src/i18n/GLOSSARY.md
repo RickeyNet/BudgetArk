@@ -348,3 +348,122 @@ unchanged. Currency and number formatting come from the code.
 | Log actual / Applies to bill / Always do this | Logga faktiskt belopp / Gäller räkningen / Gör alltid så |
 | net worth snapshot / starting balance | ögonblicksbild av nettoförmögenheten / ingående saldo |
 | high-yield (savings) account | sparkonto med hög ränta |
+
+## Norwegian (Bokmål)
+
+Locale id `nb`. Plurals are one / other like English, German and Swedish,
+so fragments are typed `Localized<typeof en>` in `locales/nb/`. Device
+tags `nb-NO`, `nn-NO` and the legacy `no` all resolve to it (pickLanguage
+aliases nn/no → nb). Tone: informal **du**, imperatives for buttons
+("Lagre", not "Du lagrer"). Sentence case everywhere, compounds written as
+one word ("sparekonto", never "spare konto"). Norwegian quotation marks are
+«…»; percent takes a space ("15 %"); decimal comma in numeric placeholders
+("0,00"). Keep the ASCII hyphen "-" as a dash like the other locales and
+keep strings roughly as short as the English. Product names, theme names
+and category ids never change. Swedish is the closest shipped locale - use
+it as a second reference for meaning and length, but translate from the
+English and never leave Swedish spellings behind (ikke "och", "är", "på
+svenska").
+
+| English | Norwegian |
+| --- | --- |
+| Debts (tab) | Gjeld |
+| Budget (tab) | Budsjett |
+| Bridge (tab, the ship's bridge) | Broen |
+| Charts (tab, nautical charts) | Sjøkart |
+| Profile (tab) | Profil |
+| Ark (the app metaphor) | Arken (arken din) |
+| debt / a debt / debts | gjeld / en gjeldspost / gjeldsposter |
+| payment | betaling |
+| budget entry / entry | post (plural: poster) |
+| expense / income | utgift / inntekt |
+| recurring (bill) | gjentakende (gjentakende post) |
+| bill | regning |
+| category | kategori |
+| spending limit / limit | forbruksgrense / grense |
+| account | konto |
+| asset account | eiendelskonto |
+| checking / savings account | brukskonto / sparekonto |
+| credit card | kredittkort |
+| balance | saldo |
+| net worth | nettoformue |
+| emergency fund | buffer |
+| savings goal | sparemål |
+| milestone | milepæl |
+| payoff strategy (avalanche / snowball) | nedbetalingsstrategi (snøskred / snøball) |
+| interest rate / APR | rente / effektiv rente |
+| minimum payment | minstebetaling |
+| partner sync | partnersynk |
+| pair / paired / unpair | koble sammen / sammenkoblet / koble fra |
+| sync now | Synk nå |
+| backup / back up | sikkerhetskopi / ta sikkerhetskopi |
+| restore | gjenopprett |
+| export / import | eksporter / importer |
+| reset all data | Nullstill alle data |
+| receipt (photo) | kvittering |
+| business expense | bedriftsutgift |
+| bank connection | banktilkobling |
+| review inbox | gjennomgangsinnboks (short: innboks) |
+| merchant | forhandler |
+| achievement / badge | prestasjon / merke |
+| lesson | leksjon |
+| streak | rekke |
+| privacy mode | personvernmodus |
+| app lock / PIN | applås / PIN-kode |
+| notifications / reminder | varsler / påminnelse |
+| release notes / what's new | versjonsinformasjon / nyheter |
+| update (OTA) | oppdatering |
+| tip jar | tipsboks |
+| currency / exchange rate | valuta / valutakurs |
+| holdings (stocks) | beholdning |
+| purchase planner / sinking fund | kjøpsplanlegger / målsparing |
+| take-home pay | nettolønn |
+| person / people | person / personer |
+| safe to spend | Igjen å bruke |
+| carry over / rollover | overfør / overføring |
+| Done / Cancel / Save / Delete | Ferdig / Avbryt / Lagre / Slett |
+| On / Off | På / Av |
+| Learn more / Got it | Les mer / Skjønner |
+| Keel / Hull / Deck / Supplies / Gather the animals / Anchor / Sail (milestones) | Kjøl / Skrog / Dekk / Forsyninger / Samle dyrene / Anker / Seil |
+| Build Your Ark | Bygg arken din |
+| Ship's Log | Loggbok |
+| Debt Tracker | Gjeldsoversikt |
+| Live Holdings | Beholdning i sanntid |
+| Quick Entry (widget) | Hurtigregistrering |
+| Owed to You / loan / lent | Til gode / lån / utlånt |
+| business / businesses | bedrift / Bedrifter |
+| custom category / built-in | egen kategori / innebygd |
+| bucket (50/30/20 group) | bøtte |
+| Needs / Wants / Savings | Behov / Ønsker / Sparing |
+| transaction (bank) | transaksjon |
+| connection / provider | tilkobling / leverandør |
+| map / mapping (accounts) | knytt til / tilknytning |
+| merchant rule / auto-approve | forhandlerregel / autogodkjenn |
+| Approve / Skip (inbox) | Godkjenn / Hopp over |
+| Insights | Innsikt |
+| Cash Flow / Monthly Review / Until Payday | Kontantstrøm / Månedsoversikt / Til lønning |
+| Tracking reminders | Loggpåminnelser |
+| automatic backups / Merge / Replace | automatiske sikkerhetskopier / Slå sammen / Erstatt |
+| Onboarding (guide) / feature tour | Introduksjon / Funksjonsomvisning |
+| tip tiers (small / medium / generous) | Lite / Middels / Raust tips |
+| NEW badge / Keep going | NYTT / Fortsett |
+| keep-alive watch (cards) | aktivitetsovervåking |
+| Captain's Course / chapter | Kapteinskurset / kapittel |
+| Subscription Detective / Personal Inflation | Abonnementsdetektiven / Personlig inflasjon |
+| What-If tool | Hva om |
+| break-even / closing costs / lifetime interest | nullpunkt / etableringskostnader / samlet rente over løpetiden |
+| filing status / head of household | skattestatus / husholdningsforsørger |
+| Ambient backgrounds / Solid / Glass | Bakgrunnseffekter / Ensfarget / Glass |
+| density Compact / Comfortable / Spacious | Kompakt / Komfortabel / Luftig |
+| categories: Grocery / Utilities / Giving / Other / Debt Payments | Dagligvarer / Strøm og vann / Gaver / Annet / Gjeldsbetalinger |
+| units: yr / mo / min / hr / ago | år / mnd / min / t / siden |
+| APR (card lines) / est. | % rente / ca. |
+| Spending Pace | Forbrukstempo |
+| Purchase Plans / Plan a Purchase | Kjøpsplaner / Planlegg et kjøp |
+| Mine / Partner / Joint (debt owner) | Mine / Partnerens / Felles |
+| starter cushion | startbuffer |
+| Log actual / Applies to bill / Always do this | Logg faktisk beløp / Gjelder regningen / Gjør alltid dette |
+| net worth snapshot / starting balance | øyeblikksbilde av nettoformuen / inngående saldo |
+| high-yield (savings) account | høyrentekonto |
+| check-in (reminders) / credentials / Edit | avstemming / innloggingsopplysninger / Rediger |
+| Not solvable / today / tomorrow | Går ikke opp / i dag / i morgen |

@@ -15,6 +15,7 @@ import { de } from "../locales/de";
 import { ru } from "../locales/ru";
 import { uk } from "../locales/uk";
 import { sv } from "../locales/sv";
+import { nb } from "../locales/nb";
 
 type Tree = { readonly [key: string]: string | Tree };
 
@@ -31,7 +32,7 @@ const flatten = (tree: Tree, prefix = ""): Record<string, string> => {
 const placeholders = (s: string): string[] =>
   Array.from(s.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g), (m) => m[1]).sort();
 
-const LOCALES: Record<string, Tree> = { en, de, ru, uk, sv };
+const LOCALES: Record<string, Tree> = { en, de, ru, uk, sv, nb };
 const enFlat = flatten(en);
 
 /** CLDR cardinal categories i18next resolves per language (besides `other`). */
@@ -41,6 +42,7 @@ const PLURAL_FORMS: Record<string, readonly string[]> = {
   ru: ["one", "few", "many"],
   uk: ["one", "few", "many"],
   sv: ["one"],
+  nb: ["one"],
 };
 
 /** English key set expanded to the plural forms `lang` needs. */

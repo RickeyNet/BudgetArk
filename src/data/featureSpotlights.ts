@@ -79,21 +79,27 @@ export type FeatureSpotlight = {
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   {
-    id: "german-language",
+    // ONE slide for every language 1.11.0 ships (German, Russian, Ukrainian,
+    // Swedish, Norwegian) - a new language extends the blurb, it never gets
+    // its own page. Started life as "german-language" when German was the
+    // only one; the old id stays superseded so dev installs that saw or
+    // acked it are not re-debuted.
+    id: "languages",
+    supersedes: ["german-language"],
     sinceVersion: "1.11.0",
     // expo-localization is native: the language picker only exists in the
     // 1.11.0 store build.
     requiresRuntimeVersion: "1.11.0",
     icon: "🌐",
     get title() {
-      return t("data.spotlights.german-language.title");
+      return t("data.spotlights.languages.title");
     },
     get blurb() {
-      return t("data.spotlights.german-language.blurb");
+      return t("data.spotlights.languages.blurb");
     },
     cta: {
       get label() {
-        return t("data.spotlights.german-language.cta");
+        return t("data.spotlights.languages.cta");
       },
       kind: "profile-section",
       section: "language",

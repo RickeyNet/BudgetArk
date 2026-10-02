@@ -12,7 +12,7 @@
  * tag resolves to English rather than throwing or rendering raw keys.
  */
 
-export const SUPPORTED_LANGUAGES = ["en", "de", "ru", "uk", "sv"] as const;
+export const SUPPORTED_LANGUAGES = ["en", "de", "ru", "uk", "sv", "nb"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 export const DEFAULT_LANGUAGE: SupportedLanguage = "en";
@@ -28,6 +28,7 @@ export const LANGUAGE_NATIVE_NAMES: Readonly<Record<SupportedLanguage, string>> 
   ru: "Русский",
   uk: "Українська",
   sv: "Svenska",
+  nb: "Norsk",
 };
 
 export const isSupportedLanguage = (value: unknown): value is SupportedLanguage =>
@@ -36,6 +37,17 @@ export const isSupportedLanguage = (value: unknown): value is SupportedLanguage 
 
 export const isAppLanguageId = (value: unknown): value is AppLanguageId =>
   value === "auto" || isSupportedLanguage(value);
+
+/**
+ * Primary subtags that mean "one of our languages" without being its id.
+ * Norwegian phones report `nb` (Bokmål), `nn` (Nynorsk) or the legacy
+ * macrolanguage `no`; we ship Bokmål and serve it for all three rather than
+ * dropping a Nynorsk user to English.
+ */
+const LANGUAGE_ALIASES: Readonly<Record<string, SupportedLanguage>> = {
+  nn: "nb",
+  no: "nb",
+};
 
 /**
  * First device language (in the phone's preference order) that the app
@@ -49,6 +61,8 @@ export const pickSupportedLanguage = (
     if (typeof tag !== "string") continue;
     const primary = tag.trim().toLowerCase().split(/[-_]/)[0];
     if (isSupportedLanguage(primary)) return primary;
+    const alias = LANGUAGE_ALIASES[primary];
+    if (alias) return alias;
   }
   return DEFAULT_LANGUAGE;
 };

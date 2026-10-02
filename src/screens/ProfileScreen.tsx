@@ -147,7 +147,7 @@ const SECTION_FEATURE_IDS: Record<ProfileSpotlightSection, string> = {
   theme: "theme-fleet",
   appLock: "app-lock",
   data: "bank-statement-import",
-  language: "german-language",
+  language: "languages",
 };
 
 const ProfileScreen: React.FC = () => {

@@ -8,9 +8,9 @@
  */
 
 export const dataSpotlights = {
-  "german-language": {
+  languages: {
     title: "BudgetArk speaks your language",
-    blurb: "Every tab, sheet and reminder now comes in German, Russian, Ukrainian and Swedish. It follows your phone's language automatically, or pick one yourself under Profile, right beside Currency.",
+    blurb: "Every tab, sheet and reminder now comes in five more languages: German, Russian, Ukrainian, Swedish and Norwegian. It follows your phone's language automatically, or pick one yourself under Profile, right beside Currency.",
     cta: "Choose a language",
   },
   "bill-fulfillment": {

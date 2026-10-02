@@ -163,6 +163,14 @@ describe("FEATURE_SPOTLIGHTS data", () => {
     }
   });
 
+  it("keeps a single 1.11.0 language slide that covers the old german-language id", () => {
+    const languageSlides = FEATURE_SPOTLIGHTS.filter(
+      (s) => s.sinceVersion === "1.11.0" && s.cta?.kind === "profile-section" && s.cta.section === "language"
+    );
+    expect(languageSlides.map((s) => s.id)).toEqual(["languages"]);
+    expect(languageSlides[0].supersedes).toEqual(["german-language"]);
+  });
+
   it("merges the 1.9.0 theme slides into one that covers the old ids", () => {
     const fleet = FEATURE_SPOTLIGHTS.find((s) => s.id === "theme-fleet");
     expect(fleet?.supersedes).toEqual([

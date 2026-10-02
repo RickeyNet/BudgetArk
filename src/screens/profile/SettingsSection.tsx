@@ -690,7 +690,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           <TouchableOpacity
             style={styles.groupedRow}
             onPress={() => {
-              onDismissNewBadge("german-language");
+              onDismissNewBadge("languages");
               setShowLanguageModal(true);
             }}
             accessibilityRole="button"
@@ -702,7 +702,7 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   {t("profile.settings.language.label")}
                 </Text>
-                {newFeatureIds.has("german-language") && <NewFeatureBadge />}
+                {newFeatureIds.has("languages") && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}

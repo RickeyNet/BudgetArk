@@ -45,7 +45,7 @@ export const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
 ];
 
 type LanguageContextValue = Readonly<{
-  /** The persisted setting ("auto" | "en" | "de" | "ru" | "uk" | "sv"). */
+  /** The persisted setting ("auto" | "en" | "de" | "ru" | "uk" | "sv" | "nb"). */
   languageId: AppLanguageId;
   /** What i18next is actually rendering. */
   resolvedLanguage: SupportedLanguage;
