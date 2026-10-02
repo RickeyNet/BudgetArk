@@ -63,6 +63,14 @@ EAS build by the user - say so explicitly instead of claiming a UI flow works.
   `setShowX(true)` in `InteractionManager.runAfterInteractions(...)`, keep the
   task, and cancel it on unmount. Grep BudgetScreen/ProfileScreen for the
   pattern before adding any deep-link-triggered modal.
+- **Any calendar or day picker uses `components/MonthDayCalendar.tsx`** -
+  never hand-roll a 7-column grid. Percentage-width cells plus a pixel gap
+  overflow phone widths, wrap at six, and put every day under the wrong
+  weekday (a user-reported bug). `mode="date"` for picking a date,
+  `mode="dayOfMonth"` for a recurring 1-31 day (29-31 stay pickable,
+  dimmed in short months), `renderDay` for a custom cell body. Weekday
+  labels come from `common.weekdays`; layout helpers live in
+  `utils/entryDate.ts` and are the tested part.
 - **Colors come only from `useTheme()`** - no hardcoded hex in components.
   Style factories are `makeStyles(colors, tokens)` memoized on
   `[colors, tokens]`; use density tokens (`tokens.pad/gap/radius/fontScale`)
