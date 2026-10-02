@@ -16,8 +16,9 @@ import type { FeatureSpotlight } from "../data/featureSpotlights";
 
 type FeatureTourValue = Readonly<{
   /**
-   * Re-opens the debut carousel with every spotlight that works on this
-   * install, seen or not. No-op when the current runtime enables none.
+   * Re-opens the debut carousel (the Profile "Update spotlight" row) with
+   * every spotlight of the current release line that works on this install,
+   * seen or not. No-op when the current runtime enables none.
    */
   replayFeatureTour: () => void;
   /**

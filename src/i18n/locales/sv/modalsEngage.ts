@@ -91,7 +91,7 @@ export const modalsEngage: Localized<typeof en> = {
     newIn: "NYTT I {{version}}",
     fullReleaseNotes: "Fullständig versionsinformation",
     fullReleaseNotesA11y: "Öppna fullständig versionsinformation",
-    skipA11y: "Hoppa över funktionsrundturen",
+    skipA11y: "Hoppa över uppdateringsnyheterna",
     nextA11y: "Nästa funktion",
     browseGuide: "Bläddra bland alla funktioner i guiden",
     browseGuideA11y: "Öppna funktionsguiden",

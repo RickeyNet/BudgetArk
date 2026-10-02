@@ -29,10 +29,10 @@ export const profileInfo: LocalizedPlural<typeof en> = {
       label: "Знайомство",
       description: "Посібник із пошуком по всьому або повтор першого налаштування",
     },
-    featureTour: {
-      label: "Тур функціями",
-      description: "Переглянути тур новими функціями ще раз",
-      a11yLabel: "Повторити тур функціями",
+    updateSpotlight: {
+      label: "Огляд оновлення",
+      description: "Переглянути ще раз, що нового в цій версії BudgetArk",
+      a11yLabel: "Повторити огляд оновлення",
     },
     featureGuide: {
       label: "Довідник функцій",

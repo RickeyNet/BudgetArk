@@ -14,6 +14,14 @@
  * native modules arrives - `requiresRuntimeVersion` gates those, so their
  * debut waits until the feature actually works on this install.
  *
+ * The carousel (the Profile "Update spotlight") and the NEW badges only
+ * cover the CURRENT RELEASE LINE: a spotlight debuts or badges only while
+ * its `sinceVersion` shares major.minor with CURRENT_APP_VERSION (1.11.x
+ * features on a 1.11 app). Older entries stay in the list for the feature
+ * guide, which is a directory of everything, not a debut - see
+ * isSpotlightCurrent. Deliberately by release line rather than exact
+ * version so a 1.11.1 patch still spotlights the 1.11.0 features.
+ *
  * Title, blurb and CTA label live in the translation tree
  * (src/i18n/locales/en/dataSpotlights.ts + the German twin), keyed by
  * spotlight id, and are exposed here as getters that resolve through the
@@ -30,6 +38,7 @@
 
 import { compareVersions } from "../utils/versionGuard";
 import { t } from "../i18n/translate";
+import { CURRENT_APP_VERSION } from "./releaseNotes";
 
 /** Profile-screen surfaces a spotlight CTA (or the openSection deep link) can open. */
 export type ProfileSpotlightSection =
@@ -612,6 +621,22 @@ export const isSpotlightAvailable = (
   );
 };
 
+/** The release line a version belongs to: "1.11" for "1.11.0" or "1.11.2". */
+export const releaseLine = (version: string): string =>
+  version.split(".").slice(0, 2).join(".");
+
+/**
+ * Whether a spotlight belongs to the running app's release line - the only
+ * ones the carousel and the NEW badges show. A 1.9.0 feature is not news
+ * on a 1.11 install, however the user got there (fresh install, skipped
+ * updates, reinstall), so it neither debuts nor badges; the feature guide
+ * still lists it.
+ */
+export const isSpotlightCurrent = (
+  spotlight: FeatureSpotlight,
+  currentAppVersion: string = CURRENT_APP_VERSION
+): boolean => releaseLine(spotlight.sinceVersion) === releaseLine(currentAppVersion);
+
 /**
  * Whether a stored id set (seen or acked) covers a spotlight - directly, or
  * through any spotlight it superseded.
@@ -623,34 +648,41 @@ const isSpotlightCovered = (
   ids.has(spotlight.id) ||
   (spotlight.supersedes?.some((legacyId) => ids.has(legacyId)) ?? false);
 
-/** Carousel slides still owed to this user, in declaration order. */
+/**
+ * Carousel slides still owed to this user, in declaration order: this
+ * release line's unseen, non-badgeOnly spotlights that work on this install.
+ */
 export const selectUnseenSpotlights = (
   spotlights: readonly FeatureSpotlight[],
   seenIds: readonly string[],
-  currentRuntimeVersion: string | undefined
+  currentRuntimeVersion: string | undefined,
+  currentAppVersion: string = CURRENT_APP_VERSION
 ): FeatureSpotlight[] => {
   const seen = new Set(seenIds);
   return spotlights.filter(
     (spotlight) =>
       !spotlight.badgeOnly &&
+      isSpotlightCurrent(spotlight, currentAppVersion) &&
       !isSpotlightCovered(spotlight, seen) &&
       isSpotlightAvailable(spotlight, currentRuntimeVersion)
   );
 };
 
 /**
- * The full tour for the Profile "Feature tour" replay row: every
- * carousel-worthy spotlight that works on this install, seen or not.
+ * The Profile "Update spotlight" replay row: every carousel-worthy
+ * spotlight of this release line that works on this install, seen or not.
  * Mirrors selectUnseenSpotlights minus the seen filter so a user can
  * rewatch debuts they skipped or want to revisit.
  */
 export const selectReplaySpotlights = (
   spotlights: readonly FeatureSpotlight[],
-  currentRuntimeVersion: string | undefined
+  currentRuntimeVersion: string | undefined,
+  currentAppVersion: string = CURRENT_APP_VERSION
 ): FeatureSpotlight[] =>
   spotlights.filter(
     (spotlight) =>
       !spotlight.badgeOnly &&
+      isSpotlightCurrent(spotlight, currentAppVersion) &&
       isSpotlightAvailable(spotlight, currentRuntimeVersion)
   );
 
@@ -736,16 +768,21 @@ export const getSpotlightGuide = (
   return { where, steps };
 };
 
-/** Ids whose Profile rows should show a NEW badge (until first tapped). */
+/**
+ * Ids whose Profile rows should show a NEW badge (until first tapped):
+ * this release line's unacked spotlights that work on this install.
+ */
 export const selectNewBadgeIds = (
   spotlights: readonly FeatureSpotlight[],
   ackedIds: readonly string[],
-  currentRuntimeVersion: string | undefined
+  currentRuntimeVersion: string | undefined,
+  currentAppVersion: string = CURRENT_APP_VERSION
 ): string[] => {
   const acked = new Set(ackedIds);
   return spotlights
     .filter(
       (spotlight) =>
+        isSpotlightCurrent(spotlight, currentAppVersion) &&
         !isSpotlightCovered(spotlight, acked) &&
         isSpotlightAvailable(spotlight, currentRuntimeVersion)
     )

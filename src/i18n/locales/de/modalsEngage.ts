@@ -91,7 +91,7 @@ export const modalsEngage: Localized<typeof en> = {
     newIn: "NEU IN {{version}}",
     fullReleaseNotes: "Alle Versionshinweise",
     fullReleaseNotesA11y: "Alle Versionshinweise öffnen",
-    skipA11y: "Funktionstour überspringen",
+    skipA11y: "Update-Spotlight überspringen",
     nextA11y: "Nächste Funktion",
     browseGuide: "Alle Funktionen in der Übersicht ansehen",
     browseGuideA11y: "Funktionsübersicht öffnen",

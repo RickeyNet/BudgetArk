@@ -29,10 +29,10 @@ export const profileInfo: Localized<typeof en> = {
       label: "Introduktion",
       description: "Sökbar guide till allt, eller gör om förstagångsinställningen",
     },
-    featureTour: {
-      label: "Funktionsrundtur",
-      description: "Se nyhetsrundturen om de senaste funktionerna igen",
-      a11yLabel: "Spela upp funktionsrundturen igen",
+    updateSpotlight: {
+      label: "Uppdateringsnyheter",
+      description: "Se vad som är nytt i den här versionen av BudgetArk igen",
+      a11yLabel: "Spela upp uppdateringsnyheterna igen",
     },
     featureGuide: {
       label: "Funktionsguide",

@@ -89,7 +89,7 @@ export const modalsEngage: LocalizedPlural<typeof en> = {
     newIn: "НОВЕ В {{version}}",
     fullReleaseNotes: "Повний список змін",
     fullReleaseNotesA11y: "Відкрити повний список змін",
-    skipA11y: "Пропустити огляд функцій",
+    skipA11y: "Пропустити огляд оновлення",
     nextA11y: "Наступна функція",
     browseGuide: "Переглянути всі функції в довіднику",
     browseGuideA11y: "Відкрити довідник функцій",

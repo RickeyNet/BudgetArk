@@ -29,10 +29,10 @@ export const profileInfo: LocalizedPlural<typeof en> = {
       label: "Знакомство",
       description: "Руководство с поиском по всему или повтор первой настройки",
     },
-    featureTour: {
-      label: "Тур по функциям",
-      description: "Пересмотреть тур по новым функциям",
-      a11yLabel: "Повторить тур по функциям",
+    updateSpotlight: {
+      label: "Обзор обновления",
+      description: "Пересмотреть, что нового в этой версии BudgetArk",
+      a11yLabel: "Повторить обзор обновления",
     },
     featureGuide: {
       label: "Справочник функций",

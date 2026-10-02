@@ -212,7 +212,7 @@ Currency and number formatting come from the code; only words move.
 | Cash Flow / Monthly Review / Until Payday | Денежный поток / Итоги месяца / До зарплаты | Грошовий потік / Підсумки місяця / До зарплати |
 | Tracking reminders | Напоминания об учёте | Нагадування про облік |
 | automatic backups / Merge / Replace | автоматические копии / Объединить / Заменить | автоматичні копії / Об'єднати / Замінити |
-| Onboarding (guide) / feature tour | Знакомство / Тур по функциям | Знайомство / Тур функціями |
+| Onboarding (guide) / update spotlight | Знакомство / Обзор обновления | Знайомство / Огляд оновлення |
 | tip tiers (small / medium / generous) | Небольшие / Средние / Щедрые чаевые | Невеликі / Середні / Щедрі чайові |
 | NEW badge / Keep going | НОВОЕ / Продолжить | НОВЕ / Продовжити |
 | keep-alive watch (cards) | контроль активности | контроль активності |
@@ -327,7 +327,7 @@ unchanged. Currency and number formatting come from the code.
 | Cash Flow / Monthly Review / Until Payday | Kassaflöde / Månadsöversikt / Till lönen |
 | Tracking reminders | Loggpåminnelser |
 | automatic backups / Merge / Replace | automatiska säkerhetskopior / Slå ihop / Ersätt |
-| Onboarding (guide) / feature tour | Introduktion / Funktionsrundtur |
+| Onboarding (guide) / update spotlight | Introduktion / Uppdateringsnyheter |
 | tip tiers (small / medium / generous) | Liten / Mellan / Generös dricks |
 | NEW badge / Keep going | NYTT / Fortsätt |
 | keep-alive watch (cards) | aktivitetsbevakning |
@@ -444,7 +444,7 @@ svenska").
 | Cash Flow / Monthly Review / Until Payday | Kontantstrøm / Månedsoversikt / Til lønning |
 | Tracking reminders | Loggpåminnelser |
 | automatic backups / Merge / Replace | automatiske sikkerhetskopier / Slå sammen / Erstatt |
-| Onboarding (guide) / feature tour | Introduksjon / Funksjonsomvisning |
+| Onboarding (guide) / update spotlight | Introduksjon / Oppdateringsnyheter |
 | tip tiers (small / medium / generous) | Lite / Middels / Raust tips |
 | NEW badge / Keep going | NYTT / Fortsett |
 | keep-alive watch (cards) | aktivitetsovervåking |

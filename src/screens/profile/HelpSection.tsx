@@ -4,7 +4,7 @@
  *
  * The HELP card: an "Onboarding" row opening the searchable onboarding
  * guide (OnboardingGuideModal) which also hosts Redo onboarding, a
- * "Feature tour" row replaying the feature-debut carousel on demand, and a
+ * "Update spotlight" row replaying this version's debut carousel, and a
  * "Feature guide" row opening the browsable directory of every feature
  * (FeatureGuideModal). This section owns the redo sequence - close the
  * sheet, then reset the onboarding flag + coachmark state and flip the app
@@ -163,16 +163,16 @@ const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
               triggerHaptic("selection");
               replayFeatureTour();
             }}
-            accessibilityLabel={t("profile.info.help.featureTour.a11yLabel")}
+            accessibilityLabel={t("profile.info.help.updateSpotlight.a11yLabel")}
           >
             <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.info.help.featureTour.label")}
+                {t("profile.info.help.updateSpotlight.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                {t("profile.info.help.featureTour.description")}
+                {t("profile.info.help.updateSpotlight.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

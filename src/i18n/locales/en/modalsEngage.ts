@@ -93,7 +93,7 @@ export const modalsEngage = {
     newIn: "NEW IN {{version}}",
     fullReleaseNotes: "Full release notes",
     fullReleaseNotesA11y: "Open full release notes",
-    skipA11y: "Skip the feature tour",
+    skipA11y: "Skip the update spotlight",
     nextA11y: "Next feature",
     browseGuide: "Browse every feature in the guide",
     browseGuideA11y: "Open the feature guide",

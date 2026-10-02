@@ -26,10 +26,10 @@ export const profileInfo = {
       label: "Onboarding",
       description: "Searchable guide to everything, or redo the first-launch setup",
     },
-    featureTour: {
-      label: "Feature tour",
-      description: "Rewatch the what's-new tour of recent features",
-      a11yLabel: "Replay the feature tour",
+    updateSpotlight: {
+      label: "Update spotlight",
+      description: "Rewatch what's new in this version of BudgetArk",
+      a11yLabel: "Replay the update spotlight",
     },
     featureGuide: {
       label: "Feature guide",

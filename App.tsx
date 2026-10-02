@@ -489,11 +489,12 @@ const AppContent: React.FC = () => {
   }, [closeSpotlights, navigationRef]);
 
   /**
-   * Re-open the debut carousel on demand (Profile → Help → Feature tour).
-   * Replays every carousel-worthy spotlight that works on this install,
-   * seen or not; closing re-marks everything seen, a no-op for a replay.
-   * An empty selection (older store build enables nothing) leaves the
-   * queue null so the modal never mounts with zero slides.
+   * Re-open the debut carousel on demand (Profile → Help → Update
+   * spotlight). Replays every carousel-worthy spotlight of the current
+   * release line that works on this install, seen or not; closing re-marks
+   * everything seen, a no-op for a replay. An empty selection (older store
+   * build enables nothing) leaves the queue null so the modal never mounts
+   * with zero slides.
    */
   const replayFeatureTour = useCallback(() => {
     const tour = selectReplaySpotlights(

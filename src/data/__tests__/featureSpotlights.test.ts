@@ -1,7 +1,13 @@
 /**
  * Tests for feature-spotlight selection: seen filtering, badgeOnly
- * exclusion, and runtimeVersion gating (features that ship dormant via OTA
- * and only debut when the store build with their native modules arrives).
+ * exclusion, runtimeVersion gating (features that ship dormant via OTA and
+ * only debut when the store build with their native modules arrives), and
+ * the release-line rule (only the running version's x.y features debut or
+ * badge; the feature guide still lists everything).
+ *
+ * The fixtures are 1.9.0 features, so every selector call below passes
+ * "1.9.0" as the app version explicitly - the default is the real
+ * CURRENT_APP_VERSION, which would filter them all out.
  */
 
 import {
@@ -9,6 +15,8 @@ import {
   FEATURE_SPOTLIGHTS,
   getSpotlightGuide,
   isSpotlightAvailable,
+  isSpotlightCurrent,
+  releaseLine,
   selectGuideGroups,
   selectNewBadgeIds,
   selectReplaySpotlights,
@@ -16,6 +24,7 @@ import {
   spotlightArea,
   type FeatureSpotlight,
 } from "../featureSpotlights";
+import { CURRENT_APP_VERSION } from "../releaseNotes";
 
 const spotlight = (
   overrides: Partial<FeatureSpotlight> & Pick<FeatureSpotlight, "id">
@@ -36,6 +45,9 @@ const BADGE_ONLY = spotlight({ id: "badge-only", badgeOnly: true });
 
 const ALL = [OTA_FEATURE, NATIVE_FEATURE, BADGE_ONLY];
 
+/** The fixtures' own release line - a 1.9.x app, so they all count as current. */
+const APP = "1.9.0";
+
 describe("isSpotlightAvailable", () => {
   it("is always available without a runtime requirement", () => {
     expect(isSpotlightAvailable(OTA_FEATURE, "1.8.0")).toBe(true);
@@ -53,35 +65,94 @@ describe("isSpotlightAvailable", () => {
   });
 });
 
+describe("releaseLine / isSpotlightCurrent", () => {
+  it("keeps major.minor and drops the patch", () => {
+    expect(releaseLine("1.11.0")).toBe("1.11");
+    expect(releaseLine("1.11.2")).toBe("1.11");
+    expect(releaseLine("2.0.0")).toBe("2.0");
+  });
+
+  it("is current only within the running app's release line", () => {
+    const feature = spotlight({ id: "f", sinceVersion: "1.11.0" });
+    expect(isSpotlightCurrent(feature, "1.11.0")).toBe(true);
+    // A patch release still spotlights the line's features.
+    expect(isSpotlightCurrent(feature, "1.11.3")).toBe(true);
+    expect(isSpotlightCurrent(feature, "1.10.4")).toBe(false);
+    expect(isSpotlightCurrent(feature, "1.12.0")).toBe(false);
+    expect(isSpotlightCurrent(feature, "2.11.0")).toBe(false);
+  });
+
+  it("defaults to the running app version", () => {
+    const current = spotlight({ id: "c", sinceVersion: CURRENT_APP_VERSION });
+    const old = spotlight({ id: "o", sinceVersion: "1.9.0" });
+    expect(isSpotlightCurrent(current)).toBe(true);
+    expect(isSpotlightCurrent(old)).toBe(false);
+  });
+});
+
+describe("release-line gating across selectors", () => {
+  const OLD = spotlight({ id: "old", sinceVersion: "1.10.2" });
+  const CURRENT = spotlight({ id: "current", sinceVersion: "1.11.0" });
+  const OLD_BADGE = spotlight({ id: "old-badge", sinceVersion: "1.9.0", badgeOnly: true });
+  const LIST = [OLD, CURRENT, OLD_BADGE];
+
+  it("only debuts this release line's features", () => {
+    expect(selectUnseenSpotlights(LIST, [], undefined, "1.11.0").map((s) => s.id)).toEqual([
+      "current",
+    ]);
+  });
+
+  it("only replays this release line's features", () => {
+    expect(selectReplaySpotlights(LIST, undefined, "1.11.0").map((s) => s.id)).toEqual([
+      "current",
+    ]);
+  });
+
+  it("only badges this release line's features", () => {
+    expect(selectNewBadgeIds(LIST, [], undefined, "1.11.0")).toEqual(["current"]);
+  });
+
+  it("still lists every feature in the guide, old lines included", () => {
+    const ids = selectGuideGroups(LIST, undefined).flatMap((g) => g.spotlights.map((s) => s.id));
+    expect(ids).toEqual(expect.arrayContaining(["old", "current", "old-badge"]));
+  });
+
+  it("uses the running app version by default", () => {
+    // Nothing from an older line reaches the carousel on the real version.
+    expect(selectUnseenSpotlights(LIST, [], undefined).map((s) => s.id)).not.toContain("old");
+    expect(selectNewBadgeIds(LIST, [], undefined)).not.toContain("old-badge");
+  });
+});
+
 describe("selectUnseenSpotlights", () => {
   it("returns available, unseen, non-badgeOnly spotlights in order", () => {
-    const result = selectUnseenSpotlights(ALL, [], "1.9.0");
+    const result = selectUnseenSpotlights(ALL, [], "1.9.0", APP);
     expect(result.map((s) => s.id)).toEqual(["ota-feature", "native-feature"]);
   });
 
   it("filters spotlights already seen", () => {
-    const result = selectUnseenSpotlights(ALL, ["ota-feature"], "1.9.0");
+    const result = selectUnseenSpotlights(ALL, ["ota-feature"], "1.9.0", APP);
     expect(result.map((s) => s.id)).toEqual(["native-feature"]);
   });
 
   it("holds back native-gated features on an older store build", () => {
-    const result = selectUnseenSpotlights(ALL, [], "1.8.0");
+    const result = selectUnseenSpotlights(ALL, [], "1.8.0", APP);
     expect(result.map((s) => s.id)).toEqual(["ota-feature"]);
   });
 
   it("debuts a native feature later, once the build arrives", () => {
     // User saw the OTA-era carousel on the old build...
-    const seenOnOldBuild = selectUnseenSpotlights(ALL, [], "1.8.0").map(
+    const seenOnOldBuild = selectUnseenSpotlights(ALL, [], "1.8.0", APP).map(
       (s) => s.id
     );
     // ...then the store build lands: only the newly-enabled feature debuts.
-    const result = selectUnseenSpotlights(ALL, seenOnOldBuild, "1.9.0");
+    const result = selectUnseenSpotlights(ALL, seenOnOldBuild, "1.9.0", APP);
     expect(result.map((s) => s.id)).toEqual(["native-feature"]);
   });
 
   it("returns nothing when everything is seen", () => {
     const allIds = ALL.map((s) => s.id);
-    expect(selectUnseenSpotlights(ALL, allIds, "1.9.0")).toEqual([]);
+    expect(selectUnseenSpotlights(ALL, allIds, "1.9.0", APP)).toEqual([]);
   });
 
   it("treats a merged spotlight as seen when any superseded id was seen", () => {
@@ -90,16 +161,16 @@ describe("selectUnseenSpotlights", () => {
       supersedes: ["old-a", "old-b"],
     });
     const list = [merged, OTA_FEATURE];
-    expect(selectUnseenSpotlights(list, [], "1.9.0").map((s) => s.id)).toEqual([
+    expect(selectUnseenSpotlights(list, [], "1.9.0", APP).map((s) => s.id)).toEqual([
       "merged",
       "ota-feature",
     ]);
     expect(
-      selectUnseenSpotlights(list, ["old-b"], "1.9.0").map((s) => s.id)
+      selectUnseenSpotlights(list, ["old-b"], "1.9.0", APP).map((s) => s.id)
     ).toEqual(["ota-feature"]);
     // Unrelated legacy ids don't count.
     expect(
-      selectUnseenSpotlights(list, ["old-c"], "1.9.0").map((s) => s.id)
+      selectUnseenSpotlights(list, ["old-c"], "1.9.0", APP).map((s) => s.id)
     ).toEqual(["merged", "ota-feature"]);
   });
 });
@@ -108,37 +179,37 @@ describe("selectReplaySpotlights", () => {
   it("includes already-seen features, unlike the debut queue", () => {
     // Everything seen: debut queue is empty, but the replay tour is full.
     const allIds = ALL.map((s) => s.id);
-    expect(selectUnseenSpotlights(ALL, allIds, "1.9.0")).toEqual([]);
-    const replay = selectReplaySpotlights(ALL, "1.9.0");
+    expect(selectUnseenSpotlights(ALL, allIds, "1.9.0", APP)).toEqual([]);
+    const replay = selectReplaySpotlights(ALL, "1.9.0", APP);
     expect(replay.map((s) => s.id)).toEqual(["ota-feature", "native-feature"]);
   });
 
   it("still excludes badgeOnly features from the carousel", () => {
-    const replay = selectReplaySpotlights(ALL, "1.9.0");
+    const replay = selectReplaySpotlights(ALL, "1.9.0", APP);
     expect(replay.map((s) => s.id)).not.toContain("badge-only");
   });
 
   it("still holds back native-gated features on an older store build", () => {
-    const replay = selectReplaySpotlights(ALL, "1.8.0");
+    const replay = selectReplaySpotlights(ALL, "1.8.0", APP);
     expect(replay.map((s) => s.id)).toEqual(["ota-feature"]);
   });
 });
 
 describe("selectNewBadgeIds", () => {
   it("includes badgeOnly features, unlike the carousel", () => {
-    const result = selectNewBadgeIds(ALL, [], "1.9.0");
+    const result = selectNewBadgeIds(ALL, [], "1.9.0", APP);
     expect(result).toEqual(["ota-feature", "native-feature", "badge-only"]);
   });
 
   it("filters acked ids and unavailable features independently", () => {
-    const result = selectNewBadgeIds(ALL, ["badge-only"], "1.8.0");
+    const result = selectNewBadgeIds(ALL, ["badge-only"], "1.8.0", APP);
     expect(result).toEqual(["ota-feature"]);
   });
 
   it("treats a merged spotlight as acked when any superseded id was acked", () => {
     const merged = spotlight({ id: "merged", supersedes: ["old-a"] });
-    expect(selectNewBadgeIds([merged], [], "1.9.0")).toEqual(["merged"]);
-    expect(selectNewBadgeIds([merged], ["old-a"], "1.9.0")).toEqual([]);
+    expect(selectNewBadgeIds([merged], [], "1.9.0", APP)).toEqual(["merged"]);
+    expect(selectNewBadgeIds([merged], ["old-a"], "1.9.0", APP)).toEqual([]);
   });
 });
 
@@ -249,6 +320,15 @@ describe("FEATURE_SPOTLIGHTS data", () => {
     expect(tipJar?.title).toBe("Tip Jar");
   });
 
+  it("has carousel slides for the current release line", () => {
+    // The Update spotlight row must never open to nothing on a fresh build.
+    const slides = selectReplaySpotlights(FEATURE_SPOTLIGHTS, undefined);
+    expect(slides.length).toBeGreaterThan(0);
+    for (const s of slides) {
+      expect(releaseLine(s.sinceVersion)).toBe(releaseLine(CURRENT_APP_VERSION));
+    }
+  });
+
   it("has unique ids", () => {
     const ids = FEATURE_SPOTLIGHTS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -282,7 +362,8 @@ describe("FEATURE_SPOTLIGHTS data", () => {
     const unseen = selectUnseenSpotlights(
       FEATURE_SPOTLIGHTS,
       ["deep-sea-theme", "slate-classic-themes", "four-themes"],
-      undefined
+      undefined,
+      "1.9.0"
     );
     expect(unseen.map((s) => s.id)).not.toContain("theme-fleet");
   });
