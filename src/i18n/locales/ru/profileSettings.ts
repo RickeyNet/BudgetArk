@@ -18,6 +18,14 @@ export const profileSettings: LocalizedPlural<typeof en> = {
     a11yLabel: "Язык, сейчас {{current}}",
     a11yHint: "Открывает выбор языка приложения",
     autoWithResolved: "Автоматически ({{language}})",
+    names: {
+      en: "Английский",
+      de: "Немецкий",
+      ru: "Русский",
+      uk: "Украинский",
+      sv: "Шведский",
+      nb: "Норвежский",
+    },
     options: {
       auto: {
         name: "Автоматически",

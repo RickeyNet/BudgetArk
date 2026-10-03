@@ -17,6 +17,14 @@ export const profileSettings: Localized<typeof en> = {
     a11yLabel: "Språk, nå {{current}}",
     a11yHint: "Åpner appens språkvalg",
     autoWithResolved: "Automatisk ({{language}})",
+    names: {
+      en: "Engelsk",
+      de: "Tysk",
+      ru: "Russisk",
+      uk: "Ukrainsk",
+      sv: "Svensk",
+      nb: "Norsk",
+    },
     options: {
       auto: {
         name: "Automatisk",

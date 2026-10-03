@@ -59,7 +59,7 @@ import AppLockSetupModal from "../../components/AppLockSetupModal";
 import type { PairingState } from "../../sync/types";
 import OptionPickerModal from "../../components/OptionPickerModal";
 import { useLanguage, type LanguageOption } from "../../i18n/LanguageProvider";
-import { LANGUAGE_NATIVE_NAMES } from "../../i18n/pickLanguage";
+import type { SupportedLanguage } from "../../i18n/pickLanguage";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
 import TrackingRemindersModal from "../../components/TrackingRemindersModal";
 import type { TrackingReminderSettings } from "../../utils/trackingReminderPlanner";
@@ -181,23 +181,34 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     setLanguageId,
   } = useLanguage();
   const [showLanguageModal, setShowLanguageModal] = useState(false);
-  // "Automatic (Deutsch)" tells the user what auto resolved to; a fixed
-  // choice shows the language in its own name.
+  // Languages are named in the ACTIVE language ("German" on an English app,
+  // "Deutsch" on a German one), so the row and the picker read like the rest
+  // of the screen. "Automatic (German)" tells the user what auto resolved to.
+  const translatedLanguageName = useCallback(
+    (id: SupportedLanguage): string => t(`profile.settings.language.names.${id}`),
+    [t],
+  );
   const languageName =
     languageId === "auto"
       ? t("profile.settings.language.autoWithResolved", {
-          language: LANGUAGE_NATIVE_NAMES[resolvedLanguage],
+          language: translatedLanguageName(resolvedLanguage),
         })
-      : LANGUAGE_NATIVE_NAMES[languageId];
+      : translatedLanguageName(languageId);
   const languageOptionText = useCallback(
-    (option: LanguageOption): { name: string; description: string } =>
-      option.id === "auto"
-        ? {
-            name: t("profile.settings.language.options.auto.name"),
-            description: t("profile.settings.language.options.auto.description"),
-          }
-        : { name: option.nativeName ?? option.id, description: "" },
-    [t],
+    (option: LanguageOption): { name: string; description: string } => {
+      if (option.id === "auto") {
+        return {
+          name: t("profile.settings.language.options.auto.name"),
+          description: t("profile.settings.language.options.auto.description"),
+        };
+      }
+      // The language's own name underneath, when it differs, so a user
+      // stuck in a language they can't read still finds theirs.
+      const name = translatedLanguageName(option.id);
+      const native = option.nativeName ?? "";
+      return { name, description: native === name ? "" : native };
+    },
+    [t, translatedLanguageName],
   );
   const handleLanguageSelect = useCallback(
     async (option: LanguageOption) => {

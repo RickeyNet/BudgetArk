@@ -18,6 +18,20 @@ export const profileSettings = {
     a11yHint: "Opens the app language options",
     /** Shown as the subtext when "Automatic" is selected. */
     autoWithResolved: "Automatic ({{language}})",
+    /**
+     * Each shipped language named IN THE ACTIVE LANGUAGE ("German" on an
+     * English app, "Deutsch" on a German one). The picker shows the
+     * language's own name (LANGUAGE_NATIVE_NAMES) underneath when it differs,
+     * so a user stuck in a language they can't read still finds theirs.
+     */
+    names: {
+      en: "English",
+      de: "German",
+      ru: "Russian",
+      uk: "Ukrainian",
+      sv: "Swedish",
+      nb: "Norwegian",
+    },
     options: {
       auto: {
         name: "Automatic",
