@@ -22,8 +22,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { formatMonthKeyLabel } from "../utils/budgetMonths";
-import { buildMonthDayGrid } from "../utils/entryDate";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -38,6 +39,7 @@ import { getCategoryIcon } from "../data/categoryIcons";
 import { getRecurrenceTag } from "../utils/recurrence";
 import { isFulfillingEntry } from "../utils/billFulfillment";
 import { normalizePaymentUrl } from "../utils/paymentUrl";
+import MonthDayCalendar, { MonthDayCalendarDayInfo } from "./MonthDayCalendar";
 
 interface BillCalendarModalProps {
   visible: boolean;
@@ -49,30 +51,23 @@ interface BillCalendarModalProps {
   onEditEntry: (entry: BudgetEntry) => void;
 }
 
-const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
-
 interface GridCell {
-  day: number | null;
   total: number;
   categories: CategoryName[];
 }
 
-const buildGridCells = (monthKey: string, bills: BillsByDay): GridCell[] => {
-  // Same Sunday-first layout as the entry form's day picker
-  // (utils/entryDate.buildMonthDayGrid), so a date sits in the same
-  // column in both.
-  const cells: GridCell[] = buildMonthDayGrid(monthKey).map((d) => {
-    if (d == null) return { day: null, total: 0, categories: [] };
-    const list = bills.byDay.get(d) ?? [];
+/** Per-day totals and up to three category dots (so the cell stays legible). */
+const buildGridCells = (bills: BillsByDay): Map<number, GridCell> => {
+  const cells = new Map<number, GridCell>();
+  for (const [day, list] of bills.byDay) {
     const total = list.reduce((s, e) => s + e.amount, 0);
-    // Distinct category list, max 3 dots per cell so the row stays legible.
     const cats: CategoryName[] = [];
     for (const e of list) {
       if (!cats.includes(e.category)) cats.push(e.category);
       if (cats.length >= 3) break;
     }
-    return { day: d, total, categories: cats };
-  });
+    cells.set(day, { total, categories: cats });
+  }
   return cells;
 };
 
@@ -85,6 +80,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
   colorForCategory,
   onEditEntry,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -96,7 +92,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
     () => groupBillsByDay(entries, monthKey, { includeOneOff }),
     [entries, monthKey, includeOneOff]
   );
-  const cells = useMemo(() => buildGridCells(monthKey, bills), [monthKey, bills]);
+  const gridCells = useMemo(() => buildGridCells(bills), [bills]);
   const { paid, remaining } = useMemo(
     () => splitPaidVsRemaining(bills, monthKey),
     [bills, monthKey]
@@ -117,38 +113,66 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
     const url = normalizePaymentUrl(raw);
     if (!url) {
       Alert.alert(
-        "Can't open this link",
-        "The saved URL isn't a valid http(s) address. Edit the bill to fix it."
+        t("budget.tools.billCalendar.linkError.title"),
+        t("budget.tools.billCalendar.linkError.invalid")
       );
       return;
     }
     try {
       const ok = await Linking.canOpenURL(url);
       if (!ok) {
-        Alert.alert("Can't open this link", "No browser is available to open the URL.");
+        Alert.alert(
+          t("budget.tools.billCalendar.linkError.title"),
+          t("budget.tools.billCalendar.linkError.noBrowser")
+        );
         return;
       }
       await Linking.openURL(url);
     } catch {
-      Alert.alert("Can't open this link", "Something went wrong opening the URL.");
+      Alert.alert(
+        t("budget.tools.billCalendar.linkError.title"),
+        t("budget.tools.billCalendar.linkError.failed")
+      );
     }
-  }, []);
+  }, [t]);
 
-  const nextLabel = useMemo(() => {
+  const nextLabel = useMemo((): string | null => {
     if (!next) return null;
-    if (next.daysUntil === 0) return "today";
-    if (next.daysUntil === 1) return "tomorrow";
-    if (next.daysUntil < 0) return `${Math.abs(next.daysUntil)}d ago`;
-    return `in ${next.daysUntil}d`;
-  }, [next]);
+    if (next.daysUntil === 0) return t("budget.tools.billCalendar.when.today");
+    if (next.daysUntil === 1) return t("budget.tools.billCalendar.when.tomorrow");
+    if (next.daysUntil < 0)
+      return t("budget.tools.billCalendar.when.daysAgo", { count: Math.abs(next.daysUntil) });
+    return t("budget.tools.billCalendar.when.inDays", { count: next.daysUntil });
+  }, [next, t]);
+
+  // Month title in the active app language (formatMonthKeyLabel follows the
+  // device locale, which a fixed-language user may have set differently).
+  const monthLabel = useMemo(() => {
+    const [y, m] = monthKey.split("-").map(Number);
+    const d = new Date(y, (m || 1) - 1, 1);
+    try {
+      return d.toLocaleDateString(i18n.language, { month: "long", year: "numeric" });
+    } catch {
+      return formatMonthKeyLabel(monthKey);
+    }
+  }, [monthKey, i18n.language]);
+  const monthOnlyLabel = useMemo(() => {
+    const [y, m] = monthKey.split("-").map(Number);
+    const d = new Date(y, (m || 1) - 1, 1);
+    try {
+      return d.toLocaleDateString(i18n.language, { month: "long" });
+    } catch {
+      return formatMonthKeyLabel(monthKey).split(" ")[0];
+    }
+  }, [monthKey, i18n.language]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={[styles.overlay, { paddingTop: insets.top }]}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>Bill Calendar</Text>
-            <Text style={styles.subtitle}>{formatMonthKeyLabel(monthKey)}</Text>
+            <Text style={styles.title}>{t("budget.tools.billCalendar.title")}</Text>
+            <Text style={styles.subtitle}>{monthLabel}</Text>
           </View>
 
           <ScrollView
@@ -160,19 +184,19 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
           >
             <View style={styles.statsStrip}>
               <View style={styles.statCol}>
-                <Text style={styles.statLabel}>Bills</Text>
+                <Text style={styles.statLabel}>{t("budget.tools.billCalendar.stats.bills")}</Text>
                 <Text style={styles.statValue}>{formatCurrency(bills.monthTotal)}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statCol}>
-                <Text style={styles.statLabel}>Paid</Text>
+                <Text style={styles.statLabel}>{t("budget.tools.billCalendar.stats.paid")}</Text>
                 <Text style={[styles.statValue, { color: colors.success }]}>
                   {formatCurrency(paid)}
                 </Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statCol}>
-                <Text style={styles.statLabel}>Remaining</Text>
+                <Text style={styles.statLabel}>{t("budget.tools.billCalendar.stats.remaining")}</Text>
                 <Text style={[styles.statValue, { color: colors.warning }]}>
                   {formatCurrency(remaining)}
                 </Text>
@@ -181,69 +205,59 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
 
             {next && nextLabel && (
               <View style={styles.nextRow}>
-                <Text style={styles.nextLabel}>NEXT</Text>
+                <Text style={styles.nextLabel}>{t("budget.tools.billCalendar.nextLabel")}</Text>
                 <Text style={styles.nextText} numberOfLines={1}>
-                  {next.entry.description || next.entry.category} ·{" "}
-                  {formatCurrency(next.entry.amount)} · {nextLabel}
+                  {t("budget.tools.billCalendar.nextRow", {
+                    name: next.entry.description || categoryLabel(t, next.entry.category),
+                    amount: formatCurrency(next.entry.amount),
+                    when: nextLabel,
+                  })}
                 </Text>
               </View>
             )}
 
-            <View style={styles.weekRow}>
-              {WEEKDAY_LABELS.map((label, idx) => (
-                <Text key={`${label}-${idx}`} style={styles.weekLabel}>
-                  {label}
-                </Text>
-              ))}
-            </View>
-
-            <View style={styles.grid}>
-              {cells.map((cell, idx) => {
-                const isToday = cell.day != null && cell.day === today;
-                const isPast = cell.day != null && isCurrentMonth && cell.day < today;
-                const hasBills = cell.total > 0;
+            {/* The shared seven-column grid (MonthDayCalendar) keeps every
+                day under its weekday; only the cell body is ours. */}
+            <MonthDayCalendar
+              yearMonth={monthKey}
+              mode="date"
+              gap={4}
+              cellAspectRatio={0.9}
+              renderDay={({ day, weekdayLabel }: MonthDayCalendarDayInfo) => {
+                const cell = gridCells.get(day);
+                const hasBills = cell != null && cell.total > 0;
+                const isPast = isCurrentMonth && day < today;
                 return (
                   <Pressable
-                    key={idx}
                     style={[
                       styles.cell,
                       hasBills && styles.cellHasBills,
-                      isToday && styles.cellToday,
+                      day === today && styles.cellToday,
                       isPast && styles.cellPast,
-                      cell.day == null && styles.cellEmpty,
                     ]}
-                    onPress={
-                      cell.day != null && hasBills
-                        ? () => setSelectedDay(cell.day)
-                        : undefined
-                    }
-                    disabled={cell.day == null || !hasBills}
+                    onPress={hasBills ? () => setSelectedDay(day) : undefined}
+                    disabled={!hasBills}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${weekdayLabel} ${day}`}
                   >
-                    {cell.day != null && (
-                      <>
-                        <Text style={styles.cellDay}>{cell.day}</Text>
-                        <View style={styles.cellDots}>
-                          {cell.categories.map((cat, dotIdx) => (
-                            <View
-                              key={`${cat}-${dotIdx}`}
-                              style={[
-                                styles.cellDot,
-                                { backgroundColor: colorForCategory(cat) },
-                              ]}
-                            />
-                          ))}
-                        </View>
-                        {hasBills && (
-                          <Text style={styles.cellAmount} numberOfLines={1}>
-                            {formatCurrency(cell.total)}
-                          </Text>
-                        )}
-                      </>
+                    <Text style={styles.cellDay}>{day}</Text>
+                    <View style={styles.cellDots}>
+                      {cell?.categories.map((cat, dotIdx) => (
+                        <View
+                          key={`${cat}-${dotIdx}`}
+                          style={[styles.cellDot, { backgroundColor: colorForCategory(cat) }]}
+                        />
+                      ))}
+                    </View>
+                    {hasBills && (
+                      <Text style={styles.cellAmount} numberOfLines={1}>
+                        {formatCurrency(cell.total)}
+                      </Text>
                     )}
                   </Pressable>
                 );
-              })}
-            </View>
+              }}
+            />
 
             <TouchableOpacity
               style={styles.toggleRow}
@@ -261,15 +275,11 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
               >
                 {includeOneOff && <Text style={styles.toggleCheck}>✓</Text>}
               </View>
-              <Text style={styles.toggleLabel}>Show one-off expenses too</Text>
+              <Text style={styles.toggleLabel}>{t("budget.tools.billCalendar.showOneOff")}</Text>
             </TouchableOpacity>
 
             {bills.byDay.size === 0 && (
-              <Text style={styles.emptyHint}>
-                No recurring bills land in this month. Add a recurring expense
-                from the Add Entry sheet and set its day-of-month to see it
-                here.
-              </Text>
+              <Text style={styles.emptyHint}>{t("budget.tools.billCalendar.emptyHint")}</Text>
             )}
           </ScrollView>
 
@@ -282,7 +292,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
             ]}
           >
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeText}>Close</Text>
+              <Text style={styles.closeText}>{t("common.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -303,9 +313,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.dayCardTitle}>
-              {selectedDay != null
-                ? `${formatMonthKeyLabel(monthKey).split(" ")[0]} ${selectedDay}`
-                : ""}
+              {selectedDay != null ? `${monthOnlyLabel} ${selectedDay}` : ""}
             </Text>
             <ScrollView style={styles.dayList}>
               {selectedEntries.map((entry) => (
@@ -327,12 +335,14 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
                       <View style={{ flex: 1 }}>
                         <Text style={styles.dayItemTitle} numberOfLines={1}>
                           {getCategoryIcon(entry.category, customCategories)}{" "}
-                          {entry.description || entry.category}
+                          {entry.description || categoryLabel(t, entry.category)}
                         </Text>
                         <Text style={styles.dayItemSub}>
-                          {entry.category}
+                          {categoryLabel(t, entry.category)}
                           {entry.recurring ? ` · ${getRecurrenceTag(entry)}` : ""}
-                          {isFulfillingEntry(entry) ? " · ✓ Paid (actual)" : ""}
+                          {isFulfillingEntry(entry)
+                            ? ` · ${t("budget.tools.billCalendar.paidActual")}`
+                            : ""}
                         </Text>
                       </View>
                     </View>
@@ -345,11 +355,11 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
                       style={styles.payBtn}
                       onPress={() => openPaymentUrl(entry.paymentUrl)}
                       accessibilityRole="link"
-                      accessibilityLabel={`Open payment site for ${
-                        entry.description || entry.category
-                      }`}
+                      accessibilityLabel={t("budget.tools.billCalendar.payA11y", {
+                        name: entry.description || categoryLabel(t, entry.category),
+                      })}
                     >
-                      <Text style={styles.payBtnText}>Pay ↗</Text>
+                      <Text style={styles.payBtnText}>{t("budget.tools.billCalendar.payButton")}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -359,7 +369,7 @@ const BillCalendarModal: React.FC<BillCalendarModalProps> = ({
               style={styles.closeButton}
               onPress={() => setSelectedDay(null)}
             >
-              <Text style={styles.closeText}>Close</Text>
+              <Text style={styles.closeText}>{t("common.close")}</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -453,27 +463,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 13,
       color: colors.text,
     },
-    weekRow: {
-      flexDirection: "row",
-      justifyContent: "space-around",
-      paddingHorizontal: 2,
-    },
-    weekLabel: {
-      flex: 1,
-      textAlign: "center",
-      fontSize: 11,
-      fontWeight: "600",
-      color: colors.textDim,
-      letterSpacing: 0.5,
-    },
-    grid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 4,
-    },
+    /* Fills the MonthDayCalendar cell wrapper, which sets the size. */
     cell: {
-      width: "13.6%",
-      aspectRatio: 0.9,
+      flex: 1,
       borderRadius: 8,
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -481,10 +473,6 @@ const makeStyles = (colors: ThemeColors) =>
       padding: 4,
       alignItems: "center",
       justifyContent: "flex-start",
-    },
-    cellEmpty: {
-      backgroundColor: "transparent",
-      borderColor: "transparent",
     },
     cellHasBills: {
       backgroundColor: `${colors.accent}15`,

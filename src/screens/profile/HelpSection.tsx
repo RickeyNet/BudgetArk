@@ -3,40 +3,86 @@
  * File: src/screens/profile/HelpSection.tsx
  *
  * The HELP card: an "Onboarding" row opening the searchable onboarding
- * guide (OnboardingGuideModal) which also hosts Redo onboarding, and a
- * "Feature tour" row replaying the feature-debut carousel on demand. This
- * section owns the redo sequence - close the sheet, then reset the
- * onboarding flag + coachmark state and flip the app gate - and registers
- * the help-card coachmark anchor.
+ * guide (OnboardingGuideModal) which also hosts Redo onboarding, a
+ * "Update spotlight" row replaying this version's debut carousel, and a
+ * "Feature guide" row opening the browsable directory of every feature
+ * (FeatureGuideModal). This section owns the redo sequence - close the
+ * sheet, then reset the onboarding flag + coachmark state and flip the app
+ * gate - and registers the help-card coachmark anchor. The imperative
+ * handle lets the `openSection: "featureGuide"` deep link (the carousel's
+ * "browse every feature" link and the guide's own debut slide) open the
+ * guide from ProfileScreen's deferred effect.
  */
 
-import React, { useCallback, useState } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useState,
+} from "react";
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useCoachmarks } from "../../onboarding/CoachmarksProvider";
 import { useCoachmarkAnchor } from "../../onboarding/CoachmarkAnchorContext";
 import { useOnboardingGate } from "../../onboarding/OnboardingGateContext";
 import { useFeatureTour } from "../../components/FeatureTourContext";
 import { resetOnboardingStatus } from "../../storage/userStorage";
 import OnboardingGuideModal from "../../components/OnboardingGuideModal";
+import FeatureGuideModal from "../../components/FeatureGuideModal";
+import type { FeatureSpotlight } from "../../data/featureSpotlights";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
 
-type HelpSectionProps = {
-  scrollRef: React.RefObject<ScrollView | null>;
+export type HelpSectionHandle = {
+  /** Open the feature guide sheet (openSection deep link). */
+  openFeatureGuide: () => void;
 };
 
-const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
+type HelpSectionProps = {
+  scrollRef: React.RefObject<ScrollView | null>;
+  /** Ids still wearing a NEW badge; the guide shows the pill on their rows. */
+  newFeatureIds: ReadonlySet<string>;
+  /** Expanding a feature in the guide counts as seeing it - clears its badge. */
+  onFeatureOpened: (featureId: string) => void;
+};
+
+const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
+  scrollRef,
+  newFeatureIds,
+  onFeatureOpened,
+}, ref) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
   const { replay: replayCoachmarks } = useCoachmarks();
   const { restartOnboarding } = useOnboardingGate();
-  const { replayFeatureTour } = useFeatureTour();
+  const { replayFeatureTour, openSpotlightCta } = useFeatureTour();
   const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
 
   const [showGuide, setShowGuide] = useState(false);
+  const [showFeatureGuide, setShowFeatureGuide] = useState(false);
+
+  useImperativeHandle(
+    ref,
+    () => ({ openFeatureGuide: () => setShowFeatureGuide(true) }),
+    []
+  );
+
+  /**
+   * "Try it" inside the feature guide: close the sheet and let its dismiss
+   * animation finish before following the CTA, which may present another
+   * Modal (the iOS silent-present rule, same as handleRedoOnboarding).
+   */
+  const handleTryFeature = useCallback(
+    (spotlight: FeatureSpotlight) => {
+      setShowFeatureGuide(false);
+      setTimeout(() => openSpotlightCta(spotlight), 350);
+    },
+    [openSpotlightCta]
+  );
 
   /**
    * Redo onboarding, triggered from inside the guide sheet. Close the
@@ -71,7 +117,7 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          HELP
+          {t("profile.info.help.sectionTitle")}
         </Text>
 
         <View
@@ -91,12 +137,12 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
           >
             <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Onboarding
+                {t("profile.info.help.onboarding.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Searchable guide to everything, or redo the first-launch setup
+                {t("profile.info.help.onboarding.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -117,16 +163,46 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
               triggerHaptic("selection");
               replayFeatureTour();
             }}
-            accessibilityLabel="Replay the feature tour"
+            accessibilityLabel={t("profile.info.help.updateSpotlight.a11yLabel")}
           >
             <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Feature tour
+                {t("profile.info.help.updateSpotlight.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Rewatch the what's-new tour of recent features
+                {t("profile.info.help.updateSpotlight.description")}
+              </Text>
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              →
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => {
+              triggerHaptic("selection");
+              setShowFeatureGuide(true);
+            }}
+            accessibilityLabel={t("profile.info.help.featureGuide.a11yLabel")}
+          >
+            <View style={styles.rowTextWrap}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                {t("profile.info.help.featureGuide.label")}
+              </Text>
+              <Text
+                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+              >
+                {t("profile.info.help.featureGuide.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -142,8 +218,19 @@ const HelpSection: React.FC<HelpSectionProps> = ({ scrollRef }) => {
           onRedoOnboarding={handleRedoOnboarding}
         />
       ) : null}
+
+      {showFeatureGuide ? (
+        <FeatureGuideModal
+          onClose={() => setShowFeatureGuide(false)}
+          onTryFeature={handleTryFeature}
+          newFeatureIds={newFeatureIds}
+          onFeatureOpened={onFeatureOpened}
+        />
+      ) : null}
     </>
   );
-};
+});
+
+HelpSection.displayName = "HelpSection";
 
 export default HelpSection;

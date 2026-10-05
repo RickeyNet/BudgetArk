@@ -23,7 +23,7 @@
  * order); the host screen refreshes its entry list via `onChanged`.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -36,6 +36,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import type {
   BudgetEntry,
   MerchantRule,
@@ -53,6 +54,7 @@ import TagPillPicker, { MultiTagPillPicker } from "./TagPillPicker";
 import { entryPersonIds, formatPersonNames } from "../utils/entryPeople";
 import { LENT_TO_MAX_LENGTH, lentToSuggestions } from "../utils/loans";
 import { useTheme } from "../theme/ThemeProvider";
+import { categoryLabel } from "../i18n/categoryLabel";
 import type { ThemeColors } from "../theme/themes";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { useConnections } from "../connections/ConnectionsProvider";
@@ -105,6 +107,7 @@ import {
   groupDefaultCategory,
   type InboxSection,
 } from "../utils/reviewInboxSections";
+import { anchoredScrollOffset } from "../utils/inboxScrollAnchor";
 
 interface ReviewInboxModalProps {
   visible: boolean;
@@ -125,12 +128,37 @@ interface ReviewInboxModalProps {
 
 const DEFAULT_CATEGORY: CategoryName = "Other";
 
+/**
+ * measureInWindow never calls back for a view that is already gone; cap the
+ * wait so an approve/skip can never hang on the measurement.
+ */
+const MEASURE_TIMEOUT_MS = 100;
+
+/** Window y of a mounted view, or null when it can't be measured in time. */
+const windowTopAsync = (view: View | null | undefined): Promise<number | null> =>
+  new Promise((resolve) => {
+    if (!view) {
+      resolve(null);
+      return;
+    }
+    const timer = setTimeout(() => resolve(null), MEASURE_TIMEOUT_MS);
+    try {
+      view.measureInWindow((_x, y) => {
+        clearTimeout(timer);
+        resolve(Number.isFinite(y) ? y : null);
+      });
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
+
 /** "Sep 3" for the already-logged notice; falls back to the raw date text. */
-const formatPaymentDay = (iso: string): string => {
+const formatPaymentDay = (iso: string, locale: string): string => {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
     ? iso
-    : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    : date.toLocaleDateString(locale, { month: "short", day: "numeric" });
 };
 
 
@@ -143,6 +171,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   entries,
   onChanged,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -154,6 +183,40 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     refresh,
     syncNow,
   } = useConnections();
+
+  // Keeping the user's place when a card leaves the list. Approve/Skip
+  // remove the card (and its tall expanded editor), so the content shrinks
+  // under the current scroll offset and the list used to jump - see
+  // utils/inboxScrollAnchor. Before the action we measure where the card's
+  // top sits in the viewport; once the shrunken list has rendered we scroll
+  // so the next card takes that exact place.
+  const listRef = useRef<SectionList<PendingTransaction, InboxSection>>(null);
+  const cardRefs = useRef(new Map<string, View>());
+  const scrollOffsetRef = useRef(0);
+  /** Offset to apply after the next pendingTransactions render; null = none. */
+  const pendingScrollOffsetRef = useRef<number | null>(null);
+
+  const captureScrollAnchor = useCallback(async (itemId: string) => {
+    const scrollHost = listRef.current?.getScrollResponder()?.getNativeScrollRef?.();
+    const [cardTop, listTop] = await Promise.all([
+      windowTopAsync(cardRefs.current.get(itemId)),
+      windowTopAsync(scrollHost as View | null | undefined),
+    ]);
+    pendingScrollOffsetRef.current =
+      cardTop == null || listTop == null
+        ? null
+        : anchoredScrollOffset(scrollOffsetRef.current, cardTop - listTop);
+  }, []);
+
+  useEffect(() => {
+    const offset = pendingScrollOffsetRef.current;
+    if (offset == null) return;
+    pendingScrollOffsetRef.current = null;
+    // scrollTo on the underlying ScrollView is offset-based, so it doesn't
+    // depend on VirtualizedList's cell frames, which are stale right after
+    // a removal.
+    listRef.current?.getScrollResponder()?.scrollTo({ y: offset, animated: false });
+  }, [pendingTransactions]);
 
   const [links, setLinks] = useState<ExternalAccountLink[]>([]);
   /** Live merchant rules, so the "make it a rule" nudge knows what's covered. */
@@ -178,6 +241,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   /** "Lent to someone?" - free text, "" = not a loan (see BudgetEntry.lentTo). */
   const [draftLentTo, setDraftLentTo] = useState("");
   const [rememberRule, setRememberRule] = useState(false);
+  // "Applies to bill", "Add to a purchase plan" and "Lent to someone" fold
+  // away by default so the editor stays short; the picked bill/debt or name
+  // is still summarised on the collapsed header, so nothing a rule prefilled
+  // is hidden silently.
+  const [showBillSection, setShowBillSection] = useState(false);
+  const [showPlanSection, setShowPlanSection] = useState(false);
+  const [showLentSection, setShowLentSection] = useState(false);
   // "By vendor" grouping: fold every transaction from one merchant into a
   // single section so a big multi-month import is triaged vendor by vendor.
   const [groupByMerchant, setGroupByMerchant] = useState(false);
@@ -217,7 +287,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     void refresh()
       .then(() => setActionError(null))
       .catch((error: unknown) =>
-        setActionError(describeError(error, "Couldn't load the inbox.")),
+        setActionError(describeError(error, t("budget.inbox.errors.load"))),
       );
     // Account names are cosmetic here - a failed read just shows ids.
     void getLinks()
@@ -236,7 +306,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     void getDebts()
       .then(setDebts)
       .catch(() => setDebts([]));
-  }, [visible, refresh]);
+  }, [visible, refresh, t]);
 
   const accountNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -255,11 +325,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     const map = new Map<string, string>();
     for (const entry of entries) {
       if (isBillCandidate(entry)) {
-        map.set(entry.id, entry.description?.trim() || entry.category);
+        map.set(entry.id, entry.description?.trim() || categoryLabel(t, entry.category));
       }
     }
     return map;
-  }, [entries]);
+  }, [entries, t]);
 
   const businessNameById = useMemo(
     () => new Map(businesses.map((b) => [b.id, b.name])),
@@ -279,7 +349,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       groupByMerchant
         ? buildInboxSectionsByMerchant(pendingTransactions)
         : buildInboxSections(pendingTransactions),
-    [groupByMerchant, pendingTransactions]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t: the helper output is translated; recompute after a language switch
+    [groupByMerchant, pendingTransactions, t]
   );
 
   // Warning lines for charges far above the merchant's usual, or large
@@ -324,6 +395,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       );
       setDraftLentTo("");
       setRememberRule(false);
+      setShowBillSection(false);
+      setShowPlanSection(false);
+      setShowLentSection(false);
       return item.id;
     });
   }, []);
@@ -341,6 +415,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     ) => {
       setBusyId(item.id);
       setActionError(null);
+      await captureScrollAnchor(item.id);
       try {
         await approvePendingTransaction({
           pendingId: item.id,
@@ -376,19 +451,21 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           if (nudge) setInboxNudge(nudge);
         }
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't approve this transaction."));
+        setActionError(describeError(error, t("budget.inbox.errors.approve")));
       } finally {
         setBusyId(null);
       }
     },
-    [billNameById, noteWin, onChanged, refresh],
+    [billNameById, captureScrollAnchor, noteWin, onChanged, refresh, t],
   );
 
   const handleSkip = useCallback(
     async (item: PendingTransaction, remember: boolean) => {
       setBusyId(item.id);
       setActionError(null);
+      await captureScrollAnchor(item.id);
       try {
         // "Always" + Skip = ignore this merchant on every future sync (and
         // clear its other inbox items right now).
@@ -401,19 +478,21 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         triggerHaptic("selection");
         setExpandedId(null);
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't skip this transaction."));
+        setActionError(describeError(error, t("budget.inbox.errors.skip")));
       } finally {
         setBusyId(null);
       }
     },
-    [refresh],
+    [captureScrollAnchor, refresh, t],
   );
 
   const handleTransferToPlan = useCallback(
     async (item: PendingTransaction, goal: SavingsGoal) => {
       setBusyId(item.id);
       setActionError(null);
+      await captureScrollAnchor(item.id);
       try {
         const goals = await applyPendingTransferToPlan(item.id, goal.id);
         if (goals) {
@@ -424,13 +503,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         triggerHaptic("success");
         setExpandedId(null);
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't add this to the plan."));
+        setActionError(describeError(error, t("budget.inbox.errors.addToPlan")));
       } finally {
         setBusyId(null);
       }
     },
-    [onChanged, refresh],
+    [captureScrollAnchor, onChanged, refresh, t],
   );
 
   /**
@@ -443,6 +523,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       setBusyId(item.id);
       setActionError(null);
       setActionNotice(null);
+      await captureScrollAnchor(item.id);
       try {
         const result = await applyPendingPaymentToDebt(item.id, debtId, {
           rememberRule: remember,
@@ -464,11 +545,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           // Matched to the due-prompt's or a hand-logged payment: nothing
           // was added, say so - and it isn't a fresh win.
           setActionNotice(
-            `Already on the Debts tab - matched to the ${formatCurrency(
-              result.alreadyLogged.amount,
-            )} payment logged ${formatPaymentDay(
-              result.alreadyLogged.date,
-            )}. Nothing was counted twice.`,
+            t("budget.inbox.notices.alreadyLogged", {
+              amount: formatCurrency(result.alreadyLogged.amount),
+              date: formatPaymentDay(result.alreadyLogged.date, i18n.language),
+            }),
           );
         } else if (result) {
           // Same win the Debt tab counts for a logged payment.
@@ -480,13 +560,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           if (nudge) setInboxNudge(nudge);
         }
       } catch (error) {
+        pendingScrollOffsetRef.current = null;
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't log this debt payment."));
+        setActionError(describeError(error, t("budget.inbox.errors.logDebtPayment")));
       } finally {
         setBusyId(null);
       }
     },
-    [formatCurrency, noteWin, onChanged, refresh],
+    [captureScrollAnchor, formatCurrency, i18n.language, noteWin, onChanged, refresh, t],
   );
 
   const handleSkipSection = useCallback(
@@ -499,12 +580,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         triggerHaptic("selection");
       } catch (error) {
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't skip those transactions."));
+        setActionError(describeError(error, t("budget.inbox.errors.skipMany")));
       } finally {
         setBulkBusy(false);
       }
     },
-    [refresh],
+    [refresh, t],
   );
 
   /**
@@ -546,12 +627,12 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         triggerHaptic("success");
       } catch (error) {
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't create the recurring bill."));
+        setActionError(describeError(error, t("budget.inbox.errors.createBill")));
       } finally {
         setCreatingBillId(null);
       }
     },
-    [creatingBillId, draftCategory, draftName, onChanged],
+    [creatingBillId, draftCategory, draftName, onChanged, t],
   );
 
   // Switch grouping; closing any open item/group editor so nothing points at
@@ -599,14 +680,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       } catch (error) {
         triggerHaptic("error");
         setActionError(
-          describeError(error, "Couldn't categorize this vendor's transactions."),
+          describeError(error, t("budget.inbox.errors.categorizeVendor")),
         );
         await refresh().catch(() => undefined);
       } finally {
         setBulkBusy(false);
       }
     },
-    [groupCategory, groupRemember, onChanged, refresh],
+    [groupCategory, groupRemember, onChanged, refresh, t],
   );
 
   const handleBulkApprove = useCallback(async () => {
@@ -632,13 +713,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       // save); refresh so the list reflects exactly what landed.
       triggerHaptic("error");
       setActionError(
-        describeError(error, "Couldn't approve all of the suggested transactions."),
+        describeError(error, t("budget.inbox.errors.bulkApprove")),
       );
       await refresh().catch(() => undefined);
     } finally {
       setBulkBusy(false);
     }
-  }, [onChanged, pendingTransactions, refresh]);
+  }, [onChanged, pendingTransactions, refresh, t]);
 
   const renderItem = ({ item }: { item: PendingTransaction }) => {
     const expanded = expandedId === item.id;
@@ -674,18 +755,27 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         : [];
     const billOptions = billCandidates.map((bill) => ({
       id: bill.id,
-      name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
-        bill.amount,
-      )}`,
+      name: t("budget.inbox.form.billOption", {
+        name: bill.description?.trim() || categoryLabel(t, bill.category),
+        amount: formatCurrency(bill.amount),
+      }),
     }));
     const debtOptions = debtCandidates.map((debt) => ({
       id: debtOptionId(debt.id),
-      name: `${debt.name} · min ${formatCurrency(debt.minPayment)}`,
+      name: t("budget.inbox.form.debtOption", {
+        name: debt.name,
+        amount: formatCurrency(debt.minPayment),
+      }),
     }));
     const applyToOptions =
       draftCategory === "Debt Payments"
         ? [...debtOptions, ...billOptions]
         : [...billOptions, ...debtOptions];
+    // Shown on the folded "Applies to bill" header so a rule-prefilled pick
+    // (which changes what Approve does) is visible without opening it.
+    const pickedApplyTo = draftRecurringId
+      ? applyToOptions.find((option) => option.id === draftRecurringId)
+      : undefined;
     // A merchant that has charged once a month for three months with no
     // bill on file: offer to create one (hidden once a bill is picked).
     const billSuggestion =
@@ -702,7 +792,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         : null;
     const planChoices = expanded && isExpense ? plans : [];
     return (
-      <View style={styles.itemCard}>
+      <View
+        style={styles.itemCard}
+        ref={(node) => {
+          if (node) cardRefs.current.set(item.id, node);
+          else cardRefs.current.delete(item.id);
+        }}
+      >
         <TouchableOpacity
           style={styles.itemHeader}
           onPress={() => toggleExpand(item)}
@@ -713,19 +809,21 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               {item.suggestedName ||
                 item.merchant ||
                 item.description ||
-                "(no description)"}
+                t("budget.inbox.row.noDescription")}
             </Text>
             <Text style={styles.itemMeta} numberOfLines={1}>
               {[
                 accountName,
-                item.pending ? "pending" : null,
+                item.pending ? t("budget.inbox.row.pending") : null,
                 item.suggestedCategory
-                  ? `suggested: ${item.suggestedCategory}`
+                  ? t("budget.inbox.row.suggested", {
+                      category: categoryLabel(t, item.suggestedCategory),
+                    })
                   : null,
                 item.suggestedBusinessId
                   ? `💼 ${
                       businessNameById.get(item.suggestedBusinessId) ??
-                      "(deleted business)"
+                      t("budget.inbox.row.deletedBusiness")
                     }`
                   : null,
                 item.suggestedPersonId
@@ -735,11 +833,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                         personIds: item.suggestedPersonIds,
                       }),
                       personNameById,
-                      "(deleted person)",
+                      t("budget.inbox.row.deletedPerson"),
                     )}`
                   : null,
                 item.suggestedDebtId
-                  ? `💳 ${debtNameById.get(item.suggestedDebtId) ?? "(deleted debt)"}`
+                  ? `💳 ${debtNameById.get(item.suggestedDebtId) ?? t("budget.inbox.row.deletedDebt")}`
                   : item.suggestedRecurringId &&
                       billNameById.has(item.suggestedRecurringId)
                     ? `🧾 ${billNameById.get(item.suggestedRecurringId)}`
@@ -767,17 +865,17 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
 
         {expanded ? (
           <View style={styles.expandedArea}>
-            <Text style={styles.label}>NAME</Text>
+            <Text style={styles.label}>{t("budget.inbox.form.nameLabel")}</Text>
             <TextInput
               style={styles.nameInput}
               value={draftName}
               onChangeText={setDraftName}
-              placeholder={item.description || "Name this transaction"}
+              placeholder={item.description || t("budget.inbox.form.namePlaceholder")}
               placeholderTextColor={colors.textMuted}
               maxLength={220}
               returnKeyType="done"
             />
-            <Text style={styles.label}>CATEGORY</Text>
+            <Text style={styles.label}>{t("budget.inbox.form.categoryLabel")}</Text>
             <CategoryPillPicker
               value={draftCategory}
               onChange={setDraftCategory}
@@ -786,13 +884,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             />
             {billSuggestion ? (
               <View style={styles.billSuggestCard}>
-                <Text style={styles.billSuggestTitle}>🧾 Looks like a monthly bill</Text>
+                <Text style={styles.billSuggestTitle}>{t("budget.inbox.billSuggest.title")}</Text>
                 <Text style={styles.billSuggestText}>
-                  {billSuggestion.label} has posted once a month for{" "}
-                  {billSuggestion.months.length} months, averaging{" "}
-                  {formatCurrency(billSuggestion.averageAmount)}. Make it a
-                  recurring bill and this charge - and future ones - file
-                  against it instead of stacking on the estimate.
+                  {t("budget.inbox.billSuggest.body", {
+                    label: billSuggestion.label,
+                    count: billSuggestion.months.length,
+                    amount: formatCurrency(billSuggestion.averageAmount),
+                  })}
                 </Text>
                 <TouchableOpacity
                   style={[
@@ -804,21 +902,23 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 >
                   <Text style={styles.billSuggestButtonText}>
                     {creatingBillId === item.id
-                      ? "Creating..."
-                      : `Make it a recurring bill · ${formatCurrency(
-                          billSuggestion.averageAmount,
-                        )}/mo`}
+                      ? t("budget.inbox.billSuggest.creating")
+                      : t("budget.inbox.billSuggest.create", {
+                          amount: formatCurrency(billSuggestion.averageAmount),
+                        })}
                   </Text>
                 </TouchableOpacity>
               </View>
             ) : null}
             {ruleNudge ? (
               <View style={styles.billSuggestCard}>
-                <Text style={styles.billSuggestTitle}>🔁 You've done this before</Text>
+                <Text style={styles.billSuggestTitle}>{t("budget.inbox.ruleNudge.title")}</Text>
                 <Text style={styles.billSuggestText}>
-                  You've approved "{ruleNudge.merchant}" as {ruleNudge.category}{" "}
-                  {ruleNudge.count} times. Make it a rule and future imports from
-                  this merchant approve themselves with the same category.
+                  {t("budget.inbox.ruleNudge.body", {
+                    merchant: ruleNudge.merchant,
+                    category: categoryLabel(t, ruleNudge.category),
+                    count: ruleNudge.count,
+                  })}
                 </Text>
                 <TouchableOpacity
                   style={[styles.billSuggestButton, busy && styles.buttonDisabled]}
@@ -839,129 +939,168 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   accessibilityState={{ disabled: busy }}
                 >
                   <Text style={styles.billSuggestButtonText}>
-                    {busy ? "Saving..." : `Always approve as ${ruleNudge.category}`}
+                    {busy
+                      ? t("budget.inbox.ruleNudge.saving")
+                      : t("budget.inbox.ruleNudge.alwaysApproveAs", {
+                          category: categoryLabel(t, ruleNudge.category),
+                        })}
                   </Text>
                 </TouchableOpacity>
               </View>
             ) : null}
-            {applyToOptions.length > 0 ? (
+            {item.suggestedType === "expense" &&
+            (people.length > 0 || draftPersonIds.length > 0) ? (
               <>
-                <Text style={styles.label}>APPLIES TO BILL</Text>
-                <TagPillPicker
-                  options={applyToOptions}
-                  value={draftRecurringId}
-                  onChange={setDraftRecurringId}
-                  noneLabel="Not a bill"
-                  glyph="🧾"
-                />
-                {draftDebtId ? (
-                  <Text style={styles.planHint}>
-                    Logged as a payment on this debt - its balance and payment
-                    history update on the Debts tab, and the Budget counts it
-                    under Debt Payments. No separate expense is created, and
-                    the category above is not used. Tick "Always do this"
-                    below and future payments to this merchant are logged on
-                    the debt without stopping here.
-                  </Text>
-                ) : null}
+                <Text style={styles.label}>{t("budget.inbox.form.peopleLabel")}</Text>
+                <MultiTagPillPicker
+                    options={people}
+                    values={draftPersonIds}
+                    onChange={setDraftPersonIds}
+                    noneLabel={t("budget.inbox.form.unassigned")}
+                    glyph="👤"
+                    deletedLabel={t("budget.inbox.row.deletedPerson")}
+                  />
               </>
             ) : null}
             {item.suggestedType === "expense" &&
             (businesses.length > 0 || draftBusinessId) ? (
               <>
-                <Text style={styles.label}>BUSINESS</Text>
+                <Text style={styles.label}>{t("budget.inbox.form.businessLabel")}</Text>
                 <TagPillPicker
                     options={businesses}
                     value={draftBusinessId}
                     onChange={setDraftBusinessId}
-                    noneLabel="Personal"
+                    noneLabel={t("budget.inbox.form.personal")}
                     glyph="💼"
-                    deletedLabel="(deleted business)"
+                    deletedLabel={t("budget.inbox.row.deletedBusiness")}
                   />
               </>
             ) : null}
-            {item.suggestedType === "expense" &&
-            (people.length > 0 || draftPersonIds.length > 0) ? (
+            {applyToOptions.length > 0 ? (
               <>
-                <Text style={styles.label}>PEOPLE</Text>
-                <MultiTagPillPicker
-                    options={people}
-                    values={draftPersonIds}
-                    onChange={setDraftPersonIds}
-                    noneLabel="Unassigned"
-                    glyph="👤"
-                    deletedLabel="(deleted person)"
-                  />
-              </>
-            ) : null}
-            {item.suggestedType === "expense" ? (
-              <>
-                <Text style={styles.label}>LENT TO SOMEONE?</Text>
-                <Text style={styles.planHint}>
-                  Money you expect back? Name who has it and track what they
-                  pay back under Profile → People → Owed to You.
-                </Text>
-                <TextInput
-                  style={styles.nameInput}
-                  value={draftLentTo}
-                  onChangeText={setDraftLentTo}
-                  placeholder="Leave blank if this isn't a loan"
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={LENT_TO_MAX_LENGTH}
-                  autoCapitalize="words"
-                  returnKeyType="done"
-                />
-                {lentToChips.length > 0 ? (
-                  <View style={styles.planChipRow}>
-                    {lentToChips.map((name) => (
-                      <TouchableOpacity
-                        key={name}
-                        style={styles.planChip}
-                        onPress={() => setDraftLentTo(name)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Lent to ${name}`}
-                      >
-                        <Text style={styles.planChipText} numberOfLines={1}>
-                          🤝 {name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                <TouchableOpacity
+                  style={styles.foldHeader}
+                  onPress={() => setShowBillSection((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showBillSection }}
+                  accessibilityLabel={t("budget.inbox.form.appliesToBill")}
+                >
+                  <Text style={styles.foldLabel} numberOfLines={1}>
+                    {t("budget.inbox.form.appliesToBill")}
+                    {!showBillSection && pickedApplyTo ? ` · 🧾 ${pickedApplyTo.name}` : ""}
+                  </Text>
+                  <Text style={styles.foldChevron}>{showBillSection ? "▾" : "›"}</Text>
+                </TouchableOpacity>
+                {showBillSection ? (
+                  <>
+                    <TagPillPicker
+                      options={applyToOptions}
+                      value={draftRecurringId}
+                      onChange={setDraftRecurringId}
+                      noneLabel={t("budget.inbox.form.notABill")}
+                      glyph="🧾"
+                    />
+                    {draftDebtId ? (
+                      <Text style={styles.planHint}>{t("budget.inbox.form.debtHint")}</Text>
+                    ) : null}
+                  </>
                 ) : null}
               </>
             ) : null}
             {planChoices.length > 0 ? (
               <>
-                <Text style={styles.label}>ADD TO A PURCHASE PLAN</Text>
-                <Text style={styles.planHint}>
-                  Moved this money into savings for one of your plans? Tap the
-                  plan and the amount lands on its balance instead of being
-                  filed as an expense.
-                </Text>
-                <View style={styles.planChipRow}>
-                  {planChoices.map((goal) => {
-                    const remaining = remainingForPlan(goal);
-                    return (
-                      <TouchableOpacity
-                        key={goal.id}
-                        style={[styles.planChip, busy && styles.buttonDisabled]}
-                        onPress={() => void handleTransferToPlan(item, goal)}
-                        disabled={busy}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Add ${formatCurrency(
-                          Math.abs(item.amount),
-                        )} to ${goal.name}`}
-                      >
-                        <Text style={styles.planChipText} numberOfLines={1}>
-                          {goal.name}
-                          {remaining > 0
-                            ? ` · ${formatCurrency(remaining)} to go`
-                            : " · funded"}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <TouchableOpacity
+                  style={styles.foldHeader}
+                  onPress={() => setShowPlanSection((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showPlanSection }}
+                  accessibilityLabel={t("budget.inbox.form.planLabel")}
+                >
+                  <Text style={styles.foldLabel}>{t("budget.inbox.form.planLabel")}</Text>
+                  <Text style={styles.foldChevron}>{showPlanSection ? "▾" : "›"}</Text>
+                </TouchableOpacity>
+                {showPlanSection ? (
+                  <>
+                    <Text style={styles.planHint}>{t("budget.inbox.form.planHint")}</Text>
+                    <View style={styles.planChipRow}>
+                      {planChoices.map((goal) => {
+                        const remaining = remainingForPlan(goal);
+                        return (
+                          <TouchableOpacity
+                            key={goal.id}
+                            style={[styles.planChip, busy && styles.buttonDisabled]}
+                            onPress={() => void handleTransferToPlan(item, goal)}
+                            disabled={busy}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("budget.inbox.form.planChipA11y", {
+                              amount: formatCurrency(Math.abs(item.amount)),
+                              plan: goal.name,
+                            })}
+                          >
+                            <Text style={styles.planChipText} numberOfLines={1}>
+                              {goal.name}
+                              {remaining > 0
+                                ? t("budget.inbox.form.planToGo", { amount: formatCurrency(remaining) })
+                                : t("budget.inbox.form.planFunded")}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+            {item.suggestedType === "expense" ? (
+              <>
+                <TouchableOpacity
+                  style={styles.foldHeader}
+                  onPress={() => setShowLentSection((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showLentSection }}
+                  accessibilityLabel={t("budget.inbox.form.lentToLabel")}
+                >
+                  <Text style={styles.foldLabel} numberOfLines={1}>
+                    {t("budget.inbox.form.lentToLabel")}
+                    {!showLentSection && draftLentTo.trim() ? ` · 🤝 ${draftLentTo.trim()}` : ""}
+                  </Text>
+                  <Text style={styles.foldChevron}>{showLentSection ? "▾" : "›"}</Text>
+                </TouchableOpacity>
+                {showLentSection ? (
+                  <>
+                    <Text style={styles.planHint}>{t("budget.inbox.form.lentToHint")}</Text>
+                    <TextInput
+                      style={styles.nameInput}
+                      value={draftLentTo}
+                      onChangeText={setDraftLentTo}
+                      placeholder={t("budget.inbox.form.lentToPlaceholder")}
+                      placeholderTextColor={colors.textMuted}
+                      maxLength={LENT_TO_MAX_LENGTH}
+                      autoCapitalize="words"
+                      returnKeyType="done"
+                    />
+                    {lentToChips.length > 0 ? (
+                      <View style={styles.planChipRow}>
+                        {lentToChips.map((name) => (
+                          <TouchableOpacity
+                            key={name}
+                            style={styles.planChip}
+                            onPress={() => setDraftLentTo(name)}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("budget.inbox.form.lentToChip", { name })}
+                          >
+                            <Text style={styles.planChipText} numberOfLines={1}>
+                              🤝 {name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
               </>
             ) : null}
             {item.merchant ? (
@@ -976,10 +1115,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   {rememberRule ? <Text style={styles.checkboxCheck}>✓</Text> : null}
                 </View>
                 <Text style={styles.rememberLabel}>
-                  Always do this for "{item.merchant}" - on Approve, matching
-                  transactions here and in future imports are approved
-                  automatically with these choices; on Skip, it never imports
-                  again
+                  {t("budget.inbox.form.rememberRule", { merchant: item.merchant })}
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -990,7 +1126,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                 disabled={busy}
               >
                 <Text style={styles.skipButtonText}>
-                  {rememberRule && item.merchant ? "Always Skip" : "Skip"}
+                  {rememberRule && item.merchant
+                    ? t("budget.inbox.actions.alwaysSkip")
+                    : t("budget.inbox.actions.skip")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1013,14 +1151,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               >
                 <Text style={styles.approveButtonText}>
                   {busy
-                    ? "Saving..."
+                    ? t("budget.inbox.actions.saving")
                     : draftDebtId
                       ? rememberRule && item.merchant
-                        ? "Always Log Payment"
-                        : "Log Payment"
+                        ? t("budget.inbox.actions.alwaysLogPayment")
+                        : t("budget.inbox.actions.logPayment")
                       : rememberRule && item.merchant
-                        ? "Always Approve"
-                        : "Approve"}
+                        ? t("budget.inbox.actions.alwaysApprove")
+                        : t("budget.inbox.actions.approve")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1036,20 +1174,18 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         <View style={styles.modalSheet}>
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Review Inbox</Text>
+              <Text style={styles.title}>{t("budget.inbox.title")}</Text>
               <Text style={styles.subtitle}>
                 {pendingTransactions.length > 0
-                  ? `${pendingTransactions.length} imported transaction${
-                      pendingTransactions.length === 1 ? "" : "s"
-                    } waiting for approval`
-                  : "Nothing to review"}
+                  ? t("budget.inbox.subtitle.waiting", { count: pendingTransactions.length })
+                  : t("budget.inbox.subtitle.empty")}
               </Text>
             </View>
             <TouchableOpacity
               style={styles.syncButton}
               onPress={() => setShowRules(true)}
             >
-              <Text style={styles.syncButtonText}>Rules</Text>
+              <Text style={styles.syncButtonText}>{t("budget.inbox.header.rules")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.syncButton, isSyncing && styles.buttonDisabled]}
@@ -1066,7 +1202,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
               {isSyncing ? (
                 <ActivityIndicator size="small" color={colors.textDim} />
               ) : (
-                <Text style={styles.syncButtonText}>Sync</Text>
+                <Text style={styles.syncButtonText}>{t("budget.inbox.header.sync")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -1095,7 +1231,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
 
           {pendingTransactions.length > 1 ? (
             <View style={styles.groupToggleRow}>
-              <Text style={styles.groupToggleLabel}>Group by</Text>
+              <Text style={styles.groupToggleLabel}>{t("budget.inbox.groupBy.label")}</Text>
               <View style={styles.groupToggle}>
                 <TouchableOpacity
                   style={[styles.groupToggleBtn, !groupByMerchant && styles.groupToggleBtnActive]}
@@ -1109,7 +1245,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       !groupByMerchant && styles.groupToggleTextActive,
                     ]}
                   >
-                    Date
+                    {t("budget.inbox.groupBy.date")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1124,7 +1260,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       groupByMerchant && styles.groupToggleTextActive,
                     ]}
                   >
-                    Vendor
+                    {t("budget.inbox.groupBy.vendor")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1139,8 +1275,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             >
               <Text style={styles.bulkBarText}>
                 {bulkBusy
-                  ? "Approving..."
-                  : `Approve ${suggestedReadyCount} with suggested categories`}
+                  ? t("budget.inbox.bulk.approving")
+                  : t("budget.inbox.bulk.approveSuggested", { count: suggestedReadyCount })}
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -1148,15 +1284,18 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           {pendingTransactions.length === 0 ? (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyGlyph}>📥</Text>
-              <Text style={styles.emptyText}>
-                Inbox zero. New transactions land here after a sync.
-              </Text>
+              <Text style={styles.emptyText}>{t("budget.inbox.empty")}</Text>
             </View>
           ) : (
             <SectionList
+              ref={listRef}
               sections={sections}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
+              onScroll={(event) => {
+                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
               renderSectionHeader={({ section }) => {
                 const categorizing =
                   section.bulkCategorizable &&
@@ -1178,7 +1317,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                               bulkBusy && styles.buttonDisabled,
                             ]}
                           >
-                            Skip all
+                            {t("budget.inbox.bulk.skipAll")}
                           </Text>
                         </TouchableOpacity>
                       ) : null}
@@ -1194,7 +1333,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                               bulkBusy && styles.buttonDisabled,
                             ]}
                           >
-                            {categorizing ? "Close" : "Categorize all"}
+                            {categorizing
+                              ? t("budget.inbox.bulk.close")
+                              : t("budget.inbox.bulk.categorizeAll")}
                           </Text>
                         </TouchableOpacity>
                       ) : null}
@@ -1223,7 +1364,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                             ) : null}
                           </View>
                           <Text style={styles.rememberLabel}>
-                            Always file this vendor here
+                            {t("budget.inbox.bulk.alwaysFileVendor")}
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -1233,8 +1374,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                         >
                           <Text style={styles.groupApproveText}>
                             {bulkBusy
-                              ? "Working..."
-                              : `Approve ${section.data.length} as ${groupCategory}`}
+                              ? t("budget.inbox.bulk.working")
+                              : t("budget.inbox.bulk.approveGroupAs", {
+                                  count: section.data.length,
+                                  category: categoryLabel(t, groupCategory),
+                                })}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -1273,7 +1417,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             ]}
           >
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Close</Text>
+              <Text style={styles.closeButtonText}>{t("common.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1526,6 +1670,32 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       letterSpacing: 0.5,
       marginTop: 8,
+    },
+    // Outlined like an input so the fold reads as a drop-down, not a label.
+    foldHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginTop: 4,
+    },
+    foldLabel: {
+      flex: 1,
+      fontSize: 11,
+      color: colors.textDim,
+      fontWeight: "600",
+      letterSpacing: 0.5,
+    },
+    foldChevron: {
+      fontSize: 16,
+      color: colors.textMuted,
+      fontWeight: "600",
     },
     nameInput: {
       borderWidth: 1,

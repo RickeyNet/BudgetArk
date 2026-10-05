@@ -14,6 +14,7 @@
  */
 
 import type { SyncDiff } from "./types";
+import { t } from "../i18n/translate";
 
 /** Collection keys the activity log reports, in display order. */
 export const SYNC_ACTIVITY_COLLECTIONS = [
@@ -33,22 +34,6 @@ export const SYNC_ACTIVITY_COLLECTIONS = [
 ] as const;
 
 export type SyncActivityCollection = (typeof SYNC_ACTIVITY_COLLECTIONS)[number];
-
-export const SYNC_ACTIVITY_LABELS: Record<SyncActivityCollection, [singular: string, plural: string]> = {
-  budgetEntries: ["entry", "entries"],
-  payments: ["payment", "payments"],
-  debts: ["debt", "debts"],
-  savingsGoals: ["savings goal", "savings goals"],
-  assetAccounts: ["account", "accounts"],
-  holdings: ["holding", "holdings"],
-  budgetLimits: ["limit", "limits"],
-  monthStartBalances: ["starting balance", "starting balances"],
-  customCategories: ["category", "categories"],
-  businesses: ["business", "businesses"],
-  people: ["person", "people"],
-  dismissedTransactions: ["skipped transaction", "skipped transactions"],
-  netWorthSnapshots: ["net worth snapshot", "net worth snapshots"],
-};
 
 export type SyncActivityCount = { upserts: number; deletes: number };
 
@@ -120,8 +105,8 @@ export const totalReceived = (counts: SyncActivityCounts): number =>
   Object.values(counts).reduce((sum, c) => sum + (c ? c.upserts + c.deletes : 0), 0);
 
 /**
- * "12 entries (1 removed), 2 payments" - counts only. Empty counts read
- * as "nothing new".
+ * "12 entries (1 removed), 2 payments" - counts only, in the active app
+ * language. Empty counts read as "nothing new".
  */
 export const describeSyncActivity = (counts: SyncActivityCounts): string => {
   const parts: string[] = [];
@@ -129,12 +114,13 @@ export const describeSyncActivity = (counts: SyncActivityCounts): string => {
     const count = counts[key];
     if (!count) continue;
     const total = count.upserts + count.deletes;
-    const [singular, plural] = SYNC_ACTIVITY_LABELS[key];
-    let part = `${total} ${total === 1 ? singular : plural}`;
-    if (count.deletes > 0) part += ` (${count.deletes} removed)`;
+    let part: string = t(`helpers.misc.syncActivity.collections.${key}`, { count: total });
+    if (count.deletes > 0) {
+      part += ` ${t("helpers.misc.syncActivity.removed", { n: count.deletes })}`;
+    }
     parts.push(part);
   }
-  return parts.length > 0 ? parts.join(", ") : "nothing new";
+  return parts.length > 0 ? parts.join(", ") : t("helpers.misc.syncActivity.nothingNew");
 };
 
 const isCount = (value: unknown): value is SyncActivityCount =>

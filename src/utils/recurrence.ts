@@ -4,6 +4,7 @@ import {
   RECURRENCE_INTERVAL_OPTIONS,
   RecurrenceInterval,
 } from "../types";
+import { t } from "../i18n/translate";
 
 const VALID_INTERVALS = new Set<number>(
   RECURRENCE_INTERVAL_OPTIONS.map((o) => o.value)
@@ -23,14 +24,21 @@ export const getRecurrenceInterval = (
   return DEFAULT_RECURRENCE_INTERVAL;
 };
 
-/** Short tag (e.g. "Monthly", "Quarterly", "6 mo", "Yearly") for an entry. */
+/**
+ * Short tag (e.g. "Monthly", "Quarterly", "6 mo", "Yearly") for an entry,
+ * in the active language. Translated by interval value; the English `tag`
+ * on RECURRENCE_INTERVAL_OPTIONS is the fallback for an interval the tree
+ * doesn't know.
+ */
 export const getRecurrenceTag = (
   entry: Pick<BudgetEntry, "recurring" | "recurrenceInterval">
 ): string => {
   if (!entry.recurring) return "";
   const interval = getRecurrenceInterval(entry);
   const opt = RECURRENCE_INTERVAL_OPTIONS.find((o) => o.value === interval);
-  return opt?.tag ?? "Monthly";
+  return t(`helpers.insights.recurrence.tag.${interval}`, {
+    defaultValue: opt?.tag ?? "Monthly",
+  });
 };
 
 const monthKeyFromISO = (iso: string): string => {

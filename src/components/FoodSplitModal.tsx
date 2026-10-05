@@ -13,6 +13,8 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { BudgetCategory, BudgetEntry } from "../types";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -50,6 +52,7 @@ interface FoodSplitModalProps {
 }
 
 const FoodSplitModal: React.FC<FoodSplitModalProps> = ({ entries, onClose, onApply }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -69,8 +72,8 @@ const FoodSplitModal: React.FC<FoodSplitModalProps> = ({ entries, onClose, onApp
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
-          <Text style={styles.title}>Split Food Entries</Text>
-          <Text style={styles.subtitle}>Review each Food expense and assign Grocery or Restaurant.</Text>
+          <Text style={styles.title}>{t("budget.spending.foodSplit.title")}</Text>
+          <Text style={styles.subtitle}>{t("budget.spending.foodSplit.subtitle")}</Text>
 
           <FlatList
             data={entries}
@@ -108,7 +111,7 @@ const FoodSplitModal: React.FC<FoodSplitModalProps> = ({ entries, onClose, onApp
                               { color: isSelected ? colors.accent : colors.textDim },
                             ]}
                           >
-                            {option}
+                            {categoryLabel(t, option)}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -124,10 +127,10 @@ const FoodSplitModal: React.FC<FoodSplitModalProps> = ({ entries, onClose, onApp
               style={styles.cancelBtn}
               onPress={onClose}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveBtn} onPress={() => onApply(draft)}>
-              <Text style={styles.saveText}>Apply Split</Text>
+              <Text style={styles.saveText}>{t("budget.spending.foodSplit.apply")}</Text>
             </TouchableOpacity>
           </View>
         </View>

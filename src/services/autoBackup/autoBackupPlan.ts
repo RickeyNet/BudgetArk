@@ -38,9 +38,6 @@ export const AUTO_BACKUP_KEEP = 3;
 export const cadenceMs = (cadence: AutoBackupCadence): number =>
   cadence === "weekly" ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
 
-export const cadenceLabel = (cadence: AutoBackupCadence): string =>
-  cadence === "weekly" ? "Weekly" : "Monthly";
-
 /* ── File naming ── */
 
 const FILE_PREFIX = "auto-backup-";

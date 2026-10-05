@@ -10,6 +10,7 @@
 
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import { CURRENT_APP_VERSION } from "../../data/releaseNotes";
 import {
   dismissBackupReminder,
@@ -33,6 +34,7 @@ const BackupReminderBanner: React.FC<BackupReminderBannerProps> = ({
   onBackUpNow,
   onRefreshBackupState,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -50,13 +52,15 @@ const BackupReminderBanner: React.FC<BackupReminderBannerProps> = ({
     >
       <Text style={[styles.backupBannerTitle, { color: colors.text }]}>
         {backupState.lastBackupVersion
-          ? `You upgraded to v${CURRENT_APP_VERSION}`
-          : "No backup yet"}
+          ? t("profile.main.backupBanner.upgradedTitle", { version: CURRENT_APP_VERSION })
+          : t("profile.main.backupBanner.noBackupTitle")}
       </Text>
       <Text style={[styles.backupBannerBody, { color: colors.textDim }]}>
         {backupState.lastBackupVersion
-          ? `Your last backup was on v${backupState.lastBackupVersion}. Take a fresh one so you can always restore from this version.`
-          : "Export your data so you have a recovery point if anything ever happens to your device."}
+          ? t("profile.main.backupBanner.upgradedBody", {
+              lastVersion: backupState.lastBackupVersion,
+            })
+          : t("profile.main.backupBanner.noBackupBody")}
       </Text>
       <View style={styles.backupBannerActions}>
         <TouchableOpacity
@@ -72,7 +76,7 @@ const BackupReminderBanner: React.FC<BackupReminderBannerProps> = ({
               { color: colors.white },
             ]}
           >
-            Back up now
+            {t("profile.main.backupBanner.backUpNow")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -88,7 +92,7 @@ const BackupReminderBanner: React.FC<BackupReminderBannerProps> = ({
               { color: colors.textDim },
             ]}
           >
-            Dismiss
+            {t("profile.main.backupBanner.dismiss")}
           </Text>
         </TouchableOpacity>
       </View>

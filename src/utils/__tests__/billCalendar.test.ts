@@ -34,6 +34,31 @@ describe("getDayOfMonth", () => {
   it("falls back to day 15 for an unparseable date", () => {
     expect(getDayOfMonth({ date: "not-a-date" }, "2026-06")).toBe(15);
   });
+
+  // Regression: a user reported Bill Calendar days off by one. The day must
+  // come from the stored YYYY-MM-DD prefix, not from local getDate() on the
+  // parsed string, which shifts by device timezone. Node's timezone can't be
+  // switched per test, so these pin the formats that broke in some zone and
+  // must match the prefix in every zone.
+  it("reads a date-only string (Subscription Detective bills) as its calendar day", () => {
+    // new Date("2026-09-05") is UTC midnight -> local getDate() is the 4th
+    // anywhere west of UTC.
+    expect(getDayOfMonth({ date: "2026-09-05" }, "2026-09")).toBe(5);
+    expect(getDayOfMonth({ date: "2026-09-01" }, "2026-09")).toBe(1);
+  });
+
+  it("reads the canonical noon-UTC date as its calendar day", () => {
+    // Rolls to the next day for UTC+13/+14 users under local parsing.
+    expect(getDayOfMonth({ date: "2026-06-30T12:00:00.000Z" }, "2026-06")).toBe(30);
+    expect(getDayOfMonth({ date: "2026-06-01T12:00:00.000Z" }, "2026-06")).toBe(1);
+  });
+
+  it("agrees with the month filter for a late-evening legacy timestamp", () => {
+    // Older entries stored new Date().toISOString(): an evening entry in the
+    // Americas carries the NEXT UTC day. The month filter reads the prefix,
+    // so the day must too, or a bill filed under July shows on a June cell.
+    expect(getDayOfMonth({ date: "2026-07-01T03:30:00.000Z" }, "2026-07")).toBe(1);
+  });
 });
 
 describe("groupBillsByDay", () => {

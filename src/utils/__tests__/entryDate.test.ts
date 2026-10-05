@@ -8,6 +8,7 @@ import {
   DEFAULT_RECURRENCE_DAY,
   WEEKDAY_SHORT_LABELS,
   buildEntryDateISO,
+  buildDueDayPickerRows,
   buildMonthDayGrid,
   buildMonthDayRows,
   dayOfMonthFromIso,
@@ -126,5 +127,38 @@ describe("buildMonthDayGrid (the entry form's DAY calendar and the Bill Calendar
     expect(rows.every((row) => row.length === 7)).toBe(true);
     expect(rows.flat()).toEqual(buildMonthDayGrid("2026-09"));
     expect(rows[0]).toEqual([null, null, 1, 2, 3, 4, 5]);
+  });
+});
+
+describe("buildDueDayPickerRows (the debt form's due-day calendar)", () => {
+  it("aligns day 1 to the month's weekday and pads to whole weeks of seven", () => {
+    // September 2026 starts on a Tuesday: two leading blanks, like the
+    // real month grid, so the weekday header lines up.
+    const rows = buildDueDayPickerRows("2026-09");
+    expect(rows.every((row) => row.length === 7)).toBe(true);
+    expect(rows[0]).toEqual([null, null, 1, 2, 3, 4, 5]);
+    expect(rows.flat().slice(0, 7)).toEqual(buildMonthDayGrid("2026-09").slice(0, 7));
+  });
+
+  it("always runs through day 31, whatever the month's length", () => {
+    const days = (ym: string) => buildDueDayPickerRows(ym).flat().filter((d) => d != null);
+    const oneTo31 = Array.from({ length: 31 }, (_, i) => i + 1);
+    expect(days("2026-02")).toEqual(oneTo31); // 28-day month
+    expect(days("2026-09")).toEqual(oneTo31); // 30-day month
+    expect(days("2026-07")).toEqual(oneTo31); // 31-day month
+  });
+
+  it("continues the weekday sequence past the month's last day", () => {
+    // September 2026 ends on Wednesday the 30th, so a due day of 31 sits in
+    // the Thursday column directly after it - never wrapped to a new row's
+    // Sunday or dropped.
+    const rows = buildDueDayPickerRows("2026-09");
+    const flat = rows.flat();
+    expect(flat.indexOf(31)).toBe(flat.indexOf(30) + 1);
+    expect(flat.indexOf(31) % 7).toBe(4); // Thursday column
+  });
+
+  it("matches the real month grid exactly for a 31-day month", () => {
+    expect(buildDueDayPickerRows("2026-07")).toEqual(buildMonthDayRows("2026-07"));
   });
 });

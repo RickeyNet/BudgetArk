@@ -24,6 +24,7 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle, Line, Path, Text as SvgText } from "react-native-svg";
+import { useTranslation } from "react-i18next";
 import type { BudgetEntry, Debt, NetWorthSnapshot } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -60,14 +61,16 @@ const PAD_B = 26;
 const CHART_H = H - PAD_T - PAD_B;
 const HISTORY_MONTHS = 12;
 
-const shortMonth = (monthKey: string): string =>
-  new Date(`${monthKey}-01T00:00:00`).toLocaleDateString(undefined, {
+// Month labels follow the APP language (i18n.language), not the device
+// locale, so a German UI never shows "Sep 26" next to German copy.
+const shortMonth = (monthKey: string, locale: string): string =>
+  new Date(`${monthKey}-01T00:00:00`).toLocaleDateString(locale, {
     month: "short",
     year: "2-digit",
   });
 
-const longMonth = (monthKey: string): string =>
-  new Date(`${monthKey}-01T00:00:00`).toLocaleDateString(undefined, {
+const longMonth = (monthKey: string, locale: string): string =>
+  new Date(`${monthKey}-01T00:00:00`).toLocaleDateString(locale, {
     month: "long",
     year: "numeric",
   });
@@ -81,6 +84,8 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
   formatCurrency,
   formatCompactCurrency,
 }) => {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -158,10 +163,11 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
       zeroY: min <= 0 && max >= 0 ? toY(0) : null,
       ticks: [max, (max + min) / 2, min],
       toY,
-      startLabel: minOffset < 0 ? shortMonth(getMonthKeyOffset(minOffset)) : "Now",
-      endLabel: shortMonth(getMonthKeyOffset(maxOffset)),
+      startLabel:
+        minOffset < 0 ? shortMonth(getMonthKeyOffset(minOffset), locale) : t("bridge.projection.chart.now"),
+      endLabel: shortMonth(getMonthKeyOffset(maxOffset), locale),
     };
-  }, [history, innerWidth, netWorth, outlook]);
+  }, [history, innerWidth, locale, netWorth, outlook, t]);
 
   const beginEdit = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -179,18 +185,18 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
   const handleSave = useCallback(async () => {
     const amount = parseMoneyInput(amountText, { allowNegative: true, max: MAX_GOAL_AMOUNT });
     if (amount === null) {
-      setError("Enter a target amount.");
+      setError(t("bridge.projection.errors.missingAmount"));
       return;
     }
     if (targetMonth < getMonthKey()) {
-      setError("Pick a month that hasn't passed.");
+      setError(t("bridge.projection.errors.monthPassed"));
       return;
     }
     try {
       const createdAt = goal ? goal.createdAt : new Date().toISOString();
       const saved = await saveNetWorthGoal({ targetAmount: amount, targetMonth, createdAt });
       if (!saved) {
-        setError("That goal couldn't be saved.");
+        setError(t("bridge.projection.errors.notSaved"));
         return;
       }
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -200,9 +206,9 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
       triggerHaptic("success");
     } catch (err) {
       triggerHaptic("error");
-      setError(describeError(err, "Couldn't save the goal."));
+      setError(describeError(err, t("bridge.projection.errors.saveFailed")));
     }
-  }, [amountText, goal, targetMonth]);
+  }, [amountText, goal, t, targetMonth]);
 
   const handleRemove = useCallback(async () => {
     try {
@@ -212,19 +218,20 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
       setEditing(false);
       triggerHaptic("selection");
     } catch (err) {
-      setError(describeError(err, "Couldn't remove the goal."));
+      setError(describeError(err, t("bridge.projection.errors.removeFailed")));
     }
-  }, []);
+  }, [t]);
 
   const endPoint = outlook.points[outlook.points.length - 1];
   const surplusText =
     outlook.surplus.monthsTracked === 0
-      ? "No budget history yet, so the line assumes nothing is added month to month - log a few months and it learns your pace."
-      : `At your pace of ${outlook.surplus.monthly >= 0 ? "+" : "-"}${formatCurrency(
-          Math.abs(outlook.surplus.monthly)
-        )}/mo after spending and debt minimums (last ${outlook.surplus.monthsTracked} tracked ${
-          outlook.surplus.monthsTracked === 1 ? "month" : "months"
-        }), with debts paid down at their minimums.`;
+      ? t("bridge.projection.pace.noHistory")
+      : t("bridge.projection.pace.tracked", {
+          count: outlook.surplus.monthsTracked,
+          signedAmount: `${outlook.surplus.monthly >= 0 ? "+" : "-"}${formatCurrency(
+            Math.abs(outlook.surplus.monthly)
+          )}`,
+        });
 
   const goalAssessment = outlook.goal;
   const goalColor = goalAssessment?.onTrack ? colors.success : colors.warning;
@@ -233,15 +240,18 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>Where This Is Heading</Text>
+          <Text style={styles.title}>{t("bridge.projection.title")}</Text>
           <Text style={styles.subtext}>
-            {formatCurrency(endPoint.netWorth)} by {longMonth(getMonthKeyOffset(outlook.horizonMonths))}
+            {t("bridge.projection.horizon", {
+              amount: formatCurrency(endPoint.netWorth),
+              month: longMonth(getMonthKeyOffset(outlook.horizonMonths), locale),
+            })}
           </Text>
         </View>
         {goalAssessment ? (
           <View style={[styles.badge, { borderColor: goalColor, backgroundColor: `${goalColor}20` }]}>
             <Text style={[styles.badgeText, { color: goalColor }]}>
-              {goalAssessment.onTrack ? "On track" : "Off track"}
+              {goalAssessment.onTrack ? t("bridge.projection.onTrack") : t("bridge.projection.offTrack")}
             </Text>
           </View>
         ) : null}
@@ -326,7 +336,7 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
           </SvgText>
           {chart.historyPath ? (
             <SvgText x={chart.nowX} y={H - 5} fill={colors.textDim} fontSize={9} textAnchor="middle">
-              Now
+              {t("bridge.projection.chart.now")}
             </SvgText>
           ) : null}
           <SvgText x={chartWidth - PAD_R} y={H - 5} fill={colors.textDim} fontSize={9} textAnchor="end">
@@ -339,35 +349,35 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
 
       {editing ? (
         <View style={styles.form}>
-          <Text style={styles.fieldLabel}>Target net worth</Text>
+          <Text style={styles.fieldLabel}>{t("bridge.projection.form.targetLabel")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. 100000"
+            placeholder={t("bridge.projection.form.targetPlaceholder")}
             placeholderTextColor={colors.textMuted}
             keyboardType="numbers-and-punctuation"
             value={amountText}
             onChangeText={setAmountText}
             maxLength={14}
           />
-          <Text style={styles.fieldLabel}>By the end of</Text>
+          <Text style={styles.fieldLabel}>{t("bridge.projection.form.byEndOf")}</Text>
           <TouchableOpacity
             style={styles.input}
             onPress={() => setShowMonthPicker(true)}
             accessibilityRole="button"
           >
-            <Text style={styles.inputText}>{longMonth(targetMonth)}</Text>
+            <Text style={styles.inputText}>{longMonth(targetMonth, locale)}</Text>
           </TouchableOpacity>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.primaryBtn} onPress={() => void handleSave()} accessibilityRole="button">
-              <Text style={styles.primaryBtnText}>Save goal</Text>
+              <Text style={styles.primaryBtnText}>{t("bridge.projection.form.save")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryBtn} onPress={cancelEdit} accessibilityRole="button">
-              <Text style={styles.secondaryBtnText}>Cancel</Text>
+              <Text style={styles.secondaryBtnText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
             {goal ? (
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => void handleRemove()} accessibilityRole="button">
-                <Text style={[styles.secondaryBtnText, { color: colors.danger }]}>Remove</Text>
+                <Text style={[styles.secondaryBtnText, { color: colors.danger }]}>{t("common.remove")}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -376,46 +386,51 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
         <View style={styles.goalBox}>
           <View style={styles.goalHeader}>
             <Text style={styles.goalTitle}>
-              Goal: {formatCurrency(goalAssessment.targetAmount)} by {longMonth(goalAssessment.targetMonth)}
+              {t("bridge.projection.goal.title", {
+                amount: formatCurrency(goalAssessment.targetAmount),
+                month: longMonth(goalAssessment.targetMonth, locale),
+              })}
             </Text>
             <TouchableOpacity onPress={beginEdit} accessibilityRole="button">
-              <Text style={styles.link}>Edit</Text>
+              <Text style={styles.link}>{t("common.edit")}</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.goalLine}>
-            Projected then: {formatCurrency(goalAssessment.projectedAtTarget)} (
-            {goalAssessment.gap >= 0 ? "+" : "-"}
-            {formatCurrency(Math.abs(goalAssessment.gap))})
+            {t("bridge.projection.goal.projected", {
+              amount: formatCurrency(goalAssessment.projectedAtTarget),
+              signedGap: `${goalAssessment.gap >= 0 ? "+" : "-"}${formatCurrency(
+                Math.abs(goalAssessment.gap)
+              )}`,
+            })}
           </Text>
           {goalAssessment.onTrack ? (
             <Text style={[styles.goalLine, { color: colors.success }]}>
               {goalAssessment.reachMonths !== null && goalAssessment.reachMonths < goalAssessment.monthsUntil
-                ? `At this pace you get there around ${longMonth(
-                    getMonthKeyOffset(goalAssessment.reachMonths)
-                  )} - early.`
-                : "Right on pace."}
+                ? t("bridge.projection.goal.early", {
+                    month: longMonth(getMonthKeyOffset(goalAssessment.reachMonths), locale),
+                  })
+                : t("bridge.projection.goal.onPace")}
             </Text>
           ) : (
             <Text style={[styles.goalLine, { color: colors.warning }]}>
-              Needs about {formatCurrency(Math.max(0, goalAssessment.requiredMonthly))}/mo to land on time
+              {t("bridge.projection.goal.needsMonthly", {
+                amount: formatCurrency(Math.max(0, goalAssessment.requiredMonthly)),
+              })}
               {goalAssessment.reachDate
-                ? `; at today's pace it arrives around ${longMonth(
-                    getMonthKeyOffset(goalAssessment.reachMonths ?? 0)
-                  )}.`
-                : "; today's pace never reaches it."}
+                ? t("bridge.projection.goal.arrivesAround", {
+                    month: longMonth(getMonthKeyOffset(goalAssessment.reachMonths ?? 0), locale),
+                  })
+                : t("bridge.projection.goal.neverReaches")}
             </Text>
           )}
         </View>
       ) : (
         <TouchableOpacity style={styles.primaryBtn} onPress={beginEdit} accessibilityRole="button">
-          <Text style={styles.primaryBtnText}>Set a net worth goal</Text>
+          <Text style={styles.primaryBtnText}>{t("bridge.projection.goal.set")}</Text>
         </TouchableOpacity>
       )}
 
-      <Text style={styles.footerHint}>
-        Solid: monthly history. Dashed: projection. Estimates, not promises - markets, raises and
-        surprises all move the line.
-      </Text>
+      <Text style={styles.footerHint}>{t("bridge.projection.footer")}</Text>
 
       <MonthYearPicker
         visible={showMonthPicker}
@@ -423,7 +438,7 @@ const NetWorthProjectionCard: React.FC<NetWorthProjectionCardProps> = ({
         onSelect={setTargetMonth}
         onClose={() => setShowMonthPicker(false)}
         confirm
-        title="Reach it by the end of"
+        title={t("bridge.projection.form.pickerTitle")}
         minYear={new Date().getFullYear()}
       />
     </View>

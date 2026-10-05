@@ -1,8 +1,8 @@
 import {
-  CHECK_IN_MESSAGES,
+  checkInMessages,
   DEFAULT_TRACKING_REMINDER_SETTINGS,
   MAX_SCHEDULED_REMINDERS,
-  MONTH_START_MESSAGES,
+  monthStartMessages,
   REMINDER_WINDOW_DAYS,
   lastTrackedAt,
   planTrackingReminders,
@@ -10,6 +10,8 @@ import {
 } from "../trackingReminderPlanner";
 import { makeBudgetEntry } from "../../__tests__/fixtures";
 import type { BudgetEntry } from "../../types";
+import i18next from "i18next";
+import { de } from "../../i18n/locales/de";
 
 // Dates use explicit local times (no Z) so getDate()/getHours() return the
 // intended values regardless of the test runner's timezone.
@@ -147,7 +149,7 @@ describe("planTrackingReminders", () => {
     // Every title/body comes from the fixed message list (nothing sensitive).
     for (const reminder of reminders) {
       expect(
-        CHECK_IN_MESSAGES.some(
+        checkInMessages().some(
           (m) => m.title === reminder.title && m.body === reminder.body
         )
       ).toBe(true);
@@ -206,7 +208,7 @@ describe("planTrackingReminders - month-start planning", () => {
     expect(reminder.fireDate.getDate()).toBe(1);
     expect(reminder.fireDate.getHours()).toBe(19);
     expect(
-      MONTH_START_MESSAGES.some(
+      monthStartMessages().some(
         (m) => m.title === reminder.title && m.body === reminder.body
       )
     ).toBe(true);
@@ -278,5 +280,44 @@ describe("planTrackingReminders - month-start planning", () => {
       now: new Date(2026, 5, 20, 12, 0, 0),
     });
     expect(julyAgain[0].body).toBe(july[0].body);
+  });
+});
+
+describe("tracking reminder copy in German (rule 11 holds in every language)", () => {
+  beforeAll(() => {
+    i18next.addResourceBundle("de", "translation", de, true, true);
+  });
+  beforeEach(async () => {
+    // eslint-disable-next-line import/no-named-as-default-member
+    await i18next.changeLanguage("de");
+  });
+  afterEach(async () => {
+    // eslint-disable-next-line import/no-named-as-default-member
+    await i18next.changeLanguage("en");
+  });
+
+  it("resolves a distinct German pool with no money or identity", () => {
+    const pools = [...checkInMessages(), ...monthStartMessages()];
+    expect(pools).toHaveLength(8);
+    for (const m of pools) {
+      expect(m.title).not.toMatch(/helpers\.notifications/);
+      expect(m.body).not.toMatch(/helpers\.notifications/);
+      expect(m.title).not.toMatch(/[$€]/);
+      expect(m.body).not.toMatch(/[$€]/);
+    }
+  });
+
+  it("plans German copy when German is active", () => {
+    const planned = planTrackingReminders({
+      entries: [makeBudgetEntry({ createdAt: "2026-06-09T12:00:00" })],
+      settings: { ...DEFAULT_TRACKING_REMINDER_SETTINGS, enabled: true, cadenceDays: 1 },
+      now: new Date(2026, 5, 10, 8),
+    });
+    expect(planned.length).toBeGreaterThan(0);
+    for (const r of planned) {
+      expect(r.title).toMatch(/[A-Za-zÄÖÜäöüß]/);
+      expect(r.title).not.toMatch(/helpers\.notifications/);
+      expect(r.body).not.toMatch(/[$€]/);
+    }
   });
 });

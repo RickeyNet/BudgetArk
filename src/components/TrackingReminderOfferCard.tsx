@@ -23,6 +23,7 @@ import {
   ViewStyle,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { triggerHaptic } from "../utils/haptics";
@@ -45,6 +46,7 @@ interface TrackingReminderOfferCardProps {
 }
 
 const TrackingReminderOfferCard: React.FC<TrackingReminderOfferCardProps> = ({ style }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [visible, setVisible] = useState(false);
@@ -105,38 +107,36 @@ const TrackingReminderOfferCard: React.FC<TrackingReminderOfferCardProps> = ({ s
         triggerHaptic("success");
       } else {
         Alert.alert(
-          "Notifications are off",
-          "BudgetArk needs notification permission to send check-in reminders. You can turn it on in your phone's Settings, then enable reminders from Profile → Tracking Reminders.",
+          t("budget.cards.reminderOffer.permissionTitle"),
+          t("budget.cards.reminderOffer.permissionMessage"),
           [
-            { text: "Not now", style: "cancel" },
-            { text: "Open Settings", onPress: () => void Linking.openSettings() },
+            { text: t("budget.cards.reminderOffer.notNow"), style: "cancel" },
+            {
+              text: t("budget.cards.reminderOffer.openSettings"),
+              onPress: () => void Linking.openSettings(),
+            },
           ]
         );
       }
     } catch {
       Alert.alert(
-        "Couldn't turn on reminders",
-        "Something went wrong saving the setting. You can try again from Profile → Tracking Reminders."
+        t("budget.cards.reminderOffer.failedTitle"),
+        t("budget.cards.reminderOffer.failedMessage")
       );
     } finally {
       setBusy(false);
       setVisible(false);
       void markTrackingReminderOfferDismissed().catch(() => {});
     }
-  }, [busy]);
+  }, [busy, t]);
 
   if (!visible) return null;
 
   return (
     <View style={[styles.card, style]} accessibilityRole="summary">
-      <Text style={styles.eyebrow}>TRACKING REMINDERS</Text>
-      <Text style={styles.title}>🔔 Want a nudge to keep tracking?</Text>
-      <Text style={styles.body}>
-        A short check-in if a few days pass without an entry, and a heads-up
-        on the 1st. Never an amount, balance, account, or bill - just a tap
-        back into the app. Adjust or turn off any time in Profile → Tracking
-        Reminders.
-      </Text>
+      <Text style={styles.eyebrow}>{t("budget.cards.reminderOffer.eyebrow")}</Text>
+      <Text style={styles.title}>{t("budget.cards.reminderOffer.title")}</Text>
+      <Text style={styles.body}>{t("budget.cards.reminderOffer.body")}</Text>
       <View style={styles.actions}>
         <TouchableOpacity
           style={[styles.primary, busy && styles.disabled]}
@@ -145,7 +145,7 @@ const TrackingReminderOfferCard: React.FC<TrackingReminderOfferCardProps> = ({ s
           accessibilityRole="button"
         >
           <Text style={styles.primaryText}>
-            {busy ? "Asking your phone..." : "Turn on"}
+            {busy ? t("budget.cards.reminderOffer.asking") : t("budget.cards.reminderOffer.turnOn")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -154,7 +154,7 @@ const TrackingReminderOfferCard: React.FC<TrackingReminderOfferCardProps> = ({ s
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
         >
-          <Text style={styles.dismissText}>No thanks</Text>
+          <Text style={styles.dismissText}>{t("budget.cards.reminderOffer.noThanks")}</Text>
         </TouchableOpacity>
       </View>
     </View>

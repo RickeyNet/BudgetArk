@@ -22,6 +22,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { EntryAttachment } from "../types";
@@ -46,6 +47,7 @@ const ViewerPage: React.FC<{
   styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
 }> = ({ attachment, width, styles, colors }) => {
+  const { t } = useTranslation();
   const [dataUri, setDataUri] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
 
@@ -78,10 +80,7 @@ const ViewerPage: React.FC<{
       ) : missing ? (
         <View style={styles.missingWrap}>
           <Text style={styles.missingIcon}>📷</Text>
-          <Text style={styles.missingText}>
-            This photo lives on the device that took it. Receipt photos don't
-            transfer during sync.
-          </Text>
+          <Text style={styles.missingText}>{t("modals.people.viewer.missing")}</Text>
         </View>
       ) : (
         <ActivityIndicator size="large" color={colors.accent} />
@@ -97,6 +96,7 @@ const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
   onClose,
   onDelete,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -134,14 +134,17 @@ const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
         <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
           <Text style={styles.counter}>
             {attachments.length > 0
-              ? `${Math.min(pageIndex + 1, attachments.length)} of ${attachments.length}`
+              ? t("modals.people.viewer.counter", {
+                  current: Math.min(pageIndex + 1, attachments.length),
+                  total: attachments.length,
+                })
               : ""}
           </Text>
           <TouchableOpacity
             onPress={onClose}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityRole="button"
-            accessibilityLabel="Close photo viewer"
+            accessibilityLabel={t("modals.people.viewer.closeA11y")}
           >
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
@@ -172,9 +175,9 @@ const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
               style={styles.deleteButton}
               onPress={() => onDelete(current.id)}
               accessibilityRole="button"
-              accessibilityLabel="Remove this receipt photo"
+              accessibilityLabel={t("modals.people.viewer.removeA11y")}
             >
-              <Text style={styles.deleteText}>Remove Photo</Text>
+              <Text style={styles.deleteText}>{t("modals.people.viewer.remove")}</Text>
             </TouchableOpacity>
           </View>
         )}

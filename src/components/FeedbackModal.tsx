@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { openComposer } from "react-native-email-link";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import { CURRENT_APP_VERSION } from "../data/releaseNotes";
@@ -40,6 +41,7 @@ const GITHUB_ISSUES_URL = "https://github.com/RickeyNet/BudgetArk/issues";
 const SUPPORT_EMAIL = "budgetark.support@gmail.com";
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResult }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
@@ -74,34 +76,34 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
     const body =
       feedbackType === "bug"
         ? [
-            "WHAT HAPPENED",
+            t("modals.guard.feedback.template.bug.whatHappened"),
             trimmed,
             "",
-            "STEPS TO REPRODUCE",
+            t("modals.guard.feedback.template.bug.steps"),
             "1. ",
             "2. ",
             "3. ",
             "",
-            "WHAT I EXPECTED INSTEAD",
+            t("modals.guard.feedback.template.bug.expected"),
             "",
             "",
-            "HOW OFTEN DOES IT HAPPEN? (every time / sometimes / once)",
+            t("modals.guard.feedback.template.bug.howOften"),
             "",
             "",
-            "SCREENSHOTS (attach below if you have any)",
+            t("modals.guard.feedback.template.bug.screenshots"),
             "",
             "",
             "---",
             deviceInfo,
           ].join("\n")
         : [
-            "FEATURE IDEA",
+            t("modals.guard.feedback.template.feature.idea"),
             trimmed,
             "",
-            "WHAT PROBLEM WOULD THIS SOLVE FOR YOU?",
+            t("modals.guard.feedback.template.feature.problem"),
             "",
             "",
-            "HOW SHOULD IT WORK?",
+            t("modals.guard.feedback.template.feature.howItWorks"),
             "",
             "",
             "---",
@@ -113,13 +115,13 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
         to: SUPPORT_EMAIL,
         subject,
         body,
-        title: "Choose email app",
+        title: t("modals.guard.feedback.chooseApp"),
         removeText: true,
       });
       onClose();
       onResult({
-        title: "Thanks!",
-        message: "Your feedback helps make BudgetArk better.",
+        title: t("modals.guard.feedback.thanks.title"),
+        message: t("modals.guard.feedback.thanks.message"),
       });
     } catch {
       // No email app found - fall back to mailto: link
@@ -128,28 +130,28 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
         await Linking.openURL(mailto);
         onClose();
         onResult({
-          title: "Thanks!",
-          message: "Your feedback helps make BudgetArk better.",
+          title: t("modals.guard.feedback.thanks.title"),
+          message: t("modals.guard.feedback.thanks.message"),
         });
       } catch {
         onResult({
-          title: "No Email App",
-          message: `No email app found. You can send feedback to ${SUPPORT_EMAIL} or open an issue on GitHub.`,
+          title: t("modals.guard.feedback.noEmailApp.title"),
+          message: t("modals.guard.feedback.noEmailApp.message", { email: SUPPORT_EMAIL }),
         });
       }
     }
-  }, [message, feedbackType, deviceInfo, onClose, onResult]);
+  }, [message, feedbackType, deviceInfo, onClose, onResult, t]);
 
   const handleOpenGitHub = useCallback(async () => {
     try {
       await Linking.openURL(GITHUB_ISSUES_URL);
     } catch {
       onResult({
-        title: "Couldn't Open Link",
-        message: `Visit ${GITHUB_ISSUES_URL} in your browser to submit an issue.`,
+        title: t("modals.guard.feedback.linkFailed.title"),
+        message: t("modals.guard.feedback.linkFailed.message", { url: GITHUB_ISSUES_URL }),
       });
     }
-  }, [onResult]);
+  }, [onResult, t]);
 
   if (!visible) return null;
 
@@ -164,10 +166,8 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
               keyboardShouldPersistTaps="handled"
               automaticallyAdjustKeyboardInsets
             >
-              <Text style={styles.title}>Send Feedback</Text>
-              <Text style={styles.subtitle}>
-                Report a bug or suggest a feature.
-              </Text>
+              <Text style={styles.title}>{t("modals.guard.feedback.title")}</Text>
+              <Text style={styles.subtitle}>{t("modals.guard.feedback.subtitle")}</Text>
 
               {/* Type toggle */}
               <View style={styles.typeRow}>
@@ -185,7 +185,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
                       feedbackType === "bug" && { color: colors.warning },
                     ]}
                   >
-                    Bug Report
+                    {t("modals.guard.feedback.types.bug")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -202,7 +202,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
                       feedbackType === "feature" && { color: colors.accent },
                     ]}
                   >
-                    Feature Idea
+                    {t("modals.guard.feedback.types.feature")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -210,15 +210,11 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
               {/* Message input */}
               <View style={styles.field}>
                 <Text style={styles.label}>
-                  {feedbackType === "bug" ? "WHAT HAPPENED?" : "WHAT WOULD YOU LIKE TO SEE?"}
+                  {t(`modals.guard.feedback.prompt.${feedbackType}`)}
                 </Text>
                 <TextInput
                   style={styles.textArea}
-                  placeholder={
-                    feedbackType === "bug"
-                      ? "Describe the bug - what you expected vs what happened..."
-                      : "Describe the feature you'd like..."
-                  }
+                  placeholder={t(`modals.guard.feedback.placeholder.${feedbackType}`)}
                   placeholderTextColor={colors.textMuted}
                   value={message}
                   onChangeText={setMessage}
@@ -231,7 +227,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
 
               {/* Device info preview */}
               <View style={styles.infoBox}>
-                <Text style={styles.infoLabel}>AUTO-ATTACHED</Text>
+                <Text style={styles.infoLabel}>{t("modals.guard.feedback.autoAttached")}</Text>
                 <Text style={styles.infoText}>{deviceInfo}</Text>
               </View>
 
@@ -244,17 +240,17 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ visible, onClose, onResul
                 onPress={handleSendEmail}
                 disabled={!message.trim()}
               >
-                <Text style={styles.sendButtonText}>Send via Email</Text>
+                <Text style={styles.sendButtonText}>{t("modals.guard.feedback.sendEmail")}</Text>
               </TouchableOpacity>
 
               {/* GitHub link */}
               <TouchableOpacity style={styles.githubButton} onPress={handleOpenGitHub}>
-                <Text style={styles.githubButtonText}>Open GitHub Issues</Text>
+                <Text style={styles.githubButtonText}>{t("modals.guard.feedback.openGithub")}</Text>
               </TouchableOpacity>
 
               {/* Cancel */}
               <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
             </ScrollView>
           </TouchableOpacity>

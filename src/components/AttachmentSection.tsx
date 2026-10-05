@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { File as ExpoFile } from "expo-file-system";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { EntryAttachment } from "../types";
@@ -64,6 +65,7 @@ const AttachmentThumb: React.FC<{
   styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
 }> = ({ attachment, onPress, onRemove, styles, colors }) => {
+  const { t } = useTranslation();
   const [thumbUri, setThumbUri] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
 
@@ -91,14 +93,14 @@ const AttachmentThumb: React.FC<{
         style={styles.thumbBox}
         onPress={onPress}
         accessibilityRole="imagebutton"
-        accessibilityLabel="View receipt photo"
+        accessibilityLabel={t("modals.people.attachments.viewA11y")}
       >
         {thumbUri ? (
           <Image source={{ uri: thumbUri }} style={styles.thumbImage} />
         ) : missing ? (
           <View style={styles.thumbPlaceholder}>
             <Text style={styles.thumbPlaceholderIcon}>📷</Text>
-            <Text style={styles.thumbPlaceholderText}>On partner's device</Text>
+            <Text style={styles.thumbPlaceholderText}>{t("modals.people.attachments.onPartnerDevice")}</Text>
           </View>
         ) : (
           <ActivityIndicator size="small" color={colors.textMuted} />
@@ -109,7 +111,7 @@ const AttachmentThumb: React.FC<{
         onPress={onRemove}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         accessibilityRole="button"
-        accessibilityLabel="Remove receipt photo"
+        accessibilityLabel={t("modals.people.attachments.removeA11y")}
       >
         <Text style={styles.thumbRemoveText}>×</Text>
       </TouchableOpacity>
@@ -123,6 +125,7 @@ const AttachmentSection: React.FC<AttachmentSectionProps> = ({
   onRemove,
   stagingSession,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [importing, setImporting] = useState(false);
@@ -148,8 +151,8 @@ const AttachmentSection: React.FC<AttachmentSectionProps> = ({
           const permission = await ImagePicker.requestCameraPermissionsAsync();
           if (!permission.granted) {
             Alert.alert(
-              "Camera access needed",
-              "Allow camera access in your device Settings to photograph receipts."
+              t("modals.people.attachments.cameraPermission.title"),
+              t("modals.people.attachments.cameraPermission.message")
             );
             return;
           }
@@ -196,31 +199,31 @@ const AttachmentSection: React.FC<AttachmentSectionProps> = ({
         if (latestSessionRef.current !== pickSession) return;
         if (error instanceof AttachmentEncryptionUnavailableError) {
           Alert.alert(
-            "Secure storage unavailable",
-            "BudgetArk can't access this device's secure keystore, so receipt photos can't be stored encrypted. Photos are disabled rather than saved unprotected."
+            t("modals.people.attachments.secureStorage.title"),
+            t("modals.people.attachments.secureStorage.message")
           );
         } else {
           Alert.alert(
-            "Couldn't add photo",
-            "Something went wrong while processing the image. Please try again."
+            t("modals.people.attachments.addFailed.title"),
+            t("modals.people.attachments.addFailed.message")
           );
         }
       } finally {
         setImporting(false);
       }
     },
-    [importing, onAdd, stagingSession]
+    [importing, onAdd, stagingSession, t]
   );
 
   return (
     <View style={styles.field}>
       <Text style={styles.label}>
-        RECEIPT PHOTOS ({attachments.length}/{MAX_ATTACHMENTS_PER_ENTRY})
+        {t("modals.people.attachments.label", {
+          count: attachments.length,
+          max: MAX_ATTACHMENTS_PER_ENTRY,
+        })}
       </Text>
-      <Text style={styles.hint}>
-        Photos are stored encrypted on this device only - they don't sync to
-        your partner or leave with exports.
-      </Text>
+      <Text style={styles.hint}>{t("modals.people.attachments.hint")}</Text>
 
       {attachments.length > 0 && (
         <View style={styles.thumbRow}>
@@ -245,7 +248,7 @@ const AttachmentSection: React.FC<AttachmentSectionProps> = ({
             disabled={importing}
           >
             <Text style={styles.photoButtonText}>
-              {importing ? "Adding…" : "📷 Take Photo"}
+              {importing ? t("modals.people.attachments.adding") : t("modals.people.attachments.takePhoto")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -254,7 +257,7 @@ const AttachmentSection: React.FC<AttachmentSectionProps> = ({
             disabled={importing}
           >
             <Text style={styles.photoButtonText}>
-              {importing ? "Adding…" : "🖼️ Choose Photo"}
+              {importing ? t("modals.people.attachments.adding") : t("modals.people.attachments.choosePhoto")}
             </Text>
           </TouchableOpacity>
         </View>

@@ -20,6 +20,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { getDebts } from "../storage/debtStorage";
 import { planKeepAliveReminders } from "../utils/cardKeepAlivePlanner";
+import { t } from "../i18n/translate";
 
 export const CARD_KEEP_ALIVE_CHANNEL_ID = "card-keep-alive";
 
@@ -29,9 +30,8 @@ export const CARD_KEEP_ALIVE_DATA_TYPE = "card-keep-alive-reminder";
 const ensureAndroidChannel = async (): Promise<void> => {
   if (Platform.OS !== "android") return;
   await Notifications.setNotificationChannelAsync(CARD_KEEP_ALIVE_CHANNEL_ID, {
-    name: "Card activity reminders",
-    description:
-      "Gentle reminders to use a tracked credit card before its issuer closes it for inactivity",
+    name: t("helpers.notifications.keepAlive.channel.name"),
+    description: t("helpers.notifications.keepAlive.channel.description"),
     importance: Notifications.AndroidImportance.DEFAULT,
     vibrationPattern: [0, 250],
   });

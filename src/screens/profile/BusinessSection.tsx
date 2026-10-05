@@ -10,6 +10,7 @@
 
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import ManageBusinessesModal from "../../components/ManageBusinessesModal";
 import BusinessReportModal from "../../components/BusinessReportModal";
 import NewFeatureBadge from "../../components/NewFeatureBadge";
@@ -33,6 +34,7 @@ const BusinessSection: React.FC<BusinessSectionProps> = ({
   onOpenManageBusinesses,
   onCloseManageBusinesses,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -46,7 +48,7 @@ const BusinessSection: React.FC<BusinessSectionProps> = ({
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          BUSINESS EXPENSES
+          {t("profile.info.business.sectionTitle")}
         </Text>
 
         <View
@@ -63,19 +65,19 @@ const BusinessSection: React.FC<BusinessSectionProps> = ({
               onOpenManageBusinesses();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Manage businesses"
+            accessibilityLabel={t("profile.info.business.businesses.a11yLabel")}
           >
             <View style={{ flex: 1 }}>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Businesses 💼
+                  {t("profile.info.business.businesses.label")}
                 </Text>
                 {newFeatureIds.has("business-expenses") && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Tag expenses to a company or side gig
+                {t("profile.info.business.businesses.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -97,16 +99,16 @@ const BusinessSection: React.FC<BusinessSectionProps> = ({
               setShowBusinessReport(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open business expense report"
+            accessibilityLabel={t("profile.info.business.report.a11yLabel")}
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Business Expense Report
+                {t("profile.info.business.report.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Per-business totals by year, with CSV export
+                {t("profile.info.business.report.description")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

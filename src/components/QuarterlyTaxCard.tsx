@@ -13,6 +13,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutAnimation, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -32,7 +33,6 @@ import {
   markQuarterPaid,
   unmarkQuarterPaid,
 } from "../storage/quarterlyTaxPaidStorage";
-import { formatDayLabel } from "../utils/dateFormat";
 import { triggerHaptic } from "../utils/haptics";
 import { describeError } from "../utils/errorMessage";
 import type { BudgetEntry } from "../types";
@@ -42,7 +42,30 @@ interface QuarterlyTaxCardProps {
   entries: BudgetEntry[];
 }
 
+/** "Apr 15" / "15. Apr." in the app language; falls back to the raw ISO date. */
+const formatDay = (iso: string, locale: string): string => {
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return iso;
+  try {
+    return new Date(parsed).toLocaleDateString(locale, { month: "short", day: "numeric" });
+  } catch {
+    return new Date(parsed).toLocaleDateString();
+  }
+};
+
+/** Short month name for a 1-based month number, in the app language. */
+const shortMonth = (month: number, locale: string): string => {
+  const date = new Date(2026, month - 1, 1);
+  try {
+    return date.toLocaleDateString(locale, { month: "short" });
+  } catch {
+    return date.toLocaleDateString(undefined, { month: "short" });
+  }
+};
+
 const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -96,12 +119,12 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
         triggerHaptic(row.paid ? "selection" : "success");
       } catch (err) {
         triggerHaptic("error");
-        setError(describeError(err, "Couldn't update that quarter."));
+        setError(describeError(err, t("charts.tax.quarterly.updateFailed")));
       } finally {
         setBusyKey(null);
       }
     },
-    [busyKey]
+    [busyKey, t]
   );
 
   const thisYear = new Date().getFullYear();
@@ -109,15 +132,27 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
   const statusLabel = (row: QuarterRow): { text: string; color: string } => {
     switch (row.status) {
       case "paid":
-        return { text: `Paid ${formatDayLabel(row.paid?.paidAt ?? "")}`, color: colors.success };
+        return {
+          text: t("charts.tax.quarterly.status.paid", { date: formatDay(row.paid?.paidAt ?? "", locale) }),
+          color: colors.success,
+        };
       case "overdue":
-        return { text: `Was due ${formatDayLabel(row.dueDate.toISOString())}`, color: colors.danger };
+        return {
+          text: t("charts.tax.quarterly.status.overdue", { date: formatDay(row.dueDate.toISOString(), locale) }),
+          color: colors.danger,
+        };
       case "due-soon":
-        return { text: `Due ${formatDayLabel(row.dueDate.toISOString())}`, color: colors.warning };
+        return {
+          text: t("charts.tax.quarterly.status.due", { date: formatDay(row.dueDate.toISOString(), locale) }),
+          color: colors.warning,
+        };
       case "upcoming":
-        return { text: `Due ${formatDayLabel(row.dueDate.toISOString())}`, color: colors.textDim };
+        return {
+          text: t("charts.tax.quarterly.status.due", { date: formatDay(row.dueDate.toISOString(), locale) }),
+          color: colors.textDim,
+        };
       default:
-        return { text: "No 1099 income", color: colors.textMuted };
+        return { text: t("charts.tax.quarterly.status.none"), color: colors.textMuted };
     }
   };
 
@@ -129,14 +164,18 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel="Quarterly Taxes"
+        accessibilityLabel={t("charts.tax.quarterly.title")}
       >
         <View>
-          <Text style={tool.toolTitle}>Quarterly Taxes</Text>
+          <Text style={tool.toolTitle}>{t("charts.tax.quarterly.title")}</Text>
           <Text style={tool.toolHint}>
             {model.hasIncome
-              ? `${year}: set aside ${formatCurrency(model.totalSetAside)} of ~${formatCurrency(model.totalEstimatedDue)} estimated`
-              : "Estimated payments on your 1099 income"}
+              ? t("charts.tax.quarterly.hintWithIncome", {
+                  year,
+                  setAside: formatCurrency(model.totalSetAside),
+                  estimated: formatCurrency(model.totalEstimatedDue),
+                })
+              : t("charts.tax.quarterly.hintEmpty")}
           </Text>
         </View>
         <Text style={tool.toolChevron}>{open ? "▾" : "›"}</Text>
@@ -153,22 +192,22 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
                 style={[styles.yearBtn, year <= firstYear && styles.yearBtnDisabled]}
                 disabled={year <= firstYear}
                 accessibilityRole="button"
-                accessibilityLabel="Previous year"
+                accessibilityLabel={t("charts.tax.quarterly.prevYear")}
               >
                 <Text style={styles.yearBtnText}>‹</Text>
               </TouchableOpacity>
-              <Text style={styles.yearLabel}>Tax year {year}</Text>
+              <Text style={styles.yearLabel}>{t("charts.tax.quarterly.taxYear", { year })}</Text>
               <TouchableOpacity
                 onPress={() => setYear((y) => Math.min(thisYear, y + 1))}
                 style={[styles.yearBtn, year >= thisYear && styles.yearBtnDisabled]}
                 disabled={year >= thisYear}
                 accessibilityRole="button"
-                accessibilityLabel="Next year"
+                accessibilityLabel={t("charts.tax.quarterly.nextYear")}
               >
                 <Text style={styles.yearBtnText}>›</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.inputLabel}>Filing status</Text>
+            <Text style={styles.inputLabel}>{t("charts.tax.quarterly.filingStatusLabel")}</Text>
             <View style={tool.chipWrap}>
               {FILING_STATUS_OPTIONS.map((opt) => (
                 <TouchableOpacity
@@ -180,7 +219,7 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
                   accessibilityState={{ selected: status === opt.value }}
                 >
                   <Text style={[tool.chipText, status === opt.value && tool.chipTextActive]}>
-                    {opt.label}
+                    {t(`charts.tax.filingStatus.${opt.value}`)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -189,23 +228,26 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
 
           {!model.hasIncome ? (
             <View style={tool.efCard}>
-              <Text style={tool.refiEmptyText}>
-                No 1099 income logged for {year}. Mark income entries as 1099 (with a tax
-                set-aside rate) in the Add Entry form and the quarters fill in here.
-              </Text>
+              <Text style={tool.refiEmptyText}>{t("charts.tax.quarterly.empty", { year })}</Text>
             </View>
           ) : (
             <>
               <View style={tool.resultCard}>
-                <Text style={tool.resultLabel}>{year} ESTIMATED PAYMENTS</Text>
+                <Text style={tool.resultLabel}>{t("charts.tax.quarterly.summary.label", { year })}</Text>
                 <Text style={tool.resultValue}>{formatCurrency(model.totalEstimatedDue)}</Text>
                 <Text style={tool.resultSub}>
-                  on {formatCurrency(model.totalIncome)} of 1099 income · set aside{" "}
-                  {formatCurrency(model.totalSetAside)}
+                  {t("charts.tax.quarterly.summary.sub", {
+                    income: formatCurrency(model.totalIncome),
+                    setAside: formatCurrency(model.totalSetAside),
+                  })}
                   {model.reserveGap < -0.5
-                    ? ` (${formatCurrency(Math.abs(model.reserveGap))} short)`
+                    ? t("charts.tax.quarterly.summary.short", {
+                        amount: formatCurrency(Math.abs(model.reserveGap)),
+                      })
                     : model.reserveGap > 0.5
-                      ? ` (${formatCurrency(model.reserveGap)} to spare)`
+                      ? t("charts.tax.quarterly.summary.spare", {
+                          amount: formatCurrency(model.reserveGap),
+                        })
                       : ""}
                 </Text>
               </View>
@@ -218,20 +260,24 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
                   <View key={row.key} style={tool.efCard}>
                     <View style={styles.rowHeader}>
                       <Text style={styles.rowTitle}>
-                        {row.quarter.label} · {row.quarter.monthsLabel}
+                        {t("charts.tax.quarterly.row.title", {
+                          quarter: row.quarter.label,
+                          from: shortMonth(row.quarter.months[0], locale),
+                          to: shortMonth(row.quarter.months[row.quarter.months.length - 1], locale),
+                        })}
                       </Text>
                       <Text style={[styles.rowStatus, { color: label.color }]}>{label.text}</Text>
                     </View>
                     <View style={styles.breakRow}>
-                      <Text style={styles.breakLabel}>1099 income</Text>
+                      <Text style={styles.breakLabel}>{t("charts.tax.quarterly.row.income")}</Text>
                       <Text style={styles.breakValue}>{formatCurrency(row.income1099)}</Text>
                     </View>
                     <View style={styles.breakRow}>
-                      <Text style={styles.breakLabel}>Set aside</Text>
+                      <Text style={styles.breakLabel}>{t("charts.tax.quarterly.row.setAside")}</Text>
                       <Text style={styles.breakValue}>{formatCurrency(row.setAside)}</Text>
                     </View>
                     <View style={styles.breakRow}>
-                      <Text style={styles.breakLabel}>Estimated payment</Text>
+                      <Text style={styles.breakLabel}>{t("charts.tax.quarterly.row.estimated")}</Text>
                       <Text style={[styles.breakValue, { color: colors.accent }]}>
                         {formatCurrency(row.estimatedDue)}
                       </Text>
@@ -260,7 +306,7 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
                         accessibilityRole="button"
                       >
                         <Text style={row.paid ? styles.secondaryButtonText : styles.primaryButtonText}>
-                          {row.paid ? "Undo paid" : "Mark paid"}
+                          {row.paid ? t("charts.tax.quarterly.row.undoPaid") : t("charts.tax.quarterly.row.markPaid")}
                         </Text>
                       </TouchableOpacity>
                     ) : null}
@@ -270,11 +316,7 @@ const QuarterlyTaxCard: React.FC<QuarterlyTaxCardProps> = ({ entries }) => {
 
               <View style={tool.insightCard}>
                 <Text style={tool.insightText}>
-                  Estimates from the {TAX_DATA_YEAR} federal tables: self-employment tax plus income
-                  tax on your annualized 1099 income, with the standard deduction. No state tax,
-                  credits, W-2 withholding or other income - if you also have a W-2 job, your
-                  real installment may differ. Due dates are the IRS calendar; the paid mark stays
-                  on this phone.
+                  {t("charts.tax.quarterly.disclaimer", { year: TAX_DATA_YEAR })}
                 </Text>
               </View>
             </>

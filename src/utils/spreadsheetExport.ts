@@ -48,6 +48,7 @@ import {
 } from "../types";
 import { getRecurrenceInterval } from "./recurrence";
 import { getEmergencyFundSource } from "./emergencyFund";
+import { t } from "../i18n/translate";
 
 export type SpreadsheetFormat = "csv" | "xlsx";
 
@@ -1150,48 +1151,48 @@ export const exportSpreadsheet = async (
     withTimeout(
       getBudgetEntries(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading budget entries for export."
+      t("helpers.import.export.loadTimeout.budgetEntries")
     ),
     withTimeout(
       getCategoryBudgetLimits(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading budget limits for export."
+      t("helpers.import.export.loadTimeout.budgetLimits")
     ),
-    withTimeout(getDebts(), DATA_LOAD_TIMEOUT_MS, "Timed out loading debts for export."),
+    withTimeout(getDebts(), DATA_LOAD_TIMEOUT_MS, t("helpers.import.export.loadTimeout.debts")),
     withTimeout(
       getPayments(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading payments for export."
+      t("helpers.import.export.loadTimeout.payments")
     ),
     withTimeout(
       getSavingsGoals(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading savings goals for export."
+      t("helpers.import.export.loadTimeout.savingsGoals")
     ),
     withTimeout(
       getAssetAccounts(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading asset accounts for export."
+      t("helpers.import.export.loadTimeout.assetAccounts")
     ),
     withTimeout(
       getHoldings(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading holdings for export."
+      t("helpers.import.export.loadTimeout.holdings")
     ),
     withTimeout(
       getDebtMilestonePlan(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading milestone plan for export."
+      t("helpers.import.export.loadTimeout.milestonePlan")
     ),
     withTimeout(
       getBusinesses(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading businesses for export."
+      t("helpers.import.export.loadTimeout.businesses")
     ),
     withTimeout(
       getPeople(),
       DATA_LOAD_TIMEOUT_MS,
-      "Timed out loading people for export."
+      t("helpers.import.export.loadTimeout.people")
     ),
   ]);
   log("data-loaded", `ms=${nowMs() - loadStartedAt}`);
@@ -1455,7 +1456,7 @@ export const exportSpreadsheet = async (
     await withTimeout(
       Promise.resolve(options.beforeShare()),
       BEFORE_SHARE_TIMEOUT_MS,
-      "Timed out preparing share sheet presentation."
+      t("helpers.import.export.shareTimeout")
     );
   }
 
@@ -1471,7 +1472,7 @@ export const exportSpreadsheet = async (
       format === "csv"
         ? "text/csv"
         : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    dialogTitle: "Export BudgetArk Spreadsheet",
+    dialogTitle: t("helpers.import.export.dialogTitle"),
     UTI:
       format === "csv"
         ? "public.comma-separated-values-text"

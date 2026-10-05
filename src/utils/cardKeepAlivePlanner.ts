@@ -18,6 +18,7 @@
  */
 
 import type { Debt } from "../types";
+import { t } from "../i18n/translate";
 import {
   KEEP_ALIVE_URGENT_DAYS,
   getEffectiveKeepAliveLeadDays,
@@ -48,26 +49,30 @@ export interface PlannedKeepAliveReminder {
 
 /**
  * Rotating generic copy. Deliberately content-free (rule 11): no card
- * names, amounts, or counts on the lock screen.
+ * names, amounts, or counts on the lock screen. Resolved through the global
+ * translator at plan time (language active at the last reschedule).
  */
-export const KEEP_ALIVE_MESSAGES: readonly { title: string; body: string }[] = [
+export const keepAliveMessages = (): readonly {
+  readonly title: string;
+  readonly body: string;
+}[] => [
   {
-    title: "A card could use some activity",
-    body: "One of your credit cards hasn't been used in a while. A small purchase keeps it active.",
+    title: t("helpers.notifications.keepAlive.messages.activity.title"),
+    body: t("helpers.notifications.keepAlive.messages.activity.body"),
   },
   {
-    title: "Keep your credit line afloat",
-    body: "An idle card can be closed by its issuer. Open BudgetArk to see which one needs a quick purchase.",
+    title: t("helpers.notifications.keepAlive.messages.afloat.title"),
+    body: t("helpers.notifications.keepAlive.messages.afloat.body"),
   },
   {
-    title: "Quick card check",
-    body: "A card you're tracking is nearing its inactivity deadline. A coffee-sized purchase resets the clock.",
+    title: t("helpers.notifications.keepAlive.messages.quickCheck.title"),
+    body: t("helpers.notifications.keepAlive.messages.quickCheck.body"),
   },
 ];
 
 const dayKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
+    date.getDate(),
   ).padStart(2, "0")}`;
 
 export interface PlanKeepAliveRemindersInput {
@@ -98,7 +103,7 @@ const candidateOffsets = (leadDays: number): number[] => {
  * window, capped, sorted soonest-first.
  */
 export const planKeepAliveReminders = (
-  input: PlanKeepAliveRemindersInput
+  input: PlanKeepAliveRemindersInput,
 ): PlannedKeepAliveReminder[] => {
   const now = input.now ?? new Date();
   const windowEnd = new Date(
@@ -107,7 +112,7 @@ export const planKeepAliveReminders = (
     now.getDate() + KEEP_ALIVE_WINDOW_DAYS,
     23,
     59,
-    59
+    59,
   );
 
   const fireDays = new Map<string, Date>();
@@ -118,14 +123,16 @@ export const planKeepAliveReminders = (
     if (!status) continue;
 
     const { deadline } = status;
-    for (const offset of candidateOffsets(getEffectiveKeepAliveLeadDays(debt))) {
+    for (const offset of candidateOffsets(
+      getEffectiveKeepAliveLeadDays(debt),
+    )) {
       const fire = new Date(
         deadline.getFullYear(),
         deadline.getMonth(),
         deadline.getDate() + offset,
         KEEP_ALIVE_REMINDER_HOUR,
         0,
-        0
+        0,
       );
       if (fire.getTime() <= now.getTime()) continue;
       if (fire.getTime() > windowEnd.getTime()) continue;
@@ -134,6 +141,7 @@ export const planKeepAliveReminders = (
     }
   }
 
+  const messages = keepAliveMessages();
   return Array.from(fireDays.values())
     .sort((a, b) => a.getTime() - b.getTime())
     .slice(0, MAX_SCHEDULED_KEEP_ALIVE_REMINDERS)
@@ -141,9 +149,7 @@ export const planKeepAliveReminders = (
       // Rotate copy deterministically by calendar day so a reschedule
       // doesn't reshuffle a message already sitting in the tray.
       const message =
-        KEEP_ALIVE_MESSAGES[
-          Math.floor(fire.getTime() / 86_400_000) % KEEP_ALIVE_MESSAGES.length
-        ];
+        messages[Math.floor(fire.getTime() / 86_400_000) % messages.length];
       return {
         identifier: `budgetark-keepalive-${dayKey(fire)}`,
         title: message.title,

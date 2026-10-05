@@ -25,9 +25,9 @@
 
 import React, { useCallback, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
-import { MONTH_LABELS } from "../utils/dateFormat";
 import { useValueChanged } from "../hooks/useValueChanged";
 
 interface MonthYearPickerProps {
@@ -44,6 +44,12 @@ interface MonthYearPickerProps {
   /** Floor for the year stepper's decrement (debt goals can't be past). */
   minYear?: number;
 }
+
+/** Locale-key per month index; the grid emits "YYYY-MM", never a label. */
+const MONTH_KEYS = [
+  "jan", "feb", "mar", "apr", "may", "jun",
+  "jul", "aug", "sep", "oct", "nov", "dec",
+] as const;
 
 /** Parse the year out of "YYYY-MM", falling back to the current year. */
 const seedYear = (value: string): number => {
@@ -72,6 +78,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
   title,
   minYear,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
@@ -131,7 +138,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
           style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close month picker"
+          accessibilityLabel={t("datePicker.closeA11y")}
         />
         <View style={styles.pickerCard}>
           {title ? <Text style={styles.pickerTitle}>{title}</Text> : null}
@@ -147,7 +154,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
                 <Text style={styles.pickerArrowConfirm}>‹</Text>
               </TouchableOpacity>
               <View style={styles.pickerYearCenter}>
-                <Text style={styles.pickerYearCaption}>YEAR</Text>
+                <Text style={styles.pickerYearCaption}>{t("datePicker.yearCaption")}</Text>
                 <Text style={styles.pickerYear}>{pickerYear}</Text>
               </View>
               <TouchableOpacity
@@ -171,14 +178,15 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
           )}
 
           <View style={styles.monthGrid}>
-            {MONTH_LABELS.map((label, index) => {
+            {MONTH_KEYS.map((monthKey, index) => {
+              const label = t(`datePicker.months.${monthKey}`);
               const monthValue = String(index + 1).padStart(2, "0");
               const isSelected = confirm
                 ? pickerMonth === index
                 : value === `${pickerYear}-${monthValue}`;
               return (
                 <TouchableOpacity
-                  key={label}
+                  key={monthKey}
                   style={[styles.monthBtn, isSelected && styles.monthBtnActive]}
                   onPress={() => handleMonthPress(index)}
                   accessibilityRole="button"
@@ -202,12 +210,15 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
             <>
               <Text style={styles.pickerSelection}>
                 {pickerMonth !== null
-                  ? `Selected: ${MONTH_LABELS[pickerMonth]} ${pickerYear}`
-                  : "Tap a month to set your goal"}
+                  ? t("datePicker.selected", {
+                      month: t(`datePicker.months.${MONTH_KEYS[pickerMonth]}`),
+                      year: pickerYear,
+                    })
+                  : t("datePicker.tapToSet")}
               </Text>
               <View style={styles.pickerActions}>
                 <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                  <Text style={styles.cancelText}>Cancel</Text>
+                  <Text style={styles.cancelText}>{t("common.cancel")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -217,7 +228,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
                   onPress={handleDone}
                   disabled={pickerMonth === null}
                 >
-                  <Text style={styles.doneButtonText}>Done</Text>
+                  <Text style={styles.doneButtonText}>{t("common.done")}</Text>
                 </TouchableOpacity>
               </View>
             </>

@@ -27,6 +27,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import type {
   BudgetEntry,
   Business,
@@ -132,6 +134,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
   const insets = useSafeAreaInsets();
   const { refresh } = useConnections();
+  const { t } = useTranslation();
 
   const [rules, setRules] = useState<MerchantRule[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -165,11 +168,12 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     () =>
       entries.filter(isBillCandidate).map((bill) => ({
         id: bill.id,
-        name: `${bill.description?.trim() || bill.category} · est. ${formatCurrency(
-          bill.amount,
-        )}`,
+        name: t("modals.data.rules.billOption", {
+          name: bill.description?.trim() || categoryLabel(t, bill.category),
+          amount: formatCurrency(bill.amount),
+        }),
       })),
-    [entries, formatCurrency],
+    [entries, formatCurrency, t],
   );
 
   // Live debts with a balance (plus whichever one the open rule already
@@ -180,9 +184,12 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         keepId: debtIdFromOption(draftRecurringId),
       }).map((debt) => ({
         id: debtOptionId(debt.id),
-        name: `${debt.name} · min ${formatCurrency(debt.minPayment)}`,
+        name: t("modals.data.rules.debtOption", {
+          name: debt.name,
+          amount: formatCurrency(debt.minPayment),
+        }),
       })),
-    [debts, draftRecurringId, formatCurrency],
+    [debts, draftRecurringId, formatCurrency, t],
   );
 
   const debtNameById = useMemo(
@@ -205,13 +212,13 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
     void loadRules()
       .then(() => setActionError(null))
       .catch((error: unknown) =>
-        setActionError(describeError(error, "Couldn't load your rules.")),
+        setActionError(describeError(error, t("modals.data.rules.errors.load"))),
       );
     // Debts are offered in the bill picker; a failed read just hides them.
     void getDebts()
       .then(setDebts)
       .catch(() => setDebts([]));
-  }, [visible, loadRules]);
+  }, [visible, loadRules, t]);
 
   const handleClose = useCallback(() => {
     setExpandedId(null);
@@ -266,12 +273,13 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         setExpandedId(null);
       } catch (error) {
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't save this rule."));
+        setActionError(describeError(error, t("modals.data.rules.errors.save")));
       } finally {
         setBusyId(null);
       }
     },
     [
+      t,
       draftAutoApprove,
       draftBusinessId,
       draftCategory,
@@ -297,50 +305,73 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
         setExpandedId(null);
       } catch (error) {
         triggerHaptic("error");
-        setActionError(describeError(error, "Couldn't delete this rule."));
+        setActionError(describeError(error, t("modals.data.rules.errors.delete")));
       } finally {
         setBusyId(null);
       }
     },
-    [loadRules, refresh],
+    [loadRules, refresh, t],
   );
 
   const behaviorLabel = (rule: MerchantRule): string => {
-    if (rule.action === "ignore") return "Always skip - never imports";
+    if (rule.action === "ignore") return t("modals.data.rules.behavior.alwaysSkip");
     if (rule.debtId) {
       // A debt rule logs a Payment on the debt, never an entry.
-      const debtName = debtNameById.get(rule.debtId) ?? "(deleted debt)";
+      const name =
+        debtNameById.get(rule.debtId) ??
+        t("modals.data.rules.behavior.deletedDebt");
       return rule.action === "approve"
-        ? `Logs a payment on 💳 ${debtName}`
-        : `Suggests a payment on 💳 ${debtName}`;
+        ? t("modals.data.rules.behavior.logsDebtPayment", { name })
+        : t("modals.data.rules.behavior.suggestsDebtPayment", { name });
     }
-    const parts = [
-      `${rule.action === "approve" ? "Auto-approves" : "Suggests"} ${getCategoryIcon(rule.category, customCategories)} ${rule.category}`,
+    const parts: string[] = [
+      t(
+        rule.action === "approve"
+          ? "modals.data.rules.behavior.autoApproves"
+          : "modals.data.rules.behavior.suggests",
+        {
+          icon: getCategoryIcon(rule.category, customCategories),
+          category: categoryLabel(t, rule.category),
+        },
+      ),
     ];
-    if (rule.renameTo) parts.push(`as "${rule.renameTo}"`);
+    if (rule.renameTo) {
+      parts.push(
+        t("modals.data.rules.behavior.renameAs", { name: rule.renameTo }),
+      );
+    }
     if (rule.businessId) {
       parts.push(
-        `💼 ${businesses.find((b) => b.id === rule.businessId)?.name ?? "(deleted business)"}`,
+        `💼 ${businesses.find((b) => b.id === rule.businessId)?.name ?? t("modals.data.rules.behavior.deletedBusiness")}`,
       );
     }
     const rulePeople = entryPersonIds(rule);
     if (rulePeople.length > 0) {
       parts.push(
         `👤 ${rulePeople
-          .map((id) => people.find((p) => p.id === id)?.name ?? "(deleted person)")
+          .map(
+            (id) =>
+              people.find((p) => p.id === id)?.name ??
+              t("modals.data.rules.behavior.deletedPerson"),
+          )
           .join(", ")}`,
       );
     }
     if (rule.recurringEntryId) {
       parts.push(
-        `🧾 ${billOptions.find((b) => b.id === rule.recurringEntryId)?.name ?? "(deleted bill)"}`,
+        `🧾 ${billOptions.find((b) => b.id === rule.recurringEntryId)?.name ?? t("modals.data.rules.behavior.deletedBill")}`,
       );
     }
     return parts.join(" ");
   };
 
   const metaLabel = (rule: MerchantRule): string =>
-    [behaviorLabel(rule), rule.useCount > 1 ? `used ${rule.useCount}×` : null]
+    [
+      behaviorLabel(rule),
+      rule.useCount > 1
+        ? t("modals.data.rules.behavior.usedCount", { count: rule.useCount })
+        : null,
+    ]
       .filter(Boolean)
       .join(" · ");
 
@@ -357,7 +388,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       >
         {expanded ? (
           <View style={styles.expandedArea}>
-            <Text style={styles.label}>WHEN THIS MERCHANT IMPORTS</Text>
+            <Text style={styles.label}>{t("modals.data.rules.editor.whenImports")}</Text>
             <CategoryPillPicker
               value={draftCategory}
               onChange={(category) => {
@@ -366,7 +397,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
               }}
               customCategories={customCategories}
               leadingOption={{
-                label: "🚫 Always skip",
+                label: t("modals.data.rules.editor.alwaysSkipPill"),
                 selected: draftIgnore,
                 onPress: () => setDraftIgnore(true),
               }}
@@ -389,20 +420,18 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                   ) : null}
                 </View>
                 <Text style={styles.autoApproveLabel}>
-                  Auto-approve without review - matching imports go straight
-                  into your budget with this rule's choices. Unchecked, they
-                  wait in the inbox with the category suggested.
+                  {t("modals.data.rules.editor.autoApproveHelp")}
                 </Text>
               </TouchableOpacity>
             ) : null}
             {!draftIgnore ? (
               <>
-                <Text style={styles.label}>RENAME TO (OPTIONAL)</Text>
+                <Text style={styles.label}>{t("modals.data.rules.editor.renameLabel")}</Text>
                 <TextInput
                   style={styles.nameInput}
                   value={draftRename}
                   onChangeText={setDraftRename}
-                  placeholder="Keep the bank's description"
+                  placeholder={t("modals.data.rules.editor.renamePlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   maxLength={220}
                   returnKeyType="done"
@@ -413,14 +442,14 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             rule.type === "expense" &&
             (businesses.length > 0 || draftBusinessId) ? (
               <>
-                <Text style={styles.label}>BUSINESS</Text>
+                <Text style={styles.label}>{t("modals.data.rules.editor.businessLabel")}</Text>
                 <TagPillPicker
                     options={businesses}
                     value={draftBusinessId}
                     onChange={setDraftBusinessId}
-                    noneLabel="Personal"
+                    noneLabel={t("modals.data.rules.editor.personalPill")}
                     glyph="💼"
-                    deletedLabel="(deleted business)"
+                    deletedLabel={t("modals.data.rules.behavior.deletedBusiness")}
                   />
               </>
             ) : null}
@@ -428,14 +457,14 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             rule.type === "expense" &&
             (people.length > 0 || draftPersonIds.length > 0) ? (
               <>
-                <Text style={styles.label}>PEOPLE</Text>
+                <Text style={styles.label}>{t("modals.data.rules.editor.peopleLabel")}</Text>
                 <MultiTagPillPicker
                     options={people}
                     values={draftPersonIds}
                     onChange={setDraftPersonIds}
-                    noneLabel="Unassigned"
+                    noneLabel={t("modals.data.rules.editor.unassignedPill")}
                     glyph="👤"
-                    deletedLabel="(deleted person)"
+                    deletedLabel={t("modals.data.rules.behavior.deletedPerson")}
                   />
               </>
             ) : null}
@@ -443,20 +472,18 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
             rule.type === "expense" &&
             (billOptions.length > 0 || debtOptions.length > 0 || draftRecurringId) ? (
               <>
-                <Text style={styles.label}>APPLIES TO BILL</Text>
+                <Text style={styles.label}>{t("modals.data.rules.editor.billLabel")}</Text>
                 <TagPillPicker
                     options={[...billOptions, ...debtOptions]}
                     value={draftRecurringId}
                     onChange={setDraftRecurringId}
-                    noneLabel="Not a bill"
+                    noneLabel={t("modals.data.rules.editor.notABillPill")}
                     glyph="🧾"
-                    deletedLabel="(deleted bill)"
+                    deletedLabel={t("modals.data.rules.behavior.deletedBill")}
                   />
                 {debtIdFromOption(draftRecurringId) ? (
                   <Text style={styles.autoApproveLabel}>
-                    Payments to this merchant are logged on the debt (Debts
-                    tab balance and history) instead of being filed as an
-                    expense. The category above is not used.
+                    {t("modals.data.rules.editor.debtHelp")}
                   </Text>
                 ) : null}
               </>
@@ -467,7 +494,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                 onPress={() => setConfirmingDeleteId(rule.id)}
                 disabled={busy}
               >
-                <Text style={styles.deleteButtonText}>Delete Rule</Text>
+                <Text style={styles.deleteButtonText}>{t("modals.data.rules.editor.deleteRule")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveButton, busy && styles.buttonDisabled]}
@@ -475,7 +502,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                 disabled={busy}
               >
                 <Text style={styles.saveButtonText}>
-                  {busy ? "Saving..." : "Save"}
+                  {busy ? t("modals.data.rules.editor.saving") : t("common.save")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -494,11 +521,11 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       <SheetKeyboardAvoider style={styles.avoider}>
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Text style={styles.title}>Merchant Rules</Text>
+          <Text style={styles.title}>{t("modals.data.rules.title")}</Text>
           <Text style={styles.subtitle}>
             {rules.length > 0
-              ? `${rules.length} remembered rule${rules.length === 1 ? "" : "s"}. Changes apply to future imports and anything still in your inbox - transactions you already skipped stay skipped.`
-              : "Rules remember what to do when a merchant's transactions import."}
+              ? t("modals.data.rules.subtitleCount", { count: rules.length })
+              : t("modals.data.rules.subtitleEmpty")}
           </Text>
           {actionError ? (
             <Text style={styles.errorText}>{actionError}</Text>
@@ -509,9 +536,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyGlyph}>📌</Text>
             <Text style={styles.emptyText}>
-              No rules yet. In the Review Inbox, check "Always do this" when
-              approving or skipping a transaction - the rule will appear here,
-              where you can change or delete it anytime.
+              {t("modals.data.rules.emptyBody")}
             </Text>
           </View>
         ) : (
@@ -544,7 +569,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
           ]}
         >
           <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-            <Text style={styles.closeButtonText}>Done</Text>
+            <Text style={styles.closeButtonText}>{t("common.done")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -558,13 +583,16 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       >
         <View style={styles.dialogOverlay}>
           <View style={styles.dialogBox}>
-            <Text style={styles.dialogTitle}>Delete this rule?</Text>
+            <Text style={styles.dialogTitle}>{t("modals.data.rules.confirmDelete.title")}</Text>
             <Text style={styles.dialogBody}>
-              {confirmingRule?.action === "ignore"
-                ? `Future "${confirmingRule?.merchantKey ?? ""}" transactions will import into your Review Inbox again. Ones already skipped won't come back.`
-                : confirmingRule?.action === "approve"
-                  ? `Future "${confirmingRule?.merchantKey ?? ""}" transactions will wait in your Review Inbox for manual approval. Entries already created are not changed.`
-                  : `Future "${confirmingRule?.merchantKey ?? ""}" transactions will arrive without a suggested category. Approved entries are not changed.`}
+              {t(
+                confirmingRule?.action === "ignore"
+                  ? "modals.data.rules.confirmDelete.bodyIgnore"
+                  : confirmingRule?.action === "approve"
+                    ? "modals.data.rules.confirmDelete.bodyApprove"
+                    : "modals.data.rules.confirmDelete.bodySuggest",
+                { merchant: confirmingRule?.merchantKey ?? "" },
+              )}
             </Text>
             <View style={styles.dialogActions}>
               <TouchableOpacity
@@ -572,7 +600,7 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                 onPress={() => setConfirmingDeleteId(null)}
                 disabled={busyId !== null}
               >
-                <Text style={styles.dialogCancelText}>Keep</Text>
+                <Text style={styles.dialogCancelText}>{t("modals.data.rules.confirmDelete.keep")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -587,7 +615,9 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                 disabled={busyId !== null}
               >
                 <Text style={styles.dialogDeleteText}>
-                  {busyId !== null ? "Deleting..." : "Delete"}
+                  {busyId !== null
+                    ? t("modals.data.rules.confirmDelete.deleting")
+                    : t("common.delete")}
                 </Text>
               </TouchableOpacity>
             </View>

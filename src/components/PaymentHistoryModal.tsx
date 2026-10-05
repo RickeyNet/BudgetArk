@@ -16,6 +16,7 @@ import {
   Modal,
   StyleSheet,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { Payment, Debt } from "../types";
 import {
   getPayments,
@@ -89,7 +90,11 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   onPaymentsChanged,
 }) => {
   const { colors } = useTheme();
-  const { formatCurrency, preference } = useCurrency();
+  const { formatCurrency } = useCurrency();
+  // Dates follow the app language (not the currency locale) so a German
+  // user sees "September 2026" / "18. Sept. 2026".
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const [sections, setSections] = useState<MonthSection[]>([]);
@@ -112,11 +117,11 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const reloadPayments = useCallback(async () => {
     try {
       const payments = await getPayments();
-      setSections(groupByMonth(payments, preference.locale));
+      setSections(groupByMonth(payments, locale));
     } catch {
       setSections([]);
     }
-  }, [preference.locale]);
+  }, [locale]);
 
   const exitSelection = useCallback(() => {
     setSelectionMode(false);
@@ -208,7 +213,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     getPayments()
       .then((payments) => {
         if (cancelled) return;
-        setSections(groupByMonth(payments, preference.locale));
+        setSections(groupByMonth(payments, locale));
       })
       .catch(() => {
         if (cancelled) return;
@@ -220,7 +225,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [clearUndoTimer, preference.locale, visible]);
+  }, [clearUndoTimer, locale, visible]);
 
   const totalAll = React.useMemo(
     () => sections.reduce((sum, s) => sum + s.total, 0),
@@ -261,7 +266,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       }
 
       const { payment } = item;
-      const debtName = debtNameMap.get(payment.debtId) ?? "Deleted Debt";
+      const debtName = debtNameMap.get(payment.debtId) ?? t("debts.card.history.deletedDebt");
       const isSelected = selectedIds.has(payment.id);
 
       return (
@@ -295,7 +300,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           )}
           <View style={styles.paymentLeft}>
             <Text style={styles.paymentDebtName}>{debtName}</Text>
-            <Text style={styles.paymentDate}>{formatDate(payment.date, preference.locale)}</Text>
+            <Text style={styles.paymentDate}>{formatDate(payment.date, locale)}</Text>
           </View>
           <Text style={styles.paymentAmount}>
             -{formatCurrency(payment.amount)}
@@ -307,20 +312,19 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       colors,
       debtNameMap,
       formatCurrency,
-      preference.locale,
+      locale,
       selectionMode,
       selectedIds,
       styles,
+      t,
       toggleSelect,
     ]
   );
 
   const emptyState = (
     <View style={styles.emptyWrap}>
-      <Text style={styles.emptyTitle}>No Payments Yet</Text>
-      <Text style={styles.emptySub}>
-        Payments you make will show up here.
-      </Text>
+      <Text style={styles.emptyTitle}>{t("debts.card.history.empty.title")}</Text>
+      <Text style={styles.emptySub}>{t("debts.card.history.empty.subtitle")}</Text>
     </View>
   );
 
@@ -336,10 +340,10 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>Payment History</Text>
+              <Text style={styles.title}>{t("debts.card.history.title")}</Text>
               {sections.length > 0 && (
                 <Text style={styles.totalLabel}>
-                  Total paid: {formatCurrency(totalAll)}
+                  {t("debts.card.history.totalPaid", { amount: formatCurrency(totalAll) })}
                 </Text>
               )}
             </View>
@@ -348,7 +352,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
               style={styles.closeBtn}
             >
               <Text style={styles.closeBtnText}>
-                {selectionMode ? "Cancel" : "Done"}
+                {selectionMode ? t("common.cancel") : t("common.done")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -368,13 +372,13 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           {selectionMode && (
             <View style={styles.bulkBar}>
               <Text style={styles.bulkBarCount}>
-                {selectedIds.size} selected
+                {t("debts.card.history.selected", { count: selectedIds.size })}
               </Text>
               <TouchableOpacity
                 disabled={selectedIds.size === 0}
                 onPress={handleBulkDelete}
                 accessibilityRole="button"
-                accessibilityLabel="Delete selected payments"
+                accessibilityLabel={t("debts.card.history.deleteSelectedA11y")}
               >
                 <Text
                   style={[
@@ -382,7 +386,7 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                     selectedIds.size === 0 && { color: colors.textMuted },
                   ]}
                 >
-                  Delete
+                  {t("common.delete")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -391,16 +395,15 @@ const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           {undoBatch && !selectionMode && (
             <View style={styles.undoBar}>
               <Text style={styles.undoText}>
-                Deleted {undoBatch.length}{" "}
-                {undoBatch.length === 1 ? "payment" : "payments"}
+                {t("debts.card.history.deleted", { count: undoBatch.length })}
               </Text>
               <TouchableOpacity
                 onPress={handleUndo}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 accessibilityRole="button"
-                accessibilityLabel="Undo delete payments"
+                accessibilityLabel={t("debts.card.history.undoA11y")}
               >
-                <Text style={styles.undoAction}>UNDO</Text>
+                <Text style={styles.undoAction}>{t("debts.card.history.undo")}</Text>
               </TouchableOpacity>
             </View>
           )}

@@ -22,6 +22,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { FeatureSpotlight } from "../data/featureSpotlights";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -35,6 +36,8 @@ interface FeatureSpotlightModalProps {
   onCtaPress: (spotlight: FeatureSpotlight) => void;
   /** "Full release notes" link on the last slide. */
   onOpenReleaseNotes: () => void;
+  /** "Browse every feature" link on the last slide - opens the feature guide. */
+  onOpenFeatureGuide: () => void;
 }
 
 const FeatureSpotlightModal: React.FC<FeatureSpotlightModalProps> = ({
@@ -43,7 +46,9 @@ const FeatureSpotlightModal: React.FC<FeatureSpotlightModalProps> = ({
   onDone,
   onCtaPress,
   onOpenReleaseNotes,
+  onOpenFeatureGuide,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const scrollRef = useRef<ScrollView>(null);
@@ -130,7 +135,9 @@ const FeatureSpotlightModal: React.FC<FeatureSpotlightModalProps> = ({
                 >
                   <View style={styles.versionPill}>
                     <Text style={styles.versionPillText}>
-                      NEW IN {spotlight.sinceVersion}
+                      {t("modals.engage.spotlight.newIn", {
+                        version: spotlight.sinceVersion,
+                      })}
                     </Text>
                   </View>
                   {index === clampedPage ? (
@@ -182,32 +189,51 @@ const FeatureSpotlightModal: React.FC<FeatureSpotlightModalProps> = ({
             </View>
           )}
 
+          {isLastPage ? (
+            <TouchableOpacity
+              style={styles.guideLink}
+              onPress={onOpenFeatureGuide}
+              accessibilityRole="button"
+              accessibilityLabel={t("modals.engage.spotlight.browseGuideA11y")}
+            >
+              <Text style={styles.linkText}>
+                📖 {t("modals.engage.spotlight.browseGuide")}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
           <View style={styles.actionsRow}>
             {isLastPage ? (
               <TouchableOpacity
                 onPress={onOpenReleaseNotes}
                 accessibilityRole="button"
-                accessibilityLabel="Open full release notes"
+                accessibilityLabel={t("modals.engage.spotlight.fullReleaseNotesA11y")}
               >
-                <Text style={styles.linkText}>Full release notes</Text>
+                <Text style={styles.linkText}>
+                  {t("modals.engage.spotlight.fullReleaseNotes")}
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 onPress={onDone}
                 accessibilityRole="button"
-                accessibilityLabel="Skip the feature tour"
+                accessibilityLabel={t("modals.engage.spotlight.skipA11y")}
               >
-                <Text style={styles.skipText}>Skip</Text>
+                <Text style={styles.skipText}>{t("common.skip")}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={isLastPage ? onDone : () => goToPage(clampedPage + 1)}
               accessibilityRole="button"
-              accessibilityLabel={isLastPage ? "Done" : "Next feature"}
+              accessibilityLabel={
+                isLastPage
+                  ? t("common.done")
+                  : t("modals.engage.spotlight.nextA11y")
+              }
             >
               <Text style={styles.primaryButtonText}>
-                {isLastPage ? "Done" : "Next"}
+                {isLastPage ? t("common.done") : t("common.next")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -295,6 +321,10 @@ const makeStyles = (colors: ThemeColors) =>
       width: 7,
       height: 7,
       borderRadius: 4,
+    },
+    guideLink: {
+      alignSelf: "center",
+      marginTop: 10,
     },
     actionsRow: {
       flexDirection: "row",

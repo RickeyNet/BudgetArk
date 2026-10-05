@@ -16,14 +16,12 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { BudgetBucket, BudgetCategory, CategoryName, CustomCategory } from "../types";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
+import { categoryLabel } from "../i18n/categoryLabel";
 import type { ThemeColors } from "../theme/themes";
 import { DEFAULT_CATEGORY_ICON, EMOJI_CHOICES, getCategoryIcon } from "../data/categoryIcons";
-import {
-  BUDGET_BUCKET_LABELS,
-  BUDGET_BUCKET_ORDER,
-  DEFAULT_CUSTOM_CATEGORY_BUCKET,
-} from "../data/categoryBuckets";
+import { BUDGET_BUCKET_ORDER, DEFAULT_CUSTOM_CATEGORY_BUCKET } from "../data/categoryBuckets";
 import { MAX_CATEGORY_NAME_LENGTH } from "../storage/customCategoriesStorage";
 import { useCustomCategories } from "../categories/CustomCategoriesProvider";
 import { SELECTABLE_BUILT_IN_CATEGORIES } from "../utils/categoryVisibility";
@@ -59,6 +57,7 @@ const CategoryPillPicker: React.FC<CategoryPillPickerProps> = ({
   pinCurrentValue = false,
   allowCreate = false,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const { visibleBuiltIns, add } = useCustomCategories();
@@ -143,7 +142,7 @@ const CategoryPillPicker: React.FC<CategoryPillPickerProps> = ({
                   selected && styles.categoryPillTextActive,
                 ]}
               >
-                {getCategoryIcon(item, customCategories)} {item}
+                {getCategoryIcon(item, customCategories)} {categoryLabel(t, item)}
               </Text>
             </TouchableOpacity>
           );
@@ -153,10 +152,10 @@ const CategoryPillPicker: React.FC<CategoryPillPickerProps> = ({
             style={[styles.categoryPill, styles.createPill, creating && styles.categoryPillActive]}
             onPress={() => (creating ? closeCreate() : setCreating(true))}
             accessibilityRole="button"
-            accessibilityLabel={creating ? "Cancel new category" : "Create a new category"}
+            accessibilityLabel={creating ? t("categoryPicker.a11yCancelCreate") : t("categoryPicker.a11yCreate")}
           >
             <Text style={[styles.categoryPillText, styles.createPillText]}>
-              {creating ? "× Cancel" : "+ New"}
+              {creating ? t("categoryPicker.cancelPill") : t("categoryPicker.newPill")}
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -164,14 +163,14 @@ const CategoryPillPicker: React.FC<CategoryPillPickerProps> = ({
 
       {allowCreate && creating ? (
         <View style={styles.createCard}>
-          <Text style={styles.createLabel}>NEW CATEGORY</Text>
+          <Text style={styles.createLabel}>{t("categoryPicker.newCategoryLabel")}</Text>
           <TextInput
             style={styles.createInput}
-            placeholder="e.g. Pets, Childcare, Hobbies"
+            placeholder={t("categoryPicker.namePlaceholder")}
             placeholderTextColor={colors.textMuted}
             value={newName}
-            onChangeText={(t) => {
-              setNewName(t);
+            onChangeText={(text) => {
+              setNewName(text);
               if (createError) setCreateError(null);
             }}
             maxLength={MAX_CATEGORY_NAME_LENGTH}
@@ -186,7 +185,7 @@ const CategoryPillPicker: React.FC<CategoryPillPickerProps> = ({
                 style={[styles.emojiCell, newIcon === glyph && styles.emojiCellActive]}
                 onPress={() => setNewIcon(glyph)}
                 accessibilityRole="button"
-                accessibilityLabel={`Pick icon ${glyph}`}
+                accessibilityLabel={t("categoryPicker.pickIcon", { glyph })}
               >
                 <Text style={styles.emojiText}>{glyph}</Text>
               </TouchableOpacity>
@@ -204,7 +203,7 @@ const CategoryPillPicker: React.FC<CategoryPillPickerProps> = ({
                   <Text
                     style={[styles.categoryPillText, selected && styles.categoryPillTextActive]}
                   >
-                    {BUDGET_BUCKET_LABELS[bucket]}
+                    {t(`buckets.${bucket}`)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -220,7 +219,7 @@ const CategoryPillPicker: React.FC<CategoryPillPickerProps> = ({
             disabled={!newName.trim() || saving}
           >
             <Text style={styles.createButtonText}>
-              {saving ? "Adding…" : "Add & select"}
+              {saving ? t("categoryPicker.adding") : t("categoryPicker.addAndSelect")}
             </Text>
           </TouchableOpacity>
         </View>

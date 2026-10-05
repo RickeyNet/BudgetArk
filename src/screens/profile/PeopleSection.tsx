@@ -13,6 +13,7 @@
 
 import React, { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useTranslation } from "react-i18next";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
 import PersonReportModal from "../../components/PersonReportModal";
 import LoansModal from "../../components/LoansModal";
@@ -39,6 +40,7 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
   { newFeatureIds, onDismissNewBadge, showManagePeople, onOpenManagePeople, onCloseManagePeople },
   ref,
 ) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -58,7 +60,7 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          PEOPLE
+          {t("profile.connections.people.sectionTitle")}
         </Text>
 
         <View
@@ -75,19 +77,19 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
               onOpenManagePeople();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Manage people"
+            accessibilityLabel={t("profile.connections.people.manageA11y")}
           >
             <View style={styles.rowTextWrap}>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  People 👤
+                  {t("profile.connections.people.people")}
                 </Text>
                 {newFeatureIds.has("people-assignment") && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Assign spending to household members
+                {t("profile.connections.people.peopleSubtext")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -109,16 +111,16 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
               setShowPersonReport(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open person spending report"
+            accessibilityLabel={t("profile.connections.people.reportA11y")}
           >
             <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Person Spending Report
+                {t("profile.connections.people.report")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Per-person totals by year, with CSV export
+                {t("profile.connections.people.reportSubtext")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -133,19 +135,19 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
               setShowLoans(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open owed to you"
+            accessibilityLabel={t("profile.connections.people.owedA11y")}
           >
             <View style={styles.rowTextWrap}>
               <View style={styles.rowTitleWithBadge}>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Owed to You 🤝
+                  {t("profile.connections.people.owed")}
                 </Text>
                 {newFeatureIds.has("owed-to-you") && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Money you've lent out, and what's been paid back
+                {t("profile.connections.people.owedSubtext")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>

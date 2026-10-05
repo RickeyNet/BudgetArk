@@ -11,9 +11,9 @@ import {
   buildInboxSections,
   buildInboxSectionsByMerchant,
   groupDefaultCategory,
-  DUPLICATES_SECTION_TITLE,
-  MERCHANT_NO_KEY_TITLE,
-  TRANSFERS_SECTION_TITLE,
+  duplicatesSectionTitle,
+  merchantNoKeyTitle,
+  transfersSectionTitle,
 } from "../reviewInboxSections";
 import { formatDayLabel } from "../dateFormat";
 import { makePendingTransaction } from "../../__tests__/fixtures";
@@ -52,8 +52,8 @@ describe("buildInboxSections", () => {
 
     expect(sections.map((s) => s.title)).toEqual([
       dayTitle("2026-06-01"),
-      DUPLICATES_SECTION_TITLE,
-      TRANSFERS_SECTION_TITLE,
+      duplicatesSectionTitle(),
+      transfersSectionTitle(),
     ]);
     expect(sections[0].data.map((i) => i.id)).toEqual(["plain"]);
     expect(sections[1]).toMatchObject({ bulkSkippable: true });
@@ -74,8 +74,8 @@ describe("buildInboxSections", () => {
     const appearances = sections.flatMap((s) =>
       s.data.filter((i) => i.id === "both").map(() => s.title)
     );
-    expect(appearances).toEqual([TRANSFERS_SECTION_TITLE]);
-    expect(sections.map((s) => s.title)).toEqual([TRANSFERS_SECTION_TITLE]);
+    expect(appearances).toEqual([transfersSectionTitle()]);
+    expect(sections.map((s) => s.title)).toEqual([transfersSectionTitle()]);
   });
 
   it("omits empty heuristic sections and the dated sections alike", () => {
@@ -83,14 +83,14 @@ describe("buildInboxSections", () => {
       makePendingTransaction({ id: "xfer", transferLikely: true }),
     ]);
     expect(onlyTransfers.map((s) => s.title)).toEqual([
-      TRANSFERS_SECTION_TITLE,
+      transfersSectionTitle(),
     ]);
 
     const onlyDuplicates = buildInboxSections([
       makePendingTransaction({ id: "dupe", duplicateLikely: true }),
     ]);
     expect(onlyDuplicates.map((s) => s.title)).toEqual([
-      DUPLICATES_SECTION_TITLE,
+      duplicatesSectionTitle(),
     ]);
   });
 
@@ -129,7 +129,7 @@ describe("buildInboxSectionsByMerchant", () => {
       makePendingTransaction({ id: "n1", merchant: "" }),
       makePendingTransaction({ id: "n2", merchant: "" }),
     ]);
-    const other = sections.find((s) => s.title === MERCHANT_NO_KEY_TITLE);
+    const other = sections.find((s) => s.title === merchantNoKeyTitle());
     expect(other?.data.map((i) => i.id).sort()).toEqual(["n1", "n2"]);
     expect(other?.bulkCategorizable).toBeUndefined();
   });
@@ -142,10 +142,10 @@ describe("buildInboxSectionsByMerchant", () => {
       makePendingTransaction({ id: "both", merchant: "COSTCO", duplicateLikely: true, transferLikely: true }),
     ]);
     const titles = sections.map((s) => s.title);
-    expect(titles).toContain(DUPLICATES_SECTION_TITLE);
-    expect(titles).toContain(TRANSFERS_SECTION_TITLE);
-    const dup = sections.find((s) => s.title === DUPLICATES_SECTION_TITLE)!;
-    const xfer = sections.find((s) => s.title === TRANSFERS_SECTION_TITLE)!;
+    expect(titles).toContain(duplicatesSectionTitle());
+    expect(titles).toContain(transfersSectionTitle());
+    const dup = sections.find((s) => s.title === duplicatesSectionTitle())!;
+    const xfer = sections.find((s) => s.title === transfersSectionTitle())!;
     // A duplicate+transfer item appears only under transfers (one section rule).
     expect(dup.data.map((i) => i.id)).toEqual(["dup"]);
     expect(xfer.data.map((i) => i.id).sort()).toEqual(["both", "xfer"]);

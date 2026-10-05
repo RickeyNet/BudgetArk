@@ -12,14 +12,15 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutAnimation, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { useToolStyles } from "../theme/toolStyles";
 import { useCurrency } from "../currency/CurrencyProvider";
 import {
-  describeCadence,
   detectSubscriptions,
   subscriptionBillFields,
   type DetectedSubscription,
@@ -47,6 +48,7 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
   entries,
   onEntriesChanged,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -106,12 +108,12 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
         triggerHaptic("success");
       } catch (err) {
         triggerHaptic("error");
-        setError(describeError(err, "Couldn't create the recurring bill."));
+        setError(describeError(err, t("charts.insights.subscriptions.errors.createBill")));
       } finally {
         setBusyMerchant(null);
       }
     },
-    [busyMerchant, nowKey, onEntriesChanged],
+    [busyMerchant, nowKey, onEntriesChanged, t],
   );
 
   const handleIgnore = useCallback(
@@ -124,21 +126,21 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
         setIgnored(await ignoreSubscriptionMerchant(subscription.merchant));
         triggerHaptic("selection");
       } catch (err) {
-        setError(describeError(err, "Couldn't hide that merchant."));
+        setError(describeError(err, t("charts.insights.subscriptions.errors.hideMerchant")));
       } finally {
         setBusyMerchant(null);
       }
     },
-    [busyMerchant],
+    [busyMerchant, t],
   );
 
   const count = scan.subscriptions.length;
   // The summary spans every row, so name the cadence the rows actually have.
   const cadenceWord = scan.subscriptions.every((s) => s.cadence === "yearly")
-    ? "year"
+    ? t("charts.insights.subscriptions.cadenceWord.year")
     : scan.subscriptions.every((s) => s.cadence === "monthly")
-      ? "month"
-      : "month or year";
+      ? t("charts.insights.subscriptions.cadenceWord.month")
+      : t("charts.insights.subscriptions.cadenceWord.mixed");
 
   return (
     <>
@@ -148,14 +150,17 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel="Subscription Detective"
+        accessibilityLabel={t("charts.insights.subscriptions.title")}
       >
         <View>
-          <Text style={tool.toolTitle}>Subscription Detective</Text>
+          <Text style={tool.toolTitle}>{t("charts.insights.subscriptions.title")}</Text>
           <Text style={tool.toolHint}>
             {count > 0
-              ? `${count} without a bill on file · ~${formatCurrency(scan.annualTotal)}/yr`
-              : "Find repeat charges with no bill on file"}
+              ? t("charts.insights.subscriptions.hintCount", {
+                  count,
+                  amount: formatCurrency(scan.annualTotal),
+                })
+              : t("charts.insights.subscriptions.hintIdle")}
           </Text>
         </View>
         <Text style={tool.toolChevron}>{open ? "▾" : "›"}</Text>
@@ -166,29 +171,25 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           {!hasBankHistory ? (
             <View style={tool.efCard}>
-              <Text style={tool.refiEmptyText}>
-                Subscriptions are found in bank-imported expenses. Connect a bank
-                under Profile → Connections and approve a few months of charges,
-                then come back.
-              </Text>
+              <Text style={tool.refiEmptyText}>{t("charts.insights.subscriptions.noBankHistory")}</Text>
             </View>
           ) : count === 0 ? (
             <View style={tool.efCard}>
-              <Text style={tool.refiEmptyText}>
-                Nothing hiding right now: every repeat charge already has a
-                recurring bill, or you've marked it as not a subscription.
-              </Text>
+              <Text style={tool.refiEmptyText}>{t("charts.insights.subscriptions.nothingHiding")}</Text>
             </View>
           ) : (
             <>
               <View style={tool.resultCard}>
-                <Text style={tool.resultLabel}>WITHOUT A BILL ON FILE</Text>
-                <Text style={tool.resultValue}>{formatCurrency(scan.annualTotal)}/yr</Text>
+                <Text style={tool.resultLabel}>{t("charts.insights.subscriptions.resultLabel")}</Text>
+                <Text style={tool.resultValue}>
+                  {t("charts.insights.subscriptions.perYear", { amount: formatCurrency(scan.annualTotal) })}
+                </Text>
                 <Text style={tool.resultSub}>
-                  about {formatCurrency(scan.monthlyTotal)} a month across {count}{" "}
-                  {count === 1 ? "subscription" : "subscriptions"}. Make each one a
-                  bill and the budget expects it every {cadenceWord} - or hide the
-                  ones that aren't subscriptions.
+                  {t("charts.insights.subscriptions.summary", {
+                    count,
+                    monthly: formatCurrency(scan.monthlyTotal),
+                    cadence: cadenceWord,
+                  })}
                 </Text>
               </View>
               {scan.subscriptions.map((subscription) => {
@@ -200,13 +201,20 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
                         {subscription.label}
                       </Text>
                       <Text style={styles.rowAnnual}>
-                        {formatCurrency(subscription.annualCost)}/yr
+                        {t("charts.insights.subscriptions.perYear", {
+                          amount: formatCurrency(subscription.annualCost),
+                        })}
                       </Text>
                     </View>
                     <Text style={styles.rowMeta}>
-                      {formatCurrency(subscription.averageAmount)}{" "}
-                      {describeCadence(subscription.cadence)} · {subscription.occurrences}{" "}
-                      charges · {subscription.category}
+                      {t("charts.insights.subscriptions.rowMeta", {
+                        amount: formatCurrency(subscription.averageAmount),
+                        cadence: t(`charts.insights.subscriptions.cadence.${subscription.cadence}`),
+                        charges: t("charts.insights.subscriptions.charges", {
+                          count: subscription.occurrences,
+                        }),
+                        category: categoryLabel(t, subscription.category),
+                      })}
                     </Text>
                     <View style={styles.actionRow}>
                       <TouchableOpacity
@@ -214,10 +222,14 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
                         onPress={() => void handleMakeBill(subscription)}
                         disabled={busyMerchant !== null}
                         accessibilityRole="button"
-                        accessibilityLabel={`Make ${subscription.label} a recurring bill`}
+                        accessibilityLabel={t("charts.insights.subscriptions.a11yMakeBill", {
+                          merchant: subscription.label,
+                        })}
                       >
                         <Text style={styles.primaryButtonText}>
-                          {busy ? "Saving..." : "Make it a bill"}
+                          {busy
+                            ? t("charts.insights.subscriptions.saving")
+                            : t("charts.insights.subscriptions.makeBill")}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -225,9 +237,13 @@ const SubscriptionDetectiveCard: React.FC<SubscriptionDetectiveCardProps> = ({
                         onPress={() => void handleIgnore(subscription)}
                         disabled={busyMerchant !== null}
                         accessibilityRole="button"
-                        accessibilityLabel={`${subscription.label} is not a subscription`}
+                        accessibilityLabel={t("charts.insights.subscriptions.a11yNotSubscription", {
+                          merchant: subscription.label,
+                        })}
                       >
-                        <Text style={styles.secondaryButtonText}>Not a subscription</Text>
+                        <Text style={styles.secondaryButtonText}>
+                          {t("charts.insights.subscriptions.notSubscription")}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </View>

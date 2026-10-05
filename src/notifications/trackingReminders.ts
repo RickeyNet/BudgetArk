@@ -18,6 +18,7 @@ import { Platform } from "react-native";
 import { getBudgetEntries } from "../storage/budgetStorage";
 import { getTrackingReminderSettings } from "../storage/trackingReminderSettingsStorage";
 import { planTrackingReminders } from "../utils/trackingReminderPlanner";
+import { t } from "../i18n/translate";
 
 export const TRACKING_REMINDER_CHANNEL_ID = "tracking-check-ins";
 
@@ -42,8 +43,8 @@ Notifications.setNotificationHandler({
 const ensureAndroidChannel = async (): Promise<void> => {
   if (Platform.OS !== "android") return;
   await Notifications.setNotificationChannelAsync(TRACKING_REMINDER_CHANNEL_ID, {
-    name: "Expense check-ins",
-    description: "Gentle reminders to keep logging your spending",
+    name: t("helpers.notifications.tracking.channel.name"),
+    description: t("helpers.notifications.tracking.channel.description"),
     importance: Notifications.AndroidImportance.DEFAULT,
     vibrationPattern: [0, 250],
   });

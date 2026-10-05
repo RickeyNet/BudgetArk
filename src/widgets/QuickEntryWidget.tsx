@@ -22,6 +22,8 @@ import { FlexWidget, TextWidget } from "react-native-android-widget";
 import type { BudgetCategory } from "../types";
 import { CATEGORY_ICONS } from "../data/categoryIcons";
 import { buildQuickAddUri } from "../utils/quickAddLink";
+import { t } from "../i18n/translate";
+import { categoryLabel } from "../i18n/categoryLabel";
 
 /** Expense categories surfaced on the widget - the everyday-spend set. */
 const WIDGET_CATEGORIES: readonly BudgetCategory[] = [
@@ -66,7 +68,7 @@ const CategoryButton: React.FC<CategoryButtonProps> = ({ category }) => (
       style={{ fontSize: 20, color: PALETTE.text }}
     />
     <TextWidget
-      text={category}
+      text={categoryLabel(t, category)}
       truncate="END"
       maxLines={1}
       style={{ fontSize: 10, color: PALETTE.dim, marginTop: 2 }}
@@ -98,11 +100,11 @@ export const QuickEntryWidget: React.FC = () => (
       }}
     >
       <TextWidget
-        text="⚓ Quick Entry"
+        text={t("widgets.quickEntry.title")}
         style={{ fontSize: 12, fontWeight: "bold", color: PALETTE.accent }}
       />
       <TextWidget
-        text="  ·  log an expense"
+        text={t("widgets.quickEntry.subtitle")}
         style={{ fontSize: 11, color: PALETTE.dim }}
       />
     </FlexWidget>

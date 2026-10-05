@@ -40,6 +40,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -55,6 +56,7 @@ const RELOCK_GRACE_MS = 15_000;
 type GateStatus = "loading" | "unlocked" | "locked";
 
 const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
@@ -142,12 +144,10 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   );
 
   const handleForgotPin = useCallback(() => {
-    Alert.alert(
-      "Forgot your PIN?",
-      "Your PIN is stored only on this phone and can't be recovered or reset from here.\n\nTo use BudgetArk again, delete the app and reinstall it. That erases the data on this phone, so afterwards restore from a backup file - or sync from your partner's device if you're paired.",
-      [{ text: "OK" }]
-    );
-  }, []);
+    Alert.alert(t("modals.guard.lock.gate.forgot"), t("modals.guard.lock.gate.forgotMessage"), [
+      { text: t("common.ok") },
+    ]);
+  }, [t]);
 
   if (status === "unlocked") {
     return <>{children}</>;
@@ -173,12 +173,14 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <View style={styles.header}>
         <Text style={styles.anchor}>⚓</Text>
         <Text style={[styles.title, { color: colors.text }]}>
-          BudgetArk is locked
+          {t("modals.guard.lock.gate.title")}
         </Text>
         <Text style={[styles.subtitle, { color: colors.textDim }]}>
           {lockedOut
-            ? `Too many attempts - try again in ${formatLockoutRemaining(lockoutMsLeft)}`
-            : "Enter your PIN"}
+            ? t("modals.guard.lock.lockedOut", {
+                remaining: formatLockoutRemaining(lockoutMsLeft),
+              })
+            : t("modals.guard.lock.gate.enterPin")}
         </Text>
       </View>
 
@@ -196,10 +198,10 @@ const AppLockGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <TouchableOpacity
           onPress={handleForgotPin}
           accessibilityRole="button"
-          accessibilityLabel="Forgot PIN help"
+          accessibilityLabel={t("modals.guard.lock.gate.forgotA11y")}
         >
           <Text style={[styles.forgotText, { color: colors.textDim }]}>
-            Forgot your PIN?
+            {t("modals.guard.lock.gate.forgot")}
           </Text>
         </TouchableOpacity>
       </View>

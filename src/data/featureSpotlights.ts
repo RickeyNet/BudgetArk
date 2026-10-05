@@ -13,9 +13,32 @@
  * in an OTA bundle and only come alive when the store build with their
  * native modules arrives - `requiresRuntimeVersion` gates those, so their
  * debut waits until the feature actually works on this install.
+ *
+ * The carousel (the Profile "Update spotlight") and the NEW badges only
+ * cover the CURRENT RELEASE LINE: a spotlight debuts or badges only while
+ * its `sinceVersion` shares major.minor with CURRENT_APP_VERSION (1.11.x
+ * features on a 1.11 app). Older entries stay in the list for the feature
+ * guide, which is a directory of everything, not a debut - see
+ * isSpotlightCurrent. Deliberately by release line rather than exact
+ * version so a 1.11.1 patch still spotlights the 1.11.0 features.
+ *
+ * Title, blurb and CTA label live in the translation tree
+ * (src/i18n/locales/en/dataSpotlights.ts + the German twin), keyed by
+ * spotlight id, and are exposed here as getters that resolve through the
+ * global `t` at read time - so the carousel follows the active language.
+ * Ids, versions, icons and CTA targets stay in this file.
+ *
+ * The same list also feeds the FEATURE GUIDE (Profile → Help → Feature
+ * guide, FeatureGuideModal): a browsable, searchable directory of every
+ * feature on this install, grouped by the tab it lives on, each with a
+ * where-to-find breadcrumb and short how-to steps (`guide` in the
+ * translation entry, read by getSpotlightGuide). The carousel is the
+ * one-shot debut; the guide is the random-access reference for later.
  */
 
 import { compareVersions } from "../utils/versionGuard";
+import { t } from "../i18n/translate";
+import { CURRENT_APP_VERSION } from "./releaseNotes";
 
 /** Profile-screen surfaces a spotlight CTA (or the openSection deep link) can open. */
 export type ProfileSpotlightSection =
@@ -27,7 +50,32 @@ export type ProfileSpotlightSection =
   | "trackingReminders"
   | "theme"
   | "appLock"
-  | "data";
+  | "data"
+  | "language"
+  | "featureGuide";
+
+/**
+ * The tab a feature lives on - the feature guide's grouping. Declared in
+ * bottom-tab order so the guide reads like the app. "charts" is the
+ * Utilities route's display name (never rename the route key).
+ */
+export const FEATURE_AREAS = [
+  "debts",
+  "budget",
+  "bridge",
+  "charts",
+  "profile",
+] as const;
+
+export type FeatureArea = (typeof FEATURE_AREAS)[number];
+
+/** Guide copy for one feature: where to find it + numbered how-to steps. */
+export type FeatureGuide = {
+  /** Where-to-find breadcrumb, e.g. "Budget tab → + Add entry". */
+  where: string;
+  /** Short imperative steps, in order. */
+  steps: readonly string[];
+};
 
 export type SpotlightCta =
   | { label: string; kind: "profile-section"; section: ProfileSpotlightSection }
@@ -40,6 +88,13 @@ export type SpotlightCta =
 export type FeatureSpotlight = {
   /** Stable id - persisted in seen/acked storage, never rename after release. */
   id: string;
+  /**
+   * Ids of earlier spotlights this one replaced (slides merged after
+   * release). A user who has seen or acked ANY of them is treated as having
+   * seen/acked this one, so a merge never re-debuts or re-badges a feature.
+   * The old ids stay in storage untouched.
+   */
+  supersedes?: readonly string[];
   /** Version the feature debuted in; shown on the slide's "NEW IN x.y.z" pill. */
   sinceVersion: string;
   /**
@@ -60,43 +115,126 @@ export type FeatureSpotlight = {
   /** Two sentences max - the carousel is a teaser, not the changelog. */
   blurb: string;
   cta?: SpotlightCta;
+  /**
+   * Tab the feature guide files it under. Derived from the CTA target when
+   * omitted (see spotlightArea); set it explicitly for features with no CTA
+   * or whose CTA lands somewhere other than their home.
+   */
+  area?: FeatureArea;
 };
 
 export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
   {
+    // The guide itself debuts like any other feature: one slide pointing at
+    // the Help card, so existing users learn the directory exists.
+    id: "feature-guide",
+    sinceVersion: "1.11.0",
+    icon: "📖",
+    get title() {
+      return t("data.spotlights.feature-guide.title");
+    },
+    get blurb() {
+      return t("data.spotlights.feature-guide.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.feature-guide.cta");
+      },
+      kind: "profile-section",
+      section: "featureGuide",
+    },
+  },
+  {
+    // ONE slide for every language 1.11.0 ships (German, Russian, Ukrainian,
+    // Swedish, Norwegian) - a new language extends the blurb, it never gets
+    // its own page. Started life as "german-language" when German was the
+    // only one; the old id stays superseded so dev installs that saw or
+    // acked it are not re-debuted.
+    id: "languages",
+    supersedes: ["german-language"],
+    sinceVersion: "1.11.0",
+    // expo-localization is native: the language picker only exists in the
+    // 1.11.0 store build.
+    requiresRuntimeVersion: "1.11.0",
+    icon: "🌐",
+    get title() {
+      return t("data.spotlights.languages.title");
+    },
+    get blurb() {
+      return t("data.spotlights.languages.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.languages.cta");
+      },
+      kind: "profile-section",
+      section: "language",
+    },
+  },
+  {
     id: "bill-fulfillment",
     sinceVersion: "1.10.0",
     icon: "🧾",
-    title: "Bills that settle themselves",
-    blurb:
-      "Set a bill up once with your best estimate. When the real electric or water charge arrives - from your bank or typed in - file it against the bill and the actual replaces the estimate for that month, everywhere. No double counting, no editing the plan.",
-    cta: { label: "Log a bill's actual charge", kind: "budget-add-entry" },
+    get title() {
+      return t("data.spotlights.bill-fulfillment.title");
+    },
+    get blurb() {
+      return t("data.spotlights.bill-fulfillment.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.bill-fulfillment.cta");
+      },
+      kind: "budget-add-entry",
+    },
   },
   {
     id: "bank-card-balances",
     sinceVersion: "1.10.0",
     icon: "💳",
-    title: "Credit cards that track themselves",
-    blurb:
-      "Link a card on the Debts tab to the bank account behind it and its balance updates after every sync - the same link that stamps the card's last use for the keep-alive watch. One pick per card, and debt tracking mostly runs itself.",
-    cta: { label: "Link a card", kind: "debt-tracker" },
+    get title() {
+      return t("data.spotlights.bank-card-balances.title");
+    },
+    get blurb() {
+      return t("data.spotlights.bank-card-balances.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.bank-card-balances.cta");
+      },
+      kind: "debt-tracker",
+    },
   },
   {
     id: "cash-flow-budget",
     sinceVersion: "1.9.0",
+    // No CTA (the card is the first thing on the Budget tab), so the guide
+    // needs telling where it lives.
+    area: "budget",
     icon: "💵",
-    title: "Know what's safe to spend",
-    blurb:
-      "Tell BudgetArk what's in checking at the start of the month, and the Budget tab projects where the month ends - income in, bills and debt minimums out - with a real safe-to-spend number instead of a guess.",
+    get title() {
+      return t("data.spotlights.cash-flow-budget.title");
+    },
+    get blurb() {
+      return t("data.spotlights.cash-flow-budget.blurb");
+    },
   },
   {
     id: "private-entries",
     sinceVersion: "1.9.0",
     icon: "🔒",
-    title: "Some spending is just yours",
-    blurb:
-      "Mark any budget entry Private and it never syncs to your partner's device - perfect for gifts and surprises. It still counts in your own budget and rides your backups; only the sharing changes.",
-    cta: { label: "Add a private entry", kind: "budget-add-entry" },
+    get title() {
+      return t("data.spotlights.private-entries.title");
+    },
+    get blurb() {
+      return t("data.spotlights.private-entries.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.private-entries.cta");
+      },
+      kind: "budget-add-entry",
+    },
   },
   {
     id: "card-keep-alive",
@@ -105,57 +243,85 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     // the expo-notifications runtime - same gate as tracking-reminders.
     requiresRuntimeVersion: "1.9.0",
     icon: "💳",
-    title: "Don't let a quiet card get closed",
-    blurb:
-      "Issuers can close a credit card that sits unused - and your credit score takes the hit. Turn on the keep-alive watch for any card and BudgetArk warns you before its inactivity window runs out, right on your Bridge.",
-    cta: { label: "Set up a card watch", kind: "debt-tracker" },
+    get title() {
+      return t("data.spotlights.card-keep-alive.title");
+    },
+    get blurb() {
+      return t("data.spotlights.card-keep-alive.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.card-keep-alive.cta");
+      },
+      kind: "debt-tracker",
+    },
   },
   {
     id: "income-types",
     sinceVersion: "1.9.0",
     icon: "💵",
-    title: "W-2 or 1099? Tag your paychecks",
-    blurb:
-      "Mark income as a W-2 paycheck or 1099 contractor pay. W-2 entries can track the 401(k) withheld from each check, and 1099 entries show exactly how much to set aside for taxes - totaled monthly on your Budget.",
-    cta: { label: "Log a paycheck", kind: "budget-add-entry" },
+    get title() {
+      return t("data.spotlights.income-types.title");
+    },
+    get blurb() {
+      return t("data.spotlights.income-types.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.income-types.cta");
+      },
+      kind: "budget-add-entry",
+    },
   },
   {
     id: "bank-connections",
     sinceVersion: "1.9.0",
     icon: "🏦",
-    title: "Your bank, on autopilot",
-    blurb:
-      "Connect your bank and let transactions import themselves - nothing enters your budget until you approve it in the Review Inbox. Your credentials stay encrypted on this device; BudgetArk has no server and never sits between you and your bank.",
+    get title() {
+      return t("data.spotlights.bank-connections.title");
+    },
+    get blurb() {
+      return t("data.spotlights.bank-connections.blurb");
+    },
     cta: {
-      label: "Set up a connection",
-      kind: "profile-section",
-      section: "connections",
+      get label() {
+        return t("data.spotlights.bank-connections.cta");
+      },
+      kind: "profile-section", section: "connections",
     },
   },
   {
     id: "business-expenses",
     sinceVersion: "1.9.0",
     icon: "💼",
-    title: "Business expenses, sorted",
-    blurb:
-      "Tag any expense to a company or side gig, then pull a tax-time report with per-business totals and a CSV for your accountant. Tagged entries still count in your regular budget - the separation happens in the report.",
+    get title() {
+      return t("data.spotlights.business-expenses.title");
+    },
+    get blurb() {
+      return t("data.spotlights.business-expenses.blurb");
+    },
     cta: {
-      label: "Create a business",
-      kind: "profile-section",
-      section: "businesses",
+      get label() {
+        return t("data.spotlights.business-expenses.cta");
+      },
+      kind: "profile-section", section: "businesses",
     },
   },
   {
     id: "people-assignment",
     sinceVersion: "1.9.0",
     icon: "👤",
-    title: "Who spent that?",
-    blurb:
-      "Add the people in your household and assign any expense to them - when adding entries or approving imported bank transactions. Every entry shows who it belongs to, so shared spending finally has names on it.",
+    get title() {
+      return t("data.spotlights.people-assignment.title");
+    },
+    get blurb() {
+      return t("data.spotlights.people-assignment.blurb");
+    },
     cta: {
-      label: "Add your people",
-      kind: "profile-section",
-      section: "people",
+      get label() {
+        return t("data.spotlights.people-assignment.cta");
+      },
+      kind: "profile-section", section: "people",
     },
   },
   {
@@ -163,169 +329,275 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     sinceVersion: "1.9.0",
     requiresRuntimeVersion: "1.9.0",
     icon: "🧾",
-    title: "Attach the receipt",
-    blurb:
-      "Snap up to three receipt photos onto any entry, right from the Add and Edit forms. Photos are encrypted before they touch storage and never leave your phone unless you export them yourself.",
-    cta: { label: "Add an entry", kind: "budget-add-entry" },
+    get title() {
+      return t("data.spotlights.receipt-photos.title");
+    },
+    get blurb() {
+      return t("data.spotlights.receipt-photos.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.receipt-photos.cta");
+      },
+      kind: "budget-add-entry",
+    },
   },
   {
     id: "tracking-reminders",
     sinceVersion: "1.9.0",
     requiresRuntimeVersion: "1.9.0",
     icon: "⏰",
-    title: "Gentle tracking nudges",
-    blurb:
-      "Opt in to a check-in when you haven't logged spending in a while, or a fresh-month reminder to set your goals. Scheduled entirely on your phone - nothing about your finances ever appears on your lock screen.",
+    get title() {
+      return t("data.spotlights.tracking-reminders.title");
+    },
+    get blurb() {
+      return t("data.spotlights.tracking-reminders.blurb");
+    },
     cta: {
-      label: "Set up reminders",
-      kind: "profile-section",
-      section: "trackingReminders",
+      get label() {
+        return t("data.spotlights.tracking-reminders.cta");
+      },
+      kind: "profile-section", section: "trackingReminders",
     },
   },
   {
     id: "account-change-tracker",
     sinceVersion: "1.9.0",
     icon: "📈",
-    title: "Watch your accounts rise and fall",
-    blurb:
-      "Every account and category on the Bridge now shows how much it's up or down over the window you pick - a day, a week, a month, or a quarter. Tracked privately on this phone from your own balances and prices; nothing leaves the device.",
-    cta: { label: "See your Bridge", kind: "bridge" },
+    get title() {
+      return t("data.spotlights.account-change-tracker.title");
+    },
+    get blurb() {
+      return t("data.spotlights.account-change-tracker.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.account-change-tracker.cta");
+      },
+      kind: "bridge",
+    },
   },
   {
     id: "what-if-spending",
     sinceVersion: "1.9.0",
     icon: "🔮",
-    title: "What if you stopped spending on…?",
-    blurb:
-      "Pick a spending category and see what redirecting that money could do: how much sooner you'd be debt-free, the interest you'd skip, or what it grows into over 1, 5, and 10 years. Find it under Tools on the Charts tab.",
-    cta: { label: "Run a what-if", kind: "charts" },
+    get title() {
+      return t("data.spotlights.what-if-spending.title");
+    },
+    get blurb() {
+      return t("data.spotlights.what-if-spending.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.what-if-spending.cta");
+      },
+      kind: "charts",
+    },
   },
   {
     id: "purchase-planner",
     sinceVersion: "1.9.0",
     icon: "🛒",
-    title: "Plan a purchase, keep your goals",
-    blurb:
-      "Name the thing you're saving for and BudgetArk builds the sinking fund around it: a monthly amount that fits your real cash flow, the month it's ready, and advice tuned to your Build Your Ark step so the purchase never derails the plan.",
-    cta: { label: "Plan a purchase", kind: "charts" },
+    get title() {
+      return t("data.spotlights.purchase-planner.title");
+    },
+    get blurb() {
+      return t("data.spotlights.purchase-planner.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.purchase-planner.cta");
+      },
+      kind: "charts",
+    },
   },
   {
     id: "take-home-pay",
     sinceVersion: "1.9.0",
     icon: "🧮",
-    title: "What actually hits your account",
-    blurb:
-      "Enter a salary, filing status, and state and see your real per-paycheck take-home - federal, state, Social Security, and Medicare, all from bundled tax tables that never phone home. Tap another state to see what the same salary keeps there.",
-    cta: { label: "Estimate your take-home", kind: "charts" },
+    get title() {
+      return t("data.spotlights.take-home-pay.title");
+    },
+    get blurb() {
+      return t("data.spotlights.take-home-pay.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.take-home-pay.cta");
+      },
+      kind: "charts",
+    },
   },
   {
     id: "app-lock",
     sinceVersion: "1.9.0",
     icon: "🔐",
-    title: "Lock the app behind a PIN",
-    blurb:
-      "Turn on App Lock and BudgetArk asks for a 4-8 digit PIN whenever it opens, so someone borrowing your phone can't browse your finances. The PIN stays on this device - never synced, exported, or backed up.",
-    cta: { label: "Set up App Lock", kind: "profile-section", section: "appLock" },
+    get title() {
+      return t("data.spotlights.app-lock.title");
+    },
+    get blurb() {
+      return t("data.spotlights.app-lock.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.app-lock.cta");
+      },
+      kind: "profile-section", section: "appLock",
+    },
   },
   {
-    id: "deep-sea-theme",
+    id: "theme-fleet",
     sinceVersion: "1.9.0",
-    icon: "🌊",
-    title: "New theme: Deep Sea",
-    blurb:
-      "Abyssal blues with a bioluminescent glow, plus its own ambient background - light rays filtering down from the surface with drifting plankton. It joins Deep Space and Deep Forest under Appearance.",
-    cta: { label: "Try Deep Sea", kind: "profile-section", section: "theme" },
-  },
-  {
-    id: "slate-classic-themes",
-    sinceVersion: "1.9.0",
+    // Replaces the three 1.9.0 theme slides (Deep Sea / Slate & Classic /
+    // the four-themes batch) with one. Anyone who saw or acked those must
+    // not be shown this one as new - hence `supersedes`.
+    supersedes: ["deep-sea-theme", "slate-classic-themes", "four-themes"],
     icon: "🎨",
-    title: "Two new themes: Slate & Classic",
-    blurb:
-      "Slate pairs graphite greys with a mustard-yellow accent for a calm, focused look. Classic is a straight-faced throwback to the silver-and-teal desktops of 1998, navy accents and all. Both are waiting under Appearance.",
-    cta: { label: "Try them on", kind: "profile-section", section: "theme" },
-  },
-  {
-    id: "four-themes",
-    sinceVersion: "1.9.0",
-    icon: "🗺️",
-    title: "Four new looks for your Ark",
-    blurb:
-      "Lighthouse is a true high-contrast theme - every color audited for maximum readability. Chart Room is a nautical chart with land-tone cards on sea blue, Harbor Dawn a peach sunrise over seafoam cards, and Ledger the classic green accounting paper. All under Appearance.",
-    cta: { label: "Browse themes", kind: "profile-section", section: "theme" },
+    get title() {
+      return t("data.spotlights.theme-fleet.title");
+    },
+    get blurb() {
+      return t("data.spotlights.theme-fleet.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.theme-fleet.cta");
+      },
+      kind: "profile-section", section: "theme",
+    },
   },
   {
     id: "subscription-detective",
     sinceVersion: "1.10.1",
     icon: "🕵️",
-    title: "Subscription Detective",
-    blurb:
-      "A new Charts-tab tool finds bank-imported charges that repeat like a subscription - monthly or yearly - with no bill on file, adds up what they cost a year, and makes each one a recurring bill in a tap.",
-    cta: { label: "Run the detective", kind: "charts" },
+    get title() {
+      return t("data.spotlights.subscription-detective.title");
+    },
+    get blurb() {
+      return t("data.spotlights.subscription-detective.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.subscription-detective.cta");
+      },
+      kind: "charts",
+    },
   },
   {
     id: "owed-to-you",
     sinceVersion: "1.10.1",
     icon: "🤝",
-    title: "Owed to You",
-    blurb:
-      "Lent someone money? Name them on the expense when you log it (or in the Review Inbox), then track what they still owe and log each payment they make under Profile → People → Owed to You.",
-    cta: { label: "Open Owed to You", kind: "profile-section", section: "owedToYou" },
+    get title() {
+      return t("data.spotlights.owed-to-you.title");
+    },
+    get blurb() {
+      return t("data.spotlights.owed-to-you.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.owed-to-you.cta");
+      },
+      kind: "profile-section", section: "owedToYou",
+    },
   },
   {
     id: "net-worth-goal",
     sinceVersion: "1.10.1",
     icon: "🧭",
-    title: "Where your net worth is heading",
-    blurb:
-      "The Bridge now carries your net worth line forward from your budget's monthly surplus and your debts at their minimums. Set a goal - an amount by a month - and see on track or off, what it would take per month, and when today's pace gets there.",
-    cta: { label: "See the projection", kind: "bridge" },
+    get title() {
+      return t("data.spotlights.net-worth-goal.title");
+    },
+    get blurb() {
+      return t("data.spotlights.net-worth-goal.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.net-worth-goal.cta");
+      },
+      kind: "bridge",
+    },
   },
   {
     id: "paycheck-cycle",
     sinceVersion: "1.10.1",
     icon: "📆",
-    title: "Until Payday",
-    blurb:
-      "Budget by pay period, not calendar month: tell BudgetArk when you're paid and the Budget tab shows what's due before your next check and what's safe to spend until then.",
-    cta: { label: "Set up pay periods", kind: "budget" },
+    get title() {
+      return t("data.spotlights.paycheck-cycle.title");
+    },
+    get blurb() {
+      return t("data.spotlights.paycheck-cycle.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.paycheck-cycle.cta");
+      },
+      kind: "budget",
+    },
   },
   {
     id: "quarterly-taxes",
     sinceVersion: "1.10.1",
     icon: "🧾",
-    title: "Quarterly Taxes",
-    blurb:
-      "Log 1099 income and the new Charts tool shows each IRS quarter: what you earned, what you set aside, the estimated payment and its due date - with a Mark paid per quarter.",
-    cta: { label: "See my quarters", kind: "charts" },
+    get title() {
+      return t("data.spotlights.quarterly-taxes.title");
+    },
+    get blurb() {
+      return t("data.spotlights.quarterly-taxes.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.quarterly-taxes.cta");
+      },
+      kind: "charts",
+    },
   },
   {
     id: "purchase-plan-priorities",
     sinceVersion: "1.10.1",
     icon: "🎯",
-    title: "Purchase plans, in order",
-    blurb:
-      "Your Purchase Plans card now adds everything up - saved, still to go, and when it's all funded - and lets you rank the plans smallest-first, soonest-needed, or in your own order. Set one monthly amount and it flows down the list like a debt snowball, each plan rolling into the next.",
-    cta: { label: "See your plans", kind: "bridge" },
+    get title() {
+      return t("data.spotlights.purchase-plan-priorities.title");
+    },
+    get blurb() {
+      return t("data.spotlights.purchase-plan-priorities.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.purchase-plan-priorities.cta");
+      },
+      kind: "bridge",
+    },
   },
   {
     id: "bank-statement-import",
     sinceVersion: "1.10.2",
     icon: "🏦",
-    title: "Import a bank statement",
-    blurb:
-      "Download a CSV from your bank's website and BudgetArk reads it: confirm which columns are the date, description and amount once, and every transaction lands in the Review Inbox for you to approve. For the months before you connected a bank - or a bank you never will.",
-    cta: { label: "Import a statement", kind: "profile-section", section: "data" },
+    get title() {
+      return t("data.spotlights.bank-statement-import.title");
+    },
+    get blurb() {
+      return t("data.spotlights.bank-statement-import.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.bank-statement-import.cta");
+      },
+      kind: "profile-section", section: "data",
+    },
   },
   {
     id: "tip-jar",
     sinceVersion: "1.9.0",
     requiresRuntimeVersion: "1.9.0",
     badgeOnly: true,
+    area: "profile",
     icon: "💛",
-    title: "Tip Jar",
-    blurb:
-      "Optional one-time tips, handled entirely by the app store. Unlocks nothing - every feature is already free.",
+    get title() {
+      return t("data.spotlights.tip-jar.title");
+    },
+    get blurb() {
+      return t("data.spotlights.tip-jar.blurb");
+    },
   },
 ];
 
@@ -349,48 +621,169 @@ export const isSpotlightAvailable = (
   );
 };
 
-/** Carousel slides still owed to this user, in declaration order. */
+/** The release line a version belongs to: "1.11" for "1.11.0" or "1.11.2". */
+export const releaseLine = (version: string): string =>
+  version.split(".").slice(0, 2).join(".");
+
+/**
+ * Whether a spotlight belongs to the running app's release line - the only
+ * ones the carousel and the NEW badges show. A 1.9.0 feature is not news
+ * on a 1.11 install, however the user got there (fresh install, skipped
+ * updates, reinstall), so it neither debuts nor badges; the feature guide
+ * still lists it.
+ */
+export const isSpotlightCurrent = (
+  spotlight: FeatureSpotlight,
+  currentAppVersion: string = CURRENT_APP_VERSION
+): boolean => releaseLine(spotlight.sinceVersion) === releaseLine(currentAppVersion);
+
+/**
+ * Whether a stored id set (seen or acked) covers a spotlight - directly, or
+ * through any spotlight it superseded.
+ */
+const isSpotlightCovered = (
+  spotlight: FeatureSpotlight,
+  ids: ReadonlySet<string>
+): boolean =>
+  ids.has(spotlight.id) ||
+  (spotlight.supersedes?.some((legacyId) => ids.has(legacyId)) ?? false);
+
+/**
+ * Carousel slides still owed to this user, in declaration order: this
+ * release line's unseen, non-badgeOnly spotlights that work on this install.
+ */
 export const selectUnseenSpotlights = (
   spotlights: readonly FeatureSpotlight[],
   seenIds: readonly string[],
-  currentRuntimeVersion: string | undefined
+  currentRuntimeVersion: string | undefined,
+  currentAppVersion: string = CURRENT_APP_VERSION
 ): FeatureSpotlight[] => {
   const seen = new Set(seenIds);
   return spotlights.filter(
     (spotlight) =>
       !spotlight.badgeOnly &&
-      !seen.has(spotlight.id) &&
+      isSpotlightCurrent(spotlight, currentAppVersion) &&
+      !isSpotlightCovered(spotlight, seen) &&
       isSpotlightAvailable(spotlight, currentRuntimeVersion)
   );
 };
 
 /**
- * The full tour for the Profile "Feature tour" replay row: every
- * carousel-worthy spotlight that works on this install, seen or not.
+ * The Profile "Update spotlight" replay row: every carousel-worthy
+ * spotlight of this release line that works on this install, seen or not.
  * Mirrors selectUnseenSpotlights minus the seen filter so a user can
  * rewatch debuts they skipped or want to revisit.
  */
 export const selectReplaySpotlights = (
   spotlights: readonly FeatureSpotlight[],
-  currentRuntimeVersion: string | undefined
+  currentRuntimeVersion: string | undefined,
+  currentAppVersion: string = CURRENT_APP_VERSION
 ): FeatureSpotlight[] =>
   spotlights.filter(
     (spotlight) =>
       !spotlight.badgeOnly &&
+      isSpotlightCurrent(spotlight, currentAppVersion) &&
       isSpotlightAvailable(spotlight, currentRuntimeVersion)
   );
 
-/** Ids whose Profile rows should show a NEW badge (until first tapped). */
+/**
+ * The tab a spotlight belongs to in the feature guide: the explicit `area`
+ * when set, otherwise where its CTA lands. Profile is the fallback for a
+ * spotlight with neither - every feature has a settings home at worst.
+ */
+export const spotlightArea = (spotlight: FeatureSpotlight): FeatureArea => {
+  if (spotlight.area) return spotlight.area;
+  switch (spotlight.cta?.kind) {
+    case "debt-tracker":
+      return "debts";
+    case "budget":
+    case "budget-add-entry":
+      return "budget";
+    case "bridge":
+      return "bridge";
+    case "charts":
+      return "charts";
+    default:
+      return "profile";
+  }
+};
+
+export type FeatureGuideGroup = {
+  area: FeatureArea;
+  spotlights: FeatureSpotlight[];
+};
+
+/**
+ * The feature guide's browse list: every spotlight that works on this
+ * install - badgeOnly ones included, the guide is a directory not a debut
+ * - grouped by tab in FEATURE_AREAS order, declaration order within a
+ * group. Empty groups are dropped.
+ */
+export const selectGuideGroups = (
+  spotlights: readonly FeatureSpotlight[],
+  currentRuntimeVersion: string | undefined
+): FeatureGuideGroup[] =>
+  FEATURE_AREAS.map((area) => ({
+    area,
+    spotlights: spotlights.filter(
+      (spotlight) =>
+        spotlightArea(spotlight) === area &&
+        isSpotlightAvailable(spotlight, currentRuntimeVersion)
+    ),
+  })).filter((group) => group.spotlights.length > 0);
+
+const GUIDE_STEP_KEY = /^step(\d+)$/;
+
+/**
+ * The guide copy for a spotlight, read from `data.spotlights.<id>.guide`
+ * in the ACTIVE language: `where` plus every `stepN` key in numeric order.
+ * The key is built from the id, so it goes through an untyped `t` - a
+ * spotlight without guide copy resolves to undefined rather than a raw key
+ * on screen, and featureSpotlights.test.ts asserts every live spotlight
+ * has one. Callers that memoize must list their `t` as a dependency.
+ */
+export const getSpotlightGuide = (
+  spotlight: FeatureSpotlight
+): FeatureGuide | undefined => {
+  const lookup = t as unknown as (key: string, options: object) => unknown;
+  const raw = lookup(`data.spotlights.${spotlight.id}.guide`, {
+    returnObjects: true,
+    defaultValue: null,
+  });
+  if (!raw || typeof raw !== "object") return undefined;
+  const record = raw as Record<string, unknown>;
+  const where = record.where;
+  if (typeof where !== "string" || where.length === 0) return undefined;
+  const steps = Object.entries(record)
+    .map(([key, value]) => {
+      const match = GUIDE_STEP_KEY.exec(key);
+      return match && typeof value === "string" && value.length > 0
+        ? { order: Number(match[1]), text: value }
+        : null;
+    })
+    .filter((step): step is { order: number; text: string } => step !== null)
+    .sort((a, b) => a.order - b.order)
+    .map((step) => step.text);
+  if (steps.length === 0) return undefined;
+  return { where, steps };
+};
+
+/**
+ * Ids whose Profile rows should show a NEW badge (until first tapped):
+ * this release line's unacked spotlights that work on this install.
+ */
 export const selectNewBadgeIds = (
   spotlights: readonly FeatureSpotlight[],
   ackedIds: readonly string[],
-  currentRuntimeVersion: string | undefined
+  currentRuntimeVersion: string | undefined,
+  currentAppVersion: string = CURRENT_APP_VERSION
 ): string[] => {
   const acked = new Set(ackedIds);
   return spotlights
     .filter(
       (spotlight) =>
-        !acked.has(spotlight.id) &&
+        isSpotlightCurrent(spotlight, currentAppVersion) &&
+        !isSpotlightCovered(spotlight, acked) &&
         isSpotlightAvailable(spotlight, currentRuntimeVersion)
     )
     .map((spotlight) => spotlight.id);

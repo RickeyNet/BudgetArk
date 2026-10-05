@@ -5,7 +5,7 @@
  * Security rule 11 regression guard: notifications may never carry amounts,
  * account/card names, or balances on the lock screen. Every notification
  * this module schedules must have content pulled verbatim from the vetted
- * generic message pool (KEEP_ALIVE_MESSAGES in cardKeepAlivePlanner.ts,
+ * generic message pool (keepAliveMessages in cardKeepAlivePlanner.ts,
  * already unit-tested there) - this test proves the SCHEDULER wiring never
  * lets a real card name/balance leak into what actually reaches
  * Notifications.scheduleNotificationAsync, using a fixture with a
@@ -19,7 +19,7 @@
  * unlike the planner's own tests) so a fixed fixture reliably falls inside
  * the 30-day scheduling window regardless of the real calendar date.
  */
-import { KEEP_ALIVE_MESSAGES } from "../../utils/cardKeepAlivePlanner";
+import { keepAliveMessages } from "../../utils/cardKeepAlivePlanner";
 import { makeDebt } from "../../__tests__/fixtures";
 import {
   CARD_KEEP_ALIVE_CHANNEL_ID,
@@ -113,7 +113,7 @@ describe("rescheduleCardKeepAliveReminders - rule 11 content guard", () => {
       const { content, trigger } = request;
       expect(content.data).toEqual({ type: CARD_KEEP_ALIVE_DATA_TYPE });
       expect(
-        KEEP_ALIVE_MESSAGES.some((m) => m.title === content.title && m.body === content.body)
+        keepAliveMessages().some((m) => m.title === content.title && m.body === content.body)
       ).toBe(true);
       expect(content.title).not.toContain(SECRET_CARD_NAME);
       expect(content.body).not.toContain(SECRET_CARD_NAME);

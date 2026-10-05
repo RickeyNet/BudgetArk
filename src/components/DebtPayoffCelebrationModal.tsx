@@ -18,6 +18,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { Debt } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -41,11 +42,12 @@ interface DebtPayoffCelebrationModalProps {
   onTipJar?: () => void;
 }
 
-const getOwnerHeadline = (owner: Debt["owner"]): string => {
-  if (owner === "partner") return "Partner debt cleared";
-  if (owner === "joint") return "Joint debt cleared";
-  return "Debt cleared";
-};
+const ownerKickerKey = (owner: Debt["owner"]) =>
+  owner === "partner"
+    ? ("debts.moments.payoff.kicker.partner" as const)
+    : owner === "joint"
+      ? ("debts.moments.payoff.kicker.joint" as const)
+      : ("debts.moments.payoff.kicker.own" as const);
 
 const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
   visible,
@@ -55,6 +57,7 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
   tipNudge = null,
   onTipJar,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -109,27 +112,27 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
 
         <View style={styles.content}>
           <Animated.Text style={[styles.emoji, { transform: [{ scale: trophyScale }] }]}>🎉</Animated.Text>
-          <Text style={styles.kicker}>{getOwnerHeadline(debt.owner).toUpperCase()}</Text>
-          <Text style={styles.title}>You paid off {debt.name}</Text>
+          <Text style={styles.kicker}>{t(ownerKickerKey(debt.owner)).toUpperCase()}</Text>
+          <Text style={styles.title}>{t("debts.moments.payoff.title", { name: debt.name })}</Text>
           <Text style={styles.subtitle}>
-            One more balance at {formatCurrency(0)}. Keep rolling freed-up cash into next target.
+            {t("debts.moments.payoff.subtitle", { zero: formatCurrency(0) })}
           </Text>
 
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { borderColor: colors.cardBorder }]}> 
-              <Text style={styles.statLabel}>TOTAL CLEARED</Text>
+              <Text style={styles.statLabel}>{t("debts.moments.payoff.totalCleared")}</Text>
               <Text style={styles.statValue}>{formatCurrency(debt.originalBalance)}</Text>
             </View>
             <View style={[styles.statCard, { borderColor: colors.cardBorder }]}> 
-              <Text style={styles.statLabel}>PAYMENT FREED</Text>
-              <Text style={styles.statValue}>{formatCurrency(debt.minPayment)}/mo</Text>
+              <Text style={styles.statLabel}>{t("debts.moments.payoff.paymentFreed")}</Text>
+              <Text style={styles.statValue}>{t("debts.moments.payoff.perMonth", { amount: formatCurrency(debt.minPayment) })}</Text>
             </View>
           </View>
 
           <View style={[styles.noteCard, { borderColor: colors.cardBorder }]}> 
-            <Text style={styles.noteTitle}>Momentum tip</Text>
+            <Text style={styles.noteTitle}>{t("debts.moments.payoff.tipTitle")}</Text>
             <Text style={styles.noteText}>
-              Redirect at least {formatCurrency(debt.minPayment)} each month to next debt for snowball effect.
+              {t("debts.moments.payoff.tipBody", { amount: formatCurrency(debt.minPayment) })}
             </Text>
           </View>
 
@@ -143,14 +146,14 @@ const DebtPayoffCelebrationModal: React.FC<DebtPayoffCelebrationModalProps> = ({
                 style={[styles.secondaryButton, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}
                 onPress={onViewHistory}
               >
-                <Text style={[styles.secondaryButtonText, { color: colors.text }]}>View History</Text>
+                <Text style={[styles.secondaryButtonText, { color: colors.text }]}>{t("debts.moments.payoff.viewHistory")}</Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: colors.accent }]}
               onPress={onClose}
             >
-              <Text style={[styles.primaryButtonText, { color: colors.accentButtonText }]}>Keep Going</Text>
+              <Text style={[styles.primaryButtonText, { color: colors.accentButtonText }]}>{t("debts.moments.payoff.keepGoing")}</Text>
             </TouchableOpacity>
           </View>
         </View>

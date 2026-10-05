@@ -19,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -40,6 +41,7 @@ import {
 
 
 const CurrencyExchangeCard: React.FC = () => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { preference } = useCurrency();
@@ -84,22 +86,20 @@ const CurrencyExchangeCard: React.FC = () => {
         if (active) applyFxSnapshot(snapshot);
       })
       .catch(() => {
-        if (active) setFxRatesLabel("Couldn't load rates - tap Refresh to try again.");
+        if (active) setFxRatesLabel(t("charts.insights.exchange.loadFailed"));
       });
     return () => {
       active = false;
     };
-  }, [fxOpen, applyFxSnapshot]);
+  }, [fxOpen, applyFxSnapshot, t]);
 
   const handleFxRefresh = useCallback(() => {
     setFxRefreshing(true);
     void getConverterRates({ forceRefresh: true })
       .then(applyFxSnapshot)
-      .catch(() =>
-        setFxRatesLabel("Couldn't refresh rates - showing the last saved rates."),
-      )
+      .catch(() => setFxRatesLabel(t("charts.insights.exchange.refreshFailed")))
       .finally(() => setFxRefreshing(false));
-  }, [applyFxSnapshot]);
+  }, [applyFxSnapshot, t]);
 
   const fxFromCode = fxFrom ?? preference.currencyCode;
   const fxToCode = fxTo ?? (fxFromCode === "USD" ? "EUR" : "USD");
@@ -154,8 +154,8 @@ const CurrencyExchangeCard: React.FC = () => {
         {/* ── Currency Exchange Tool ── */}
         <TouchableOpacity style={tool.toolHeader} onPress={toggleFx} activeOpacity={0.7}>
           <View>
-            <Text style={tool.toolTitle}>Currency Exchange</Text>
-            <Text style={tool.toolHint}>Convert an amount between currencies</Text>
+            <Text style={tool.toolTitle}>{t("charts.insights.exchange.title")}</Text>
+            <Text style={tool.toolHint}>{t("charts.insights.exchange.hint")}</Text>
           </View>
           <Text style={tool.toolChevron}>{fxOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
@@ -164,7 +164,7 @@ const CurrencyExchangeCard: React.FC = () => {
           <View style={tool.toolBody}>
             {/* Result */}
             <View style={tool.resultCard}>
-              <Text style={tool.resultLabel}>CONVERTED VALUE</Text>
+              <Text style={tool.resultLabel}>{t("charts.insights.exchange.resultLabel")}</Text>
               <Text style={tool.resultValue}>
                 {fxConverted !== null
                   ? formatAmountInCurrency(fxConverted, fxToCurrency)
@@ -177,17 +177,17 @@ const CurrencyExchangeCard: React.FC = () => {
 
             {/* Amount + currency pickers */}
             <View style={tool.efCard}>
-              <Text style={tool.efSectionTitle}>Amount</Text>
+              <Text style={tool.efSectionTitle}>{t("charts.insights.exchange.amount")}</Text>
               <TextInput
                 style={tool.input}
-                placeholder="Amount to convert"
+                placeholder={t("charts.insights.exchange.amountPlaceholder")}
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
                 value={fxAmountText}
                 onChangeText={setFxAmountText}
               />
 
-              <Text style={tool.efSectionTitle}>From</Text>
+              <Text style={tool.efSectionTitle}>{t("charts.insights.exchange.from")}</Text>
               <CodeChipGrid
                 options={EXCHANGE_CURRENCIES}
                 selected={fxFromCode}
@@ -201,10 +201,10 @@ const CurrencyExchangeCard: React.FC = () => {
                 onPress={handleFxSwap}
                 activeOpacity={0.7}
               >
-                <Text style={styles.fxSwapBtnText}>⇅ Swap</Text>
+                <Text style={styles.fxSwapBtnText}>{t("charts.insights.exchange.swap")}</Text>
               </TouchableOpacity>
 
-              <Text style={tool.efSectionTitle}>To</Text>
+              <Text style={tool.efSectionTitle}>{t("charts.insights.exchange.to")}</Text>
               <CodeChipGrid
                 options={EXCHANGE_CURRENCIES}
                 selected={fxToCode}
@@ -226,7 +226,9 @@ const CurrencyExchangeCard: React.FC = () => {
                   <Text
                     style={[styles.fxRefreshText, fxRefreshing && styles.fxRefreshDisabled]}
                   >
-                    {fxRefreshing ? "Refreshing…" : "↻ Refresh rates"}
+                    {fxRefreshing
+                      ? t("charts.insights.exchange.refreshing")
+                      : t("charts.insights.exchange.refresh")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -234,9 +236,7 @@ const CurrencyExchangeCard: React.FC = () => {
 
             {/* Privacy note */}
             <View style={tool.insightCard}>
-              <Text style={tool.insightText}>
-                Rates come from a free public exchange-rate service, typically updated once a day. Only the request for the day's rate table leaves your phone - never your amounts.
-              </Text>
+              <Text style={tool.insightText}>{t("charts.insights.exchange.privacyNote")}</Text>
             </View>
           </View>
         )}

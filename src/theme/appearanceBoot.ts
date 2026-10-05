@@ -9,7 +9,7 @@
  * nested provider only MOUNTS (and so only starts its read) after its parent
  * unblocked. That serialized the boot path into four back-to-back encrypted
  * storage round-trips before anything rendered. This module starts a single
- * Promise.all for all five keys the moment the bundle evaluates; each
+ * Promise.all for all six keys the moment the bundle evaluates; each
  * provider awaits the shared promise and picks out its value, so the storage
  * latency is paid once instead of four times. The providers keep their own
  * validation and `ready` gating - only the fetch is shared.
@@ -25,6 +25,10 @@ export const SURFACE_STYLE_KEY = "@budgetark_surface_style_id" as const;
 export const THEME_KEY = "@budgetark_theme_id" as const;
 export const DENSITY_KEY = "@budgetark_density_id" as const;
 export const TEXT_SIZE_KEY = "@budgetark_text_size_id" as const;
+// App language setting ("auto" | "en" | "de" - see src/i18n/pickLanguage.ts).
+// Read here with the other cosmetic prefs so LanguageProvider shares the
+// single boot round-trip instead of adding a fifth serialized read.
+export const LANGUAGE_KEY = "@budgetark_language_id" as const;
 
 export interface AppearanceBootSnapshot {
   backgroundEffects: string | null;
@@ -32,6 +36,7 @@ export interface AppearanceBootSnapshot {
   theme: string | null;
   density: string | null;
   textSize: string | null;
+  language: string | null;
 }
 
 /** A failed read degrades to null (= the provider's default), never a throw. */
@@ -41,14 +46,16 @@ const readOrNull = (key: string): Promise<string | null> =>
 // Kicked off at module-eval time - i.e. during bundle load, before any React
 // mount - so the round-trip overlaps with the rest of startup.
 const bootPromise: Promise<AppearanceBootSnapshot> = (async () => {
-  const [backgroundEffects, surfaceStyle, theme, density, textSize] = await Promise.all([
-    readOrNull(BACKGROUND_EFFECTS_KEY),
-    readOrNull(SURFACE_STYLE_KEY),
-    readOrNull(THEME_KEY),
-    readOrNull(DENSITY_KEY),
-    readOrNull(TEXT_SIZE_KEY),
-  ]);
-  return { backgroundEffects, surfaceStyle, theme, density, textSize };
+  const [backgroundEffects, surfaceStyle, theme, density, textSize, language] =
+    await Promise.all([
+      readOrNull(BACKGROUND_EFFECTS_KEY),
+      readOrNull(SURFACE_STYLE_KEY),
+      readOrNull(THEME_KEY),
+      readOrNull(DENSITY_KEY),
+      readOrNull(TEXT_SIZE_KEY),
+      readOrNull(LANGUAGE_KEY),
+    ]);
+  return { backgroundEffects, surfaceStyle, theme, density, textSize, language };
 })();
 
 export const getAppearanceBoot = (): Promise<AppearanceBootSnapshot> => bootPromise;

@@ -1,6 +1,7 @@
 import { BudgetEntry } from "../types";
 import { isEntryActiveInMonth } from "./recurrence";
 import { fulfillmentsForMonth, isFulfillingEntry } from "./billFulfillment";
+import { dayOfMonthFromIso } from "./entryDate";
 
 export interface BillsByDay {
   /** Day-of-month (1-31) → entries that hit on that day for this month. */
@@ -29,13 +30,19 @@ const lastDayOfMonth = (year: number, monthIndex: number): number =>
  * month's actual length. A bill set to the 31st falls back to the last day
  * in shorter months (Feb 28/29, Apr 30, etc.) - mirrors the
  * `spreadsheetExport.lastDayOfMonth` clamp the projection logic already uses.
+ *
+ * The day is read from the stored YYYY-MM-DD prefix (utils/entryDate), the
+ * same way the month filter and the entry form read it. Parsing the string
+ * and calling local getDate() put bills a day early on the calendar: a
+ * date-only "2026-09-05" (Subscription Detective's "make it a bill") parses
+ * as UTC midnight, which is still the 4th anywhere west of UTC, and the
+ * canonical noon-UTC dates roll forward a day for UTC+13/+14 users.
  */
 export const getDayOfMonth = (
   entry: Pick<BudgetEntry, "date">,
   monthKey: string
 ): number => {
-  const stored = new Date(entry.date).getDate();
-  const day = Number.isFinite(stored) && stored >= 1 && stored <= 31 ? stored : 15;
+  const day = dayOfMonthFromIso(entry.date);
   const [yStr, mStr] = monthKey.split("-");
   const last = lastDayOfMonth(Number(yStr), Number(mStr) - 1);
   return Math.min(day, last);

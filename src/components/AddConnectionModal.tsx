@@ -8,11 +8,30 @@
  *
  * Layout follows AddBudgetEntryModal's sheet (scrollable body, pinned button
  * row); errors render inline under the active field, never as Alerts.
+ *
+ * Deliberately NOT a React Native Modal. The wizard only ever opens on top
+ * of the (still visible) Connections manager, which is itself a Modal, and
+ * presenting a second native dialog/view controller over it is the one
+ * configuration in this app that repeatedly froze the whole app on the
+ * wizard's Done screen: the ✅ step rendered inside that stacked dialog
+ * and then nothing responded - Done did nothing, force-close required
+ * (four Android reports). No JS runs after that screen paints (no timers,
+ * effects or provider refresh are scheduled by the done step), so the
+ * wedge is native, in the stacked dialog. Three rounds of re-sequencing
+ * the post-Done JS work never touched that, so the wizard now renders as
+ * an absolutely-positioned overlay INSIDE the manager's own tree - same
+ * fix as the onboarding walkthrough - with a plain JS slide animation.
+ * Its buttons live in the manager's own dialog (whose touches demonstrably
+ * work), there is no second native presentation left, and `onDismissed`
+ * fires from the animation's completion on both platforms. The hardware
+ * back button reaches the manager's onRequestClose, which
+ * ConnectionsSection routes to this wizard while it is showing.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Modal,
+  Animated,
+  Easing,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,10 +39,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useAnimatedValue,
+  useWindowDimensions,
 } from "react-native";
+import { useValueChanged } from "../hooks/useValueChanged";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import {
-  ASSET_ACCOUNT_CATEGORY_LABELS,
   AssetAccount,
   AssetAccountCategory,
   BankProvider,
@@ -84,11 +106,10 @@ interface AddConnectionModalProps {
   /** Called after a connection is fully set up (links saved). */
   onComplete: (connectionId: string) => void;
   /**
-   * iOS only: fires after the sheet's dismissal animation fully completes
-   * (RN Modal onDismiss). The post-setup sync is kicked from here so its
-   * state churn can't race the native dismissal - re-rendering the modal
-   * stack mid-dismissal freezes it (the same family as the silent-present
-   * failure this codebase keeps hitting).
+   * Fires once the sheet's slide-out animation has finished and the wizard
+   * has unmounted its content (both platforms). The post-setup sync is
+   * kicked from here so its provider-wide refresh lands on a settled
+   * manager rather than mid-animation.
    */
   onDismissed?: () => void;
   assetAccounts: AssetAccount[];
@@ -127,9 +148,67 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   resumeSimplefin,
   rediscoverSimplefin,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+
+  /* ── Presentation (in-tree overlay, see the file header) ── */
+
+  // `rendered` keeps the content mounted through the slide-out so the
+  // last step doesn't vanish on the Done tap; it flips false from the
+  // animation's completion, which is also where onDismissed fires.
+  const [rendered, setRendered] = useState(visible);
+  if (useValueChanged(visible) && visible && !rendered) setRendered(true);
+  // useAnimatedValue instead of useRef(new Animated.Value()).current so no
+  // ref is read during render (react-hooks/refs), matching the other sheets.
+  const progress = useAnimatedValue(visible ? 1 : 0);
+  const onDismissedRef = useRef(onDismissed);
+  useEffect(() => {
+    onDismissedRef.current = onDismissed;
+  }, [onDismissed]);
+  /** True while a slide-out is in flight and its onDismissed still owed. */
+  const dismissPending = useRef(false);
+
+  useEffect(() => {
+    if (!visible && !rendered) return; // nothing showing, nothing to hide
+    dismissPending.current = !visible;
+    const animation = Animated.timing(progress, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? 280 : 220,
+      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start(({ finished }) => {
+      if (visible || !finished) return;
+      dismissPending.current = false;
+      setRendered(false);
+      onDismissedRef.current?.();
+    });
+    return () => animation.stop();
+  }, [visible, rendered, progress]);
+
+  // Unmounting mid-slide-out (tab switch right after Done) must still hand
+  // the queued post-setup work back, or the first sync never runs.
+  useEffect(
+    () => () => {
+      if (dismissPending.current) {
+        dismissPending.current = false;
+        onDismissedRef.current?.();
+      }
+    },
+    [],
+  );
+
+  const sheetTranslateY = useMemo(
+    () =>
+      progress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [windowHeight, 0],
+      }),
+    [progress, windowHeight],
+  );
 
   const [step, setStep] = useState<WizardStep>("provider");
   const [busy, setBusy] = useState(false);
@@ -288,10 +367,10 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         if (which === "cert") setTellerCertPem(text);
         else setTellerKeyPem(text);
       } catch {
-        setError("Couldn't read that file. Unzip teller.zip and pick the .pem files directly.");
+        setError(t("modals.connections.wizard.tellerSetup.readFileError"));
       }
     },
-    [],
+    [t],
   );
 
   const submitTellerSetup = useCallback(async () => {
@@ -427,11 +506,11 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
       await finalizeAccountLinks(connectionId, finalSelections);
       setStep("done");
     } catch {
-      setError("Saving the account mapping failed. Try again.");
+      setError(t("modals.connections.wizard.map.saveError"));
     } finally {
       setBusy(false);
     }
-  }, [connectionId, selections]);
+  }, [connectionId, selections, t]);
 
   // Same no-reset rule as handleClose - and connectionId must survive the
   // press, so a repeat tap (e.g. while the close animation is still pending)
@@ -454,72 +533,61 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
 
   const renderProviderStep = () => (
     <>
-      <Text style={styles.title}>Connect a Bank</Text>
-      <Text style={styles.subtitle}>
-        Pick a provider. Your credentials stay encrypted on this device. New to
-        this? Tap "Setup guide & privacy" for step-by-step help.
-      </Text>
+      <Text style={styles.title}>{t("modals.connections.wizard.provider.title")}</Text>
+      <Text style={styles.subtitle}>{t("modals.connections.wizard.provider.subtitle")}</Text>
       <TouchableOpacity
         style={styles.providerCard}
         onPress={() => startProviderSetup("simplefin")}
       >
-        <Text style={styles.providerTitle}>🏦 SimpleFIN Bridge (recommended)</Text>
+        <Text style={styles.providerTitle}>{t("modals.connections.wizard.provider.simplefinTitle")}</Text>
         <Text style={styles.providerDescription}>
-          One setup token covers Chase and thousands of US banks and credit
-          cards. Paid service (~$1.50/month) with open signup - anyone can
-          join today.
+          {t("modals.connections.wizard.provider.simplefinDescription")}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.guideLink}
         onPress={() => setGuideProvider("simplefin")}
       >
-        <Text style={styles.guideLinkText}>📖 SimpleFIN setup guide & privacy</Text>
+        <Text style={styles.guideLinkText}>{t("modals.connections.wizard.provider.simplefinGuide")}</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.providerCard}
         onPress={() => startProviderSetup("teller")}
       >
-        <Text style={styles.providerTitle}>🔗 Teller</Text>
+        <Text style={styles.providerTitle}>{t("modals.connections.wizard.provider.tellerTitle")}</Text>
         <Text style={styles.providerDescription}>
-          Bring your own Teller developer account (100 free bank connections).
-          Best if you already have one: Teller has no public signup right now -
-          new accounts are by request via support@teller.io.
+          {t("modals.connections.wizard.provider.tellerDescription")}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.guideLink}
         onPress={() => setGuideProvider("teller")}
       >
-        <Text style={styles.guideLinkText}>📖 Teller setup guide & privacy</Text>
+        <Text style={styles.guideLinkText}>{t("modals.connections.wizard.provider.tellerGuide")}</Text>
       </TouchableOpacity>
     </>
   );
 
   const renderTellerSetupStep = () => (
     <>
-      <Text style={styles.title}>Teller Setup</Text>
-      <Text style={styles.subtitle}>
-        Uses your own free developer account from teller.io.
-      </Text>
+      <Text style={styles.title}>{t("modals.connections.wizard.tellerSetup.title")}</Text>
+      <Text style={styles.subtitle}>{t("modals.connections.wizard.tellerSetup.subtitle")}</Text>
       <View style={styles.instructionsCard}>
-        <Text style={styles.instructionLine}>1. Sign in at teller.io - no account? Signups are currently by request only (email support@teller.io), or use SimpleFIN instead</Text>
-        <Text style={styles.instructionLine}>2. Download and unzip the teller.zip from your dashboard (it holds certificate.pem and private_key.pem)</Text>
-        <Text style={styles.instructionLine}>3. Copy your Application ID from the dashboard and import both .pem files below</Text>
+        <Text style={styles.instructionLine}>{t("modals.connections.wizard.tellerSetup.step1")}</Text>
+        <Text style={styles.instructionLine}>{t("modals.connections.wizard.tellerSetup.step2")}</Text>
+        <Text style={styles.instructionLine}>{t("modals.connections.wizard.tellerSetup.step3")}</Text>
       </View>
       <TouchableOpacity
         style={styles.guideLink}
         onPress={() => setGuideProvider("teller")}
       >
-        <Text style={styles.guideLinkText}>
-          📖 Full setup guide, links & privacy
-        </Text>
+        <Text style={styles.guideLinkText}>{t("modals.connections.wizard.fullGuide")}</Text>
       </TouchableOpacity>
       <View style={styles.field}>
-        <Text style={styles.label}>APPLICATION ID</Text>
+        <Text style={styles.label}>{t("modals.connections.wizard.tellerSetup.applicationId")}</Text>
         <TextInput
           style={styles.input}
-          placeholder="app_..."
+          placeholder={t("modals.connections.wizard.tellerSetup.applicationIdPlaceholder")}
           placeholderTextColor={colors.textMuted}
           value={tellerAppId}
           onChangeText={setTellerAppId}
@@ -528,7 +596,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         />
       </View>
       <View style={styles.field}>
-        <Text style={styles.label}>ENVIRONMENT</Text>
+        <Text style={styles.label}>{t("modals.connections.wizard.tellerSetup.environment")}</Text>
         <View style={styles.pillWrap}>
           {TELLER_ENVIRONMENTS.map((env) => (
             <TouchableOpacity
@@ -549,44 +617,45 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         </View>
       </View>
       <View style={styles.field}>
-        <Text style={styles.label}>CLIENT CERTIFICATE</Text>
+        <Text style={styles.label}>{t("modals.connections.wizard.tellerSetup.clientCertificate")}</Text>
         <TouchableOpacity
           style={styles.pickerButton}
           onPress={() => void pickTellerPem("cert")}
         >
           <Text style={styles.pickerButtonText}>
-            {tellerCertPem ? "✓ certificate.pem loaded" : "Import certificate.pem"}
+            {tellerCertPem
+              ? t("modals.connections.wizard.tellerSetup.certificateLoaded")
+              : t("modals.connections.wizard.tellerSetup.importCertificate")}
           </Text>
         </TouchableOpacity>
       </View>
       <View style={styles.field}>
-        <Text style={styles.label}>PRIVATE KEY</Text>
+        <Text style={styles.label}>{t("modals.connections.wizard.tellerSetup.privateKey")}</Text>
         <TouchableOpacity
           style={styles.pickerButton}
           onPress={() => void pickTellerPem("key")}
         >
           <Text style={styles.pickerButtonText}>
-            {tellerKeyPem ? "✓ private_key.pem loaded" : "Import private_key.pem"}
+            {tellerKeyPem
+              ? t("modals.connections.wizard.tellerSetup.keyLoaded")
+              : t("modals.connections.wizard.tellerSetup.importKey")}
           </Text>
         </TouchableOpacity>
       </View>
       {renderError()}
-      <Text style={styles.hint}>
-        The certificate and key stay encrypted on this device - they're how
-        Teller verifies the requests come from your app.
-      </Text>
+      <Text style={styles.hint}>{t("modals.connections.wizard.tellerSetup.hint")}</Text>
     </>
   );
 
   const renderTellerEnrollStep = () => (
     <>
       <Text style={styles.title}>
-        {addBank ? "Add Another Bank" : "Connect Your Bank"}
+        {addBank ? t("modals.connections.wizard.tellerEnroll.addBankTitle") : t("modals.connections.wizard.tellerEnroll.connectTitle")}
       </Text>
       <Text style={styles.subtitle}>
         {addBank
-          ? "Log in to another bank through Teller Connect. It's added to this same connection - your existing banks stay as they are."
-          : "Next, log in to your bank through Teller Connect. Your bank credentials go to Teller, never to BudgetArk."}
+          ? t("modals.connections.wizard.tellerEnroll.addBankSubtitle")
+          : t("modals.connections.wizard.tellerEnroll.connectSubtitle")}
       </Text>
       {renderError()}
       <TouchableOpacity
@@ -596,10 +665,9 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
           setShowTellerConnect(true);
         }}
       >
-        <Text style={styles.providerTitle}>🏦 Open Teller Connect</Text>
+        <Text style={styles.providerTitle}>{t("modals.connections.wizard.tellerEnroll.openTitle")}</Text>
         <Text style={styles.providerDescription}>
-          Opens Teller's secure bank-login flow. When it finishes, your
-          accounts appear here for mapping.
+          {t("modals.connections.wizard.tellerEnroll.openDescription")}
         </Text>
       </TouchableOpacity>
     </>
@@ -611,12 +679,8 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     if (rediscoverSimplefin && connectionId) {
       return (
         <>
-          <Text style={styles.title}>Check for New Accounts</Text>
-          <Text style={styles.subtitle}>
-            Added a bank or account on your SimpleFIN Bridge after setup?
-            This re-lists your bridge's accounts and offers any that aren't
-            mapped yet. Accounts you've already mapped stay as they are.
-          </Text>
+          <Text style={styles.title}>{t("modals.connections.wizard.simplefin.rediscoverTitle")}</Text>
+          <Text style={styles.subtitle}>{t("modals.connections.wizard.simplefin.rediscoverSubtitle")}</Text>
           {renderError()}
         </>
       );
@@ -627,18 +691,10 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     if (connectionId) {
       return (
         <>
-          <Text style={styles.title}>Finish SimpleFIN Setup</Text>
-          <Text style={styles.subtitle}>
-            Your setup token was already claimed and this connection is saved
-            on this device - you don't need a new token.
-          </Text>
+          <Text style={styles.title}>{t("modals.connections.wizard.simplefin.resumeTitle")}</Text>
+          <Text style={styles.subtitle}>{t("modals.connections.wizard.simplefin.resumeSubtitle")}</Text>
           <View style={styles.instructionsCard}>
-            <Text style={styles.instructionLine}>
-              Listing your accounts failed, most often because SimpleFIN
-              Bridge needs an active subscription. Check your billing at
-              beta-bridge.simplefin.org, then load your accounts to finish
-              setup.
-            </Text>
+            <Text style={styles.instructionLine}>{t("modals.connections.wizard.simplefin.resumeInstruction")}</Text>
           </View>
           {renderError()}
         </>
@@ -646,26 +702,24 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     }
     return (
       <>
-        <Text style={styles.title}>SimpleFIN Setup</Text>
-        <Text style={styles.subtitle}>Three steps on SimpleFIN's site, then paste one token here.</Text>
+        <Text style={styles.title}>{t("modals.connections.wizard.simplefin.title")}</Text>
+        <Text style={styles.subtitle}>{t("modals.connections.wizard.simplefin.subtitle")}</Text>
         <View style={styles.instructionsCard}>
-          <Text style={styles.instructionLine}>1. Create an account at beta-bridge.simplefin.org</Text>
-          <Text style={styles.instructionLine}>2. Connect your bank(s) there</Text>
-          <Text style={styles.instructionLine}>3. Choose "New App", copy the setup token, and paste it below</Text>
+          <Text style={styles.instructionLine}>{t("modals.connections.wizard.simplefin.step1")}</Text>
+          <Text style={styles.instructionLine}>{t("modals.connections.wizard.simplefin.step2")}</Text>
+          <Text style={styles.instructionLine}>{t("modals.connections.wizard.simplefin.step3")}</Text>
         </View>
         <TouchableOpacity
           style={styles.guideLink}
           onPress={() => setGuideProvider("simplefin")}
         >
-          <Text style={styles.guideLinkText}>
-            📖 Full setup guide, links & privacy
-          </Text>
+          <Text style={styles.guideLinkText}>{t("modals.connections.wizard.fullGuide")}</Text>
         </TouchableOpacity>
         <View style={styles.field}>
-          <Text style={styles.label}>SETUP TOKEN</Text>
+          <Text style={styles.label}>{t("modals.connections.wizard.simplefin.setupToken")}</Text>
           <TextInput
             style={[styles.input, styles.tokenInput]}
-            placeholder="Paste your SimpleFIN setup token"
+            placeholder={t("modals.connections.wizard.simplefin.tokenPlaceholder")}
             placeholderTextColor={colors.textMuted}
             value={setupToken}
             onChangeText={setSetupToken}
@@ -674,10 +728,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
             multiline
           />
           {renderError()}
-          <Text style={styles.hint}>
-            Tokens are single-use: once BudgetArk claims it, it can't be pasted
-            anywhere else.
-          </Text>
+          <Text style={styles.hint}>{t("modals.connections.wizard.simplefin.tokenHint")}</Text>
         </View>
       </>
     );
@@ -685,11 +736,8 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
 
   const renderMapAccountsStep = () => (
     <>
-      <Text style={styles.title}>Your Accounts</Text>
-      <Text style={styles.subtitle}>
-        Choose what to import, and where balances should land. Unmapped
-        accounts still import transactions to the Review Inbox.
-      </Text>
+      <Text style={styles.title}>{t("modals.connections.wizard.map.title")}</Text>
+      <Text style={styles.subtitle}>{t("modals.connections.wizard.map.subtitle")}</Text>
       {selections.map((selection) => {
         const ext = selection.account;
         return (
@@ -716,12 +764,12 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                   <Text style={styles.checkboxCheck}>✓</Text>
                 ) : null}
               </View>
-              <Text style={styles.checkboxLabel}>Import transactions</Text>
+              <Text style={styles.checkboxLabel}>{t("modals.connections.mapping.importTransactions")}</Text>
             </TouchableOpacity>
 
             {people.length > 0 && selection.importTransactions ? (
               <>
-                <Text style={styles.label}>WHOSE CARD IS THIS?</Text>
+                <Text style={styles.label}>{t("modals.connections.wizard.map.whoseCard")}</Text>
                 <View style={styles.pillWrap}>
                   <TouchableOpacity
                     style={[
@@ -736,7 +784,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                         selection.personId === null && styles.pillTextActive,
                       ]}
                     >
-                      No one
+                      {t("modals.connections.mapping.noOne")}
                     </Text>
                   </TouchableOpacity>
                   {people.map((person) => (
@@ -761,13 +809,11 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                     </TouchableOpacity>
                   ))}
                 </View>
-                <Text style={styles.hint}>
-                  Expenses imported from this account will suggest this person.
-                </Text>
+                <Text style={styles.hint}>{t("modals.connections.wizard.map.personHint")}</Text>
               </>
             ) : null}
 
-            <Text style={styles.label}>BALANCE UPDATES</Text>
+            <Text style={styles.label}>{t("modals.connections.wizard.map.balanceUpdates")}</Text>
             <View style={styles.pillWrap}>
               <TouchableOpacity
                 style={[
@@ -782,7 +828,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                     selection.assetAccountId === null && styles.pillTextActive,
                   ]}
                 >
-                  None
+                  {t("modals.connections.mapping.none")}
                 </Text>
               </TouchableOpacity>
               {mappableAccounts.map((asset) => (
@@ -819,7 +865,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                   setNewAccountCategory(suggestAssetCategory(ext.name));
                 }}
               >
-                <Text style={styles.pillText}>+ New account</Text>
+                <Text style={styles.pillText}>{t("modals.connections.mapping.newAccount")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -827,7 +873,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
               <View style={styles.newAccountForm}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Account name"
+                  placeholder={t("modals.connections.mapping.accountNamePlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   value={newAccountName}
                   onChangeText={setNewAccountName}
@@ -849,7 +895,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                           newAccountCategory === category && styles.pillTextActive,
                         ]}
                       >
-                        {ASSET_ACCOUNT_CATEGORY_LABELS[category]}
+                        {t(`bridge.screen.accounts.categories.${category}`)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -862,21 +908,14 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                   disabled={!newAccountName.trim()}
                   onPress={() => void createNewAssetAccount(ext.externalAccountId)}
                 >
-                  <Text style={styles.smallButtonText}>Create & map</Text>
+                  <Text style={styles.smallButtonText}>{t("modals.connections.mapping.createAndMap")}</Text>
                 </TouchableOpacity>
                 {newAccountCategory === "savings" ? (
-                  <Text style={styles.hint}>
-                    Savings accounts can be marked as your emergency fund from
-                    the Bridge tab once created.
-                  </Text>
+                  <Text style={styles.hint}>{t("modals.connections.mapping.savingsHint")}</Text>
                 ) : null}
                 {newAccountCategory === "retirement" ||
                 newAccountCategory === "investment" ? (
-                  <Text style={styles.hint}>
-                    The bank's balance becomes this account's value on the
-                    Bridge. If you also add its stocks or funds there, they
-                    count on top of it.
-                  </Text>
+                  <Text style={styles.hint}>{t("modals.connections.mapping.investmentHint")}</Text>
                 ) : null}
               </View>
             ) : null}
@@ -894,22 +933,20 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
     if ((addBank || rediscoverSimplefin) && selections.length === 0) {
       return (
         <>
-          <Text style={styles.title}>✅ All Set</Text>
+          <Text style={styles.title}>{t("modals.connections.wizard.done.allSetTitle")}</Text>
           <Text style={styles.subtitle}>
             {rediscoverSimplefin
-              ? "No new accounts found - everything on your bridge is already mapped. If you just added a bank on your SimpleFIN Bridge, give it a few minutes to finish linking and check again."
-              : "That bank's accounts were already connected, so nothing changed."}
+              ? t("modals.connections.wizard.done.rediscoverNothing")
+              : t("modals.connections.wizard.done.addBankNothing")}
           </Text>
         </>
       );
     }
     return (
       <>
-        <Text style={styles.title}>✅ Connected</Text>
+        <Text style={styles.title}>{t("modals.connections.wizard.done.connectedTitle")}</Text>
         <Text style={styles.subtitle}>
-          {`${importing} account${
-            importing === 1 ? "" : "s"
-          } will import transactions to your Review Inbox. New items appear after each sync.`}
+          {t("modals.connections.wizard.done.summary", { count: importing })}
         </Text>
       </>
     );
@@ -923,102 +960,108 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   } = (() => {
     switch (step) {
       case "provider":
-        return { label: "Next", onPress: () => {}, hidden: true };
+        return { label: t("common.next"), onPress: () => {}, hidden: true };
       case "simplefinToken":
         return connectionId
           ? {
               label: rediscoverSimplefin
                 ? busy
-                  ? "Checking..."
-                  : "Check for New Accounts"
+                  ? t("modals.connections.wizard.actions.checking")
+                  : t("modals.connections.wizard.actions.checkNewAccounts")
                 : busy
-                  ? "Loading accounts..."
-                  : "Load Accounts",
+                  ? t("modals.connections.wizard.actions.loadingAccounts")
+                  : t("modals.connections.wizard.actions.loadAccounts"),
               onPress: () => void loadSavedSimplefinAccounts(),
               disabled: busy,
             }
           : {
-              label: busy ? "Connecting..." : "Connect",
+              label: busy ? t("modals.connections.wizard.actions.connecting") : t("modals.connections.wizard.actions.connect"),
               onPress: () => void submitSimplefinToken(),
               disabled: busy || !setupToken.trim(),
             };
       case "tellerSetup":
         return {
-          label: busy ? "Saving..." : "Continue",
+          label: busy ? t("modals.connections.wizard.actions.saving") : t("common.continue"),
           onPress: () => void submitTellerSetup(),
           disabled:
             busy || !tellerAppId.trim() || !tellerCertPem || !tellerKeyPem,
         };
       case "tellerEnroll":
         return {
-          label: busy ? "Loading accounts..." : "Open Teller Connect",
+          label: busy ? t("modals.connections.wizard.actions.loadingAccounts") : t("modals.connections.wizard.actions.openTellerConnect"),
           onPress: () => setShowTellerConnect(true),
           disabled: busy,
         };
       case "mapAccounts":
         return {
-          label: busy ? "Saving..." : "Save",
+          label: busy ? t("modals.connections.wizard.actions.saving") : t("common.save"),
           onPress: () => void submitMapping(),
           disabled: busy,
         };
       case "done":
-        return { label: "Done", onPress: finish };
+        return { label: t("common.done"), onPress: finish };
     }
   })();
 
+  if (!rendered) return null;
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleClose}
-      onDismiss={onDismissed}
-    >
-      <SheetKeyboardAvoider style={styles.overlay}>
-        <View style={styles.modalSheet}>
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
-          >
-            {step === "provider" && renderProviderStep()}
-            {step === "simplefinToken" && renderSimplefinStep()}
-            {step === "tellerSetup" && renderTellerSetupStep()}
-            {step === "tellerEnroll" && renderTellerEnrollStep()}
-            {step === "mapAccounts" && renderMapAccountsStep()}
-            {step === "done" && renderDoneStep()}
-          </ScrollView>
-
-          <View
-            style={[
-              styles.buttonRow,
-              Platform.OS === "android" && insets.bottom > 0
-                ? { paddingBottom: insets.bottom + 12 }
-                : null,
-            ]}
-          >
-            {step !== "done" ? (
-              <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-            ) : null}
-            {!primaryAction.hidden ? (
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  primaryAction.disabled && styles.buttonDisabled,
-                ]}
-                onPress={primaryAction.onPress}
-                disabled={primaryAction.disabled}
-              >
-                <Text style={styles.primaryButtonText}>{primaryAction.label}</Text>
-              </TouchableOpacity>
-            ) : null}
+    <View style={styles.host}>
+      <Animated.View style={[styles.backdrop, { opacity: progress }]} />
+      <Animated.View
+        style={[
+          styles.slide,
+          { transform: [{ translateY: sheetTranslateY }] },
+        ]}
+      >
+        <SheetKeyboardAvoider style={styles.overlay}>
+          <View style={styles.modalSheet}>
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets
+            >
+              {step === "provider" && renderProviderStep()}
+              {step === "simplefinToken" && renderSimplefinStep()}
+              {step === "tellerSetup" && renderTellerSetupStep()}
+              {step === "tellerEnroll" && renderTellerEnrollStep()}
+              {step === "mapAccounts" && renderMapAccountsStep()}
+              {step === "done" && renderDoneStep()}
+            </ScrollView>
+  
+            <View
+              style={[
+                styles.buttonRow,
+                Platform.OS === "android" && insets.bottom > 0
+                  ? { paddingBottom: insets.bottom + 12 }
+                  : null,
+              ]}
+            >
+              {step !== "done" ? (
+                <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+                  <Text style={styles.cancelText}>{t("common.cancel")}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {!primaryAction.hidden ? (
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    primaryAction.disabled && styles.buttonDisabled,
+                  ]}
+                  onPress={primaryAction.onPress}
+                  disabled={primaryAction.disabled}
+                >
+                  <Text style={styles.primaryButtonText}>{primaryAction.label}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
-        </View>
-      </SheetKeyboardAvoider>
+        </SheetKeyboardAvoider>
+      </Animated.View>
 
+      {/* Real Modals, but nested as children of the manager's Modal - the
+          supported configuration - not presented beside it. */}
       <TellerConnectModal
         visible={showTellerConnect}
         applicationId={tellerAppId.trim()}
@@ -1037,15 +1080,34 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         onClose={() => setGuideProvider(null)}
         onStartSetup={startProviderSetup}
       />
-    </Modal>
+    </View>
   );
 };
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    // Covers the manager and swallows its touches while the wizard is up
+    // (a plain View's default pointerEvents), like a modal backdrop would.
+    host: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 10,
+      elevation: 10,
+    },
+    backdrop: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: colors.overlayStrong,
+    },
+    slide: { flex: 1 },
     overlay: {
       flex: 1,
-      backgroundColor: colors.overlayStrong,
       justifyContent: "flex-end",
     },
     modalSheet: {

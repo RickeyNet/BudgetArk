@@ -17,6 +17,7 @@ import {
   ScrollView,
   Linking,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { RELEASE_NOTES, type ReleaseNote } from "../../data/releaseNotes";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
@@ -35,6 +36,7 @@ const AboutSection: React.FC<AboutSectionProps> = ({
   onOpenReleaseNotes,
   onCloseReleaseNotes,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -56,7 +58,7 @@ const AboutSection: React.FC<AboutSectionProps> = ({
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          ABOUT
+          {t("profile.info.about.sectionTitle")}
         </Text>
 
         <View
@@ -71,12 +73,15 @@ const AboutSection: React.FC<AboutSectionProps> = ({
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                v{latestRelease.version} - {latestRelease.title}
+                {t("profile.info.about.versionRow", {
+                  version: latestRelease.version,
+                  title: latestRelease.title,
+                })}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
-                Tap for release notes
+                {t("profile.info.about.tapForReleaseNotes")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -95,11 +100,11 @@ const AboutSection: React.FC<AboutSectionProps> = ({
             style={styles.groupedRow}
             onPress={() => Linking.openURL("https://budgetark.app")}
             accessibilityRole="link"
-            accessibilityLabel="Open the BudgetArk website"
+            accessibilityLabel={t("profile.info.about.websiteA11y")}
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                Website
+                {t("profile.info.about.websiteLabel")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
@@ -125,7 +130,7 @@ const AboutSection: React.FC<AboutSectionProps> = ({
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                GitHub
+                {t("profile.info.about.githubLabel")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
@@ -158,10 +163,10 @@ const AboutSection: React.FC<AboutSectionProps> = ({
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>
-              Release Notes
+              {t("profile.info.about.releaseNotes.title")}
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              Browse current and past versions.
+              {t("profile.info.about.releaseNotes.subtitle")}
             </Text>
 
             <ScrollView
@@ -184,7 +189,10 @@ const AboutSection: React.FC<AboutSectionProps> = ({
                   >
                     <View style={styles.faqHeader}>
                       <Text style={[styles.faqQuestion, { color: colors.text }]}>
-                        v{release.version} - {release.title}
+                        {t("profile.info.about.versionRow", {
+                          version: release.version,
+                          title: release.title,
+                        })}
                       </Text>
                       <Text style={[styles.faqArrow, { color: colors.textMuted }]}>
                         {isExpanded ? "v" : ">"}
@@ -195,7 +203,9 @@ const AboutSection: React.FC<AboutSectionProps> = ({
                         <Text
                           style={[styles.faqAnswer, { color: colors.textMuted }]}
                         >
-                          Released {release.releasedAt}
+                          {t("profile.info.about.releaseNotes.releasedOn", {
+                            date: release.releasedAt,
+                          })}
                         </Text>
                         {release.highlights.map((item) => (
                           <Text
@@ -217,7 +227,7 @@ const AboutSection: React.FC<AboutSectionProps> = ({
               onPress={onCloseReleaseNotes}
             >
               <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                Done
+                {t("common.done")}
               </Text>
             </TouchableOpacity>
           </View>

@@ -91,6 +91,7 @@ jest.mock("../../../notifications/cardKeepAliveReminders", () => ({
 jest.mock("../simplefinClient", () => ({ fetchSimplefinAccounts: jest.fn() }));
 jest.mock("../tellerClient", () => ({ fetchTellerData: jest.fn() }));
 jest.mock("../reviewInboxService", () => ({
+  applyEntryAmountCorrections: jest.fn(async () => 0),
   autoApproveInboxByRules: jest.fn(),
   reconcileInboxWithDecisions: jest.fn(async () => 0),
 }));

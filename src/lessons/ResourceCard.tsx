@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -41,6 +42,7 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
   showAffiliateLinks = false,
   onOpenTool,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = React.useMemo(
@@ -56,11 +58,11 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
     } catch (err) {
       if (__DEV__) console.warn("[ResourceCard] open url failed", err);
       Alert.alert(
-        "Couldn't open link",
-        "Your device doesn't have an app that can open that link."
+        t("charts.lessons.resource.linkFailed.title"),
+        t("charts.lessons.resource.linkFailed.message")
       );
     }
-  }, []);
+  }, [t]);
 
   switch (resource.type) {
     case "youtube":
@@ -148,7 +150,7 @@ const ResourceCard: React.FC<ResourceCardProps> = ({
             <Text style={styles.title} numberOfLines={2}>
               {resource.title}
             </Text>
-            <Text style={styles.subtitle}>Open in this app</Text>
+            <Text style={styles.subtitle}>{t("charts.lessons.resource.openInApp")}</Text>
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>

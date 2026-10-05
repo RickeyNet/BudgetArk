@@ -16,6 +16,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Debt, Payment } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -40,6 +41,7 @@ const DebtDueReminderBanner: React.FC<DebtDueReminderBannerProps> = ({
   daysAhead = 7,
   style,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -52,24 +54,25 @@ const DebtDueReminderBanner: React.FC<DebtDueReminderBannerProps> = ({
   const nextDue = upcoming[0] ?? null;
   const totalDue = upcoming.reduce((sum, item) => sum + item.amount, 0);
 
-  const summaryLine = useMemo(() => {
+  const summaryLine = useMemo<string>(() => {
     if (!nextDue) return "";
-    if (upcoming.length === 1) {
-      return `1 debt minimum due in the next ${daysAhead} days`;
-    }
-    return `${upcoming.length} debt minimums due in the next ${daysAhead} days`;
-  }, [daysAhead, nextDue, upcoming.length]);
+    return t("budget.cards.debtDue.summary", { count: upcoming.length, days: daysAhead });
+  }, [daysAhead, nextDue, t, upcoming.length]);
 
-  const nextLine = useMemo(() => {
+  const nextLine = useMemo<string>(() => {
     if (!nextDue) return "";
-    const when =
+    const when: string =
       nextDue.daysUntil === 0
-        ? "today"
+        ? t("budget.cards.debtDue.today")
         : nextDue.daysUntil === 1
-          ? "tomorrow"
-          : `in ${nextDue.daysUntil} days`;
-    return `Next: ${nextDue.debt.name} · ${formatCurrency(nextDue.amount)} · ${when}`;
-  }, [formatCurrency, nextDue]);
+          ? t("budget.cards.debtDue.tomorrow")
+          : t("budget.cards.debtDue.inDays", { count: nextDue.daysUntil });
+    return t("budget.cards.debtDue.next", {
+      name: nextDue.debt.name,
+      amount: formatCurrency(nextDue.amount),
+      when,
+    });
+  }, [formatCurrency, nextDue, t]);
 
   if (!nextDue) return null;
 
@@ -84,7 +87,7 @@ const DebtDueReminderBanner: React.FC<DebtDueReminderBannerProps> = ({
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
           <Text style={[styles.eyebrow, { color: isUrgent ? colors.warning : colors.accent }]}>
-            DEBT PAYMENT REMINDER
+            {t("budget.cards.debtDue.eyebrow")}
           </Text>
           <Text style={styles.title}>{summaryLine}</Text>
         </View>
@@ -92,7 +95,7 @@ const DebtDueReminderBanner: React.FC<DebtDueReminderBannerProps> = ({
       </View>
 
       <Text style={styles.totalLine}>
-        {formatCurrency(totalDue)} minimum total (from Debts tab)
+        {t("budget.cards.debtDue.total", { amount: formatCurrency(totalDue) })}
       </Text>
       <Text style={styles.nextLine} numberOfLines={2}>
         {nextLine}

@@ -94,3 +94,25 @@ export const buildMonthDayRows = (yearMonth: string): (number | null)[][] => {
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
   return rows;
 };
+
+/**
+ * Calendar rows for picking a recurring DAY OF MONTH (1-31) rather than a
+ * date - the debt form's "minimum payment due day". Laid out like
+ * `buildMonthDayRows` for the given month so the picker reads as that
+ * month's calendar (weekday headers line up), but always runs through 31:
+ * a due day of 29-31 must stay pickable, and a stored 31 must stay visible,
+ * in February or April too. Days past the month's real length simply
+ * continue the sequence; callers mute them (`lastDayOfYearMonth` says where
+ * the month ends) because the due-day rule clamps them to the last day.
+ */
+export const buildDueDayPickerRows = (yearMonth: string): (number | null)[][] => {
+  const [yStr, mStr] = yearMonth.split("-");
+  const firstWeekday = new Date(Number(yStr), Number(mStr) - 1, 1).getDay();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let day = 1; day <= 31; day++) cells.push(day);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const rows: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  return rows;
+};

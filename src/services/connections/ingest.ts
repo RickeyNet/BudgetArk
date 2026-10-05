@@ -14,15 +14,20 @@
  *      entries arriving via P2P sync and restored backups)
  *   4. identity key already in the inbox     -> update (pending->posted, drift)
  *   5. posted tx with a NEW id matching a pending twin by fingerprint
- *      (same account, same amount, ±4 days)  -> update + ledger alias
- *      (the twin may be in the inbox, or already decided in the ledger)
+ *      (same account, same sign, amount within the pending tolerance,
+ *      ±PENDING_MATCH_WINDOW_DAYS)           -> update + ledger alias
+ *      (the twin may be in the inbox, or already decided in the ledger;
+ *      an exact-amount twin always beats a tolerance match, and a twin
+ *      approved while pending gets its entry amount corrected)
  *   6. otherwise                             -> new inbox item
  *
  * Those defenses only see transactions as they are fetched; rows already
  * in the inbox are revisited by planInboxReconciliation (below), which
  * retires them once a partner's entry or dismissal for the same
- * transaction arrives. selectSyncableDismissals picks the ledger slice
- * partner sync carries.
+ * transaction arrives, and by planStalePending, which retires pending
+ * rows the bank stopped reporting (a dropped hold, or a posted twin the
+ * tolerance couldn't tie back). selectSyncableDismissals picks the ledger
+ * slice partner sync carries.
  *
  * Node-testable: no storage, no fetch, injectable clock via `now`.
  */
@@ -56,8 +61,51 @@ const MAX_PROVIDER_TX_ID_LENGTH = 128;
 /** Max description length stored on an inbox item (mirrors BudgetEntry cap). */
 const MAX_DESCRIPTION_LENGTH = 220;
 
-/** Days of slack when matching a posted transaction to its pending twin. */
-export const PENDING_MATCH_WINDOW_DAYS = 4;
+/**
+ * Days of slack when matching a posted transaction to its pending twin.
+ * Weekend + holiday settlement regularly takes 5-6 days (a Friday-evening
+ * charge posting the next Wednesday), which a 4-day window missed - the
+ * posted charge then surfaced as a second inbox row.
+ */
+export const PENDING_MATCH_WINDOW_DAYS = 7;
+
+/**
+ * Amount slack when matching a posted transaction to its pending twin: the
+ * settled amount may differ from the authorization (restaurant tips, gas
+ * pump holds, foreign-currency conversion). Within max(30% of the pending
+ * amount, $1), same sign, same account. An exact-amount twin is always
+ * preferred over a tolerance match (see buildDecidedTwinFinder /
+ * findPendingInboxTwin), so two similar charges in one week don't merge.
+ */
+export const PENDING_AMOUNT_TOLERANCE_RATIO = 0.3;
+export const PENDING_AMOUNT_TOLERANCE_MIN = 1;
+
+/** Whether a posted amount is a plausible settlement of a pending one. */
+export const pendingAmountsCompatible = (
+  pendingAmount: number,
+  postedAmount: number,
+): boolean => {
+  if (!Number.isFinite(pendingAmount) || !Number.isFinite(postedAmount)) {
+    return false;
+  }
+  if (Math.sign(pendingAmount) !== Math.sign(postedAmount)) return false;
+  const slack = Math.max(
+    PENDING_AMOUNT_TOLERANCE_RATIO * Math.abs(pendingAmount),
+    PENDING_AMOUNT_TOLERANCE_MIN,
+  );
+  // Half a cent of float slack: amounts are cents-rounded on both sides.
+  return Math.abs(postedAmount - pendingAmount) <= slack + 0.005;
+};
+
+/** Exact beats tolerance; then the closer amount; then the closer day. */
+const isCloserTwin = (
+  a: { exact: boolean; amountDelta: number; dayDelta: number },
+  b: { exact: boolean; amountDelta: number; dayDelta: number },
+): boolean => {
+  if (a.exact !== b.exact) return a.exact;
+  if (a.amountDelta !== b.amountDelta) return a.amountDelta < b.amountDelta;
+  return a.dayDelta < b.dayDelta;
+};
 
 export const TRANSFER_DESCRIPTION_PATTERN =
   /(transfer|xfer|zelle (to|from)|payment to (chase|amex|.*card)|online payment|autopay|ach pmt)/i;
@@ -113,6 +161,25 @@ export const splitPendingFingerprint = (
   return { prefix: fingerprint.slice(0, cut), day };
 };
 
+/**
+ * Full decomposition of a fingerprint: the account, the SIGNED pending
+ * amount and the day. Built on splitPendingFingerprint (right-to-left, so
+ * a "|" inside an account id survives). Null for anything malformed.
+ */
+export const parsePendingFingerprint = (
+  fingerprint: string,
+): { account: string; amount: number; day: string } | null => {
+  const parts = splitPendingFingerprint(fingerprint);
+  if (!parts) return null;
+  const cut = parts.prefix.lastIndexOf("|");
+  if (cut <= 0) return null;
+  const amountText = parts.prefix.slice(cut + 1);
+  if (!/^-?\d+\.\d{2}$/.test(amountText)) return null;
+  const amount = Number(amountText);
+  if (!Number.isFinite(amount)) return null;
+  return { account: parts.prefix.slice(0, cut), amount, day: parts.day };
+};
+
 const daysBetween = (aIso: string, bIso: string): number =>
   Math.abs(Date.parse(aIso) - Date.parse(bIso)) / (24 * 3600_000);
 
@@ -151,51 +218,116 @@ export interface IngestPlan {
   /** Transactions auto-skipped by an "ignore" merchant rule - recorded as
    *  dismissed so they stay gone even if the rule is later deleted. */
   autoDismissed: Record<string, IngestLedgerEntry>;
+  /** Entries approved while pending whose twin settled for another amount. */
+  amountCorrections: EntryAmountCorrection[];
+}
+
+export interface DecidedTwin {
+  /** Ledger key of the decision made while the transaction was pending. */
+  key: string;
+  /** SIGNED amount the transaction had while pending (from the fingerprint). */
+  pendingAmount: number;
+  /** False when the match relied on the amount tolerance. */
+  exact: boolean;
 }
 
 /**
- * Day-tolerant lookup of ledger decisions made while a transaction was
- * pending (they carry a pendingFingerprint), so a posted twin that the
- * provider reissued under a new id can be recognized. A decision can be the
- * twin of exactly ONE posted transaction: once a posted id has aliased to it
- * (this batch or an earlier one - aliases are persisted in the ledger), it
- * must not absorb a second same-amount purchase from the same account
- * within the window, which would otherwise sit in the inbox as "pending"
- * forever. Shared by planIngest and planInboxReconciliation.
+ * An entry approved from a PENDING row whose posted twin settled for a
+ * different amount (tip added, hold replaced by the real charge). The
+ * caller rewrites the entry only while it still carries `fromAmount` - an
+ * amount the user has edited since is theirs.
+ */
+export interface EntryAmountCorrection {
+  budgetEntryId: string;
+  /** Positive dollars the entry was created with (the pending amount). */
+  fromAmount: number;
+  /** Positive dollars the transaction settled for. */
+  toAmount: number;
+}
+
+const correctionFor = (
+  decision: IngestLedgerEntry,
+  twin: DecidedTwin,
+  postedAmount: number,
+): EntryAmountCorrection | null => {
+  if (twin.exact || decision.status !== "approved" || !decision.budgetEntryId) {
+    return null;
+  }
+  const fromAmount = Math.abs(twin.pendingAmount);
+  const toAmount = Math.abs(postedAmount);
+  if (fromAmount === toAmount) return null;
+  return { budgetEntryId: decision.budgetEntryId, fromAmount, toAmount };
+};
+
+/**
+ * Day- and amount-tolerant lookup of ledger decisions made while a
+ * transaction was pending (they carry a pendingFingerprint), so a posted
+ * twin that the provider reissued under a new id can be recognized. A
+ * decision can be the twin of exactly ONE posted transaction: once a
+ * posted id has aliased to it (this batch or an earlier one - aliases are
+ * persisted in the ledger), it must not absorb a second same-amount
+ * purchase from the same account within the window, which would otherwise
+ * sit in the inbox as "pending" forever. Candidates are ranked exact
+ * amount first, then closest amount, then closest day; `reserved` keys are
+ * off limits to tolerance matches (planIngest reserves every decision some
+ * posted tx in the batch matches to the cent). Shared by planIngest and
+ * planInboxReconciliation.
  */
 export const buildDecidedTwinFinder = (
   ledger: IngestLedger,
 ): {
-  find: (fingerprint: string) => string | null;
+  find: (
+    fingerprint: string,
+    reserved?: ReadonlySet<string>,
+  ) => DecidedTwin | null;
   claim: (decidedKey: string) => void;
 } => {
-  const decidedByPrefix = new Map<string, { day: string; key: string }[]>();
+  const decidedByAccount = new Map<
+    string,
+    { day: string; amount: number; key: string }[]
+  >();
   const claimed = new Set<string>();
   for (const key of Object.keys(ledger)) {
     const entry = ledger[key];
     if (entry.aliasOf) claimed.add(entry.aliasOf);
     if (!entry.pendingFingerprint) continue;
-    const parts = splitPendingFingerprint(entry.pendingFingerprint);
+    const parts = parsePendingFingerprint(entry.pendingFingerprint);
     if (!parts) continue;
-    const list = decidedByPrefix.get(parts.prefix) ?? [];
-    list.push({ day: parts.day, key });
-    decidedByPrefix.set(parts.prefix, list);
+    const list = decidedByAccount.get(parts.account) ?? [];
+    list.push({ day: parts.day, amount: parts.amount, key });
+    decidedByAccount.set(parts.account, list);
   }
   return {
-    find: (fingerprint) => {
-      const parts = splitPendingFingerprint(fingerprint);
+    find: (fingerprint, reserved) => {
+      const parts = parsePendingFingerprint(fingerprint);
       if (!parts) return null;
-      const candidates = decidedByPrefix.get(parts.prefix) ?? [];
-      let best: { key: string; distance: number } | null = null;
+      const candidates = decidedByAccount.get(parts.account) ?? [];
+      let best:
+        | (DecidedTwin & { amountDelta: number; dayDelta: number })
+        | null = null;
       for (const candidate of candidates) {
         if (claimed.has(candidate.key)) continue;
-        const distance = daysBetween(candidate.day, parts.day);
-        if (!(distance <= PENDING_MATCH_WINDOW_DAYS)) continue;
-        if (!best || distance < best.distance) {
-          best = { key: candidate.key, distance };
+        const dayDelta = daysBetween(candidate.day, parts.day);
+        if (!(dayDelta <= PENDING_MATCH_WINDOW_DAYS)) continue;
+        const exact = candidate.amount === parts.amount;
+        if (!exact) {
+          if (!pendingAmountsCompatible(candidate.amount, parts.amount)) continue;
+          if (reserved?.has(candidate.key)) continue;
+        }
+        const amountDelta = Math.abs(candidate.amount - parts.amount);
+        if (!best || isCloserTwin({ exact, amountDelta, dayDelta }, best)) {
+          best = {
+            key: candidate.key,
+            pendingAmount: candidate.amount,
+            exact,
+            amountDelta,
+            dayDelta,
+          };
         }
       }
-      return best?.key ?? null;
+      return best
+        ? { key: best.key, pendingAmount: best.pendingAmount, exact: best.exact }
+        : null;
     },
     claim: (decidedKey) => {
       claimed.add(decidedKey);
@@ -217,6 +349,8 @@ export interface ReconcilePlan {
   removeIds: string[];
   /** Ledger entries recording WHY each row went, so re-fetches stay quiet. */
   ledgerWrites: Record<string, IngestLedgerEntry>;
+  /** Entries approved while pending whose twin settled for another amount. */
+  amountCorrections: EntryAmountCorrection[];
 }
 
 /**
@@ -236,7 +370,11 @@ export interface ReconcilePlan {
  * Pure: no storage, injectable clock.
  */
 export const planInboxReconciliation = (input: ReconcileInputs): ReconcilePlan => {
-  const plan: ReconcilePlan = { removeIds: [], ledgerWrites: {} };
+  const plan: ReconcilePlan = {
+    removeIds: [],
+    ledgerWrites: {},
+    amountCorrections: [],
+  };
   const decidedTwins = buildDecidedTwinFinder(input.ledger);
 
   for (const item of input.inbox) {
@@ -260,18 +398,21 @@ export const planInboxReconciliation = (input: ReconcileInputs): ReconcilePlan =
     }
 
     if (!item.pending) {
-      const decidedKey = decidedTwins.find(
+      const twin = decidedTwins.find(
         pendingFingerprintFor(item.externalAccountId, item.amount, item.postedAt),
       );
-      if (decidedKey) {
-        decidedTwins.claim(decidedKey);
+      if (twin) {
+        decidedTwins.claim(twin.key);
+        const decision = input.ledger[twin.key];
         plan.removeIds.push(item.id);
         plan.ledgerWrites[item.id] = {
-          status: input.ledger[decidedKey].status,
-          budgetEntryId: input.ledger[decidedKey].budgetEntryId,
+          status: decision.status,
+          budgetEntryId: decision.budgetEntryId,
           at: input.now,
-          aliasOf: decidedKey,
+          aliasOf: twin.key,
         };
+        const correction = correctionFor(decision, twin, item.amount);
+        if (correction) plan.amountCorrections.push(correction);
       }
     }
   }
@@ -310,6 +451,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     updatedInboxItems: [],
     ledgerAliases: {},
     autoDismissed: {},
+    amountCorrections: [],
   };
 
   const importableAccounts = new Set(
@@ -332,7 +474,6 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     pendingInboxByAccount.set(item.externalAccountId, list);
   }
   const decidedTwins = buildDecidedTwinFinder(input.ledger);
-  const findDecidedTwinKey = decidedTwins.find;
 
   /**
    * Rule-derived suggestions for a merchant key. Shared by the new-item
@@ -420,13 +561,59 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
   const claimedTwinIds = new Set<string>();
   const findPendingInboxTwin = (
     tx: NormalizedTransaction,
-  ): PendingTransaction | undefined =>
-    (pendingInboxByAccount.get(tx.externalAccountId) ?? []).find(
-      (item) =>
-        item.amount === tx.amount &&
-        daysBetween(item.postedAt, tx.postedAt) <= PENDING_MATCH_WINDOW_DAYS &&
-        !claimedTwinIds.has(item.id),
+    reserved?: ReadonlySet<string>,
+  ): { item: PendingTransaction; exact: boolean } | undefined => {
+    let best:
+      | {
+          item: PendingTransaction;
+          exact: boolean;
+          amountDelta: number;
+          dayDelta: number;
+        }
+      | undefined;
+    for (const item of pendingInboxByAccount.get(tx.externalAccountId) ?? []) {
+      if (claimedTwinIds.has(item.id)) continue;
+      const dayDelta = daysBetween(item.postedAt, tx.postedAt);
+      if (!(dayDelta <= PENDING_MATCH_WINDOW_DAYS)) continue;
+      const exact = item.amount === tx.amount;
+      if (!exact) {
+        if (!pendingAmountsCompatible(item.amount, tx.amount)) continue;
+        if (reserved?.has(item.id)) continue;
+      }
+      const candidate = {
+        item,
+        exact,
+        amountDelta: Math.abs(item.amount - tx.amount),
+        dayDelta,
+      };
+      if (!best || isCloserTwin(candidate, best)) best = candidate;
+    }
+    return best ? { item: best.item, exact: best.exact } : undefined;
+  };
+
+  // Exact-amount twins are spoken for before the batch is walked: a posted
+  // tx whose settled amount only tolerance-matches some pending row must
+  // not take a row that another posted tx in this batch matches to the
+  // cent (batch order is the provider's, not ours).
+  const exactReserved = new Set<string>();
+  for (const tx of input.fetched) {
+    if (tx.pending || tx.amount === 0) continue;
+    if (!importableAccounts.has(tx.externalAccountId)) continue;
+    const key = identityKeyFor(input.provider, tx.externalAccountId, tx.providerTxId);
+    if (
+      input.ledger[key] ||
+      input.knownEntryExternalIds.has(key) ||
+      inboxById.has(key)
+    ) {
+      continue;
+    }
+    const inboxTwin = findPendingInboxTwin(tx);
+    if (inboxTwin?.exact) exactReserved.add(inboxTwin.item.id);
+    const decided = decidedTwins.find(
+      pendingFingerprintFor(tx.externalAccountId, tx.amount, tx.postedAt),
     );
+    if (decided?.exact) exactReserved.add(decided.key);
+  }
 
   for (const tx of input.fetched) {
     if (!importableAccounts.has(tx.externalAccountId)) continue;
@@ -444,7 +631,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       // Alias the twin's id to the decision; the sync service retires
       // inbox rows whose id gains an alias.
       if (!tx.pending) {
-        const twin = findPendingInboxTwin(tx);
+        const twin = findPendingInboxTwin(tx, exactReserved)?.item;
         if (twin && !input.ledger[twin.id]) {
           claimedTwinIds.add(twin.id);
           plan.ledgerAliases[twin.id] = {
@@ -494,32 +681,43 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       continue;
     }
 
-    // Unknown id on a POSTED transaction: look for its pending twin.
+    // Unknown id on a POSTED transaction: look for its pending twin - one
+    // already decided (ledger fingerprint) or one still in the inbox. An
+    // exact-amount twin wins wherever it lives; a tolerance match (tip,
+    // hold, conversion) is used only when no exact one exists.
     if (!tx.pending) {
       const fingerprint = pendingFingerprintFor(
         tx.externalAccountId,
         tx.amount,
         tx.postedAt,
       );
+      const decided = decidedTwins.find(fingerprint, exactReserved);
+      const inboxTwin = findPendingInboxTwin(tx, exactReserved);
 
       // Twin already decided while pending -> alias the new id to that
       // decision. Day-tolerant: the decision was stamped with the pending
-      // (transacted) date and this tx carries the settlement date.
-      const decidedKey = findDecidedTwinKey(fingerprint);
-      if (decidedKey) {
-        decidedTwins.claim(decidedKey);
+      // (transacted) date and this tx carries the settlement date. When the
+      // settled amount differs, the entry approved from the pending row is
+      // corrected to it (applied by the caller, only while the user hasn't
+      // edited the amount since).
+      if (decided && (decided.exact || !inboxTwin?.exact)) {
+        decidedTwins.claim(decided.key);
+        const decision = input.ledger[decided.key];
         plan.ledgerAliases[key] = {
-          status: input.ledger[decidedKey].status,
-          budgetEntryId: input.ledger[decidedKey].budgetEntryId,
+          status: decision.status,
+          budgetEntryId: decision.budgetEntryId,
           at: input.now,
-          aliasOf: decidedKey,
+          aliasOf: decided.key,
         };
+        const correction = correctionFor(decision, decided, tx.amount);
+        if (correction) plan.amountCorrections.push(correction);
         continue;
       }
 
-      // Twin still sitting in the inbox -> migrate it to the new id.
-      const twin = findPendingInboxTwin(tx);
-      if (twin) {
+      // Twin still sitting in the inbox -> migrate it to the new id, with
+      // the settled amount.
+      if (inboxTwin) {
+        const twin = inboxTwin.item;
         claimedTwinIds.add(twin.id);
         // If the pending id was ALSO listed in this batch and drifted, that
         // update targets the old id - fold it into the migration instead of
@@ -543,9 +741,11 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
           providerTxId: tx.providerTxId,
           pending: false,
           postedAt: tx.postedAt,
+          amount: tx.amount,
           description,
           merchant,
           ...suggestions,
+          missingSince: undefined,
           updatedAt: input.now,
         });
         // Remember the old id as dismissed-by-alias so a stale re-fetch of
@@ -600,5 +800,105 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     });
   }
 
+  return plan;
+};
+
+/* ─── Stale pending rows ─── */
+
+/**
+ * Days a pending row may go unreported before it is retired. Bridges
+ * occasionally omit a pending transaction for a pass and list it again.
+ */
+export const STALE_PENDING_GRACE_DAYS = 3;
+/** No authorization outlives this; a pending row this old is a leftover. */
+export const MAX_PENDING_AGE_DAYS = 30;
+
+export interface StalePendingInputs {
+  provider: IngestProvider;
+  connectionId: string;
+  /** The inbox AFTER this pass's ingest plan has been applied. */
+  inbox: PendingTransaction[];
+  fetched: NormalizedTransaction[];
+  /** Accounts the provider actually answered for in this pass. */
+  fetchedAccountIds: ReadonlySet<string>;
+  /** Start of this pass's fetch window; older rows can't be judged. */
+  windowStartMs: number;
+  now: string;
+}
+
+export interface StalePendingPlan {
+  /** Rows whose missing-since bookkeeping changed (set or cleared). */
+  updatedInboxItems: PendingTransaction[];
+  /** Pending rows the bank stopped reporting: retire them. */
+  retireIds: string[];
+  /** Dismissals for the retired rows (NO fingerprint - see below). */
+  ledgerWrites: Record<string, IngestLedgerEntry>;
+}
+
+/**
+ * Retire pending inbox rows the bank no longer reports. planIngest only
+ * ever sees transactions the provider returns, so a pending charge that
+ * vanished - a dropped hold, a declined authorization, or a posted twin
+ * that settled outside the tolerance and became its own row - used to sit
+ * in the inbox forever, and approving both was the classic double count.
+ *
+ * A row is judged only when its account answered this pass and its date
+ * sits inside the fetch window (the provider was asked for it); the first
+ * unreported pass stamps `missingSince`, being seen again clears it, and
+ * STALE_PENDING_GRACE_DAYS of absence retires it. Rows older than
+ * MAX_PENDING_AGE_DAYS retire regardless. Retired rows are ledgered as
+ * dismissed WITHOUT a fingerprint on purpose: if the real charge posts
+ * later under a new id, it must surface as a fresh row for review, not be
+ * swallowed by an alias to this dismissal. Pure, injectable clock.
+ */
+export const planStalePending = (input: StalePendingInputs): StalePendingPlan => {
+  const plan: StalePendingPlan = {
+    updatedInboxItems: [],
+    retireIds: [],
+    ledgerWrites: {},
+  };
+  const nowMs = Date.parse(input.now);
+  if (!Number.isFinite(nowMs)) return plan;
+  const seen = new Set(
+    input.fetched.map((tx) =>
+      identityKeyFor(input.provider, tx.externalAccountId, tx.providerTxId),
+    ),
+  );
+  const DAY_MS = 24 * 3600_000;
+
+  for (const row of input.inbox) {
+    if (row.connectionId !== input.connectionId || !row.pending) continue;
+    if (!input.fetchedAccountIds.has(row.externalAccountId)) continue;
+
+    if (seen.has(row.id)) {
+      if (row.missingSince) {
+        plan.updatedInboxItems.push({ ...row, missingSince: undefined });
+      }
+      continue;
+    }
+
+    const postedMs = Date.parse(row.postedAt);
+    const ageDays = Number.isFinite(postedMs)
+      ? (nowMs - postedMs) / DAY_MS
+      : Number.POSITIVE_INFINITY;
+    const missingMs = row.missingSince ? Date.parse(row.missingSince) : NaN;
+    const missingDays = Number.isFinite(missingMs)
+      ? (nowMs - missingMs) / DAY_MS
+      : 0;
+
+    if (
+      ageDays > MAX_PENDING_AGE_DAYS ||
+      (row.missingSince && missingDays >= STALE_PENDING_GRACE_DAYS)
+    ) {
+      plan.retireIds.push(row.id);
+      plan.ledgerWrites[row.id] = { status: "dismissed", at: input.now };
+      continue;
+    }
+    // Older than the window: the provider wasn't asked, so no verdict.
+    if (Number.isFinite(postedMs) && postedMs < input.windowStartMs) continue;
+    if (!row.missingSince) {
+      plan.updatedInboxItems.push({ ...row, missingSince: input.now });
+    }
+  }
   return plan;
 };

@@ -11,6 +11,7 @@
 
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, Modal } from "react-native";
+import { useTranslation } from "react-i18next";
 import PairingModal from "../../components/PairingModal";
 import type { PairingState, SyncStatus } from "../../sync/types";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -45,6 +46,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
   onToggleAutoSync,
   onUnpair,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
@@ -78,7 +80,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          PARTNER SYNC
+          {t("profile.connections.partnerSync.sectionTitle")}
         </Text>
 
         {!pairing ? (
@@ -97,7 +99,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
             >
               <View>
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  Pair with Partner
+                  {t("profile.connections.partnerSync.pair")}
                 </Text>
                 <Text
                   style={[
@@ -105,7 +107,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                     { color: colors.textDim },
                   ]}
                 >
-                  Sync budgets over WiFi - no account needed
+                  {t("profile.connections.partnerSync.pairSubtext")}
                 </Text>
               </View>
               <Text
@@ -140,15 +142,23 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                   ]}
                 >
                   {pairing.homeSSID
-                    ? `Auto-sync ${pairing.autoSyncEnabled ? "on" : "off"} · "${pairing.homeSSID}"`
-                    : "Tap to set home WiFi for auto-sync"}
+                    ? t("profile.connections.partnerSync.autoSyncStatus", {
+                        state: pairing.autoSyncEnabled
+                          ? t("common.on").toLowerCase()
+                          : t("common.off").toLowerCase(),
+                        ssid: pairing.homeSSID,
+                      })
+                    : t("profile.connections.partnerSync.setHomeWifi")}
                   {pairing.homeSSID ? (
                     <Text
                       style={{ color: colors.textMuted }}
                       onPress={onToggleAutoSync}
                     >
                       {" "}
-                      · {pairing.autoSyncEnabled ? "Disable" : "Enable"}
+                      ·{" "}
+                      {pairing.autoSyncEnabled
+                        ? t("profile.connections.partnerSync.disable")
+                        : t("profile.connections.partnerSync.enable")}
                     </Text>
                   ) : null}
                 </Text>
@@ -180,7 +190,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                 <Text
                   style={[styles.settingsRowText, { color: colors.accent }]}
                 >
-                  Sync Now
+                  {t("profile.connections.partnerSync.syncNow")}
                 </Text>
                 <Text
                   style={[
@@ -189,14 +199,16 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                   ]}
                 >
                   {syncStatus === "discovering"
-                    ? "Looking for partner..."
+                    ? t("profile.connections.partnerSync.discovering")
                     : syncStatus === "connecting"
-                      ? "Connecting..."
+                      ? t("profile.connections.partnerSync.connecting")
                       : syncStatus === "syncing"
-                        ? "Syncing data..."
+                        ? t("profile.connections.partnerSync.syncing")
                         : lastSyncTime
-                          ? `Last synced ${formatDateTime(lastSyncTime)}`
-                          : "Never synced"}
+                          ? t("profile.connections.partnerSync.lastSynced", {
+                              when: formatDateTime(lastSyncTime),
+                            })
+                          : t("profile.connections.partnerSync.neverSynced")}
                 </Text>
               </View>
               <Text style={[styles.settingsRowArrow, { color: colors.accent }]}>
@@ -215,16 +227,23 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
               <View style={styles.groupedRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                    Recent activity
+                    {t("profile.connections.partnerSync.recentActivity")}
                   </Text>
                   {visibleActivity.map((record) => (
                     <Text
                       key={record.at}
                       style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                     >
-                      {formatDateTime(record.at)} · {describeSyncActivity(record.received)}{" "}
-                      from {record.partnerName}
-                      {record.sent > 0 ? ` · sent ${record.sent}` : ""}
+                      {t("profile.connections.partnerSync.activityRow", {
+                        when: formatDateTime(record.at),
+                        received: describeSyncActivity(record.received),
+                        partner: record.partnerName,
+                      })}
+                      {record.sent > 0
+                        ? t("profile.connections.partnerSync.activitySent", {
+                            count: record.sent,
+                          })
+                        : ""}
                     </Text>
                   ))}
                 </View>
@@ -245,7 +264,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
               onPress={() => setShowUnpairConfirm(true)}
             >
               <Text style={[styles.settingsRowText, { color: colors.danger }]}>
-                Unpair
+                {t("profile.connections.partnerSync.unpair")}
               </Text>
               <Text style={[styles.settingsRowArrow, { color: colors.danger }]}>
                 →
@@ -282,11 +301,10 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
             ]}
           >
             <Text style={[styles.dialogTitle, { color: colors.text }]}>
-              Unpair Device
+              {t("profile.connections.partnerSync.unpairConfirm.title")}
             </Text>
             <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-              This will disconnect partner sync. Your data stays on this device,
-              but you'll need to pair again to sync.
+              {t("profile.connections.partnerSync.unpairConfirm.message")}
             </Text>
             <View style={styles.dialogActions}>
               <TouchableOpacity
@@ -294,7 +312,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                 onPress={() => setShowUnpairConfirm(false)}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.text }]}>
-                  Cancel
+                  {t("common.cancel")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -311,7 +329,7 @@ const PartnerSyncSection: React.FC<PartnerSyncSectionProps> = ({
                 }}
               >
                 <Text style={[styles.dialogBtnText, { color: colors.white }]}>
-                  Unpair
+                  {t("profile.connections.partnerSync.unpair")}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -29,6 +29,7 @@ import React from "react";
 import { Text, StyleSheet } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { TAB_BAR_BASE_HEIGHT } from "./tabBarLayout";
 import { RootTabParamList } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
@@ -60,20 +61,12 @@ const TAB_ICONS: Record<keyof RootTabParamList, string> = {
   Profile: "👤",
 };
 
-/**
- * Tab display labels.
- * Shortened versions of screen names for the tab bar.
- */
-const TAB_LABELS: Record<keyof RootTabParamList, string> = {
-  DebtTracker: "Debts",
-  Budget: "Budget",
-  Bridge: "Bridge",
-  Utilities: "Charts",
-  Profile: "Profile",
-};
-
 const AppNavigator: React.FC = () => {
   const { colors, themeId, showAmbientBackground } = useTheme();
+  // Tab display labels live in the locale tree under nav.tabs.<routeName>
+  // (English: Debts / Budget / Bridge / Charts / Profile) - the route keys
+  // themselves never change.
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   const ambientBackground =
@@ -107,7 +100,7 @@ const AppNavigator: React.FC = () => {
         /** Tab bar label */
         tabBarLabel: ({ focused }) => (
           <Text style={[styles.label, focused ? styles.labelActive : styles.labelInactive]}>
-            {TAB_LABELS[route.name as keyof RootTabParamList]}
+            {t(`nav.tabs.${route.name as keyof RootTabParamList}`)}
           </Text>
         ),
 

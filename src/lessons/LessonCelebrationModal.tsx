@@ -24,6 +24,7 @@ import {
   View,
   useAnimatedValue,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { Chapter, LessonStub } from "../types";
@@ -72,6 +73,7 @@ const LessonCelebrationModal: React.FC<LessonCelebrationModalProps> = ({
   onClose,
   onNext,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // useAnimatedValue instead of useRef(new Animated.Value()).current so no
@@ -118,27 +120,38 @@ const LessonCelebrationModal: React.FC<LessonCelebrationModalProps> = ({
     outputRange: [1, 1.08],
   });
 
-  const kicker = isCourseComplete
-    ? "CAPTAIN'S COURSE COMPLETE"
+  const kicker: string = isCourseComplete
+    ? t("charts.lessons.celebration.kicker.course")
     : isChapterComplete
-      ? `CHAPTER ${chapter.number} COMPLETE`
+      ? t("charts.lessons.celebration.kicker.chapter", { number: chapter.number })
       : isFirstEver
-        ? "FIRST LESSON COMPLETE"
-        : "LESSON COMPLETE";
+        ? t("charts.lessons.celebration.kicker.first")
+        : t("charts.lessons.celebration.kicker.lesson");
 
-  const title = isCourseComplete
-    ? "You've finished every lesson aboard."
+  const title: string = isCourseComplete
+    ? t("charts.lessons.celebration.title.course")
     : isChapterComplete
-      ? `${chapter.title}: chapter cleared`
+      ? t("charts.lessons.celebration.title.chapter", { chapter: chapter.title })
       : stub.title;
 
-  const subtitle = isCourseComplete
-    ? `${totalCompleted} of ${totalAuthored} lessons read. Welcome to the wheelhouse.`
+  const subtitle: string = isCourseComplete
+    ? t("charts.lessons.celebration.subtitle.course", {
+        completed: totalCompleted,
+        total: totalAuthored,
+      })
     : isChapterComplete
-      ? `Ch ${chapter.number} done. ${totalCompleted} of ${totalAuthored} lessons across the course.`
+      ? t("charts.lessons.celebration.subtitle.chapter", {
+          number: chapter.number,
+          completed: totalCompleted,
+          total: totalAuthored,
+        })
       : isFirstEver
-        ? "One down. The course is yours to set the pace on from here."
-        : `Ch ${chapter.number} · ${chapterCompleted} of ${chapterTotal} lessons read`;
+        ? t("charts.lessons.celebration.subtitle.first")
+        : t("charts.lessons.celebration.subtitle.lesson", {
+            number: chapter.number,
+            completed: chapterCompleted,
+            total: chapterTotal,
+          });
 
   const heroGlyph = isCourseComplete ? "🏴‍☠️" : isChapterComplete ? chapter.glyph : "✨";
 
@@ -177,7 +190,10 @@ const LessonCelebrationModal: React.FC<LessonCelebrationModalProps> = ({
             />
           </View>
           <Text style={styles.progressLabel}>
-            {totalCompleted} / {totalAuthored} course lessons read
+            {t("charts.lessons.celebration.progress", {
+              completed: totalCompleted,
+              total: totalAuthored,
+            })}
           </Text>
 
           <View style={styles.actions}>
@@ -187,7 +203,7 @@ const LessonCelebrationModal: React.FC<LessonCelebrationModalProps> = ({
                 onPress={() => onNext(nextStub)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.primaryButtonText}>Next lesson</Text>
+                <Text style={styles.primaryButtonText}>{t("charts.lessons.celebration.nextLesson")}</Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
@@ -203,7 +219,7 @@ const LessonCelebrationModal: React.FC<LessonCelebrationModalProps> = ({
                   nextStub ? styles.secondaryButtonText : styles.primaryButtonText
                 }
               >
-                {nextStub ? "Done" : "Close"}
+                {nextStub ? t("common.done") : t("common.close")}
               </Text>
             </TouchableOpacity>
           </View>

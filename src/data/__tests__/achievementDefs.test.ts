@@ -46,6 +46,18 @@ describe("registry integrity", () => {
     expect(TOTAL_ACHIEVEMENTS).toBe(ACHIEVEMENT_DEFS.length);
   });
 
+  it("has English copy for every def (title, description, hint)", () => {
+    // Copy resolves through getters; a def without keys would render the
+    // key path instead of a sentence.
+    for (const def of ACHIEVEMENT_DEFS) {
+      expect(def.title).not.toMatch(/^data\.achievements/);
+      expect(def.description).not.toMatch(/^data\.achievements/);
+      expect(def.hint).not.toMatch(/^data\.achievements/);
+      expect(def.title.length).toBeGreaterThan(0);
+    }
+    expect(ACHIEVEMENT_DEFS_BY_ID.first_steps.title).toBe("First Steps");
+  });
+
   it("gives every def a check function", () => {
     for (const d of ACHIEVEMENT_DEFS) {
       expect(typeof d.check).toBe("function");

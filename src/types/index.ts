@@ -914,6 +914,13 @@ export interface PendingTransaction {
   duplicateLikely?: boolean;
   /** Heuristic: likely an inter-account transfer. Flag only - never dropped. */
   transferLikely?: boolean;
+  /**
+   * First sync pass on which the provider stopped listing this PENDING
+   * row (cleared if it reappears). After STALE_PENDING_GRACE_DAYS of
+   * absence the row is retired - see ingest.planStalePending. Per-device
+   * bookkeeping; the inbox never syncs.
+   */
+  missingSince?: string;
   fetchedAt: string;
   updatedAt: string;
 }

@@ -136,7 +136,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | `quickAddLink.test.ts` | `quickAddLink.ts` | Widget deep-link builder + fail-closed parser (category names only) |
 | `appLock.test.ts` | `appLock.ts` | PIN validation, record parsing, escalating lockout, clock-tamper clamp |
 | `versionGuard.test.ts` / `updateReleaseNotes.test.ts` | `versionGuard.ts` / `updateReleaseNotes.ts` | OTA downgrade guard; release-note message parsing |
-| `searchFilter.test.ts` / `guideSearch.test.ts` | `searchFilter.ts` / `guideSearch.ts` | Global search + advanced filters; guide search |
+| `searchFilter.test.ts` / `guideSearch.test.ts` / `featureGuideSearch.test.ts` | `searchFilter.ts` / `guideSearch.ts` / `featureGuideSearch.ts` | Global search + advanced filters; onboarding guide search; feature guide search |
 | `recordTimestamps.test.ts` | `recordTimestamps.ts` | `ensureUpdatedAt` normalizer, NaN-safe timestamp compare |
 | `errorMessage.test.ts` / `haptics.test.ts` / `iosNativeShare.test.ts` / `uuid.test.ts` | matching modules | Error text, haptic wrapper, native share + screen-guard, UUID delegation |
 

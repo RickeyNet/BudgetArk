@@ -38,19 +38,14 @@ export const PAY_FREQUENCIES: readonly PayFrequency[] = [
   "monthly",
 ];
 
-export const PAY_FREQUENCY_LABELS: Record<PayFrequency, string> = {
-  weekly: "Weekly",
-  biweekly: "Every 2 weeks",
-  semimonthly: "Twice a month",
-  monthly: "Monthly",
-};
-
 /** Day-of-month value meaning "the last day of the month". */
 export const LAST_DAY = 31;
 
+// Ids + days only: the card translates each preset by id
+// (`budget.cards.paycheck.semimonthly.<id>`).
 export const SEMIMONTHLY_PRESETS = [
-  { id: "1-15", label: "1st & 15th", days: [1, 15] },
-  { id: "15-last", label: "15th & last day", days: [15, LAST_DAY] },
+  { id: "1-15", days: [1, 15] },
+  { id: "15-last", days: [15, LAST_DAY] },
 ] as const;
 
 export type PaycheckCycleSettings = {

@@ -28,6 +28,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { describeError } from "../utils/errorMessage";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -37,7 +39,6 @@ import {
   type AutoBackupCadence,
   type AutoBackupFileInfo,
   type AutoBackupSettings,
-  cadenceLabel,
   formatBackupSize,
 } from "../services/autoBackup/autoBackupPlan";
 import {
@@ -58,26 +59,39 @@ type AutoBackupModalProps = {
   showInfo: (info: { title: string; message: string }) => void;
 };
 
-const summarizeRestore = (result: ImportResult): string => {
-  const parts = [
-    `${result.debts} debts`,
-    `${result.payments} payments`,
-    `${result.budgetEntries} budget entries`,
-    `${result.budgetLimits} budget limits`,
+const summarizeRestore = (t: TFunction, result: ImportResult): string => {
+  const parts: string[] = [
+    t("profile.data.import.counts.debts", { count: result.debts }),
+    t("profile.data.import.counts.payments", { count: result.payments }),
+    t("profile.data.import.counts.budgetEntries", { count: result.budgetEntries }),
+    t("profile.data.import.counts.budgetLimits", { count: result.budgetLimits }),
   ];
-  if (result.savingsGoals > 0) parts.push(`${result.savingsGoals} savings goals`);
-  if (result.assetAccounts > 0) parts.push(`${result.assetAccounts} asset accounts`);
-  if (result.holdings > 0) parts.push(`${result.holdings} holdings`);
-  if (result.customCategories > 0) parts.push(`${result.customCategories} custom categories`);
-  if (result.businesses > 0) parts.push(`${result.businesses} businesses`);
-  if (result.people > 0) parts.push(`${result.people} people`);
-  return `Restored ${parts.join(", ")}.`;
+  if (result.savingsGoals > 0) {
+    parts.push(t("profile.data.import.counts.savingsGoals", { count: result.savingsGoals }));
+  }
+  if (result.assetAccounts > 0) {
+    parts.push(t("profile.data.import.counts.assetAccounts", { count: result.assetAccounts }));
+  }
+  if (result.holdings > 0) {
+    parts.push(t("profile.data.import.counts.holdings", { count: result.holdings }));
+  }
+  if (result.customCategories > 0) {
+    parts.push(t("profile.data.import.counts.customCategories", { count: result.customCategories }));
+  }
+  if (result.businesses > 0) {
+    parts.push(t("profile.data.import.counts.businesses", { count: result.businesses }));
+  }
+  if (result.people > 0) {
+    parts.push(t("profile.data.import.counts.people", { count: result.people }));
+  }
+  return t("modals.guard.backup.restored.summary", { parts: parts.join(", ") });
 };
 
 const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
   onClose,
   showInfo,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
@@ -115,13 +129,13 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
       .catch((error: unknown) => {
         if (cancelled) return;
         setInlineError(
-          describeError(error, "Couldn't load backup settings. Close and reopen to try again."),
+          describeError(error, t("modals.guard.backup.errors.loadSettings")),
         );
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const persist = useCallback(
     async (next: AutoBackupSettings) => {
@@ -136,10 +150,10 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
           await refresh();
         }
       } catch {
-        setInlineError("Couldn't save the setting. Please try again.");
+        setInlineError(t("modals.guard.backup.errors.saveSetting"));
       }
     },
-    [refresh]
+    [refresh, t]
   );
 
   const handleToggle = useCallback(() => {
@@ -166,16 +180,14 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
       await createAutoBackupNow();
       await refresh();
       triggerHaptic("success");
-      setInlineNote("Backed up just now.");
+      setInlineNote(t("modals.guard.backup.backedUpNow"));
     } catch {
       triggerHaptic("error");
-      setInlineError(
-        "Couldn't write the backup. If this keeps happening, your phone's secure storage may be unavailable."
-      );
+      setInlineError(t("modals.guard.backup.errors.write"));
     } finally {
       setBusy(false);
     }
-  }, [busy, refresh]);
+  }, [busy, refresh, t]);
 
   const handleRestore = useCallback(
     async (name: string, mode: "merge" | "replace") => {
@@ -185,9 +197,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
       try {
         const json = await readAutoBackupJson(name);
         if (json === null) {
-          throw new Error(
-            "This backup could not be read. It may be damaged, or it was made before the app's encryption key changed."
-          );
+          throw new Error(t("modals.guard.backup.errors.unreadable"));
         }
         const result = await importFromString(json, mode);
         void refreshCustomCategories();
@@ -195,8 +205,8 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
         onClose();
         await waitForIosModalTeardown(350);
         showInfo({
-          title: "Backup Restored",
-          message: summarizeRestore(result),
+          title: t("modals.guard.backup.restored.title"),
+          message: summarizeRestore(t, result),
         });
         // Deferred like DataSection's export flow: the unlock celebration
         // is a Modal and must not present mid-teardown.
@@ -208,7 +218,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
         setInlineError(
           error instanceof Error && error.message
             ? error.message
-            : "Something went wrong while restoring."
+            : t("modals.guard.backup.errors.restoreFailed")
         );
         setBusy(false);
         setRestoreTarget(null);
@@ -216,7 +226,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
       }
       setBusy(false);
     },
-    [busy, onClose, refreshAchievements, refreshCustomCategories, showInfo]
+    [busy, onClose, refreshAchievements, refreshCustomCategories, showInfo, t]
   );
 
   return (
@@ -233,16 +243,16 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
       >
         <View style={styles.headerRow}>
           <Text style={[styles.title, { color: colors.text }]}>
-            Automatic Backups
+            {t("modals.guard.backup.title")}
           </Text>
           <TouchableOpacity
             onPress={onClose}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel="Close automatic backups"
+            accessibilityLabel={t("modals.guard.backup.closeA11y")}
           >
             <Text style={[styles.closeText, { color: colors.textDim }]}>
-              Done
+              {t("common.done")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -252,9 +262,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.intro, { color: colors.textDim }]}>
-            BudgetArk can quietly save an encrypted copy of your data inside
-            its own storage on this phone, so a bad import or an accidental
-            delete is never the end of the story.
+            {t("modals.guard.backup.intro")}
           </Text>
 
           <View
@@ -266,16 +274,18 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
             <TouchableOpacity style={styles.row} onPress={handleToggle}>
               <View style={styles.rowTextWrap}>
                 <Text style={[styles.rowText, { color: colors.text }]}>
-                  Automatic backups
+                  {t("modals.guard.backup.toggleLabel")}
                 </Text>
                 <Text style={[styles.rowSubtext, { color: colors.textDim }]}>
                   {settings?.enabled
-                    ? `${cadenceLabel(settings.cadence)}, keeping the last 3`
-                    : "Off - only manual backups"}
+                    ? t("modals.guard.backup.statusOn", {
+                        cadence: t(`modals.guard.backup.cadence.${settings.cadence}`),
+                      })
+                    : t("modals.guard.backup.statusOff")}
                 </Text>
               </View>
               <Text style={[styles.rowValue, { color: colors.textDim }]}>
-                {settings?.enabled ? "On" : "Off"}
+                {settings?.enabled ? t("common.on") : t("common.off")}
               </Text>
             </TouchableOpacity>
 
@@ -297,7 +307,9 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                       ]}
                       onPress={() => handleCadence(cadence)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Back up ${cadenceLabel(cadence).toLowerCase()}`}
+                      accessibilityLabel={t("modals.guard.backup.cadenceA11y", {
+                        cadence: t(`modals.guard.backup.cadence.${cadence}`).toLowerCase(),
+                      })}
                     >
                       <Text
                         style={[
@@ -305,7 +317,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                           { color: selected ? colors.accentButtonText : colors.text },
                         ]}
                       >
-                        {cadenceLabel(cadence)}
+                        {t(`modals.guard.backup.cadence.${cadence}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -327,7 +339,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
               <ActivityIndicator color={colors.accentButtonText} />
             ) : (
               <Text style={[styles.backupNowText, { color: colors.accentButtonText }]}>
-                Back Up Now
+                {t("modals.guard.backup.backUpNow")}
               </Text>
             )}
           </TouchableOpacity>
@@ -344,15 +356,15 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
           ) : null}
 
           <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
-            BACKUPS ON THIS PHONE
+            {t("modals.guard.backup.sectionTitle")}
           </Text>
 
           {files.length === 0 ? (
             <Text style={[styles.emptyText, { color: colors.textDim }]}>
-              No backups yet.
+              {t("modals.guard.backup.empty.base")}
               {settings?.enabled
-                ? " The first one is written automatically, or tap Back Up Now."
-                : " Turn automatic backups on, or tap Back Up Now."}
+                ? t("modals.guard.backup.empty.enabled")
+                : t("modals.guard.backup.empty.disabled")}
             </Text>
           ) : (
             <View
@@ -384,17 +396,17 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                     >
                       <View style={styles.rowTextWrap}>
                         <Text style={[styles.rowText, { color: colors.text }]}>
-                          {new Date(file.timestampMs).toLocaleString()}
+                          {new Date(file.timestampMs).toLocaleString(i18n.language)}
                         </Text>
                         <Text
                           style={[styles.rowSubtext, { color: colors.textDim }]}
                         >
-                          {index === 0 ? "Most recent" : "Older backup"}
+                          {index === 0 ? t("modals.guard.backup.mostRecent") : t("modals.guard.backup.olderBackup")}
                           {size ? ` · ${size}` : ""}
                         </Text>
                       </View>
                       <Text style={[styles.rowValue, { color: colors.accent }]}>
-                        Restore
+                        {t("modals.guard.backup.restore")}
                       </Text>
                     </TouchableOpacity>
                     {isTarget ? (
@@ -402,9 +414,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                         <Text
                           style={[styles.restoreText, { color: colors.textDim }]}
                         >
-                          Merge adds anything missing and keeps newer edits.
-                          Replace erases what's on the phone now and restores
-                          exactly this backup.
+                          {t("modals.guard.backup.restoreHint")}
                         </Text>
                         <View style={styles.restoreButtons}>
                           <TouchableOpacity
@@ -424,7 +434,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                                   { color: colors.accentButtonText },
                                 ]}
                               >
-                                Merge
+                                {t("modals.guard.backup.merge")}
                               </Text>
                             )}
                           </TouchableOpacity>
@@ -444,7 +454,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                                 { color: colors.danger },
                               ]}
                             >
-                              Replace
+                              {t("modals.guard.backup.replace")}
                             </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -461,7 +471,7 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                                 { color: colors.textDim },
                               ]}
                             >
-                              Cancel
+                              {t("common.cancel")}
                             </Text>
                           </TouchableOpacity>
                         </View>

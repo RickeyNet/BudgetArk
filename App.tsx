@@ -6,6 +6,9 @@ import "react-native-reanimated";
 // Side-effect: clamps the OS font-scale multiplier app-wide. Must run before
 // any <Text>/<TextInput> renders, so keep it among the top imports.
 import "./src/theme/fontScalingPolicy";
+// Side-effect: initializes i18next with the bundled translations (sync, no
+// network). Must run before any screen renders so t() never sees a bare key.
+import "./src/i18n";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import {
@@ -32,6 +35,8 @@ import TrackingReminderHost from "./src/components/TrackingReminderHost";
 import CardKeepAliveReminderHost from "./src/components/CardKeepAliveReminderHost";
 import QuickAddLinkHost from "./src/components/QuickAddLinkHost";
 import SynthwaveGrid from "./src/components/SynthwaveGrid";
+import { LanguageProvider } from "./src/i18n/LanguageProvider";
+import { useTranslation } from "react-i18next";
 import { BackgroundEffectsProvider } from "./src/theme/BackgroundEffectsProvider";
 import { SurfaceStyleProvider } from "./src/theme/SurfaceStyleProvider";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
@@ -105,6 +110,7 @@ type UpdatePrompt = {
  */
 const AppContent: React.FC = () => {
   const { colors, themeId, backgroundEffectsEnabled } = useTheme();
+  const { t } = useTranslation();
   const { startGuidedTour } = useCoachmarks();
   const navigationRef = useMemo(() => createNavigationContainerRef<RootTabParamList>(), []);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
@@ -404,17 +410,13 @@ const AppContent: React.FC = () => {
     void closeSpotlights();
   }, [closeSpotlights]);
 
-  const handleSpotlightCta = useCallback(
-    async (spotlight: FeatureSpotlight) => {
+  /**
+   * Follow a spotlight's CTA: the carousel's "Try it" and the feature
+   * guide's "Try it" share this. Callers dismiss their own Modal first.
+   */
+  const openSpotlightCta = useCallback(
+    (spotlight: FeatureSpotlight) => {
       const cta = spotlight.cta;
-      await closeSpotlights();
-
-      // Same deferral as handleOpenReleaseHistory: let the modal's fade-out
-      // finish before navigating, or iOS can silently drop the presentation.
-      await new Promise((resolve) => {
-        setTimeout(resolve, 220);
-      });
-
       if (!cta || !navigationRef.isReady()) return;
       try {
         if (cta.kind === "budget-add-entry") {
@@ -435,7 +437,22 @@ const AppContent: React.FC = () => {
         if (__DEV__) console.warn("Spotlight navigation failed:", e);
       }
     },
-    [closeSpotlights, navigationRef]
+    [navigationRef]
+  );
+
+  const handleSpotlightCta = useCallback(
+    async (spotlight: FeatureSpotlight) => {
+      await closeSpotlights();
+
+      // Same deferral as handleOpenReleaseHistory: let the modal's fade-out
+      // finish before navigating, or iOS can silently drop the presentation.
+      await new Promise((resolve) => {
+        setTimeout(resolve, 220);
+      });
+
+      openSpotlightCta(spotlight);
+    },
+    [closeSpotlights, openSpotlightCta]
   );
 
   const handleSpotlightOpenNotes = useCallback(async () => {
@@ -454,12 +471,30 @@ const AppContent: React.FC = () => {
     }
   }, [closeSpotlights, navigationRef]);
 
+  /** "Browse every feature" on the last slide: close, then open the guide on Profile. */
+  const handleSpotlightOpenGuide = useCallback(async () => {
+    await closeSpotlights();
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 220);
+    });
+
+    if (navigationRef.isReady()) {
+      try {
+        navigationRef.navigate("Profile", { openSection: "featureGuide" });
+      } catch (e) {
+        if (__DEV__) console.warn("Navigation to Profile failed:", e);
+      }
+    }
+  }, [closeSpotlights, navigationRef]);
+
   /**
-   * Re-open the debut carousel on demand (Profile → Help → Feature tour).
-   * Replays every carousel-worthy spotlight that works on this install,
-   * seen or not; closing re-marks everything seen, a no-op for a replay.
-   * An empty selection (older store build enables nothing) leaves the
-   * queue null so the modal never mounts with zero slides.
+   * Re-open the debut carousel on demand (Profile → Help → Update
+   * spotlight). Replays every carousel-worthy spotlight of the current
+   * release line that works on this install, seen or not; closing re-marks
+   * everything seen, a no-op for a replay. An empty selection (older store
+   * build enables nothing) leaves the queue null so the modal never mounts
+   * with zero slides.
    */
   const replayFeatureTour = useCallback(() => {
     const tour = selectReplaySpotlights(
@@ -470,8 +505,8 @@ const AppContent: React.FC = () => {
   }, []);
 
   const featureTour = useMemo(
-    () => ({ replayFeatureTour }),
-    [replayFeatureTour]
+    () => ({ replayFeatureTour, openSpotlightCta }),
+    [replayFeatureTour, openSpotlightCta]
   );
 
   /** Storage read failed - offer retry rather than restarting onboarding */
@@ -565,7 +600,7 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>Update Ready</Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>{t("modals.engage.updateReady.title")}</Text>
             <ScrollView
               style={styles.dialogScroll}
               contentContainerStyle={styles.dialogScrollContent}
@@ -590,18 +625,22 @@ const AppContent: React.FC = () => {
                   ))}
                   {pendingUpdate.releaseNote.highlights.length > 4 ? (
                     <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                      +{pendingUpdate.releaseNote.highlights.length - 4} more in Release Notes
+                      {t("modals.engage.updateReady.moreInReleaseNotes", {
+                        n: pendingUpdate.releaseNote.highlights.length - 4,
+                      })}
                     </Text>
                   ) : null}
                 </>
               ) : (
                 <Text style={[styles.dialogMessage, { color: colors.textDim }]}>
-                  {pendingUpdate?.message ?? "A new update is ready to install."}
+                  {pendingUpdate?.message ?? t("modals.engage.updateReady.defaultMessage")}
                 </Text>
               )}
               {pendingUpdate?.createdAt && (
                 <Text style={[styles.updateMeta, { color: colors.textMuted }]}>
-                  Published {formatDateTime(pendingUpdate.createdAt)}
+                  {t("modals.engage.updateReady.published", {
+                    when: formatDateTime(pendingUpdate.createdAt),
+                  })}
                 </Text>
               )}
             </ScrollView>
@@ -610,13 +649,13 @@ const AppContent: React.FC = () => {
                 style={[styles.dialogButton, { backgroundColor: colors.bg }]}
                 onPress={() => setPendingUpdate(null)}
               >
-                <Text style={[styles.dialogButtonText, { color: colors.text }]}>Later</Text>
+                <Text style={[styles.dialogButtonText, { color: colors.text }]}>{t("modals.engage.updateReady.later")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.dialogButton, { backgroundColor: colors.accent }]}
                 onPress={handleInstallUpdate}
               >
-                <Text style={[styles.dialogButtonText, { color: colors.white }]}>Install Now</Text>
+                <Text style={[styles.dialogButtonText, { color: colors.white }]}>{t("modals.engage.updateReady.installNow")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -639,7 +678,7 @@ const AppContent: React.FC = () => {
               { backgroundColor: colors.card, borderColor: colors.cardBorder },
             ]}
           >
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>New in v{latestRelease.version}</Text>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>{t("modals.engage.whatsNew.title", { version: latestRelease.version })}</Text>
             <ScrollView
               style={styles.dialogScroll}
               contentContainerStyle={styles.dialogScrollContent}
@@ -653,7 +692,7 @@ const AppContent: React.FC = () => {
               ))}
               {latestRelease.highlights.length > 3 && (
                 <Text style={[styles.dialogBullet, { color: colors.textMuted }]}>
-                  +{latestRelease.highlights.length - 3} more
+                  {t("modals.engage.whatsNew.more", { n: latestRelease.highlights.length - 3 })}
                 </Text>
               )}
             </ScrollView>
@@ -661,13 +700,13 @@ const AppContent: React.FC = () => {
               style={[styles.dialogButton, { backgroundColor: colors.accent }]}
               onPress={handleOpenReleaseHistory}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.white }]}>See what's new</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.white }]}>{t("modals.engage.whatsNew.seeWhatsNew")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dialogButton, { backgroundColor: "transparent" }]}
               onPress={handleDismissReleaseNotesPrompt}
             >
-              <Text style={[styles.dialogButtonText, { color: colors.textMuted }]}>Maybe later</Text>
+              <Text style={[styles.dialogButtonText, { color: colors.textMuted }]}>{t("modals.engage.whatsNew.maybeLater")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -683,6 +722,7 @@ const AppContent: React.FC = () => {
         onDone={handleSpotlightDone}
         onCtaPress={handleSpotlightCta}
         onOpenReleaseNotes={handleSpotlightOpenNotes}
+        onOpenFeatureGuide={handleSpotlightOpenGuide}
       />
     </View>
     </AppLockGate>
@@ -698,6 +738,10 @@ export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        {/* Language sits above everything visual: it depends on nothing and
+            every screen (onboarding included) must render in the chosen
+            language. See src/i18n/LanguageProvider.tsx. */}
+        <LanguageProvider>
         <BackgroundEffectsProvider>
           <SurfaceStyleProvider>
             <ThemeProvider>
@@ -728,6 +772,7 @@ export default function App(): React.JSX.Element {
             </ThemeProvider>
           </SurfaceStyleProvider>
         </BackgroundEffectsProvider>
+        </LanguageProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

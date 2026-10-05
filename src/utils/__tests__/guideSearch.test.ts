@@ -1,5 +1,7 @@
+import i18next from "i18next";
 import { searchGuide } from "../guideSearch";
 import type { CoachmarkTabId, CoachmarkTour } from "../../data/coachmarkContent";
+import { de } from "../../i18n/locales/de";
 
 // Small controlled fixture: real COACHMARKS content is covered by
 // coachmarkContent.test.ts; these tests pin the matching/ranking rules.
@@ -141,5 +143,37 @@ describe("searchGuide", () => {
     // Sanity: the default COACHMARKS export answers a real question.
     const ids = searchGuide("credit card closed").map((r) => r.step.id);
     expect(ids).toContain("debts-keepalive");
+  });
+});
+
+describe("searchGuide in German", () => {
+  // The guide copy resolves through the translation tree at read time, so
+  // switching the global language must switch what the search matches.
+  beforeAll(() => {
+    if (!i18next.hasResourceBundle("de", "translation")) {
+      i18next.addResourceBundle("de", "translation", de);
+    }
+  });
+
+  afterEach(async () => {
+    // eslint-disable-next-line import/no-named-as-default-member
+    await i18next.changeLanguage("en");
+  });
+
+  it("finds the receipts step for a German query and labels the tab in German", async () => {
+    // eslint-disable-next-line import/no-named-as-default-member
+    await i18next.changeLanguage("de");
+    const results = searchGuide("Beleg");
+    expect(results.map((r) => r.step.id)).toContain("budget-receipts");
+    expect(results[0].tabLabel).toBe("Budget - was reinkommt, was rausgeht");
+    expect(results[0].step.title).toBe("Belege und Geschäftsausgaben");
+  });
+
+  it("matches German search-only keywords", async () => {
+    // eslint-disable-next-line import/no-named-as-default-member
+    await i18next.changeLanguage("de");
+    expect(searchGuide("bonität").map((r) => r.step.id)).toContain("debts-keepalive");
+    // An English-only phrase from the English body no longer matches.
+    expect(searchGuide("inactivity window")).toEqual([]);
   });
 });

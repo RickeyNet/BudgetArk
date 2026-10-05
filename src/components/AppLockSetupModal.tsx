@@ -27,6 +27,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -61,6 +62,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
   onClose,
   showInfo,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
@@ -130,16 +132,15 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
           await enableAppLock(chosenPin);
           triggerHaptic("success");
           finish({
-            title: "App Lock On",
-            message:
-              "BudgetArk will ask for your PIN when it opens. Your PIN stays on this phone only - if you forget it, you'll need to reinstall the app and restore from a backup.",
+            title: t("modals.guard.lock.results.on.title"),
+            message: t("modals.guard.lock.results.on.message"),
           });
         } else {
           await changeAppLockPin(chosenPin);
           triggerHaptic("success");
           finish({
-            title: "PIN Changed",
-            message: "Your new PIN takes effect the next time the app locks.",
+            title: t("modals.guard.lock.results.changed.title"),
+            message: t("modals.guard.lock.results.changed.message"),
           });
         }
       } catch {
@@ -149,11 +150,11 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
         setBusy(false);
         setPin("");
         setFirstPin("");
-        setError("Couldn't save the PIN. Please try again.");
+        setError(t("modals.guard.lock.errors.savePin"));
         setStep("new");
       }
     },
-    [finish, intent, setError]
+    [finish, intent, setError, t]
   );
 
   const handleVerifySubmit = useCallback(
@@ -171,13 +172,13 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
             // The PIN was right but the record couldn't be removed - the
             // lock is still on; say so instead of reporting "App Lock Off".
             triggerHaptic("error");
-            setError("Couldn't turn off App Lock. Please try again.");
+            setError(t("modals.guard.lock.errors.disable"));
             return;
           }
           triggerHaptic("success");
           finish({
-            title: "App Lock Off",
-            message: "BudgetArk will open without asking for a PIN.",
+            title: t("modals.guard.lock.results.off.title"),
+            message: t("modals.guard.lock.results.off.message"),
           });
           return;
         }
@@ -186,7 +187,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
         setBusy(false);
       }
     },
-    [busy, finish, intent, record, setError, verify]
+    [busy, finish, intent, record, setError, t, verify]
   );
 
   const handlePinChange = useCallback(
@@ -203,43 +204,43 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
           triggerHaptic("error");
           setPin("");
           setFirstPin("");
-          setError("PINs didn't match - choose a PIN again");
+          setError(t("modals.guard.lock.mismatch"));
           setStep("new");
         }
       }
     },
-    [busy, firstPin, handleVerifySubmit, record, saveNewPin, setError, step]
+    [busy, firstPin, handleVerifySubmit, record, saveNewPin, setError, step, t]
   );
 
   const handleNewPinSubmit = useCallback(() => {
     if (!isValidPin(pin)) {
-      setError(`Use ${PIN_MIN_LENGTH}-${PIN_MAX_LENGTH} digits`);
+      setError(t("modals.guard.lock.digitsRange", { min: PIN_MIN_LENGTH, max: PIN_MAX_LENGTH }));
       return;
     }
     setFirstPin(pin);
     setPin("");
     setError(null);
     setStep("confirm");
-  }, [pin, setError]);
+  }, [pin, setError, t]);
 
   const stepTitle =
     step === "menu"
-      ? "App Lock"
+      ? t("modals.guard.lock.title")
       : step === "verify"
-        ? "Enter your current PIN"
+        ? t("modals.guard.lock.steps.verify")
         : step === "confirm"
-          ? "Re-enter your new PIN"
+          ? t("modals.guard.lock.steps.confirm")
           : intent === "change"
-            ? "Choose a new PIN"
-            : "Choose a PIN";
+            ? t("modals.guard.lock.steps.change")
+            : t("modals.guard.lock.steps.choose");
 
   const subtitle =
     step === "verify" && lockedOut
-      ? `Too many attempts - try again in ${formatLockoutRemaining(lockoutMsLeft)}`
+      ? t("modals.guard.lock.lockedOut", { remaining: formatLockoutRemaining(lockoutMsLeft) })
       : step === "new"
-        ? `${PIN_MIN_LENGTH}-${PIN_MAX_LENGTH} digits, then tap ✓`
+        ? t("modals.guard.lock.newHint", { min: PIN_MIN_LENGTH, max: PIN_MAX_LENGTH })
         : step === "confirm"
-          ? "Same digits, one more time"
+          ? t("modals.guard.lock.confirmHint")
           : null;
 
   return (
@@ -259,10 +260,10 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
             onPress={onClose}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel="Close App Lock settings"
+            accessibilityLabel={t("modals.guard.lock.closeA11y")}
           >
             <Text style={[styles.cancelText, { color: colors.textDim }]}>
-              Cancel
+              {t("common.cancel")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -281,8 +282,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
           {step === "menu" && record ? (
             <View style={styles.menu}>
               <Text style={[styles.menuNote, { color: colors.textDim }]}>
-                App Lock is on - BudgetArk asks for your{" "}
-                {record.pinLength}-digit PIN when it opens.
+                {t("modals.guard.lock.menuNote", { digits: record.pinLength })}
               </Text>
               <TouchableOpacity
                 style={[
@@ -292,7 +292,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
                 onPress={() => beginVerify("change")}
               >
                 <Text style={[styles.menuButtonText, { color: colors.text }]}>
-                  Change PIN
+                  {t("modals.guard.lock.changePin")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -303,7 +303,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
                 onPress={() => beginVerify("disable")}
               >
                 <Text style={[styles.menuButtonText, { color: colors.danger }]}>
-                  Turn Off App Lock
+                  {t("modals.guard.lock.turnOff")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -327,7 +327,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
 
           {step === "saving" ? (
             <Text style={[styles.subtitle, { color: colors.textDim }]}>
-              Saving...
+              {t("modals.guard.lock.saving")}
             </Text>
           ) : null}
 
@@ -337,9 +337,7 @@ const AppLockSetupModal: React.FC<AppLockSetupModalProps> = ({
 
           {step === "new" && intent === "enable" ? (
             <Text style={[styles.privacyNote, { color: colors.textMuted }]}>
-              Your PIN stays on this phone - it's never backed up, exported,
-              or synced to your partner. If you forget it, you'll need to
-              reinstall the app and restore from a backup.
+              {t("modals.guard.lock.privacyNote")}
             </Text>
           ) : null}
         </View>

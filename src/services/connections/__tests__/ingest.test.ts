@@ -1,11 +1,15 @@
 import {
   identityKeyFor,
+  parsePendingFingerprint,
+  pendingAmountsCompatible,
   pendingFingerprintFor,
   planIngest,
   planInboxReconciliation,
+  planStalePending,
   selectSyncableDismissals,
   splitPendingFingerprint,
   IngestInputs,
+  StalePendingInputs,
 } from "../ingest";
 import type {
   ExternalAccountLink,
@@ -362,20 +366,28 @@ describe("planIngest - pending->posted id instability", () => {
     expect(plan.updatedInboxItems.map((i) => i.id)).toEqual([x2Key]);
   });
 
-  it("does not match a twin outside the ±4 day window or with a different amount", () => {
-    const posted = tx({
+  it("does not match a twin outside the ±7 day window, outside the amount tolerance, or with the opposite sign", () => {
+    // Pending 06-27 -> posted 07-05 is 8 days: past the window.
+    const tooLate = tx({
       providerTxId: "POSTED-2",
       pending: false,
-      postedAt: "2026-07-10T00:00:00.000Z",
+      postedAt: "2026-07-05T00:00:00.000Z",
     });
-    const plan = planIngest(baseInputs({ inbox: [pendingItem], fetched: [posted] }));
-    expect(plan.newInboxItems).toHaveLength(1);
+    expect(
+      planIngest(baseInputs({ inbox: [pendingItem], fetched: [tooLate] })).newInboxItems,
+    ).toHaveLength(1);
 
-    const differentAmount = tx({ providerTxId: "POSTED-3", pending: false, amount: -26 });
-    const plan2 = planIngest(
-      baseInputs({ inbox: [pendingItem], fetched: [differentAmount] }),
-    );
-    expect(plan2.newInboxItems).toHaveLength(1);
+    // -25 -> -60 is far past the 30% settlement slack: a different purchase.
+    const wayOff = tx({ providerTxId: "POSTED-3", pending: false, amount: -60 });
+    expect(
+      planIngest(baseInputs({ inbox: [pendingItem], fetched: [wayOff] })).newInboxItems,
+    ).toHaveLength(1);
+
+    // A same-size refund is never the settlement of a charge.
+    const refund = tx({ providerTxId: "POSTED-4", pending: false, amount: 25 });
+    expect(
+      planIngest(baseInputs({ inbox: [pendingItem], fetched: [refund] })).newInboxItems,
+    ).toHaveLength(1);
   });
 
   it("aliases a posted tx to a ledger decision made while it was pending", () => {
@@ -468,11 +480,11 @@ describe("planIngest - pending->posted id instability", () => {
     });
   });
 
-  it("does not alias to a ledger decision outside the ±4 day window or with a different amount", () => {
+  it("does not alias to a ledger decision outside the ±7 day window or outside the amount tolerance", () => {
     const tooLate = tx({
       providerTxId: "POSTED-LATE",
       pending: false,
-      postedAt: "2026-07-03T00:00:00.000Z", // well past the ±4 day window
+      postedAt: "2026-07-05T00:00:00.000Z", // 8 days after the 06-27 decision
     });
     const plan = planIngest(
       baseInputs({ fetched: [tooLate], ledger: decidedWhilePending("approved") }),
@@ -481,9 +493,9 @@ describe("planIngest - pending->posted id instability", () => {
     expect(Object.keys(plan.ledgerAliases)).toHaveLength(0);
 
     const differentAmount = tx({
-      providerTxId: "POSTED-TIP",
+      providerTxId: "POSTED-OTHER",
       pending: false,
-      amount: -30.0,
+      amount: -40.0, // 60% over: not a tip, another purchase
       postedAt: "2026-06-29T00:00:00.000Z",
     });
     const plan2 = planIngest(
@@ -491,6 +503,20 @@ describe("planIngest - pending->posted id instability", () => {
     );
     expect(plan2.newInboxItems).toHaveLength(1);
     expect(Object.keys(plan2.ledgerAliases)).toHaveLength(0);
+    expect(plan2.amountCorrections).toEqual([]);
+  });
+
+  it("matches a twin that took six days to post (weekend + holiday settlement)", () => {
+    const posted = tx({
+      providerTxId: "POSTED-SLOW",
+      pending: false,
+      postedAt: "2026-07-03T00:00:00.000Z",
+    });
+    const plan = planIngest(baseInputs({ inbox: [pendingItem], fetched: [posted] }));
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.updatedInboxItems[0].id).toBe(
+      identityKeyFor("simplefin", "ACT-1", "POSTED-SLOW"),
+    );
   });
 
   it("prefers the nearest-day decision when several share account and amount", () => {
@@ -534,6 +560,156 @@ describe("planIngest - pending->posted id instability", () => {
     const posted = tx({ providerTxId: "POSTED-G", pending: false });
     const plan = planIngest(baseInputs({ fetched: [posted], ledger }));
     expect(plan.newInboxItems).toHaveLength(1);
+  });
+});
+
+const row = (overrides: Partial<PendingTransaction> = {}): PendingTransaction => ({
+  id: KEY,
+  connectionId: "conn-1",
+  externalAccountId: "ACT-1",
+  providerTxId: "TXN-1",
+  pending: false,
+  postedAt: "2026-06-28T00:00:00.000Z",
+  amount: -25.0,
+  description: "COSTCO WHSE #1234",
+  merchant: "costco",
+  suggestedType: "expense",
+  fetchedAt: NOW,
+  updatedAt: NOW,
+  ...overrides,
+});
+
+describe("pendingAmountsCompatible", () => {
+  it("allows 30% of the pending amount, with a $1 floor, same sign only", () => {
+    expect(pendingAmountsCompatible(-25, -32.5)).toBe(true); // exactly 30%
+    expect(pendingAmountsCompatible(-25, -32.51)).toBe(false);
+    expect(pendingAmountsCompatible(-25, -20)).toBe(true); // conversion can go down
+    expect(pendingAmountsCompatible(-3, -3.9)).toBe(true); // floor beats 30% of $3
+    expect(pendingAmountsCompatible(-3, -4.1)).toBe(false);
+    expect(pendingAmountsCompatible(-25, 25)).toBe(false);
+    expect(pendingAmountsCompatible(-25, Number.NaN)).toBe(false);
+  });
+});
+
+describe("parsePendingFingerprint", () => {
+  it("recovers account, signed amount and day - even with a pipe in the account id", () => {
+    expect(parsePendingFingerprint(pendingFingerprintFor("ACT|1", -25, "2026-06-27T00:00:00.000Z"))).toEqual({
+      account: "ACT|1",
+      amount: -25,
+      day: "2026-06-27",
+    });
+  });
+
+  it("fails closed on malformed values", () => {
+    expect(parsePendingFingerprint("ACT-1|abc|2026-06-27")).toBeNull();
+    expect(parsePendingFingerprint("ACT-1|-25.00|junk")).toBeNull();
+    expect(parsePendingFingerprint("|-25.00|2026-06-27")).toBeNull();
+    expect(parsePendingFingerprint("nonsense")).toBeNull();
+  });
+});
+
+describe("planIngest - settled amount differs from the authorization", () => {
+  const pendingRow = row({
+    id: identityKeyFor("simplefin", "ACT-1", "PENDING-9"),
+    providerTxId: "PENDING-9",
+    pending: true,
+    postedAt: "2026-06-27T00:00:00.000Z",
+    description: "PENDING DINER",
+    merchant: "PENDING DINER",
+  });
+  const approvedWhilePending: IngestInputs["ledger"] = {
+    [pendingRow.id]: {
+      status: "approved",
+      budgetEntryId: "entry-1",
+      at: "2026-06-27T02:00:00.000Z",
+      pendingFingerprint: pendingFingerprintFor("ACT-1", -25, pendingRow.postedAt),
+    },
+  };
+
+  it("migrates an inbox twin that settled with a tip, carrying the settled amount", () => {
+    const posted = tx({ providerTxId: "POSTED-TIP", amount: -30, description: "DINER #12" });
+    const plan = planIngest(baseInputs({ inbox: [pendingRow], fetched: [posted] }));
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.updatedInboxItems).toHaveLength(1);
+    expect(plan.updatedInboxItems[0]).toMatchObject({
+      id: identityKeyFor("simplefin", "ACT-1", "POSTED-TIP"),
+      pending: false,
+      amount: -30,
+      description: "DINER #12",
+    });
+    expect(plan.ledgerAliases[pendingRow.id]).toMatchObject({
+      status: "dismissed",
+      aliasOf: identityKeyFor("simplefin", "ACT-1", "POSTED-TIP"),
+    });
+    expect(plan.amountCorrections).toEqual([]);
+  });
+
+  it("aliases to an approval made while pending and corrects that entry's amount", () => {
+    const posted = tx({ providerTxId: "POSTED-TIP", amount: -30 });
+    const plan = planIngest(baseInputs({ fetched: [posted], ledger: approvedWhilePending }));
+    expect(plan.newInboxItems).toHaveLength(0);
+    expect(plan.ledgerAliases[identityKeyFor("simplefin", "ACT-1", "POSTED-TIP")]).toMatchObject({
+      status: "approved",
+      budgetEntryId: "entry-1",
+      aliasOf: pendingRow.id,
+    });
+    expect(plan.amountCorrections).toEqual([
+      { budgetEntryId: "entry-1", fromAmount: 25, toAmount: 30 },
+    ]);
+  });
+
+  it("emits no correction for an exact match or for a dismissed decision", () => {
+    const exact = planIngest(
+      baseInputs({ fetched: [tx({ providerTxId: "POSTED-X", amount: -25 })], ledger: approvedWhilePending }),
+    );
+    expect(Object.keys(exact.ledgerAliases)).toHaveLength(1);
+    expect(exact.amountCorrections).toEqual([]);
+
+    const dismissed = planIngest(
+      baseInputs({
+        fetched: [tx({ providerTxId: "POSTED-D", amount: -30 })],
+        ledger: {
+          [pendingRow.id]: { ...approvedWhilePending[pendingRow.id], status: "dismissed", budgetEntryId: undefined },
+        },
+      }),
+    );
+    expect(dismissed.ledgerAliases[identityKeyFor("simplefin", "ACT-1", "POSTED-D")].status).toBe("dismissed");
+    expect(dismissed.amountCorrections).toEqual([]);
+  });
+
+  it("gives an exact-amount twin precedence even when the tolerance match is listed first", () => {
+    const fuzzy = tx({ providerTxId: "POSTED-F", amount: -27 });
+    const exact = tx({ providerTxId: "POSTED-E", amount: -25 });
+    const plan = planIngest(baseInputs({ inbox: [pendingRow], fetched: [fuzzy, exact] }));
+    // The exact one took the pending row; the near one is its own purchase.
+    expect(plan.updatedInboxItems.map((item) => item.id)).toEqual([
+      identityKeyFor("simplefin", "ACT-1", "POSTED-E"),
+    ]);
+    expect(plan.newInboxItems.map((item) => item.id)).toEqual([
+      identityKeyFor("simplefin", "ACT-1", "POSTED-F"),
+    ]);
+  });
+
+  it("reserves an exactly-matching ledger decision the same way", () => {
+    const fuzzy = tx({ providerTxId: "POSTED-F", amount: -27 });
+    const exact = tx({ providerTxId: "POSTED-E", amount: -25 });
+    const plan = planIngest(baseInputs({ fetched: [fuzzy, exact], ledger: approvedWhilePending }));
+    expect(plan.ledgerAliases[identityKeyFor("simplefin", "ACT-1", "POSTED-E")]).toBeDefined();
+    expect(plan.ledgerAliases[identityKeyFor("simplefin", "ACT-1", "POSTED-F")]).toBeUndefined();
+    expect(plan.newInboxItems.map((item) => item.id)).toEqual([
+      identityKeyFor("simplefin", "ACT-1", "POSTED-F"),
+    ]);
+    expect(plan.amountCorrections).toEqual([]);
+  });
+
+  it("picks the closest amount among several tolerance candidates", () => {
+    const farther = { ...pendingRow, id: identityKeyFor("simplefin", "ACT-1", "PENDING-A"), providerTxId: "PENDING-A", amount: -20 };
+    const closer = { ...pendingRow, id: identityKeyFor("simplefin", "ACT-1", "PENDING-B"), providerTxId: "PENDING-B", amount: -24 };
+    const posted = tx({ providerTxId: "POSTED-1", amount: -25.5 });
+    const plan = planIngest(baseInputs({ inbox: [farther, closer], fetched: [posted] }));
+    expect(plan.updatedInboxItems).toHaveLength(1);
+    expect(plan.ledgerAliases[closer.id]).toBeDefined();
+    expect(plan.ledgerAliases[farther.id]).toBeUndefined();
   });
 });
 
@@ -857,22 +1033,6 @@ describe("planIngest - manual-entry duplicate flagging", () => {
 
 /* ─── Inbox reconciliation (decisions that arrived after the fetch) ─── */
 
-const row = (overrides: Partial<PendingTransaction> = {}): PendingTransaction => ({
-  id: KEY,
-  connectionId: "conn-1",
-  externalAccountId: "ACT-1",
-  providerTxId: "TXN-1",
-  pending: false,
-  postedAt: "2026-06-28T00:00:00.000Z",
-  amount: -25.0,
-  description: "COSTCO WHSE #1234",
-  merchant: "costco",
-  suggestedType: "expense",
-  fetchedAt: NOW,
-  updatedAt: NOW,
-  ...overrides,
-});
-
 describe("planInboxReconciliation", () => {
   it("leaves undecided rows alone", () => {
     const plan = planInboxReconciliation({
@@ -952,6 +1112,28 @@ describe("planInboxReconciliation", () => {
       aliasOf: pendingKey,
     });
     expect(plan.ledgerWrites[posted2.id]).toBeUndefined();
+  });
+
+  it("retires a posted row whose pending twin was approved for a different amount, correcting the entry", () => {
+    const pendingKey = identityKeyFor("simplefin", "ACT-1", "PENDING-1");
+    const plan = planInboxReconciliation({
+      inbox: [row({ amount: -30 })],
+      ledger: {
+        [pendingKey]: {
+          status: "approved",
+          budgetEntryId: "entry-9",
+          at: NOW,
+          pendingFingerprint: pendingFingerprintFor("ACT-1", -25, "2026-06-26T00:00:00.000Z"),
+        },
+      },
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    expect(plan.removeIds).toEqual([KEY]);
+    expect(plan.ledgerWrites[KEY]).toMatchObject({ status: "approved", aliasOf: pendingKey });
+    expect(plan.amountCorrections).toEqual([
+      { budgetEntryId: "entry-9", fromAmount: 25, toAmount: 30 },
+    ]);
   });
 
   it("does not twin-match outside the settlement window", () => {
@@ -1038,5 +1220,86 @@ describe("selectSyncableDismissals", () => {
 
   it("returns an empty map for an empty ledger", () => {
     expect(selectSyncableDismissals({}, 0, true)).toEqual({});
+  });
+});
+
+/* ─── Stale pending rows (the bank stopped reporting them) ─── */
+
+describe("planStalePending", () => {
+  const PENDING_ID = identityKeyFor("simplefin", "ACT-1", "PENDING-9");
+  const pendingRow = row({
+    id: PENDING_ID,
+    providerTxId: "PENDING-9",
+    pending: true,
+    postedAt: "2026-06-28T00:00:00.000Z",
+  });
+  const inputs = (overrides: Partial<StalePendingInputs> = {}): StalePendingInputs => ({
+    provider: "simplefin",
+    connectionId: "conn-1",
+    inbox: [pendingRow],
+    fetched: [],
+    fetchedAccountIds: new Set(["ACT-1"]),
+    windowStartMs: Date.parse("2026-06-24T00:00:00.000Z"),
+    now: NOW,
+    ...overrides,
+  });
+
+  it("stamps missingSince the first pass the provider stops listing a pending row", () => {
+    const plan = planStalePending(inputs());
+    expect(plan.retireIds).toEqual([]);
+    expect(plan.updatedInboxItems).toEqual([{ ...pendingRow, missingSince: NOW }]);
+  });
+
+  it("leaves a row that is still listed alone, and clears missingSince once it reappears", () => {
+    const listed = tx({ providerTxId: "PENDING-9", pending: true, postedAt: pendingRow.postedAt });
+    expect(planStalePending(inputs({ fetched: [listed] })).updatedInboxItems).toEqual([]);
+
+    const plan = planStalePending(
+      inputs({
+        inbox: [{ ...pendingRow, missingSince: "2026-06-30T00:00:00.000Z" }],
+        fetched: [listed],
+      }),
+    );
+    expect(plan.updatedInboxItems).toEqual([{ ...pendingRow, missingSince: undefined }]);
+    expect(plan.retireIds).toEqual([]);
+  });
+
+  it("retires a row after the grace period, ledgered as dismissed WITHOUT a fingerprint", () => {
+    const notYet = planStalePending(
+      inputs({ inbox: [{ ...pendingRow, missingSince: "2026-06-29T12:00:00.000Z" }] }),
+    );
+    expect(notYet.retireIds).toEqual([]);
+    expect(notYet.updatedInboxItems).toEqual([]); // already stamped - no rewrite
+
+    const plan = planStalePending(
+      inputs({ inbox: [{ ...pendingRow, missingSince: "2026-06-28T12:00:00.000Z" }] }),
+    );
+    expect(plan.retireIds).toEqual([PENDING_ID]);
+    expect(plan.ledgerWrites[PENDING_ID]).toEqual({ status: "dismissed", at: NOW });
+    expect(plan.updatedInboxItems).toEqual([]);
+  });
+
+  it("does not judge a row older than the fetch window (the provider was never asked for it)", () => {
+    const plan = planStalePending(
+      inputs({ inbox: [{ ...pendingRow, postedAt: "2026-06-20T00:00:00.000Z" }] }),
+    );
+    expect(plan.updatedInboxItems).toEqual([]);
+    expect(plan.retireIds).toEqual([]);
+  });
+
+  it("retires a pending row older than 30 days regardless of the window", () => {
+    const plan = planStalePending(
+      inputs({ inbox: [{ ...pendingRow, postedAt: "2026-05-20T00:00:00.000Z" }] }),
+    );
+    expect(plan.retireIds).toEqual([PENDING_ID]);
+  });
+
+  it("ignores posted rows, other connections, and accounts the provider did not answer for", () => {
+    const posted = row({ id: identityKeyFor("simplefin", "ACT-1", "P"), providerTxId: "P" });
+    const otherConnection = { ...pendingRow, id: "x:1", connectionId: "conn-2" };
+    const darkAccount = { ...pendingRow, id: "x:2", externalAccountId: "ACT-2" };
+    const plan = planStalePending(inputs({ inbox: [posted, otherConnection, darkAccount] }));
+    expect(plan.updatedInboxItems).toEqual([]);
+    expect(plan.retireIds).toEqual([]);
   });
 });

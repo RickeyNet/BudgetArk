@@ -34,6 +34,7 @@ import type { NormalizedTransaction } from "../services/connections/types";
 import type { PendingTransaction } from "../types";
 import { parseMoney } from "./importPresets";
 import { sanitizeTextInput } from "./sanitize";
+import { t } from "../i18n/translate";
 
 /** Cap raw file size - a year of card activity is well under 1 MB. */
 export const MAX_STATEMENT_FILE_BYTES = 5 * 1024 * 1024;
@@ -246,24 +247,24 @@ export const parseStatementCsv = (text: string): ParsedStatementFile => {
       : [];
   } catch {
     throw new Error(
-      "Could not read the file. Make sure it is a CSV export from your bank.",
+      t("helpers.import.statement.unreadable"),
     );
   }
 
   const lines = matrix
     .map((row) => (Array.isArray(row) ? row.map(cellText) : []))
     .filter((row) => nonEmptyCount(row) > 0);
-  if (lines.length === 0) throw new Error("The file is empty.");
+  if (lines.length === 0) throw new Error(t("helpers.import.statement.empty"));
   if (lines.length > MAX_STATEMENT_ROWS + 1) {
     throw new Error(
-      `The file has too many rows (${lines.length}). Maximum is ${MAX_STATEMENT_ROWS} - export a shorter date range.`,
+      t("helpers.import.statement.tooManyRows", { rows: lines.length, max: MAX_STATEMENT_ROWS }),
     );
   }
 
   const firstDataIndex = lines.findIndex((row) => row.some(looksLikeDate));
   if (firstDataIndex === -1) {
     throw new Error(
-      "No transaction rows found - the file has no column with dates in it.",
+      t("helpers.import.statement.noDateColumn"),
     );
   }
 
@@ -521,7 +522,7 @@ export const parseStatementRows = (
     const dateRaw = row[mapping.dateColumn] ?? "";
     const postedAt = parseStatementDate(dateRaw);
     if (!postedAt) {
-      result.skipped.push({ rowNumber, reason: `Unreadable date "${dateRaw}"` });
+      result.skipped.push({ rowNumber, reason: t("helpers.import.statement.unreadableDate", { value: dateRaw }) });
       return;
     }
 
@@ -532,7 +533,7 @@ export const parseStatementRows = (
       const debit = debitRaw ? parseMoney(debitRaw) : 0;
       const credit = creditRaw ? parseMoney(creditRaw) : 0;
       if (!Number.isFinite(debit) || !Number.isFinite(credit)) {
-        result.skipped.push({ rowNumber, reason: "Unreadable amount" });
+        result.skipped.push({ rowNumber, reason: t("helpers.import.statement.unreadableAmount") });
         return;
       }
       // Some banks already write debits as negatives inside the debit
@@ -542,7 +543,7 @@ export const parseStatementRows = (
       const raw = (row[mapping.amountColumn ?? ""] ?? "").trim();
       const value = parseMoney(raw);
       if (!Number.isFinite(value)) {
-        result.skipped.push({ rowNumber, reason: `Unreadable amount "${raw}"` });
+        result.skipped.push({ rowNumber, reason: t("helpers.import.statement.unreadableAmountValue", { value: raw }) });
         return;
       }
       amount = mapping.positiveIsOutflow ? -value : value;

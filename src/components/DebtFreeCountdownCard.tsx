@@ -12,6 +12,7 @@
 
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Debt, Payment } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
@@ -30,27 +31,13 @@ interface DebtFreeCountdownCardProps {
   now: Date;
 }
 
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
-
 const DebtFreeCountdownCard: React.FC<DebtFreeCountdownCardProps> = ({
   debts,
   payments,
   strategy,
   now,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -72,18 +59,21 @@ const DebtFreeCountdownCard: React.FC<DebtFreeCountdownCardProps> = ({
   );
 
   const paceLine = useMemo(() => {
-    const pace = `${formatCurrency(projection.paceMonthly)}/mo`;
+    const pace = t("debts.moments.countdown.pace.perMonth", {
+      amount: formatCurrency(projection.paceMonthly),
+    });
     switch (projection.velocity.basis) {
       case "history":
-        return `At your pace of ${pace} · from your last ${
-          projection.velocity.monthsSampled
-        } ${projection.velocity.monthsSampled === 1 ? "month" : "months"} of payments`;
+        return t("debts.moments.countdown.pace.history", {
+          pace,
+          count: projection.velocity.monthsSampled,
+        });
       case "current-month":
-        return `At your pace of ${pace} · from this month's payments`;
+        return t("debts.moments.countdown.pace.currentMonth", { pace });
       default:
-        return `Assuming minimum payments of ${pace} · log payments to tune this`;
+        return t("debts.moments.countdown.pace.minimums", { pace });
     }
-  }, [formatCurrency, projection.paceMonthly, projection.velocity]);
+  }, [formatCurrency, projection.paceMonthly, projection.velocity, t]);
 
   if (projection.status === "no-debts") return null;
 
@@ -91,11 +81,9 @@ const DebtFreeCountdownCard: React.FC<DebtFreeCountdownCardProps> = ({
     return (
       <View style={[styles.card, styles.cardCelebrate]}>
         <Text style={[styles.eyebrow, { color: colors.success }]}>
-          DEBT-FREE COUNTDOWN
+          {t("debts.moments.countdown.eyebrow")}
         </Text>
-        <Text style={styles.celebrateText}>
-          🎉 You're debt-free! Every balance is at zero.
-        </Text>
+        <Text style={styles.celebrateText}>{t("debts.moments.countdown.debtFree")}</Text>
       </View>
     );
   }
@@ -104,35 +92,40 @@ const DebtFreeCountdownCard: React.FC<DebtFreeCountdownCardProps> = ({
     return (
       <View style={styles.card}>
         <Text style={[styles.eyebrow, { color: colors.warning }]}>
-          DEBT-FREE COUNTDOWN
+          {t("debts.moments.countdown.eyebrow")}
         </Text>
         <Text style={styles.notSolvableTitle}>
-          No payoff date at the current pace
+          {t("debts.moments.countdown.notSolvableTitle")}
         </Text>
-        <Text style={styles.noteText}>
-          Monthly interest is outpacing these payments, so the balances never
-          reach zero. Even a small extra payment changes that - open Build Your
-          Ark above to compare payoff strategies.
-        </Text>
+        <Text style={styles.noteText}>{t("debts.moments.countdown.notSolvableBody")}</Text>
       </View>
     );
   }
 
   const { years, months, days } = countdown;
   const boxes: { value: number; label: string }[] = [];
-  if (years > 0) boxes.push({ value: years, label: years === 1 ? "YEAR" : "YEARS" });
-  if (years > 0 || months > 0) {
-    boxes.push({ value: months, label: months === 1 ? "MONTH" : "MONTHS" });
+  if (years > 0) {
+    boxes.push({ value: years, label: t("debts.moments.countdown.units.year", { count: years }) });
   }
-  boxes.push({ value: days, label: days === 1 ? "DAY" : "DAYS" });
+  if (years > 0 || months > 0) {
+    boxes.push({ value: months, label: t("debts.moments.countdown.units.month", { count: months }) });
+  }
+  boxes.push({ value: days, label: t("debts.moments.countdown.units.day", { count: days }) });
 
   const target = projection.projectedDate as Date;
-  const targetLabel = `${MONTH_NAMES[target.getMonth()]} ${target.getFullYear()}`;
+  // Month name in the app language ("September 2027" / "September 2027");
+  // the projection date itself is untouched.
+  let targetLabel: string;
+  try {
+    targetLabel = target.toLocaleDateString(i18n.language, { month: "long", year: "numeric" });
+  } catch {
+    targetLabel = target.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
 
   return (
     <View style={styles.card}>
       <Text style={[styles.eyebrow, { color: colors.accent }]}>
-        DEBT-FREE COUNTDOWN
+        {t("debts.moments.countdown.eyebrow")}
       </Text>
 
       <View style={styles.boxRow}>
@@ -145,15 +138,17 @@ const DebtFreeCountdownCard: React.FC<DebtFreeCountdownCardProps> = ({
       </View>
 
       <Text style={styles.targetLine}>
-        Projected debt-free in {targetLabel}
+        {t("debts.moments.countdown.target", { month: targetLabel })}
       </Text>
       <Text style={styles.paceLine}>{paceLine}</Text>
 
       {projection.velocityBelowMinimums && (
         <Text style={styles.noteText}>
-          Your recent pace of {formatCurrency(projection.velocity.monthlyAverage)}/mo
-          is below your combined minimums - the projection assumes the minimums
-          are met.
+          {t("debts.moments.countdown.belowMinimums", {
+            pace: t("debts.moments.countdown.pace.perMonth", {
+              amount: formatCurrency(projection.velocity.monthlyAverage),
+            }),
+          })}
         </Text>
       )}
     </View>

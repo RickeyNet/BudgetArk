@@ -23,6 +23,7 @@ import type {
   DebtMilestonePlan,
   SavingsGoal,
 } from "../types";
+import { t } from "../i18n/translate";
 
 /* ────────────────────────────── Totals ────────────────────────────── */
 
@@ -142,6 +143,22 @@ export const computeMilestoneProgress = (
 
   if (!plan) return [];
 
+  // Display text is keyed by the persisted milestone id so a stored plan
+  // seeded in one language reads correctly in another; the stored
+  // title/description stay untouched (they are synced data).
+  const stepText = (key: DebtMilestoneKey) => ({
+    title: t(`helpers.planning.milestones.steps.${key}.title`),
+    description: t(`helpers.planning.milestones.steps.${key}.description`),
+    nextAction: t(`helpers.planning.milestones.steps.${key}.nextAction`),
+  });
+  const ratio = (current: number, target: number): string =>
+    t("helpers.planning.milestones.metric.ratio", {
+      current: formatCurrency(current),
+      target: formatCurrency(target),
+    });
+  const remaining = (amount: number): string =>
+    t("helpers.planning.milestones.metric.remaining", { amount: formatCurrency(amount) });
+
   // Hull (Build Your Ark step "Clear Non-Mortgage Debt") covers credit cards,
   // personal loans, and car loans - anything that isn't the mortgage.
   const nonMortgageDebts = debts.filter((debt) => debt.debtClass !== "house");
@@ -167,24 +184,23 @@ export const computeMilestoneProgress = (
       const target = step.targetAmount || 1200;
       return {
         ...step,
+        ...stepText("keel"),
         progress: towardTargetRatio(effectiveReserve, target),
-        metricLabel: `${formatCurrency(effectiveReserve)} / ${formatCurrency(target)}`,
-        nextAction: "Set aside your first cushion target before pushing harder elsewhere.",
+        metricLabel: ratio(effectiveReserve, target),
       };
     }
 
     if (step.key === "hull") {
       return {
         ...step,
+        ...stepText("hull"),
         // A user whose only debt is a mortgage has `nonMortgageOriginal === 0`;
         // clearedRatio returns 0 rather than dividing to NaN. 0 (not 1) is the
         // deliberate reading: the bar measures debt actually paid down, and a
         // full bar for someone who never carried non-mortgage debt would claim
         // work that never happened. `moorings` below uses the same convention.
         progress: clearedRatio(nonMortgageOriginal, nonMortgageRemaining),
-        metricLabel: `${formatCurrency(nonMortgageRemaining)} remaining`,
-        nextAction:
-          "Apply your next extra payment to the first debt in your chosen payoff order.",
+        metricLabel: remaining(nonMortgageRemaining),
       };
     }
 
@@ -192,9 +208,9 @@ export const computeMilestoneProgress = (
       const target = step.targetAmount || monthlyEssentialsEstimate * 3;
       return {
         ...step,
+        ...stepText("deck"),
         progress: towardTargetRatio(effectiveReserve, target),
-        metricLabel: `${formatCurrency(effectiveReserve)} / ${formatCurrency(target)}`,
-        nextAction: "Grow your reserves toward 3-6 months of essentials for stability.",
+        metricLabel: ratio(effectiveReserve, target),
       };
     }
 
@@ -202,9 +218,12 @@ export const computeMilestoneProgress = (
       const target = step.targetAmount || 500;
       return {
         ...step,
+        ...stepText("supplies"),
         progress: towardTargetRatio(retirementInvestingMonthly, target),
-        metricLabel: `${formatCurrency(retirementInvestingMonthly)} / ${formatCurrency(target)} /mo`,
-        nextAction: "Increase retirement contributions toward 15% of household income.",
+        metricLabel: t("helpers.planning.milestones.metric.ratioMonthly", {
+          current: formatCurrency(retirementInvestingMonthly),
+          target: formatCurrency(target),
+        }),
       };
     }
 
@@ -215,24 +234,24 @@ export const computeMilestoneProgress = (
       const target = step.targetAmount || totalGoalTarget || 10000;
       return {
         ...step,
+        ...stepText("gather_animals"),
         progress: towardTargetRatio(totalSaved, target),
         metricLabel:
           educationGoals.length > 0
-            ? `${formatCurrency(totalSaved)} / ${formatCurrency(target)}`
-            : "Add an education savings goal to track",
-        nextAction: "Open or contribute to a 529 plan or education savings account.",
+            ? ratio(totalSaved, target)
+            : t("helpers.planning.milestones.metric.addEducationGoal"),
       };
     }
 
     if (step.key === "moorings") {
       return {
         ...step,
+        ...stepText("moorings"),
         progress: clearedRatio(mortgageOriginal, mortgageRemaining),
         metricLabel:
           mortgageRemaining > 0
-            ? `${formatCurrency(mortgageRemaining)} remaining`
-            : "No mortgage debt tracked",
-        nextAction: "Make extra principal payments on your mortgage when possible.",
+            ? remaining(mortgageRemaining)
+            : t("helpers.planning.milestones.metric.noMortgage"),
       };
     }
 
@@ -240,16 +259,22 @@ export const computeMilestoneProgress = (
       const target = step.targetAmount || 1000;
       return {
         ...step,
+        ...stepText("sail"),
         progress: step.isCompleted ? 1 : 0,
-        metricLabel: step.isCompleted ? "Completed" : `Target: ${formatCurrency(target)} /mo`,
-        nextAction: "Live generously, invest beyond retirement, and build lasting wealth.",
+        metricLabel: step.isCompleted
+          ? t("helpers.planning.milestones.metric.completed")
+          : t("helpers.planning.milestones.metric.targetMonthly", {
+              amount: formatCurrency(target),
+            }),
       };
     }
 
     return {
       ...step,
       progress: step.isCompleted ? 1 : 0,
-      metricLabel: step.isCompleted ? "Completed" : "Not started",
+      metricLabel: step.isCompleted
+        ? t("helpers.planning.milestones.metric.completed")
+        : t("helpers.planning.milestones.metric.notStarted"),
       nextAction: "",
     };
   });

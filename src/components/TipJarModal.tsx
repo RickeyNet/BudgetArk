@@ -29,6 +29,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import { ErrorCode, useIAP, type Product } from "expo-iap";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -43,10 +44,13 @@ interface TipJarModalProps {
   onClose: () => void;
 }
 
+type TipTierId = "small" | "medium" | "large";
+
 interface TipTier {
   sku: string;
   emoji: string;
-  label: string;
+  /** Display label lives at `modals.engage.tipJar.tiers.<tierId>`. */
+  tierId: TipTierId;
 }
 
 /**
@@ -55,17 +59,19 @@ interface TipTier {
  * store-setup checklist in TODO.md.
  */
 const TIP_TIERS: TipTier[] = [
-  { sku: "com.budgetark.app.tip.small", emoji: "☕", label: "Small tip" },
-  { sku: "com.budgetark.app.tip.medium", emoji: "🍕", label: "Medium tip" },
-  { sku: "com.budgetark.app.tip.large", emoji: "🚢", label: "Large tip" },
+  { sku: "com.budgetark.app.tip.small", emoji: "☕", tierId: "small" },
+  { sku: "com.budgetark.app.tip.medium", emoji: "🍕", tierId: "medium" },
+  { sku: "com.budgetark.app.tip.large", emoji: "🚢", tierId: "large" },
 ];
 
 const TIP_SKUS: string[] = TIP_TIERS.map((tier) => tier.sku);
 
-const STORE_NAME = Platform.OS === "ios" ? "the App Store" : "Google Play";
+const STORE_ID = Platform.OS === "ios" ? "ios" : "android";
 
 const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
+  const storeName = t(`modals.engage.tipJar.store.${STORE_ID}`);
   const insets = useSafeAreaInsets();
   const styles = useMemo(
     () => makeStyles(colors, insets.bottom),
@@ -113,14 +119,16 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
         // e.g. Ask to Buy / slow payment methods - the store will finish
         // the charge on its own; nothing for the app to track.
         setErrorText(
-          `Your tip is pending approval from ${STORE_NAME}. Thank you!`,
+          t("modals.engage.tipJar.pendingApproval", { store: storeName }),
         );
       }
     },
     onPurchaseError: (error) => {
       setBusySku(null);
       if (error.code === ErrorCode.UserCancelled) return;
-      setErrorText(error.message || "The purchase could not be completed.");
+      setErrorText(
+        error.message || t("modals.engage.tipJar.purchaseFailed"),
+      );
     },
   });
 
@@ -262,24 +270,24 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
             {thanked ? (
               <>
                 <Text style={styles.thanksEmoji}>💛</Text>
-                <Text style={styles.title}>Thank you!</Text>
+                <Text style={styles.title}>
+                  {t("modals.engage.tipJar.thanks.title")}
+                </Text>
                 <Text style={styles.subtitle}>
-                  Your tip helps keep BudgetArk sailing. Nothing changed in
-                  the app - it was already all yours.
+                  {t("modals.engage.tipJar.thanks.body")}
                 </Text>
 
                 {lastTip ? (
                   logState === "logged" ? (
                     <Text style={styles.logDoneText}>
-                      🎁 Added to your budget under Giving. You can edit or
-                      remove it there like any other entry.
+                      {t("modals.engage.tipJar.thanks.logged")}
                     </Text>
                   ) : (
                     <View style={styles.logSection}>
                       <Text style={styles.logPrompt}>
-                        Want to count this tip in your budget? It'll be added
-                        as a {lastTip.displayPrice} expense today under the
-                        Giving category.
+                        {t("modals.engage.tipJar.thanks.logPrompt", {
+                          price: lastTip.displayPrice,
+                        })}
                       </Text>
                       <TouchableOpacity
                         style={styles.logButton}
@@ -290,14 +298,13 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
                           <ActivityIndicator color={colors.white} />
                         ) : (
                           <Text style={styles.logButtonText}>
-                            Add to Budget · Giving 🎁
+                            {t("modals.engage.tipJar.thanks.logButton")}
                           </Text>
                         )}
                       </TouchableOpacity>
                       {logState === "failed" ? (
                         <Text style={styles.errorText}>
-                          Couldn't save the entry. You can try again, or add
-                          it later from the Budget tab.
+                          {t("modals.engage.tipJar.thanks.logFailed")}
                         </Text>
                       ) : null}
                     </View>
@@ -306,30 +313,32 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
 
                 <TouchableOpacity style={styles.closeButton} onPress={onClose}>
                   <Text style={styles.closeText}>
-                    {lastTip && logState !== "logged" ? "No Thanks" : "Close"}
+                    {lastTip && logState !== "logged"
+                      ? t("modals.engage.tipJar.thanks.noThanks")
+                      : t("common.close")}
                   </Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={styles.title}>Tip Jar</Text>
+                <Text style={styles.title}>
+                  {t("modals.engage.tipJar.title")}
+                </Text>
                 <Text style={styles.subtitle}>
-                  If BudgetArk has helped you, you can leave a small one-time
-                  tip. It's completely optional and unlocks nothing - every
-                  feature stays free for everyone.
+                  {t("modals.engage.tipJar.intro")}
                 </Text>
 
                 {loading ? (
                   <View style={styles.loadingBox}>
                     <ActivityIndicator color={colors.accent} />
                     <Text style={styles.loadingText}>
-                      Contacting {STORE_NAME}...
+                      {t("modals.engage.tipJar.contacting", { store: storeName })}
                     </Text>
                   </View>
                 ) : unavailable ? (
                   <View style={styles.loadingBox}>
                     <Text style={styles.loadingText}>
-                      Tips aren't available right now. Please try again later.
+                      {t("modals.engage.tipJar.unavailable")}
                     </Text>
                   </View>
                 ) : (
@@ -347,7 +356,9 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
                         disabled={busySku !== null}
                       >
                         <Text style={styles.tierEmoji}>{row.emoji}</Text>
-                        <Text style={styles.tierLabel}>{row.label}</Text>
+                        <Text style={styles.tierLabel}>
+                          {t(`modals.engage.tipJar.tiers.${row.tierId}`)}
+                        </Text>
                         {busySku === row.sku ? (
                           <ActivityIndicator color={colors.accent} />
                         ) : (
@@ -365,15 +376,14 @@ const TipJarModal: React.FC<TipJarModalProps> = ({ onClose }) => {
                 ) : null}
 
                 <Text style={styles.privacyText}>
-                  Tips are processed entirely by {STORE_NAME}. BudgetArk never
-                  sees, collects, or stores any payment details.
+                  {t("modals.engage.tipJar.privacy", { store: storeName })}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.closeButton}
                   onPress={handleBackdrop}
                 >
-                  <Text style={styles.closeText}>Close</Text>
+                  <Text style={styles.closeText}>{t("common.close")}</Text>
                 </TouchableOpacity>
               </>
             )}

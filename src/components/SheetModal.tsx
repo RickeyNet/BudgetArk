@@ -37,6 +37,16 @@ import type { DensityTokens } from "../theme/density";
 
 export const makeSheetStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
+  /** The card chrome shared by the full-height and fit-to-content sheets. */
+  const sheetFrame = {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: tokens.radius + 8,
+    borderTopRightRadius: tokens.radius + 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderBottomWidth: 0,
+    overflow: "hidden" as const,
+  };
   return StyleSheet.create({
     overlay: {
       flex: 1,
@@ -44,19 +54,35 @@ export const makeSheetStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       justifyContent: "flex-end",
     },
     modalSheet: {
+      ...sheetFrame,
       flex: 1,
       // Leaves the status bar / a sliver of the parent visible above the sheet.
       marginTop: Platform.OS === "ios" ? 44 : 32,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: tokens.radius + 8,
-      borderTopRightRadius: tokens.radius + 8,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderBottomWidth: 0,
-      overflow: "hidden",
+    },
+    /**
+     * fitContent: the sheet hugs its children (a short option list, a
+     * confirmation) instead of stretching to the top margin. Deliberately a
+     * separate style rather than an override layered on `modalSheet`: the
+     * card must carry no `flex` at all so Yoga sizes it from its content -
+     * the same shape as PaymentHistoryModal's proven auto-height card. The
+     * cap keeps an unexpectedly tall body from pushing the footer off-screen.
+     */
+    modalSheetFit: {
+      ...sheetFrame,
+      maxHeight: "85%",
     },
     scrollArea: {
       flex: 1,
+    },
+    /**
+     * fitContent body: a plain padded column, no ScrollView (see prop doc).
+     * Shrinkable so, if the body ever hits the sheet's cap, the footer
+     * stays pinned instead of being pushed out of the card.
+     */
+    fitContent: {
+      flexShrink: 1,
+      padding: tokens.padLg,
+      paddingBottom: 40,
     },
     scrollContent: {
       padding: tokens.padLg,
@@ -136,6 +162,15 @@ interface SheetModalProps {
   contentContainerStyle?: StyleProp<ViewStyle>;
   /** Buttons for the pinned footer row; omit for no footer. */
   footer?: React.ReactNode;
+  /**
+   * Size the sheet to its content instead of the default full height. For
+   * SHORT content only - a two-to-four-row menu, a confirmation - that must
+   * fit on screen unscrolled: children render in a plain padded View, not a
+   * ScrollView, because a ScrollView inside an auto-height parent has no
+   * bounded height to measure against and can collapse to nothing. Long or
+   * variable content keeps the default full-height scrolling sheet.
+   */
+  fitContent?: boolean;
   children: React.ReactNode;
 }
 
@@ -147,12 +182,15 @@ const SheetModal: React.FC<SheetModalProps> = ({
   scrollProps,
   contentContainerStyle,
   footer,
+  fitContent = false,
   children,
 }) => {
   const sheet = useSheetStyles();
   const insets = useSafeAreaInsets();
 
-  const body = scroll ? (
+  const body = fitContent ? (
+    <View style={[sheet.fitContent, contentContainerStyle]}>{children}</View>
+  ) : scroll ? (
     <ScrollView
       style={sheet.scrollArea}
       contentContainerStyle={[sheet.scrollContent, contentContainerStyle]}
@@ -167,7 +205,7 @@ const SheetModal: React.FC<SheetModalProps> = ({
   );
 
   const inner = (
-    <View style={sheet.modalSheet}>
+    <View style={fitContent ? sheet.modalSheetFit : sheet.modalSheet}>
       {body}
       {footer ? (
         <View

@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   type AppLockRecord,
   applyFailedAttempt,
@@ -28,8 +29,6 @@ import {
   recordSuccessfulUnlock,
 } from "../storage/appLockStorage";
 import { triggerHaptic } from "../utils/haptics";
-
-export const INCORRECT_PIN_MESSAGE = "Incorrect PIN - try again";
 
 export type PinVerifier = {
   record: AppLockRecord | null;
@@ -56,6 +55,7 @@ export type PinVerifier = {
  *   one-second interval only runs when someone can see it.
  */
 export const usePinVerifier = (countdownActive: boolean): PinVerifier => {
+  const { t } = useTranslation();
   const [record, setRecord] = useState<AppLockRecord | null>(null);
   const [lockoutMsLeft, setLockoutMsLeft] = useState(0);
   const [verifying, setVerifying] = useState(false);
@@ -107,13 +107,13 @@ export const usePinVerifier = (countdownActive: boolean): PinVerifier => {
         }
         setRecord(next);
         setLockoutMsLeft(lockoutRemainingMs(next, Date.now()));
-        setError(INCORRECT_PIN_MESSAGE);
+        setError(t("helpers.misc.pin.incorrect"));
         return false;
       } finally {
         setVerifying(false);
       }
     },
-    [record, verifying]
+    [record, verifying, t]
   );
 
   return {

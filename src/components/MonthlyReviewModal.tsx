@@ -17,7 +17,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { ThemeColors } from "../theme/themes";
 import SparklineChart from "./SparklineChart";
@@ -29,21 +31,25 @@ interface MonthlyReviewModalProps {
   data: MonthlyReviewData | null;
 }
 
+// Cache keyed by language too - a language switch must not serve the
+// previous language's month names.
 const SHORT_MONTH: Record<string, string> = {};
-const formatShortMonth = (monthKey: string): string => {
-  if (SHORT_MONTH[monthKey]) return SHORT_MONTH[monthKey];
+const formatShortMonth = (monthKey: string, locale: string): string => {
+  const cacheKey = `${locale}:${monthKey}`;
+  if (SHORT_MONTH[cacheKey]) return SHORT_MONTH[cacheKey];
   const d = new Date(`${monthKey}-01T00:00:00`);
-  const label = d.toLocaleDateString(undefined, { month: "short" });
-  SHORT_MONTH[monthKey] = label;
+  const label = d.toLocaleDateString(locale, { month: "short" });
+  SHORT_MONTH[cacheKey] = label;
   return label;
 };
 
-const formatFullMonth = (monthKey: string): string => {
+const formatFullMonth = (monthKey: string, locale: string): string => {
   const d = new Date(`${monthKey}-01T00:00:00`);
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString(locale, { month: "long", year: "numeric" });
 };
 
 const buildComparisonLabel = (
+  t: (key: "new" | "stopped" | "flat") => string,
   percentChange: number | null,
   current: number,
   average: number
@@ -51,9 +57,9 @@ const buildComparisonLabel = (
   if (percentChange != null) {
     return `${percentChange > 0 ? "+" : ""}${percentChange.toFixed(0)}%`;
   }
-  if (average === 0 && current > 0) return "New";
-  if (current === 0 && average > 0) return "Stopped";
-  return "Flat";
+  if (average === 0 && current > 0) return t("new");
+  if (current === 0 && average > 0) return t("stopped");
+  return t("flat");
 };
 
 const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
@@ -61,11 +67,16 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
   onClose,
   data,
 }) => {
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (!data) return null;
+
+  const locale = i18n.language;
+  const comparisonWord = (key: "new" | "stopped" | "flat"): string =>
+    t(`budget.tools.monthlyReview.comparison.${key}`);
 
   const {
     summaries,
@@ -80,20 +91,20 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
 
   const currentMonth =
     summaries.length > 0
-      ? formatFullMonth(summaries[summaries.length - 1].monthKey)
+      ? formatFullMonth(summaries[summaries.length - 1].monthKey, locale)
       : "";
 
   const chartData = summaries
     .filter((s) => s.totalExpenses > 0 || s.totalIncome > 0)
     .map((s) => ({
-      label: formatShortMonth(s.monthKey),
+      label: formatShortMonth(s.monthKey, locale),
       value: s.totalExpenses,
     }));
 
   const incomeChartData = summaries
     .filter((s) => s.totalExpenses > 0 || s.totalIncome > 0)
     .map((s) => ({
-      label: formatShortMonth(s.monthKey),
+      label: formatShortMonth(s.monthKey, locale),
       value: s.net,
     }));
 
@@ -125,31 +136,28 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>Monthly Review</Text>
+              <Text style={styles.title}>{t("budget.tools.monthlyReview.title")}</Text>
               <Text style={styles.subtitle}>{currentMonth}</Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <Text style={styles.closeBtnText}>Done</Text>
+              <Text style={styles.closeBtnText}>{t("common.done")}</Text>
             </TouchableOpacity>
           </View>
 
           {isEmpty ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>Not enough data yet</Text>
-              <Text style={styles.emptySubtext}>
-                Add budget entries for at least 2 months to see trends, category
-                changes, and streaks.
-              </Text>
+              <Text style={styles.emptyTitle}>{t("budget.tools.monthlyReview.emptyTitle")}</Text>
+              <Text style={styles.emptySubtext}>{t("budget.tools.monthlyReview.emptyBody")}</Text>
             </View>
           ) : (
             <>
               {/* Spending vs Average callout */}
               {spendingVsAvgPercent != null && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>This Month vs. Average</Text>
+                  <Text style={styles.cardTitle}>{t("budget.tools.monthlyReview.vsAverage.title")}</Text>
                   <View style={styles.vsRow}>
                     <View style={styles.vsStat}>
-                      <Text style={styles.vsLabel}>This month</Text>
+                      <Text style={styles.vsLabel}>{t("budget.tools.monthlyReview.vsAverage.thisMonth")}</Text>
                       <Text
                         style={[
                           styles.vsValue,
@@ -165,13 +173,13 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                       </Text>
                     </View>
                     <View style={styles.vsStat}>
-                      <Text style={styles.vsLabel}>Avg / month</Text>
+                      <Text style={styles.vsLabel}>{t("budget.tools.monthlyReview.vsAverage.avgPerMonth")}</Text>
                       <Text style={[styles.vsValue, { color: colors.textDim }]}>
                         {formatCurrency(avgMonthlySpending)}
                       </Text>
                     </View>
                     <View style={styles.vsStat}>
-                      <Text style={styles.vsLabel}>Change</Text>
+                      <Text style={styles.vsLabel}>{t("budget.tools.monthlyReview.vsAverage.change")}</Text>
                       <Text
                         style={[
                           styles.vsValue,
@@ -194,10 +202,8 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
               {/* Spending by person (current month, per category) */}
               {hasPersonSpending && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Spending by Person</Text>
-                  <Text style={styles.cardHint}>
-                    Assigned expenses this month
-                  </Text>
+                  <Text style={styles.cardTitle}>{t("budget.tools.monthlyReview.byPerson.title")}</Text>
+                  <Text style={styles.cardHint}>{t("budget.tools.monthlyReview.byPerson.hint")}</Text>
                   {personSpending.map((person, i) => (
                     <View
                       key={person.personId}
@@ -224,7 +230,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                       {person.byCategory.map((cat) => (
                         <View key={cat.category} style={styles.personCatRow}>
                           <Text style={styles.personCatName} numberOfLines={1}>
-                            {cat.category}
+                            {categoryLabel(t, cat.category)}
                           </Text>
                           <Text style={styles.personCatAmount}>
                             {formatCurrency(cat.total)}
@@ -239,8 +245,8 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
               {/* Category spending comparison */}
               {hasComparisons && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Category Spending Comparison</Text>
-                  <Text style={styles.cardHint}>vs. trailing 3-month average</Text>
+                  <Text style={styles.cardTitle}>{t("budget.tools.monthlyReview.comparison.title")}</Text>
+                  <Text style={styles.cardHint}>{t("budget.tools.monthlyReview.comparison.hint")}</Text>
                   {categoryComparisons.slice(0, 5).map((comparison) => {
                     const isUp = comparison.delta > 0;
                     const changeColor =
@@ -253,14 +259,18 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                     return (
                       <View key={comparison.category} style={styles.changeRow}>
                         <View style={styles.changeLeft}>
-                          <Text style={styles.changeCategory}>{comparison.category}</Text>
+                          <Text style={styles.changeCategory}>{categoryLabel(t, comparison.category)}</Text>
                           <Text style={[styles.changeAmount, { color: colors.textDim }]}>
-                            {formatCurrency(comparison.current)} this month · avg {formatCurrency(comparison.average)}
+                            {t("budget.tools.monthlyReview.comparison.row", {
+                              current: formatCurrency(comparison.current),
+                              average: formatCurrency(comparison.average),
+                            })}
                           </Text>
                         </View>
                         <View style={styles.changeRight}>
                           <Text style={[styles.changeDelta, { color: changeColor }]}>
                             {buildComparisonLabel(
+                              comparisonWord,
                               comparison.percentChange,
                               comparison.current,
                               comparison.average
@@ -280,7 +290,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
               {/* Spending trend chart */}
               {hasChartData && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Spending Trend</Text>
+                  <Text style={styles.cardTitle}>{t("budget.tools.monthlyReview.spendingTrend")}</Text>
                   <SparklineChart
                     data={chartData}
                     width={320}
@@ -297,7 +307,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
               {/* Net income trend */}
               {hasChartData && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Net Income Trend</Text>
+                  <Text style={styles.cardTitle}>{t("budget.tools.monthlyReview.netIncomeTrend")}</Text>
                   <SparklineChart
                     data={incomeChartData}
                     width={320}
@@ -314,7 +324,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
               {/* Streaks */}
               {hasStreaks && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Streaks</Text>
+                  <Text style={styles.cardTitle}>{t("budget.tools.monthlyReview.streaks.title")}</Text>
                   {streaks.map((streak, i) => (
                     <View key={i} style={styles.streakRow}>
                       <View
@@ -339,7 +349,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                             },
                           ]}
                         >
-                          {streak.count} mo
+                          {t("budget.tools.monthlyReview.streaks.months", { count: streak.count })}
                         </Text>
                       </View>
                       <Text style={styles.streakLabel}>{streak.label}</Text>
@@ -351,8 +361,8 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
               {/* Category changes */}
               {hasChanges && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Category Changes</Text>
-                  <Text style={styles.cardHint}>vs. previous month</Text>
+                  <Text style={styles.cardTitle}>{t("budget.tools.monthlyReview.changes.title")}</Text>
+                  <Text style={styles.cardHint}>{t("budget.tools.monthlyReview.changes.hint")}</Text>
                   {categoryChanges.map((change) => {
                     const isUp = change.delta > 0;
                     const isNew = change.previous === 0 && change.current > 0;
@@ -363,7 +373,7 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                       <View key={change.category} style={styles.changeRow}>
                         <View style={styles.changeLeft}>
                           <Text style={styles.changeCategory}>
-                            {change.category}
+                            {categoryLabel(t, change.category)}
                           </Text>
                           <Text
                             style={[styles.changeAmount, { color: colors.textDim }]}
@@ -374,11 +384,11 @@ const MonthlyReviewModal: React.FC<MonthlyReviewModalProps> = ({
                         <View style={styles.changeRight}>
                           {isNew ? (
                             <Text style={[styles.changeDelta, { color: colors.accent }]}>
-                              New
+                              {t("budget.tools.monthlyReview.comparison.new")}
                             </Text>
                           ) : isGone ? (
                             <Text style={[styles.changeDelta, { color: colors.textMuted }]}>
-                              Stopped
+                              {t("budget.tools.monthlyReview.comparison.stopped")}
                             </Text>
                           ) : (
                             <>

@@ -22,6 +22,7 @@ import { getConnections } from "../storage/connectionsStorage";
 import { getPendingTransactions } from "../storage/reviewInboxStorage";
 import { subscribeDataChanged } from "../storage/dataChangeNotifier";
 import {
+  startConnectionsMonitoring,
   syncConnections,
   type ConnectionSyncResult,
 } from "../services/connections/connectionsSyncService";
@@ -83,6 +84,16 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Foreground auto-sync trigger for bank connections (startup pass +
+  // background->active). Registered HERE, on the always-mounted provider,
+  // deliberately: it used to live in the Profile tab's Connections section,
+  // and bottom tabs mount lazily, so a launch that never visited Profile
+  // never synced - balances went stale for days. Idempotent; the service
+  // enforces the per-connection cooldowns, so this is cheap.
+  useEffect(() => {
+    startConnectionsMonitoring();
+  }, []);
 
   // A partner sync (or an import) can retire Review Inbox rows behind this
   // cache's back - the partner's entries and dismissals reconcile the

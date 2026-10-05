@@ -20,6 +20,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { TipNudgeCopy } from "../utils/tipJarNudge";
@@ -41,6 +42,7 @@ const TipJarNudgeCard: React.FC<TipJarNudgeCardProps> = ({
   variant = "inline",
   style,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -48,9 +50,9 @@ const TipJarNudgeCard: React.FC<TipJarNudgeCardProps> = ({
     <View
       style={[styles.card, variant === "floating" ? styles.floating : styles.inline, style]}
       accessibilityRole="summary"
-      accessibilityLabel={`Tip Jar. ${copy.title}. ${copy.body}`}
+      accessibilityLabel={t("debts.moments.tipNudge.a11yCard", { title: copy.title, body: copy.body })}
     >
-      <Text style={styles.eyebrow}>TIP JAR 💛</Text>
+      <Text style={styles.eyebrow}>{t("debts.moments.tipNudge.eyebrow")}</Text>
       <Text style={styles.title}>{copy.title}</Text>
       <Text style={styles.body}>{copy.body}</Text>
       <View style={styles.actions}>
@@ -58,18 +60,18 @@ const TipJarNudgeCard: React.FC<TipJarNudgeCardProps> = ({
           onPress={onTip}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
-          accessibilityLabel="Open the Tip Jar"
+          accessibilityLabel={t("debts.moments.tipNudge.a11yOpen")}
         >
-          <Text style={styles.tipAction}>Leave a tip ›</Text>
+          <Text style={styles.tipAction}>{t("debts.moments.tipNudge.leaveTip")}</Text>
         </TouchableOpacity>
         {onDismiss ? (
           <TouchableOpacity
             onPress={onDismiss}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel="Dismiss"
+            accessibilityLabel={t("debts.moments.tipNudge.a11yDismiss")}
           >
-            <Text style={styles.dismissAction}>Not now</Text>
+            <Text style={styles.dismissAction}>{t("debts.moments.tipNudge.notNow")}</Text>
           </TouchableOpacity>
         ) : null}
       </View>

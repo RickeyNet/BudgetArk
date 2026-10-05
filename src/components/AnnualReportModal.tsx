@@ -22,6 +22,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+import { categoryLabel } from "../i18n/categoryLabel";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -47,6 +49,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -159,16 +162,16 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTextBlock}>
-              <Text style={styles.title}>Annual Report</Text>
-              <Text style={styles.subtitle}>Your {selectedYear} in review</Text>
+              <Text style={styles.title}>{t("bridge.reports.annual.title")}</Text>
+              <Text style={styles.subtitle}>{t("bridge.reports.annual.subtitle", { year: selectedYear })}</Text>
             </View>
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={onClose}
               accessibilityRole="button"
-              accessibilityLabel="Close annual report"
+              accessibilityLabel={t("bridge.reports.annual.closeA11y")}
             >
-              <Text style={styles.closeBtnText}>Done</Text>
+              <Text style={styles.closeBtnText}>{t("common.done")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -213,10 +216,9 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
 
           {!isLoaded ? null : !report || !report.hasData ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>Nothing logged for {selectedYear}</Text>
+              <Text style={styles.emptyTitle}>{t("bridge.reports.annual.empty.title", { year: selectedYear })}</Text>
               <Text style={styles.emptySubtext}>
-                Add budget entries, record debt payments, or track accounts and
-                your {selectedYear} report will fill in automatically.
+                {t("bridge.reports.annual.empty.body", { year: selectedYear })}
               </Text>
             </View>
           ) : (
@@ -224,26 +226,25 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
               {/* Headline stat tiles */}
               <View style={styles.tileGrid}>
                 <View style={styles.tile}>
-                  <Text style={styles.tileLabel}>Debt paid</Text>
+                  <Text style={styles.tileLabel}>{t("bridge.reports.annual.tiles.debtPaid")}</Text>
                   <Text style={[styles.tileValue, { color: colors.success }]}>
                     {formatCurrency(report.debtPaid)}
                   </Text>
                   <Text style={styles.tileHint}>
-                    {report.paymentCount}{" "}
-                    {report.paymentCount === 1 ? "payment" : "payments"}
+                    {t("bridge.reports.annual.tiles.payments", { count: report.paymentCount })}
                   </Text>
                 </View>
 
                 <View style={styles.tile}>
-                  <Text style={styles.tileLabel}>Set aside</Text>
+                  <Text style={styles.tileLabel}>{t("bridge.reports.annual.tiles.setAside")}</Text>
                   <Text style={[styles.tileValue, { color: colors.teal }]}>
                     {formatCurrency(report.totalContributed)}
                   </Text>
-                  <Text style={styles.tileHint}>Savings · Retire · Invest</Text>
+                  <Text style={styles.tileHint}>{t("bridge.reports.annual.tiles.setAsideHint")}</Text>
                 </View>
 
                 <View style={styles.tile}>
-                  <Text style={styles.tileLabel}>Net worth change</Text>
+                  <Text style={styles.tileLabel}>{t("bridge.reports.annual.tiles.netWorthChange")}</Text>
                   <Text style={[styles.tileValue, { color: netWorthColor }]}>
                     {netWorthChange == null
                       ? "-"
@@ -253,13 +254,13 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                   </Text>
                   <Text style={styles.tileHint}>
                     {netWorthChange == null
-                      ? "Not enough history"
-                      : "Start vs. end of year"}
+                      ? t("bridge.reports.annual.tiles.notEnoughHistory")
+                      : t("bridge.reports.annual.tiles.startVsEnd")}
                   </Text>
                 </View>
 
                 <View style={styles.tile}>
-                  <Text style={styles.tileLabel}>Savings rate</Text>
+                  <Text style={styles.tileLabel}>{t("bridge.reports.annual.tiles.savingsRate")}</Text>
                   <Text
                     style={[
                       styles.tileValue,
@@ -277,28 +278,28 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                       ? "-"
                       : `${Math.round(report.savingsRate)}%`}
                   </Text>
-                  <Text style={styles.tileHint}>Income kept, not spent</Text>
+                  <Text style={styles.tileHint}>{t("bridge.reports.annual.tiles.savingsRateHint")}</Text>
                 </View>
               </View>
 
               {/* Cash flow */}
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Cash Flow</Text>
+                <Text style={styles.cardTitle}>{t("bridge.reports.annual.cashFlow.title")}</Text>
                 <View style={styles.flowRow}>
-                  <Text style={styles.flowLabel}>Income</Text>
+                  <Text style={styles.flowLabel}>{t("bridge.reports.annual.cashFlow.income")}</Text>
                   <Text style={[styles.flowValue, { color: colors.success }]}>
                     {formatCurrency(report.totalIncome)}
                   </Text>
                 </View>
                 <View style={styles.flowRow}>
-                  <Text style={styles.flowLabel}>Expenses</Text>
+                  <Text style={styles.flowLabel}>{t("bridge.reports.annual.cashFlow.expenses")}</Text>
                   <Text style={[styles.flowValue, { color: colors.warning }]}>
                     {formatCurrency(report.totalExpenses)}
                   </Text>
                 </View>
                 <View style={[styles.flowRow, styles.flowRowLast]}>
                   <Text style={[styles.flowLabel, styles.flowLabelStrong]}>
-                    Net saved
+                    {t("bridge.reports.annual.cashFlow.netSaved")}
                   </Text>
                   <Text
                     style={[
@@ -319,7 +320,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
               {/* Months under budget */}
               {report.monthsWithLimits > 0 && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Months Under Budget</Text>
+                  <Text style={styles.cardTitle}>{t("bridge.reports.annual.underBudget.title")}</Text>
                   <Text style={styles.bigStat}>
                     {report.monthsUnderBudget}
                     <Text style={styles.bigStatDen}>
@@ -328,9 +329,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                     </Text>
                   </Text>
                   <Text style={styles.cardHint}>
-                    Months where every category with a limit stayed under it.
-                    A full year of limits is kept, so the current year is
-                    fully covered; older years may have aged-out limits.
+                    {t("bridge.reports.annual.underBudget.hint")}
                   </Text>
                 </View>
               )}
@@ -338,7 +337,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
               {/* Top spending categories */}
               {report.topCategories.length > 0 && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Top Spending Categories</Text>
+                  <Text style={styles.cardTitle}>{t("bridge.reports.annual.topCategories")}</Text>
                   {report.topCategories.map((cat, i) => {
                     const max = report.topCategories[0].amount || 1;
                     const pct = Math.max(4, (cat.amount / max) * 100);
@@ -347,7 +346,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                         <View style={styles.catHeader}>
                           <Text style={styles.catName}>
                             {i === 0 ? "🏆 " : ""}
-                            {cat.category}
+                            {categoryLabel(t, cat.category)}
                           </Text>
                           <Text style={styles.catAmount}>
                             {formatCurrency(cat.amount)}
@@ -374,7 +373,7 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
               {/* Monthly spending trend */}
               {hasChart && (
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Spending by Month</Text>
+                  <Text style={styles.cardTitle}>{t("bridge.reports.annual.trend")}</Text>
                   <SparklineChart
                     data={chartData}
                     width={320}
@@ -393,12 +392,12 @@ const AnnualReportModal: React.FC<AnnualReportModalProps> = ({
                 style={styles.shareBtn}
                 onPress={handleShare}
                 accessibilityRole="button"
-                accessibilityLabel="Share annual summary"
+                accessibilityLabel={t("bridge.reports.annual.share.a11y")}
               >
-                <Text style={styles.shareBtnText}>Share summary</Text>
+                <Text style={styles.shareBtnText}>{t("bridge.reports.annual.share.button")}</Text>
               </TouchableOpacity>
               <Text style={styles.shareNote}>
-                Shares totals and percentages only - no names or details.
+                {t("bridge.reports.annual.share.note")}
               </Text>
             </>
           )}

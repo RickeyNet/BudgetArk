@@ -22,6 +22,7 @@ import {
 } from "../data/categoryBuckets";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { generateUUID } from "../utils/uuid";
+import { t } from "../i18n/translate";
 
 const STORAGE_KEY = "@budgetark_custom_categories";
 
@@ -136,22 +137,22 @@ const validateName = (
   excludeId?: string
 ): { ok: true; name: string } | { ok: false; error: string } => {
   const name = sanitizeTextInput(rawName).trim();
-  if (!name) return { ok: false, error: "Enter a category name." };
+  if (!name) return { ok: false, error: t("helpers.misc.categories.nameRequired") };
   if (name.length > MAX_CATEGORY_NAME_LENGTH) {
     return {
       ok: false,
-      error: `Keep it under ${MAX_CATEGORY_NAME_LENGTH} characters.`,
+      error: t("helpers.misc.validation.tooLong", { max: MAX_CATEGORY_NAME_LENGTH }),
     };
   }
   if (collidesWithBuiltInCategory(name)) {
-    return { ok: false, error: `"${name}" is already a built-in category.` };
+    return { ok: false, error: t("helpers.misc.categories.builtIn", { name }) };
   }
   const lower = name.toLowerCase();
   const clash = existing.some(
     (c) => c.id !== excludeId && c.name.toLowerCase() === lower
   );
   if (clash) {
-    return { ok: false, error: `"${name}" already exists.` };
+    return { ok: false, error: t("helpers.misc.validation.alreadyExists", { name }) };
   }
   return { ok: true, name };
 };
@@ -165,7 +166,7 @@ export const addCustomCategory = async (
   if (existing.length >= MAX_CUSTOM_CATEGORIES) {
     return {
       ok: false,
-      error: `You can have up to ${MAX_CUSTOM_CATEGORIES} custom categories.`,
+      error: t("helpers.misc.categories.limit", { max: MAX_CUSTOM_CATEGORIES }),
     };
   }
   const checked = validateName(rawName, existing);
@@ -195,7 +196,7 @@ export const updateCustomCategory = async (
 ): Promise<CategoryMutationResult> => {
   const existing = await readStore();
   const target = existing.find((c) => c.id === id);
-  if (!target) return { ok: false, error: "Category not found." };
+  if (!target) return { ok: false, error: t("helpers.misc.categories.notFound") };
 
   let name = target.name;
   if (patch.name !== undefined) {
@@ -252,7 +253,7 @@ export const restoreCustomCategory = async (
   if (existing.length >= MAX_CUSTOM_CATEGORIES) {
     return {
       ok: false,
-      error: `You can have up to ${MAX_CUSTOM_CATEGORIES} custom categories.`,
+      error: t("helpers.misc.categories.limit", { max: MAX_CUSTOM_CATEGORIES }),
     };
   }
   const lower = category.name.toLowerCase();
@@ -260,7 +261,7 @@ export const restoreCustomCategory = async (
     collidesWithBuiltInCategory(category.name) ||
     existing.some((c) => c.name.toLowerCase() === lower)
   ) {
-    return { ok: false, error: `"${category.name}" already exists.` };
+    return { ok: false, error: t("helpers.misc.validation.alreadyExists", { name: category.name }) };
   }
   const next = [...existing, category];
   await writeStore(next);

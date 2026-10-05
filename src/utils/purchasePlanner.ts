@@ -22,6 +22,7 @@ import { getMonthKey } from "./budgetMonths";
 import { calcMonthsToPayoff, calcTotalInterest } from "./calculations";
 import { entriesForMonth } from "./billFulfillment";
 import { parseMoneyInput } from "./parseMoneyInput";
+import { t } from "../i18n/translate";
 
 /* ── Monthly cash flow (from budget history) ── */
 
@@ -209,46 +210,20 @@ export type ArkPurchaseGuidance = {
   message: string;
 };
 
-const STEP_GUIDANCE: Record<
-  DebtMilestoneKey,
-  { tone: ArkGuidanceTone; message: string }
-> = {
-  keel: {
-    tone: "hold",
-    message:
-      "You're building your Keel - the starter emergency fund. Fund that first: without a cushion, one surprise expense turns this purchase into new debt. Keep this set-aside small, or park the plan until the Keel is done.",
-  },
-  hull: {
-    tone: "caution",
-    message:
-      "You're on the Hull step - paying off debt. A sinking fund beats financing, but every dollar set aside here is a dollar not knocking down a balance. Check the debt trade-off below and lean toward needs over wants.",
-  },
-  deck: {
-    tone: "caution",
-    message:
-      "You're building the Deck - your full 3-6 month emergency fund. Saving for a purchase alongside it is fine; just keep the emergency fund the bigger slice until it's topped up.",
-  },
-  supplies: {
-    tone: "go",
-    message:
-      "You're past the survival steps of your Ark - a sinking fund is exactly the right tool. Keep your 15% retirement investing first, set this aside from what's left, and pay cash.",
-  },
-  gather_animals: {
-    tone: "go",
-    message:
-      "Your Ark is well underway - set the money aside monthly and pay cash so this purchase never becomes debt. Keep your education savings on pace alongside it.",
-  },
-  moorings: {
-    tone: "go",
-    message:
-      "Your Ark is nearly built - a sinking fund keeps this purchase from touching your mortgage-payoff momentum. Set it aside monthly and pay cash.",
-  },
-  sail: {
-    tone: "go",
-    message:
-      "You're sailing - buying with cash you set aside on purpose is exactly how this stays a wealth-building habit rather than a setback.",
-  },
+/** Tone per step; the sentence itself lives at helpers.planning.ark.steps.<key>. */
+const STEP_TONE: Record<DebtMilestoneKey, ArkGuidanceTone> = {
+  keel: "hold",
+  hull: "caution",
+  deck: "caution",
+  supplies: "go",
+  gather_animals: "go",
+  moorings: "go",
+  sail: "go",
 };
+
+/** Localized step name by persisted id (the stored title is English seed data). */
+const milestoneTitle = (key: DebtMilestoneKey): string =>
+  t(`helpers.planning.milestones.steps.${key}.title`);
 
 /**
  * Ark-step-aware guidance for starting a purchase fund, keyed off the
@@ -263,23 +238,26 @@ export const buildArkPurchaseGuidance = (
     return {
       tone: "go",
       stepTitle: "",
-      message:
-        "A sinking fund sets money aside every month so the purchase is paid in cash - it never has to become debt.",
+      message: t("helpers.planning.ark.noPlan"),
     };
   }
   const current = plan.steps.find((step) => step.key === plan.currentStepKey);
   if (!current) {
     return buildArkPurchaseGuidance(null);
   }
+  const stepTitle = milestoneTitle(current.key);
   if (current.isCompleted) {
     return {
       tone: "go",
-      stepTitle: current.title,
-      message: `Your ${current.title} step is complete - setting cash aside for this purchase won't knock the Ark off course. Keep the monthly amount inside your free cash flow and pay cash.`,
+      stepTitle,
+      message: t("helpers.planning.ark.stepComplete", { step: stepTitle }),
     };
   }
-  const guidance = STEP_GUIDANCE[current.key];
-  return { tone: guidance.tone, stepTitle: current.title, message: guidance.message };
+  return {
+    tone: STEP_TONE[current.key],
+    stepTitle,
+    message: t(`helpers.planning.ark.steps.${current.key}`),
+  };
 };
 
 /* ── Display helpers ── */
@@ -326,27 +304,10 @@ export const PLAN_PRIORITY_METHODS: readonly PlanPriorityMethod[] = [
   "custom",
 ];
 
-export const PLAN_PRIORITY_METHOD_LABELS: Record<PlanPriorityMethod, string> = {
-  snowball: "Smallest first",
-  soonest: "Soonest needed",
-  custom: "My order",
-};
-
-export const PLAN_PRIORITY_METHOD_HINTS: Record<PlanPriorityMethod, string> = {
-  snowball: "Finish the cheapest plans first for quick wins - the snowball.",
-  soonest: "Plans with the nearest need-by date come first; undated ones after.",
-  custom: "Rank them yourself with the arrows on each plan.",
-};
-
 export const PLAN_ALLOCATION_MODES: readonly PlanAllocationMode[] = [
   "rollover",
   "parallel",
 ];
-
-export const PLAN_ALLOCATION_LABELS: Record<PlanAllocationMode, string> = {
-  rollover: "One at a time",
-  parallel: "Split evenly",
-};
 
 /** Simulation horizon; a plan not funded by then reports "never" (null). */
 export const MAX_PLAN_PROJECTION_MONTHS = 240;
@@ -706,12 +667,12 @@ export const calcHoursOfWork = (
 
 /** "under an hour" / "3 hours" / "120 hours - about 3 weeks of work". */
 export const describeHoursOfWork = (work: HoursOfWork): string => {
-  if (work.hours < 1) return "under an hour of work";
+  if (work.hours < 1) return t("helpers.planning.hoursOfWork.underAnHour");
   const hours = Math.round(work.hours);
-  const base = `${hours} hour${hours === 1 ? "" : "s"} of work`;
+  const base = t("helpers.planning.hoursOfWork.hours", { count: hours });
   if (work.weeks < 1) return base;
   const weeks = Math.round(work.weeks * 10) / 10;
-  return `${base} - about ${weeks} week${weeks === 1 ? "" : "s"}`;
+  return t("helpers.planning.hoursOfWork.withWeeks", { base, count: weeks });
 };
 
 /** Standard amortized payment; 0% APR is plain division. */
@@ -869,20 +830,26 @@ export const describeDebtOpportunityCost = (
   cost: DebtOpportunityCost,
   money: (amount: number) => string
 ): string => {
-  const lead = `${money(cost.monthlyAmount)}/mo on ${cost.debtName} instead`;
+  const lead = t("helpers.planning.debtOpportunity.lead", {
+    amount: money(cost.monthlyAmount),
+    debt: cost.debtName,
+  });
   if (cost.monthsSooner === Infinity) {
-    return `${lead} would turn a debt its minimum never clears into one that does.`;
+    return t("helpers.planning.debtOpportunity.neverClears", { lead });
   }
+  const interest = money(Math.round(cost.interestSaved));
   if (cost.monthsSooner === 0) {
     // Same payoff month either way; only the interest line (if any) is worth saying.
     return cost.interestSaved >= 1
-      ? `${lead} would save ${money(Math.round(cost.interestSaved))} in interest, though it clears the same month.`
-      : `${lead} would barely move it - this plan costs you almost nothing there.`;
+      ? t("helpers.planning.debtOpportunity.sameMonthInterest", { lead, interest })
+      : t("helpers.planning.debtOpportunity.barelyMoves", { lead });
   }
-  const months = `${cost.monthsSooner} month${cost.monthsSooner === 1 ? "" : "s"} sooner`;
+  const months = t("helpers.planning.debtOpportunity.monthsSooner", {
+    count: cost.monthsSooner,
+  });
   return cost.interestSaved >= 1
-    ? `${lead} would clear it ${months} and save ${money(Math.round(cost.interestSaved))} in interest.`
-    : `${lead} would clear it ${months}.`;
+    ? t("helpers.planning.debtOpportunity.soonerWithInterest", { lead, months, interest })
+    : t("helpers.planning.debtOpportunity.sooner", { lead, months });
 };
 
 /* ── Cost per use ── */
@@ -932,9 +899,15 @@ export const describeCostPerUse = (
   money: (amount: number) => string
 ): string => {
   const rounded = Math.round(costPerUse * 100) / 100;
-  const cents = rounded < 1 ? `${Math.round(costPerUse * 100)}¢` : money(rounded);
-  const years = `${usefulLifeYears} year${usefulLifeYears === 1 ? "" : "s"}`;
-  return `about ${cents} per use (${usesPerMonth}x a month for ${years})`;
+  const cost =
+    rounded < 1
+      ? t("helpers.planning.costPerUse.cents", { cents: Math.round(costPerUse * 100) })
+      : money(rounded);
+  return t("helpers.planning.costPerUse.sentence", {
+    cost,
+    uses: usesPerMonth,
+    count: usefulLifeYears,
+  });
 };
 
 /* ── Per-row what-if nudges ── */

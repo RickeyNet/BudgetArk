@@ -19,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { BankProvider } from "../types";
 import { CONNECTION_GUIDES } from "../data/connectionGuides";
 import { useTheme } from "../theme/ThemeProvider";
@@ -38,6 +39,7 @@ const ProviderSetupGuideModal: React.FC<ProviderSetupGuideModalProps> = ({
   onClose,
   onStartSetup,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const guide = CONNECTION_GUIDES[provider];
@@ -58,7 +60,7 @@ const ProviderSetupGuideModal: React.FC<ProviderSetupGuideModalProps> = ({
           <Text style={styles.tagline}>{guide.tagline}</Text>
 
           <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>COST</Text>
+            <Text style={styles.infoLabel}>{t("modals.connections.guide.cost")}</Text>
             <Text style={styles.infoValue}>{guide.cost}</Text>
           </View>
 
@@ -66,10 +68,12 @@ const ProviderSetupGuideModal: React.FC<ProviderSetupGuideModalProps> = ({
             style={styles.linkButton}
             onPress={() => openUrl(guide.siteUrl)}
           >
-            <Text style={styles.linkButtonText}>Open {guide.siteLabel} ↗</Text>
+            <Text style={styles.linkButtonText}>
+              {t("modals.connections.guide.openSite", { site: guide.siteLabel })}
+            </Text>
           </TouchableOpacity>
 
-          <Text style={styles.sectionLabel}>STEP BY STEP</Text>
+          <Text style={styles.sectionLabel}>{t("modals.connections.guide.stepByStep")}</Text>
           {guide.steps.map((step, index) => (
             <View key={step.title} style={styles.stepRow}>
               <View style={styles.stepNumber}>
@@ -87,11 +91,11 @@ const ProviderSetupGuideModal: React.FC<ProviderSetupGuideModalProps> = ({
             onPress={() => openUrl(guide.officialGuideUrl)}
           >
             <Text style={styles.inlineLinkText}>
-              See {guide.name}'s official setup guide ↗
+              {t("modals.connections.guide.officialGuide", { name: guide.name })}
             </Text>
           </TouchableOpacity>
 
-          <Text style={styles.sectionLabel}>GOOD TO KNOW</Text>
+          <Text style={styles.sectionLabel}>{t("modals.connections.guide.goodToKnow")}</Text>
           {guide.tips.map((tip) => (
             <View key={tip} style={styles.tipRow}>
               <Text style={styles.tipBullet}>•</Text>
@@ -99,7 +103,7 @@ const ProviderSetupGuideModal: React.FC<ProviderSetupGuideModalProps> = ({
             </View>
           ))}
 
-          <Text style={styles.sectionLabel}>PRIVACY AT A GLANCE</Text>
+          <Text style={styles.sectionLabel}>{t("modals.connections.guide.privacy")}</Text>
           <View style={styles.privacyCard}>
             <Text style={styles.privacyHeadline}>{guide.privacy.headline}</Text>
             {guide.privacy.points.map((point) => (
@@ -113,25 +117,22 @@ const ProviderSetupGuideModal: React.FC<ProviderSetupGuideModalProps> = ({
               onPress={() => openUrl(guide.privacy.policyUrl)}
             >
               <Text style={styles.inlineLinkText}>
-                Read {guide.name}'s full privacy policy ↗
+                {t("modals.connections.guide.policy", { name: guide.name })}
               </Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.disclaimer}>
-            This is a plain-language summary, not legal advice. Policies can
-            change - the link above is always the authoritative version.
-          </Text>
+          <Text style={styles.disclaimer}>{t("modals.connections.guide.disclaimer")}</Text>
         </ScrollView>
 
         <View style={styles.footer}>
           <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
-            <Text style={styles.secondaryButtonText}>Back</Text>
+            <Text style={styles.secondaryButtonText}>{t("common.back")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() => onStartSetup(provider)}
           >
-            <Text style={styles.primaryButtonText}>Start setup →</Text>
+            <Text style={styles.primaryButtonText}>{t("modals.connections.guide.startSetup")}</Text>
           </TouchableOpacity>
         </View>
       </View>

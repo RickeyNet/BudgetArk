@@ -21,6 +21,9 @@ describe("QUICK_START_TEMPLATES", () => {
       expect(total).toBeLessThanOrEqual(100);
       expect(total).toBeGreaterThanOrEqual(70);
       expect(template.allocations.Housing).toBeGreaterThan(0);
+      // Card copy resolves through i18n at read time (English under Jest).
+      expect(template.title).not.toMatch(/^data\./);
+      expect(template.description.length).toBeGreaterThan(0);
     }
     // Zero-based and the two balanced ones assign everything; debt-heavy
     // deliberately leaves room for debt payments the Debts tab plans.

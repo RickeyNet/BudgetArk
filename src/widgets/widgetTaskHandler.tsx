@@ -6,11 +6,29 @@
  * widget to render. Clicks never reach here - every tappable element in the
  * Quick Entry widget uses the built-in OPEN_URI action, which Android
  * handles natively via the deep link.
+ *
+ * The headless context has no LanguageProvider, so the handler applies the
+ * stored app-language setting itself before rendering (device language
+ * when "auto"), keeping widget labels in step with the app.
  */
 
 import React from "react";
 import type { WidgetTaskHandlerProps } from "react-native-android-widget";
 import { QuickEntryWidget } from "./QuickEntryWidget";
+import i18n, { getDeviceLanguageTags } from "../i18n";
+import { isAppLanguageId, resolveAppLanguage } from "../i18n/pickLanguage";
+import { getAppearanceBoot } from "../theme/appearanceBoot";
+
+const applyStoredLanguage = async (): Promise<void> => {
+  try {
+    const { language } = await getAppearanceBoot();
+    const setting = isAppLanguageId(language) ? language : "auto";
+    const resolved = resolveAppLanguage(setting, getDeviceLanguageTags());
+    if (i18n.language !== resolved) await i18n.changeLanguage(resolved);
+  } catch {
+    // Best effort: the widget renders in whatever language i18n booted with.
+  }
+};
 
 const nameToWidget = {
   // Must match the widget `name` in app.json's react-native-android-widget
@@ -29,6 +47,7 @@ export async function widgetTaskHandler(
     case "WIDGET_ADDED":
     case "WIDGET_UPDATE":
     case "WIDGET_RESIZED":
+      await applyStoredLanguage();
       props.renderWidget(<Widget />);
       break;
     default:

@@ -25,7 +25,8 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from "react-native";
-import { DEBT_CLASS_OPTIONS, DEBT_OWNER_OPTIONS, Debt } from "../types";
+import { useTranslation } from "react-i18next";
+import { Debt } from "../types";
 import {
   calcMonthsToPayoff,
   calcMonthsUntilDate,
@@ -82,6 +83,8 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
 
   /** Memoized styles - only recreate when colors change */
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
@@ -129,36 +132,37 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
         ? colors.accent
         : colors.warning || colors.accent;
 
-  const keepAliveLine = React.useMemo(() => {
+  const keepAliveLine = React.useMemo((): string => {
     if (!keepAlive) return "";
-    const when = keepAlive.deadline.toLocaleDateString(undefined, {
+    const when = keepAlive.deadline.toLocaleDateString(locale, {
       month: "short",
       day: "numeric",
     });
-    if (keepAlive.status === "ok") return `Card active · next use by ${when}`;
+    if (keepAlive.status === "ok") return t("debts.card.card.keepAlive.active", { date: when });
     if (keepAlive.status === "overdue") {
-      return `Inactivity deadline passed (${when}) · use it soon`;
+      return t("debts.card.card.keepAlive.overdue", { date: when });
     }
     const days =
       keepAlive.daysUntil === 0
-        ? "today"
+        ? t("debts.card.card.keepAlive.today")
         : keepAlive.daysUntil === 1
-          ? "tomorrow"
-          : `${keepAlive.daysUntil} days`;
-    return `Use by ${when} (${days})`;
-  }, [keepAlive]);
+          ? t("debts.card.card.keepAlive.tomorrow")
+          : t("debts.card.card.keepAlive.days", { count: keepAlive.daysUntil });
+    return t("debts.card.card.keepAlive.useBy", { date: when, when: days });
+  }, [keepAlive, locale, t]);
 
   /** Goal date calculations */
   /** "Balance from <bank account> · as of <date>" - see the bankSync prop. */
-  const bankSyncLine = React.useMemo(() => {
+  const bankSyncLine = React.useMemo((): string => {
     if (!bankSync) return "";
     const asOf = bankSync.asOf ? new Date(bankSync.asOf) : null;
-    const when =
-      asOf && !Number.isNaN(asOf.getTime())
-        ? ` · as of ${asOf.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-        : "";
-    return `Balance from ${bankSync.accountName}${when}`;
-  }, [bankSync]);
+    return asOf && !Number.isNaN(asOf.getTime())
+      ? t("debts.card.card.bankSyncAsOf", {
+          account: bankSync.accountName,
+          date: asOf.toLocaleDateString(locale, { month: "short", day: "numeric" }),
+        })
+      : t("debts.card.card.bankSync", { account: bankSync.accountName });
+  }, [bankSync, locale, t]);
 
   const goalInfo = React.useMemo(() => {
     if (!debt.goalDate || debt.balance <= 0) return null;
@@ -186,16 +190,15 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
 
   const statusText =
     percentPaid >= 75
-      ? "Almost there!"
+      ? t("debts.card.card.status.almost")
       : percentPaid >= 40
-      ? "Making progress"
-      : "Keep going";
+      ? t("debts.card.card.status.progress")
+      : t("debts.card.card.status.keepGoing");
 
-  const ownerLabel =
-    DEBT_OWNER_OPTIONS.find((option) => option.id === debt.owner)?.label || "Mine";
-  const debtClassLabel =
-    DEBT_CLASS_OPTIONS.find((option) => option.id === debt.debtClass)?.label ||
-    "Credit / Personal";
+  // Owner / class labels are keyed by the DebtOwner / DebtClass ids
+  // (see locales/en/debtsCard.ts); an unknown id falls back to the default.
+  const ownerLabel = t(`debts.form.owner.options.${debt.owner ?? "mine"}`);
+  const debtClassLabel = t(`debts.form.type.options.${debt.debtClass ?? "personal_credit"}`);
   const usesInferredType = debt.debtClassSource !== "manual";
 
   /**
@@ -225,7 +228,10 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
         <View style={styles.collapsedLeft}>
           <Text style={styles.collapsedName} numberOfLines={1}>{debt.name}</Text>
           <Text style={styles.collapsedDetail}>
-            {formatCurrency(debt.balance)} · {debt.rate}% APR
+            {t("debts.card.card.collapsedDetail", {
+              balance: formatCurrency(debt.balance),
+              rate: debt.rate,
+            })}
           </Text>
         </View>
         <View style={styles.collapsedRight}>
@@ -261,13 +267,18 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             </View>
           </View>
           <Text style={styles.rateText}>
-            {debt.rate}% APR · {formatCurrency(debt.minPayment)}/mo minimum
+            {t("debts.card.card.rateLine", {
+              rate: debt.rate,
+              minimum: formatCurrency(debt.minPayment),
+            })}
           </Text>
           <View style={styles.metaRow}>
-            <Text style={styles.ownerText}>Owner: {ownerLabel} · Type: {debtClassLabel}</Text>
+            <Text style={styles.ownerText}>
+              {t("debts.card.card.meta", { owner: ownerLabel, type: debtClassLabel })}
+            </Text>
             {usesInferredType && (
               <View style={[styles.inferredBadge, { backgroundColor: colors.warningDim || `${colors.warning || colors.accent}20` }]}>
-                <Text style={[styles.inferredBadgeText, { color: colors.warning || colors.accent }]}>Review type</Text>
+                <Text style={[styles.inferredBadgeText, { color: colors.warning || colors.accent }]}>{t("debts.card.card.reviewType")}</Text>
               </View>
             )}
           </View>
@@ -285,13 +296,13 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
       {/* ── Balance Row: Remaining vs Paid ── */}
       <View style={styles.balanceRow}>
         <View>
-          <Text style={styles.balanceLabel}>REMAINING</Text>
+          <Text style={styles.balanceLabel}>{t("debts.card.card.remaining")}</Text>
           <Text style={styles.balanceAmount}>
             {formatCurrency(debt.balance)}
           </Text>
         </View>
         <View style={styles.balanceRight}>
-          <Text style={styles.balanceLabel}>PAID OFF</Text>
+          <Text style={styles.balanceLabel}>{t("debts.card.card.paidOff")}</Text>
           <Text style={[styles.balanceAmount, { color: colors.success }]}>
             {formatCurrency(debt.originalBalance - debt.balance)}
           </Text>
@@ -323,16 +334,21 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
         <View style={[styles.goalRow, { backgroundColor: goalInfo.expired ? colors.dangerDim : goalInfo.onTrack ? colors.successDim : `${colors.accent}20` }]}>
           {goalInfo.expired ? (
             <Text style={[styles.goalText, { color: colors.danger }]}>
-              Goal date has passed
+              {t("debts.card.card.goal.passed")}
             </Text>
           ) : (
             <>
               <Text style={[styles.goalText, { color: goalInfo.onTrack ? colors.success : colors.accent }]}>
-                Goal: {parseGoalDateLocal(debt.goalDate!).toLocaleDateString()} ({goalInfo.monthsUntilGoal} mo left)
+                {t("debts.card.card.goal.line", {
+                  date: parseGoalDateLocal(debt.goalDate!).toLocaleDateString(locale),
+                  monthsLeft: t("debts.card.card.goal.monthsLeft", { count: goalInfo.monthsUntilGoal }),
+                })}
               </Text>
               {isFinite(goalInfo.requiredPayment) && (
                 <Text style={[styles.goalText, { color: goalInfo.onTrack ? colors.success : colors.accent }]}>
-                  {goalInfo.onTrack ? "On track" : `Need ${formatCurrency(goalInfo.requiredPayment)}/mo`}
+                  {goalInfo.onTrack
+                    ? t("debts.card.card.goal.onTrack")
+                    : t("debts.card.card.goal.need", { amount: formatCurrency(goalInfo.requiredPayment) })}
                 </Text>
               )}
             </>
@@ -354,7 +370,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             onPress={() => onKeepAliveUse?.(debt.id)}
           >
             <Text style={[styles.keepAliveButtonText, { color: keepAliveColor }]}>
-              I used it
+              {t("debts.card.card.keepAlive.usedIt")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -364,8 +380,8 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
       <View style={styles.footerRow}>
         <Text style={styles.timelineText}>
           {monthsLeft === Infinity
-            ? "Adjust payment plan"
-            : `${monthsLeft} months to payoff`}
+            ? t("debts.card.card.timeline.adjust")
+            : t("debts.card.card.timeline.months", { count: monthsLeft })}
         </Text>
 
         <View style={styles.actionButtons}>
@@ -374,7 +390,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             onPress={() => setShowPayInput(!showPayInput)}
           >
             <Text style={[styles.payButtonText, { color: colors.accentButtonText }]}>
-              Pay
+              {t("debts.card.card.pay")}
             </Text>
           </TouchableOpacity>
 
@@ -383,13 +399,15 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             onPress={() => onEdit(debt)}
           >
             <Text style={[styles.editButtonText, { color: colors.accent }]}>
-              Edit
+              {t("common.edit")}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.deleteButton, { backgroundColor: colors.dangerDim || '#ff525220' }]}
             onPress={() => onDelete(debt.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t("debts.card.card.deleteA11y", { name: debt.name })}
           >
             <Text style={[styles.deleteButtonText, { color: colors.danger || '#ff5252' }]}>
               ✕
@@ -410,7 +428,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
                 color: colors.text,
               },
             ]}
-            placeholder="Payment amount"
+            placeholder={t("debts.card.card.paymentPlaceholder")}
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
             value={payAmount}
@@ -420,6 +438,8 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
           <TouchableOpacity
             style={[styles.confirmPayButton, { backgroundColor: colors.success }]}
             onPress={handlePayment}
+            accessibilityRole="button"
+            accessibilityLabel={t("debts.card.card.confirmPaymentA11y")}
           >
             <Text style={[styles.confirmPayText, { color: colors.bg }]}>
               ✓

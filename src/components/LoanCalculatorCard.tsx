@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import { useDensity } from "../theme/DensityProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -48,6 +49,8 @@ type SliderConfig = {
 };
 
 /* ── Loan Calculator Config ── */
+// `label` is the English fallback the slider editor hook wants; the rendered
+// label comes from charts.planning.loan.sliders.<key>.
 
 const LOAN_SLIDERS: Record<"loanAmount" | "loanRate" | "loanTerm", SliderConfig> = {
   loanAmount: { label: "Loan Amount", min: 1000, max: 1000000, step: 1000 },
@@ -60,6 +63,7 @@ const LOAN_SCHEDULE_PAGE_SIZE = 12;
 
 
 const LoanCalculatorCard: React.FC = () => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const { formatCurrency } = useCurrency();
@@ -140,13 +144,13 @@ const LoanCalculatorCard: React.FC = () => {
       key === "loanAmount"
         ? formatCurrency(value)
         : key === "loanRate"
-          ? `${value}%`
-          : `${value} yr`;
+          ? t("charts.planning.loan.sliders.rateValue", { value })
+          : t("charts.planning.loan.sliders.termValue", { value });
 
     return (
       <SliderRow
         key={key}
-        label={cfg.label}
+        label={t(`charts.planning.loan.sliders.${key}`)}
         value={value}
         min={cfg.min}
         max={cfg.max}
@@ -196,21 +200,22 @@ const LoanCalculatorCard: React.FC = () => {
       // Deleted once the share sheet closes - no export file lingers on disk.
       await shareLocalFileThenDelete(file, {
         mimeType: "text/csv",
-        dialogTitle: "Export Amortization Schedule",
+        dialogTitle: t("charts.planning.loan.schedule.exportDialogTitle"),
         UTI: "public.comma-separated-values-text",
       });
 
       setLoanExportMessage({
         type: "success",
-        text: "CSV export opened. Save or share it from the sheet.",
+        text: t("charts.planning.loan.schedule.exportSuccess"),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Loan schedule export failed.";
+      const message =
+        error instanceof Error ? error.message : t("charts.planning.loan.schedule.exportFailed");
       setLoanExportMessage({ type: "error", text: message });
     } finally {
       setIsLoanExporting(false);
     }
-  }, [isLoanExporting, loanSchedule]);
+  }, [isLoanExporting, loanSchedule, t]);
 
 
   return (
@@ -218,8 +223,8 @@ const LoanCalculatorCard: React.FC = () => {
         {/* ── Loan / Mortgage Calculator Tool ── */}
         <TouchableOpacity style={tool.toolHeader} onPress={toggleLoan} activeOpacity={0.7}>
           <View>
-            <Text style={tool.toolTitle}>Loan / Mortgage Calculator</Text>
-            <Text style={tool.toolHint}>See your monthly payment and total interest</Text>
+            <Text style={tool.toolTitle}>{t("charts.planning.loan.title")}</Text>
+            <Text style={tool.toolHint}>{t("charts.planning.loan.hint")}</Text>
           </View>
           <Text style={tool.toolChevron}>{loanOpen ? "▾" : "›"}</Text>
         </TouchableOpacity>
@@ -228,12 +233,16 @@ const LoanCalculatorCard: React.FC = () => {
           <View style={tool.toolBody}>
             {/* Result */}
             <View style={tool.resultCard}>
-              <Text style={tool.resultLabel}>MONTHLY PAYMENT</Text>
+              <Text style={tool.resultLabel}>{t("charts.planning.loan.result.label")}</Text>
               <Text style={tool.resultValue}>
                 {isFinite(loanMonthlyPayment) ? formatCurrency(loanMonthlyPayment) : "--"}
               </Text>
               <Text style={tool.resultSub}>
-                {formatCurrency(loanAmount)} loan · {loanRate}% APR · {loanTerm} years
+                {t("charts.planning.loan.result.sub", {
+                  count: loanTerm,
+                  amount: formatCurrency(loanAmount),
+                  rate: loanRate,
+                })}
               </Text>
             </View>
 
@@ -251,7 +260,7 @@ const LoanCalculatorCard: React.FC = () => {
                     onPress={() => setLoanTerm(preset)}
                   >
                     <Text style={[tool.presetBtnText, loanTerm === preset && tool.presetBtnTextActive]}>
-                      {preset}yr
+                      {t("charts.planning.loan.sliders.preset", { count: preset })}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -260,20 +269,20 @@ const LoanCalculatorCard: React.FC = () => {
 
             {/* Breakdown */}
             <View style={tool.breakdownCard}>
-              <Text style={tool.breakdownTitle}>Cost Breakdown</Text>
+              <Text style={tool.breakdownTitle}>{t("charts.planning.loan.breakdown.title")}</Text>
               <View style={tool.breakdownRow}>
                 <View style={tool.breakdownItem}>
                   <Text style={[tool.breakdownValue, { color: colors.success }]}>
                     {formatCurrency(loanAmount)}
                   </Text>
-                  <Text style={tool.breakdownLabel}>Principal</Text>
+                  <Text style={tool.breakdownLabel}>{t("charts.planning.loan.breakdown.principal")}</Text>
                 </View>
                 <View style={tool.breakdownDivider} />
                 <View style={tool.breakdownItem}>
                   <Text style={[tool.breakdownValue, { color: colors.danger }]}>
                     {formatCurrency(loanTotalInterest)}
                   </Text>
-                  <Text style={tool.breakdownLabel}>Total Interest</Text>
+                  <Text style={tool.breakdownLabel}>{t("charts.planning.loan.breakdown.totalInterest")}</Text>
                 </View>
               </View>
               {loanTotalPaid > 0 && (
@@ -294,24 +303,31 @@ const LoanCalculatorCard: React.FC = () => {
               )}
               {loanTotalPaid > 0 && (
                 <Text style={tool.ratioText}>
-                  You'll pay {formatCurrency(loanTotalPaid)} total over {loanTerm} years
+                  {t("charts.planning.loan.breakdown.totalPaid", {
+                    count: loanTerm,
+                    total: formatCurrency(loanTotalPaid),
+                  })}
                 </Text>
               )}
             </View>
 
             {/* First-5-years highlight */}
             <View style={styles.loanHighlightCard}>
-              <Text style={tool.resultLabel}>INTEREST IN FIRST 5 YEARS</Text>
+              <Text style={tool.resultLabel}>{t("charts.planning.loan.firstFive.label")}</Text>
               <Text style={[styles.loanHighlightValue, { color: colors.danger }]}>
                 {formatCurrency(loanInterestFirstFiveYears)}
               </Text>
               <Text style={styles.loanHighlightText}>
                 {loanSchedule.length >= 60
-                  ? `${(loanInterestFirstFiveYearsShare * 100).toFixed(0)}% of your total interest is paid in the first 60 months.`
-                  : "This loan ends before year 5, so this reflects the full-term interest cost."}
+                  ? t("charts.planning.loan.firstFive.share", {
+                      percent: (loanInterestFirstFiveYearsShare * 100).toFixed(0),
+                    })
+                  : t("charts.planning.loan.firstFive.shortLoan")}
               </Text>
               <Text style={styles.loanHighlightSubtext}>
-                Principal paid in that span: {formatCurrency(loanPrincipalFirstFiveYears)}
+                {t("charts.planning.loan.firstFive.principal", {
+                  amount: formatCurrency(loanPrincipalFirstFiveYears),
+                })}
               </Text>
             </View>
 
@@ -323,13 +339,11 @@ const LoanCalculatorCard: React.FC = () => {
                 activeOpacity={0.7}
               >
                 <View style={styles.scheduleHeaderTextWrap}>
-                  <Text style={tool.breakdownTitle}>Yearly Summary</Text>
-                  <Text style={styles.scheduleHint}>
-                    Groups every 12 payments from the loan start. Final year may be shorter.
-                  </Text>
+                  <Text style={tool.breakdownTitle}>{t("charts.planning.loan.yearly.title")}</Text>
+                  <Text style={styles.scheduleHint}>{t("charts.planning.loan.yearly.hint")}</Text>
                 </View>
                 <View style={styles.scheduleHeaderActions}>
-                  <Text style={styles.scheduleMeta}>{loanYearlySummary.length} yr</Text>
+                  <Text style={styles.scheduleMeta}>{t("charts.planning.loan.yearly.meta", { count: loanYearlySummary.length })}</Text>
                   <Text style={styles.scheduleChevron}>{loanYearlySummaryOpen ? "▾" : "›"}</Text>
                 </View>
               </TouchableOpacity>
@@ -339,19 +353,19 @@ const LoanCalculatorCard: React.FC = () => {
                   <View style={styles.scheduleTable}>
                     <View style={[styles.scheduleRow, styles.scheduleHeaderRow]}>
                       <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleMonthCell]}>
-                        Year
+                        {t("charts.planning.loan.yearly.columns.year")}
                       </Text>
                       <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                        Payments
+                        {t("charts.planning.loan.yearly.columns.payments")}
                       </Text>
                       <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                        Principal
+                        {t("charts.planning.loan.yearly.columns.principal")}
                       </Text>
                       <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                        Interest
+                        {t("charts.planning.loan.yearly.columns.interest")}
                       </Text>
                       <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleBalanceCell]}>
-                        End Balance
+                        {t("charts.planning.loan.yearly.columns.endBalance")}
                       </Text>
                     </View>
 
@@ -384,31 +398,29 @@ const LoanCalculatorCard: React.FC = () => {
             <View style={styles.scheduleCard}>
               <View style={styles.scheduleHeader}>
                 <View style={styles.scheduleHeaderTextWrap}>
-                  <Text style={tool.breakdownTitle}>Amortization Schedule</Text>
-                  <Text style={styles.scheduleHint}>
-                    Month-by-month payment, principal, interest, and remaining balance.
-                  </Text>
+                  <Text style={tool.breakdownTitle}>{t("charts.planning.loan.schedule.title")}</Text>
+                  <Text style={styles.scheduleHint}>{t("charts.planning.loan.schedule.hint")}</Text>
                 </View>
-                <Text style={styles.scheduleMeta}>{loanSchedule.length} mo</Text>
+                <Text style={styles.scheduleMeta}>{t("charts.planning.loan.schedule.meta", { count: loanSchedule.length })}</Text>
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={styles.scheduleTable}>
                   <View style={[styles.scheduleRow, styles.scheduleHeaderRow]}>
                     <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleMonthCell]}>
-                      Month
+                      {t("charts.planning.loan.schedule.columns.month")}
                     </Text>
                     <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                      Payment
+                      {t("charts.planning.loan.schedule.columns.payment")}
                     </Text>
                     <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                      Principal
+                      {t("charts.planning.loan.schedule.columns.principal")}
                     </Text>
                     <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleValueCell]}>
-                      Interest
+                      {t("charts.planning.loan.schedule.columns.interest")}
                     </Text>
                     <Text style={[styles.scheduleCell, styles.scheduleHeaderCell, styles.scheduleBalanceCell]}>
-                      Balance
+                      {t("charts.planning.loan.schedule.columns.balance")}
                     </Text>
                   </View>
 
@@ -441,7 +453,10 @@ const LoanCalculatorCard: React.FC = () => {
 
               <View style={styles.scheduleFooter}>
                 <Text style={styles.scheduleFooterText}>
-                  Showing {visibleLoanSchedule.length} of {loanSchedule.length} months
+                  {t("charts.planning.loan.schedule.showing", {
+                    visible: visibleLoanSchedule.length,
+                    total: loanSchedule.length,
+                  })}
                 </Text>
                 <View style={styles.scheduleActions}>
                   <TouchableOpacity
@@ -450,18 +465,20 @@ const LoanCalculatorCard: React.FC = () => {
                     disabled={isLoanExporting || loanSchedule.length === 0}
                   >
                     <Text style={styles.scheduleMoreBtnText}>
-                      {isLoanExporting ? "Preparing CSV..." : "Export CSV"}
+                      {isLoanExporting ? t("charts.planning.loan.schedule.preparing") : t("charts.planning.loan.schedule.exportCsv")}
                     </Text>
                   </TouchableOpacity>
                   {hasMoreLoanScheduleRows ? (
                     <TouchableOpacity style={styles.scheduleMoreBtn} onPress={handleShowMoreLoanSchedule}>
                       <Text style={styles.scheduleMoreBtnText}>
-                        Show {Math.min(LOAN_SCHEDULE_PAGE_SIZE, loanSchedule.length - loanScheduleVisibleRows)} more
+                        {t("charts.planning.loan.schedule.showMore", {
+                          count: Math.min(LOAN_SCHEDULE_PAGE_SIZE, loanSchedule.length - loanScheduleVisibleRows),
+                        })}
                       </Text>
                     </TouchableOpacity>
                   ) : canCollapseLoanSchedule ? (
                     <TouchableOpacity style={styles.scheduleMoreBtn} onPress={handleShowLessLoanSchedule}>
-                      <Text style={styles.scheduleMoreBtnText}>Show less</Text>
+                      <Text style={styles.scheduleMoreBtnText}>{t("charts.planning.loan.schedule.showLess")}</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>

@@ -18,6 +18,7 @@ import {
   pbkdf2Sha256,
 } from "../crypto/nativeCrypto";
 import * as EncryptedStorage from "../storage/encryptedStorage";
+import { t } from "../i18n/translate";
 import {
   DEFAULT_CURRENCY_PREFERENCE_ID,
   CUSTOM_CATEGORY_STORAGE_VERSION,
@@ -243,16 +244,18 @@ const sanitizeBudgetLimitsByMonth = (
     if (!Array.isArray(value)) continue;
     if (value.length > LIMITS.MAX_COLLECTION_ITEMS) {
       throw new Error(
-        `Too many budget limits in month ${monthKey}. Maximum is ${LIMITS.MAX_COLLECTION_ITEMS}.`
+        t("helpers.import.backup.tooManyLimits", { month: monthKey, max: LIMITS.MAX_COLLECTION_ITEMS })
       );
     }
     const valid = value.filter(isBudgetLimitItem);
     if (valid.length !== value.length) {
       const firstInvalidIdx = value.findIndex((item) => !isBudgetLimitItem(item));
       throw new Error(
-        `Import rejected: budget limits for ${monthKey} contain invalid ` +
-          `records (first at item ${firstInvalidIdx + 1} of ${value.length}). ` +
-          `Each limit needs a valid "category" and a numeric "monthlyLimit".`
+        t("helpers.import.backup.invalidLimits", {
+          month: monthKey,
+          index: firstInvalidIdx + 1,
+          total: value.length,
+        })
       );
     }
     out[monthKey] = valid;
@@ -260,19 +263,33 @@ const sanitizeBudgetLimitsByMonth = (
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
+type ImportCollectionLabelId =
+  | "debts"
+  | "payments"
+  | "budgetEntries"
+  | "budgetLimits"
+  | "savingsGoals"
+  | "assetAccounts"
+  | "holdings"
+  | "netWorthSnapshots"
+  | "customCategories"
+  | "businesses"
+  | "people";
+
 const sanitizeCollection = (
   collection: unknown[] | undefined,
-  label: string,
+  labelId: ImportCollectionLabelId,
   validator: (item: unknown) => item is Record<string, unknown>,
   explain?: (item: unknown) => string
 ): Record<string, unknown>[] => {
   if (!collection) return [];
+  const label = t(`helpers.import.backup.collections.${labelId}`);
   if (!Array.isArray(collection)) {
-    throw new Error(`Invalid ${label} format. Expected an array.`);
+    throw new Error(t("helpers.import.backup.invalidFormat", { label }));
   }
   if (collection.length > LIMITS.MAX_COLLECTION_ITEMS) {
     throw new Error(
-      `Too many ${label} items. Maximum allowed is ${LIMITS.MAX_COLLECTION_ITEMS}.`
+      t("helpers.import.backup.tooManyItems", { label, max: LIMITS.MAX_COLLECTION_ITEMS })
     );
   }
 
@@ -283,12 +300,14 @@ const sanitizeCollection = (
     // impossible to debug from a bare "contains invalid records".
     const invalidCount = collection.length - valid.length;
     const firstInvalidIdx = collection.findIndex((item) => !validator(item));
-    let message =
-      `Import rejected: ${label} contains ${invalidCount} invalid ` +
-      `record${invalidCount === 1 ? "" : "s"} ` +
-      `(first at item ${firstInvalidIdx + 1} of ${collection.length}).`;
+    let message = t("helpers.import.backup.invalidRecords", {
+      label,
+      count: invalidCount,
+      index: firstInvalidIdx + 1,
+      total: collection.length,
+    });
     if (explain) {
-      message += ` Problem: ${explain(collection[firstInvalidIdx])}`;
+      message += " " + t("helpers.import.backup.problem", { detail: explain(collection[firstInvalidIdx]) });
     }
     throw new Error(message);
   }
@@ -298,7 +317,7 @@ const sanitizeCollection = (
 const sanitizeUser = (user: unknown): Record<string, unknown> | undefined => {
   if (user === undefined) return undefined;
   if (!isObject(user)) {
-    throw new Error("Import rejected: user profile format is invalid.");
+    throw new Error(t("helpers.import.backup.userInvalid"));
   }
 
   const normalized: Record<string, unknown> = {
@@ -320,7 +339,7 @@ const sanitizeUser = (user: unknown): Record<string, unknown> | undefined => {
   }
 
   if (!normalized.id) {
-    throw new Error("Import rejected: user profile is missing a valid id.");
+    throw new Error(t("helpers.import.backup.userMissingId"));
   }
 
   return normalized;
@@ -469,35 +488,35 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
   const payments = sanitizeCollection(data.payments, "payments", isPaymentItem);
   const budgetEntries = sanitizeCollection(
     data.budgetEntries,
-    "budget entries",
+    "budgetEntries",
     isBudgetEntryItem,
     explainBudgetEntryProblem
   );
   const budgetLimits = sanitizeCollection(
     data.budgetLimits,
-    "budget limits",
+    "budgetLimits",
     isBudgetLimitItem
   );
   const budgetLimitsByMonth = sanitizeBudgetLimitsByMonth(data.budgetLimitsByMonth);
   const savingsGoals = sanitizeCollection(
     data.savingsGoals,
-    "savings goals",
+    "savingsGoals",
     isSavingsGoalItem
   );
   const assetAccounts = sanitizeCollection(
     data.assetAccounts,
-    "asset accounts",
+    "assetAccounts",
     isAssetAccountItem
   );
   const holdings = sanitizeCollection(data.holdings, "holdings", isHoldingItem);
   const netWorthSnapshots = sanitizeCollection(
     data.netWorthSnapshots,
-    "net worth snapshots",
+    "netWorthSnapshots",
     isNetWorthSnapshotItem
   );
   const customCategories = sanitizeCollection(
     data.customCategories,
-    "custom categories",
+    "customCategories",
     isCustomCategoryItem
   );
   const businesses = sanitizeCollection(
@@ -552,7 +571,7 @@ const sanitizePayload = (data: ImportPayload): SanitizedImportPayload => {
     people.length;
   if (totalItems > LIMITS.MAX_TOTAL_ITEMS) {
     throw new Error(
-      `Import rejected: payload is too large. Maximum total records is ${LIMITS.MAX_TOTAL_ITEMS}.`
+      t("helpers.import.backup.payloadTooLarge", { max: LIMITS.MAX_TOTAL_ITEMS })
     );
   }
 
@@ -618,12 +637,28 @@ const decryptV2Envelope = async (
 ): Promise<string> => {
   const parts = envelope.split(".");
   if (parts.length !== 3) {
-    throw new Error("Decryption failed. The encrypted export is malformed.");
+    throw new Error(t("helpers.import.backup.malformedEnvelope"));
   }
   const [saltHex, ivHex, ctB64] = parts;
   const key = await pbkdf2Sha256(password, hexToBytes(saltHex), 250_000, 32);
   return aesCbcDecryptFromBase64(ctB64, key, hexToBytes(ivHex));
 };
+
+/**
+ * Thrown when a password-encrypted export is opened without a password.
+ * Callers detect it by type (isPasswordRequiredError), never by message
+ * text: the message is translated and changes with the app language.
+ */
+export class PasswordRequiredError extends Error {
+  constructor() {
+    super(t("helpers.import.backup.passwordRequired"));
+    this.name = "PasswordRequiredError";
+  }
+}
+
+export const isPasswordRequiredError = (error: unknown): boolean =>
+  error instanceof PasswordRequiredError ||
+  (error instanceof Error && error.name === "PasswordRequiredError");
 
 export const importFromString = async (
   raw: string,
@@ -631,9 +666,7 @@ export const importFromString = async (
   password?: string
 ): Promise<ImportResult> => {
   if (raw.length > LIMITS.MAX_RAW_CHARS) {
-    throw new Error(
-      "Import file is too large to be a BudgetArk export."
-    );
+    throw new Error(t("helpers.import.backup.fileTooLarge"));
   }
 
   /* 0. Decrypt if this is a password-encrypted export. v3 (current write
@@ -645,9 +678,7 @@ export const importFromString = async (
   const trimmed = raw.trimStart();
   if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V3)) {
     if (!password) {
-      throw new Error(
-        "This export is password-encrypted. Please enter the password to decrypt it."
-      );
+      throw new PasswordRequiredError();
     }
     // Throws its own precise message (wrong password / altered file) - the
     // MAC check makes those the only failure modes, so don't re-wrap it.
@@ -657,24 +688,20 @@ export const importFromString = async (
     );
   } else if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)) {
     if (!password) {
-      throw new Error(
-        "This export is password-encrypted. Please enter the password to decrypt it."
-      );
+      throw new PasswordRequiredError();
     }
     const envelope = trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V2.length);
     try {
       jsonString = await decryptV2Envelope(envelope, password);
     } catch {
-      throw new Error("Decryption failed. The password may be incorrect.");
+      throw new Error(t("helpers.import.backup.wrongPassword"));
     }
     if (!jsonString) {
-      throw new Error("Decryption failed. The password may be incorrect.");
+      throw new Error(t("helpers.import.backup.wrongPassword"));
     }
   } else if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX)) {
     if (!password) {
-      throw new Error(
-        "This export is password-encrypted. Please enter the password to decrypt it."
-      );
+      throw new PasswordRequiredError();
     }
     // Legacy v1: crypto-js's passphrase format (EVP_BytesToKey KDF), decrypted
     // via the native EVP-compatible helper. A wrong password surfaces as a
@@ -683,31 +710,27 @@ export const importFromString = async (
     try {
       jsonString = decryptLegacyCryptoJsBlob(ciphertext, password);
     } catch {
-      throw new Error("Decryption failed. The password may be incorrect.");
+      throw new Error(t("helpers.import.backup.wrongPassword"));
     }
     if (!jsonString) {
-      throw new Error("Decryption failed. The password may be incorrect.");
+      throw new Error(t("helpers.import.backup.wrongPassword"));
     }
   }
 
   /* 1. Parse */
   if (jsonString.length > LIMITS.MAX_JSON_CHARS) {
-    throw new Error("Import file is too large to be a BudgetArk export.");
+    throw new Error(t("helpers.import.backup.fileTooLarge"));
   }
   let data: unknown;
   try {
     data = JSON.parse(jsonString);
   } catch {
-    throw new Error(
-      "The text is not valid JSON. Please paste a BudgetArk export."
-    );
+    throw new Error(t("helpers.import.backup.notJson"));
   }
 
   /* 2. Validate structure */
   if (!validatePayload(data)) {
-    throw new Error(
-      "The data does not appear to be a BudgetArk export. Expected debts, payments, or budget data."
-    );
+    throw new Error(t("helpers.import.backup.notExport"));
   }
 
   const sanitized = sanitizePayload(data);
@@ -1848,16 +1871,11 @@ export const importFromString = async (
 
     if (restoreFailures.length > 0) {
       throw new Error(
-        `Import failed during write and rollback could not restore all data ` +
-          `(failed keys: ${restoreFailures.length}). ` +
-          `Some records may be in an inconsistent state - please reinstall ` +
-          `the app and re-import your most recent backup before adding new data.`
+        t("helpers.import.backup.rollbackFailed", { failed: restoreFailures.length })
       );
     }
 
-    throw new Error(
-      "Import failed during write. Your existing data has been restored."
-    );
+    throw new Error(t("helpers.import.backup.writeFailed"));
   }
 
   // Phase 4: Clean up temp keys
@@ -1903,9 +1921,7 @@ export const openDocumentPicker = async (
       typeof error?.message === "string" &&
       error.message.includes("Different document picking in progress")
     ) {
-      throw new Error(
-        "The file picker is stuck from an earlier attempt. Please fully close and reopen the app, then try again."
-      );
+      throw new Error(t("helpers.import.backup.pickerStuck"));
     }
     throw error;
   }
@@ -1929,7 +1945,7 @@ export const importData = async (
   if (result.canceled) return null;
 
   const file = result.assets[0];
-  if (!file?.uri) throw new Error("No file selected.");
+  if (!file?.uri) throw new Error(t("helpers.import.file.noFileSelected"));
 
   const raw = await new ExpoFile(file.uri).text();
   return importFromString(raw, mode, password);

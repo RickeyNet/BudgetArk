@@ -1,11 +1,13 @@
 import {
-  KEEP_ALIVE_MESSAGES,
+  keepAliveMessages,
   KEEP_ALIVE_REMINDER_HOUR,
   MAX_SCHEDULED_KEEP_ALIVE_REMINDERS,
   planKeepAliveReminders,
 } from "../cardKeepAlivePlanner";
 import { makeDebt } from "../../__tests__/fixtures";
 import type { Debt } from "../../types";
+import i18next from "i18next";
+import { de } from "../../i18n/locales/de";
 
 const debt = (over: Partial<Debt> = {}): Debt =>
   makeDebt({
@@ -141,10 +143,40 @@ describe("planKeepAliveReminders", () => {
       }
       // Copy comes verbatim from the vetted generic pool.
       expect(
-        KEEP_ALIVE_MESSAGES.some(
+        keepAliveMessages().some(
           (m) => m.title === p.title && m.body === p.body
         )
       ).toBe(true);
+    }
+  });
+});
+
+describe("keep-alive copy in German (rule 11 holds in every language)", () => {
+  beforeAll(() => {
+    i18next.addResourceBundle("de", "translation", de, true, true);
+  });
+  beforeEach(async () => {
+    // eslint-disable-next-line import/no-named-as-default-member
+    await i18next.changeLanguage("de");
+  });
+  afterEach(async () => {
+    // eslint-disable-next-line import/no-named-as-default-member
+    await i18next.changeLanguage("en");
+  });
+
+  it("plans a distinct German pool with no card name, amount or count", () => {
+    const secret = debt({ name: "Secret Card", balance: 4321.99 });
+    const planned = planKeepAliveReminders({ debts: [secret], now: new Date(2026, 5, 14) });
+    expect(planned.length).toBeGreaterThan(0);
+    const pool = keepAliveMessages();
+    expect(pool).toHaveLength(3);
+    for (const p of planned) {
+      expect(pool.some((m) => m.title === p.title && m.body === p.body)).toBe(true);
+      expect(p.title).not.toMatch(/helpers\.notifications/);
+      expect(p.title).not.toContain("Secret Card");
+      expect(p.body).not.toContain("Secret Card");
+      expect(p.body).not.toContain("4321");
+      expect(p.body).not.toMatch(/[$€\d]/);
     }
   });
 });

@@ -29,6 +29,7 @@ import {
 } from "./tombstones";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { generateUUID } from "../utils/uuid";
+import { t } from "../i18n/translate";
 
 /** Also listed in debtStorage.RESET_KEYS - keep in lockstep. */
 const STORAGE_KEY = "@budgetark_people";
@@ -201,11 +202,11 @@ const validateName = (
   excludeId?: string
 ): { ok: true; name: string } | { ok: false; error: string } => {
   const name = sanitizeTextInput(rawName).trim();
-  if (!name) return { ok: false, error: "Enter a name." };
+  if (!name) return { ok: false, error: t("helpers.misc.people.nameRequired") };
   if (name.length > MAX_PERSON_NAME_LENGTH) {
     return {
       ok: false,
-      error: `Keep it under ${MAX_PERSON_NAME_LENGTH} characters.`,
+      error: t("helpers.misc.validation.tooLong", { max: MAX_PERSON_NAME_LENGTH }),
     };
   }
   const lower = name.toLowerCase();
@@ -213,7 +214,7 @@ const validateName = (
     (p) => !p.deletedAt && p.id !== excludeId && p.name.toLowerCase() === lower
   );
   if (clash) {
-    return { ok: false, error: `"${name}" already exists.` };
+    return { ok: false, error: t("helpers.misc.validation.alreadyExists", { name }) };
   }
   return { ok: true, name };
 };
@@ -226,7 +227,7 @@ export const addPerson = async (
   if (live.length >= MAX_PEOPLE) {
     return {
       ok: false,
-      error: `You can have up to ${MAX_PEOPLE} people.`,
+      error: t("helpers.misc.people.limit", { max: MAX_PEOPLE }),
     };
   }
   const checked = validateName(rawName, all);
@@ -252,7 +253,7 @@ export const updatePerson = async (
 ): Promise<PersonMutationResult> => {
   const all = await readStore();
   const target = all.find((p) => p.id === id && !p.deletedAt);
-  if (!target) return { ok: false, error: "Person not found." };
+  if (!target) return { ok: false, error: t("helpers.misc.people.notFound") };
 
   let name = target.name;
   if (patch.name !== undefined) {

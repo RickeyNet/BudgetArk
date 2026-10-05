@@ -1,5 +1,6 @@
 import { BudgetCategory, BudgetEntry, CategoryBudgetLimit, Person } from "../types";
 import { entryPersonIds, personShare } from "./entryPeople";
+import { t } from "../i18n/translate";
 import { entriesForMonth } from "./billFulfillment";
 import { getMonthKeyOffset } from "./budgetMonths";
 
@@ -286,7 +287,7 @@ export const computeStreaks = (
   }
   if (positiveNetCount >= 2) {
     streaks.push({
-      label: "Positive net income",
+      label: t("helpers.insights.streaks.positiveNet"),
       count: positiveNetCount,
       type: "positive",
     });
@@ -315,7 +316,7 @@ export const computeStreaks = (
   }
   if (underBudgetCount >= 2) {
     streaks.push({
-      label: "All categories under budget",
+      label: t("helpers.insights.streaks.allUnderBudget"),
       count: underBudgetCount,
       type: "positive",
     });
@@ -335,7 +336,7 @@ export const computeStreaks = (
   }
   if (decreasingCount >= 2) {
     streaks.push({
-      label: "Spending decreasing",
+      label: t("helpers.insights.streaks.spendingDecreasing"),
       count: decreasingCount,
       type: "positive",
     });
@@ -355,7 +356,7 @@ export const computeStreaks = (
   }
   if (increasingCount >= 2) {
     streaks.push({
-      label: "Spending increasing",
+      label: t("helpers.insights.streaks.spendingIncreasing"),
       count: increasingCount,
       type: "warning",
     });
@@ -366,7 +367,7 @@ export const computeStreaks = (
 
 /* ─── Per-person spending (who spent what this month) ─── */
 
-const UNKNOWN_PERSON_NAME = "(deleted person)";
+const unknownPersonName = (): string => t("helpers.insights.people.deletedPerson");
 
 /**
  * Groups one month's person-assigned expenses per person, with a
@@ -401,7 +402,7 @@ export const computePersonMonthSpending = (
         group = {
           spending: {
             personId,
-            name: person?.name ?? UNKNOWN_PERSON_NAME,
+            name: person?.name ?? unknownPersonName(),
             deleted: !person || !!person.deletedAt,
             total: 0,
             entryCount: 0,

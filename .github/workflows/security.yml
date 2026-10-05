@@ -38,9 +38,14 @@ jobs:
 
       # Gate on high/critical only - moderate/low advisories in transitive
       # build tooling are often unactionable and would block every PR.
-      # Run `npm audit` locally to triage the full list.
-      - name: Audit dependencies (high+)
-        run: npm audit --audit-level=high
+      # scripts/audit-gate.mjs wraps `npm audit --json` and additionally
+      # tolerates the advisories pinned in .npm-audit-allowlist.json (high+
+      # findings with no patched release yet; each entry carries a reason and
+      # an expiry date after which the gate fails again). Anything else at
+      # high/critical still fails. Run `npm audit` locally to triage the
+      # full list, `npm run audit:gate` to see exactly what CI sees.
+      - name: Audit dependencies (high+, allowlist-aware)
+        run: npm run audit:gate
 
   # ── SCA: block PRs that introduce vulnerable / disallowed-license deps ──
   dependency-review:

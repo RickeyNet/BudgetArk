@@ -15,6 +15,7 @@
 import React, { useCallback, useMemo } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
 
@@ -77,6 +78,7 @@ const TellerConnectModal: React.FC<TellerConnectModalProps> = ({
   onSuccess,
   onFailure,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -108,21 +110,21 @@ const TellerConnectModal: React.FC<TellerConnectModalProps> = ({
           accessToken: payload.accessToken,
         });
       } else if (payload.type === "failure") {
-        onFailure(payload.message ?? "Teller Connect reported a failure.");
+        onFailure(payload.message ?? t("modals.connections.teller.failure"));
       } else if (payload.type === "exit") {
         onClose();
       }
     },
-    [onClose, onFailure, onSuccess],
+    [onClose, onFailure, onSuccess, t],
   );
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Connect via Teller</Text>
+          <Text style={styles.title}>{t("modals.connections.teller.title")}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.closeText}>Close</Text>
+            <Text style={styles.closeText}>{t("common.close")}</Text>
           </TouchableOpacity>
         </View>
         {visible ? (
