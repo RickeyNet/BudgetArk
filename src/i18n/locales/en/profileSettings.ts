@@ -39,6 +39,14 @@ export const profileSettings = {
       },
     },
     note: "Some content - lessons, the US tax tools, and release notes - is still English only.",
+    /**
+     * Honesty note under the picker: the non-English trees are
+     * machine-assisted and unreviewed; corrections come through the
+     * in-app feedback form (no new egress). Names the path IN THIS
+     * language so it matches what the user actually sees.
+     */
+    translationNote:
+      "The German, Russian, Ukrainian, Swedish and Norwegian translations were produced with machine assistance and haven't been verified by a native speaker yet. Spotted a mistake? Send the correction in-app via Profile → Help → Send Feedback.",
   },
   notNow: "Not now",
   currency: {

@@ -971,14 +971,19 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
           return text.description ? `${text.name}. ${text.description}` : text.name;
         }}
         header={
-          <Text
-            style={[
-              styles.settingsRowSubtext,
-              { color: colors.textDim, marginBottom: 12 },
-            ]}
-          >
-            {t("profile.settings.language.note")}
-          </Text>
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+              {t("profile.settings.language.note")}
+            </Text>
+            <Text
+              style={[
+                styles.settingsRowSubtext,
+                { color: colors.textDim, marginTop: 8 },
+              ]}
+            >
+              {t("profile.settings.language.translationNote")}
+            </Text>
+          </View>
         }
         renderOption={(option) => {
           const text = languageOptionText(option);

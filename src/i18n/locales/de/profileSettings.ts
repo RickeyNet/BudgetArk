@@ -33,6 +33,8 @@ export const profileSettings: Localized<typeof en> = {
       },
     },
     note: "Einige Inhalte - Lektionen, die US-Steuertools und Versionshinweise - gibt es bisher nur auf Englisch.",
+    translationNote:
+      "Die deutsche, russische, ukrainische, schwedische und norwegische Übersetzung wurde maschinell unterstützt erstellt und noch nicht von Muttersprachlern geprüft. Fehler entdeckt? Schick die Korrektur in der App über Profil → Hilfe → Feedback senden.",
   },
   notNow: "Jetzt nicht",
   currency: {

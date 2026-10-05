@@ -33,6 +33,8 @@ export const profileSettings: Localized<typeof en> = {
       },
     },
     note: "Visst innehåll - lektioner, de amerikanska skatteverktygen och versionsinformationen - finns än så länge bara på engelska.",
+    translationNote:
+      "Översättningarna till tyska, ryska, ukrainska, svenska och norska är maskinassisterade och har ännu inte granskats av en modersmålstalare. Hittat ett fel? Skicka rättelsen i appen via Profil → Hjälp → Skicka feedback.",
   },
   notNow: "Inte nu",
   currency: {
