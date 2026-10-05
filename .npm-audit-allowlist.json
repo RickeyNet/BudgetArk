@@ -1,0 +1,19 @@
+{
+  "$comment": "Read by scripts/audit-gate.mjs (the Security workflow's npm audit step). Only for high/critical advisories that have NO patched release yet. Every entry needs the exact GHSA id, the reason the risk is acceptable in THIS app, and an expiry date after which the gate fails again so the decision is revisited. When a fixed version ships: take the upgrade and delete the entry. Never allowlist an advisory in code that runs on the device or handles user data.",
+  "advisories": [
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "reason": "Stack-exhaustion DoS from deeply nested glob patterns. Every version <=3.0.3 is flagged and no fix is published (checked 2026-10-05). Reached only through micromatch inside metro-file-map / @expo/metro-file-map, i.e. the Metro bundler's file crawler at build time; the patterns come from our own metro config, not from users, and nothing from braces ships in the app bundle.",
+      "added": "2026-10-05",
+      "expires": "2026-12-01"
+    },
+    {
+      "id": "GHSA-86w9-cpqp-85rv",
+      "package": "node-forge",
+      "reason": "RSA PKCS#1 v1.5 verification accepts extra nested DigestAlgorithm elements. Every version <=1.4.0 is flagged and no fix is published (checked 2026-10-05). Reached only via @expo/code-signing-certificates (expo-updates / @expo/cli), Node-side tooling that generates code-signing certificates on the developer machine. The app's own update verification runs in the native expo-updates module, not node-forge, and nothing from node-forge ships in the app bundle.",
+      "added": "2026-10-05",
+      "expires": "2026-12-01"
+    }
+  ]
+}

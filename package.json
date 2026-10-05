@@ -15,7 +15,8 @@
     "test:coverage": "jest --coverage",
     "test:ci": "jest --runInBand --ci",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --max-warnings 1"
+    "lint": "eslint . --max-warnings 1",
+    "audit:gate": "node scripts/audit-gate.mjs"
   },
   "dependencies": {
     "@bacons/apple-targets": "^5.0.0",
@@ -25,10 +26,10 @@
     "@react-navigation/native": "^7.2.0",
     "babel-preset-expo": "~57.0.0",
     "crypto-js": "^4.2.0",
-    "expo": "~57.0.25",
+    "expo": "~57.0.26",
     "expo-crypto": "~57.0.3",
     "expo-dev-client": "~57.0.19",
-    "expo-document-picker": "~57.0.2",
+    "expo-document-picker": "~57.0.3",
     "expo-file-system": "~57.0.0",
     "expo-haptics": "~57.0.3",
     "expo-iap": "^5.6.3",
@@ -40,7 +41,7 @@
     "expo-sharing": "~57.0.22",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
-    "expo-updates": "~57.0.23",
+    "expo-updates": "~57.0.24",
     "i18next": "^26.4.2",
     "intl-pluralrules": "^2.0.1",
     "jszip": "^3.10.1",
@@ -72,7 +73,7 @@
     "eslint": "^9.39.4",
     "eslint-config-expo": "~57.0.2",
     "jest": "^30.4.2",
-    "ts-jest": "^29.4.11",
+    "ts-jest": "^29.4.14",
     "typescript": "~6.0.3"
   },
   "optionalDependencies": {
