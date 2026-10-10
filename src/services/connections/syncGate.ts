@@ -15,7 +15,7 @@
  * dark bank's backlog would never be requested once it comes back.
  */
 
-import type { ExternalAccountLink } from "../../types";
+import type { BankConnection, ExternalAccountLink } from "../../types";
 import type { NormalizedAccount } from "./types";
 
 export const AUTO_SYNC_MIN_INTERVAL_MS = 6 * 3600_000;
@@ -39,6 +39,49 @@ export const isSyncDue = (
     ? MANUAL_SYNC_MIN_INTERVAL_MS
     : AUTO_SYNC_MIN_INTERVAL_MS;
   return nowMs - last >= interval;
+};
+
+/**
+ * True when a MANUAL sync of this connection should skip the cooldown: the
+ * app itself says it is broken (authStatus not "ok") or the bridge reports a
+ * bank needing attention (providerWarnings). A manual tap on such a
+ * connection is a deliberate retry after the user fixed something - making
+ * them wait out a cooldown that a failed attempt started is what made "needs
+ * attention" feel stuck. Auto syncs never consult this; they keep the
+ * cooldown so a broken provider is still not hammered - and a connection
+ * whose last error was a provider rate limit never bypasses either.
+ */
+export const manualRetryBypassesCooldown = (
+  connection: Pick<
+    BankConnection,
+    "authStatus" | "providerWarnings" | "lastErrorCode"
+  >,
+): boolean => {
+  // A provider that just asked us to slow down is the one case where a
+  // retry must still wait: bypassing here would turn every tap into
+  // another 429.
+  if (connection.lastErrorCode === "rate-limited") return false;
+  return (
+    connection.authStatus !== "ok" ||
+    (connection.providerWarnings?.length ?? 0) > 0
+  );
+};
+
+/**
+ * When the manual cooldown next lets "Sync now" through: ISO of
+ * `lastAttemptAt + MANUAL_SYNC_MIN_INTERVAL_MS` while that is still in the
+ * future, else null (also null for a missing or unparseable lastAttemptAt -
+ * nothing is blocking).
+ */
+export const nextManualSyncAt = (
+  lastAttemptAt: string | undefined,
+  nowMs: number,
+): string | null => {
+  if (!lastAttemptAt) return null;
+  const last = Date.parse(lastAttemptAt);
+  if (!Number.isFinite(last)) return null;
+  const nextMs = last + MANUAL_SYNC_MIN_INTERVAL_MS;
+  return nextMs > nowMs ? new Date(nextMs).toISOString() : null;
 };
 
 /** Furthest back a gap backfill or a manual re-import will ask for. */

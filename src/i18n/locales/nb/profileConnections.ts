@@ -26,6 +26,13 @@ export const profileConnections: Localized<typeof en> = {
       continue: "Fortsett",
     },
   },
+  /** Bridge/Budget banner when a bank connection needs the user. */
+  banner: {
+    title: "En banktilkobling trenger oppfølging",
+    body: "En bank trenger ny innlogging, eller siste synk mislyktes. Åpne Banktilkoblinger for å fikse det.",
+    open: "Åpne",
+    later: "Senere",
+  },
   partnerSync: {
     sectionTitle: "PARTNERSYNK",
     pair: "Koble sammen med partner",

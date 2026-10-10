@@ -966,4 +966,61 @@ describe("provider warnings (SimpleFIN per-institution errors)", () => {
       expect.objectContaining({ authStatus: "ok", providerWarnings: undefined }),
     );
   });
+
+  it("carries the pass's warnings on the 'updated' result (undefined when clean)", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockFetchSimplefin.mockResolvedValue({
+      ...okFetch(),
+      warnings: ["Connection to Chase may need attention"],
+    });
+    const [warned] = await syncConnections({ now: NOW, manual: true });
+    expect(warned.outcome).toBe("updated");
+    expect(warned.providerWarnings).toEqual(["Connection to Chase may need attention"]);
+
+    mockFetchSimplefin.mockResolvedValue({ ...okFetch(), warnings: [] });
+    const [clean] = await syncConnections({ now: NOW + 3600_000, manual: true });
+    expect(clean.outcome).toBe("updated");
+    expect(clean.providerWarnings).toBeUndefined();
+  });
+});
+
+describe("manual retry of a connection that needs attention skips the cooldown", () => {
+  const oneMinuteAgo = new Date(NOW - 60_000).toISOString();
+
+  it("runs a manual sync on a connection with provider warnings despite a 1-minute-old attempt", async () => {
+    mockGetConnections.mockResolvedValue([
+      conn({ lastAttemptAt: oneMinuteAgo, providerWarnings: ["Chase needs attention"] }),
+    ]);
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("updated");
+    expect(mockFetchSimplefin).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs a manual sync on an 'error' connection despite a 1-minute-old attempt", async () => {
+    mockGetConnections.mockResolvedValue([
+      conn({ lastAttemptAt: oneMinuteAgo, authStatus: "error" }),
+    ]);
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("updated");
+    expect(mockFetchSimplefin).toHaveBeenCalledTimes(1);
+  });
+
+  it("still holds an AUTO sync to the cooldown even with warnings or an error", async () => {
+    mockGetConnections.mockResolvedValue([
+      conn({ id: "conn-1", lastAttemptAt: oneMinuteAgo, providerWarnings: ["Chase needs attention"] }),
+      conn({ id: "conn-2", lastAttemptAt: oneMinuteAgo, authStatus: "error" }),
+    ]);
+    const results = await syncConnections({ now: NOW, manual: false });
+    expect(results.map((r) => r.outcome)).toEqual(["fresh", "fresh"]);
+    expect(mockUpdateConnection).not.toHaveBeenCalled();
+    expect(mockFetchSimplefin).not.toHaveBeenCalled();
+  });
+
+  it("reports 'fresh' with nextSyncAt = lastAttemptAt + 15 min for a healthy connection inside the manual cooldown", async () => {
+    mockGetConnections.mockResolvedValue([conn({ lastAttemptAt: oneMinuteAgo })]);
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("fresh");
+    expect(result.nextSyncAt).toBe(new Date(NOW - 60_000 + 15 * 60_000).toISOString());
+    expect(mockFetchSimplefin).not.toHaveBeenCalled();
+  });
 });

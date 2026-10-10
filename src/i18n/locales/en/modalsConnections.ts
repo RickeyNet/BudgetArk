@@ -95,13 +95,31 @@ export const modalsConnections = {
     reimport: "Re-import the last {{count}} days",
     reimportHint:
       "Use this if a bank was disconnected for a while and its transactions are missing. Anything you already reviewed stays as it is.",
+    bankDataAsOf: "Bank data as of {{date}}",
+    bankDataNoDate: "Bank data: no date yet",
+    bankDataDaysOld: " · {{count}} days old",
+    staleHint: "A balance here hasn't moved in {{count}}+ days. If the bank needs a fresh login, the Bridge says so above - otherwise the Bridge refreshes about once a day.",
+    reconnectHint: "The Bridge no longer accepts this connection's access. Generate a new setup token at beta-bridge.simplefin.org and paste it here - your accounts, card links and imported history stay.",
+    reconnectPlaceholder: "Paste your new setup token",
+    reconnect: "Reconnect",
     remove: "Remove Connection",
     errors: {
       loadAccounts: "Couldn't load this connection's accounts.",
       savePerson: "Couldn't save who this card belongs to.",
       savePreferences: "Couldn't save this account's settings.",
       createAccount: "Couldn't create the Bridge account.",
+      reconnect: "Couldn't reconnect. Check the token and try again.",
     },
+  },
+  /** Result of a manual Sync tap, shown under the button that was tapped. */
+  syncNotice: {
+    updated: "Synced just now",
+    updatedWithWarnings: "Synced just now - the Bridge still reports a bank needing attention (see below)",
+    fresh: "Already synced recently - you can sync again at {{time}}",
+    freshSoon: "Already synced recently - you can sync again in a few minutes",
+    rateLimited: "The provider asked us to slow down - try again later",
+    needsReauth: "Reconnect needed - see below",
+    failed: "Sync failed - try again later",
   },
   removeDialog: {
     title: "Remove this connection?",

@@ -12,6 +12,12 @@
  * The wizard asks these once at setup; without this editor a "None" chosen
  * on day one was permanent, which blocked e.g. designating that savings
  * account as the emergency fund later.
+ *
+ * Manual syncs report back inline (cooldown, rate limit, reconnect needed)
+ * instead of spinning and showing nothing, each account row says how old
+ * the BANK's data is (the bridge's balance-date, not our last fetch), and a
+ * SimpleFIN connection the bridge stopped accepting can be reconnected in
+ * place with a new setup token - links and history stay.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -51,9 +57,15 @@ import {
 import { getDebts } from "../storage/debtStorage";
 import {
   MAPPABLE_ASSET_CATEGORIES,
+  reconnectSimplefin,
   removeConnection,
   updateLinkPreferences,
 } from "../services/connections/connectionsService";
+import type { ConnectionSyncResult } from "../services/connections/connectionsSyncService";
+import {
+  STALE_BANK_DATA_DAYS,
+  bankDataAge,
+} from "../services/connections/bankDataAge";
 import { MAX_GAP_BACKFILL_DAYS } from "../services/connections/syncGate";
 import type { LinkPreferenceChange } from "../services/connections/linkPreferences";
 import { suggestAssetCategory } from "../services/connections/assetCategoryHint";
@@ -111,6 +123,101 @@ const timeAgo = (t: TFunction, iso?: string): string => {
   return t("modals.connections.timeAgo.days", { count: days });
 };
 
+/** "Jun 25" in the app language for a bank balance-date, or null. */
+const formatBankDate = (iso: string | undefined, locale: string): string | null => {
+  if (!iso) return null;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  try {
+    return parsed.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  } catch {
+    return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+};
+
+/** "3:45 PM" in the app language for the cooldown's next-allowed time, or null. */
+const formatSyncTime = (iso: string | undefined, locale: string): string | null => {
+  if (!iso) return null;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  try {
+    return parsed.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return parsed.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+};
+
+/** Inline result of a manual sync, shown under the button that was tapped. */
+interface SyncNotice {
+  text: string;
+  tone: "ok" | "warn";
+  /** Which button it belongs under: list "Sync all" or the detail's "Sync now". */
+  where: "all" | "detail";
+}
+
+/** One result -> its notice ("disabled" says nothing: the user paused it). */
+const noticeForResult = (
+  t: TFunction,
+  locale: string,
+  result: ConnectionSyncResult,
+): Omit<SyncNotice, "where"> | null => {
+  switch (result.outcome) {
+    case "updated":
+      return (result.providerWarnings?.length ?? 0) > 0
+        ? { text: t("modals.connections.syncNotice.updatedWithWarnings"), tone: "warn" }
+        : { text: t("modals.connections.syncNotice.updated"), tone: "ok" };
+    case "fresh": {
+      const time = formatSyncTime(result.nextSyncAt, locale);
+      return {
+        text: time
+          ? t("modals.connections.syncNotice.fresh", { time })
+          : t("modals.connections.syncNotice.freshSoon"),
+        tone: "warn",
+      };
+    }
+    case "rate-limited":
+      return { text: t("modals.connections.syncNotice.rateLimited"), tone: "warn" };
+    case "needs-reauth":
+      return { text: t("modals.connections.syncNotice.needsReauth"), tone: "warn" };
+    case "unavailable":
+      return {
+        text: result.errorMessage ?? t("modals.connections.syncNotice.failed"),
+        tone: "warn",
+      };
+    case "disabled":
+    default:
+      return null;
+  }
+};
+
+/**
+ * Summarise a "Sync all" (or single) pass: all blocked by the cooldown ->
+ * the cooldown notice (earliest retry time); any updated -> synced (with the
+ * bridge caveat if one still reports a bank); otherwise the first problem.
+ */
+const summariseSyncResults = (
+  t: TFunction,
+  locale: string,
+  results: readonly ConnectionSyncResult[],
+): Omit<SyncNotice, "where"> | null => {
+  const active = results.filter((r) => r.outcome !== "disabled");
+  if (active.length === 0) return null;
+  if (active.every((r) => r.outcome === "fresh")) {
+    const earliest = active
+      .map((r) => r.nextSyncAt)
+      .filter((iso): iso is string => !!iso && Number.isFinite(Date.parse(iso)))
+      .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+    return noticeForResult(t, locale, { ...active[0], nextSyncAt: earliest });
+  }
+  const updated = active.filter((r) => r.outcome === "updated");
+  if (updated.length > 0) {
+    const withWarnings = updated.find((r) => (r.providerWarnings?.length ?? 0) > 0);
+    return noticeForResult(t, locale, withWarnings ?? updated[0]);
+  }
+  const problem = active.find((r) => r.outcome !== "fresh" && r.outcome !== "updated");
+  return problem ? noticeForResult(t, locale, problem) : null;
+};
+
 const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   visible,
   onClose,
@@ -121,10 +228,22 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   overlay,
   onOverlayRequestClose,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { connections, isSyncing, refresh, syncNow } = useConnections();
+
+  /** Last manual sync's inline result (null = nothing to say). */
+  const [syncNotice, setSyncNotice] = useState<SyncNotice | null>(null);
+  // SimpleFIN reconnect form (detail view, re-auth state only).
+  const [reconnectToken, setReconnectToken] = useState("");
+  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectError, setReconnectError] = useState<string | null>(null);
+  /**
+   * "Now" for the bank-data age on account rows. Captured when the links
+   * load (each detail open and after every sync), never read during render.
+   */
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [links, setLinks] = useState<ExternalAccountLink[]>([]);
@@ -172,6 +291,16 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     setLinks([]);
     setLinksLoaded(false);
     setLinkError(null);
+    // Switching list <-> detail (or between connections) drops the last
+    // sync's notice and any half-typed reconnect token.
+    setSyncNotice(null);
+    setReconnectToken("");
+    setReconnectError(null);
+  }
+
+  // Closed (by us or the parent): the next open starts without a stale notice.
+  if (useValueChanged(visible)) {
+    if (!visible) setSyncNotice(null);
   }
 
   useEffect(() => {
@@ -182,6 +311,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         if (!cancelled) {
           setLinks(result);
           setLinksLoaded(true);
+          setNowMs(Date.now());
         }
       })
       .catch((error: unknown) => {
@@ -317,6 +447,69 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
     }
   }, [handleBack, refresh, selectedId]);
 
+  /** Manual sync that reports back inline under the tapped button. */
+  const runSync = useCallback(
+    async (
+      where: SyncNotice["where"],
+      connectionId?: string,
+      opts?: { backfillDays?: number },
+    ) => {
+      setSyncNotice(null);
+      try {
+        const results = await syncNow(connectionId, opts);
+        const notice = summariseSyncResults(t, i18n.language, results);
+        setSyncNotice(notice ? { ...notice, where } : null);
+      } catch (error) {
+        setSyncNotice({
+          text: describeError(error, t("modals.connections.syncNotice.failed")),
+          tone: "warn",
+          where,
+        });
+      }
+    },
+    [i18n.language, syncNow, t],
+  );
+
+  const handleReconnect = useCallback(
+    async (connectionId: string) => {
+      const token = reconnectToken.trim();
+      if (!token || reconnecting) return;
+      setReconnecting(true);
+      setReconnectError(null);
+      setSyncNotice(null);
+      let reconnected = false;
+      try {
+        const result = await reconnectSimplefin(connectionId, token);
+        if (result.ok) {
+          reconnected = true;
+          setReconnectToken("");
+          await refresh();
+        } else {
+          setReconnectError(result.message);
+        }
+      } catch (error) {
+        setReconnectError(describeError(error, t("modals.connections.detail.errors.reconnect")));
+      } finally {
+        setReconnecting(false);
+      }
+      // Fetch right away so the user sees it worked (or what's still wrong).
+      if (reconnected) await runSync("detail", connectionId);
+    },
+    [reconnectToken, reconnecting, refresh, runSync, t],
+  );
+
+  const renderSyncNotice = (where: SyncNotice["where"]) =>
+    syncNotice && syncNotice.where === where ? (
+      <Text
+        style={[
+          styles.hint,
+          { color: syncNotice.tone === "ok" ? colors.success : colors.warning },
+        ]}
+      >
+        {syncNotice.text}
+      </Text>
+    ) : null;
+
   const statusLine = (connection: BankConnection): { text: string; tone: string } => {
     if (connection.authStatus === "needs-reauth") {
       return { text: t("modals.connections.status.reconnectNeeded"), tone: colors.warning };
@@ -382,7 +575,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
       {connections.length > 0 ? (
         <TouchableOpacity
           style={[styles.secondaryButton, isSyncing && styles.buttonDisabled]}
-          onPress={() => void syncNow()}
+          onPress={() => void runSync("all")}
           disabled={isSyncing}
         >
           {isSyncing ? (
@@ -392,11 +585,20 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           )}
         </TouchableOpacity>
       ) : null}
+      {connections.length > 0 ? renderSyncNotice("all") : null}
     </>
   );
 
   const renderDetail = (connection: BankConnection) => {
     const status = statusLine(connection);
+    // SimpleFIN can be reconnected in place with a new setup token; Teller
+    // keeps the remove-and-re-add banner.
+    const canReconnect =
+      connection.provider === "simplefin" &&
+      (connection.authStatus === "needs-reauth" ||
+        connection.lastErrorCode === "auth-expired");
+    const ages = links.map((link) => bankDataAge(link.lastExternalBalanceAt, nowMs));
+    const anyStale = ages.some((age) => age?.stale === true);
     return (
       <>
         <TouchableOpacity onPress={handleBack} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -410,7 +612,41 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
           <Text style={[styles.subtitle, { color: colors.danger }]}>{linkError}</Text>
         ) : null}
 
-        {connection.authStatus === "needs-reauth" ? (
+        {canReconnect ? (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningText}>{t("modals.connections.detail.reconnectHint")}</Text>
+            <TextInput
+              style={[styles.input, styles.tokenInput]}
+              placeholder={t("modals.connections.detail.reconnectPlaceholder")}
+              placeholderTextColor={colors.textMuted}
+              value={reconnectToken}
+              onChangeText={setReconnectToken}
+              multiline
+              autoCorrect={false}
+              autoCapitalize="none"
+              spellCheck={false}
+              secureTextEntry={false}
+              editable={!reconnecting}
+            />
+            {reconnectError ? (
+              <Text style={[styles.hint, { color: colors.danger }]}>{reconnectError}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={[
+                styles.warningButton,
+                (!reconnectToken.trim() || reconnecting || isSyncing) && styles.buttonDisabled,
+              ]}
+              onPress={() => void handleReconnect(connection.id)}
+              disabled={!reconnectToken.trim() || reconnecting || isSyncing}
+            >
+              {reconnecting ? (
+                <ActivityIndicator size="small" color={colors.accentButtonText} />
+              ) : (
+                <Text style={styles.warningButtonText}>{t("modals.connections.detail.reconnect")}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : connection.authStatus === "needs-reauth" ? (
           <View style={styles.warningBanner}>
             <Text style={styles.warningText}>{t("modals.connections.detail.reauthBanner")}</Text>
           </View>
@@ -441,6 +677,11 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         ) : null}
 
         <Text style={styles.sectionLabel}>{t("modals.connections.detail.linkedAccounts")}</Text>
+        {anyStale ? (
+          <Text style={[styles.hint, { color: colors.warning }]}>
+            {t("modals.connections.detail.staleHint", { count: STALE_BANK_DATA_DAYS })}
+          </Text>
+        ) : null}
         <View style={styles.groupedCard}>
           {links.length === 0 ? (
             <Text style={styles.emptyText}>{t("modals.connections.detail.noAccounts")}</Text>
@@ -455,6 +696,8 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
               const mirrorsCard = link.updateDebtBalance !== false;
               const noTarget = !link.assetAccountId && !link.debtId;
               const saving = savingLinkId === link.id;
+              const age = ages[index];
+              const bankDate = formatBankDate(link.lastExternalBalanceAt, i18n.language);
               return (
               <React.Fragment key={link.id}>
                 {index > 0 ? <View style={styles.divider} /> : null}
@@ -486,6 +729,14 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                         ? t("modals.connections.detail.balanceValue", {
                             amount: formatBankBalance(link.lastExternalBalance, link.currency),
                           })
+                        : ""}
+                    </Text>
+                    <Text style={[styles.rowSubtext, age?.stale && { color: colors.warning }]}>
+                      {bankDate
+                        ? t("modals.connections.detail.bankDataAsOf", { date: bankDate })
+                        : t("modals.connections.detail.bankDataNoDate")}
+                      {bankDate && age?.stale
+                        ? t("modals.connections.detail.bankDataDaysOld", { count: age.days })
                         : ""}
                     </Text>
                   </View>
@@ -694,7 +945,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
 
         <TouchableOpacity
           style={[styles.secondaryButton, isSyncing && styles.buttonDisabled]}
-          onPress={() => void syncNow(connection.id)}
+          onPress={() => void runSync("detail", connection.id)}
           disabled={isSyncing}
         >
           {isSyncing ? (
@@ -703,6 +954,7 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             <Text style={styles.secondaryButtonText}>{t("modals.connections.detail.syncNow")}</Text>
           )}
         </TouchableOpacity>
+        {renderSyncNotice("detail")}
 
         {/* Manual safety net for a bank that came back after going dark when
             the automatic gap detection had nothing to go on. Skips the
@@ -713,7 +965,9 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
             <TouchableOpacity
               style={[styles.secondaryButton, isSyncing && styles.buttonDisabled]}
               onPress={() =>
-                void syncNow(connection.id, { backfillDays: MAX_GAP_BACKFILL_DAYS })
+                void runSync("detail", connection.id, {
+                  backfillDays: MAX_GAP_BACKFILL_DAYS,
+                })
               }
               disabled={isSyncing}
             >
@@ -936,6 +1190,11 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 12,
       color: colors.text,
       fontSize: 15,
+    },
+    tokenInput: {
+      minHeight: 72,
+      fontSize: 13,
+      textAlignVertical: "top",
     },
     smallButton: {
       alignSelf: "flex-start",

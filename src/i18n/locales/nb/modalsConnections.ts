@@ -96,13 +96,31 @@ export const modalsConnections: Localized<typeof en> = {
     reimport: "Importer de siste {{count}} dagene på nytt",
     reimportHint:
       "Bruk dette hvis en bank har vært frakoblet en stund og transaksjonene dens mangler. Alt du allerede har gjennomgått blir som det er.",
+    bankDataAsOf: "Bankdata per {{date}}",
+    bankDataNoDate: "Bankdata: ingen dato ennå",
+    bankDataDaysOld: " · {{count}} dager gammel",
+    staleHint: "En saldo her har ikke endret seg på {{count}}+ dager. Hvis banken trenger ny innlogging, sier SimpleFIN Bridge fra om det over - ellers oppdaterer Bridge omtrent én gang om dagen.",
+    reconnectHint: "SimpleFIN Bridge godtar ikke lenger tilgangen til denne tilkoblingen. Lag et nytt oppsettstoken på beta-bridge.simplefin.org og lim det inn her - kontoene, kortkoblingene og den importerte historikken din blir værende.",
+    reconnectPlaceholder: "Lim inn det nye oppsettstokenet ditt",
+    reconnect: "Koble til på nytt",
     remove: "Fjern tilkobling",
     errors: {
       loadAccounts: "Kunne ikke laste inn tilkoblingens kontoer.",
       savePerson: "Kunne ikke lagre hvem kortet tilhører.",
       savePreferences: "Kunne ikke lagre kontoens innstillinger.",
       createAccount: "Kunne ikke opprette kontoen på Broen.",
+      reconnect: "Kunne ikke koble til på nytt. Sjekk tokenet og prøv igjen.",
     },
+  },
+  /** Result of a manual Sync tap, shown under the button that was tapped. */
+  syncNotice: {
+    updated: "Synket akkurat nå",
+    updatedWithWarnings: "Synket akkurat nå - SimpleFIN Bridge melder fortsatt at en bank trenger oppfølging (se nedenfor)",
+    fresh: "Nylig synket - du kan synke igjen kl. {{time}}",
+    freshSoon: "Nylig synket - du kan synke igjen om noen minutter",
+    rateLimited: "Leverandøren ba oss roe ned - prøv igjen senere",
+    needsReauth: "Må kobles til på nytt - se nedenfor",
+    failed: "Synk mislyktes - prøv igjen senere",
   },
   removeDialog: {
     title: "Fjerne denne tilkoblingen?",

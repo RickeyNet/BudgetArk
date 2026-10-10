@@ -26,6 +26,13 @@ export const profileConnections: Localized<typeof en> = {
       continue: "Fortfahren",
     },
   },
+  /** Bridge/Budget banner when a bank connection needs the user. */
+  banner: {
+    title: "Eine Bankverbindung braucht Aufmerksamkeit",
+    body: "Eine Bank braucht eine neue Anmeldung oder der letzte Sync ist fehlgeschlagen. Öffne die Bankverbindungen, um das zu beheben.",
+    open: "Öffnen",
+    later: "Später",
+  },
   partnerSync: {
     sectionTitle: "PARTNER-SYNC",
     pair: "Mit Partner koppeln",

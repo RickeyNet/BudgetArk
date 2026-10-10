@@ -7,6 +7,8 @@ import {
   INITIAL_BACKFILL_DAYS,
   MAX_GAP_BACKFILL_DAYS,
   planGapBackfill,
+  manualRetryBypassesCooldown,
+  nextManualSyncAt,
 } from "../syncGate";
 
 const NOW = Date.parse("2026-07-01T12:00:00Z");
@@ -157,5 +159,56 @@ describe("planGapBackfill", () => {
         nowMs: NOW,
       }),
     ).toBeNull();
+  });
+});
+
+describe("manualRetryBypassesCooldown", () => {
+  it("is false for a healthy connection with no provider warnings", () => {
+    expect(manualRetryBypassesCooldown({ authStatus: "ok" })).toBe(false);
+    expect(
+      manualRetryBypassesCooldown({ authStatus: "ok", providerWarnings: [] }),
+    ).toBe(false);
+  });
+
+  it("never bypasses after a provider rate limit, whatever else is wrong", () => {
+    expect(
+      manualRetryBypassesCooldown({
+        authStatus: "error",
+        lastErrorCode: "rate-limited",
+        providerWarnings: ["Connection to Bank may need attention"],
+      }),
+    ).toBe(false);
+  });
+
+  it("is true when the app marks the connection broken", () => {
+    expect(manualRetryBypassesCooldown({ authStatus: "error" })).toBe(true);
+    expect(manualRetryBypassesCooldown({ authStatus: "needs-reauth" })).toBe(true);
+  });
+
+  it("is true when the bridge reports a bank needing attention", () => {
+    expect(
+      manualRetryBypassesCooldown({
+        authStatus: "ok",
+        providerWarnings: ["Chase needs attention"],
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("nextManualSyncAt", () => {
+  it("returns lastAttemptAt + the manual interval while that is in the future", () => {
+    expect(nextManualSyncAt(iso(NOW - 60_000), NOW)).toBe(
+      iso(NOW - 60_000 + MANUAL_SYNC_MIN_INTERVAL_MS),
+    );
+  });
+
+  it("returns null once the cooldown has elapsed (boundary included)", () => {
+    expect(nextManualSyncAt(iso(NOW - MANUAL_SYNC_MIN_INTERVAL_MS), NOW)).toBeNull();
+    expect(nextManualSyncAt(iso(NOW - DAY), NOW)).toBeNull();
+  });
+
+  it("returns null for a missing or unparseable lastAttemptAt", () => {
+    expect(nextManualSyncAt(undefined, NOW)).toBeNull();
+    expect(nextManualSyncAt("garbage", NOW)).toBeNull();
   });
 });

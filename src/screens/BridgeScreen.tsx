@@ -59,6 +59,7 @@ import { getBudgetEntries } from "../storage/budgetStorage";
 import { calcMonthlyCashFlow } from "../utils/purchasePlanner";
 import { getDebts } from "../storage/debtStorage";
 import CardKeepAliveBanner from "../components/CardKeepAliveBanner";
+import ConnectionsAttentionBanner from "../components/ConnectionsAttentionBanner";
 import {
   dismissCardKeepAliveForMonth,
   getCardKeepAliveDismissals,
@@ -1168,6 +1169,13 @@ const BridgeScreen: React.FC = () => {
         dismissals={keepAliveDismissals}
         onOpen={() => navigation.navigate("DebtTracker", { openKeepAlive: true })}
         onDismiss={handleKeepAliveDismiss}
+        style={{ marginBottom: tokens.gap }}
+      />
+
+      {/* A bank connection that needs a fresh login or keeps failing would
+          otherwise only show on Profile. Generic copy, no names/amounts. */}
+      <ConnectionsAttentionBanner
+        onOpen={() => navigation.navigate("Profile", { openSection: "connections" })}
         style={{ marginBottom: tokens.gap }}
       />
 

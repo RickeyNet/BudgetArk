@@ -9,6 +9,12 @@
  * wizard leaving undecided debtId/personId undefined so a re-run cannot
  * wipe a stored card link. Storage is an in-memory fake; the pure rules
  * themselves are covered in linkPreferences.test.ts.
+ *
+ * Also pins reconnectSimplefin: a fresh setup token replaces the stored
+ * access URL under the SAME connection id (links untouched), the burned
+ * token's URL persists even when the verification fetch fails, and every
+ * refusal (keystore down, unknown/non-SimpleFIN id, bad token, failed
+ * claim) saves nothing.
  */
 
 import type { Debt, ExternalAccountLink } from "../../../types";
@@ -19,15 +25,22 @@ import {
 } from "../../../storage/externalAccountLinksStorage";
 import { getDebts, updateDebt } from "../../../storage/debtStorage";
 import { updateAssetAccount } from "../../../storage/assetAccountStorage";
+import { getConnection, updateConnection } from "../../../storage/connectionsStorage";
+import { isEncryptionAvailable } from "../../../storage/encryptedStorage";
+import { setConnectionSecrets } from "../../../storage/connectionSecretsStorage";
+import { claimAccessUrl, fetchSimplefinAccounts } from "../simplefinClient";
+import { makeBankConnection } from "../../../__tests__/fixtures";
 import {
   finalizeAccountLinks,
   linkAccountToDebt,
+  reconnectSimplefin,
   updateLinkPreferences,
 } from "../connectionsService";
 
 jest.mock("../../../storage/connectionsStorage", () => ({
   addConnection: jest.fn(),
   deleteConnection: jest.fn(),
+  getConnection: jest.fn(),
   updateConnection: jest.fn(),
 }));
 jest.mock("../../../storage/encryptedStorage", () => ({
@@ -239,5 +252,123 @@ describe("finalizeAccountLinks", () => {
       { account, assetAccountId: "asset-1", importTransactions: true, personId: null, debtId: null },
     ]);
     expect(store[0]).toMatchObject({ assetAccountId: "asset-1", updateBalance: true, debtId: null });
+  });
+});
+
+describe("reconnectSimplefin", () => {
+  const mockedGetConnection = getConnection as jest.MockedFunction<typeof getConnection>;
+  const mockedUpdateConnection = updateConnection as jest.MockedFunction<typeof updateConnection>;
+  const mockedEncryption = isEncryptionAvailable as jest.MockedFunction<typeof isEncryptionAvailable>;
+  const mockedSetSecrets = setConnectionSecrets as jest.MockedFunction<typeof setConnectionSecrets>;
+  const mockedClaim = claimAccessUrl as jest.MockedFunction<typeof claimAccessUrl>;
+  const mockedFetch = fetchSimplefinAccounts as jest.MockedFunction<typeof fetchSimplefinAccounts>;
+
+  // Placeholder bridge URLs only - never a real access URL in a fixture.
+  const TOKEN = Buffer.from("https://bridge.example/claim/abc").toString("base64");
+  const NEW_URL = "https://user:pass@bridge.example/simplefin";
+
+  beforeEach(() => {
+    mockedEncryption.mockResolvedValue(true);
+    mockedGetConnection.mockResolvedValue(
+      makeBankConnection({
+        id: "conn-1",
+        authStatus: "needs-reauth",
+        lastErrorCode: "auth-expired",
+        lastErrorMessage: "Expired",
+        providerWarnings: ["Chase needs attention"],
+        lastSyncedAt: NOW,
+        lastAttemptAt: NOW,
+      }),
+    );
+    mockedClaim.mockResolvedValue({ ok: true, accessUrl: NEW_URL });
+    mockedFetch.mockResolvedValue({ ok: true, accounts: [], transactions: [] });
+  });
+
+  it("saves the new URL under the same id, resets the connection's sync state and leaves links alone", async () => {
+    await expect(reconnectSimplefin("conn-1", TOKEN)).resolves.toEqual({ ok: true });
+    expect(mockedClaim).toHaveBeenCalledWith("https://bridge.example/claim/abc");
+    expect(mockedSetSecrets).toHaveBeenCalledWith("conn-1", {
+      provider: "simplefin",
+      accessUrl: NEW_URL,
+    });
+    expect(mockedUpdateConnection).toHaveBeenCalledWith("conn-1", {
+      authStatus: "ok",
+      lastErrorCode: undefined,
+      lastErrorMessage: undefined,
+      providerWarnings: undefined,
+      lastSyncedAt: undefined,
+      lastAttemptAt: undefined,
+    });
+    expect(mockedFetch).toHaveBeenCalledWith(NEW_URL, expect.any(Object));
+    expect(mockedUpdateLink).not.toHaveBeenCalled();
+    expect(mockedUpsertLink).not.toHaveBeenCalled();
+    // Secrets never reach a non-secret write.
+    expect(JSON.stringify(mockedUpdateConnection.mock.calls)).not.toContain("pass@");
+  });
+
+  it("saves nothing when the claim fails, passing its message through", async () => {
+    mockedClaim.mockResolvedValue({
+      ok: false,
+      error: "invalid-credentials",
+      message: "Token already used",
+    });
+    await expect(reconnectSimplefin("conn-1", TOKEN)).resolves.toEqual({
+      ok: false,
+      message: "Token already used",
+    });
+    expect(mockedSetSecrets).not.toHaveBeenCalled();
+    expect(mockedUpdateConnection).not.toHaveBeenCalled();
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects an undecodable token before claiming anything", async () => {
+    const result = await reconnectSimplefin("conn-1", "not a token");
+    expect(result.ok).toBe(false);
+    expect(mockedClaim).not.toHaveBeenCalled();
+    expect(mockedSetSecrets).not.toHaveBeenCalled();
+  });
+
+  it("keeps the new URL and records the error when the verification fetch fails", async () => {
+    mockedFetch.mockResolvedValue({
+      ok: false,
+      error: "provider-error",
+      message: "Payment required",
+    });
+    await expect(reconnectSimplefin("conn-1", TOKEN)).resolves.toEqual({
+      ok: false,
+      message: "Payment required",
+    });
+    expect(mockedSetSecrets).toHaveBeenCalledWith("conn-1", {
+      provider: "simplefin",
+      accessUrl: NEW_URL,
+    });
+    expect(mockedUpdateConnection).toHaveBeenLastCalledWith("conn-1", {
+      authStatus: "error",
+      lastErrorCode: "provider-error",
+      lastErrorMessage: "Payment required",
+    });
+  });
+
+  it("refuses an unknown id or a non-SimpleFIN connection without claiming", async () => {
+    mockedGetConnection.mockResolvedValueOnce(undefined);
+    const unknown = await reconnectSimplefin("missing", TOKEN);
+    expect(unknown.ok).toBe(false);
+
+    mockedGetConnection.mockResolvedValueOnce(
+      makeBankConnection({ id: "conn-t", provider: "teller" }),
+    );
+    const teller = await reconnectSimplefin("conn-t", TOKEN);
+    expect(teller.ok).toBe(false);
+    expect(mockedClaim).not.toHaveBeenCalled();
+    expect(mockedSetSecrets).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the keystore is unavailable", async () => {
+    mockedEncryption.mockResolvedValue(false);
+    const result = await reconnectSimplefin("conn-1", TOKEN);
+    expect(result.ok).toBe(false);
+    expect(mockedGetConnection).not.toHaveBeenCalled();
+    expect(mockedClaim).not.toHaveBeenCalled();
+    expect(mockedSetSecrets).not.toHaveBeenCalled();
   });
 });

@@ -15,7 +15,12 @@ import type {
   ExternalAccountLink,
 } from "../../types";
 import { BANK_PROVIDER_LABELS } from "../../types";
-import { addConnection, deleteConnection, updateConnection } from "../../storage/connectionsStorage";
+import {
+  addConnection,
+  deleteConnection,
+  getConnection,
+  updateConnection,
+} from "../../storage/connectionsStorage";
 import { isEncryptionAvailable } from "../../storage/encryptedStorage";
 import {
   getConnectionSecrets,
@@ -135,6 +140,69 @@ export const createSimplefinConnection = async (
   }
 
   return { ok: true, connectionId: connection.id, accounts: fetched.accounts };
+};
+
+export type ReconnectResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * SimpleFIN reconnect: claim a fresh setup token for an EXISTING connection
+ * (the old access URL was revoked / expired - authStatus "needs-reauth"),
+ * replacing only its stored access URL. The connection id is kept, so its
+ * per-device account links (Bridge targets, card links, people) survive -
+ * removing and re-adding the connection would delete them, which is the
+ * whole reason this exists.
+ *
+ * The claim burns the single-use token, so the new URL is saved the moment
+ * the claim succeeds (same reasoning as createSimplefinConnection) and the
+ * connection's sync state is reset so the next pass runs immediately and
+ * backfills the full initial window (the ingest ledger dedupes). A failed
+ * verification fetch afterwards records the error but keeps the new URL.
+ */
+export const reconnectSimplefin = async (
+  connectionId: string,
+  setupToken: string,
+): Promise<ReconnectResult> => {
+  const blocked = await encryptionUnavailableResult();
+  if (blocked) return blocked;
+
+  const connection = await getConnection(connectionId);
+  if (!connection || connection.provider !== "simplefin") {
+    return { ok: false, message: t("helpers.misc.connections.syncFailed") };
+  }
+
+  const decoded = decodeSetupToken(setupToken);
+  if (!decoded.ok) return { ok: false, message: decoded.message };
+
+  const claimed = await claimAccessUrl(decoded.claimUrl);
+  if (!claimed.ok) return { ok: false, message: claimed.message };
+
+  await setConnectionSecrets(connectionId, {
+    provider: "simplefin",
+    accessUrl: claimed.accessUrl,
+  });
+  await updateConnection(connectionId, {
+    authStatus: "ok",
+    lastErrorCode: undefined,
+    lastErrorMessage: undefined,
+    providerWarnings: undefined,
+    lastSyncedAt: undefined,
+    lastAttemptAt: undefined,
+  });
+
+  const fetched = await fetchSimplefinAccounts(claimed.accessUrl, {
+    startDateEpochSec: discoveryWindow().startDate.getTime() / 1000,
+  });
+  if (!fetched.ok) {
+    const message =
+      fetched.message ?? "SimpleFIN reconnected but listing accounts failed.";
+    await updateConnection(connectionId, {
+      authStatus: "error",
+      lastErrorCode: fetched.error,
+      lastErrorMessage: message,
+    });
+    return { ok: false, message };
+  }
+  return { ok: true };
 };
 
 /**

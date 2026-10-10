@@ -66,7 +66,13 @@ import {
   reconcileInboxWithDecisions,
 } from "./reviewInboxService";
 import { notifyDataChanged } from "../../storage/dataChangeNotifier";
-import { computeFetchWindow, isSyncDue, planGapBackfill } from "./syncGate";
+import {
+  computeFetchWindow,
+  isSyncDue,
+  manualRetryBypassesCooldown,
+  nextManualSyncAt,
+  planGapBackfill,
+} from "./syncGate";
 import { t } from "../../i18n/translate";
 import type {
   NormalizedAccount,
@@ -96,6 +102,18 @@ export interface ConnectionSyncResult {
    * the second fetch started from), or the user asked for a re-import.
    */
   backfilledFrom?: string;
+  /**
+   * "fresh" only: when the manual cooldown next lets "Sync now" through
+   * (ISO), so the UI can say "try again at ..." instead of silently doing
+   * nothing. Undefined when nothing is blocking.
+   */
+  nextSyncAt?: string;
+  /**
+   * "updated" only: the bridge's per-institution warnings from this pass
+   * (e.g. a bank needing a fresh login), so the UI can say the sync went
+   * through but the bridge still reports a bank. Undefined when clean.
+   */
+  providerWarnings?: string[];
 }
 
 const fetchForConnection = async (
@@ -393,12 +411,22 @@ const syncOneConnection = async (
     return { ...base, outcome: "needs-reauth" };
   }
   // An explicit re-import is the user's deliberate one-off, so it skips the
-  // manual cooldown (still one request against the daily budget).
+  // manual cooldown (still one request against the daily budget). So does a
+  // manual retry of a connection that is broken or carries bridge warnings
+  // (see manualRetryBypassesCooldown) - auto passes never bypass.
+  const bypassCooldown =
+    opts.backfillDays !== undefined ||
+    (opts.manual && manualRetryBypassesCooldown(connection));
   if (
-    opts.backfillDays === undefined &&
+    !bypassCooldown &&
     !isSyncDue(connection.lastAttemptAt, opts.nowMs, opts.manual)
   ) {
-    return { ...base, outcome: "fresh" };
+    return {
+      ...base,
+      outcome: "fresh",
+      nextSyncAt:
+        nextManualSyncAt(connection.lastAttemptAt, opts.nowMs) ?? undefined,
+    };
   }
 
   // Stamp the attempt BEFORE fetching - failed providers must not be hammered.
@@ -523,6 +551,8 @@ const syncOneConnection = async (
     };
   }
 
+  const providerWarnings =
+    result.warnings && result.warnings.length > 0 ? result.warnings : undefined;
   await updateConnection(connection.id, {
     lastSyncedAt: new Date(opts.nowMs).toISOString(),
     authStatus: "ok",
@@ -530,8 +560,7 @@ const syncOneConnection = async (
     lastErrorMessage: undefined,
     // Per-institution "needs attention" from the provider: kept while the
     // bridge keeps reporting it, cleared the first time it comes back clean.
-    providerWarnings:
-      result.warnings && result.warnings.length > 0 ? result.warnings : undefined,
+    providerWarnings,
   });
 
   return {
@@ -540,6 +569,7 @@ const syncOneConnection = async (
     ...ingestCounts,
     balancesUpdated,
     backfilledFrom,
+    providerWarnings,
   };
 };
 

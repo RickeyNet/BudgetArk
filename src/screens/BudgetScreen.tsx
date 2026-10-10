@@ -29,6 +29,7 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import { generateUUID } from "../utils/uuid";
 import BudgetBucketCard from "../components/BudgetBucketCard";
+import ConnectionsAttentionBanner from "../components/ConnectionsAttentionBanner";
 import SpendingCard, {
   type ExpenseCategoryRow,
   isAutoEntryId,
@@ -1293,6 +1294,13 @@ const BudgetScreen: React.FC = () => {
           </TouchableOpacity>
         ) : null}
       </View>
+
+      {/* Same banner as the Bridge: a bank connection that needs the user
+          (imports stop until it's fixed). Opens Profile -> Bank Connections. */}
+      <ConnectionsAttentionBanner
+        onOpen={() => navigation.navigate("Profile", { openSection: "connections" })}
+        style={{ marginBottom: tokens.gap }}
+      />
 
       <View style={styles.monthPillRow}>
       <View style={styles.monthPill}>

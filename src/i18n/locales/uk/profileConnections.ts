@@ -30,6 +30,13 @@ export const profileConnections: LocalizedPlural<typeof en> = {
       continue: "Продовжити",
     },
   },
+  /** Bridge/Budget banner when a bank connection needs the user. */
+  banner: {
+    title: "Підключення банку потребує уваги",
+    body: "Банку потрібен повторний вхід, або остання синхронізація не вдалася. Відкрий «Підключення банків», щоб це виправити.",
+    open: "Відкрити",
+    later: "Пізніше",
+  },
   partnerSync: {
     sectionTitle: "СИНХРОНІЗАЦІЯ З ПАРТНЕРОМ",
     pair: "Зв'язати з партнером",

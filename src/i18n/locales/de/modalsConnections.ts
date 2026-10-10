@@ -95,13 +95,31 @@ export const modalsConnections: Localized<typeof en> = {
     reimport: "Die letzten {{count}} Tage neu importieren",
     reimportHint:
       "Nutze das, wenn eine Bank eine Weile getrennt war und ihre Umsätze fehlen. Alles, was du schon geprüft hast, bleibt wie es ist.",
+    bankDataAsOf: "Bankdaten vom {{date}}",
+    bankDataNoDate: "Bankdaten: noch kein Datum",
+    bankDataDaysOld: " · {{count}} Tage alt",
+    staleHint: "Ein Kontostand hier hat sich seit {{count}}+ Tagen nicht bewegt. Wenn die Bank eine neue Anmeldung braucht, meldet die SimpleFIN Bridge das oben - ansonsten aktualisiert die Bridge etwa einmal am Tag.",
+    reconnectHint: "Die SimpleFIN Bridge akzeptiert den Zugang dieser Verbindung nicht mehr. Erstelle auf beta-bridge.simplefin.org ein neues Setup-Token und füge es hier ein - deine Konten, Kartenverknüpfungen und importierten Umsätze bleiben erhalten.",
+    reconnectPlaceholder: "Neues Setup-Token hier einfügen",
+    reconnect: "Neu verbinden",
     remove: "Verbindung entfernen",
     errors: {
       loadAccounts: "Die Konten dieser Verbindung konnten nicht geladen werden.",
       savePerson: "Konnte nicht speichern, wem diese Karte gehört.",
       savePreferences: "Die Einstellungen dieses Kontos konnten nicht gespeichert werden.",
       createAccount: "Das Brücken-Konto konnte nicht angelegt werden.",
+      reconnect: "Neu verbinden hat nicht geklappt. Prüfe das Token und versuch es noch mal.",
     },
+  },
+  /** Result of a manual Sync tap, shown under the button that was tapped. */
+  syncNotice: {
+    updated: "Gerade synchronisiert",
+    updatedWithWarnings: "Gerade synchronisiert - die SimpleFIN Bridge meldet weiterhin eine Bank, die Aufmerksamkeit braucht (siehe unten)",
+    fresh: "Erst kürzlich synchronisiert - du kannst um {{time}} wieder synchronisieren",
+    freshSoon: "Erst kürzlich synchronisiert - du kannst in ein paar Minuten wieder synchronisieren",
+    rateLimited: "Der Anbieter bittet um eine Pause - versuch es später noch mal",
+    needsReauth: "Neu verbinden nötig - siehe unten",
+    failed: "Synchronisierung fehlgeschlagen - versuch es später noch mal",
   },
   removeDialog: {
     title: "Diese Verbindung entfernen?",

@@ -25,6 +25,13 @@ export const profileConnections = {
       continue: "Continue",
     },
   },
+  /** Bridge/Budget banner when a bank connection needs the user. */
+  banner: {
+    title: "A bank connection needs attention",
+    body: "A bank needs a fresh login or the last sync failed. Open Bank Connections to fix it.",
+    open: "Open",
+    later: "Later",
+  },
   partnerSync: {
     sectionTitle: "PARTNER SYNC",
     pair: "Pair with Partner",
