@@ -99,11 +99,36 @@ export const budgetInbox: Localized<typeof en> = {
     approve: "Godkjenn",
     alwaysApprove: "Godkjenn alltid",
   },
+  skipped: {
+    toggle: "Nylig hoppet over · {{count}}",
+    title: "Nylig hoppet over",
+    subtitle:
+      "Transaksjoner som forlot innboksen uten å bli godkjent de siste {{days}} dagene - hoppet over av deg, av en regel, av partnerens telefon eller gjennom en match under synk. Gjenopprett en, så kommer den tilbake i innboksen; en gjenopprettet transaksjon hoppes aldri over automatisk igjen.",
+    back: "Tilbake til innboksen",
+    restore: "Gjenopprett",
+    restoring: "Gjenoppretter...",
+    empty: "Ingenting hoppet over nylig.",
+    when: "Hoppet over {{date}}",
+    reason: {
+      user: "Du hoppet over den",
+      rule: "Hoppet over av en Hopp alltid over-regel",
+      partner: "Hoppet over på partnerens telefon",
+      duplicate: "Matchet en transaksjon som allerede er gjennomgått",
+      stale: "Banken rapporterer ikke lenger denne ventende transaksjonen",
+    },
+  },
   notices: {
+    syncSkipped_one:
+      "{{count}} transaksjon ble hoppet over under denne synken - se Nylig hoppet over nedenfor.",
+    syncSkipped_other:
+      "{{count}} transaksjoner ble hoppet over under denne synken - se Nylig hoppet over nedenfor.",
+    syncAutoApproved_one: "{{count}} transaksjon ble automatisk godkjent av reglene dine.",
+    syncAutoApproved_other: "{{count}} transaksjoner ble automatisk godkjent av reglene dine.",
     alreadyLogged:
       "Finnes allerede på Gjeld-fanen - matchet mot betalingen på {{amount}} som ble logget {{date}}. Ingenting ble telt dobbelt.",
   },
   errors: {
+    restore: "Kunne ikke gjenopprette denne transaksjonen.",
     load: "Kunne ikke laste inn innboksen.",
     approve: "Kunne ikke godkjenne denne transaksjonen.",
     skip: "Kunne ikke hoppe over denne transaksjonen.",

@@ -97,11 +97,37 @@ export const budgetInbox = {
     approve: "Approve",
     alwaysApprove: "Always Approve",
   },
+  /** "Recently skipped": rows that left the inbox without an entry, restorable. */
+  skipped: {
+    toggle: "Recently skipped · {{count}}",
+    title: "Recently skipped",
+    subtitle:
+      "Transactions that left the inbox without being approved in the last {{days}} days - skipped by you, by a rule, by your partner's phone, or by a sync match. Restore one and it returns to the inbox; a restored transaction is never skipped automatically again.",
+    back: "Back to inbox",
+    restore: "Restore",
+    restoring: "Restoring...",
+    empty: "Nothing skipped recently.",
+    when: "Skipped {{date}}",
+    reason: {
+      user: "You skipped it",
+      rule: "Skipped by an Always Skip rule",
+      partner: "Skipped on your partner's phone",
+      duplicate: "Matched a transaction already reviewed",
+      stale: "The bank stopped reporting this pending charge",
+    },
+  },
   notices: {
+    syncSkipped_one:
+      "{{count}} transaction was skipped during this sync - see Recently skipped below.",
+    syncSkipped_other:
+      "{{count}} transactions were skipped during this sync - see Recently skipped below.",
+    syncAutoApproved_one: "{{count}} transaction was auto-approved by your rules.",
+    syncAutoApproved_other: "{{count}} transactions were auto-approved by your rules.",
     alreadyLogged:
       "Already on the Debts tab - matched to the {{amount}} payment logged {{date}}. Nothing was counted twice.",
   },
   errors: {
+    restore: "Couldn't restore this transaction.",
     load: "Couldn't load the inbox.",
     approve: "Couldn't approve this transaction.",
     skip: "Couldn't skip this transaction.",

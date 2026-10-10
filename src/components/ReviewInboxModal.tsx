@@ -17,7 +17,11 @@
  * A bulk bar
  * approves everything that already has a rule-suggested category. The Rules
  * header button opens MerchantRulesModal, where saved rules can be changed
- * or deleted later.
+ * or deleted later. A "Recently skipped" row swaps the list for the rows
+ * that left the inbox without becoming entries (Skip, an Always Skip rule,
+ * a partner's decision, a sync match, a stale pending charge) with why and
+ * a Restore button - so a sync that shrinks the inbox is never a mystery
+ * (user report: "I clicked sync and lost items").
  *
  * Approvals run through reviewInboxService (entry -> ledger -> inbox write
  * order); the host screen refreshes its entry list via `onChanged`.
@@ -26,6 +30,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Modal,
   Platform,
   SectionList,
@@ -48,6 +53,7 @@ import type {
   ExternalAccountLink,
   PendingTransaction,
   Person,
+  SkippedTransaction,
 } from "../types";
 import { describeError } from "../utils/errorMessage";
 import TagPillPicker, { MultiTagPillPicker } from "./TagPillPicker";
@@ -69,7 +75,9 @@ import {
   approvePendingTransaction,
   dismissAndIgnoreMerchant,
   dismissPendingTransactions,
+  restoreSkippedTransaction,
 } from "../services/connections/reviewInboxService";
+import { SKIPPED_TTL_DAYS } from "../storage/reviewInboxStorage";
 import { suggestRuleFromHistory } from "../services/connections/ruleNudges";
 import { describeUnusualCharge, flagUnusualCharges } from "../utils/unusualCharges";
 import { getLinks } from "../storage/externalAccountLinksStorage";
@@ -179,6 +187,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const {
     connections,
     pendingTransactions,
+    skippedTransactions,
     isSyncing,
     refresh,
     syncNow,
@@ -263,6 +272,10 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  /** "Recently skipped" view in place of the list (same sheet, no second Modal). */
+  const [showSkipped, setShowSkipped] = useState(false);
+  /** Skipped row id being restored. */
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   /** Last failed load/approve/skip, shown under the header until the next action. */
   const [actionError, setActionError] = useState<string | null>(null);
   /**
@@ -587,6 +600,49 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     },
     [refresh, t],
   );
+
+  const handleRestore = useCallback(
+    async (record: SkippedTransaction) => {
+      setRestoringId(record.item.id);
+      setActionError(null);
+      try {
+        await restoreSkippedTransaction(record.item.id);
+        await refresh();
+        triggerHaptic("selection");
+      } catch (error) {
+        triggerHaptic("error");
+        setActionError(describeError(error, t("budget.inbox.errors.restore")));
+      } finally {
+        setRestoringId(null);
+      }
+    },
+    [refresh, t],
+  );
+
+  /**
+   * A manual Sync from this sheet: say what the pass did to the inbox
+   * besides adding rows - rows it skipped (now under Recently skipped) and
+   * rows its rules auto-approved - instead of letting the list shrink
+   * silently. The host screen reloads its entries afterwards because the
+   * sweep can have written real entries.
+   */
+  const handleSync = useCallback(async () => {
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      const results = await syncNow();
+      const skipped = results.reduce((sum, r) => sum + r.skippedCount, 0);
+      const autoApproved = results.reduce((sum, r) => sum + r.autoApprovedCount, 0);
+      const parts: string[] = [];
+      if (skipped > 0) parts.push(t("budget.inbox.notices.syncSkipped", { count: skipped }));
+      if (autoApproved > 0) {
+        parts.push(t("budget.inbox.notices.syncAutoApproved", { count: autoApproved }));
+      }
+      setActionNotice(parts.length > 0 ? parts.join(" ") : null);
+    } finally {
+      await onChanged();
+    }
+  }, [onChanged, syncNow, t]);
 
   /**
    * "Make it a recurring bill" (utils/recurringBillDetection): create the
@@ -1189,14 +1245,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.syncButton, isSyncing && styles.buttonDisabled]}
-              onPress={() =>
-                // A sync can now auto-approve items into real entries, so
-                // the host screen must reload its entry list afterwards.
-                void (async () => {
-                  await syncNow();
-                  await onChanged();
-                })()
-              }
+              onPress={() => void handleSync()}
               disabled={isSyncing || connections.length === 0}
             >
               {isSyncing ? (
@@ -1229,7 +1278,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             />
           ) : null}
 
-          {pendingTransactions.length > 1 ? (
+          {!showSkipped && pendingTransactions.length > 1 ? (
             <View style={styles.groupToggleRow}>
               <Text style={styles.groupToggleLabel}>{t("budget.inbox.groupBy.label")}</Text>
               <View style={styles.groupToggle}>
@@ -1267,7 +1316,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </View>
           ) : null}
 
-          {suggestedReadyCount > 0 ? (
+          {!showSkipped && suggestedReadyCount > 0 ? (
             <TouchableOpacity
               style={[styles.bulkBar, bulkBusy && styles.buttonDisabled]}
               onPress={() => void handleBulkApprove()}
@@ -1281,7 +1330,98 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             </TouchableOpacity>
           ) : null}
 
-          {pendingTransactions.length === 0 ? (
+          {skippedTransactions.length > 0 || showSkipped ? (
+            <TouchableOpacity
+              style={styles.skippedToggle}
+              onPress={() => setShowSkipped((v) => !v)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showSkipped }}
+            >
+              <Text style={styles.skippedToggleText}>
+                {showSkipped
+                  ? t("budget.inbox.skipped.back")
+                  : t("budget.inbox.skipped.toggle", { count: skippedTransactions.length })}
+              </Text>
+              <Text style={styles.skippedToggleChevron}>{showSkipped ? "‹" : "›"}</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {showSkipped ? (
+            <FlatList
+              data={skippedTransactions}
+              keyExtractor={(record) => record.item.id}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+              extraData={restoringId}
+              ListHeaderComponent={
+                <View>
+                  <Text style={styles.sectionHeader}>{t("budget.inbox.skipped.title")}</Text>
+                  <Text style={styles.skippedSubtitle}>
+                    {t("budget.inbox.skipped.subtitle", { days: SKIPPED_TTL_DAYS })}
+                  </Text>
+                </View>
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyText}>{t("budget.inbox.skipped.empty")}</Text>
+                </View>
+              }
+              renderItem={({ item: record }) => {
+                const row = record.item;
+                const restoring = restoringId === row.id;
+                const accountName =
+                  accountNameById.get(row.externalAccountId) ??
+                  statementAccountLabelFrom(row.externalAccountId);
+                return (
+                  <View style={styles.itemCard}>
+                    <View style={styles.itemHeader}>
+                      <View style={styles.itemTextWrap}>
+                        <Text style={styles.itemMerchant} numberOfLines={1}>
+                          {row.suggestedName ||
+                            row.description ||
+                            t("budget.inbox.row.noDescription")}
+                        </Text>
+                        <Text style={styles.itemMeta}>
+                          {formatPaymentDay(row.postedAt, i18n.language)}
+                          {accountName ? ` · ${accountName}` : ""}
+                          {row.pending ? ` · ${t("budget.inbox.row.pending")}` : ""}
+                        </Text>
+                        <Text style={styles.itemMeta}>
+                          {t(`budget.inbox.skipped.reason.${record.reason}`)}
+                          {" · "}
+                          {t("budget.inbox.skipped.when", {
+                            date: formatPaymentDay(record.skippedAt, i18n.language),
+                          })}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.itemAmount,
+                          { color: row.amount < 0 ? colors.warning : colors.success },
+                        ]}
+                      >
+                        {formatCurrency(Math.abs(row.amount))}
+                      </Text>
+                    </View>
+                    <View style={styles.restoreRow}>
+                      <TouchableOpacity
+                        style={[styles.restoreButton, restoring && styles.buttonDisabled]}
+                        onPress={() => void handleRestore(record)}
+                        disabled={restoring || restoringId !== null}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.restoreButtonText}>
+                          {restoring
+                            ? t("budget.inbox.skipped.restoring")
+                            : t("budget.inbox.skipped.restore")}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          ) : pendingTransactions.length === 0 ? (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyGlyph}>📥</Text>
               <Text style={styles.emptyText}>{t("budget.inbox.empty")}</Text>
@@ -1550,6 +1690,50 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 24,
       paddingBottom: 32,
       gap: 8,
+    },
+    skippedToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginHorizontal: 24,
+      marginBottom: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 12,
+    },
+    skippedToggleText: {
+      color: colors.textDim,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    skippedToggleChevron: {
+      color: colors.textDim,
+      fontSize: 18,
+      lineHeight: 18,
+    },
+    skippedSubtitle: {
+      color: colors.textDim,
+      fontSize: 12,
+      lineHeight: 17,
+      marginBottom: 10,
+    },
+    restoreRow: {
+      paddingHorizontal: 14,
+      paddingBottom: 12,
+    },
+    restoreButton: {
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      alignItems: "center",
+    },
+    restoreButtonText: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "700",
     },
     sectionHeaderRow: {
       flexDirection: "row",

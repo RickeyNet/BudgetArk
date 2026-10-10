@@ -115,7 +115,7 @@ jest.mock("../../storage/reviewInboxStorage", () => ({
   mergeLedgerFromSync: jest.fn(async () => 0),
 }));
 jest.mock("../../services/connections/reviewInboxService", () => ({
-  reconcileInboxWithDecisions: jest.fn(async () => 0),
+  reconcileInboxWithDecisions: jest.fn(async () => ({ removed: 0, skipped: [] })),
 }));
 jest.mock("../../storage/encryptedStorage", () => ({
   getItem: jest.fn(async (k: string) =>

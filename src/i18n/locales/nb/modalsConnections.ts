@@ -114,6 +114,12 @@ export const modalsConnections: Localized<typeof en> = {
   },
   /** Result of a manual Sync tap, shown under the button that was tapped. */
   syncNotice: {
+    skipped_one:
+      "{{count}} transaksjon hoppet over - gjenopprett den under Nylig hoppet over i gjennomgangsinnboksen",
+    skipped_other:
+      "{{count}} transaksjoner hoppet over - gjenopprett dem under Nylig hoppet over i gjennomgangsinnboksen",
+    autoApproved_one: "{{count}} transaksjon automatisk godkjent av reglene dine",
+    autoApproved_other: "{{count}} transaksjoner automatisk godkjent av reglene dine",
     updated: "Synket akkurat nå",
     updatedWithWarnings: "Synket akkurat nå - SimpleFIN Bridge melder fortsatt at en bank trenger oppfølging (se nedenfor)",
     fresh: "Nylig synket - du kan synke igjen kl. {{time}}",

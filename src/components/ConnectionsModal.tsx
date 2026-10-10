@@ -191,9 +191,30 @@ const noticeForResult = (
 };
 
 /**
+ * What a pass did to the Review Inbox besides adding rows: rows it retired
+ * without an entry (now under the inbox's Recently skipped) and rows its
+ * rules auto-approved. Appended to the synced notice so the inbox never
+ * shrinks silently. Empty when there is nothing to say.
+ */
+const inboxChangeParts = (
+  t: TFunction,
+  results: readonly ConnectionSyncResult[],
+): string[] => {
+  const skipped = results.reduce((sum, r) => sum + r.skippedCount, 0);
+  const autoApproved = results.reduce((sum, r) => sum + r.autoApprovedCount, 0);
+  const parts: string[] = [];
+  if (skipped > 0) parts.push(t("modals.connections.syncNotice.skipped", { count: skipped }));
+  if (autoApproved > 0) {
+    parts.push(t("modals.connections.syncNotice.autoApproved", { count: autoApproved }));
+  }
+  return parts;
+};
+
+/**
  * Summarise a "Sync all" (or single) pass: all blocked by the cooldown ->
  * the cooldown notice (earliest retry time); any updated -> synced (with the
- * bridge caveat if one still reports a bank); otherwise the first problem.
+ * bridge caveat if one still reports a bank, plus what happened to the
+ * inbox); otherwise the first problem.
  */
 const summariseSyncResults = (
   t: TFunction,
@@ -212,7 +233,12 @@ const summariseSyncResults = (
   const updated = active.filter((r) => r.outcome === "updated");
   if (updated.length > 0) {
     const withWarnings = updated.find((r) => (r.providerWarnings?.length ?? 0) > 0);
-    return noticeForResult(t, locale, withWarnings ?? updated[0]);
+    const notice = noticeForResult(t, locale, withWarnings ?? updated[0]);
+    if (!notice) return null;
+    const parts = inboxChangeParts(t, active);
+    return parts.length > 0
+      ? { ...notice, text: [notice.text, ...parts].join(" · ") }
+      : notice;
   }
   const problem = active.find((r) => r.outcome !== "fresh" && r.outcome !== "updated");
   return problem ? noticeForResult(t, locale, problem) : null;

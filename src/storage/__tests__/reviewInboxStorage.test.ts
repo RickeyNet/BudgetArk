@@ -7,18 +7,26 @@
  * fetchedAt) rather than an arbitrary/insertion-order slice. Storage is
  * mocked with an in-memory map, everything else runs real.
  */
-import type { IngestLedger, PendingTransaction } from "../../types";
+import type { IngestLedger, PendingTransaction, SkippedTransaction } from "../../types";
 import {
   LEDGER_TTL_DAYS,
   MAX_INBOX_SIZE,
+  MAX_SKIPPED_SIZE,
+  SKIPPED_TTL_DAYS,
+  forgetLedgerDecision,
   getIngestLedger,
   getPendingTransactions,
+  getSkippedTransactions,
   mergeLedgerFromSync,
   purgePendingForConnection,
+  purgeSkippedForConnection,
   pruneLedger,
+  pruneSkipped,
   recordLedgerEntries,
+  recordSkippedTransactions,
   removePendingTransaction,
   removePendingTransactions,
+  removeSkippedTransaction,
   upsertPendingTransactions,
 } from "../reviewInboxStorage";
 
@@ -36,6 +44,7 @@ jest.mock("../encryptedStorage", () => ({
 
 const INBOX_KEY = "@budgetark_pending_transactions";
 const LEDGER_KEY = "@budgetark_connection_ingest_ledger";
+const SKIPPED_KEY = "@budgetark_skipped_transactions";
 
 beforeEach(() => {
   mockStore = new Map();
@@ -279,6 +288,102 @@ describe("mergeLedgerFromSync", () => {
 
   it("returns 0 and touches nothing for an empty map", async () => {
     expect(await mergeLedgerFromSync({})).toBe(0);
+    expect(mockStore.has(LEDGER_KEY)).toBe(false);
+  });
+});
+
+/* ─── Recently skipped ─── */
+
+describe("recordSkippedTransactions / getSkippedTransactions", () => {
+  const NOW = new Date("2026-09-01T00:00:00.000Z");
+  const readSkipped = (): SkippedTransaction[] => JSON.parse(mockStore.get(SKIPPED_KEY) ?? "[]");
+
+  it("prepends newest-first with the reason and stamp, and a re-skip replaces the older record", async () => {
+    await recordSkippedTransactions([tx({ id: "a" })], "user", NOW);
+    await recordSkippedTransactions(
+      [tx({ id: "b" }), tx({ id: "a", description: "again" })],
+      "stale",
+      new Date(NOW.getTime() + 1000),
+    );
+    const records = readSkipped();
+    expect(records.map((r) => r.item.id)).toEqual(["b", "a"]);
+    expect(records[1]).toMatchObject({
+      reason: "stale",
+      item: { description: "again" },
+      skippedAt: new Date(NOW.getTime() + 1000).toISOString(),
+    });
+    expect(await getSkippedTransactions()).toEqual(records);
+  });
+
+  it("is a no-op for an empty list and tolerates a corrupt stored value", async () => {
+    await recordSkippedTransactions([], "user", NOW);
+    expect(mockStore.has(SKIPPED_KEY)).toBe(false);
+    mockStore.set(SKIPPED_KEY, "{not json");
+    expect(await getSkippedTransactions()).toEqual([]);
+    mockStore.set(SKIPPED_KEY, JSON.stringify({ nope: 1 }));
+    expect(await getSkippedTransactions()).toEqual([]);
+  });
+
+  it("removeSkippedTransaction drops one record; purgeSkippedForConnection drops a connection's", async () => {
+    await recordSkippedTransactions(
+      [tx({ id: "a" }), tx({ id: "b", connectionId: "conn-2" }), tx({ id: "c" })],
+      "user",
+      NOW,
+    );
+    expect((await removeSkippedTransaction("c")).map((r) => r.item.id)).toEqual(["a", "b"]);
+    await removeSkippedTransaction("missing"); // no write
+    await purgeSkippedForConnection("conn-1");
+    expect(readSkipped().map((r) => r.item.id)).toEqual(["b"]);
+  });
+});
+
+describe("pruneSkipped", () => {
+  const NOW = new Date("2026-09-01T00:00:00.000Z");
+  const cutoffMs = NOW.getTime() - SKIPPED_TTL_DAYS * 24 * 3600_000;
+  const record = (id: string, skippedAt: string): SkippedTransaction => ({
+    item: tx({ id }),
+    reason: "user",
+    skippedAt,
+  });
+
+  it("drops records older than SKIPPED_TTL_DAYS and returns the same array when nothing expires", () => {
+    const fresh = [record("a", new Date(cutoffMs + 1000).toISOString())];
+    expect(pruneSkipped(fresh, NOW)).toBe(fresh);
+    const mixed = [...fresh, record("old", new Date(cutoffMs - 1000).toISOString())];
+    expect(pruneSkipped(mixed, NOW).map((r) => r.item.id)).toEqual(["a"]);
+  });
+
+  it("keeps only the newest MAX_SKIPPED_SIZE records (newest-first input)", () => {
+    const many = Array.from({ length: MAX_SKIPPED_SIZE + 5 }, (_, i) =>
+      record(`r${i}`, NOW.toISOString()),
+    );
+    const pruned = pruneSkipped(many, NOW);
+    expect(pruned).toHaveLength(MAX_SKIPPED_SIZE);
+    expect(pruned[0].item.id).toBe("r0");
+  });
+});
+
+describe("forgetLedgerDecision", () => {
+  const readLedger = (): IngestLedger => JSON.parse(mockStore.get(LEDGER_KEY) ?? "{}");
+
+  it("deletes the key and strips the fingerprint of the decision it aliased", async () => {
+    mockStore.set(
+      LEDGER_KEY,
+      JSON.stringify({
+        pending: { status: "dismissed", at: "2026-08-30T00:00:00.000Z", pendingFingerprint: "acc-1|-10|2026-08-29" },
+        posted: { status: "dismissed", at: "2026-08-31T00:00:00.000Z", aliasOf: "pending" },
+        other: { status: "approved", at: "2026-08-31T00:00:00.000Z", budgetEntryId: "e1", pendingFingerprint: "acc-1|-5|2026-08-29" },
+      }),
+    );
+    await forgetLedgerDecision("posted");
+    const ledger = readLedger();
+    expect(ledger.posted).toBeUndefined();
+    expect(ledger.pending).toEqual({ status: "dismissed", at: "2026-08-30T00:00:00.000Z" });
+    expect(ledger.other.pendingFingerprint).toBe("acc-1|-5|2026-08-29"); // untouched
+  });
+
+  it("is a no-op (no write) for an unknown key", async () => {
+    await forgetLedgerDecision("nope");
     expect(mockStore.has(LEDGER_KEY)).toBe(false);
   });
 });

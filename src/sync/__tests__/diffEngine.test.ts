@@ -144,7 +144,7 @@ jest.mock("../../storage/reviewInboxStorage", () => ({
   }),
 }));
 jest.mock("../../services/connections/reviewInboxService", () => ({
-  reconcileInboxWithDecisions: jest.fn(async () => 0),
+  reconcileInboxWithDecisions: jest.fn(async () => ({ removed: 0, skipped: [] })),
 }));
 jest.mock("../../storage/encryptedStorage", () => ({
   getItem: jest.fn(async (k: string) =>
@@ -1156,7 +1156,7 @@ describe("dismissed bank transactions sync", () => {
 
   it("merges into the ledger (newer wins) and reconciles the inbox afterwards", async () => {
     mockState.ledger = { [KEY_A]: dismissed(NEW) };
-    (inboxService.reconcileInboxWithDecisions as jest.Mock).mockResolvedValueOnce(2);
+    (inboxService.reconcileInboxWithDecisions as jest.Mock).mockResolvedValueOnce({ removed: 2, skipped: [] });
     const changed = await applyIncomingDiff(
       emptyDiff({
         dismissedTransactions: {

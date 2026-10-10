@@ -951,6 +951,19 @@ describe("planIngest - ignore rules", () => {
     expect(plan.newInboxItems).toHaveLength(0);
     expect(plan.autoDismissed[KEY]).toMatchObject({ status: "dismissed", at: NOW });
     expect(plan.autoDismissed[KEY].pendingFingerprint).toBeUndefined();
+    // ...but still hands the caller the row it would have been, so the
+    // user can see it under "Recently skipped" and restore it.
+    expect(plan.autoDismissedItems).toHaveLength(1);
+    expect(plan.autoDismissedItems[0]).toMatchObject({
+      id: KEY,
+      connectionId: "conn-1",
+      amount: -25,
+      merchant: "COSTCO WHSE",
+    });
+  });
+
+  it("lists no auto-dismissed items when nothing matches an ignore rule", () => {
+    expect(planIngest(baseInputs()).autoDismissedItems).toEqual([]);
   });
 
   it("records the pending fingerprint so the posted twin aliases to the dismissal", () => {
@@ -1054,6 +1067,60 @@ describe("planInboxReconciliation", () => {
     });
     expect(plan.removeIds).toEqual([KEY]);
     expect(plan.ledgerWrites).toEqual({});
+    expect(plan.skipped).toEqual([{ id: KEY, reason: "partner" }]);
+  });
+
+  it("does not list a row retired by an APPROVED ledger decision or an entry as skipped (the money is tracked)", () => {
+    const byLedger = planInboxReconciliation({
+      inbox: [row()],
+      ledger: { [KEY]: { status: "approved", budgetEntryId: "e1", at: NOW } },
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    expect(byLedger.removeIds).toEqual([KEY]);
+    expect(byLedger.skipped).toEqual([]);
+    const byEntry = planInboxReconciliation({
+      inbox: [row()],
+      ledger: {},
+      knownEntries: new Map([[KEY, "entry-9"]]),
+      now: NOW,
+    });
+    expect(byEntry.removeIds).toEqual([KEY]);
+    expect(byEntry.skipped).toEqual([]);
+  });
+
+  it("leaves a restored row alone for a synced dismissal and a twin match, but still retires it for an entry", () => {
+    const restored = row({ restoredAt: NOW });
+    const synced = planInboxReconciliation({
+      inbox: [restored],
+      ledger: { [KEY]: { status: "dismissed", at: NOW } },
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    expect(synced.removeIds).toEqual([]);
+
+    const pendingKey = identityKeyFor("simplefin", "ACT-1", "PENDING-1");
+    const twin = planInboxReconciliation({
+      inbox: [restored],
+      ledger: {
+        [pendingKey]: {
+          status: "dismissed",
+          at: NOW,
+          pendingFingerprint: pendingFingerprintFor("ACT-1", -25, "2026-06-26T00:00:00.000Z"),
+        },
+      },
+      knownEntries: new Map(),
+      now: NOW,
+    });
+    expect(twin.removeIds).toEqual([]);
+
+    const tracked = planInboxReconciliation({
+      inbox: [restored],
+      ledger: {},
+      knownEntries: new Map([[KEY, "entry-9"]]),
+      now: NOW,
+    });
+    expect(tracked.removeIds).toEqual([KEY]);
   });
 
   it("retires a row whose key is on an entry (partner approved it) and records the approval", () => {
@@ -1112,6 +1179,7 @@ describe("planInboxReconciliation", () => {
       aliasOf: pendingKey,
     });
     expect(plan.ledgerWrites[posted2.id]).toBeUndefined();
+    expect(plan.skipped).toEqual([{ id: posted1.id, reason: "duplicate" }]);
   });
 
   it("retires a posted row whose pending twin was approved for a different amount, correcting the entry", () => {
@@ -1292,6 +1360,19 @@ describe("planStalePending", () => {
       inputs({ inbox: [{ ...pendingRow, postedAt: "2026-05-20T00:00:00.000Z" }] }),
     );
     expect(plan.retireIds).toEqual([PENDING_ID]);
+  });
+
+  it("never judges a row the user restored from Recently skipped (no stamp, no retirement)", () => {
+    const restored = { ...pendingRow, restoredAt: NOW };
+    expect(planStalePending(inputs({ inbox: [restored] })).updatedInboxItems).toEqual([]);
+    const old = planStalePending(
+      inputs({ inbox: [{ ...restored, postedAt: "2026-05-20T00:00:00.000Z" }] }),
+    );
+    expect(old.retireIds).toEqual([]);
+    const missing = planStalePending(
+      inputs({ inbox: [{ ...restored, missingSince: "2026-06-20T00:00:00.000Z" }] }),
+    );
+    expect(missing.retireIds).toEqual([]);
   });
 
   it("ignores posted rows, other connections, and accounts the provider did not answer for", () => {

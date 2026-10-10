@@ -27,7 +27,12 @@
  */
 
 import { AppState, AppStateStatus } from "react-native";
-import type { BankConnection, Debt, ExternalAccountLink } from "../../types";
+import type {
+  BankConnection,
+  Debt,
+  ExternalAccountLink,
+  PendingTransaction,
+} from "../../types";
 import {
   getConnections,
   updateConnection,
@@ -41,6 +46,7 @@ import {
   getIngestLedger,
   getPendingTransactions,
   recordLedgerEntries,
+  recordSkippedTransactions,
   removePendingTransactions,
   upsertPendingTransactions,
 } from "../../storage/reviewInboxStorage";
@@ -93,6 +99,16 @@ export interface ConnectionSyncResult {
   outcome: ConnectionSyncOutcome;
   newPendingCount: number;
   updatedPendingCount: number;
+  /**
+   * Review Inbox rows this pass retired WITHOUT making an entry (a twin of
+   * something already reviewed, an Always Skip rule, a pending charge the
+   * bank stopped reporting, a partner's decision) - now listed under the
+   * inbox's "Recently skipped". Surfaced so a sync that shrinks the inbox
+   * never does so silently (user report: "I clicked sync and lost items").
+   */
+  skippedCount: number;
+  /** Rows the auto-approve sweep turned into entries during this pass. */
+  autoApprovedCount: number;
   /** AssetAccount balances + credit-card (debt) balances that changed. */
   balancesUpdated: number;
   errorMessage?: string;
@@ -283,7 +299,7 @@ const ingestTransactions = async (
   result: Extract<ProviderFetchResult, { ok: true }>,
   links: ExternalAccountLink[],
   opts: { nowMs: number; windowStartMs: number },
-): Promise<{ newPendingCount: number; updatedPendingCount: number }> => {
+): Promise<IngestCounts> => {
   const [inbox, ledger, rules, allEntries] = await Promise.all([
     getPendingTransactions(),
     getIngestLedger(),
@@ -345,6 +361,26 @@ const ingestTransactions = async (
   const staleIds = Object.keys(plan.ledgerAliases).filter((key) =>
     inbox.some((existing) => existing.id === key),
   );
+  // Of those, the rows that are simply GONE (their twin was already
+  // dismissed) go on the "Recently skipped" list. A pending->posted
+  // migration also aliases the old id, but that row lives on under its
+  // posted id (in updatedInboxItems) - not skipped. Rows aliased to an
+  // APPROVED decision are tracked money - not skipped either.
+  const migratedTo = new Set(plan.updatedInboxItems.map((item) => item.id));
+  const duplicateSkipped = staleIds
+    .map((id) => inbox.find((existing) => existing.id === id))
+    .filter((item): item is PendingTransaction => {
+      if (!item) return false;
+      const alias = plan.ledgerAliases[item.id];
+      return (
+        alias.status === "dismissed" &&
+        !(alias.aliasOf !== undefined && migratedTo.has(alias.aliasOf))
+      );
+    });
+  await recordSkippedTransactions(duplicateSkipped, "duplicate");
+  // Transactions an Always Skip rule dropped on arrival never reached the
+  // inbox, but the user still gets to see (and undo) that.
+  await recordSkippedTransactions(plan.autoDismissedItems, "rule");
   if (staleIds.length > 0) {
     await removePendingTransactions(staleIds);
   }
@@ -374,6 +410,12 @@ const ingestTransactions = async (
     await upsertPendingTransactions(stale.updatedInboxItems);
   }
   if (stale.retireIds.length > 0) {
+    await recordSkippedTransactions(
+      stale.retireIds
+        .map((id) => inboxAfterIngest.get(id))
+        .filter((item): item is PendingTransaction => item !== undefined),
+      "stale",
+    );
     await removePendingTransactions(stale.retireIds);
   }
 
@@ -382,8 +424,9 @@ const ingestTransactions = async (
   // selectAutoApprovable). Best-effort like keep-alive: an inbox-side
   // failure must not mark the connection as broken - the items just wait
   // in the inbox for manual approval.
+  let autoApprovedCount = 0;
   try {
-    await autoApproveInboxByRules();
+    autoApprovedCount = await autoApproveInboxByRules();
   } catch (error) {
     if (__DEV__) console.error("Auto-approve sweep failed:", error);
   }
@@ -391,7 +434,24 @@ const ingestTransactions = async (
   return {
     newPendingCount: plan.newInboxItems.length,
     updatedPendingCount: plan.updatedInboxItems.length - migratedIds.length,
+    skippedCount:
+      duplicateSkipped.length +
+      plan.autoDismissedItems.length +
+      stale.retireIds.length,
+    autoApprovedCount,
   };
+};
+
+type IngestCounts = Pick<
+  ConnectionSyncResult,
+  "newPendingCount" | "updatedPendingCount" | "skippedCount" | "autoApprovedCount"
+>;
+
+const EMPTY_INGEST_COUNTS: IngestCounts = {
+  newPendingCount: 0,
+  updatedPendingCount: 0,
+  skippedCount: 0,
+  autoApprovedCount: 0,
 };
 
 const syncOneConnection = async (
@@ -401,8 +461,7 @@ const syncOneConnection = async (
   const base: ConnectionSyncResult = {
     connectionId: connection.id,
     outcome: "updated",
-    newPendingCount: 0,
-    updatedPendingCount: 0,
+    ...EMPTY_INGEST_COUNTS,
     balancesUpdated: 0,
   };
 
@@ -492,10 +551,7 @@ const syncOneConnection = async (
   // say why. A failed ingest is recorded on the connection instead and the
   // pass reports "unavailable"; lastSyncedAt stays put so the next pass
   // re-fetches (and the ledger dedupes) the same window.
-  let ingestCounts: { newPendingCount: number; updatedPendingCount: number } = {
-    newPendingCount: 0,
-    updatedPendingCount: 0,
-  };
+  let ingestCounts: IngestCounts = EMPTY_INGEST_COUNTS;
   let ingestFailed = false;
   try {
     ingestCounts = await ingestTransactions(connection, result, links, {
@@ -596,9 +652,18 @@ export const syncConnections = async (
     // Retire inbox rows a partner has since decided (their entries and
     // dismissals arrive over partner sync, possibly after this device
     // fetched the same transactions). Best-effort: a storage hiccup here
-    // must not fail the pass - the next one reconciles again.
+    // must not fail the pass - the next one reconciles again. Rows it
+    // skipped are counted on their connection's result below, so the pass
+    // still reports them.
+    const preSkippedByConnection = new Map<string, number>();
     try {
-      await reconcileInboxWithDecisions();
+      const { skipped } = await reconcileInboxWithDecisions();
+      for (const item of skipped) {
+        preSkippedByConnection.set(
+          item.connectionId,
+          (preSkippedByConnection.get(item.connectionId) ?? 0) + 1,
+        );
+      }
     } catch (error) {
       if (__DEV__) console.error("Inbox reconciliation failed:", error);
     }
@@ -635,12 +700,19 @@ export const syncConnections = async (
         results.push({
           connectionId: connection.id,
           outcome: "unavailable",
-          newPendingCount: 0,
-          updatedPendingCount: 0,
+          ...EMPTY_INGEST_COUNTS,
           balancesUpdated: 0,
           errorMessage,
         });
       }
+    }
+    // Attribute the pre-pass skips to their connections; rows from a
+    // connection outside this pass's targets ride on the first result so
+    // the count is never dropped.
+    for (const [connectionId, count] of preSkippedByConnection) {
+      const target =
+        results.find((r) => r.connectionId === connectionId) ?? results[0];
+      if (target) target.skippedCount += count;
     }
     // An "updated" pass may have written budget entries (auto-approvals),
     // asset balances and keep-alive stamps behind a mounted tab's back - and

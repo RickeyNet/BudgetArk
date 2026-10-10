@@ -26,6 +26,7 @@ import type {
   MerchantRule,
   Payment,
   PendingTransaction,
+  SkippedTransaction,
 } from "../../../types";
 import {
   makeBudgetEntry,
@@ -53,6 +54,7 @@ import {
   removeMerchantRule,
   approvePendingGroup,
   applyEntryAmountCorrections,
+  restoreSkippedTransaction,
 } from "../reviewInboxService";
 import * as reviewInboxStorage from "../../../storage/reviewInboxStorage";
 
@@ -91,6 +93,7 @@ const ENTRIES_KEY = "@budgetark_budget_entries";
 const GOALS_KEY = "@budgetark_savings_goals";
 const DEBTS_KEY = "@budgetark_debts";
 const PAYMENTS_KEY = "@budgetark_payments";
+const SKIPPED_KEY = "@budgetark_skipped_transactions";
 
 const seed = (key: string, value: unknown) => {
   mockStore.set(key, JSON.stringify(value));
@@ -101,6 +104,7 @@ const read = <T,>(key: string, fallback: T): T =>
 
 const inboxNow = (): PendingTransaction[] => read(INBOX_KEY, []);
 const ledgerNow = (): IngestLedger => read(LEDGER_KEY, {});
+const skippedNow = (): SkippedTransaction[] => read(SKIPPED_KEY, []);
 const rulesNow = (): MerchantRule[] => read(RULES_KEY, []);
 const entriesNow = () => read(ENTRIES_KEY, [] as any[]);
 
@@ -445,6 +449,11 @@ describe("dismissPendingTransactions / dismissPendingTransaction", () => {
     });
     expect(ledgerNow().missing).toBeUndefined();
     expect(inboxNow().map((i) => i.id)).toEqual(["c"]);
+    // ...and remembers them under "Recently skipped" as the user's own skip.
+    expect(skippedNow().map((r) => [r.item.id, r.reason])).toEqual([
+      ["a", "user"],
+      ["b", "user"],
+    ]);
   });
 
   it("is a no-op for an empty id list (never touches storage)", async () => {
@@ -480,6 +489,7 @@ describe("dismissAndIgnoreMerchant", () => {
       t1: { status: "dismissed" },
       t2: { status: "dismissed" },
     });
+    expect(skippedNow().map((r) => r.reason)).toEqual(["rule", "rule"]);
   });
 
   it("falls back to a plain single dismiss (no rule) when the item has no merchant key", async () => {
@@ -881,9 +891,14 @@ describe("reconcileInboxWithDecisions", () => {
       makeBudgetEntry({ id: "entry-1", externalTxId: "simplefin:ACT-1:A", source: "bank" }),
     ]);
 
-    const removed = await reconcileInboxWithDecisions();
+    const { removed, skipped } = await reconcileInboxWithDecisions();
 
     expect(removed).toBe(2);
+    // Only the dismissal is "skipped"; the approved one is tracked money.
+    expect(skipped.map((item) => item.id)).toEqual(["simplefin:ACT-1:B"]);
+    expect(skippedNow().map((r) => [r.item.id, r.reason])).toEqual([
+      ["simplefin:ACT-1:B", "partner"],
+    ]);
     expect(readInbox().map((item) => item.id)).toEqual(["simplefin:ACT-1:C"]);
     const ledger = readLedger();
     expect(ledger["simplefin:ACT-1:A"]).toMatchObject({ status: "approved", budgetEntryId: "entry-1" });
@@ -912,16 +927,16 @@ describe("reconcileInboxWithDecisions", () => {
       makeBudgetEntry({ id: "entry-1", amount: 25, externalTxId: pendingKey, source: "bank" }),
     ]);
 
-    expect(await reconcileInboxWithDecisions()).toBe(1);
+    expect((await reconcileInboxWithDecisions()).removed).toBe(1);
     expect(readInbox()).toEqual([]);
     expect(readLedger()[posted.id]).toMatchObject({ status: "approved", aliasOf: pendingKey });
     expect(entriesNow()[0].amount).toBe(30);
   });
 
   it("is a no-op on an empty inbox and when nothing was decided elsewhere", async () => {
-    expect(await reconcileInboxWithDecisions()).toBe(0);
+    expect((await reconcileInboxWithDecisions()).removed).toBe(0);
     seed(INBOX_KEY, [makePendingTransaction({ id: "simplefin:ACT-1:C", providerTxId: "C" })]);
-    expect(await reconcileInboxWithDecisions()).toBe(0);
+    expect((await reconcileInboxWithDecisions()).removed).toBe(0);
     expect(readInbox()).toHaveLength(1);
   });
 });
@@ -1372,7 +1387,7 @@ describe("applyPendingTransferToPlan", () => {
       encryptedStorage.setItem.mockImplementation(originalSetItem);
     }
 
-    expect(await reconcileInboxWithDecisions()).toBe(1);
+    expect((await reconcileInboxWithDecisions()).removed).toBe(1);
     expect(inboxNow()).toEqual([]);
     expect(read<{ currentAmount: number }[]>(GOALS_KEY, [])[0].currentAmount).toBe(10);
   });
@@ -1432,5 +1447,59 @@ describe("applyEntryAmountCorrections", () => {
 
   it("is a no-op for an empty list", async () => {
     expect(await applyEntryAmountCorrections([])).toBe(0);
+  });
+});
+
+describe("restoreSkippedTransaction", () => {
+  const readLedger = (): IngestLedger => JSON.parse(mockStore.get(LEDGER_KEY) ?? "{}");
+
+  it("puts the row back (stamped restoredAt), forgets the ledger decision and the skipped record", async () => {
+    const item = makePendingTransaction({ id: "simplefin:ACT-1:A", providerTxId: "A", missingSince: "2026-06-29T00:00:00.000Z" });
+    seed(INBOX_KEY, [item]);
+    await dismissPendingTransactions([item.id]);
+    expect(inboxNow()).toHaveLength(0);
+
+    const restored = await restoreSkippedTransaction(item.id);
+
+    expect(restored).toMatchObject({ id: item.id, missingSince: undefined });
+    expect(restored?.restoredAt).toEqual(expect.any(String));
+    expect(inboxNow().map((row) => row.id)).toEqual([item.id]);
+    expect(inboxNow()[0].restoredAt).toBe(restored?.restoredAt);
+    expect(readLedger()[item.id]).toBeUndefined();
+    expect(skippedNow()).toEqual([]);
+  });
+
+  it("strips the fingerprint of the twin decision a duplicate row was aliased to, so it cannot re-claim the row", async () => {
+    const pendingKey = "simplefin:ACT-1:PENDING-1";
+    const posted = makePendingTransaction({
+      id: "simplefin:ACT-1:POSTED-1",
+      providerTxId: "POSTED-1",
+      postedAt: "2026-06-29T00:00:00.000Z",
+    });
+    seed(INBOX_KEY, [posted]);
+    seed(LEDGER_KEY, {
+      [pendingKey]: {
+        status: "dismissed",
+        at: new Date(Date.now() - 24 * 3600_000).toISOString(),
+        pendingFingerprint: pendingFingerprintFor("ACT-1", -25, "2026-06-27T00:00:00.000Z"),
+      },
+    });
+    const { skipped } = await reconcileInboxWithDecisions();
+    expect(skipped.map((row) => row.id)).toEqual([posted.id]);
+    expect(skippedNow()[0].reason).toBe("duplicate");
+
+    await restoreSkippedTransaction(posted.id);
+
+    expect(inboxNow().map((row) => row.id)).toEqual([posted.id]);
+    expect(readLedger()[posted.id]).toBeUndefined();
+    expect(readLedger()[pendingKey].pendingFingerprint).toBeUndefined();
+    // The next reconcile pass leaves the restored row alone.
+    expect((await reconcileInboxWithDecisions()).removed).toBe(0);
+    expect(inboxNow()).toHaveLength(1);
+  });
+
+  it("returns null and writes nothing when the record is gone", async () => {
+    expect(await restoreSkippedTransaction("nope")).toBeNull();
+    expect(mockStore.has(INBOX_KEY)).toBe(false);
   });
 });

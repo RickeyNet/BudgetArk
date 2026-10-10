@@ -15,7 +15,10 @@ import * as EncryptedStorage from "./encryptedStorage";
 import type { BankConnection } from "../types";
 import { deleteConnectionSecrets } from "./connectionSecretsStorage";
 import { deleteLinksForConnection } from "./externalAccountLinksStorage";
-import { purgePendingForConnection } from "./reviewInboxStorage";
+import {
+  purgePendingForConnection,
+  purgeSkippedForConnection,
+} from "./reviewInboxStorage";
 
 const STORAGE_KEY = "@budgetark_bank_connections" as const;
 
@@ -82,5 +85,6 @@ export const deleteConnection = async (
   await deleteConnectionSecrets(connectionId);
   await deleteLinksForConnection(connectionId);
   await purgePendingForConnection(connectionId);
+  await purgeSkippedForConnection(connectionId);
   return updated;
 };

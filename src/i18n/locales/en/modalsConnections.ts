@@ -113,6 +113,12 @@ export const modalsConnections = {
   },
   /** Result of a manual Sync tap, shown under the button that was tapped. */
   syncNotice: {
+    skipped_one:
+      "{{count}} transaction skipped - restore it under Recently skipped in the Review Inbox",
+    skipped_other:
+      "{{count}} transactions skipped - restore them under Recently skipped in the Review Inbox",
+    autoApproved_one: "{{count}} transaction auto-approved by your rules",
+    autoApproved_other: "{{count}} transactions auto-approved by your rules",
     updated: "Synced just now",
     updatedWithWarnings: "Synced just now - the Bridge still reports a bank needing attention (see below)",
     fresh: "Already synced recently - you can sync again at {{time}}",

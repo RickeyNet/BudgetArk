@@ -14,12 +14,21 @@
  *    overlaps) and reconnects never re-offer them. Entries older than
  *    LEDGER_TTL_DAYS are pruned - far beyond any fetch window's reach.
  *
- * Neither collection exports, and the inbox never syncs. The ledger's
- * DISMISSED decisions do ride partner sync (SyncDiff.dismissedTransactions,
- * merged here by mergeLedgerFromSync) so a partner phone connected to the
- * same institution doesn't re-offer what was already skipped; approved ones
- * still dedupe via the synced BudgetEntry.externalTxId. If the ledger is
- * lost (reinstall), the next partner sync restores the dismissals.
+ *  - The SKIPPED list (`@budgetark_skipped_transactions`): rows that left
+ *    the inbox WITHOUT becoming an entry - the user's own Skip, an Always
+ *    Skip rule, a partner's decision arriving over sync, a pending/posted
+ *    twin match, or a pending charge the bank stopped reporting - kept with
+ *    the reason for SKIPPED_TTL_DAYS (newest MAX_SKIPPED_SIZE) so the
+ *    Review Inbox can show "Recently skipped" and restore one. Exists
+ *    because the automatic retirements used to be silent: a sync could
+ *    shrink the inbox and nothing said why or offered a way back.
+ *
+ * None of the three export, and only the ledger's DISMISSED decisions ride
+ * partner sync (SyncDiff.dismissedTransactions, merged here by
+ * mergeLedgerFromSync) so a partner phone connected to the same institution
+ * doesn't re-offer what was already skipped; approved ones still dedupe via
+ * the synced BudgetEntry.externalTxId. If the ledger is lost (reinstall),
+ * the next partner sync restores the dismissals.
  */
 
 import * as EncryptedStorage from "./encryptedStorage";
@@ -27,13 +36,18 @@ import type {
   IngestLedger,
   IngestLedgerEntry,
   PendingTransaction,
+  SkippedReason,
+  SkippedTransaction,
 } from "../types";
 
 const INBOX_KEY = "@budgetark_pending_transactions" as const;
 const LEDGER_KEY = "@budgetark_connection_ingest_ledger" as const;
+const SKIPPED_KEY = "@budgetark_skipped_transactions" as const;
 
 export const MAX_INBOX_SIZE = 500;
 export const LEDGER_TTL_DAYS = 120;
+export const MAX_SKIPPED_SIZE = 100;
+export const SKIPPED_TTL_DAYS = 30;
 
 /* ─── Inbox ─── */
 
@@ -172,6 +186,26 @@ export const mergeLedgerFromSync = async (
 };
 
 /**
+ * Undo one decision so its transaction can be reviewed again (a restore
+ * from "Recently skipped"). Deletes the key, and when the decision was an
+ * alias of an earlier one (a pending/posted twin match) strips THAT
+ * decision's fingerprint so the twin finders cannot re-claim the row on
+ * the next pass. No-op when the key is unknown.
+ */
+export const forgetLedgerDecision = async (identityKey: string): Promise<void> => {
+  const ledger = await getIngestLedger();
+  const decision = ledger[identityKey];
+  if (!decision) return;
+  delete ledger[identityKey];
+  const target = decision.aliasOf ? ledger[decision.aliasOf] : undefined;
+  if (target?.pendingFingerprint) {
+    const { pendingFingerprint: _dropped, ...rest } = target;
+    ledger[decision.aliasOf as string] = rest;
+  }
+  await writeIngestLedger(ledger);
+};
+
+/**
  * Drop entries older than LEDGER_TTL_DAYS. Pure helper (exported for tests);
  * returns the same object when nothing expires.
  */
@@ -188,4 +222,87 @@ export const pruneLedger = (ledger: IngestLedger, now: Date): IngestLedger => {
     next[key] = ledger[key];
   }
   return dropped ? next : ledger;
+};
+
+/* ─── Recently skipped ─── */
+
+export const getSkippedTransactions = async (): Promise<SkippedTransaction[]> => {
+  const raw = await EncryptedStorage.getItem(SKIPPED_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as SkippedTransaction[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeSkippedTransactions = async (
+  items: SkippedTransaction[],
+): Promise<void> => {
+  await EncryptedStorage.setItem(SKIPPED_KEY, JSON.stringify(items));
+};
+
+/**
+ * Drop records older than SKIPPED_TTL_DAYS and keep the newest
+ * MAX_SKIPPED_SIZE. Pure helper (exported for tests); returns the same
+ * array when nothing changes. Expects newest-first input.
+ */
+export const pruneSkipped = (
+  items: SkippedTransaction[],
+  now: Date,
+): SkippedTransaction[] => {
+  const cutoff = now.getTime() - SKIPPED_TTL_DAYS * 24 * 3600_000;
+  const kept = items.filter((record) => {
+    const at = Date.parse(record.skippedAt);
+    return !Number.isFinite(at) || at >= cutoff;
+  });
+  const capped = kept.length > MAX_SKIPPED_SIZE ? kept.slice(0, MAX_SKIPPED_SIZE) : kept;
+  return capped.length === items.length ? items : capped;
+};
+
+/**
+ * Remember rows that just left the inbox without becoming entries. Newest
+ * first; a row skipped again replaces its older record (one record per
+ * inbox id). The snapshot is the row as it sat in the inbox, so a restore
+ * puts back exactly what the user saw.
+ */
+export const recordSkippedTransactions = async (
+  items: readonly PendingTransaction[],
+  reason: SkippedReason,
+  now: Date = new Date(),
+): Promise<void> => {
+  if (items.length === 0) return;
+  const existing = await getSkippedTransactions();
+  const skippedAt = now.toISOString();
+  const incomingIds = new Set(items.map((item) => item.id));
+  const next: SkippedTransaction[] = [
+    ...items.map((item) => ({ item, reason, skippedAt })),
+    ...existing.filter((record) => !incomingIds.has(record.item.id)),
+  ];
+  await writeSkippedTransactions(pruneSkipped(next, now));
+};
+
+/** Forget one record (after a restore, or when its row is re-fetched). */
+export const removeSkippedTransaction = async (
+  pendingId: string,
+): Promise<SkippedTransaction[]> => {
+  const existing = await getSkippedTransactions();
+  const remaining = existing.filter((record) => record.item.id !== pendingId);
+  if (remaining.length !== existing.length) {
+    await writeSkippedTransactions(remaining);
+  }
+  return remaining;
+};
+
+/** Drop the skipped history of a removed connection (its ids mean nothing now). */
+export const purgeSkippedForConnection = async (
+  connectionId: string,
+): Promise<void> => {
+  const existing = await getSkippedTransactions();
+  const remaining = existing.filter(
+    (record) => record.item.connectionId !== connectionId,
+  );
+  if (remaining.length === existing.length) return;
+  await writeSkippedTransactions(remaining);
 };

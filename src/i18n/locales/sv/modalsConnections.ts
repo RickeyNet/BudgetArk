@@ -113,6 +113,12 @@ export const modalsConnections: Localized<typeof en> = {
   },
   /** Result of a manual Sync tap, shown under the button that was tapped. */
   syncNotice: {
+    skipped_one:
+      "{{count}} transaktion överhoppad - återställ den under Nyligen överhoppade i granskningsinkorgen",
+    skipped_other:
+      "{{count}} transaktioner överhoppade - återställ dem under Nyligen överhoppade i granskningsinkorgen",
+    autoApproved_one: "{{count}} transaktion automatiskt godkänd av dina regler",
+    autoApproved_other: "{{count}} transaktioner automatiskt godkända av dina regler",
     updated: "Synkad nyss",
     updatedWithWarnings: "Synkad nyss - SimpleFIN Bridge rapporterar fortfarande att en bank behöver åtgärdas (se nedan)",
     fresh: "Redan synkad nyligen - du kan synka igen kl. {{time}}",

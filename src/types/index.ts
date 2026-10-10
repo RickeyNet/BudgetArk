@@ -921,8 +921,37 @@ export interface PendingTransaction {
    * bookkeeping; the inbox never syncs.
    */
   missingSince?: string;
+  /**
+   * Set when the user brought this row back from Recently skipped
+   * (reviewInboxService.restoreSkippedTransaction). A restored row is the
+   * user's explicit "I want to review this": the automatic retirements
+   * (stale-pending, pending/posted twin matching, partner-decided
+   * reconciliation) all leave it alone - only Approve or Skip retire it.
+   */
+  restoredAt?: string;
   fetchedAt: string;
   updatedAt: string;
+}
+
+/**
+ * Why a Review Inbox row left the inbox without becoming an entry (see
+ * reviewInboxStorage "skipped" collection). "user" = Skip tapped; "rule" =
+ * an Always Skip merchant rule; "partner" = the decision arrived over
+ * partner sync; "duplicate" = matched a pending/posted twin that was already
+ * reviewed; "stale" = the bank stopped reporting the pending charge.
+ */
+export type SkippedReason = "user" | "rule" | "partner" | "duplicate" | "stale";
+
+/**
+ * A retired inbox row kept for a while so the user can see WHY it went and
+ * put it back. Per-device, never synced or exported (like the inbox).
+ */
+export interface SkippedTransaction {
+  /** The row exactly as it sat in the inbox when it was retired. */
+  item: PendingTransaction;
+  reason: SkippedReason;
+  /** ISO timestamp of the retirement (drives the TTL and the list order). */
+  skippedAt: string;
 }
 
 /**

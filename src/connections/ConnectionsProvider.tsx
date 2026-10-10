@@ -17,9 +17,16 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import type { BankConnection, PendingTransaction } from "../types";
+import type {
+  BankConnection,
+  PendingTransaction,
+  SkippedTransaction,
+} from "../types";
 import { getConnections } from "../storage/connectionsStorage";
-import { getPendingTransactions } from "../storage/reviewInboxStorage";
+import {
+  getPendingTransactions,
+  getSkippedTransactions,
+} from "../storage/reviewInboxStorage";
 import { subscribeDataChanged } from "../storage/dataChangeNotifier";
 import {
   startConnectionsMonitoring,
@@ -31,6 +38,8 @@ interface ConnectionsContextValue {
   connections: BankConnection[];
   pendingTransactions: PendingTransaction[];
   pendingCount: number;
+  /** "Recently skipped" rows (newest first) - see reviewInboxStorage. */
+  skippedTransactions: SkippedTransaction[];
   /** True when any connection needs re-auth or errored on its last sync. */
   needsAttention: boolean;
   isSyncing: boolean;
@@ -56,6 +65,9 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
   const [pendingTransactions, setPendingTransactions] = useState<
     PendingTransaction[]
   >([]);
+  const [skippedTransactions, setSkippedTransactions] = useState<
+    SkippedTransaction[]
+  >([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
@@ -67,10 +79,15 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
   // async, so this shape lints clean. Behaviorally identical to async/await.
   const refresh = useCallback(
     (): Promise<void> =>
-      Promise.all([getConnections(), getPendingTransactions()])
-        .then(([nextConnections, nextPending]) => {
+      Promise.all([
+        getConnections(),
+        getPendingTransactions(),
+        getSkippedTransactions(),
+      ])
+        .then(([nextConnections, nextPending, nextSkipped]) => {
           setConnections(nextConnections);
           setPendingTransactions(nextPending);
+          setSkippedTransactions(nextSkipped);
         })
         .catch((error) => {
           if (__DEV__) console.warn("Connections load failed:", error);
@@ -138,6 +155,7 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
       connections,
       pendingTransactions,
       pendingCount: pendingTransactions.length,
+      skippedTransactions,
       needsAttention,
       isSyncing,
       isReady,
@@ -147,6 +165,7 @@ export const ConnectionsProvider: React.FC<{ children: React.ReactNode }> = ({
     [
       connections,
       pendingTransactions,
+      skippedTransactions,
       needsAttention,
       isSyncing,
       isReady,

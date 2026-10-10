@@ -113,6 +113,12 @@ export const modalsConnections: Localized<typeof en> = {
   },
   /** Result of a manual Sync tap, shown under the button that was tapped. */
   syncNotice: {
+    skipped_one:
+      "{{count}} Umsatz übersprungen - unter Kürzlich übersprungen im Prüfposteingang wiederherstellbar",
+    skipped_other:
+      "{{count}} Umsätze übersprungen - unter Kürzlich übersprungen im Prüfposteingang wiederherstellbar",
+    autoApproved_one: "{{count}} Umsatz durch deine Regeln automatisch freigegeben",
+    autoApproved_other: "{{count}} Umsätze durch deine Regeln automatisch freigegeben",
     updated: "Gerade synchronisiert",
     updatedWithWarnings: "Gerade synchronisiert - die SimpleFIN Bridge meldet weiterhin eine Bank, die Aufmerksamkeit braucht (siehe unten)",
     fresh: "Erst kürzlich synchronisiert - du kannst um {{time}} wieder synchronisieren",

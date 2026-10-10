@@ -22,6 +22,7 @@ import type {
   Payment,
   PendingTransaction,
   SavingsGoal,
+  SkippedReason,
 } from "../../types";
 import {
   addBudgetEntry,
@@ -41,11 +42,15 @@ import {
 } from "../../utils/inboxDebtPayments";
 import { roundToCents } from "../../utils/money";
 import {
+  forgetLedgerDecision,
   getIngestLedger,
   getPendingTransactions,
+  getSkippedTransactions,
   recordLedgerEntries,
+  recordSkippedTransactions,
   removePendingTransaction,
   removePendingTransactions,
+  removeSkippedTransaction,
   upsertPendingTransactions,
 } from "../../storage/reviewInboxStorage";
 import {
@@ -284,19 +289,62 @@ export const approvePendingGroup = async (
 };
 
 /** Dismiss inbox items - they never become entries and never come back. */
+/**
+ * Skip rows: ledger first (the decision is durable and syncs), then the
+ * "Recently skipped" record (so the row can be restored), inbox removal
+ * last. `reason` is "user" for a Skip tap; dismissAndIgnoreMerchant passes
+ * "rule" for the fan-out its new Always Skip rule causes.
+ */
 export const dismissPendingTransactions = async (
   pendingIds: string[],
+  reason: SkippedReason = "user",
 ): Promise<void> => {
   if (pendingIds.length === 0) return;
   const inbox = await getPendingTransactions();
   const byId = new Map(inbox.map((item) => [item.id, item]));
   const ledgerUpdates: Record<string, IngestLedgerEntry> = {};
+  const skipped: PendingTransaction[] = [];
   for (const id of pendingIds) {
     const item = byId.get(id);
-    if (item) ledgerUpdates[id] = ledgerEntryFor(item, "dismissed");
+    if (item) {
+      ledgerUpdates[id] = ledgerEntryFor(item, "dismissed");
+      skipped.push(item);
+    }
   }
   await recordLedgerEntries(ledgerUpdates);
+  await recordSkippedTransactions(skipped, reason);
   await removePendingTransactions(pendingIds);
+};
+
+/**
+ * Put a "Recently skipped" row back in the inbox. Undoes the ledger
+ * decision for its id (so a re-fetch updates the row instead of skipping
+ * it) and, when the row was retired as the twin of an earlier decision,
+ * strips that decision's fingerprint so it cannot claim the row again.
+ * The row comes back stamped `restoredAt`, which exempts it from every
+ * automatic retirement (see ingest.ts) - only Approve or Skip retire it.
+ * Returns the restored row, or null when the record is gone.
+ */
+export const restoreSkippedTransaction = async (
+  pendingId: string,
+): Promise<PendingTransaction | null> => {
+  const skipped = await getSkippedTransactions();
+  const record = skipped.find((entry) => entry.item.id === pendingId);
+  if (!record) return null;
+  const now = new Date().toISOString();
+  const restored: PendingTransaction = {
+    ...record.item,
+    missingSince: undefined,
+    restoredAt: now,
+    updatedAt: now,
+  };
+  // Order: the row is visible again BEFORE its record goes, so a crash in
+  // between leaves a stale record (harmless: restoring it again is a no-op
+  // upsert) rather than a row that is gone from both lists.
+  await forgetLedgerDecision(pendingId);
+  await upsertPendingTransactions([restored]);
+  await removeSkippedTransaction(pendingId);
+  return restored;
 };
 
 /**
@@ -340,11 +388,18 @@ export const applyEntryAmountCorrections = async (
  * every applied partner diff (see planInboxReconciliation for the rules).
  * Same crash-safe order as approval: ledger first, inbox removal last, so
  * an interrupted run leaves at worst a row the next run retires again.
- * Returns how many rows went.
+ * Returns how many rows went, and the ones that went without becoming an
+ * entry (now listed under "Recently skipped") so a sync pass can report
+ * them instead of shrinking the inbox silently.
  */
-export const reconcileInboxWithDecisions = async (): Promise<number> => {
+export interface ReconcileResult {
+  removed: number;
+  skipped: PendingTransaction[];
+}
+
+export const reconcileInboxWithDecisions = async (): Promise<ReconcileResult> => {
   const inbox = await getPendingTransactions();
-  if (inbox.length === 0) return 0;
+  if (inbox.length === 0) return { removed: 0, skipped: [] };
   const [ledger, entries] = await Promise.all([
     getIngestLedger(),
     getBudgetEntriesIncludingDeleted(),
@@ -359,11 +414,22 @@ export const reconcileInboxWithDecisions = async (): Promise<number> => {
     knownEntries,
     now: new Date().toISOString(),
   });
-  if (plan.removeIds.length === 0) return 0;
+  if (plan.removeIds.length === 0) return { removed: 0, skipped: [] };
   await applyEntryAmountCorrections(plan.amountCorrections);
   await recordLedgerEntries(plan.ledgerWrites);
+  const byId = new Map(inbox.map((item) => [item.id, item]));
+  const skipped: PendingTransaction[] = [];
+  for (const reason of ["partner", "duplicate"] as const) {
+    const items = plan.skipped
+      .filter((entry) => entry.reason === reason)
+      .map((entry) => byId.get(entry.id))
+      .filter((item): item is PendingTransaction => item !== undefined);
+    if (items.length === 0) continue;
+    await recordSkippedTransactions(items, reason);
+    skipped.push(...items);
+  }
   await removePendingTransactions(plan.removeIds);
-  return plan.removeIds.length;
+  return { removed: plan.removeIds.length, skipped };
 };
 
 export const dismissPendingTransaction = (pendingId: string): Promise<void> =>
@@ -578,7 +644,7 @@ export const dismissAndIgnoreMerchant = async (
         (p.merchant ? matchMerchantRule(p.merchant, [rule]) !== undefined : false),
     )
     .map((p) => p.id);
-  await dismissPendingTransactions(ids);
+  await dismissPendingTransactions(ids, "rule");
   return ids.length;
 };
 

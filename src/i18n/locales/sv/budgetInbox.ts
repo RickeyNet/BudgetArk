@@ -99,11 +99,36 @@ export const budgetInbox: Localized<typeof en> = {
     approve: "Godkänn",
     alwaysApprove: "Godkänn alltid",
   },
+  skipped: {
+    toggle: "Nyligen överhoppade · {{count}}",
+    title: "Nyligen överhoppade",
+    subtitle:
+      "Transaktioner som lämnat inkorgen utan att godkännas de senaste {{days}} dagarna - överhoppade av dig, av en regel, av din partners telefon eller genom en matchning vid synk. Återställ en så kommer den tillbaka till inkorgen; en återställd transaktion hoppas aldrig över automatiskt igen.",
+    back: "Tillbaka till inkorgen",
+    restore: "Återställ",
+    restoring: "Återställer...",
+    empty: "Inget överhoppat nyligen.",
+    when: "Överhoppad {{date}}",
+    reason: {
+      user: "Du hoppade över den",
+      rule: "Överhoppad av en Hoppa alltid över-regel",
+      partner: "Överhoppad på din partners telefon",
+      duplicate: "Matchade en redan granskad transaktion",
+      stale: "Banken rapporterar inte längre den här väntande transaktionen",
+    },
+  },
   notices: {
+    syncSkipped_one:
+      "{{count}} transaktion hoppades över under den här synken - se Nyligen överhoppade nedan.",
+    syncSkipped_other:
+      "{{count}} transaktioner hoppades över under den här synken - se Nyligen överhoppade nedan.",
+    syncAutoApproved_one: "{{count}} transaktion godkändes automatiskt av dina regler.",
+    syncAutoApproved_other: "{{count}} transaktioner godkändes automatiskt av dina regler.",
     alreadyLogged:
       "Finns redan på fliken Skulder - matchad mot betalningen på {{amount}} som loggades {{date}}. Inget räknades dubbelt.",
   },
   errors: {
+    restore: "Kunde inte återställa den här transaktionen.",
     load: "Kunde inte läsa in inkorgen.",
     approve: "Kunde inte godkänna den här transaktionen.",
     skip: "Kunde inte hoppa över den här transaktionen.",

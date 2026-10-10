@@ -99,11 +99,36 @@ export const budgetInbox: Localized<typeof en> = {
     approve: "Freigeben",
     alwaysApprove: "Immer freigeben",
   },
+  skipped: {
+    toggle: "Kürzlich übersprungen · {{count}}",
+    title: "Kürzlich übersprungen",
+    subtitle:
+      "Umsätze, die den Posteingang in den letzten {{days}} Tagen ohne Freigabe verlassen haben - übersprungen von dir, von einer Regel, vom Handy deines Partners oder durch einen Abgleich beim Sync. Stell einen wieder her und er kehrt in den Posteingang zurück; ein wiederhergestellter Umsatz wird nie wieder automatisch übersprungen.",
+    back: "Zurück zum Posteingang",
+    restore: "Wiederherstellen",
+    restoring: "Wird wiederhergestellt...",
+    empty: "Zuletzt nichts übersprungen.",
+    when: "Übersprungen am {{date}}",
+    reason: {
+      user: "Von dir übersprungen",
+      rule: "Durch eine Immer-überspringen-Regel übersprungen",
+      partner: "Auf dem Handy deines Partners übersprungen",
+      duplicate: "Entspricht einem bereits geprüften Umsatz",
+      stale: "Die Bank meldet diese vorgemerkte Buchung nicht mehr",
+    },
+  },
   notices: {
+    syncSkipped_one:
+      "{{count}} Umsatz wurde bei diesem Sync übersprungen - siehe Kürzlich übersprungen unten.",
+    syncSkipped_other:
+      "{{count}} Umsätze wurden bei diesem Sync übersprungen - siehe Kürzlich übersprungen unten.",
+    syncAutoApproved_one: "{{count}} Umsatz wurde durch deine Regeln automatisch freigegeben.",
+    syncAutoApproved_other: "{{count}} Umsätze wurden durch deine Regeln automatisch freigegeben.",
     alreadyLogged:
       "Schon im Schulden-Tab - passt zur Zahlung über {{amount}} vom {{date}}. Nichts wurde doppelt gezählt.",
   },
   errors: {
+    restore: "Dieser Umsatz konnte nicht wiederhergestellt werden.",
     load: "Der Posteingang konnte nicht geladen werden.",
     approve: "Dieser Umsatz konnte nicht freigegeben werden.",
     skip: "Dieser Umsatz konnte nicht übersprungen werden.",

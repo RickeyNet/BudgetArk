@@ -40,6 +40,7 @@ import type {
   IngestLedgerEntry,
   MerchantRule,
   PendingTransaction,
+  SkippedReason,
 } from "../../types";
 import type { NormalizedTransaction } from "./types";
 import { matchMerchantRule, normalizeMerchant, suggestedPeopleFor } from "./merchant";
@@ -218,6 +219,12 @@ export interface IngestPlan {
   /** Transactions auto-skipped by an "ignore" merchant rule - recorded as
    *  dismissed so they stay gone even if the rule is later deleted. */
   autoDismissed: Record<string, IngestLedgerEntry>;
+  /**
+   * The same auto-skipped transactions as the inbox rows they would have
+   * been, so the caller can list them under "Recently skipped" (reason
+   * "rule") and a restore puts back a real row.
+   */
+  autoDismissedItems: PendingTransaction[];
   /** Entries approved while pending whose twin settled for another amount. */
   amountCorrections: EntryAmountCorrection[];
 }
@@ -345,6 +352,12 @@ export interface ReconcileInputs {
 }
 
 export interface ReconcilePlan {
+  /**
+   * Removed rows that did NOT end up as an entry, with why - the caller
+   * records them under "Recently skipped". Rows retired because an entry
+   * exists (approved elsewhere) are tracked money, so they are not here.
+   */
+  skipped: { id: string; reason: SkippedReason }[];
   /** Inbox rows that are already decided and must go. */
   removeIds: string[];
   /** Ledger entries recording WHY each row went, so re-fetches stay quiet. */
@@ -367,10 +380,16 @@ export interface ReconcilePlan {
  *  3. posted row whose pending twin was
  *     decided under a different id         -> remove + ledger alias
  *
+ * A row the user restored from "Recently skipped" (`restoredAt`) is exempt
+ * from 1 and 3 - those are the very rules that retired it, and the restore
+ * is the user overruling them; 2 still applies because an entry for it
+ * means the money IS tracked.
+ *
  * Pure: no storage, injectable clock.
  */
 export const planInboxReconciliation = (input: ReconcileInputs): ReconcilePlan => {
   const plan: ReconcilePlan = {
+    skipped: [],
     removeIds: [],
     ledgerWrites: {},
     amountCorrections: [],
@@ -378,8 +397,15 @@ export const planInboxReconciliation = (input: ReconcileInputs): ReconcilePlan =
   const decidedTwins = buildDecidedTwinFinder(input.ledger);
 
   for (const item of input.inbox) {
-    if (input.ledger[item.id]) {
+    const restored = item.restoredAt !== undefined;
+    if (!restored && input.ledger[item.id]) {
       plan.removeIds.push(item.id);
+      // A decision this device made itself removes the row on the spot, so
+      // one that is only in the ledger arrived over partner sync (or a
+      // crash sat between the ledger write and the removal).
+      if (input.ledger[item.id].status === "dismissed") {
+        plan.skipped.push({ id: item.id, reason: "partner" });
+      }
       continue;
     }
 
@@ -397,7 +423,7 @@ export const planInboxReconciliation = (input: ReconcileInputs): ReconcilePlan =
       continue;
     }
 
-    if (!item.pending) {
+    if (!item.pending && !restored) {
       const twin = decidedTwins.find(
         pendingFingerprintFor(item.externalAccountId, item.amount, item.postedAt),
       );
@@ -405,6 +431,9 @@ export const planInboxReconciliation = (input: ReconcileInputs): ReconcilePlan =
         decidedTwins.claim(twin.key);
         const decision = input.ledger[twin.key];
         plan.removeIds.push(item.id);
+        if (decision.status === "dismissed") {
+          plan.skipped.push({ id: item.id, reason: "duplicate" });
+        }
         plan.ledgerWrites[item.id] = {
           status: decision.status,
           budgetEntryId: decision.budgetEntryId,
@@ -451,6 +480,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     updatedInboxItems: [],
     ledgerAliases: {},
     autoDismissed: {},
+    autoDismissedItems: [],
     amountCorrections: [],
   };
 
@@ -469,6 +499,9 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
   const pendingInboxByAccount = new Map<string, PendingTransaction[]>();
   for (const item of input.inbox) {
     if (!item.pending) continue;
+    // A row the user restored from "Recently skipped" is never a twin
+    // candidate again - the twin match may be what retired it.
+    if (item.restoredAt !== undefined) continue;
     const list = pendingInboxByAccount.get(item.externalAccountId) ?? [];
     list.push(item);
     pendingInboxByAccount.set(item.externalAccountId, list);
@@ -770,18 +803,7 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
     // "Ignore" rule: auto-skip, recorded as dismissed. The fingerprint is
     // kept for pending transactions so the posted twin (possibly under a new
     // id) aliases to this decision instead of resurfacing.
-    if (rule?.action === "ignore") {
-      plan.autoDismissed[key] = {
-        status: "dismissed",
-        at: input.now,
-        pendingFingerprint: tx.pending
-          ? pendingFingerprintFor(tx.externalAccountId, tx.amount, tx.postedAt)
-          : undefined,
-      };
-      continue;
-    }
-
-    plan.newInboxItems.push({
+    const item: PendingTransaction = {
       id: key,
       connectionId: input.connectionId,
       externalAccountId: tx.externalAccountId,
@@ -797,7 +819,21 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
       duplicateLikely: looksLikeManualDuplicate(tx) || undefined,
       fetchedAt: input.now,
       updatedAt: input.now,
-    });
+    };
+
+    if (rule?.action === "ignore") {
+      plan.autoDismissed[key] = {
+        status: "dismissed",
+        at: input.now,
+        pendingFingerprint: tx.pending
+          ? pendingFingerprintFor(tx.externalAccountId, tx.amount, tx.postedAt)
+          : undefined,
+      };
+      plan.autoDismissedItems.push(item);
+      continue;
+    }
+
+    plan.newInboxItems.push(item);
   }
 
   return plan;
@@ -849,7 +885,10 @@ export interface StalePendingPlan {
  * MAX_PENDING_AGE_DAYS retire regardless. Retired rows are ledgered as
  * dismissed WITHOUT a fingerprint on purpose: if the real charge posts
  * later under a new id, it must surface as a fresh row for review, not be
- * swallowed by an alias to this dismissal. Pure, injectable clock.
+ * swallowed by an alias to this dismissal. A row the user restored from
+ * "Recently skipped" (`restoredAt`) is never judged here - this rule may be
+ * what retired it, and only Approve or Skip retire a restored row. Pure,
+ * injectable clock.
  */
 export const planStalePending = (input: StalePendingInputs): StalePendingPlan => {
   const plan: StalePendingPlan = {
@@ -868,6 +907,7 @@ export const planStalePending = (input: StalePendingInputs): StalePendingPlan =>
 
   for (const row of input.inbox) {
     if (row.connectionId !== input.connectionId || !row.pending) continue;
+    if (row.restoredAt !== undefined) continue;
     if (!input.fetchedAccountIds.has(row.externalAccountId)) continue;
 
     if (seen.has(row.id)) {

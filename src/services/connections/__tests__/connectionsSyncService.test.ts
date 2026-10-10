@@ -24,6 +24,7 @@ import {
   makeBankConnection,
   makeDebt,
   makeExternalAccountLink,
+  makeMerchantRule,
   makePendingTransaction,
 } from "../../../__tests__/fixtures";
 import type { NormalizedAccount, NormalizedTransaction } from "../types";
@@ -35,6 +36,7 @@ import {
   getIngestLedger,
   getPendingTransactions,
   recordLedgerEntries,
+  recordSkippedTransactions,
   removePendingTransactions,
   upsertPendingTransactions,
 } from "../../../storage/reviewInboxStorage";
@@ -45,7 +47,7 @@ import { getDebts, updateDebt } from "../../../storage/debtStorage";
 import { rescheduleCardKeepAliveReminders } from "../../../notifications/cardKeepAliveReminders";
 import { fetchSimplefinAccounts } from "../simplefinClient";
 import { fetchTellerData } from "../tellerClient";
-import { autoApproveInboxByRules } from "../reviewInboxService";
+import { autoApproveInboxByRules, reconcileInboxWithDecisions } from "../reviewInboxService";
 import { notifyDataChanged } from "../../../storage/dataChangeNotifier";
 
 // RN edge: only AppState is touched (startConnectionsMonitoring/stop).
@@ -70,6 +72,7 @@ jest.mock("../../../storage/reviewInboxStorage", () => ({
   recordLedgerEntries: jest.fn(),
   removePendingTransactions: jest.fn(),
   upsertPendingTransactions: jest.fn(),
+  recordSkippedTransactions: jest.fn(),
 }));
 jest.mock("../../../storage/merchantRulesStorage", () => ({
   getMerchantRules: jest.fn(),
@@ -93,7 +96,7 @@ jest.mock("../tellerClient", () => ({ fetchTellerData: jest.fn() }));
 jest.mock("../reviewInboxService", () => ({
   applyEntryAmountCorrections: jest.fn(async () => 0),
   autoApproveInboxByRules: jest.fn(),
-  reconcileInboxWithDecisions: jest.fn(async () => 0),
+  reconcileInboxWithDecisions: jest.fn(async () => ({ removed: 0, skipped: [] })),
 }));
 jest.mock("../../../storage/dataChangeNotifier", () => ({ notifyDataChanged: jest.fn() }));
 
@@ -133,6 +136,8 @@ const mockGetIngestLedger = getIngestLedger as jest.Mock;
 const mockGetPendingTransactions = getPendingTransactions as jest.Mock;
 const mockRecordLedgerEntries = recordLedgerEntries as jest.Mock;
 const mockRemovePendingTransactions = removePendingTransactions as jest.Mock;
+const mockRecordSkipped = recordSkippedTransactions as jest.Mock;
+const mockReconcile = reconcileInboxWithDecisions as jest.Mock;
 const mockUpsertPendingTransactions = upsertPendingTransactions as jest.Mock;
 const mockGetMerchantRules = getMerchantRules as jest.Mock;
 const mockGetBudgetEntriesIncludingDeleted = getBudgetEntriesIncludingDeleted as jest.Mock;
@@ -160,6 +165,8 @@ beforeEach(() => {
   mockRecordLedgerEntries.mockResolvedValue(undefined);
   mockRemovePendingTransactions.mockResolvedValue([]);
   mockUpsertPendingTransactions.mockResolvedValue([]);
+  mockRecordSkipped.mockResolvedValue(undefined);
+  mockReconcile.mockResolvedValue({ removed: 0, skipped: [] });
   mockGetMerchantRules.mockResolvedValue([]);
   mockGetBudgetEntriesIncludingDeleted.mockResolvedValue([]);
   mockGetAssetAccounts.mockResolvedValue([]);
@@ -343,6 +350,30 @@ describe("successful sync bookkeeping", () => {
       expect.objectContaining({ [pendingKey]: expect.objectContaining({ status: "dismissed", aliasOf: postedKey }) }),
     );
     expect(mockRemovePendingTransactions).toHaveBeenCalledTimes(1);
+    expect(mockRemovePendingTransactions).toHaveBeenCalledWith([pendingKey]);
+    // The retired twin is reported, not silently gone.
+    expect(result.skippedCount).toBe(1);
+    expect(mockRecordSkipped).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: pendingKey })],
+      "duplicate",
+    );
+  });
+
+  it("does not report a pending->posted migration as skipped (the row lives on under its posted id)", async () => {
+    const pendingKey = "simplefin:ACT-1:PENDING-1";
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([makeExternalAccountLink({ externalAccountId: "ACT-1" })]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ transactions: [tx({ providerTxId: "TXN-1", pending: false })] }));
+    mockGetPendingTransactions.mockResolvedValue([
+      makePendingTransaction({ id: pendingKey, providerTxId: "PENDING-1", pending: true, postedAt: "2026-06-27T00:00:00.000Z" }),
+    ]);
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.skippedCount).toBe(0);
+    expect(mockRecordSkipped).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.anything()]),
+      "duplicate",
+    );
     expect(mockRemovePendingTransactions).toHaveBeenCalledWith([pendingKey]);
   });
 
@@ -1022,5 +1053,65 @@ describe("manual retry of a connection that needs attention skips the cooldown",
     expect(result.outcome).toBe("fresh");
     expect(result.nextSyncAt).toBe(new Date(NOW - 60_000 + 15 * 60_000).toISOString());
     expect(mockFetchSimplefin).not.toHaveBeenCalled();
+  });
+});
+
+describe("what the pass did to the inbox is reported, never silent", () => {
+  it("counts rows an Always Skip rule dropped on arrival and records them as skipped by a rule", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([makeExternalAccountLink({ externalAccountId: "ACT-1" })]);
+    mockGetMerchantRules.mockResolvedValue([
+      makeMerchantRule({ merchantKey: "COSTCO WHSE", action: "ignore" }),
+    ]);
+    mockFetchSimplefin.mockResolvedValue(okFetch({ transactions: [tx()] }));
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+
+    expect(result.newPendingCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+    expect(mockRecordSkipped).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: "simplefin:ACT-1:TXN-1", merchant: "COSTCO WHSE" })],
+      "rule",
+    );
+  });
+
+  it("counts a stale pending row the bank stopped reporting and records it as stale", async () => {
+    const staleId = "simplefin:ACT-1:OLD-HOLD";
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([makeExternalAccountLink({ externalAccountId: "ACT-1" })]);
+    mockFetchSimplefin.mockResolvedValue(
+      okFetch({ accounts: [{ externalAccountId: "ACT-1", name: "Checking", balance: 10, currency: "USD" }] }),
+    );
+    mockGetPendingTransactions.mockResolvedValue([
+      makePendingTransaction({ id: staleId, providerTxId: "OLD-HOLD", pending: true, postedAt: "2026-05-01T00:00:00.000Z" }),
+    ]);
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+
+    expect(result.skippedCount).toBe(1);
+    expect(mockRecordSkipped).toHaveBeenCalledWith([expect.objectContaining({ id: staleId })], "stale");
+    expect(mockRemovePendingTransactions).toHaveBeenCalledWith([staleId]);
+  });
+
+  it("carries the auto-approve sweep's count on the result", async () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockAutoApprove.mockResolvedValue(3);
+    const [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.autoApprovedCount).toBe(3);
+  });
+
+  it("attributes the pre-pass reconcile's skips to their connection, and parks strays on the first result", async () => {
+    mockGetConnections.mockResolvedValue([conn(), conn({ id: "conn-2" })]);
+    mockReconcile.mockResolvedValue({
+      removed: 3,
+      skipped: [
+        makePendingTransaction({ id: "a", connectionId: "conn-2" }),
+        makePendingTransaction({ id: "b", connectionId: "conn-2" }),
+        makePendingTransaction({ id: "c", connectionId: "conn-gone" }),
+      ],
+    });
+    const results = await syncConnections({ now: NOW, manual: true });
+    expect(results.find((r) => r.connectionId === "conn-1")?.skippedCount).toBe(1);
+    expect(results.find((r) => r.connectionId === "conn-2")?.skippedCount).toBe(2);
   });
 });

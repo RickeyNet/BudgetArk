@@ -904,7 +904,7 @@ export const applyIncomingDiff = async (diff: SyncDiff): Promise<number> => {
   // Best-effort: a hiccup here must not reject an already-applied diff.
   if (dismissalsApplied > 0 || diff.budgetEntries.length > 0) {
     try {
-      changedCount += await reconcileInboxWithDecisions();
+      changedCount += (await reconcileInboxWithDecisions()).removed;
     } catch {
       // The next bank-sync pass reconciles again.
     }
