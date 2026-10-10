@@ -604,6 +604,78 @@ describe("auto-approve sweep", () => {
   });
 });
 
+describe("ingest failure does not stop balance + debt-link updates", () => {
+  const debtLinkedSetup = () => {
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockGetLinksForConnection.mockResolvedValue([
+      makeExternalAccountLink({ externalAccountId: "ACT-1", debtId: "debt-1", assetAccountId: null }),
+    ]);
+    mockGetDebts.mockResolvedValue([makeDebt({ id: "debt-1", balance: 100, originalBalance: 1000 })]);
+    mockFetchSimplefin.mockResolvedValue(
+      okFetch({ accounts: [account({ balance: -420.5 })], transactions: [tx()] }),
+    );
+  };
+
+  it("still mirrors the card balance, records the error, reports 'unavailable' and notifies when an inbox write throws", async () => {
+    debtLinkedSetup();
+    mockUpsertPendingTransactions.mockRejectedValue(new Error("inbox write exploded"));
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+
+    expect(mockUpdateDebt).toHaveBeenCalledWith("debt-1", { balance: 420.5 });
+    expect(result).toMatchObject({
+      outcome: "unavailable",
+      balancesUpdated: 1,
+      errorMessage: "Something went wrong syncing this connection.",
+    });
+    expect(mockUpdateConnection).toHaveBeenLastCalledWith("conn-1", {
+      authStatus: "error",
+      lastErrorCode: "provider-error",
+      lastErrorMessage: "Something went wrong syncing this connection.",
+    });
+    // lastSyncedAt never advances, so the next pass re-fetches the window.
+    for (const [, fields] of mockUpdateConnection.mock.calls) {
+      expect(fields).not.toHaveProperty("lastSyncedAt");
+      expect(fields.authStatus).not.toBe("needs-reauth");
+    }
+    expect(mockNotifyDataChanged).toHaveBeenCalledWith("bank-sync");
+  });
+
+  it("survives a throw from the ledger write and from the settled-amount corrections the same way", async () => {
+    const { applyEntryAmountCorrections } = jest.requireMock("../reviewInboxService");
+    debtLinkedSetup();
+    (applyEntryAmountCorrections as jest.Mock).mockRejectedValueOnce(new Error("corrections exploded"));
+    let [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("unavailable");
+    expect(mockUpdateDebt).toHaveBeenCalledWith("debt-1", { balance: 420.5 });
+
+    jest.clearAllMocks();
+    debtLinkedSetup();
+    mockGetPendingTransactions.mockRejectedValue(new Error("inbox read exploded"));
+    [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("unavailable");
+    expect(mockUpdateDebt).toHaveBeenCalledWith("debt-1", { balance: 420.5 });
+    expect(mockNotifyDataChanged).toHaveBeenCalledWith("bank-sync");
+  });
+
+  it("retries normally on the next pass and clears the recorded error once the ingest succeeds", async () => {
+    debtLinkedSetup();
+    mockUpsertPendingTransactions.mockRejectedValueOnce(new Error("inbox write exploded"));
+    const [first] = await syncConnections({ now: NOW, manual: true });
+    expect(first.outcome).toBe("unavailable");
+
+    mockGetConnections.mockResolvedValue([
+      conn({ authStatus: "error", lastErrorCode: "provider-error", lastAttemptAt: new Date(NOW).toISOString() }),
+    ]);
+    const [second] = await syncConnections({ now: NOW + 7 * 60 * 60 * 1000, manual: false });
+    expect(second.outcome).toBe("updated");
+    expect(mockUpdateConnection).toHaveBeenLastCalledWith(
+      "conn-1",
+      expect.objectContaining({ authStatus: "ok", lastErrorCode: undefined, lastErrorMessage: undefined }),
+    );
+  });
+});
+
 describe("multi-connection batch", () => {
   it("does not let one connection's unexpected throw abort the rest of the pass", async () => {
     mockGetConnections.mockResolvedValue([conn({ id: "conn-1" }), conn({ id: "conn-2" })]);
@@ -620,6 +692,32 @@ describe("multi-connection batch", () => {
       errorMessage: "Something went wrong syncing this connection.",
     });
     expect(results[1]).toMatchObject({ connectionId: "conn-2", outcome: "updated" });
+    // The surprise is recorded on the failing connection (best-effort).
+    expect(mockUpdateConnection).toHaveBeenCalledWith("conn-1", {
+      authStatus: "error",
+      lastErrorCode: "provider-error",
+      lastErrorMessage: "Something went wrong syncing this connection.",
+    });
+  });
+
+  it("keeps needs-reauth when recording an unexpected failure, and survives the record write itself failing", async () => {
+    mockGetConnections.mockResolvedValue([conn({ authStatus: "needs-reauth" })]);
+    mockGetLinksForConnection.mockRejectedValue(new Error("surprise failure"));
+    let [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result.outcome).toBe("unavailable");
+    expect(mockUpdateConnection).toHaveBeenLastCalledWith(
+      "conn-1",
+      expect.objectContaining({ authStatus: "needs-reauth", lastErrorCode: "provider-error" }),
+    );
+
+    mockGetConnections.mockResolvedValue([conn()]);
+    mockUpdateConnection.mockImplementation(async (_id: string, fields: Record<string, unknown>) => {
+      if (fields.lastErrorCode) throw new Error("record failed");
+      return [];
+    });
+    [result] = await syncConnections({ now: NOW, manual: true });
+    expect(result).toMatchObject({ outcome: "unavailable", balancesUpdated: 0 });
+    expect(mockNotifyDataChanged).not.toHaveBeenCalled();
   });
 
   it("filters to a single connection when connectionId is given", async () => {
@@ -802,6 +900,25 @@ describe("gap backfill (a bank behind the bridge comes back after going dark)", 
       link.id,
       expect.objectContaining({ lastExternalBalanceAt: iso(NOW) }),
     );
+  });
+
+  it("leaves the balance date alone when the re-fetched backlog never reached the inbox (ingest failed)", async () => {
+    const link = makeExternalAccountLink({
+      externalAccountId: "ACT-1",
+      lastExternalBalance: 100,
+      lastExternalBalanceAt: iso(NOW - 30 * DAY),
+    });
+    mockGetLinksForConnection.mockResolvedValue([link]);
+    const unchanged = account({ balance: 100, balanceAsOf: iso(NOW) });
+    mockFetchSimplefin
+      .mockResolvedValueOnce(okFetch({ accounts: [unchanged], transactions: [tx()] }))
+      .mockResolvedValueOnce(okFetch({ accounts: [unchanged], transactions: [tx()] }));
+    mockUpsertPendingTransactions.mockRejectedValue(new Error("inbox write exploded"));
+
+    const [result] = await syncConnections({ now: NOW, manual: true });
+
+    expect(result.outcome).toBe("unavailable");
+    expect(mockUpdateLink).not.toHaveBeenCalled();
   });
 
   it("an explicit re-import widens the window to N days, skips the cooldown, and never gap-detects", async () => {

@@ -24,6 +24,7 @@ export const debtsCard: Localized<typeof en> = {
     paidOff: "ABBEZAHLT",
     bankSync: "Saldo von {{account}}",
     bankSyncAsOf: "Saldo von {{account}} · Stand {{date}}",
+    bankLinkedNoMirror: "Verknüpft mit {{account}} · Saldo wird nicht übernommen",
     goal: {
       passed: "Zieldatum ist verstrichen",
       line: "Ziel: {{date}} ({{monthsLeft}})",
@@ -41,6 +42,15 @@ export const debtsCard: Localized<typeof en> = {
       days_one: "{{count}} Tag",
       days_other: "{{count}} Tage",
       usedIt: "Benutzt",
+      lastUsed: "Zuletzt benutzt am {{date}}",
+      trackedByBank: "Stempelt sich selbst aus {{account}}",
+      trackedManually: "Tippe nach einem Kauf auf „Benutzt“",
+      a11y: {
+        ok: "Keep-Alive-Überwachung aktiv · nächste Nutzung bis {{date}}",
+        upcoming: "Keep-Alive-Überwachung · nutzen bis {{date}}",
+        urgent: "Keep-Alive-Überwachung · bald nutzen, bis {{date}}",
+        overdue: "Keep-Alive-Überwachung · Inaktivitätsfrist verstrichen ({{date}})",
+      },
     },
     timeline: {
       adjust: "Zahlungsplan anpassen",

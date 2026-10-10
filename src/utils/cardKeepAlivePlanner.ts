@@ -82,14 +82,25 @@ export interface PlanKeepAliveRemindersInput {
 
 /**
  * Candidate nudge days for one card: the day its lead window opens, one
- * week out, the deadline itself, then weekly while overdue. All relative
- * to the deadline so a reschedule lands on the same days (deterministic).
+ * week out, the deadline itself, then weekly while overdue - for as long as
+ * it stays overdue. All relative to the deadline (every OVERDUE_REPEAT_DAYS
+ * after it) so a reschedule lands on the same days (deterministic).
+ *
+ * The weekly run starts at the first repeat on/after today (`daysOverdue` =
+ * whole calendar days past the deadline, <= 0 when not yet due) and covers
+ * the scheduling window, so a card overdue for months still gets its nudges
+ * instead of stopping a few weeks after the deadline. Bounded: at most
+ * ~KEEP_ALIVE_WINDOW_DAYS / OVERDUE_REPEAT_DAYS + 1 repeats, however overdue.
  */
-const candidateOffsets = (leadDays: number): number[] => {
+const candidateOffsets = (leadDays: number, daysOverdue: number): number[] => {
   const offsets = new Set<number>([-leadDays, -KEEP_ALIVE_URGENT_DAYS, 0]);
+  const firstRepeat = Math.max(
+    1,
+    Math.ceil(Math.max(0, daysOverdue) / OVERDUE_REPEAT_DAYS),
+  );
   for (
-    let after = OVERDUE_REPEAT_DAYS;
-    after <= KEEP_ALIVE_WINDOW_DAYS;
+    let after = firstRepeat * OVERDUE_REPEAT_DAYS;
+    after <= Math.max(0, daysOverdue) + KEEP_ALIVE_WINDOW_DAYS;
     after += OVERDUE_REPEAT_DAYS
   ) {
     offsets.add(after);
@@ -122,9 +133,10 @@ export const planKeepAliveReminders = (
     const status = keepAliveStatus(debt, now);
     if (!status) continue;
 
-    const { deadline } = status;
+    const { deadline, daysUntil } = status;
     for (const offset of candidateOffsets(
       getEffectiveKeepAliveLeadDays(debt),
+      -daysUntil,
     )) {
       const fire = new Date(
         deadline.getFullYear(),

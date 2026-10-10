@@ -7,6 +7,16 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.11.1",
+    title: "Cards, Connected",
+    releasedAt: "2026-10-09",
+    highlights: [
+      "Connected credit cards track their own balance - and now you can set that up where you connect the bank. A card on the Debts tab only follows the bank once it is linked to the matching bank account, and until now the only place to do that was inside the card's editor, easy to miss. The bank connection wizard and Profile → Bank Connections now offer a Cards on Debts choice right next to the Bridge accounts, point out accounts that look like credit cards, and push the bank's balance onto the card the moment you pick it. One account feeds one card, and a card never doubles as a Bridge balance.",
+      "The card keep-alive watch finally shows its work. A watched card keeps its status dot even while collapsed (green when all is fine), the expanded card says when it was last used and whether a connected bank account stamps that for you, the card editor shows a live 'last used · next use by' line as you change the window, and a card linked to the bank with Balance from bank turned off says so instead of looking unlinked. Switching the watch back on after a break restarts the clock today instead of reviving a months-old date, and a long-overdue card keeps getting its weekly reminder instead of going quiet after four weeks.",
+      "Bank sync keeps your balances moving even when the Review Inbox hiccups. If importing transactions fails partway through a sync, the pass still updates your Bridge and card balances, and the connection shows the error in Profile → Bank Connections instead of silently stalling.",
+    ],
+  },
+  {
     version: "1.11.0",
     title: "Welcome Aboard, in Your Language",
     releasedAt: "2026-09-22",

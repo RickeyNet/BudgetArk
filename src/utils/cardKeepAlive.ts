@@ -146,6 +146,81 @@ export const keepAliveStatus = (
   return { deadline, daysUntil, status };
 };
 
+export type KeepAlivePrevFields = Pick<
+  Debt,
+  "keepAliveEnabled" | "keepAliveLastUsedAt"
+>;
+
+/**
+ * True when saving the watch as ON must (re)start the clock at "now".
+ * That's the case for a card with no usable last-used anchor (new card, or
+ * a stamp that doesn't parse) AND for a card whose watch was off: a
+ * disabled watch is never auto-stamped by connections sync and nobody taps
+ * "I used it" on it, so its old stamp is stale - re-enabling months later
+ * would otherwise make the card instantly overdue. A card whose watch is
+ * already on keeps its stamp untouched.
+ */
+export const keepAliveNeedsRestamp = (
+  prev: KeepAlivePrevFields | null | undefined
+): boolean =>
+  !prev ||
+  prev.keepAliveEnabled !== true ||
+  !prev.keepAliveLastUsedAt ||
+  parseKeepAliveDate(prev.keepAliveLastUsedAt) === null;
+
+/**
+ * The keepAlive* fields the debt editor writes on save. Always writes the
+ * toggle + window + lead days; adds `keepAliveLastUsedAt = nowISO` only when
+ * enabling and keepAliveNeedsRestamp says the clock must start today (real
+ * activity may predate what a bank sync can see, so "today" is the
+ * conservative anchor). Disabling never touches the stamp.
+ */
+export const keepAliveFieldsForSave = (
+  prev: KeepAlivePrevFields | null | undefined,
+  next: { enabled: boolean; windowMonths: number; leadDays: number },
+  nowISO: string
+): Partial<Debt> => ({
+  keepAliveEnabled: next.enabled,
+  keepAliveWindowMonths: next.windowMonths,
+  keepAliveLeadDays: next.leadDays,
+  ...(next.enabled && keepAliveNeedsRestamp(prev)
+    ? { keepAliveLastUsedAt: nowISO }
+    : {}),
+});
+
+export interface KeepAlivePreview {
+  /** The last-used anchor the save would keep (or "now" when restamping). */
+  lastUsed: Date;
+  /** lastUsed + the chosen window. */
+  deadline: Date;
+  /** True when saving would start the clock today (keepAliveNeedsRestamp). */
+  startsToday: boolean;
+}
+
+/**
+ * What the editor's keep-alive section should show for the watch as
+ * currently configured (assumes it will be saved ON): the anchor
+ * keepAliveFieldsForSave would leave on the record and the resulting
+ * deadline under the chosen window, so the line tracks the window chips
+ * live.
+ */
+export const keepAlivePreview = (
+  prev: KeepAlivePrevFields | null | undefined,
+  windowMonths: number,
+  now: Date = new Date()
+): KeepAlivePreview => {
+  const startsToday = keepAliveNeedsRestamp(prev);
+  const lastUsed =
+    (!startsToday && prev?.keepAliveLastUsedAt
+      ? parseKeepAliveDate(prev.keepAliveLastUsedAt)
+      : null) ?? now;
+  return {
+    lastUsed,
+    deadline: keepAliveDeadline(lastUsed, windowMonths),
+    startsToday,
+  };
+};
+
 export const keepAliveDismissalKey = dismissalKey;
 
 /**

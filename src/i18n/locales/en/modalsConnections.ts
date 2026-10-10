@@ -34,6 +34,9 @@ export const modalsConnections = {
     balanceUpdates: "Balance updates",
     none: "None",
     newAccount: "+ New account",
+    cardsOnDebts: "Cards on Debts",
+    noCardsHint:
+      "Add the card on the Debts tab first, then pick it here or in the card's editor.",
     accountNamePlaceholder: "Account name",
     createAndMap: "Create & map",
     savingsHint:
@@ -81,6 +84,9 @@ export const modalsConnections = {
     updatesAccount: " · updates {{name}}",
     balanceFallback: "balance",
     updatesDebtCard: " · updates a card on Debts",
+    balanceToCard: " · balance → {{card}}",
+    linkedToCardOff: " · linked to {{card}} · balance off",
+    linkedDebtCardOff: " · linked to a card on Debts · balance off",
     balanceNotTracked: " · balance not tracked",
     balanceValue: " · {{amount}}",
     addAnotherBank: "+ Add another bank",
@@ -179,6 +185,10 @@ export const modalsConnections = {
         "Choose what to import, and where balances should land. Unmapped accounts still import transactions to the Review Inbox.",
       whoseCard: "WHOSE CARD IS THIS?",
       personHint: "Expenses imported from this account will suggest this person.",
+      cardHintNegative:
+        "Negative balance - this looks like a credit card. Pick it under Cards on Debts to track the balance there.",
+      cardHintName:
+        "This looks like a credit card. Pick it under Cards on Debts to track the balance there.",
       balanceUpdates: "BALANCE UPDATES",
       saveError: "Saving the account mapping failed. Try again.",
     },

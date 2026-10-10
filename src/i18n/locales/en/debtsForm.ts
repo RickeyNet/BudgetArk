@@ -94,6 +94,8 @@ export const debtsForm = {
       "Tap \"I used it\" on the card after a purchase - or pick a connected account above and it stamps itself.",
     lastUsedNoLinks:
       "Tap \"I used it\" on the card after a purchase. Set up a bank connection (Profile → Bank Connections) and the date stamps itself from your transactions.",
+    statusLine: "Last used {{date}} · next use by {{deadline}}",
+    statusStartsToday: "Starts today · next use by {{deadline}}",
   },
   alerts: {
     notificationsOff: {

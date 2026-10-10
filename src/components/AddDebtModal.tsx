@@ -50,6 +50,8 @@ import {
   KEEP_ALIVE_DEFAULT_WINDOW_MONTHS,
   getEffectiveKeepAliveLeadDays,
   getEffectiveKeepAliveWindowMonths,
+  keepAliveFieldsForSave,
+  keepAlivePreview,
 } from "../utils/cardKeepAlive";
 import { getLinks } from "../storage/externalAccountLinksStorage";
 import { debtBalanceFromProvider } from "../services/connections/debtBalances";
@@ -87,6 +89,19 @@ const formatBankAsOfDate = (iso: string | undefined, locale: string): string | n
     return parsed.toLocaleDateString(locale, { month: "short", day: "numeric" });
   } catch {
     return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+};
+
+/**
+ * "Jun 25, 2027" (in the app language) for the keep-alive status line. The
+ * year is included because 12/24-month windows put deadlines past this year.
+ */
+const formatKeepAliveDate = (date: Date, locale: string): string => {
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
+  try {
+    return date.toLocaleDateString(locale, opts);
+  } catch {
+    return date.toLocaleDateString(undefined, opts);
   }
 };
 
@@ -314,6 +329,24 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     ? formatBankAsOfDate(bankLink.lastExternalBalanceAt, i18n.language)
     : null;
 
+  /**
+   * Live keep-alive status line for the editor: the anchor the save would
+   * keep (or "today" when keepAliveFieldsForSave would restamp - new card,
+   * or a watch being switched back on) and the deadline under the window
+   * chip currently selected. `visible` is a dep so "today" refreshes per open.
+   */
+  const keepAliveStatusLine = React.useMemo((): string | null => {
+    if (!keepAliveEnabled || !visible) return null;
+    const preview = keepAlivePreview(editDebt, keepAliveWindowMonths);
+    const deadline = formatKeepAliveDate(preview.deadline, i18n.language);
+    return preview.startsToday
+      ? t("debts.form.keepAlive.statusStartsToday", { deadline })
+      : t("debts.form.keepAlive.statusLine", {
+          date: formatKeepAliveDate(preview.lastUsed, i18n.language),
+          deadline,
+        });
+  }, [keepAliveEnabled, visible, editDebt, keepAliveWindowMonths, i18n.language, t]);
+
   /** Calculate required payment for goal date */
   const goalPaymentInfo = React.useMemo(() => {
     if (!goalMonth) return null;
@@ -380,20 +413,20 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
     /**
      * Keep-alive fields ride the debt record (they sync with it). Only
      * written for credit cards; other classes leave whatever is stored
-     * untouched (edit) or unset (add). Enable-time anchor: a card enabled
-     * with no last-used date is stamped "now" - real activity may predate
-     * what a bank sync can see, so starting the clock today is the
-     * conservative choice.
+     * untouched (edit) or unset (add). Enable-time anchor (new card, or a
+     * watch switched back on after being off) is "now" - see
+     * keepAliveFieldsForSave for why a stale stamp is not reused.
      */
     const keepAliveFields: Partial<Debt> = isCreditCard
-      ? {
-          keepAliveEnabled,
-          keepAliveWindowMonths,
-          keepAliveLeadDays,
-          ...(keepAliveEnabled && !editDebt?.keepAliveLastUsedAt
-            ? { keepAliveLastUsedAt: new Date().toISOString() }
-            : {}),
-        }
+      ? keepAliveFieldsForSave(
+          editDebt,
+          {
+            enabled: keepAliveEnabled,
+            windowMonths: keepAliveWindowMonths,
+            leadDays: keepAliveLeadDays,
+          },
+          new Date().toISOString()
+        )
       : {};
     const bankLinkExtras: DebtBankLinkExtras | undefined = isCreditCard
       ? { linkId: bankLinkId, updateBalance: bankUpdateBalance }
@@ -854,6 +887,12 @@ const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
                   {keepAliveEnabled && (
                     <>
+                      {keepAliveStatusLine ? (
+                        <Text style={styles.keepAliveStatusText}>
+                          {keepAliveStatusLine}
+                        </Text>
+                      ) : null}
+
                       <Text style={styles.keepAliveSubLabel}>
                         {t("debts.form.keepAlive.windowLabel")}
                       </Text>
@@ -1104,6 +1143,12 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.5,
       marginTop: 10,
       marginBottom: 6,
+    },
+    keepAliveStatusText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: colors.textDim,
+      marginTop: 8,
     },
     keepAliveLinkList: {
       gap: 8,

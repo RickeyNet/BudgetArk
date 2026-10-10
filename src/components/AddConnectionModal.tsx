@@ -49,6 +49,7 @@ import {
   AssetAccount,
   AssetAccountCategory,
   BankProvider,
+  Debt,
 } from "../types";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemeColors } from "../theme/themes";
@@ -63,8 +64,12 @@ import {
   MAPPABLE_ASSET_CATEGORIES,
   type AccountSelection,
 } from "../services/connections/connectionsService";
-import { suggestAssetCategory } from "../services/connections/assetCategoryHint";
+import {
+  looksLikeCreditCard,
+  suggestAssetCategory,
+} from "../services/connections/assetCategoryHint";
 import { getLinksForConnection } from "../storage/externalAccountLinksStorage";
+import { getDebts } from "../storage/debtStorage";
 import { usePeople } from "../people/PeopleProvider";
 import type { NormalizedAccount } from "../services/connections/types";
 import { addAssetAccount } from "../storage/assetAccountStorage";
@@ -96,6 +101,11 @@ interface DraftSelection {
   account: NormalizedAccount;
   importTransactions: boolean;
   assetAccountId: string | null;
+  /**
+   * Credit card on the Debts tab this account IS (its balance lands there).
+   * Exclusive with assetAccountId - one balance destination per account.
+   */
+  debtId: string | null;
   /** "Whose card is this" - imported expenses suggest this person. */
   personId: string | null;
 }
@@ -228,6 +238,8 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [selections, setSelections] = useState<DraftSelection[]>([]);
   const [localAccounts, setLocalAccounts] = useState<AssetAccount[]>(assetAccounts);
+  /** Live credit cards on the Debts tab, for the "Cards on Debts" picker. */
+  const [cardDebts, setCardDebts] = useState<Debt[]>([]);
   /** Live people, for the per-account "whose card is this" picker. */
   const { people } = usePeople();
 
@@ -297,9 +309,20 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         account,
         importTransactions: true,
         assetAccountId: null,
+        debtId: null,
         personId: null,
       })),
     );
+    // Cards can only be picked once they exist on the Debts tab; read them
+    // fresh each time (a card added since the last open must show). A
+    // failed read just leaves the group showing its "add it first" hint.
+    void getDebts()
+      .then((debts) =>
+        setCardDebts(
+          debts.filter((d) => !d.deletedAt && d.debtClass === "personal_credit"),
+        ),
+      )
+      .catch(() => setCardDebts([]));
     setStep("mapAccounts");
   }, []);
 
@@ -458,7 +481,22 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
       setSelections((prev) =>
         prev.map((s) =>
           s.account.externalAccountId === externalAccountId
-            ? { ...s, assetAccountId }
+            ? { ...s, assetAccountId, debtId: null }
+            : s,
+        ),
+      );
+      setNewAccountFor(null);
+    },
+    [],
+  );
+
+  /** Card choice: replaces any Bridge target (one destination per account). */
+  const setCardMapping = useCallback(
+    (externalAccountId: string, debtId: string) => {
+      setSelections((prev) =>
+        prev.map((s) =>
+          s.account.externalAccountId === externalAccountId
+            ? { ...s, assetAccountId: null, debtId }
             : s,
         ),
       );
@@ -502,6 +540,7 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
         assetAccountId: s.assetAccountId,
         importTransactions: s.importTransactions,
         personId: s.personId,
+        debtId: s.debtId,
       }));
       await finalizeAccountLinks(connectionId, finalSelections);
       setStep("done");
@@ -818,14 +857,18 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
               <TouchableOpacity
                 style={[
                   styles.pill,
-                  selection.assetAccountId === null && styles.pillActive,
+                  selection.assetAccountId === null &&
+                    selection.debtId === null &&
+                    styles.pillActive,
                 ]}
                 onPress={() => setMapping(ext.externalAccountId, null)}
               >
                 <Text
                   style={[
                     styles.pillText,
-                    selection.assetAccountId === null && styles.pillTextActive,
+                    selection.assetAccountId === null &&
+                      selection.debtId === null &&
+                      styles.pillTextActive,
                   ]}
                 >
                   {t("modals.connections.mapping.none")}
@@ -918,6 +961,44 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({
                   <Text style={styles.hint}>{t("modals.connections.mapping.investmentHint")}</Text>
                 ) : null}
               </View>
+            ) : null}
+
+            <Text style={[styles.label, styles.labelCaps]}>
+              {t("modals.connections.mapping.cardsOnDebts")}
+            </Text>
+            {cardDebts.length > 0 ? (
+              <View style={styles.pillWrap}>
+                {cardDebts.map((debt) => (
+                  <TouchableOpacity
+                    key={debt.id}
+                    style={[
+                      styles.pill,
+                      selection.debtId === debt.id && styles.pillActive,
+                    ]}
+                    onPress={() => setCardMapping(ext.externalAccountId, debt.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.pillText,
+                        selection.debtId === debt.id && styles.pillTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {debt.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.hint}>{t("modals.connections.mapping.noCardsHint")}</Text>
+            )}
+            {selection.debtId === null &&
+            looksLikeCreditCard(ext.name, ext.balance) ? (
+              <Text style={styles.hint}>
+                {ext.balance < 0
+                  ? t("modals.connections.wizard.map.cardHintNegative")
+                  : t("modals.connections.wizard.map.cardHintName")}
+              </Text>
             ) : null}
           </View>
         );
@@ -1145,6 +1226,10 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.textDim,
       fontWeight: "600",
       letterSpacing: 0.5,
+    },
+    /** For labels whose shared copy is mixed case (mapping.cardsOnDebts). */
+    labelCaps: {
+      textTransform: "uppercase",
     },
     input: {
       backgroundColor: colors.bg,

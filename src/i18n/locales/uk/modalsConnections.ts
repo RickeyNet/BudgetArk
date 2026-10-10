@@ -33,6 +33,9 @@ export const modalsConnections: LocalizedPlural<typeof en> = {
     balanceUpdates: "Оновлення балансу",
     none: "Немає",
     newAccount: "+ Новий рахунок",
+    cardsOnDebts: "Картки з «Боргів»",
+    noCardsHint:
+      "Спершу додай картку на вкладці «Борги», а потім вибери її тут або в редакторі картки.",
     accountNamePlaceholder: "Назва рахунку",
     createAndMap: "Створити й прив'язати",
     savingsHint:
@@ -80,6 +83,9 @@ export const modalsConnections: LocalizedPlural<typeof en> = {
     updatesAccount: " · оновлює {{name}}",
     balanceFallback: "баланс",
     updatesDebtCard: " · оновлює картку в «Боргах»",
+    balanceToCard: " · баланс → {{card}}",
+    linkedToCardOff: " · пов'язано з {{card}} · баланс не оновлюється",
+    linkedDebtCardOff: " · пов'язано з карткою в «Боргах» · баланс не оновлюється",
     balanceNotTracked: " · баланс не відстежується",
     balanceValue: " · {{amount}}",
     addAnotherBank: "+ Додати ще банк",
@@ -178,6 +184,10 @@ export const modalsConnections: LocalizedPlural<typeof en> = {
         "Вибери, що імпортувати й куди мають потрапляти баланси. Неприв'язані рахунки все одно імпортують операції у «Вхідні на перевірку».",
       whoseCard: "ЧИЯ ЦЕ КАРТКА?",
       personHint: "Витрати, імпортовані з цього рахунку, пропонуватимуть цю людину.",
+      cardHintNegative:
+        "Від'ємний баланс - схоже, це кредитна картка. Вибери її серед карток із «Боргів», щоб відстежувати баланс там.",
+      cardHintName:
+        "Схоже, це кредитна картка. Вибери її серед карток із «Боргів», щоб відстежувати баланс там.",
       balanceUpdates: "ОНОВЛЕННЯ БАЛАНСУ",
       saveError: "Не вдалося зберегти прив'язку рахунку. Спробуй ще раз.",
     },

@@ -24,7 +24,13 @@ import {
 } from "../../storage/connectionSecretsStorage";
 import { getLinks, updateLink, upsertLink } from "../../storage/externalAccountLinksStorage";
 import { getAssetAccounts, updateAssetAccount } from "../../storage/assetAccountStorage";
-import { type LinkPreferenceChange, planLinkPreferenceChange } from "./linkPreferences";
+import { getDebts, updateDebt } from "../../storage/debtStorage";
+import { debtFieldsForProviderBalance } from "./debtBalances";
+import {
+  buildWizardLink,
+  type LinkPreferenceChange,
+  planLinkPreferenceChange,
+} from "./linkPreferences";
 import { generateUUID } from "../../utils/uuid";
 import { claimAccessUrl, fetchSimplefinAccounts } from "./simplefinClient";
 import { decodeSetupToken } from "./simplefinParser";
@@ -288,6 +294,12 @@ export interface AccountSelection {
   importTransactions: boolean;
   /** "Whose card is this" - see ExternalAccountLink.personId. */
   personId?: string | null;
+  /**
+   * "This account IS this credit card on the Debts tab" - see
+   * ExternalAccountLink.debtId. Wins over assetAccountId (one balance
+   * destination per account).
+   */
+  debtId?: string | null;
 }
 
 /** Persist the wizard's account-mapping step as ExternalAccountLinks. */
@@ -297,22 +309,23 @@ export const finalizeAccountLinks = async (
 ): Promise<void> => {
   const now = new Date().toISOString();
   for (const selection of selections) {
-    const link: ExternalAccountLink = {
+    // Undecided fields are omitted so a re-run keeps a stored card link /
+    // person (see buildWizardLink + upsertLink's preserve-on-undefined).
+    const link = buildWizardLink(connectionId, selection, {
       id: generateUUID(),
-      connectionId,
-      externalAccountId: selection.account.externalAccountId,
-      externalName: selection.account.name,
-      currency: selection.account.currency,
-      assetAccountId: selection.assetAccountId,
-      importTransactions: selection.importTransactions,
-      personId: selection.personId ?? null,
-      updateBalance: selection.assetAccountId !== null,
-      lastExternalBalance: selection.account.balance,
-      lastExternalBalanceAt: selection.account.balanceAsOf ?? now,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await upsertLink(link);
+      nowISO: now,
+    });
+    const debtId = selection.debtId || null;
+    const all = await upsertLink(link);
+    if (debtId) {
+      // upsertLink keeps an existing link's id (resume path) - resolve it.
+      const saved = all.find(
+        (l) =>
+          l.connectionId === connectionId &&
+          l.externalAccountId === link.externalAccountId,
+      );
+      if (saved) await linkAccountToDebt(saved.id, debtId);
+    }
   }
   // Newly mapped accounts deserve history: clearing lastSyncedAt makes the
   // next pass fetch the full INITIAL_BACKFILL_DAYS window instead of the
@@ -333,6 +346,8 @@ export const finalizeAccountLinks = async (
  * import just turned on, and seeds a newly chosen target with the last-known
  * provider balance so the Bridge (and anything reading it, like a linked
  * emergency fund) is right immediately instead of after the next sync.
+ * Choosing a credit card (change.debtId) also clears that card from every
+ * other link and seeds the card's balance the same way.
  * Returns the connection's links after the change; unknown ids are a no-op.
  */
 export const updateLinkPreferences = async (
@@ -364,8 +379,50 @@ export const updateLinkPreferences = async (
       await updateAssetAccount(asset.id, { balance: plan.seedBalance.balance });
     }
   }
+  const chosenDebtId = all.find((l) => l.id === linkId)?.debtId;
+  if (typeof change.debtId === "string" && chosenDebtId === change.debtId) {
+    // One account per card (same rule as the debt editor): any OTHER link
+    // feeding this card lets go of it, or two accounts would fight over
+    // its balance every sync.
+    for (const other of all) {
+      if (other.id !== linkId && other.debtId === chosenDebtId) {
+        all = await updateLink(other.id, { debtId: null });
+      }
+    }
+  }
+  if (plan.seedDebtBalance) {
+    const debt = (await getDebts()).find(
+      (d) => d.id === plan.seedDebtBalance?.debtId && !d.deletedAt,
+    );
+    // Same guards as the asset seed: the card must exist; an unchanged
+    // balance skips the write (null fields = nothing would change).
+    const fields = debt
+      ? debtFieldsForProviderBalance(debt, plan.seedDebtBalance.balance)
+      : null;
+    if (debt && fields) await updateDebt(debt.id, fields);
+  }
   return all.filter((l) => l.connectionId === link.connectionId);
 };
+
+/**
+ * Point a provider account at a credit card on the Debts tab (or unlink it
+ * with null) from anywhere outside the debt editor - the wizard's mapping
+ * step and the Connections manager. Delegates to updateLinkPreferences, so
+ * the card replaces any Bridge target, other links let go of the card, and
+ * a known provider balance lands on the card immediately. Mirroring the
+ * balance defaults to ON (the point of linking a card).
+ */
+export const linkAccountToDebt = async (
+  linkId: string,
+  debtId: string | null,
+  opts?: { updateBalance?: boolean },
+): Promise<ExternalAccountLink[]> =>
+  updateLinkPreferences(
+    linkId,
+    debtId
+      ? { debtId, updateDebtBalance: opts?.updateBalance ?? true }
+      : { debtId: null },
+  );
 
 /** Remove a connection (cascades to secrets/links/inbox; ledger stays). */
 export const removeConnection = async (connectionId: string): Promise<void> => {

@@ -34,6 +34,9 @@ export const modalsConnections: Localized<typeof en> = {
     balanceUpdates: "Kontostand aktualisiert",
     none: "Keins",
     newAccount: "+ Neues Konto",
+    cardsOnDebts: "Karten unter Schulden",
+    noCardsHint:
+      "Lege die Karte zuerst im Tab Schulden an und wähle sie dann hier oder im Editor der Karte aus.",
     accountNamePlaceholder: "Kontoname",
     createAndMap: "Anlegen & zuordnen",
     savingsHint:
@@ -81,6 +84,9 @@ export const modalsConnections: Localized<typeof en> = {
     updatesAccount: " · aktualisiert {{name}}",
     balanceFallback: "Kontostand",
     updatesDebtCard: " · aktualisiert eine Karte unter Schulden",
+    balanceToCard: " · Saldo → {{card}}",
+    linkedToCardOff: " · verknüpft mit {{card}} · Saldo aus",
+    linkedDebtCardOff: " · mit einer Karte unter Schulden verknüpft · Saldo aus",
     balanceNotTracked: " · Kontostand nicht verfolgt",
     balanceValue: " · {{amount}}",
     addAnotherBank: "+ Weitere Bank hinzufügen",
@@ -179,6 +185,10 @@ export const modalsConnections: Localized<typeof en> = {
         "Wähle, was importiert wird und wo Kontostände landen. Nicht zugeordnete Konten importieren trotzdem Umsätze in den Prüfposteingang.",
       whoseCard: "WESSEN KARTE IST DAS?",
       personHint: "Aus diesem Konto importierte Ausgaben schlagen diese Person vor.",
+      cardHintNegative:
+        "Negativer Kontostand - das sieht nach einer Kreditkarte aus. Wähle sie unter „Karten unter Schulden“ aus, um den Saldo dort zu verfolgen.",
+      cardHintName:
+        "Das sieht nach einer Kreditkarte aus. Wähle sie unter „Karten unter Schulden“ aus, um den Saldo dort zu verfolgen.",
       balanceUpdates: "KONTOSTAND AKTUALISIERT",
       saveError: "Die Kontozuordnung konnte nicht gespeichert werden. Versuch es noch einmal.",
     },

@@ -96,6 +96,8 @@ export const debtsForm: Localized<typeof en> = {
       "Trykk på «Jeg brukte det» på kortet etter et kjøp - eller velg en tilkoblet konto ovenfor, så stemples det automatisk.",
     lastUsedNoLinks:
       "Trykk på «Jeg brukte det» på kortet etter et kjøp. Sett opp en banktilkobling (Profil → Banktilkoblinger), så stemples datoen automatisk fra transaksjonene dine.",
+    statusLine: "Sist brukt {{date}} · neste bruk innen {{deadline}}",
+    statusStartsToday: "Starter i dag · neste bruk innen {{deadline}}",
   },
   alerts: {
     notificationsOff: {

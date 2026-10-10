@@ -25,6 +25,7 @@ export const debtsCard: Localized<typeof en> = {
     paidOff: "NEDBETALT",
     bankSync: "Saldo fra {{account}}",
     bankSyncAsOf: "Saldo fra {{account}} · per {{date}}",
+    bankLinkedNoMirror: "Koblet til {{account}} · saldoen speiles ikke",
     goal: {
       passed: "Måldatoen har passert",
       line: "Mål: {{date}} ({{monthsLeft}})",
@@ -42,6 +43,15 @@ export const debtsCard: Localized<typeof en> = {
       days_one: "{{count}} dag",
       days_other: "{{count}} dager",
       usedIt: "Jeg brukte det",
+      lastUsed: "Sist brukt {{date}}",
+      trackedByBank: "Stemples automatisk fra {{account}}",
+      trackedManually: "Trykk på «Jeg brukte det» etter et kjøp",
+      a11y: {
+        ok: "Aktivitetsovervåking på · neste bruk innen {{date}}",
+        upcoming: "Aktivitetsovervåking · bruk innen {{date}}",
+        urgent: "Aktivitetsovervåking · bruk snart, innen {{date}}",
+        overdue: "Aktivitetsovervåking · inaktivitetsfristen har passert ({{date}})",
+      },
     },
     timeline: {
       adjust: "Juster betalingsplanen",

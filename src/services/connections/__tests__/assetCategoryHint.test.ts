@@ -4,10 +4,11 @@
  *
  * The name-based category guess behind the wizard's "+ New account"
  * default. Specific words must beat generic ones and unknown names must
- * fall back to checking.
+ * fall back to checking. Also the credit-card flag behind the wizard's
+ * "pick it under Cards on Debts" hint.
  */
 
-import { suggestAssetCategory } from "../assetCategoryHint";
+import { looksLikeCreditCard, suggestAssetCategory } from "../assetCategoryHint";
 
 describe("suggestAssetCategory", () => {
   it.each([
@@ -55,5 +56,32 @@ describe("suggestAssetCategory", () => {
   it("falls back to checking for unknown or empty names", () => {
     expect(suggestAssetCategory("")).toBe("checking");
     expect(suggestAssetCategory("Primary Account ...1234")).toBe("checking");
+  });
+});
+
+describe("looksLikeCreditCard", () => {
+  it.each([
+    "Chase Sapphire Visa",
+    "CREDIT CARD ...1234",
+    "Citi Mastercard",
+    "Amex Gold",
+    "Discover It",
+    "Freedom_Card",
+  ])("flags a card-like name with a positive balance: %s", (name) => {
+    expect(looksLikeCreditCard(name, 250)).toBe(true);
+  });
+
+  it("flags a negative balance regardless of name", () => {
+    expect(looksLikeCreditCard("Primary Account ...1234", -0.01)).toBe(true);
+  });
+
+  it("does not flag an ordinary account with a positive or zero balance", () => {
+    expect(looksLikeCreditCard("Everyday Checking", 1200)).toBe(false);
+    expect(looksLikeCreditCard("High Yield Savings", 0)).toBe(false);
+  });
+
+  it("ignores a non-finite balance", () => {
+    expect(looksLikeCreditCard("Everyday Checking", Number.NaN)).toBe(false);
+    expect(looksLikeCreditCard("Everyday Checking", Number.NEGATIVE_INFINITY)).toBe(false);
   });
 });

@@ -33,6 +33,9 @@ export const modalsConnections: LocalizedPlural<typeof en> = {
     balanceUpdates: "Обновление баланса",
     none: "Нет",
     newAccount: "+ Новый счёт",
+    cardsOnDebts: "Кредитки из «Долгов»",
+    noCardsHint:
+      "Сначала добавь карту на вкладке «Долги», затем выбери её здесь или в редакторе карты.",
     accountNamePlaceholder: "Название счёта",
     createAndMap: "Создать и привязать",
     savingsHint:
@@ -80,6 +83,9 @@ export const modalsConnections: LocalizedPlural<typeof en> = {
     updatesAccount: " · обновляет {{name}}",
     balanceFallback: "баланс",
     updatesDebtCard: " · обновляет карту в «Долгах»",
+    balanceToCard: " · баланс → {{card}}",
+    linkedToCardOff: " · связан с {{card}} · баланс не обновляется",
+    linkedDebtCardOff: " · связан с картой в «Долгах» · баланс не обновляется",
     balanceNotTracked: " · баланс не отслеживается",
     balanceValue: " · {{amount}}",
     addAnotherBank: "+ Добавить ещё банк",
@@ -178,6 +184,10 @@ export const modalsConnections: LocalizedPlural<typeof en> = {
         "Выбери, что импортировать и куда должны попадать балансы. Непривязанные счета всё равно импортируют операции во «Входящие на проверку».",
       whoseCard: "ЧЬЯ ЭТО КАРТА?",
       personHint: "Расходы, импортированные с этого счёта, будут предлагать этого человека.",
+      cardHintNegative:
+        "Отрицательный баланс - похоже, это кредитная карта. Выбери её среди кредиток из «Долгов», чтобы отслеживать баланс там.",
+      cardHintName:
+        "Похоже, это кредитная карта. Выбери её среди кредиток из «Долгов», чтобы отслеживать баланс там.",
       balanceUpdates: "ОБНОВЛЕНИЕ БАЛАНСА",
       saveError: "Не удалось сохранить привязку счёта. Попробуй ещё раз.",
     },

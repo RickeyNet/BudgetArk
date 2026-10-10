@@ -10,6 +10,11 @@
  * subtype is lost in normalization, so the name is all we have; the guess
  * is only a default - the user can always pick another pill.
  *
+ * Also flags accounts that look like credit cards (looksLikeCreditCard).
+ * There is deliberately no "credit" Bridge category - a card belongs on the
+ * Debts tab - so the wizard uses that flag to point at its "Cards on Debts"
+ * picker instead of suggesting an asset category.
+ *
  * Pure and dependency-free (Jest on Node). Order matters: the first matching
  * rule wins, so the more specific words (roth, ira, hsa) sit above the
  * generic ones (savings, checking).
@@ -34,10 +39,24 @@ const RULES: readonly Rule[] = [
  * Best-guess Bridge category for a provider account name. Falls back to
  * "checking" (the most common linked account) when nothing matches.
  */
+const normalizeName = (accountName: string): string =>
+  accountName.toLowerCase().replace(/[_./-]+/g, " ");
+
 export const suggestAssetCategory = (accountName: string): AssetAccountCategory => {
-  const name = accountName.toLowerCase().replace(/[_./-]+/g, " ");
+  const name = normalizeName(accountName);
   for (const rule of RULES) {
     if (rule.pattern.test(name)) return rule.category;
   }
   return "checking";
 };
+
+const CREDIT_CARD_PATTERN = /credit|card|visa|mastercard|amex|discover/;
+
+/**
+ * Whether a provider account is probably a credit card: a card-ish name, or
+ * a negative balance (SimpleFIN reports liabilities negative). Only drives a
+ * hint - a false positive just shows a nudge toward the card picker.
+ */
+export const looksLikeCreditCard = (accountName: string, balance: number): boolean =>
+  CREDIT_CARD_PATTERN.test(normalizeName(accountName)) ||
+  (Number.isFinite(balance) && balance < 0);

@@ -22,6 +22,7 @@ export const debtsCard = {
     paidOff: "PAID OFF",
     bankSync: "Balance from {{account}}",
     bankSyncAsOf: "Balance from {{account}} · as of {{date}}",
+    bankLinkedNoMirror: "Linked to {{account}} · balance not mirrored",
     goal: {
       passed: "Goal date has passed",
       line: "Goal: {{date}} ({{monthsLeft}})",
@@ -39,6 +40,15 @@ export const debtsCard = {
       days_one: "{{count}} day",
       days_other: "{{count}} days",
       usedIt: "I used it",
+      lastUsed: "Last used {{date}}",
+      trackedByBank: "Stamps itself from {{account}}",
+      trackedManually: "Tap \"I used it\" after a purchase",
+      a11y: {
+        ok: "Keep-alive watch on · next use by {{date}}",
+        upcoming: "Keep-alive watch · use by {{date}}",
+        urgent: "Keep-alive watch · use it soon, by {{date}}",
+        overdue: "Keep-alive watch · inactivity deadline passed ({{date}})",
+      },
     },
     timeline: {
       adjust: "Adjust payment plan",

@@ -34,6 +34,9 @@ export const modalsConnections: Localized<typeof en> = {
     balanceUpdates: "Saldouppdateringar",
     none: "Inget",
     newAccount: "+ Nytt konto",
+    cardsOnDebts: "Kort under Skulder",
+    noCardsHint:
+      "Lägg först till kortet på fliken Skulder och välj det sedan här eller i kortets redigerare.",
     accountNamePlaceholder: "Kontonamn",
     createAndMap: "Skapa & matcha",
     savingsHint:
@@ -81,6 +84,9 @@ export const modalsConnections: Localized<typeof en> = {
     updatesAccount: " · uppdaterar {{name}}",
     balanceFallback: "saldo",
     updatesDebtCard: " · uppdaterar ett kort under Skulder",
+    balanceToCard: " · saldo → {{card}}",
+    linkedToCardOff: " · kopplat till {{card}} · saldo av",
+    linkedDebtCardOff: " · kopplat till ett kort under Skulder · saldo av",
     balanceNotTracked: " · saldo spåras inte",
     balanceValue: " · {{amount}}",
     addAnotherBank: "+ Lägg till en bank till",
@@ -179,6 +185,10 @@ export const modalsConnections: Localized<typeof en> = {
         "Välj vad som ska importeras och var saldon ska landa. Omatchade konton importerar ändå transaktioner till granskningsinkorgen.",
       whoseCard: "VEMS KORT ÄR DET HÄR?",
       personHint: "Utgifter som importeras från det här kontot föreslår den här personen.",
+      cardHintNegative:
+        "Negativt saldo - det här ser ut som ett kreditkort. Välj det under Kort under Skulder för att följa saldot där.",
+      cardHintName:
+        "Det här ser ut som ett kreditkort. Välj det under Kort under Skulder för att följa saldot där.",
       balanceUpdates: "SALDOUPPDATERINGAR",
       saveError: "Det gick inte att spara kontomatchningen. Försök igen.",
     },

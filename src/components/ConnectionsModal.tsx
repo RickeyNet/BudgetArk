@@ -30,6 +30,7 @@ import {
   type AssetAccount,
   type AssetAccountCategory,
   type BankConnection,
+  type Debt,
   type ExternalAccountLink,
 } from "../types";
 import { describeError } from "../utils/errorMessage";
@@ -47,6 +48,7 @@ import {
   addAssetAccount,
   getAssetAccounts,
 } from "../storage/assetAccountStorage";
+import { getDebts } from "../storage/debtStorage";
 import {
   MAPPABLE_ASSET_CATEGORIES,
   removeConnection,
@@ -134,6 +136,15 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
   const { people } = usePeople();
   /** Live Bridge accounts, for the per-account "balance updates" picker. */
   const [assetAccounts, setAssetAccounts] = useState<AssetAccount[]>([]);
+  /**
+   * Live debts: credit cards feed the "Cards on Debts" picker, and every
+   * debt resolves a link's card name in its row subtext.
+   */
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const cardDebts = useMemo(
+    () => debts.filter((d) => !d.deletedAt && d.debtClass === "personal_credit"),
+    [debts],
+  );
   /** Link whose preference write is in flight (guards double taps). */
   const [savingLinkId, setSavingLinkId] = useState<string | null>(null);
   // Inline "+ New account" mini-form state (one at a time, per link).
@@ -199,6 +210,11 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         if (!cancelled) setAssetAccounts(result);
       })
       .catch(() => undefined);
+    void getDebts()
+      .then((result) => {
+        if (!cancelled) setDebts(result);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -227,8 +243,10 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
         const updated = await updateLinkPreferences(linkId, change);
         setLinks(updated);
         setNewAccountFor(null);
-        // A seeded balance changed an account; keep the picker's copy fresh.
+        // A seeded balance changed an account or card; keep the pickers'
+        // copies fresh.
         setAssetAccounts(await getAssetAccounts());
+        setDebts(await getDebts());
       } catch (error) {
         setLinkError(describeError(error, t("modals.connections.detail.errors.savePreferences")));
       } finally {
@@ -431,6 +449,11 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
               const target = link.assetAccountId
                 ? assetAccounts.find((a) => a.id === link.assetAccountId)
                 : undefined;
+              const linkedCard = link.debtId
+                ? debts.find((d) => d.id === link.debtId && !d.deletedAt)
+                : undefined;
+              const mirrorsCard = link.updateDebtBalance !== false;
+              const noTarget = !link.assetAccountId && !link.debtId;
               const saving = savingLinkId === link.id;
               return (
               <React.Fragment key={link.id}>
@@ -447,7 +470,17 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                             name: target?.name ?? t("modals.connections.detail.balanceFallback"),
                           })
                         : link.debtId
-                          ? t("modals.connections.detail.updatesDebtCard")
+                          ? linkedCard
+                            ? mirrorsCard
+                              ? t("modals.connections.detail.balanceToCard", {
+                                  card: linkedCard.name,
+                                })
+                              : t("modals.connections.detail.linkedToCardOff", {
+                                  card: linkedCard.name,
+                                })
+                            : mirrorsCard
+                              ? t("modals.connections.detail.updatesDebtCard")
+                              : t("modals.connections.detail.linkedDebtCardOff")
                           : t("modals.connections.detail.balanceNotTracked")}
                       {typeof link.lastExternalBalance === "number"
                         ? t("modals.connections.detail.balanceValue", {
@@ -500,14 +533,19 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                   <Text style={styles.personPickerLabel}>{t("modals.connections.mapping.balanceUpdates")}</Text>
                   <View style={styles.pillWrap}>
                     <TouchableOpacity
-                      style={[styles.pill, !link.assetAccountId && styles.pillActive]}
-                      onPress={() => void applyPreference(link.id, { assetAccountId: null })}
+                      style={[styles.pill, noTarget && styles.pillActive]}
+                      onPress={() =>
+                        void applyPreference(link.id, {
+                          assetAccountId: null,
+                          debtId: null,
+                        })
+                      }
                       disabled={saving}
                     >
                       <Text
                         style={[
                           styles.pillText,
-                          !link.assetAccountId && styles.pillTextActive,
+                          noTarget && styles.pillTextActive,
                         ]}
                       >
                         {t("modals.connections.mapping.none")}
@@ -594,6 +632,39 @@ const ConnectionsModal: React.FC<ConnectionsModalProps> = ({
                       ) : null}
                     </View>
                   ) : null}
+                </View>
+
+                <View style={styles.personPickerWrap}>
+                  <Text style={styles.personPickerLabel}>{t("modals.connections.mapping.cardsOnDebts")}</Text>
+                  {cardDebts.length > 0 ? (
+                    <View style={styles.pillWrap}>
+                      {cardDebts.map((debt) => (
+                        <TouchableOpacity
+                          key={debt.id}
+                          style={[
+                            styles.pill,
+                            link.debtId === debt.id && styles.pillActive,
+                          ]}
+                          onPress={() =>
+                            void applyPreference(link.id, { debtId: debt.id })
+                          }
+                          disabled={saving}
+                        >
+                          <Text
+                            style={[
+                              styles.pillText,
+                              link.debtId === debt.id && styles.pillTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {debt.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.hint}>{t("modals.connections.mapping.noCardsHint")}</Text>
+                  )}
                 </View>
               </React.Fragment>
               );

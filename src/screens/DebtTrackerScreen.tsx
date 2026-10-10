@@ -102,7 +102,8 @@ import SheetKeyboardAvoider from "../components/SheetKeyboardAvoider";
 import DebtFreeCountdownCard from "../components/DebtFreeCountdownCard";
 import GlobalSearchModal from "../components/GlobalSearchModal";
 import AddDebtModal, { type DebtBankLinkExtras } from "../components/AddDebtModal";
-import { getLinks, updateLink } from "../storage/externalAccountLinksStorage";
+import { getLinks } from "../storage/externalAccountLinksStorage";
+import { linkAccountToDebt } from "../services/connections/connectionsService";
 import { linkUpdatesDebtBalance } from "../services/connections/debtBalances";
 import ProgressRing from "../components/ProgressRing";
 import PaymentHistoryModal from "../components/PaymentHistoryModal";
@@ -689,33 +690,31 @@ const DebtTrackerScreen: React.FC = () => {
   /**
    * Points the chosen connected-account link at this debt ("this bank
    * account IS this card": balance mirroring + keep-alive auto-stamping,
-   * see ExternalAccountLink.debtId) and clears any other link that fed it -
-   * one account per card. The balance itself is not seeded here: the modal
-   * already submitted the bank's last-known balance as the debt's balance
-   * when mirroring is on. Best-effort: the debt save must not fail on a
-   * link hiccup. No-op when extras are undefined (not a credit card).
+   * see ExternalAccountLink.debtId) through the same service the wizard
+   * and the Connections manager use (linkAccountToDebt), so all three
+   * entry points enforce the same rules: one account per card (any other
+   * link that fed this card lets go of it) and one balance destination per
+   * account (a card replaces a Bridge target). Its balance seed is a no-op
+   * here: the modal already submitted the bank's last-known balance as the
+   * debt's balance when mirroring is on. Best-effort: the debt save must
+   * not fail on a link hiccup. No-op when extras are undefined (not a
+   * credit card).
    */
   const applyBankLink = useCallback(
     async (debtId: string, extras?: DebtBankLinkExtras) => {
       if (!extras) return;
       try {
-        let links = await getLinks();
-        for (const link of links) {
-          if (link.id === extras.linkId) {
-            if (
-              link.debtId !== debtId ||
-              (link.updateDebtBalance !== false) !== extras.updateBalance
-            ) {
-              links = await updateLink(link.id, {
-                debtId,
-                updateDebtBalance: extras.updateBalance,
-              });
-            }
-          } else if (link.debtId === debtId) {
-            links = await updateLink(link.id, { debtId: null });
+        if (extras.linkId) {
+          await linkAccountToDebt(extras.linkId, debtId, {
+            updateBalance: extras.updateBalance,
+          });
+        } else {
+          // "Not connected": unlink every account that fed this card.
+          for (const link of await getLinks()) {
+            if (link.debtId === debtId) await linkAccountToDebt(link.id, null);
           }
         }
-        setBankLinks(links);
+        setBankLinks(await getLinks());
       } catch (error) {
         if (__DEV__) console.error("Bank link update failed:", error);
       }
@@ -1178,14 +1177,28 @@ const DebtTrackerScreen: React.FC = () => {
     return () => sub.remove();
   }, [scrollPayInputIntoView]);
 
-  /** debtId -> "Balance from <account>" info for cards a bank link feeds. */
-  const bankSyncByDebt = React.useMemo(() => {
-    const map = new Map<string, { accountName: string; asOf?: string }>();
+  /**
+   * debtId -> the bank account linked to that card. Built from EVERY link
+   * with a debtId, not only balance-mirroring ones: keep-alive auto-stamping
+   * runs through any link, so the card should say it's linked even when
+   * "Balance from bank" is off. When two links point at one card, a
+   * mirroring link wins (it's the one that explains where the balance
+   * comes from).
+   */
+  const bankLinkByDebt = React.useMemo(() => {
+    const map = new Map<
+      string,
+      { accountName: string; asOf?: string; mirrorsBalance: boolean }
+    >();
     for (const link of bankLinks) {
-      if (!link.debtId || !linkUpdatesDebtBalance(link)) continue;
+      if (!link.debtId) continue;
+      const mirrorsBalance = linkUpdatesDebtBalance(link);
+      const existing = map.get(link.debtId);
+      if (existing && (existing.mirrorsBalance || !mirrorsBalance)) continue;
       map.set(link.debtId, {
         accountName: link.externalName,
         asOf: link.lastExternalBalanceAt,
+        mirrorsBalance,
       });
     }
     return map;
@@ -1195,7 +1208,7 @@ const DebtTrackerScreen: React.FC = () => {
     ({ item }: { item: Debt }) => (
       <DebtCard
         debt={item}
-        bankSync={bankSyncByDebt.get(item.id) ?? null}
+        bankLink={bankLinkByDebt.get(item.id) ?? null}
         onPayment={handlePayment}
         onDelete={handleDelete}
         onEdit={handleEdit}
@@ -1204,7 +1217,7 @@ const DebtTrackerScreen: React.FC = () => {
         isFocusDebt={item.id === focusDebtId}
       />
     ),
-    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankSyncByDebt, focusDebtId]
+    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankLinkByDebt, focusDebtId]
   );
 
   /** Summary + section header rendered above the debt list */

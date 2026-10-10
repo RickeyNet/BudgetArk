@@ -33,7 +33,7 @@ import {
   calcPaymentForGoalDate,
   parseGoalDateLocal,
 } from "../utils/calculations";
-import { keepAliveStatus } from "../utils/cardKeepAlive";
+import { keepAliveStatus, parseKeepAliveDate } from "../utils/cardKeepAlive";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
 import ProgressRing from "./ProgressRing";
 import { useTheme } from "../theme/ThemeProvider";
@@ -59,12 +59,15 @@ interface DebtCardProps {
   onKeepAliveUse?: (debtId: string) => void;
 
   /**
-   * Set when a connected bank account mirrors its balance onto this card
-   * (ExternalAccountLink.debtId on this device); shows where the balance
-   * comes from and when the bank last reported it. Per-device: a partner
-   * sees the balance move but not this line.
+   * Set when a connected bank account is linked to this card
+   * (ExternalAccountLink.debtId on this device), whether or not it mirrors
+   * the balance. `mirrorsBalance` true: shows where the balance comes from
+   * and when the bank last reported it; false: says the card is linked but
+   * the balance is typed by hand. Either way keep-alive stamping runs
+   * through the link. Per-device: a partner sees the balance move but not
+   * this line.
    */
-  bankSync?: { accountName: string; asOf?: string } | null;
+  bankLink?: { accountName: string; asOf?: string; mirrorsBalance: boolean } | null;
 
   /**
    * Fired when the inline pay input gains focus so the parent list can
@@ -79,7 +82,7 @@ interface DebtCardProps {
 }
 
 /* ─── Component ─── */
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, onPayInputFocus, bankSync = null, isFocusDebt = false }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, onKeepAliveUse, onPayInputFocus, bankLink = null, isFocusDebt = false }) => {
   /** Get current theme colors */
   const { colors } = useTheme();
   const { formatCurrency } = useCurrency();
@@ -151,18 +154,58 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
     return t("debts.card.card.keepAlive.useBy", { date: when, when: days });
   }, [keepAlive, locale, t]);
 
+  /**
+   * Second keep-alive line: when the card was last used and how that date
+   * gets updated (a linked bank account stamps it; otherwise "I used it").
+   */
+  const keepAliveDetailLine = React.useMemo((): string => {
+    if (!keepAlive || !debt.keepAliveLastUsedAt) return "";
+    const lastUsed = parseKeepAliveDate(debt.keepAliveLastUsedAt);
+    const parts: string[] = [];
+    if (lastUsed) {
+      parts.push(
+        t("debts.card.card.keepAlive.lastUsed", {
+          date: lastUsed.toLocaleDateString(locale, { month: "short", day: "numeric" }),
+        })
+      );
+    }
+    parts.push(
+      bankLink
+        ? t("debts.card.card.keepAlive.trackedByBank", { account: bankLink.accountName })
+        : t("debts.card.card.keepAlive.trackedManually")
+    );
+    return parts.join(" · ");
+  }, [keepAlive, debt.keepAliveLastUsedAt, bankLink, locale, t]);
+
+  /** Screen-reader text for the collapsed header's keep-alive dot. */
+  const keepAliveA11y = React.useMemo((): string => {
+    if (!keepAlive) return "";
+    const date = keepAlive.deadline.toLocaleDateString(locale, {
+      month: "short",
+      day: "numeric",
+    });
+    return t(`debts.card.card.keepAlive.a11y.${keepAlive.status}`, { date });
+  }, [keepAlive, locale, t]);
+
   /** Goal date calculations */
-  /** "Balance from <bank account> · as of <date>" - see the bankSync prop. */
+  /**
+   * "Balance from <bank account> · as of <date>" when the link mirrors the
+   * balance, "Linked to <bank account> · balance not mirrored" otherwise -
+   * see the bankLink prop.
+   */
   const bankSyncLine = React.useMemo((): string => {
-    if (!bankSync) return "";
-    const asOf = bankSync.asOf ? new Date(bankSync.asOf) : null;
+    if (!bankLink) return "";
+    if (!bankLink.mirrorsBalance) {
+      return t("debts.card.card.bankLinkedNoMirror", { account: bankLink.accountName });
+    }
+    const asOf = bankLink.asOf ? new Date(bankLink.asOf) : null;
     return asOf && !Number.isNaN(asOf.getTime())
       ? t("debts.card.card.bankSyncAsOf", {
-          account: bankSync.accountName,
+          account: bankLink.accountName,
           date: asOf.toLocaleDateString(locale, { month: "short", day: "numeric" }),
         })
-      : t("debts.card.card.bankSync", { account: bankSync.accountName });
-  }, [bankSync, locale, t]);
+      : t("debts.card.card.bankSync", { account: bankLink.accountName });
+  }, [bankLink, locale, t]);
 
   const goalInfo = React.useMemo(() => {
     if (!debt.goalDate || debt.balance <= 0) return null;
@@ -224,6 +267,15 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
         style={styles.collapsedCard}
         onPress={() => setExpanded(true)}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={
+          keepAlive
+            ? `${debt.name}, ${t("debts.card.card.collapsedDetail", {
+                balance: formatCurrency(debt.balance),
+                rate: debt.rate,
+              })}, ${keepAliveA11y}, ${Math.round(percentPaid)}%`
+            : undefined
+        }
       >
         <View style={styles.collapsedLeft}>
           <Text style={styles.collapsedName} numberOfLines={1}>{debt.name}</Text>
@@ -235,9 +287,13 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
           </Text>
         </View>
         <View style={styles.collapsedRight}>
-          {keepAlive && keepAlive.status !== "ok" && (
+          {/* Shown for every status once the watch is on (success color
+              when on track), so a watched card is recognizable collapsed. */}
+          {keepAlive && (
             <View
               style={[styles.keepAliveDot, { backgroundColor: keepAliveColor }]}
+              accessible
+              accessibilityLabel={keepAliveA11y}
             />
           )}
           <Text style={[styles.collapsedPercent, { color: ringColor }]}>
@@ -359,12 +415,19 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
       {/* ── Keep-Alive Row ── */}
       {keepAlive && (
         <View style={[styles.keepAliveRow, { backgroundColor: `${keepAliveColor}15` }]}>
-          <Text
-            style={[styles.keepAliveText, { color: keepAliveColor }]}
-            numberOfLines={2}
-          >
-            {keepAliveLine}
-          </Text>
+          <View style={styles.keepAliveTextCol}>
+            <Text
+              style={[styles.keepAliveText, { color: keepAliveColor }]}
+              numberOfLines={2}
+            >
+              {keepAliveLine}
+            </Text>
+            {keepAliveDetailLine ? (
+              <Text style={styles.keepAliveDetailText} numberOfLines={2}>
+                {keepAliveDetailLine}
+              </Text>
+            ) : null}
+          </View>
           <TouchableOpacity
             style={[styles.keepAliveButton, { backgroundColor: `${keepAliveColor}25` }]}
             onPress={() => onKeepAliveUse?.(debt.id)}
@@ -632,10 +695,17 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       gap: 10,
     },
-    keepAliveText: {
+    keepAliveTextCol: {
       flex: 1,
+    },
+    keepAliveText: {
       fontSize: 12,
       fontWeight: "600",
+    },
+    keepAliveDetailText: {
+      fontSize: 11,
+      color: colors.textDim,
+      marginTop: 2,
     },
     keepAliveButton: {
       borderRadius: 8,

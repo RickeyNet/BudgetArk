@@ -1142,8 +1142,14 @@ const BridgeScreen: React.FC = () => {
 
   /** "Later" on the keep-alive banner: mute that card for this month. */
   const handleKeepAliveDismiss = useCallback(async (debt: Debt) => {
-    await dismissCardKeepAliveForMonth(debt.id);
-    setKeepAliveDismissals(await getCardKeepAliveDismissals());
+    // Banner callbacks are fire-and-forget; a storage failure here must not
+    // become an unhandled rejection. The banner simply stays up.
+    try {
+      await dismissCardKeepAliveForMonth(debt.id);
+      setKeepAliveDismissals(await getCardKeepAliveDismissals());
+    } catch (error) {
+      if (__DEV__) console.error("Failed to mute keep-alive banner:", error);
+    }
   }, []);
 
   const listHeader = (

@@ -35,6 +35,9 @@ export const modalsConnections: Localized<typeof en> = {
     balanceUpdates: "Saldooppdateringer",
     none: "Ingen",
     newAccount: "+ Ny konto",
+    cardsOnDebts: "Kort under Gjeld",
+    noCardsHint:
+      "Legg til kortet på Gjeld-fanen først, og velg det deretter her eller i redigeringen av kortet.",
     accountNamePlaceholder: "Kontonavn",
     createAndMap: "Opprett og knytt til",
     savingsHint:
@@ -82,6 +85,9 @@ export const modalsConnections: Localized<typeof en> = {
     updatesAccount: " · oppdaterer {{name}}",
     balanceFallback: "saldo",
     updatesDebtCard: " · oppdaterer et kort under Gjeld",
+    balanceToCard: " · saldo → {{card}}",
+    linkedToCardOff: " · koblet til {{card}} · saldo av",
+    linkedDebtCardOff: " · koblet til et kort under Gjeld · saldo av",
     balanceNotTracked: " · saldo spores ikke",
     balanceValue: " · {{amount}}",
     addAnotherBank: "+ Legg til en bank til",
@@ -180,6 +186,10 @@ export const modalsConnections: Localized<typeof en> = {
         "Velg hva som skal importeres, og hvor saldoer skal lande. Kontoer uten tilknytning importerer likevel transaksjoner til gjennomgangsinnboksen.",
       whoseCard: "HVEM SITT KORT ER DETTE?",
       personHint: "Utgifter som importeres fra denne kontoen, foreslår denne personen.",
+      cardHintNegative:
+        "Negativ saldo - dette ser ut som et kredittkort. Velg det under Kort under Gjeld for å følge saldoen der.",
+      cardHintName:
+        "Dette ser ut som et kredittkort. Velg det under Kort under Gjeld for å følge saldoen der.",
       balanceUpdates: "SALDOOPPDATERINGER",
       saveError: "Kunne ikke lagre kontotilknytningen. Prøv igjen.",
     },

@@ -95,6 +95,8 @@ export const debtsForm: Localized<typeof en> = {
       "Tippe nach einem Kauf auf „Benutzt“ auf der Karte - oder wähle oben ein verbundenes Konto, dann stempelt es sich selbst.",
     lastUsedNoLinks:
       "Tippe nach einem Kauf auf „Benutzt“ auf der Karte. Richte eine Bankverbindung ein (Profil → Bankverbindungen), dann stempelt sich das Datum aus deinen Umsätzen selbst.",
+    statusLine: "Zuletzt benutzt am {{date}} · nächste Nutzung bis {{deadline}}",
+    statusStartsToday: "Beginnt heute · nächste Nutzung bis {{deadline}}",
   },
   alerts: {
     notificationsOff: {

@@ -20,6 +20,10 @@
  *    balance mirrors onto the Debt (services/connections/debtBalances) and
  *    its outflows stamp the card keep-alive watch, in ONE debt write per
  *    card per pass.
+ *  - The Review-Inbox ingest is guarded as a unit: if it throws, balances
+ *    and debt links are still applied, the failure is recorded on the
+ *    connection (authStatus "error", retried next pass) and the pass
+ *    reports "unavailable" without advancing lastSyncedAt.
  */
 
 import { AppState, AppStateStatus } from "react-native";
@@ -234,6 +238,144 @@ const applyBalances = async (
   return updated;
 };
 
+/**
+ * Records an unexpected (non-provider) sync failure on the connection so the
+ * manager shows it. Not an auth problem, so the next pass retries normally.
+ */
+const recordSyncFailure = async (
+  connectionId: string,
+  authStatus: BankConnection["authStatus"],
+  message: string,
+): Promise<void> => {
+  await updateConnection(connectionId, {
+    authStatus,
+    lastErrorCode: "provider-error",
+    lastErrorMessage: message,
+  });
+};
+
+/**
+ * Review-Inbox ingest for one fetched pass: plan, settled-amount
+ * corrections, ledger writes, inbox upserts/removals, stale-pending
+ * retirement and the auto-approve sweep. Throws on a storage failure (the
+ * caller records it); returns the inbox counts for the pass result.
+ */
+const ingestTransactions = async (
+  connection: BankConnection,
+  result: Extract<ProviderFetchResult, { ok: true }>,
+  links: ExternalAccountLink[],
+  opts: { nowMs: number; windowStartMs: number },
+): Promise<{ newPendingCount: number; updatedPendingCount: number }> => {
+  const [inbox, ledger, rules, allEntries] = await Promise.all([
+    getPendingTransactions(),
+    getIngestLedger(),
+    getMerchantRules(),
+    getBudgetEntriesIncludingDeleted(),
+  ]);
+  const knownEntryExternalIds = new Set<string>();
+  for (const entry of allEntries) {
+    if (entry.externalTxId) knownEntryExternalIds.add(entry.externalTxId);
+  }
+  // Live manually-entered entries: candidates for duplicateLikely flagging
+  // (the user tracked a purchase by hand before the bank imported it).
+  const manualEntries = allEntries
+    .filter((entry) => !entry.deletedAt && entry.source !== "bank")
+    .map((entry) => ({
+      amount: entry.amount,
+      type: entry.type,
+      date: entry.date,
+    }));
+
+  const plan = planIngest({
+    provider: connection.provider,
+    connectionId: connection.id,
+    fetched: result.transactions,
+    links,
+    inbox,
+    ledger,
+    knownEntryExternalIds,
+    rules,
+    manualEntries,
+    now: new Date(opts.nowMs).toISOString(),
+  });
+
+  // Settled-amount corrections go BEFORE the ledger aliases that would
+  // stop the planner from re-finding the twin (idempotent, so a crash in
+  // between re-applies next pass - see applyEntryAmountCorrections).
+  await applyEntryAmountCorrections(plan.amountCorrections);
+
+  const ledgerWrites = { ...plan.ledgerAliases, ...plan.autoDismissed };
+  if (Object.keys(ledgerWrites).length > 0) {
+    await recordLedgerEntries(ledgerWrites);
+  }
+  const migratedIds = plan.updatedInboxItems.filter(
+    (item) => !inbox.some((existing) => existing.id === item.id),
+  );
+  if (plan.newInboxItems.length > 0 || plan.updatedInboxItems.length > 0) {
+    // An id-migrated item (pending->posted rename) leaves its old row behind;
+    // upsert the new rows first, then drop the stale ids recorded as aliases.
+    await upsertPendingTransactions([
+      ...plan.newInboxItems,
+      ...plan.updatedInboxItems,
+    ]);
+  }
+  // Retire inbox rows whose id gained an alias. Runs independently of the
+  // upsert above: when a partner-synced decision names the POSTED id and the
+  // pending twin is the only thing in the inbox, the planner emits an alias
+  // but no new/updated rows - gating the removal on those lists left the
+  // pending row alive until the next pass's reconcile.
+  const staleIds = Object.keys(plan.ledgerAliases).filter((key) =>
+    inbox.some((existing) => existing.id === key),
+  );
+  if (staleIds.length > 0) {
+    await removePendingTransactions(staleIds);
+  }
+
+  // Pending rows the bank stopped reporting (see planStalePending): judged
+  // against the inbox as it stands AFTER this pass's ingest, so a row the
+  // planner just updated or migrated is never overwritten with its stale
+  // copy. Same crash-safe order as approval: ledger, bookkeeping, removal.
+  const inboxAfterIngest = new Map(inbox.map((item) => [item.id, item]));
+  for (const item of [...plan.newInboxItems, ...plan.updatedInboxItems]) {
+    inboxAfterIngest.set(item.id, item);
+  }
+  for (const id of staleIds) inboxAfterIngest.delete(id);
+  const stale = planStalePending({
+    provider: connection.provider,
+    connectionId: connection.id,
+    inbox: Array.from(inboxAfterIngest.values()),
+    fetched: result.transactions,
+    fetchedAccountIds: new Set(result.accounts.map((a) => a.externalAccountId)),
+    windowStartMs: opts.windowStartMs,
+    now: new Date(opts.nowMs).toISOString(),
+  });
+  if (Object.keys(stale.ledgerWrites).length > 0) {
+    await recordLedgerEntries(stale.ledgerWrites);
+  }
+  if (stale.updatedInboxItems.length > 0) {
+    await upsertPendingTransactions(stale.updatedInboxItems);
+  }
+  if (stale.retireIds.length > 0) {
+    await removePendingTransactions(stale.retireIds);
+  }
+
+  // Auto-approve sweep: items covered by an "approve" merchant rule become
+  // entries right away (pending/transfer/duplicate items always stay - see
+  // selectAutoApprovable). Best-effort like keep-alive: an inbox-side
+  // failure must not mark the connection as broken - the items just wait
+  // in the inbox for manual approval.
+  try {
+    await autoApproveInboxByRules();
+  } catch (error) {
+    if (__DEV__) console.error("Auto-approve sweep failed:", error);
+  }
+
+  return {
+    newPendingCount: plan.newInboxItems.length,
+    updatedPendingCount: plan.updatedInboxItems.length - migratedIds.length,
+  };
+};
+
 const syncOneConnection = async (
   connection: BankConnection,
   opts: { manual: boolean; nowMs: number; backfillDays?: number },
@@ -316,120 +458,70 @@ const syncOneConnection = async (
     }
   }
 
-  const [inbox, ledger, rules, allEntries] = await Promise.all([
-    getPendingTransactions(),
-    getIngestLedger(),
-    getMerchantRules(),
-    getBudgetEntriesIncludingDeleted(),
-  ]);
-  const knownEntryExternalIds = new Set<string>();
-  for (const entry of allEntries) {
-    if (entry.externalTxId) knownEntryExternalIds.add(entry.externalTxId);
-  }
-  // Live manually-entered entries: candidates for duplicateLikely flagging
-  // (the user tracked a purchase by hand before the bank imported it).
-  const manualEntries = allEntries
-    .filter((entry) => !entry.deletedAt && entry.source !== "bank")
-    .map((entry) => ({
-      amount: entry.amount,
-      type: entry.type,
-      date: entry.date,
-    }));
-
-  const plan = planIngest({
-    provider: connection.provider,
-    connectionId: connection.id,
-    fetched: result.transactions,
-    links,
-    inbox,
-    ledger,
-    knownEntryExternalIds,
-    rules,
-    manualEntries,
-    now: new Date(opts.nowMs).toISOString(),
-  });
-
-  // Settled-amount corrections go BEFORE the ledger aliases that would
-  // stop the planner from re-finding the twin (idempotent, so a crash in
-  // between re-applies next pass - see applyEntryAmountCorrections).
-  await applyEntryAmountCorrections(plan.amountCorrections);
-
-  const ledgerWrites = { ...plan.ledgerAliases, ...plan.autoDismissed };
-  if (Object.keys(ledgerWrites).length > 0) {
-    await recordLedgerEntries(ledgerWrites);
-  }
-  const migratedIds = plan.updatedInboxItems.filter(
-    (item) => !inbox.some((existing) => existing.id === item.id),
-  );
-  if (plan.newInboxItems.length > 0 || plan.updatedInboxItems.length > 0) {
-    // An id-migrated item (pending->posted rename) leaves its old row behind;
-    // upsert the new rows first, then drop the stale ids recorded as aliases.
-    await upsertPendingTransactions([
-      ...plan.newInboxItems,
-      ...plan.updatedInboxItems,
-    ]);
-  }
-  // Retire inbox rows whose id gained an alias. Runs independently of the
-  // upsert above: when a partner-synced decision names the POSTED id and the
-  // pending twin is the only thing in the inbox, the planner emits an alias
-  // but no new/updated rows - gating the removal on those lists left the
-  // pending row alive until the next pass's reconcile.
-  const staleIds = Object.keys(plan.ledgerAliases).filter((key) =>
-    inbox.some((existing) => existing.id === key),
-  );
-  if (staleIds.length > 0) {
-    await removePendingTransactions(staleIds);
-  }
-
-  // Pending rows the bank stopped reporting (see planStalePending): judged
-  // against the inbox as it stands AFTER this pass's ingest, so a row the
-  // planner just updated or migrated is never overwritten with its stale
-  // copy. Same crash-safe order as approval: ledger, bookkeeping, removal.
-  const inboxAfterIngest = new Map(inbox.map((item) => [item.id, item]));
-  for (const item of [...plan.newInboxItems, ...plan.updatedInboxItems]) {
-    inboxAfterIngest.set(item.id, item);
-  }
-  for (const id of staleIds) inboxAfterIngest.delete(id);
-  const stale = planStalePending({
-    provider: connection.provider,
-    connectionId: connection.id,
-    inbox: Array.from(inboxAfterIngest.values()),
-    fetched: result.transactions,
-    fetchedAccountIds: new Set(result.accounts.map((a) => a.externalAccountId)),
-    windowStartMs: (backfilledFrom
-      ? Date.parse(backfilledFrom)
-      : window.startDate.getTime()),
-    now: new Date(opts.nowMs).toISOString(),
-  });
-  if (Object.keys(stale.ledgerWrites).length > 0) {
-    await recordLedgerEntries(stale.ledgerWrites);
-  }
-  if (stale.updatedInboxItems.length > 0) {
-    await upsertPendingTransactions(stale.updatedInboxItems);
-  }
-  if (stale.retireIds.length > 0) {
-    await removePendingTransactions(stale.retireIds);
-  }
-
-  // Auto-approve sweep: items covered by an "approve" merchant rule become
-  // entries right away (pending/transfer/duplicate items always stay - see
-  // selectAutoApprovable). Best-effort like keep-alive: an inbox-side
-  // failure must not mark the connection as broken - the items just wait
-  // in the inbox for manual approval.
+  // The Review-Inbox ingest is guarded as a whole: a storage throw anywhere
+  // in it must not skip the balance + debt-link steps below, or card
+  // balances would silently stop moving with nothing on the connection to
+  // say why. A failed ingest is recorded on the connection instead and the
+  // pass reports "unavailable"; lastSyncedAt stays put so the next pass
+  // re-fetches (and the ledger dedupes) the same window.
+  let ingestCounts: { newPendingCount: number; updatedPendingCount: number } = {
+    newPendingCount: 0,
+    updatedPendingCount: 0,
+  };
+  let ingestFailed = false;
   try {
-    await autoApproveInboxByRules();
+    ingestCounts = await ingestTransactions(connection, result, links, {
+      nowMs: opts.nowMs,
+      windowStartMs: backfilledFrom
+        ? Date.parse(backfilledFrom)
+        : window.startDate.getTime(),
+    });
   } catch (error) {
-    if (__DEV__) console.error("Auto-approve sweep failed:", error);
+    ingestFailed = true;
+    if (__DEV__) console.error("Review Inbox ingest failed:", error);
   }
+
+  // A backlog re-fetch whose transactions never reached the inbox is still
+  // owed: treat its accounts as gap-pending so their balance dates aren't
+  // stamped and the next pass re-detects the gap.
+  const balanceGapPending = ingestFailed
+    ? new Set([...gapPendingIds, ...gapResolvedIds])
+    : gapPendingIds;
+  const balanceGapResolved = ingestFailed ? new Set<string>() : gapResolvedIds;
 
   const balancesUpdated =
-    (await applyBalances(links, result.accounts, gapPendingIds, gapResolvedIds)) +
+    (await applyBalances(
+      links,
+      result.accounts,
+      balanceGapPending,
+      balanceGapResolved,
+    )) +
     (await applyDebtLinks(
       links,
       result.accounts,
       result.transactions,
       opts.nowMs,
     ));
+
+  if (ingestFailed) {
+    const errorMessage = t("helpers.misc.connections.syncFailed");
+    // The fetch itself succeeded, so auth is fine: "error" (never
+    // needs-reauth), which the next pass retries normally.
+    // Best-effort, so the balances already applied still reach the result
+    // (and the caller's reload notification).
+    try {
+      await recordSyncFailure(connection.id, "error", errorMessage);
+    } catch (recordError) {
+      if (__DEV__) console.error("Recording sync failure failed:", recordError);
+    }
+    return {
+      ...base,
+      outcome: "unavailable",
+      balancesUpdated,
+      errorMessage,
+      backfilledFrom,
+    };
+  }
 
   await updateConnection(connection.id, {
     lastSyncedAt: new Date(opts.nowMs).toISOString(),
@@ -445,8 +537,7 @@ const syncOneConnection = async (
   return {
     ...base,
     outcome: "updated",
-    newPendingCount: plan.newInboxItems.length,
-    updatedPendingCount: plan.updatedInboxItems.length - migratedIds.length,
+    ...ingestCounts,
     balancesUpdated,
     backfilledFrom,
   };
@@ -495,22 +586,39 @@ export const syncConnections = async (
             backfillDays: opts.backfillDays,
           }),
         );
-      } catch {
+      } catch (error) {
         // Never let one connection's surprise kill the pass.
+        if (__DEV__) console.error("Connection sync failed:", error);
+        const errorMessage = t("helpers.misc.connections.syncFailed");
+        // Best-effort: put the failure on the connection so the manager
+        // shows it. A needs-reauth connection keeps that status (a manual
+        // retry that blew up proved nothing about its credentials).
+        try {
+          await recordSyncFailure(
+            connection.id,
+            connection.authStatus === "needs-reauth" ? "needs-reauth" : "error",
+            errorMessage,
+          );
+        } catch (recordError) {
+          if (__DEV__) console.error("Recording sync failure failed:", recordError);
+        }
         results.push({
           connectionId: connection.id,
           outcome: "unavailable",
           newPendingCount: 0,
           updatedPendingCount: 0,
           balancesUpdated: 0,
-          errorMessage: t("helpers.misc.connections.syncFailed"),
+          errorMessage,
         });
       }
     }
     // An "updated" pass may have written budget entries (auto-approvals),
-    // asset balances and keep-alive stamps behind a mounted tab's back;
-    // tell the screens to reload (see dataChangeNotifier.ts).
-    if (results.some((r) => r.outcome === "updated")) {
+    // asset balances and keep-alive stamps behind a mounted tab's back - and
+    // a pass whose ingest failed can still have applied balances; tell the
+    // screens to reload (see dataChangeNotifier.ts).
+    if (
+      results.some((r) => r.outcome === "updated" || r.balancesUpdated > 0)
+    ) {
       notifyDataChanged("bank-sync");
     }
     return results;

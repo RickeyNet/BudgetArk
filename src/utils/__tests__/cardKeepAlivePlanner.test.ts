@@ -68,7 +68,61 @@ describe("planKeepAliveReminders", () => {
       "budgetark-keepalive-2026-07-29", // deadline + 14
       "budgetark-keepalive-2026-08-05", // deadline + 21
       "budgetark-keepalive-2026-08-12", // deadline + 28
+      "budgetark-keepalive-2026-08-19", // deadline + 35 (window end)
     ]);
+  });
+
+  describe("long-overdue cards keep getting weekly nudges", () => {
+    const DEADLINE = new Date(2026, 6, 15); // Jul 15 2026 (see debt())
+    const dayDiff = (a: Date, b: Date): number =>
+      Math.round(
+        (Date.UTC(a.getFullYear(), a.getMonth(), a.getDate()) -
+          Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())) /
+          86_400_000
+      );
+    const expectWeeklyInsideWindow = (daysOverdue: number) => {
+      const now = new Date(2026, 6, 15 + daysOverdue, 12, 0);
+      const windowEnd = new Date(2026, 6, 15 + daysOverdue + 30, 23, 59, 59);
+      const planned = planKeepAliveReminders({ debts: [debt()], now });
+      // ~30 days / 7 -> four or five weekly nudges, never zero.
+      expect(planned.length).toBeGreaterThanOrEqual(4);
+      expect(planned.length).toBeLessThanOrEqual(5);
+      for (const p of planned) {
+        const after = dayDiff(p.fireDate, DEADLINE);
+        expect(after % 7).toBe(0);
+        expect(after).toBeGreaterThan(daysOverdue - 1);
+        expect(p.fireDate.getTime()).toBeGreaterThan(now.getTime());
+        expect(p.fireDate.getTime()).toBeLessThanOrEqual(windowEnd.getTime());
+        expect(p.fireDate.getHours()).toBe(KEEP_ALIVE_REMINDER_HOUR);
+      }
+      for (let i = 1; i < planned.length; i += 1) {
+        expect(dayDiff(planned[i].fireDate, planned[i - 1].fireDate)).toBe(7);
+      }
+      return planned;
+    };
+
+    it("a card 60 days overdue still gets weekly nudges on deadline + 7n inside the next 30 days", () => {
+      const planned = expectWeeklyInsideWindow(60);
+      expect(planned.map((p) => p.identifier)).toEqual([
+        "budgetark-keepalive-2026-09-16", // deadline + 63
+        "budgetark-keepalive-2026-09-23", // deadline + 70
+        "budgetark-keepalive-2026-09-30", // deadline + 77
+        "budgetark-keepalive-2026-10-07", // deadline + 84
+      ]);
+    });
+
+    it("a card 400 days overdue gets the same bounded weekly run (no runaway enumeration)", () => {
+      expectWeeklyInsideWindow(400);
+    });
+
+    it("includes today's weekly nudge when it is still ahead of now", () => {
+      // 63 days overdue at 08:00 -> today's 10:00 nudge is still future.
+      const planned = planKeepAliveReminders({
+        debts: [debt()],
+        now: new Date(2026, 6, 15 + 63, 8, 0),
+      });
+      expect(planned[0].identifier).toBe("budgetark-keepalive-2026-09-16");
+    });
   });
 
   it("skips disabled, non-credit, deleted, and anchorless debts", () => {

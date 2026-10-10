@@ -5,6 +5,9 @@ import {
   getEffectiveKeepAliveLeadDays,
   getEffectiveKeepAliveWindowMonths,
   keepAliveDeadline,
+  keepAliveFieldsForSave,
+  keepAliveNeedsRestamp,
+  keepAlivePreview,
   keepAliveStatus,
   latestOutflowByAccount,
   parseKeepAliveDate,
@@ -335,5 +338,131 @@ describe("planKeepAliveStamps", () => {
       nowISO,
     });
     expect(stamps).toEqual([{ debtId: "d1", lastUsedAt: "2026-07-12" }]);
+  });
+});
+
+describe("keepAliveFieldsForSave", () => {
+  const NOW = "2026-10-09T15:00:00.000Z";
+  const OLD = "2026-01-15T12:00:00.000Z";
+  const next = { enabled: true, windowMonths: 6, leadDays: 30 };
+
+  it("stamps now when a brand-new card is saved with the watch on", () => {
+    expect(keepAliveFieldsForSave(null, next, NOW)).toEqual({
+      keepAliveEnabled: true,
+      keepAliveWindowMonths: 6,
+      keepAliveLeadDays: 30,
+      keepAliveLastUsedAt: NOW,
+    });
+  });
+
+  it("re-stamps when an existing card's watch goes from off to on, even with an old stamp", () => {
+    const fields = keepAliveFieldsForSave(
+      { keepAliveEnabled: false, keepAliveLastUsedAt: OLD },
+      next,
+      NOW
+    );
+    expect(fields.keepAliveLastUsedAt).toBe(NOW);
+  });
+
+  it("treats a never-set toggle (undefined) as off and re-stamps", () => {
+    const fields = keepAliveFieldsForSave(
+      { keepAliveEnabled: undefined, keepAliveLastUsedAt: OLD },
+      next,
+      NOW
+    );
+    expect(fields.keepAliveLastUsedAt).toBe(NOW);
+  });
+
+  it("keeps the existing stamp when the watch was already on", () => {
+    const fields = keepAliveFieldsForSave(
+      { keepAliveEnabled: true, keepAliveLastUsedAt: OLD },
+      { enabled: true, windowMonths: 12, leadDays: 14 },
+      NOW
+    );
+    expect(fields).toEqual({
+      keepAliveEnabled: true,
+      keepAliveWindowMonths: 12,
+      keepAliveLeadDays: 14,
+    });
+    expect("keepAliveLastUsedAt" in fields).toBe(false);
+  });
+
+  it("stamps an already-on card whose stamp is missing or unparseable", () => {
+    expect(
+      keepAliveFieldsForSave({ keepAliveEnabled: true }, next, NOW).keepAliveLastUsedAt
+    ).toBe(NOW);
+    expect(
+      keepAliveFieldsForSave(
+        { keepAliveEnabled: true, keepAliveLastUsedAt: "garbage" },
+        next,
+        NOW
+      ).keepAliveLastUsedAt
+    ).toBe(NOW);
+  });
+
+  it("leaves the stamp untouched when disabling", () => {
+    const fields = keepAliveFieldsForSave(
+      { keepAliveEnabled: true, keepAliveLastUsedAt: OLD },
+      { enabled: false, windowMonths: 6, leadDays: 30 },
+      NOW
+    );
+    expect(fields).toEqual({
+      keepAliveEnabled: false,
+      keepAliveWindowMonths: 6,
+      keepAliveLeadDays: 30,
+    });
+  });
+
+  it("does not stamp a new card saved with the watch off", () => {
+    const fields = keepAliveFieldsForSave(
+      null,
+      { enabled: false, windowMonths: 6, leadDays: 30 },
+      NOW
+    );
+    expect("keepAliveLastUsedAt" in fields).toBe(false);
+  });
+});
+
+describe("keepAliveNeedsRestamp", () => {
+  it("is false only for an enabled watch with a parseable stamp", () => {
+    expect(keepAliveNeedsRestamp(null)).toBe(true);
+    expect(keepAliveNeedsRestamp(undefined)).toBe(true);
+    expect(
+      keepAliveNeedsRestamp({ keepAliveEnabled: false, keepAliveLastUsedAt: "2026-01-15" })
+    ).toBe(true);
+    expect(
+      keepAliveNeedsRestamp({ keepAliveEnabled: true, keepAliveLastUsedAt: "2026-01-15" })
+    ).toBe(false);
+  });
+});
+
+describe("keepAlivePreview", () => {
+  const now = new Date(2026, 9, 9, 15, 0, 0);
+
+  it("starts today for a new card and tracks the chosen window", () => {
+    const preview = keepAlivePreview(null, 3, now);
+    expect(preview.startsToday).toBe(true);
+    expect(preview.lastUsed).toBe(now);
+    expect(preview.deadline).toEqual(new Date(2027, 0, 9));
+    expect(keepAlivePreview(null, 12, now).deadline).toEqual(new Date(2027, 9, 9));
+  });
+
+  it("keeps an enabled card's stamp and recomputes the deadline per window", () => {
+    const prev = { keepAliveEnabled: true, keepAliveLastUsedAt: "2026-08-31" };
+    const six = keepAlivePreview(prev, 6, now);
+    expect(six.startsToday).toBe(false);
+    expect(six.lastUsed).toEqual(new Date(2026, 7, 31));
+    expect(six.deadline).toEqual(new Date(2027, 1, 28)); // end-of-month clamp
+    expect(keepAlivePreview(prev, 3, now).deadline).toEqual(new Date(2026, 10, 30));
+  });
+
+  it("starts today when re-enabling a card whose watch was off", () => {
+    const preview = keepAlivePreview(
+      { keepAliveEnabled: false, keepAliveLastUsedAt: "2025-01-01" },
+      6,
+      now
+    );
+    expect(preview.startsToday).toBe(true);
+    expect(preview.lastUsed).toBe(now);
   });
 });

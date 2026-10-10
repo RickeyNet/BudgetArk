@@ -24,6 +24,7 @@ export const debtsCard: LocalizedPlural<typeof en> = {
     paidOff: "ВЫПЛАЧЕНО",
     bankSync: "Баланс из {{account}}",
     bankSyncAsOf: "Баланс из {{account}} · на {{date}}",
+    bankLinkedNoMirror: "Связано с {{account}} · баланс не переносится",
     goal: {
       passed: "Дата цели прошла",
       line: "Цель: {{date}} ({{monthsLeft}})",
@@ -45,6 +46,15 @@ export const debtsCard: LocalizedPlural<typeof en> = {
       days_many: "{{count}} дней",
       days_other: "{{count}} дня",
       usedIt: "Я пользовался",
+      lastUsed: "Последнее использование: {{date}}",
+      trackedByBank: "Отмечается автоматически по {{account}}",
+      trackedManually: "Нажми «Я пользовался» после покупки",
+      a11y: {
+        ok: "Контроль активности включён · следующее использование до {{date}}",
+        upcoming: "Контроль активности · использовать до {{date}}",
+        urgent: "Контроль активности · воспользуйся скорее, до {{date}}",
+        overdue: "Контроль активности · срок неактивности прошёл ({{date}})",
+      },
     },
     timeline: {
       adjust: "Изменить план платежей",

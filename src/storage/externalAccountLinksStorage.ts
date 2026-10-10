@@ -61,8 +61,45 @@ export const getLinksForConnection = async (
 };
 
 /**
+ * Optional link fields a replacing upsert must not silently drop: a wizard
+ * re-run / re-enrollment builds a fresh link object that may not carry the
+ * card link, its mirroring toggle, the "whose card" person or the last seen
+ * provider balance. `undefined` keeps the stored value; an explicit `null`
+ * (the documented "cleared" value for debtId/personId) still clears.
+ */
+const PRESERVED_WHEN_UNDEFINED = [
+  "debtId",
+  "updateDebtBalance",
+  "personId",
+  "lastExternalBalance",
+  "lastExternalBalanceAt",
+] as const satisfies readonly (keyof ExternalAccountLink)[];
+
+/** Pure merge for a replacing upsert (exported for tests). */
+export const mergeUpsertedLink = (
+  stored: ExternalAccountLink,
+  incoming: ExternalAccountLink,
+  nowISO: string,
+): ExternalAccountLink => {
+  const merged: ExternalAccountLink = {
+    ...incoming,
+    id: stored.id,
+    createdAt: stored.createdAt,
+    updatedAt: nowISO,
+  };
+  for (const key of PRESERVED_WHEN_UNDEFINED) {
+    if (incoming[key] === undefined && stored[key] !== undefined) {
+      (merged as unknown as Record<string, unknown>)[key] = stored[key];
+    }
+  }
+  return merged;
+};
+
+/**
  * Insert or replace by (connectionId, externalAccountId) so re-running the
  * account-mapping step of the wizard updates in place instead of duplicating.
+ * A replace keeps stored optional fields the incoming link leaves undefined
+ * (see mergeUpsertedLink).
  */
 export const upsertLink = async (
   link: ExternalAccountLink,
@@ -73,13 +110,10 @@ export const upsertLink = async (
       l.connectionId === link.connectionId &&
       l.externalAccountId === link.externalAccountId,
   );
+  const nowISO = new Date().toISOString();
   const updated =
     index >= 0
-      ? links.map((l, i) =>
-          i === index
-            ? { ...link, id: l.id, createdAt: l.createdAt, updatedAt: new Date().toISOString() }
-            : l,
-        )
+      ? links.map((l, i) => (i === index ? mergeUpsertedLink(l, link, nowISO) : l))
       : [...links, link];
   await writeLinks(updated);
   return updated;
