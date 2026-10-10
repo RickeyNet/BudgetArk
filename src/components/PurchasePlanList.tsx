@@ -145,6 +145,13 @@ type PurchasePlanListProps = {
    * carry each plan's ready date; the Charts planning tool opts in.
    */
   showChart?: boolean;
+  /**
+   * Fold everything below the summary card (ordering, set-aside, the
+   * ranked rows) behind a "Show plans" toggle, collapsed by default. The
+   * Bridge opts in: at a glance it wants the combined progress bar, not a
+   * screen of rows; the Charts planning tool keeps everything open.
+   */
+  collapsibleDetails?: boolean;
 };
 
 /** Debounce for persisting slider drags. */
@@ -157,6 +164,7 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   cashFlow = null,
   debts,
   showChart = false,
+  collapsibleDetails = false,
 }) => {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -174,6 +182,9 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
   const [deleteTarget, setDeleteTarget] = useState<SavingsGoal | null>(null);
   /** Last failed contribute/delete, shown inside the plan dialog. */
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Collapsible mode only: whether the controls + rows are unfolded. */
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const showDetails = !collapsibleDetails || detailsOpen;
 
   const plans = filterPurchasePlans(savingsGoals);
 
@@ -461,6 +472,34 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
             ) : null}
           </View>
 
+          {collapsibleDetails ? (
+            <TouchableOpacity
+              style={styles.detailsToggle}
+              onPress={() => setDetailsOpen((open) => !open)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: detailsOpen }}
+              accessibilityLabel={t(
+                detailsOpen
+                  ? "bridge.planner.summary.hideDetails"
+                  : "bridge.planner.summary.showDetails",
+                { count: summary.planCount },
+              )}
+            >
+              <Text style={styles.detailsToggleText}>
+                {t(
+                  detailsOpen
+                    ? "bridge.planner.summary.hideDetails"
+                    : "bridge.planner.summary.showDetails",
+                  { count: summary.planCount },
+                )}
+              </Text>
+              <Text style={styles.detailsToggleChevron}>{detailsOpen ? "▾" : "›"}</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {showDetails ? (
+          <>
           {/* ── Order ── */}
           <Text style={styles.controlLabel}>{t("bridge.planner.order.label")}</Text>
           <View style={styles.chipRow}>
@@ -759,6 +798,8 @@ const PurchasePlanList: React.FC<PurchasePlanListProps> = ({
               </View>
             );
           })}
+          </>
+          ) : null}
         </>
       )}
 
@@ -1038,6 +1079,21 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: 12,
       color: colors.textDim,
       lineHeight: 17,
+    },
+    detailsToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 6,
+    },
+    detailsToggleText: {
+      fontSize: scale(13),
+      fontWeight: "600",
+      color: colors.accent,
+    },
+    detailsToggleChevron: {
+      fontSize: 18,
+      color: colors.textMuted,
     },
     controlLabel: {
       fontSize: 10,

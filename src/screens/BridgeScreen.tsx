@@ -1644,6 +1644,7 @@ const BridgeScreen: React.FC = () => {
           cashFlow={planCashFlow}
           debts={debts}
           emptyText={t("bridge.screen.plans.empty")}
+          collapsibleDetails
         />
       </View>
 
