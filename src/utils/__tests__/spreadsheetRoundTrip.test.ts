@@ -106,6 +106,12 @@ const entryFixtures = [
     { id: "rp1", amount: 25, date: "2026-06-12T12:00:00.000Z", note: "cash", createdAt: "2026-06-12T00:00:00.000Z" },
     { id: "rp2", amount: 12.5, date: "2026-06-20T12:00:00.000Z", createdAt: "2026-06-20T00:00:00.000Z" },
   ] },
+  // An earner's recurring income: PayFrequency and the earner's PersonId
+  // must round-trip, or the first deposit of a month would replace the
+  // whole estimate on restore.
+  { id: "e12", type: "income", category: "Salary", amount: 3800, date: "2026-02-06", createdAt: "2026-02-06T00:00:00.000Z", recurring: true, personId: "per1", payFrequency: "biweekly" },
+  // A deposit filed as one of e12's paychecks: FulfillsBillId on income.
+  { id: "e13", type: "income", category: "Salary", amount: 1850, date: "2026-06-12", createdAt: "2026-06-12T00:00:00.000Z", source: "bank", externalTxId: "simplefin:ACT-1:TXN-120", personId: "per1", fulfillsRecurringId: "e12" },
 ];
 const businessFixtures = [
   { id: "b1", name: "Acme Consulting LLC", createdAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-02-01T00:00:00.000Z" },
@@ -200,7 +206,12 @@ describe("xlsx round-trip", () => {
 
     // Entries: e1-e8 survive; the recurring projections of e3 are dropped.
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e12", "e13", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    // Earner's recurring income + a paycheck filed against it (v9).
+    expect(byId.e12).toMatchObject({ type: "income", recurring: true, personId: "per1", payFrequency: "biweekly" });
+    expect(byId.e13).toMatchObject({ type: "income", fulfillsRecurringId: "e12", personId: "per1" });
+    expect(byId.e13.payFrequency).toBeUndefined();
+    expect(byId.e1.payFrequency).toBeUndefined();
     expect(byId.e1).toMatchObject({ type: "income", category: "Salary", amount: 4000 });
     expect(byId.e2).toMatchObject({ type: "expense", category: "Food", amount: 30.5 });
     expect(byId.e3).toMatchObject({ type: "expense", category: "Housing", amount: 1200, recurring: true });
@@ -361,7 +372,12 @@ describe("csv round-trip", () => {
 
     const payload = lastPayload();
     const byId = Object.fromEntries(payload.budgetEntries.map((e: any) => [e.id, e]));
-    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    expect(Object.keys(byId).sort()).toEqual(["e1", "e10", "e11", "e12", "e13", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9"]);
+    // Earner's recurring income + a paycheck filed against it (v9).
+    expect(byId.e12).toMatchObject({ type: "income", recurring: true, personId: "per1", payFrequency: "biweekly" });
+    expect(byId.e13).toMatchObject({ type: "income", fulfillsRecurringId: "e12", personId: "per1" });
+    expect(byId.e13.payFrequency).toBeUndefined();
+    expect(byId.e1.payFrequency).toBeUndefined();
     expect(byId.e2).toMatchObject({ category: "Food", amount: 30.5 });
     // Paycheck fields survive the single-sheet CSV path too.
     expect(byId.e6).toMatchObject({ incomeType: "w2", retirementContribution: 150 });

@@ -22,12 +22,12 @@ const entry = (over: Partial<BudgetEntry> = {}): BudgetEntry => ({
 });
 
 describe("computePersonReport", () => {
-  it("totals per person, expenses only, year-filtered", () => {
+  it("totals spending per person with income kept on its own side, year-filtered", () => {
     const report = computePersonReport(
       [
         entry({ id: "e1", amount: 100 }),
         entry({ id: "e2", amount: 50, category: "Shopping" }),
-        // Income never counts even if somehow assigned.
+        // Income earned by the person: reported, never mixed into spending.
         entry({ id: "e3", type: "income", category: "Salary", amount: 999 }),
         // Unassigned expense ignored.
         entry({ id: "e4", personId: undefined, amount: 77 }),
@@ -45,6 +45,14 @@ describe("computePersonReport", () => {
     expect(report.grandTotal).toBe(150);
     expect(sam.byMonth[2]).toBe(150); // March
     expect(sam.deleted).toBe(false);
+    expect(sam.income).toBe(999);
+    expect(sam.incomeCount).toBe(1);
+    expect(sam.incomeByMonth[2]).toBe(999);
+    expect(report.grandIncome).toBe(999);
+    expect(sam.byCategory).toEqual([
+      { category: "Grocery", total: 100 },
+      { category: "Shopping", total: 50 },
+    ]);
   });
 
   it("expands recurring entries per cadence, capped at nowKey", () => {
@@ -153,6 +161,84 @@ describe("computePersonReport - shared expenses", () => {
   });
 });
 
+describe("computePersonReport - income by earner", () => {
+  const maria = person({ id: "per-maria", name: "Maria" });
+  const salary = entry({
+    id: "maria-salary",
+    type: "income",
+    category: "Salary",
+    amount: 4000,
+    date: "2026-01-09T12:00:00.000Z",
+    recurring: true,
+    personId: "per-maria",
+    payFrequency: "biweekly",
+  });
+  const deposit = (id: string, date: string, amount: number): BudgetEntry =>
+    entry({
+      id,
+      type: "income",
+      category: "Salary",
+      amount,
+      date,
+      personId: "per-maria",
+      fulfillsRecurringId: "maria-salary",
+    });
+
+  it("lists an earner with no assigned spending and blends paychecks into the estimate", () => {
+    const report = computePersonReport(
+      [
+        salary,
+        // February: 1 of 2 paychecks in -> 1,850 + half the estimate.
+        deposit("feb-1", "2026-02-06T12:00:00.000Z", 1850),
+        // March: both in -> deposits only.
+        deposit("mar-1", "2026-03-06T12:00:00.000Z", 1800),
+        deposit("mar-2", "2026-03-20T12:00:00.000Z", 2100),
+      ],
+      [maria],
+      2026,
+      "2026-03"
+    );
+    expect(report.perPerson).toHaveLength(1);
+    const group = report.perPerson[0];
+    expect(group.name).toBe("Maria");
+    expect(group.total).toBe(0);
+    expect(group.entryCount).toBe(0);
+    expect(group.incomeByMonth.slice(0, 3)).toEqual([4000, 1850 + 2000, 1800 + 2100]);
+    expect(group.income).toBe(4000 + 3850 + 3900);
+    expect(group.incomeCount).toBe(1 + 2 + 2);
+    expect(report.grandIncome).toBe(group.income);
+    expect(report.grandTotal).toBe(0);
+    // Lines carry their type; the projected recurring copy is flagged.
+    const feb = group.lines.filter((line) => line.monthKey === "2026-02");
+    expect(feb.map((line) => [line.type, line.amount, line.projected])).toEqual([
+      ["income", 1850, false],
+      ["income", 2000, true],
+    ]);
+  });
+
+  it("ignores income without an earner and caps at nowKey", () => {
+    const report = computePersonReport(
+      [salary, entry({ id: "anon", type: "income", amount: 500, personId: undefined })],
+      [maria],
+      2026,
+      "2026-02"
+    );
+    expect(report.perPerson[0].income).toBe(8000);
+    expect(report.grandIncome).toBe(8000);
+  });
+
+  it("sorts by spending first, then income", () => {
+    const sam = person();
+    const report = computePersonReport(
+      [salary, entry({ id: "spend", amount: 10, date: "2026-01-20T12:00:00.000Z" })],
+      [maria, sam],
+      2026,
+      "2026-01"
+    );
+    expect(report.perPerson.map((g) => g.name)).toEqual(["Sam", "Maria"]);
+  });
+});
+
 describe("buildPersonReportCsv", () => {
   it("emits header + rows with proper escaping", () => {
     const report = computePersonReport(
@@ -169,8 +255,8 @@ describe("buildPersonReportCsv", () => {
     );
     const csv = buildPersonReportCsv(report);
     const [header, row] = csv.split("\n");
-    expect(header).toBe("Date,Person,Category,Description,Amount,Recurring");
-    expect(row).toContain('"Sam, Jr."');
+    expect(header).toBe("Date,Person,Type,Category,Description,Amount,Recurring");
+    expect(row).toContain('"Sam, Jr.",expense,');
     expect(row).toContain('"Snacks, ""movie night"""');
     expect(row).toContain("12.5");
     expect(row).toContain("no");

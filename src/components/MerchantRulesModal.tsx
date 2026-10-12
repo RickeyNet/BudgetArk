@@ -163,17 +163,36 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Every live recurring bill, whatever its cadence - a rule is ongoing, so
-  // it isn't limited to the bills on cycle this month.
+  // it isn't limited to the bills on cycle this month. An outflow rule
+  // offers bills; a deposit rule offers earners' recurring income, labelled
+  // by the earner ("Maria · est. $4,000/mo").
   const billOptions = useMemo(
     () =>
-      entries.filter(isBillCandidate).map((bill) => ({
-        id: bill.id,
-        name: t("modals.data.rules.billOption", {
-          name: bill.description?.trim() || categoryLabel(t, bill.category),
-          amount: formatCurrency(bill.amount),
-        }),
-      })),
+      entries
+        .filter((bill) => isBillCandidate(bill) && bill.type === "expense")
+        .map((bill) => ({
+          id: bill.id,
+          name: t("modals.data.rules.billOption", {
+            name: bill.description?.trim() || categoryLabel(t, bill.category),
+            amount: formatCurrency(bill.amount),
+          }),
+        })),
     [entries, formatCurrency, t],
+  );
+  const incomeOptions = useMemo(
+    () =>
+      entries
+        .filter((bill) => isBillCandidate(bill) && bill.type === "income")
+        .map((bill) => ({
+          id: bill.id,
+          name: t("modals.data.rules.incomeOption", {
+            name:
+              (bill.personId ? people.find((p) => p.id === bill.personId)?.name : undefined) ??
+              (bill.description?.trim() || categoryLabel(t, bill.category)),
+            amount: formatCurrency(bill.amount),
+          }),
+        })),
+    [entries, formatCurrency, people, t],
   );
 
   // Live debts with a balance (plus whichever one the open rule already
@@ -358,8 +377,11 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
       );
     }
     if (rule.recurringEntryId) {
+      const income = incomeOptions.find((b) => b.id === rule.recurringEntryId);
       parts.push(
-        `🧾 ${billOptions.find((b) => b.id === rule.recurringEntryId)?.name ?? t("modals.data.rules.behavior.deletedBill")}`,
+        income
+          ? `👤 ${income.name}`
+          : `🧾 ${billOptions.find((b) => b.id === rule.recurringEntryId)?.name ?? t("modals.data.rules.behavior.deletedBill")}`,
       );
     }
     return parts.join(" ");
@@ -486,6 +508,22 @@ const MerchantRulesModal: React.FC<MerchantRulesModalProps> = ({
                     {t("modals.data.rules.editor.debtHelp")}
                   </Text>
                 ) : null}
+              </>
+            ) : null}
+            {/* Deposit rule: whose paycheck this payroll merchant pays. */}
+            {!draftIgnore &&
+            rule.type === "income" &&
+            (incomeOptions.length > 0 || draftRecurringId) ? (
+              <>
+                <Text style={styles.label}>{t("modals.data.rules.editor.incomeLabel")}</Text>
+                <TagPillPicker
+                    options={incomeOptions}
+                    value={draftRecurringId}
+                    onChange={setDraftRecurringId}
+                    noneLabel={t("modals.data.rules.editor.notAPaycheckPill")}
+                    glyph="👤"
+                    deletedLabel={t("modals.data.rules.behavior.deletedBill")}
+                  />
               </>
             ) : null}
             <View style={styles.actionRow}>

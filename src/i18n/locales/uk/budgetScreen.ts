@@ -33,6 +33,8 @@ export const budgetScreen: LocalizedPlural<typeof en> = {
     plannedMinimums: "Разом із {{amount}} планових мінімальних платежів із вкладки «Борги»",
     retirement: "Плюс {{amount}} у 401(k) цього місяця (не рахується як дохід)",
     taxSetAside: "Відклади {{amount}} з доходу 1099 за цей місяць на податки",
+    paychecksIn: "{{received}} з {{expected}} виплат отримано · оцінка на решту",
+    deletedPerson: "(видалена людина)",
   },
   selection: {
     cancelA11y: "Скасувати вибір",

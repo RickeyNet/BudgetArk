@@ -31,6 +31,8 @@ export const modalsData: Localized<typeof en> = {
     },
     billOption: "{{name}} · ca. {{amount}}",
     debtOption: "{{name}} · min. {{amount}}",
+    /** Pill text for an earner's recurring income in a deposit rule. */
+    incomeOption: "{{name}} · ca. {{amount}}/Monat",
     behavior: {
       alwaysSkip: "Immer überspringen - wird nie importiert",
       logsDebtPayment: "Bucht eine Zahlung auf 💳 {{name}}",
@@ -57,6 +59,8 @@ export const modalsData: Localized<typeof en> = {
       unassignedPill: "Nicht zugewiesen",
       billLabel: "GILT FÜR RECHNUNG",
       notABillPill: "Keine Rechnung",
+      incomeLabel: "WESSEN GEHALT?",
+      notAPaycheckPill: "Kein Gehalt",
       debtHelp:
         "Zahlungen an diesen Händler werden auf der Schuld gebucht (Saldo und Verlauf im Schulden-Tab), statt als Ausgabe abgelegt zu werden. Die Kategorie oben wird nicht verwendet.",
       deleteRule: "Regel löschen",

@@ -140,21 +140,24 @@ const ledgerEntryFor = (
 });
 
 /**
- * The bill id an approval may stand in for, or undefined when the requested
- * bill can't be fulfilled in the transaction's month. Reads the live entries
- * so a stale rule (bill deleted, made one-off, linked to an account) never
- * produces a dangling link that hides nothing and confuses the badge.
+ * The recurring entry an approval may stand in for - a bill for an outflow,
+ * an earner's recurring income for a deposit - or undefined when the
+ * requested one can't be fulfilled in the transaction's month. Reads the
+ * live entries so a stale rule (record deleted, made one-off, linked to an
+ * account, or pointing across the income/expense line) never produces a
+ * dangling link that hides nothing and confuses the badge.
  */
 const resolveFulfillment = async (
   billId: string | undefined,
   postedAt: string,
-): Promise<string | undefined> => {
+  type: BudgetEntryType,
+): Promise<BudgetEntry | undefined> => {
   if (!billId) return undefined;
   const entries = await getBudgetEntries();
   const bill = entries.find((entry) => entry.id === billId);
-  if (!bill || !isBillCandidate(bill)) return undefined;
+  if (!bill || !isBillCandidate(bill) || bill.type !== type) return undefined;
   if (!isEntryActiveInMonth(bill, entryMonthKey(postedAt))) return undefined;
-  return billId;
+  return bill;
 };
 
 /**
@@ -181,6 +184,19 @@ export const approvePendingTransaction = async (
           ? undefined
           : opts.businessId ?? item.suggestedBusinessId)
       : undefined;
+  // The bill (outflow) or earner's recurring income (deposit) this stands in
+  // for, re-validated against the live entries including the type match.
+  const fulfilled = await resolveFulfillment(
+    opts.fulfillsRecurringId === null
+      ? undefined
+      : opts.fulfillsRecurringId ?? item.suggestedRecurringId,
+    item.postedAt,
+    type,
+  );
+  const fulfillsRecurringId = fulfilled?.id;
+  // Expenses: who spent it. Income: the earner, inherited from the
+  // recurring income the deposit is filed against (one person, never a
+  // shared list - see BudgetEntry.personId).
   const people = personAssignmentFields(
     type === "expense"
       ? (opts.personIds === null
@@ -190,17 +206,10 @@ export const approvePendingTransaction = async (
               personId: item.suggestedPersonId,
               personIds: item.suggestedPersonIds,
             }))
-      : [],
+      : fulfilled?.personId
+        ? [fulfilled.personId]
+        : [],
   );
-  const fulfillsRecurringId =
-    type === "expense"
-      ? await resolveFulfillment(
-          opts.fulfillsRecurringId === null
-            ? undefined
-            : opts.fulfillsRecurringId ?? item.suggestedRecurringId,
-          item.postedAt,
-        )
-      : undefined;
   const lentTo = type === "expense" ? normalizeLentTo(opts.lentTo) : undefined;
   const entry: BudgetEntry = {
     id: generateUUID(),

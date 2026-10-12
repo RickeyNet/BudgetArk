@@ -115,11 +115,15 @@ export const modalsPeople: Localized<typeof en> = {
   personReport: {
     title: "Ausgaben pro Person",
     subtitle:
-      "Alles, was einer Person zugeordnet ist, pro Kalenderjahr. Wiederkehrende Rechnungen zählen einmal pro Monat, genau wie im Budget.",
+      "Alles, was einer Person zugeordnet ist, pro Kalenderjahr - plus, was jeder Verdiener eingebracht hat. Wiederkehrende Rechnungen zählen einmal pro Monat und wiederkehrendes Einkommen verbindet sich mit den zugeordneten Gehältern, genau wie im Budget.",
     shareTitle: "Ausgaben pro Person exportieren",
     grandTotal: "ZUGEORDNETE AUSGABEN GESAMT · {{year}}",
+    grandIncome: "Einkommen nach Verdiener · {{amount}}",
+    income_one: "💵 Einkommen · {{count}} Eintrag",
+    income_other: "💵 Einkommen · {{count}} Einträge",
+    net: "Netto (Einkommen − Ausgaben)",
     empty:
-      "Keine zugeordneten Ausgaben in {{year}}. Ordne eine Ausgabe beim Hinzufügen im Budget-Tab einer Person zu (Personen legst du unter Profil → Personen an).",
+      "Keine zugeordneten Ausgaben oder Einkünfte in {{year}}. Ordne eine Ausgabe beim Hinzufügen im Budget-Tab einer Person zu oder nenne den Verdiener bei einem wiederkehrenden Einkommen (Personen legst du unter Profil → Personen an).",
   },
   manage: {
     name: "NAME",

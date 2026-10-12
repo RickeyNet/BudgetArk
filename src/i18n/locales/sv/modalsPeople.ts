@@ -115,11 +115,15 @@ export const modalsPeople: Localized<typeof en> = {
   personReport: {
     title: "Utgifter per person",
     subtitle:
-      "Allt som tilldelats en person, per kalenderår. Återkommande räkningar räknas en gång per månad de infaller, precis som på Budget-skärmen.",
+      "Allt som tilldelats en person, per kalenderår, plus vad varje inkomsttagare tog in. Återkommande räkningar räknas en gång per månad de infaller och återkommande inkomst blandas med lönerna som kopplats till den, precis som på Budget-skärmen.",
     shareTitle: "Exportera utgifter per person",
     grandTotal: "TILLDELADE UTGIFTER TOTALT · {{year}}",
+    grandIncome: "Inkomst per inkomsttagare · {{amount}}",
+    income_one: "💵 Inkomst · {{count}} post",
+    income_other: "💵 Inkomst · {{count}} poster",
+    net: "Netto (inkomst − utgifter)",
     empty:
-      "Inga tilldelade utgifter {{year}}. Tilldela en utgift till en person när du lägger till den på Budget-fliken (lägg till personer under Profil → Personer).",
+      "Inga tilldelade utgifter eller inkomster {{year}}. Tilldela en utgift till en person när du lägger till den på Budget-fliken, eller ange inkomsttagaren på en återkommande inkomst (lägg till personer under Profil → Personer).",
   },
   manage: {
     name: "NAMN",

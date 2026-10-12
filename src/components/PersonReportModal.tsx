@@ -180,6 +180,13 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
                 <Text style={styles.grandTotalValue}>
                   {formatCurrency(report.grandTotal)}
                 </Text>
+                {report.grandIncome > 0 && (
+                  <Text style={styles.grandIncomeText}>
+                    {t("modals.people.personReport.grandIncome", {
+                      amount: formatCurrency(report.grandIncome),
+                    })}
+                  </Text>
+                )}
               </View>
             )}
 
@@ -215,6 +222,32 @@ const PersonReportModal: React.FC<PersonReportModalProps> = ({
                       </Text>
                     </View>
                   ))}
+                  {/* Income by earner: recurring estimates blend with the
+                      paychecks filed against them (utils/personReport). */}
+                  {group.income > 0 && (
+                    <View style={styles.incomeBlock}>
+                      <View style={styles.categoryRow}>
+                        <Text style={styles.incomeLabel} numberOfLines={1}>
+                          {t("modals.people.personReport.income", { count: group.incomeCount })}
+                        </Text>
+                        <Text style={styles.incomeTotal}>{formatCurrency(group.income)}</Text>
+                      </View>
+                      <View style={styles.categoryRow}>
+                        <Text style={styles.categoryName} numberOfLines={1}>
+                          {t("modals.people.personReport.net")}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.categoryTotal,
+                            { color: group.income - group.total >= 0 ? colors.success : colors.danger },
+                          ]}
+                        >
+                          {group.income - group.total >= 0 ? "+" : ""}
+                          {formatCurrency(group.income - group.total)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                 </View>
               ))
             )}
@@ -264,6 +297,28 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(24),
       fontWeight: "700",
       color: colors.accent,
+    },
+    grandIncomeText: {
+      fontSize: scale(12),
+      color: colors.success,
+      fontWeight: "600",
+    },
+    incomeBlock: {
+      marginTop: 4,
+      paddingTop: 4,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    incomeLabel: {
+      flex: 1,
+      color: colors.success,
+      fontSize: scale(13),
+      fontWeight: "600",
+    },
+    incomeTotal: {
+      color: colors.success,
+      fontSize: scale(13),
+      fontWeight: "700",
     },
     emptyText: {
       color: colors.textMuted,

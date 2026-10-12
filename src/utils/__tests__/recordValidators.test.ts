@@ -233,6 +233,15 @@ describe("isBudgetEntryItem", () => {
     expect(isBudgetEntryItem({ ...valid, description: "" })).toBe(true);
   });
 
+  it("gates payFrequency to the known frequencies", () => {
+    for (const payFrequency of ["weekly", "biweekly", "semimonthly", "monthly"]) {
+      expect(isBudgetEntryItem({ ...valid, payFrequency })).toBe(true);
+    }
+    expect(isBudgetEntryItem({ ...valid, payFrequency: "fortnightly" })).toBe(false);
+    expect(isBudgetEntryItem({ ...valid, payFrequency: 2 })).toBe(false);
+    expect(isBudgetEntryItem({ ...valid, payFrequency: null })).toBe(false);
+  });
+
   it("rejects a too-long description", () => {
     expect(
       isBudgetEntryItem({ ...valid, description: "a".repeat(221) })

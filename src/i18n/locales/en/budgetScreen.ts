@@ -32,6 +32,8 @@ export const budgetScreen = {
     plannedMinimums: "Includes {{amount}} planned debt minimums from the Debts tab",
     retirement: "Plus {{amount}} into your 401(k) this month (not counted as income)",
     taxSetAside: "Set aside {{amount}} of this month's 1099 income for taxes",
+    paychecksIn: "{{received}} of {{expected}} paychecks in · est. for the rest",
+    deletedPerson: "(deleted person)",
   },
   selection: {
     cancelA11y: "Cancel selection",

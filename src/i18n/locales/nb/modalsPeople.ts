@@ -115,11 +115,15 @@ export const modalsPeople: Localized<typeof en> = {
   personReport: {
     title: "Forbruk per person",
     subtitle:
-      "Alt som er tilordnet en person, per kalenderår. Gjentakende regninger telles én gang per måned de forfaller, akkurat som på Budsjett-skjermen.",
+      "Alt som er tilordnet en person, per kalenderår, pluss hva hver inntektstaker tok inn. Gjentakende regninger telles én gang per måned de forfaller, og gjentakende inntekt blandes med lønningene som er koblet til den, akkurat som på Budsjett-skjermen.",
     shareTitle: "Eksporter forbruk per person",
     grandTotal: "TILORDNET FORBRUK TOTALT · {{year}}",
+    grandIncome: "Inntekt per inntektstaker · {{amount}}",
+    income_one: "💵 Inntekt · {{count}} post",
+    income_other: "💵 Inntekt · {{count}} poster",
+    net: "Netto (inntekt − forbruk)",
     empty:
-      "Ingen tilordnede utgifter i {{year}}. Tilordne en utgift til en person når du legger den til på Budsjett-fanen (legg til personer under Profil → Personer).",
+      "Ingen tilordnede utgifter eller inntekter i {{year}}. Tilordne en utgift til en person når du legger den til på Budsjett-fanen, eller oppgi inntektstakeren på en gjentakende inntekt (legg til personer under Profil → Personer).",
   },
   manage: {
     name: "NAVN",

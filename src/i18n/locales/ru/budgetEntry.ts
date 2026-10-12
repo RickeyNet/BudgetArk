@@ -64,6 +64,8 @@ export const budgetEntry: LocalizedPlural<typeof en> = {
   },
   estimate: {
     hint: "Последние {{count}} фактических списаний в среднем {{average}}. Оценка изменится, только если нажмёшь.",
+    hintIncome:
+      "За последние {{count}} полных месяца выплаты в среднем составили {{average}}. Оценка меняется только по твоему нажатию.",
     use: "Взять {{average}}",
     useA11y: "Обновить оценку до {{average}}",
   },
@@ -92,6 +94,25 @@ export const budgetEntry: LocalizedPlural<typeof en> = {
     option: "{{name}} · ≈ {{amount}}",
     none: "Нет",
     hint: "Это фактическое списание по одному из регулярных счетов этого месяца. Выбери его - и оценка счёта на этот месяц уступит место факту, чтобы сумма не считалась дважды.",
+  },
+  /** A deposit filed as one of an earner's paychecks (income twin of `bill`). */
+  paycheck: {
+    label: "ЧЬЯ ЗАРПЛАТА?",
+    option: "{{name}} · ≈ {{amount}}/мес",
+    none: "Не зарплата",
+    hint: "Это поступление - одна из выплат этого месяца кому-то из домочадцев. Выбери кому, и месячная оценка этого человека уменьшится на долю этой выплаты, а не посчитается дважды.",
+  },
+  /** Recurring income: whose paycheck (BudgetEntry.personId on income). */
+  earner: {
+    label: "КТО ПОЛУЧАЕТ (НЕОБЯЗАТЕЛЬНО)",
+    hint: "Чей это доход? Поступления, которые ты сюда относишь, несут имя - так бюджет знает, чьи деньги пришли.",
+    unassigned: "Не назначено",
+    deleted: "👤 (удалённый человек)",
+  },
+  /** Recurring income: paychecks per month (option labels reuse budget.cards.paycheck.frequency). */
+  payFrequency: {
+    label: "ВЫПЛАТЫ",
+    hint: "Как часто приходит эта зарплата. Сумма выше - оценка за целый месяц; каждое отнесённое сюда поступление считается одной выплатой, поэтому после первой из двух вторая половина оценки по-прежнему учитывается.",
   },
   recurring: {
     label: "Регулярно",

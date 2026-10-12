@@ -63,6 +63,8 @@ export const budgetEntry: Localized<typeof en> = {
   },
   estimate: {
     hint: "Deine letzten {{count}} tatsächlichen Abbuchungen lagen im Schnitt bei {{average}}. Die Schätzung ändert sich nur, wenn du tippst.",
+    hintIncome:
+      "Deine letzten {{count}} vollständigen Monate an Gehaltseingängen lagen im Schnitt bei {{average}}. Die Schätzung ändert sich nur, wenn du tippst.",
     use: "{{average}} übernehmen",
     useA11y: "Schätzung auf {{average}} setzen",
   },
@@ -91,6 +93,25 @@ export const budgetEntry: Localized<typeof en> = {
     option: "{{name}} · ca. {{amount}}",
     none: "Keine",
     hint: "Das ist die tatsächliche Abbuchung für eine wiederkehrende Rechnung dieses Monats. Wähl sie aus, und die Schätzung der Rechnung tritt für diesen Monat zurück, damit nichts doppelt zählt.",
+  },
+  /** A deposit filed as one of an earner's paychecks (income twin of `bill`). */
+  paycheck: {
+    label: "WESSEN GEHALT?",
+    option: "{{name}} · ca. {{amount}}/Monat",
+    none: "Kein Gehalt",
+    hint: "Dieser Eingang ist eines der Gehälter dieses Monats für jemanden im Haushalt. Wähl wen - die Monatsschätzung dieser Person schrumpft um den Anteil dieser Zahlung, statt doppelt zu zählen.",
+  },
+  /** Recurring income: whose paycheck (BudgetEntry.personId on income). */
+  earner: {
+    label: "VERDIENER (OPTIONAL)",
+    hint: "Wessen Einkommen ist das? Eingänge, die du hier zuordnest, tragen den Namen - so weiß das Budget, wessen Geld hereinkam.",
+    unassigned: "Nicht zugewiesen",
+    deleted: "👤 (gelöschte Person)",
+  },
+  /** Recurring income: paychecks per month (option labels reuse budget.cards.paycheck.frequency). */
+  payFrequency: {
+    label: "GEHALTSZAHLUNGEN",
+    hint: "Wie oft dieses Gehalt kommt. Der Betrag oben ist die Schätzung für einen ganzen Monat; jeder zugeordnete Eingang zählt als eine Zahlung - nach der ersten von zwei zählt die andere Hälfte der Schätzung weiter.",
   },
   recurring: {
     label: "Wiederkehrend",

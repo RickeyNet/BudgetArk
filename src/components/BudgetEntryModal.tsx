@@ -59,6 +59,8 @@ import {
   DEFAULT_RECURRENCE_INTERVAL,
   DEFAULT_TAX_SET_ASIDE_RATE,
   IncomeType,
+  PAY_FREQUENCIES,
+  PayFrequency,
   NewBudgetEntryInput,
   RECURRENCE_INTERVAL_OPTIONS,
   RecurrenceInterval,
@@ -217,10 +219,17 @@ interface EntryFormState {
   taxSetAsideRate: string;
   attachments: EntryAttachment[];
   isPrivate: boolean;
-  /** Bill this one-off is the actual charge for - see BudgetEntry.fulfillsRecurringId. */
+  /**
+   * Recurring entry this one-off is the actual for - a bill (expense) or an
+   * earner's recurring income (deposit). See BudgetEntry.fulfillsRecurringId.
+   */
   fulfillsRecurringId: string | undefined;
   /** Who the money was lent to (BudgetEntry.lentTo); "" = not a loan. */
   lentTo: string;
+  /** Recurring income: whose paycheck this is (BudgetEntry.personId on income). */
+  earnerId: string | undefined;
+  /** Recurring income: paychecks per month behind the estimate (BudgetEntry.payFrequency). */
+  payFrequency: PayFrequency;
 }
 
 const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
@@ -258,6 +267,8 @@ const entryFormState = (entry: BudgetEntry | null): EntryFormState => ({
   isPrivate: !!entry?.isPrivate,
   fulfillsRecurringId: entry?.fulfillsRecurringId,
   lentTo: entry?.lentTo ?? "",
+  earnerId: entry?.type === "income" ? entry.personId : undefined,
+  payFrequency: entry?.payFrequency ?? "monthly",
 });
 
 const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
@@ -321,6 +332,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     initialForm.fulfillsRecurringId
   );
   const [lentTo, setLentTo] = useState(initialForm.lentTo);
+  const [earnerId, setEarnerId] = useState<string | undefined>(initialForm.earnerId);
+  const [payFrequency, setPayFrequency] = useState<PayFrequency>(initialForm.payFrequency);
   // See the header comment for the attachment lifecycle. Files are written
   // at pick time; newlyStagedIds tracks which ones a cancel may delete.
   const [attachments, setAttachments] = useState<EntryAttachment[]>(
@@ -363,6 +376,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       setIsPrivate(next.isPrivate);
       setFulfillsRecurringId(next.fulfillsRecurringId);
       setLentTo(next.lentTo);
+      setEarnerId(next.earnerId);
+      setPayFrequency(next.payFrequency);
     }
     setNewlyStagedIds(new Set());
     setStagingSession((s) => s + 1);
@@ -393,12 +408,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
 
   const showDayPicker = recurring && type === "expense";
 
-  // Bills this one-off could be the actual charge for, in the chosen month.
-  // Recurring entries can't fulfil another bill, and only expenses can.
+  // Recurring entries this one-off could be the actual for, in the chosen
+  // month: bills for an expense, earners' recurring income for a deposit.
+  // Recurring entries can't fulfil another.
   const billCandidates = useMemo(() => {
-    if (type !== "expense" || recurring) return [];
+    if (recurring) return [];
     const amountNum = parseMoneyInput(lines[0]?.amount ?? "") ?? 0;
     return rankBillCandidates(entries, yearMonth, {
+      type,
       category,
       amount: amountNum > 0 ? amountNum : undefined,
       excludeId: entry?.id,
@@ -408,10 +425,40 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
   const showBillPicker = billCandidates.length > 0;
   // Only a bill still offered for this month can be saved - a pick left
   // over from a month change or a type flip is dropped at submit.
-  const effectiveFulfillsRecurringId =
-    showBillPicker && billCandidates.some((bill) => bill.id === fulfillsRecurringId)
-      ? fulfillsRecurringId
-      : undefined;
+  const linkedRecurring = showBillPicker
+    ? billCandidates.find((bill) => bill.id === fulfillsRecurringId)
+    : undefined;
+  const effectiveFulfillsRecurringId = linkedRecurring?.id;
+  // Earner's name for an income candidate pill ("Maria · est. $4,000/mo");
+  // falls back to the entry's own label when nobody is assigned.
+  const personNameById = useMemo(
+    () => new Map(people.map((person) => [person.id, person.name])),
+    [people]
+  );
+  const candidateLabel = (bill: BudgetEntry): string =>
+    (bill.type === "income" && bill.personId
+      ? personNameById.get(bill.personId)
+      : undefined) ??
+    (bill.description?.trim() || categoryLabel(t, bill.category));
+  // Whose paycheck a one-off income is: inherited from the recurring income
+  // it is filed against (BudgetEntry.personId on income = the earner).
+  const linkedEarnerId = linkedRecurring?.personId;
+  const incomePersonIds = useMemo<string[]>(
+    () =>
+      type !== "income"
+        ? []
+        : recurring
+          ? earnerId
+            ? [earnerId]
+            : []
+          : linkedEarnerId
+            ? [linkedEarnerId]
+            : [],
+    [earnerId, linkedEarnerId, recurring, type]
+  );
+  const showEarnerPicker =
+    type === "income" && recurring && (people.length > 0 || !!earnerId);
+  const earnerMissing = !!earnerId && !people.some((p) => p.id === earnerId);
 
   // "Your last 3 actual charges averaged $X" - only when editing a bill.
   // Nothing changes unless the user taps (see suggestEstimateFromActuals).
@@ -519,6 +566,8 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     setIsPrivate(next.isPrivate);
     setFulfillsRecurringId(next.fulfillsRecurringId);
     setLentTo(next.lentTo);
+    setEarnerId(next.earnerId);
+    setPayFrequency(next.payFrequency);
     // Deliberately does NOT delete staged photo files - submit commits them
     // to the saved entry, so only the cancel path (handleCancel) deletes.
     setAttachments([]);
@@ -579,11 +628,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         paymentUrl: normalizedPaymentUrl,
         linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
         businessId: showBusinessPicker ? businessId : undefined,
-        ...personAssignmentFields(showPersonPicker ? personIds : []),
+        ...personAssignmentFields(
+          type === "expense" ? (showPersonPicker ? personIds : []) : incomePersonIds
+        ),
         incomeType: entryIncomeType,
         taxSetAsideRate: entryTaxSetAsideRate,
         isPrivate: isPrivate || undefined,
         fulfillsRecurringId: effectiveFulfillsRecurringId,
+        payFrequency: type === "income" && recurring ? payFrequency : undefined,
         lentTo: showLoanField ? normalizeLentTo(lentTo) : undefined,
         // Photos land on the FIRST valid line (the UI hints at this when
         // multiple lines are open).
@@ -618,12 +670,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     businessId,
     category,
     effectiveFulfillsRecurringId,
+    incomePersonIds,
     incomeType,
     isPrivate,
     lentTo,
     lines,
     linkedAccountId,
     onAdd,
+    payFrequency,
     paymentUrl,
     personIds,
     recurring,
@@ -669,7 +723,10 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
       linkedAccountId: showAccountPicker ? linkedAccountId : undefined,
       // Cleared when the type flips to income (mirrors linkedAccountId).
       businessId: type === "expense" ? businessId : undefined,
-      ...personAssignmentFields(type === "expense" ? personIds : []),
+      // Expenses: who spent it. Income: the earner (or the earner of the
+      // recurring income this deposit is filed against).
+      ...personAssignmentFields(type === "expense" ? personIds : incomePersonIds),
+      payFrequency: type === "income" && recurring ? payFrequency : undefined,
       // Cleared when the type flips to expense or the income type changes
       // (mirrors businessId in the other direction).
       incomeType: entryIncomeType,
@@ -704,6 +761,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     category,
     effectiveFulfillsRecurringId,
     entry,
+    incomePersonIds,
     incomeType,
     isPrivate,
     isValid,
@@ -711,6 +769,7 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
     lines,
     linkedAccountId,
     onSave,
+    payFrequency,
     paymentUrl,
     personIds,
     recurring,
@@ -940,10 +999,15 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
           {estimateSuggestion && (
             <View style={styles.estimateHintRow}>
               <Text style={styles.linesHint}>
-                {t("budget.entry.estimate.hint", {
-                  count: estimateSuggestion.count,
-                  average: formatCurrency(estimateSuggestion.average),
-                })}
+                {t(
+                  type === "income"
+                    ? "budget.entry.estimate.hintIncome"
+                    : "budget.entry.estimate.hint",
+                  {
+                    count: estimateSuggestion.count,
+                    average: formatCurrency(estimateSuggestion.average),
+                  }
+                )}
               </Text>
               <TouchableOpacity
                 style={styles.estimateHintButton}
@@ -1107,14 +1171,14 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
         </View>
       )}
 
-      {showBillPicker && (
+      {showBillPicker && type === "expense" && (
         <View style={styles.field}>
           <Text style={styles.label}>{t("budget.entry.bill.label")}</Text>
           <TagPillPicker
             options={billCandidates.map((bill) => ({
               id: bill.id,
               name: t("budget.entry.bill.option", {
-                name: bill.description?.trim() || categoryLabel(t, bill.category),
+                name: candidateLabel(bill),
                 amount: formatCurrency(bill.amount),
               }),
             }))}
@@ -1124,6 +1188,29 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
             glyph="🧾"
           />
           <Text style={styles.linesHint}>{t("budget.entry.bill.hint")}</Text>
+        </View>
+      )}
+
+      {/* A deposit is one of this month's paychecks for an earner: pick whose,
+          and their monthly estimate shrinks by this paycheck's share (see
+          utils/billFulfillment) instead of being counted twice. */}
+      {showBillPicker && type === "income" && (
+        <View style={styles.field}>
+          <Text style={styles.label}>{t("budget.entry.paycheck.label")}</Text>
+          <TagPillPicker
+            options={billCandidates.map((bill) => ({
+              id: bill.id,
+              name: t("budget.entry.paycheck.option", {
+                name: candidateLabel(bill),
+                amount: formatCurrency(bill.amount),
+              }),
+            }))}
+            value={fulfillsRecurringId}
+            onChange={setFulfillsRecurringId}
+            noneLabel={t("budget.entry.paycheck.none")}
+            glyph="👤"
+          />
+          <Text style={styles.linesHint}>{t("budget.entry.paycheck.hint")}</Text>
         </View>
       )}
 
@@ -1237,6 +1324,53 @@ const BudgetEntryModal: React.FC<BudgetEntryModalProps> = ({
                     const key = FREQUENCY_KEYS[opt.value];
                     return key ? t(`budget.entry.recurring.frequency.${key}`) : opt.label;
                   })()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Recurring income = an earner's monthly estimate: whose, and how many
+          paychecks make it up (utils/billFulfillment.expectedPaychecksInMonth). */}
+      {showEarnerPicker && (
+        <View style={styles.field}>
+          <Text style={styles.label}>{t("budget.entry.earner.label")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.earner.hint")}</Text>
+          <TagPillPicker
+            options={people}
+            value={earnerId}
+            onChange={setEarnerId}
+            noneLabel={t("budget.entry.earner.unassigned")}
+            glyph="👤"
+            deletedLabel={earnerMissing ? t("budget.entry.earner.deleted") : undefined}
+          />
+        </View>
+      )}
+
+      {recurring && type === "income" && (
+        <View style={styles.field}>
+          <Text style={styles.label}>{t("budget.entry.payFrequency.label")}</Text>
+          <Text style={styles.accountPickerHint}>{t("budget.entry.payFrequency.hint")}</Text>
+          <View style={styles.categoryWrap}>
+            {PAY_FREQUENCIES.map((frequency) => (
+              <TouchableOpacity
+                key={frequency}
+                style={[
+                  styles.categoryPill,
+                  payFrequency === frequency && styles.categoryPillActive,
+                ]}
+                onPress={() => setPayFrequency(frequency)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: payFrequency === frequency }}
+              >
+                <Text
+                  style={[
+                    styles.categoryPillText,
+                    payFrequency === frequency && styles.categoryPillTextActive,
+                  ]}
+                >
+                  {t(`budget.cards.paycheck.frequency.${frequency}`)}
                 </Text>
               </TouchableOpacity>
             ))}

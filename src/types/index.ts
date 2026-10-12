@@ -305,6 +305,21 @@ export const RECURRENCE_INTERVAL_OPTIONS: readonly {
 
 export const DEFAULT_RECURRENCE_INTERVAL: RecurrenceInterval = 1;
 
+/**
+ * How often a paycheck lands. Shared by the "Until payday" card's pay
+ * schedule (utils/paycheckCycle) and by recurring income entries
+ * (`BudgetEntry.payFrequency`), where it says how many deposits make up
+ * one month's estimate.
+ */
+export type PayFrequency = "weekly" | "biweekly" | "semimonthly" | "monthly";
+
+export const PAY_FREQUENCIES: readonly PayFrequency[] = [
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+];
+
 /** Max stored length for `BudgetEntry.paymentUrl`. */
 export const PAYMENT_URL_MAX_LENGTH = 512;
 
@@ -346,17 +361,34 @@ export interface BudgetEntry {
    */
   paymentUrl?: string;
   /**
-   * Id of the recurring bill (a `recurring: true` expense) this entry is the
-   * ACTUAL charge for, in the month of this entry's `date`. While such an
-   * entry exists, the bill's projection is hidden for that month everywhere
-   * recurring entries are rolled forward (see utils/billFulfillment
-   * `entriesForMonth`), so a $137 electric charge replaces the $120 estimate
-   * instead of stacking on top of it. Lives on the actual, not the bill:
-   * deleting the actual restores the projection with no cleanup, and paired
-   * devices never contend over one shared recurring record. Optional and
-   * ignored by older peers/importers. Set only on non-recurring expenses.
+   * Id of the recurring entry this one is the ACTUAL for, in the month of
+   * this entry's `date` - the two must share a `type`:
+   * - Expense: a `recurring: true` bill. While the actual exists, the bill's
+   *   projection is hidden for that month everywhere recurring entries are
+   *   rolled forward (see utils/billFulfillment `entriesForMonth`), so a
+   *   $137 electric charge replaces the $120 estimate instead of stacking
+   *   on top of it.
+   * - Income: a recurring income entry (an earner's monthly estimate). Each
+   *   linked deposit is one paycheck; the estimate shrinks by the paychecks
+   *   still expected (`payFrequency`) and disappears once they have all
+   *   landed, so a variable paycheck adjusts the month without lowering it
+   *   to the first deposit.
+   * Lives on the actual, not the recurring record: deleting the actual
+   * restores the projection with no cleanup, and paired devices never
+   * contend over one shared recurring record. Optional and ignored by older
+   * peers/importers. Set only on non-recurring entries.
    */
   fulfillsRecurringId?: string;
+  /**
+   * Recurring income only: how often this earner is paid, i.e. how many
+   * deposits make up the monthly estimate in `amount` (2 for semimonthly,
+   * the calendar's count of weekly / biweekly paydays anchored on `date`,
+   * 1 for monthly). Drives the blend in utils/billFulfillment: after one of
+   * two paychecks lands, the remaining half of the estimate still counts.
+   * Absent = one deposit per month (the first linked actual replaces the
+   * estimate, like a bill). Optional; older peers ignore it.
+   */
+  payFrequency?: PayFrequency;
   /** Asset account ID this savings entry contributes to */
   linkedAccountId?: string;
   /** Year-month key (YYYY-MM) of the last month this recurring entry was applied to its linked account */
@@ -388,10 +420,13 @@ export interface BudgetEntry {
    */
   businessId?: string;
   /**
-   * Person this spending is assigned to (see `Person`) - "who spent this".
-   * Expenses only, same contract as `businessId`: the UI never sets it on
-   * income, clears it when an entry's type flips, and a dangling id shows
-   * as "(deleted person)".
+   * Person this entry is assigned to (see `Person`). On an expense: "who
+   * spent this", same contract as `businessId` (cleared when the type
+   * flips; a dangling id shows as "(deleted person)"). On income: the
+   * EARNER - set on a recurring income entry ("Maria's paycheck, est.
+   * $4,000/mo") and copied onto each deposit filed against it, so
+   * per-person reports can tell whose money it is. Income has one earner,
+   * so `personIds` stays expense-only.
    */
   personId?: string;
   /**
@@ -893,10 +928,11 @@ export interface PendingTransaction {
    */
   suggestedPersonIds?: string[];
   /**
-   * From a matched MerchantRule's `recurringEntryId`: the recurring bill
-   * this transaction is expected to be the actual charge for (see
-   * BudgetEntry.fulfillsRecurringId). Expenses only. Validated against the
-   * live entries at approval time, never trusted blindly.
+   * From a matched MerchantRule's `recurringEntryId`: the recurring entry
+   * this transaction is expected to be the actual for (see
+   * BudgetEntry.fulfillsRecurringId) - a bill for an outflow, an earner's
+   * recurring income for a deposit. Validated against the live entries at
+   * approval time (including the type match), never trusted blindly.
    */
   suggestedRecurringId?: string;
   /**
@@ -1001,10 +1037,11 @@ export interface MerchantRule {
    */
   personIds?: string[];
   /**
-   * Recurring bill future approved expenses from this merchant fulfil (see
+   * Recurring entry future approvals from this merchant fulfil (see
    * BudgetEntry.fulfillsRecurringId) - "CITY POWER" is always the electric
-   * bill. Checked against the live entries on every approval: a bill that
-   * was deleted, stopped recurring, or isn't on its cycle that month simply
+   * bill, "ACME PAYROLL" is always Maria's paycheck. Checked against the
+   * live entries on every approval: a record that was deleted, stopped
+   * recurring, changed direction, or isn't on its cycle that month simply
    * yields a plain entry. Unread while action is "ignore".
    */
   recurringEntryId?: string;

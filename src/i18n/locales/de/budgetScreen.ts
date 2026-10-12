@@ -32,6 +32,8 @@ export const budgetScreen: Localized<typeof en> = {
     plannedMinimums: "Enthält {{amount}} geplante Mindestraten aus dem Schulden-Tab",
     retirement: "Plus {{amount}} in deine Altersvorsorge (401(k)) diesen Monat (zählt nicht als Einnahme)",
     taxSetAside: "Lege {{amount}} der 1099-Einnahmen dieses Monats für Steuern zurück",
+    paychecksIn: "{{received}} von {{expected}} Gehältern da · Schätzung für den Rest",
+    deletedPerson: "(gelöschte Person)",
   },
   selection: {
     cancelA11y: "Auswahl abbrechen",

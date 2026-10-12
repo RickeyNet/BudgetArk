@@ -53,7 +53,9 @@ import { t } from "../i18n/translate";
 import { MAX_PEOPLE,
   ASSET_ACCOUNT_CATEGORIES,
   PAYMENT_URL_MAX_LENGTH,
+  PAY_FREQUENCIES,
   type AssetAccountCategory,
+  type PayFrequency,
 } from "../types";
 
 /** Cap raw spreadsheet file size (uncompressed bytes for csv, on-disk size for xlsx). */
@@ -524,8 +526,21 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
   // Only meaningful on one-off expenses; anything else is dropped so the
   // stored shape matches what the app itself writes.
   const fulfillsBillRaw = parseString(get(row, "FulfillsBillId", "Fulfills Bill Id"), 120);
-  const fulfillsRecurringId =
-    fulfillsBillRaw && type === "expense" && !recurring ? fulfillsBillRaw : undefined;
+  const fulfillsRecurringId = fulfillsBillRaw && !recurring ? fulfillsBillRaw : undefined;
+
+  // Paychecks per month on an earner's recurring income (v9). Must
+  // round-trip: without it the first deposit of a month would replace the
+  // whole monthly estimate. Only meaningful on recurring income; anything
+  // else - or an unknown value - is dropped, mirroring isBudgetEntryItem.
+  const payFrequencyRaw = parseString(get(row, "PayFrequency", "Pay Frequency"), 20)
+    .toLowerCase()
+    .replace(/[\s-]/g, "");
+  const payFrequency =
+    type === "income" &&
+    recurring &&
+    (PAY_FREQUENCIES as readonly string[]).includes(payFrequencyRaw)
+      ? (payFrequencyRaw as PayFrequency)
+      : undefined;
 
   const now = new Date().toISOString();
 
@@ -584,6 +599,7 @@ const rowToBudgetEntry = (row: Record<string, unknown>): RowResult<Record<string
     taxSetAsideRate,
     isPrivate,
     fulfillsRecurringId,
+    payFrequency,
     lentTo,
     loanRepayments,
   });

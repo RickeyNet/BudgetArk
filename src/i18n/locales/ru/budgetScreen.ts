@@ -33,6 +33,8 @@ export const budgetScreen: LocalizedPlural<typeof en> = {
     plannedMinimums: "Включая {{amount}} плановых минимальных платежей с вкладки «Долги»",
     retirement: "Плюс {{amount}} в 401(k) в этом месяце (не считается доходом)",
     taxSetAside: "Отложи {{amount}} из дохода 1099 за этот месяц на налоги",
+    paychecksIn: "{{received}} из {{expected}} выплат получено · оценка на остаток",
+    deletedPerson: "(удалённый человек)",
   },
   selection: {
     cancelA11y: "Отменить выбор",

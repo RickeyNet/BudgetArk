@@ -49,6 +49,17 @@ export const dataSpotlights: Localized<typeof en> = {
       step3: "Det faktiska beloppet ersätter uppskattningen för den månaden överallt - i budgeten, kalendern och kassaflödeskortet.",
     },
   },
+  "paycheck-earners": {
+    title: "Löner som justerar planen",
+    blurb: "Ge varje inkomsttagare i hushållet en återkommande inkomst med månadsuppskattning och hur ofta lönen kommer. När en riktig insättning dyker upp - från banken eller inskriven för hand - koppla den som personens lön, så blandar månaden det som kommit in med uppskattningen för de löner som återstår. Timmar som ändras varje löneperiod slutar stöka till budgeten.",
+    cta: "Lägg till en inkomsttagare",
+    guide: {
+      where: "Fliken Budget → + Ny post → Inkomst → Återkommande → Inkomsttagare",
+      step1: "Lägg till en återkommande inkomst med din bästa månadsuppskattning, välj inkomsttagaren (vem som helst under Profil → Personer) och hur ofta lönen kommer.",
+      step2: "När en insättning kommer, godkänn den i granskningsinkorgen eller lägg till den för hand och välj personen under Vems lön. Bocka i Gör alltid så, så kopplas framtida löneinsättningar av sig själva.",
+      step3: "Efter den första av två löner räknas halva uppskattningen fortfarande; när alla kommit visar månaden vad som verkligen sattes in. När du redigerar inkomsten ser du snittet för de senaste hela månaderna, med uppdatering med ett tryck.",
+    },
+  },
   "bank-card-balances": {
     title: "Kreditkort som håller koll på sig själva",
     blurb:

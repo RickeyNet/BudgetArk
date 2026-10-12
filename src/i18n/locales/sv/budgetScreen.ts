@@ -32,6 +32,8 @@ export const budgetScreen: Localized<typeof en> = {
     plannedMinimums: "Inkluderar {{amount}} planerade minimibetalningar från fliken Skulder",
     retirement: "Plus {{amount}} till din 401(k) den här månaden (räknas inte som inkomst)",
     taxSetAside: "Sätt undan {{amount}} av månadens 1099-inkomst till skatt",
+    paychecksIn: "{{received}} av {{expected}} löner inne · uppskattning för resten",
+    deletedPerson: "(borttagen person)",
   },
   selection: {
     cancelA11y: "Avbryt markering",

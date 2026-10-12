@@ -129,7 +129,7 @@ import { useUndo } from "../undo/UndoProvider";
 import type { ThemeColors } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { getRecurrenceTag } from "../utils/recurrence";
-import { entriesForMonth } from "../utils/billFulfillment";
+import { describeIncomeProjection, entriesForMonth } from "../utils/billFulfillment";
 import { buildPaceAlerts, pacingClockFor } from "../utils/budgetPacing";
 import SpendingPaceBanner from "../components/SpendingPaceBanner";
 import { applyAndPersistMissedContributions } from "../utils/linkedAccountRecurringApply";
@@ -623,6 +623,26 @@ const BudgetScreen: React.FC = () => {
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [monthlyEntries]
   );
+
+  // Per-row context for the income list: the earner's name (recurring
+  // income and the paychecks filed against it both carry personId) and, on
+  // a recurring row, how many of the month's paychecks have landed - the
+  // row's amount is then the estimate for the ones still to come.
+  const personNameById = useMemo(
+    () => new Map(people.map((person) => [person.id, person.name])),
+    [people]
+  );
+  const incomeProgressById = useMemo(() => {
+    const map = new Map<string, { received: number; expected: number }>();
+    for (const entry of incomeEntries) {
+      if (!entry.recurring) continue;
+      const projection = describeIncomeProjection(entry, entries, selectedMonthKey);
+      if (projection && projection.received > 0) {
+        map.set(entry.id, { received: projection.received, expected: projection.expected });
+      }
+    }
+    return map;
+  }, [entries, incomeEntries, selectedMonthKey]);
 
   // W-2 / 1099 rollup for the selected month: 401(k) dollars withheld from
   // paychecks (not part of income totals) and the tax set-aside owed on
@@ -1406,14 +1426,24 @@ const BudgetScreen: React.FC = () => {
                   {entry.description || categoryLabel(t, entry.category)}
                 </Text>
                 <View style={styles.incomeSummaryRight}>
+                  {entry.personId && (
+                    <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]} numberOfLines={1}>
+                      👤 {personNameById.get(entry.personId) ?? t("budget.screen.summary.deletedPerson")}
+                    </Text>
+                  )}
                   {entry.incomeType && (
                     <Text style={[styles.incomeSummaryTag, { color: colors.textDim }]}>
                       {entry.incomeType === "w2" ? "W-2" : "1099"}
                     </Text>
                   )}
-                  {entry.recurring && (
+                  {entry.recurring && !incomeProgressById.has(entry.id) && (
                     <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
                       {getRecurrenceTag(entry)}
+                    </Text>
+                  )}
+                  {incomeProgressById.has(entry.id) && (
+                    <Text style={[styles.incomeSummaryTag, { color: colors.accent }]}>
+                      {t("budget.screen.summary.paychecksIn", incomeProgressById.get(entry.id)!)}
                     </Text>
                   )}
                   <Text style={[styles.incomeSummaryAmount, { color: colors.success }]}>

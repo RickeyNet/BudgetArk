@@ -50,6 +50,11 @@ export const budgetInbox: Localized<typeof en> = {
     categoryLabel: "KATEGORI",
     appliesToBill: "GÄLLER RÄKNINGEN",
     notABill: "Ingen räkning",
+    appliesToIncome: "VEMS LÖN?",
+    notAPaycheck: "Ingen lön",
+    incomeOption: "{{name}} · ca {{amount}}/mån",
+    incomeHint:
+      "En av månadens löner till någon i hushållet. Personens månadsuppskattning minskar med den här lönens andel så att inkomsten inte räknas två gånger - och när alla väntade löner har kommit visar månaden vad som verkligen sattes in.",
     billOption: "{{name}} · ca {{amount}}",
     debtOption: "{{name}} · min {{amount}}",
     debtHint:

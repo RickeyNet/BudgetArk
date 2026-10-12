@@ -31,6 +31,8 @@ export const modalsData: Localized<typeof en> = {
     },
     billOption: "{{name}} · ca {{amount}}",
     debtOption: "{{name}} · min {{amount}}",
+    /** Pill text for an earner's recurring income in a deposit rule. */
+    incomeOption: "{{name}} · ca {{amount}}/mån",
     behavior: {
       alwaysSkip: "Hoppa alltid över - importeras aldrig",
       logsDebtPayment: "Loggar en betalning på 💳 {{name}}",
@@ -57,6 +59,8 @@ export const modalsData: Localized<typeof en> = {
       unassignedPill: "Ej tilldelad",
       billLabel: "GÄLLER RÄKNINGEN",
       notABillPill: "Ingen räkning",
+      incomeLabel: "VEMS LÖN?",
+      notAPaycheckPill: "Ingen lön",
       debtHelp:
         "Betalningar till den här handlaren loggas på skulden (saldo och historik på fliken Skulder) i stället för att bokföras som utgift. Kategorin ovan används inte.",
       deleteRule: "Ta bort regel",

@@ -61,6 +61,8 @@ export const budgetEntry = {
   },
   estimate: {
     hint: "Your last {{count}} actual charges averaged {{average}}. The estimate only changes if you tap.",
+    hintIncome:
+      "Your last {{count}} full months of paychecks averaged {{average}}. The estimate only changes if you tap.",
     use: "Use {{average}}",
     useA11y: "Update estimate to {{average}}",
   },
@@ -89,6 +91,25 @@ export const budgetEntry = {
     option: "{{name}} · est. {{amount}}",
     none: "None",
     hint: "This is the real charge for one of this month's recurring bills. Pick it and the bill's estimate steps aside for the month, so it isn't counted twice.",
+  },
+  /** A deposit filed as one of an earner's paychecks (income twin of `bill`). */
+  paycheck: {
+    label: "WHOSE PAYCHECK?",
+    option: "{{name}} · est. {{amount}}/mo",
+    none: "Not a paycheck",
+    hint: "This deposit is one of this month's paychecks for someone in your household. Pick who, and their monthly estimate shrinks by this paycheck's share instead of being counted twice.",
+  },
+  /** Recurring income: whose paycheck (BudgetEntry.personId on income). */
+  earner: {
+    label: "EARNER (OPTIONAL)",
+    hint: "Whose income is this? Deposits you file against it carry their name, so the budget can tell whose money came in.",
+    unassigned: "Unassigned",
+    deleted: "👤 (deleted person)",
+  },
+  /** Recurring income: paychecks per month (option labels reuse budget.cards.paycheck.frequency). */
+  payFrequency: {
+    label: "PAYCHECKS",
+    hint: "How often this pay arrives. The amount above is the estimate for a whole month; each deposit filed against it counts as one paycheck, so after the first of two paychecks the other half of the estimate still counts.",
   },
   recurring: {
     label: "Recurring",

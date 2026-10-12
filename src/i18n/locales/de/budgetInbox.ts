@@ -50,6 +50,11 @@ export const budgetInbox: Localized<typeof en> = {
     categoryLabel: "KATEGORIE",
     appliesToBill: "GEHÖRT ZU RECHNUNG",
     notABill: "Keine Rechnung",
+    appliesToIncome: "WESSEN GEHALT?",
+    notAPaycheck: "Kein Gehalt",
+    incomeOption: "{{name}} · ca. {{amount}}/Monat",
+    incomeHint:
+      "Eines der Gehälter dieses Monats für jemanden im Haushalt. Die Monatsschätzung dieser Person schrumpft um den Anteil dieser Zahlung, damit Einkommen nicht doppelt zählt - und sobald alle erwarteten Zahlungen da sind, zeigt der Monat, was wirklich eingegangen ist.",
     billOption: "{{name}} · ca. {{amount}}",
     debtOption: "{{name}} · mind. {{amount}}",
     debtHint:

@@ -78,8 +78,13 @@ export type SpreadsheetFormat = "csv" | "xlsx";
  * would put the estimate back next to the actual and double-count the bill,
  * so it must round-trip. Projected recurring copies are also omitted for
  * months an actual covers, matching what the app shows.
+ * v9: Budget Entries gained PayFrequency (round-trip) - how many paychecks
+ * make up an earner's recurring income estimate. Stripping it would make
+ * the first deposit of a month replace the whole estimate, so it must
+ * round-trip. FulfillsBillId may now also link an income deposit to the
+ * earner's recurring income.
  */
-export const SPREADSHEET_SCHEMA_VERSION = 8;
+export const SPREADSHEET_SCHEMA_VERSION = 9;
 
 /**
  * Sentinel ID for the synthetic Emergency Fund row written to the Savings
@@ -168,6 +173,10 @@ const BUDGET_ENTRY_COLUMNS = [
   // BudgetEntry.fulfillsRecurringId). Round-tripped: without it a restore
   // would count both the estimate and the actual in that month.
   "FulfillsBillId",
+  // Paychecks per month on an earner's recurring income
+  // (BudgetEntry.payFrequency). Round-tripped: without it the first deposit
+  // of a month would replace the whole monthly estimate.
+  "PayFrequency",
   // Money lent out (BudgetEntry.lentTo / loanRepayments). Both round-trip
   // so a restore keeps the loan and what has been paid back; StillOwed is
   // a readable export-only figure (recomputed on import).
@@ -386,6 +395,7 @@ const budgetEntryToRow = (
   TaxSetAsideRate: entry.taxSetAsideRate ?? "",
   Private: entry.isPrivate ? "yes" : "",
   FulfillsBillId: entry.fulfillsRecurringId ?? "",
+  PayFrequency: entry.payFrequency ?? "",
   LentTo: entry.lentTo ?? "",
   Repayments: entry.lentTo ? formatLoanRepaymentsCell(entry.loanRepayments) : "",
   StillOwed: entry.lentTo ? loanOutstanding(entry) : "",

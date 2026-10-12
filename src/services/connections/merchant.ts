@@ -183,8 +183,8 @@ export const replanInboxForRules = (
       personId: item.suggestedPersonId,
       personIds: item.suggestedPersonIds,
     });
-    const suggestedRecurringId =
-      item.suggestedType === "expense" ? rule?.recurringEntryId : undefined;
+    // Bills and earners' income alike; approval checks the type match.
+    const suggestedRecurringId = rule?.recurringEntryId;
     const suggestedDebtId =
       item.suggestedType === "expense" ? rule?.debtId : undefined;
     if (

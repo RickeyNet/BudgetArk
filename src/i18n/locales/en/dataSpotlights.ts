@@ -43,6 +43,17 @@ export const dataSpotlights = {
       step3: "The actual amount replaces the estimate for that month everywhere - the budget, the calendar and the cash-flow card.",
     },
   },
+  "paycheck-earners": {
+    title: "Paychecks that adjust the plan",
+    blurb: "Give each earner in your household a recurring income with a monthly estimate and how often they're paid. When a real deposit arrives - from your bank or typed in - file it as their paycheck, and the month blends what has landed with the estimate for the checks still to come. Hours that change every pay period stop breaking the budget.",
+    cta: "Set up an earner",
+    guide: {
+      where: "Budget tab → + Add entry → Income → Recurring → Earner",
+      step1: "Add a recurring income with your best monthly estimate, pick the earner (anyone under Profile → People) and choose how often they're paid.",
+      step2: "When a deposit arrives, approve it in the Review Inbox or add it by hand and pick the earner under Whose paycheck. Tick Always do this and future payroll deposits file themselves.",
+      step3: "After the first of two paychecks, half the estimate still counts; once they've all landed the month shows what was really deposited. Editing the earner's income shows what recent full months averaged, with a one-tap update.",
+    },
+  },
   "bank-card-balances": {
     title: "Credit cards that track themselves",
     blurb: "Link a card on the Debts tab to the bank account behind it and its balance updates after every sync - the same link that stamps the card's last use for the keep-alive watch. One pick per card, and debt tracking mostly runs itself.",

@@ -33,6 +33,8 @@ export const modalsData: LocalizedPlural<typeof en> = {
     },
     billOption: "{{name}} · бл. {{amount}}",
     debtOption: "{{name}} · мін. {{amount}}",
+    /** Pill text for an earner's recurring income in a deposit rule. */
+    incomeOption: "{{name}} · ≈ {{amount}}/міс",
     behavior: {
       alwaysSkip: "Завжди пропускати - не імпортується",
       logsDebtPayment: "Записує платіж за 💳 {{name}}",
@@ -59,6 +61,8 @@ export const modalsData: LocalizedPlural<typeof en> = {
       unassignedPill: "Не призначено",
       billLabel: "СТОСУЄТЬСЯ РАХУНКУ",
       notABillPill: "Не рахунок",
+      incomeLabel: "ЧИЯ ЗАРПЛАТА?",
+      notAPaycheckPill: "Не зарплата",
       debtHelp:
         "Платежі цьому продавцю записуються за боргом (баланс та історія на вкладці «Борги»), а не як витрата. Категорія вище не використовується.",
       deleteRule: "Видалити правило",

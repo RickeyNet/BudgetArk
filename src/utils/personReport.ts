@@ -7,6 +7,14 @@
  * app's cadence logic (so the report matches what each month's Budget
  * screen shows), and render a one-way CSV for sharing.
  *
+ * Income rides along per EARNER (BudgetEntry.personId on income - see
+ * utils/billFulfillment): each month's income rows come straight from
+ * `entriesForMonth`, so a recurring income counts at its blended amount
+ * (deposits filed so far + the estimate for the paychecks still expected)
+ * and the deposits themselves count under the earner they inherited. The
+ * spending side stays the report's headline; income and net are extra
+ * lines, never mixed into the spending totals.
+ *
  * Deliberately a mirror of businessReport.ts (the tax-time twin) rather
  * than a shared generic: the two reports evolve independently and the
  * business one feeds receipt-zip planning, so coupling them would make
@@ -18,14 +26,17 @@
 import { entryPersonIds, personShare } from "./entryPeople";
 import type { BudgetEntry, Person } from "../types";
 import {
+  entriesForMonth,
   fulfilledMonthsByBill,
   listUnfulfilledOccurrenceMonths,
 } from "./billFulfillment";
 import { currentMonthKey } from "./businessReport";
 
-/** One expense occurrence assigned to a person within the report year. */
+/** One occurrence assigned to a person within the report year. */
 export interface PersonReportLine {
   entryId: string;
+  /** "expense" = spending assigned to the person; "income" = earned by them. */
+  type: "expense" | "income";
   /** YYYY-MM the occurrence lands in (recurring entries expand per month). */
   monthKey: string;
   /** YYYY-MM-DD shown in the CSV; projected occurrences reuse the original day. */
@@ -43,22 +54,35 @@ export interface PersonReportGroup {
   name: string;
   /** True when the person was deleted (or the id is unknown entirely). */
   deleted: boolean;
+  /** Spending assigned to the person. */
   total: number;
-  /** Occurrences in the year (recurring entries count once per month hit). */
+  /** Spending occurrences in the year (recurring entries count once per month hit). */
   entryCount: number;
-  /** Sorted by total descending. */
+  /** Sorted by total descending (spending only). */
   byCategory: { category: string; total: number }[];
-  /** Jan..Dec totals. */
+  /** Jan..Dec spending totals. */
   byMonth: number[];
-  /** Sorted by date ascending. */
+  /** Income earned by the person (blended recurring estimate + deposits). */
+  income: number;
+  /** Income occurrences in the year. */
+  incomeCount: number;
+  /** Jan..Dec income totals. */
+  incomeByMonth: number[];
+  /** Spending and income lines, sorted by date ascending. */
   lines: PersonReportLine[];
 }
 
 export interface PersonReport {
   year: number;
-  /** Sorted by total descending; only people with activity in the year. */
+  /**
+   * Sorted by spending descending, then income; only people with activity
+   * (spending or income) in the year.
+   */
   perPerson: PersonReportGroup[];
+  /** All assigned spending. */
   grandTotal: number;
+  /** All income with an earner. */
+  grandIncome: number;
 }
 
 const UNKNOWN_PERSON_NAME = "(deleted person)";
@@ -79,6 +103,37 @@ const lastDayOfMonth = (monthKey: string): number => {
   const [y, m] = monthKey.split("-").map(Number);
   return new Date(y, m, 0).getDate();
 };
+
+/** Every YYYY-MM from `start` to `end` inclusive (empty when end < start). */
+const monthKeysBetween = (start: string, end: string): string[] => {
+  const keys: string[] = [];
+  let [y, m] = start.split("-").map(Number);
+  let key = start;
+  while (key <= end) {
+    keys.push(key);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+    key = `${y}-${String(m).padStart(2, "0")}`;
+  }
+  return keys;
+};
+
+const emptyGroup = (personId: string, person: Person | undefined): PersonReportGroup => ({
+  personId,
+  name: person?.name ?? UNKNOWN_PERSON_NAME,
+  deleted: !person || !!person.deletedAt,
+  total: 0,
+  entryCount: 0,
+  byCategory: [],
+  byMonth: Array.from({ length: 12 }, () => 0),
+  income: 0,
+  incomeCount: 0,
+  incomeByMonth: Array.from({ length: 12 }, () => 0),
+  lines: [],
+});
 
 /**
  * Aggregates person-assigned expenses for one calendar year.
@@ -127,17 +182,7 @@ export const computePersonReport = (
       for (const personId of assignees) {
         let group = groups.get(personId);
         if (!group) {
-          const person = personById.get(personId);
-          group = {
-            personId,
-            name: person?.name ?? UNKNOWN_PERSON_NAME,
-            deleted: !person || !!person.deletedAt,
-            total: 0,
-            entryCount: 0,
-            byCategory: [],
-            byMonth: Array.from({ length: 12 }, () => 0),
-            lines: [],
-          };
+          group = emptyGroup(personId, personById.get(personId));
           groups.set(personId, group);
         }
 
@@ -149,6 +194,7 @@ export const computePersonReport = (
           group.byMonth[monthIdx] += share;
           group.lines.push({
             entryId: entry.id,
+            type: "expense",
             monthKey,
             date: `${monthKey}-${String(clampedDay).padStart(2, "0")}`,
             category: String(entry.category),
@@ -160,16 +206,51 @@ export const computePersonReport = (
         }
       }
     }
+
+    // Income by earner, month by month through the Budget screen's own
+    // month rule: a recurring income appears at its blended amount while
+    // paychecks are still expected and drops out once they have all
+    // landed; the deposits carry the earner themselves.
+    for (const monthKey of monthKeysBetween(windowStart, windowEnd)) {
+      const monthIdx = Number(monthKey.split("-")[1]) - 1;
+      for (const entry of entriesForMonth(entries, monthKey)) {
+        if (entry.type !== "income" || !entry.personId || entry.deletedAt) continue;
+        let group = groups.get(entry.personId);
+        if (!group) {
+          group = emptyGroup(entry.personId, personById.get(entry.personId));
+          groups.set(entry.personId, group);
+        }
+        const originMonth = monthKeyFromISO(entry.date);
+        const clampedDay = Math.min(Number(dayFromISO(entry.date)), lastDayOfMonth(monthKey));
+        group.income += entry.amount;
+        group.incomeCount += 1;
+        group.incomeByMonth[monthIdx] += entry.amount;
+        group.lines.push({
+          entryId: entry.id,
+          type: "income",
+          monthKey,
+          date: `${monthKey}-${String(clampedDay).padStart(2, "0")}`,
+          category: String(entry.category),
+          description: entry.description,
+          amount: entry.amount,
+          recurring: !!entry.recurring,
+          projected: !!entry.recurring && monthKey !== originMonth,
+        });
+      }
+    }
   }
 
   let grandTotal = 0;
+  let grandIncome = 0;
   const perPerson = Array.from(groups.values());
   for (const group of perPerson) {
     grandTotal += group.total;
+    grandIncome += group.income;
     group.lines.sort((a, b) => a.date.localeCompare(b.date));
 
     const catTotals = new Map<string, number>();
     for (const line of group.lines) {
+      if (line.type !== "expense") continue;
       catTotals.set(line.category, (catTotals.get(line.category) ?? 0) + line.amount);
     }
     group.byCategory = Array.from(catTotals, ([category, total]) => ({
@@ -177,9 +258,9 @@ export const computePersonReport = (
       total,
     })).sort((a, b) => b.total - a.total);
   }
-  perPerson.sort((a, b) => b.total - a.total);
+  perPerson.sort((a, b) => b.total - a.total || b.income - a.income);
 
-  return { year, perPerson, grandTotal };
+  return { year, perPerson, grandTotal, grandIncome };
 };
 
 /**
@@ -202,7 +283,7 @@ const csvCell = (raw: string | number | boolean): string => {
  */
 export const buildPersonReportCsv = (report: PersonReport): string => {
   const rows: string[] = [
-    "Date,Person,Category,Description,Amount,Recurring",
+    "Date,Person,Type,Category,Description,Amount,Recurring",
   ];
   for (const group of report.perPerson) {
     for (const line of group.lines) {
@@ -210,6 +291,7 @@ export const buildPersonReportCsv = (report: PersonReport): string => {
         [
           csvCell(line.date),
           csvCell(group.name),
+          csvCell(line.type),
           csvCell(line.category),
           csvCell(line.description ?? ""),
           csvCell(line.amount),

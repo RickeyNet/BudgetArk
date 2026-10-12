@@ -189,6 +189,24 @@ export const FEATURE_SPOTLIGHTS: readonly FeatureSpotlight[] = [
     },
   },
   {
+    id: "paycheck-earners",
+    sinceVersion: "1.11.1",
+    icon: "💵",
+    get title() {
+      return t("data.spotlights.paycheck-earners.title");
+    },
+    get blurb() {
+      return t("data.spotlights.paycheck-earners.blurb");
+    },
+    cta: {
+      get label() {
+        return t("data.spotlights.paycheck-earners.cta");
+      },
+      kind: "budget-add-entry",
+    },
+    area: "budget",
+  },
+  {
     id: "bank-card-balances",
     sinceVersion: "1.10.0",
     icon: "💳",

@@ -8,7 +8,12 @@
  * persistent storage, so they share the same gate.
  */
 
-import { MAX_PEOPLE, ASSET_ACCOUNT_CATEGORIES, BUDGET_CATEGORIES } from "../types";
+import {
+  MAX_PEOPLE,
+  ASSET_ACCOUNT_CATEGORIES,
+  BUDGET_CATEGORIES,
+  PAY_FREQUENCIES,
+} from "../types";
 import { sanitizeTextInput } from "./sanitize";
 import { isAcceptablePaymentUrl } from "./paymentUrl";
 import {
@@ -309,6 +314,12 @@ export const isBudgetEntryItem = (
   const fulfillsRecurringIdValid =
     item.fulfillsRecurringId === undefined ||
     isSafeText(item.fulfillsRecurringId, 120);
+  // Paychecks per month on an earner's recurring income
+  // (BudgetEntry.payFrequency): one of the known frequencies or absent.
+  const payFrequencyValid =
+    item.payFrequency === undefined ||
+    (typeof item.payFrequency === "string" &&
+      (PAY_FREQUENCIES as readonly string[]).includes(item.payFrequency));
   // Loan mark + repayments (BudgetEntry.lentTo / loanRepayments). The
   // borrower is free text under the same cap the UI enforces; repayments
   // are bounded like attachments so a hostile peer can't ship a 100k list.
@@ -336,6 +347,7 @@ export const isBudgetEntryItem = (
     attachmentsValid &&
     isPrivateValid &&
     fulfillsRecurringIdValid &&
+    payFrequencyValid &&
     lentToValid &&
     loanRepaymentsValid &&
     deletedRepaymentIdsValid &&
@@ -442,6 +454,15 @@ export const explainBudgetEntryProblem = (item: unknown): string => {
     !isSafeText(item.fulfillsRecurringId, 120)
   ) {
     return '"fulfillsRecurringId" must be a non-empty string of at most 120 characters when present';
+  }
+  if (
+    item.payFrequency !== undefined &&
+    !(
+      typeof item.payFrequency === "string" &&
+      (PAY_FREQUENCIES as readonly string[]).includes(item.payFrequency)
+    )
+  ) {
+    return `"payFrequency" must be one of ${PAY_FREQUENCIES.map((f) => `"${f}"`).join(", ")} when present`;
   }
   if (item.lentTo !== undefined && !isSafeText(item.lentTo, LENT_TO_MAX_LENGTH)) {
     return `"lentTo" must be a non-empty string of at most ${LENT_TO_MAX_LENGTH} characters when present`;

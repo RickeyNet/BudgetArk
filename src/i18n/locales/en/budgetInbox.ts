@@ -48,6 +48,11 @@ export const budgetInbox = {
     categoryLabel: "CATEGORY",
     appliesToBill: "APPLIES TO BILL",
     notABill: "Not a bill",
+    appliesToIncome: "WHOSE PAYCHECK?",
+    notAPaycheck: "Not a paycheck",
+    incomeOption: "{{name}} · est. {{amount}}/mo",
+    incomeHint:
+      "One of this month's paychecks for someone in your household. Their monthly estimate shrinks by this paycheck's share so income isn't counted twice - and once every expected paycheck has landed, the month shows what was really deposited.",
     billOption: "{{name}} · est. {{amount}}",
     debtOption: "{{name}} · min {{amount}}",
     debtHint:

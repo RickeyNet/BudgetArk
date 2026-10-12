@@ -1,6 +1,10 @@
 import { BudgetEntry } from "../types";
 import { isEntryActiveInMonth } from "./recurrence";
-import { fulfillmentsForMonth, isFulfillingEntry } from "./billFulfillment";
+import {
+  fulfillmentsForMonth,
+  isFulfillingEntry,
+  projectRecurringForMonth,
+} from "./billFulfillment";
 import { dayOfMonthFromIso } from "./entryDate";
 
 export interface BillsByDay {
@@ -85,8 +89,14 @@ export const groupBillsByDay = (
 
   for (const entry of entries) {
     if (!includeIncome && entry.type !== "expense") continue;
-    // The projection is replaced by its actual this month.
-    if (entry.recurring && fulfilled.has(entry.id)) continue;
+    // The projection is replaced by its actual this month (a partly-paid
+    // earner's income keeps its remaining share - see billFulfillment).
+    let shown = entry;
+    if (entry.recurring && fulfilled.has(entry.id)) {
+      const projected = projectRecurringForMonth(entry, fulfilled.get(entry.id), monthKey);
+      if (!projected) continue;
+      shown = projected;
+    }
     if (standInIds.has(entry.id)) {
       if (!includeFulfilled) continue;
     } else if (!includeOneOff && !entry.recurring) {
@@ -94,11 +104,11 @@ export const groupBillsByDay = (
     }
     if (!isEntryActiveInMonth(entry, monthKey)) continue;
 
-    const day = getDayOfMonth(entry, monthKey);
+    const day = getDayOfMonth(shown, monthKey);
     const existing = byDay.get(day);
-    if (existing) existing.push(entry);
-    else byDay.set(day, [entry]);
-    monthTotal += entry.amount;
+    if (existing) existing.push(shown);
+    else byDay.set(day, [shown]);
+    monthTotal += shown.amount;
   }
 
   return { byDay, monthTotal };

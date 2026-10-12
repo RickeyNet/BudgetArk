@@ -50,6 +50,17 @@ export const dataSpotlights: Localized<typeof en> = {
       step3: "Der Ist-Betrag ersetzt für diesen Monat überall die Schätzung - im Budget, im Kalender und auf der Cashflow-Karte.",
     },
   },
+  "paycheck-earners": {
+    title: "Gehälter, die den Plan anpassen",
+    blurb: "Gib jedem Verdiener im Haushalt ein wiederkehrendes Einkommen mit Monatsschätzung und Zahlungsrhythmus. Kommt ein echter Eingang - von der Bank oder von Hand eingetragen - ordne ihn als Gehalt zu, und der Monat verbindet, was schon da ist, mit der Schätzung für die noch ausstehenden Zahlungen. Wechselnde Stunden pro Abrechnung bringen das Budget nicht mehr durcheinander.",
+    cta: "Verdiener anlegen",
+    guide: {
+      where: "Budget-Tab → + Buchung hinzufügen → Einnahme → Wiederkehrend → Verdiener",
+      step1: "Lege ein wiederkehrendes Einkommen mit deiner besten Monatsschätzung an, wähl den Verdiener (jemanden aus Profil → Personen) und den Zahlungsrhythmus.",
+      step2: "Kommt ein Eingang, gib ihn im Prüfposteingang frei oder trag ihn von Hand ein und wähl unter „Wessen Gehalt?“ die Person. Mit „Immer so machen“ ordnen sich künftige Gehaltseingänge selbst zu.",
+      step3: "Nach der ersten von zwei Zahlungen zählt die halbe Schätzung weiter; sind alle da, zeigt der Monat, was wirklich einging. Beim Bearbeiten des Einkommens siehst du den Schnitt der letzten vollen Monate - mit Übernahme per Tipp.",
+    },
+  },
   "bank-card-balances": {
     title: "Kreditkarten, die sich selbst verfolgen",
     blurb:

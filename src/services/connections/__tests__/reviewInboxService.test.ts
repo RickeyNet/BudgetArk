@@ -837,6 +837,61 @@ describe("bill fulfilment (BudgetEntry.fulfillsRecurringId)", () => {
     ).toBeUndefined();
   });
 
+  it("files a deposit as an earner's paycheck: income link, inherited earner, remembered rule", async () => {
+    const maria = makeBudgetEntry({
+      id: "maria",
+      type: "income",
+      category: "Salary",
+      description: "Maria",
+      amount: 4000,
+      date: "2026-01-09T12:00:00",
+      recurring: true,
+      recurrenceInterval: 1,
+      personId: "per-maria",
+      payFrequency: "biweekly",
+    });
+    seed(ENTRIES_KEY, [electric(), maria]);
+    const payroll = powerTx({
+      id: "tx-payroll",
+      merchant: "ACME PAYROLL",
+      description: "ACME PAYROLL DIR DEP",
+      amount: 1850,
+      suggestedType: "income",
+    });
+    seed(INBOX_KEY, [
+      payroll,
+      powerTx({ id: "tx-payroll-wrong", amount: 1850, suggestedType: "income" }),
+    ]);
+
+    const entry = await approvePendingTransaction({
+      pendingId: "tx-payroll",
+      category: "Salary",
+      fulfillsRecurringId: "maria",
+      rememberRule: true,
+    });
+    expect(entry).toMatchObject({
+      type: "income",
+      amount: 1850,
+      fulfillsRecurringId: "maria",
+      personId: "per-maria",
+    });
+    expect(entry?.personIds).toBeUndefined();
+    expect(rulesNow().find((rule) => rule.merchantKey === "ACME PAYROLL")).toMatchObject({
+      action: "approve",
+      type: "income",
+      recurringEntryId: "maria",
+    });
+
+    // A deposit can't stand in for an expense bill, whatever the rule says.
+    const wrong = await approvePendingTransaction({
+      pendingId: "tx-payroll-wrong",
+      category: "Salary",
+      fulfillsRecurringId: "electric",
+    });
+    expect(wrong?.fulfillsRecurringId).toBeUndefined();
+    expect(wrong?.personId).toBeUndefined();
+  });
+
   it("auto-approve applies the rule's bill through the same validation", async () => {
     seed(ENTRIES_KEY, [electric()]);
     seed(RULES_KEY, [

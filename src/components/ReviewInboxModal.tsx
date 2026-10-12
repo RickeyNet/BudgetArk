@@ -334,16 +334,6 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     [debts],
   );
 
-  const billNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const entry of entries) {
-      if (isBillCandidate(entry)) {
-        map.set(entry.id, entry.description?.trim() || categoryLabel(t, entry.category));
-      }
-    }
-    return map;
-  }, [entries, t]);
-
   const businessNameById = useMemo(
     () => new Map(businesses.map((b) => [b.id, b.name])),
     [businesses],
@@ -353,6 +343,24 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     () => new Map(people.map((p) => [p.id, p.name])),
     [people],
   );
+
+  // Bills by their own label; an earner's recurring income by the earner's
+  // name ("Maria"), falling back to its description when nobody is assigned.
+  const billNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of entries) {
+      if (!isBillCandidate(entry)) continue;
+      const earner =
+        entry.type === "income" && entry.personId
+          ? personNameById.get(entry.personId)
+          : undefined;
+      map.set(
+        entry.id,
+        earner ?? (entry.description?.trim() || categoryLabel(t, entry.category)),
+      );
+    }
+    return map;
+  }, [entries, personNameById, t]);
 
   // Dated day sections, then the two heuristic "Skip all" sections. An
   // item flagged both duplicate- and transfer-likely appears only under
@@ -398,10 +406,11 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
             })
           : [],
       );
-      // A rule's debt wins over its bill - the two share one picker.
+      // A rule's debt wins over its bill - the two share one picker. A
+      // deposit's suggestion is the earner's recurring income.
       setDraftRecurringId(
         item.suggestedType !== "expense"
-          ? undefined
+          ? item.suggestedRecurringId
           : item.suggestedDebtId
             ? debtOptionId(item.suggestedDebtId)
             : item.suggestedRecurringId,
@@ -456,7 +465,8 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         setExpandedId(null);
         // Filing a real charge against its bill is a win; only the
         // occasional one (utils/tipJarNudge cadence) returns copy to show.
-        if (recurringId) {
+        // A paycheck filed against its earner is bookkeeping, not a win.
+        if (recurringId && item.amount < 0) {
           const nudge = await noteWin({
             kind: "bill-paid",
             label: billNameById.get(recurringId),
@@ -788,16 +798,17 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
       statementAccountLabelFrom(item.externalAccountId);
     // The picked pill, when it is a debt rather than a bill.
     const draftDebtId = expanded ? debtIdFromOption(draftRecurringId) : undefined;
-    // Bills this charge could stand in for, in the month it posted - best
-    // guess first (same category, closest estimate).
-    const billCandidates =
-      expanded && item.suggestedType === "expense"
-        ? rankBillCandidates(entries, entryMonthKey(item.postedAt), {
-            category: draftCategory,
-            amount: Math.abs(item.amount),
-            keepId: draftRecurringId,
-          })
-        : [];
+    // Bills this charge could stand in for - or, for a deposit, the earners
+    // whose paycheck it could be - in the month it posted, best guess first
+    // (same category, closest estimate / paycheck share).
+    const billCandidates = expanded
+      ? rankBillCandidates(entries, entryMonthKey(item.postedAt), {
+          type: item.suggestedType,
+          category: draftCategory,
+          amount: Math.abs(item.amount),
+          keepId: draftRecurringId,
+        })
+      : [];
     // Debts the outflow could be a payment on (utils/inboxDebtPayments) -
     // the Budget's "Debt Payments" rows come from the Debt tracker, not
     // from entries, so they are offered here alongside the bills. Debts
@@ -811,11 +822,20 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         : [];
     const billOptions = billCandidates.map((bill) => ({
       id: bill.id,
-      name: t("budget.inbox.form.billOption", {
-        name: bill.description?.trim() || categoryLabel(t, bill.category),
+      name: t(isExpense ? "budget.inbox.form.billOption" : "budget.inbox.form.incomeOption", {
+        name: billNameById.get(bill.id) ?? categoryLabel(t, bill.category),
         amount: formatCurrency(bill.amount),
       }),
     }));
+    // The fold header / none pill / glyph read "bill" for an outflow and
+    // "whose paycheck" for a deposit.
+    const applyToLabel = t(
+      isExpense ? "budget.inbox.form.appliesToBill" : "budget.inbox.form.appliesToIncome",
+    );
+    const applyToNone = t(
+      isExpense ? "budget.inbox.form.notABill" : "budget.inbox.form.notAPaycheck",
+    );
+    const applyToGlyph = isExpense ? "🧾" : "👤";
     const debtOptions = debtCandidates.map((debt) => ({
       id: debtOptionId(debt.id),
       name: t("budget.inbox.form.debtOption", {
@@ -1040,11 +1060,13 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: showBillSection }}
-                  accessibilityLabel={t("budget.inbox.form.appliesToBill")}
+                  accessibilityLabel={applyToLabel}
                 >
                   <Text style={styles.foldLabel} numberOfLines={1}>
-                    {t("budget.inbox.form.appliesToBill")}
-                    {!showBillSection && pickedApplyTo ? ` · 🧾 ${pickedApplyTo.name}` : ""}
+                    {applyToLabel}
+                    {!showBillSection && pickedApplyTo
+                      ? ` · ${applyToGlyph} ${pickedApplyTo.name}`
+                      : ""}
                   </Text>
                   <Text style={styles.foldChevron}>{showBillSection ? "▾" : "›"}</Text>
                 </TouchableOpacity>
@@ -1054,11 +1076,14 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       options={applyToOptions}
                       value={draftRecurringId}
                       onChange={setDraftRecurringId}
-                      noneLabel={t("budget.inbox.form.notABill")}
-                      glyph="🧾"
+                      noneLabel={applyToNone}
+                      glyph={applyToGlyph}
                     />
                     {draftDebtId ? (
                       <Text style={styles.planHint}>{t("budget.inbox.form.debtHint")}</Text>
+                    ) : null}
+                    {!isExpense ? (
+                      <Text style={styles.planHint}>{t("budget.inbox.form.incomeHint")}</Text>
                     ) : null}
                   </>
                 ) : null}

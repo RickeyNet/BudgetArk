@@ -766,7 +766,9 @@ describe("planIngest - suggestions and transfer heuristics", () => {
     expect(plan.newInboxItems[0].suggestedPersonId).toBe("per-1");
   });
 
-  it("suggests the rule's recurring bill on outflows only", () => {
+  it("suggests the rule's recurring entry on outflows and inflows alike", () => {
+    // A payroll rule's recurringEntryId is an earner's recurring income; the
+    // income/expense match is enforced at approval, not here.
     const rule: MerchantRule = {
       id: "r-bill",
       merchantKey: "COSTCO WHSE",
@@ -786,7 +788,7 @@ describe("planIngest - suggestions and transfer heuristics", () => {
         fetched: [{ ...baseInputs().fetched[0], amount: 25 }],
       })
     );
-    expect(inflow.newInboxItems[0].suggestedRecurringId).toBeUndefined();
+    expect(inflow.newInboxItems[0].suggestedRecurringId).toBe("electric");
   });
 
   it("suggests the rule's debt on outflows only", () => {

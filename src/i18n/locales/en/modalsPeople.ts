@@ -115,11 +115,15 @@ export const modalsPeople = {
   personReport: {
     title: "Person Spending",
     subtitle:
-      "Everything assigned to a person, by calendar year. Recurring bills count once per month they hit, same as the Budget screen.",
+      "Everything assigned to a person, by calendar year, plus what each earner brought in. Recurring bills count once per month they hit and recurring income blends with the paychecks filed against it, same as the Budget screen.",
     shareTitle: "Export Person Spending",
     grandTotal: "TOTAL ASSIGNED SPENDING · {{year}}",
+    grandIncome: "Income by earner · {{amount}}",
+    income_one: "💵 Income · {{count}} entry",
+    income_other: "💵 Income · {{count}} entries",
+    net: "Net (income − spending)",
     empty:
-      "No assigned spending in {{year}}. Assign an expense to a person when adding it on the Budget tab (add people under Profile → People).",
+      "No assigned spending or earned income in {{year}}. Assign an expense to a person when adding it on the Budget tab, or name the earner on a recurring income (add people under Profile → People).",
   },
   manage: {
     name: "NAME",

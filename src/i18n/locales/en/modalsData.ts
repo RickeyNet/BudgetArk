@@ -30,6 +30,8 @@ export const modalsData = {
     /** Pill text in the "Applies to bill" picker. */
     billOption: "{{name}} · est. {{amount}}",
     debtOption: "{{name}} · min {{amount}}",
+    /** Pill text for an earner's recurring income in a deposit rule. */
+    incomeOption: "{{name}} · est. {{amount}}/mo",
     /** One-line summary under the merchant name. */
     behavior: {
       alwaysSkip: "Always skip - never imports",
@@ -57,6 +59,8 @@ export const modalsData = {
       unassignedPill: "Unassigned",
       billLabel: "APPLIES TO BILL",
       notABillPill: "Not a bill",
+      incomeLabel: "WHOSE PAYCHECK?",
+      notAPaycheckPill: "Not a paycheck",
       debtHelp:
         "Payments to this merchant are logged on the debt (Debts tab balance and history) instead of being filed as an expense. The category above is not used.",
       deleteRule: "Delete Rule",

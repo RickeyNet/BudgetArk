@@ -49,6 +49,17 @@ export const dataSpotlights: Localized<typeof en> = {
       step3: "Det faktiske beløpet erstatter estimatet for den måneden overalt - i budsjettet, kalenderen og kontantstrøm-kortet.",
     },
   },
+  "paycheck-earners": {
+    title: "Lønninger som justerer planen",
+    blurb: "Gi hver inntektstaker i husholdningen en gjentakende inntekt med månedsanslag og hvor ofte lønnen kommer. Når et ekte innskudd dukker opp - fra banken eller skrevet inn for hånd - koble det som personens lønn, så blander måneden det som har kommet inn med anslaget for lønningene som gjenstår. Timer som endrer seg hver lønnsperiode slutter å rote til budsjettet.",
+    cta: "Legg til en inntektstaker",
+    guide: {
+      where: "Budsjett-fanen → + Legg til post → Inntekt → Gjentakende → Inntektstaker",
+      step1: "Legg til en gjentakende inntekt med ditt beste månedsanslag, velg inntektstakeren (hvem som helst under Profil → Personer) og hvor ofte lønnen kommer.",
+      step2: "Når et innskudd kommer, godkjenn det i gjennomgangsinnboksen eller legg det inn for hånd og velg personen under Hvem sin lønn. Huk av Gjør alltid dette, så kobles fremtidige lønnsinnskudd av seg selv.",
+      step3: "Etter den første av to lønninger teller halve anslaget fortsatt; når alle har kommet, viser måneden hva som faktisk ble satt inn. Når du redigerer inntekten ser du snittet for de siste hele månedene, med oppdatering med ett trykk.",
+    },
+  },
   "bank-card-balances": {
     title: "Kredittkort som holder styr på seg selv",
     blurb:

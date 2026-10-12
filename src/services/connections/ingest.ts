@@ -538,8 +538,9 @@ export const planIngest = (input: IngestInputs): IngestPlan => {
         suggestedType === "expense" ? rule?.businessId : undefined,
       suggestedPersonId,
       suggestedPersonIds,
-      suggestedRecurringId:
-        suggestedType === "expense" ? rule?.recurringEntryId : undefined,
+      // A bill for an outflow, an earner's income for a deposit - the type
+      // match is enforced at approval (reviewInboxService.resolveFulfillment).
+      suggestedRecurringId: rule?.recurringEntryId,
       suggestedDebtId: suggestedType === "expense" ? rule?.debtId : undefined,
     };
   };

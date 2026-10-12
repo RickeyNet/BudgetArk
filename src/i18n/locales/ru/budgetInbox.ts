@@ -52,6 +52,11 @@ export const budgetInbox: LocalizedPlural<typeof en> = {
     categoryLabel: "КАТЕГОРИЯ",
     appliesToBill: "ОТНОСИТСЯ К СЧЁТУ",
     notABill: "Не счёт",
+    appliesToIncome: "ЧЬЯ ЗАРПЛАТА?",
+    notAPaycheck: "Не зарплата",
+    incomeOption: "{{name}} · ≈ {{amount}}/мес",
+    incomeHint:
+      "Одна из выплат этого месяца кому-то из домочадцев. Месячная оценка этого человека уменьшается на долю этой выплаты, чтобы доход не считался дважды, а когда все ожидаемые выплаты пришли, месяц показывает, сколько действительно поступило.",
     billOption: "{{name}} · ≈ {{amount}}",
     debtOption: "{{name}} · мин. {{amount}}",
     debtHint:

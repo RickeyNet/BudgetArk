@@ -63,6 +63,8 @@ export const budgetEntry: Localized<typeof en> = {
   },
   estimate: {
     hint: "Dina senaste {{count}} faktiska dragningar låg i snitt på {{average}}. Uppskattningen ändras bara om du trycker.",
+    hintIncome:
+      "Dina senaste {{count}} hela månader av löneinsättningar låg i snitt på {{average}}. Uppskattningen ändras bara om du trycker.",
     use: "Använd {{average}}",
     useA11y: "Uppdatera uppskattningen till {{average}}",
   },
@@ -91,6 +93,25 @@ export const budgetEntry: Localized<typeof en> = {
     option: "{{name}} · ca {{amount}}",
     none: "Ingen",
     hint: "Det här är den faktiska dragningen för en av månadens återkommande räkningar. Välj den så kliver räkningens uppskattning åt sidan för månaden, så att inget räknas dubbelt.",
+  },
+  /** A deposit filed as one of an earner's paychecks (income twin of `bill`). */
+  paycheck: {
+    label: "VEMS LÖN?",
+    option: "{{name}} · ca {{amount}}/mån",
+    none: "Ingen lön",
+    hint: "Den här insättningen är en av månadens löner till någon i hushållet. Välj vem, så minskar personens månadsuppskattning med den här lönens andel i stället för att räknas två gånger.",
+  },
+  /** Recurring income: whose paycheck (BudgetEntry.personId on income). */
+  earner: {
+    label: "INKOMSTTAGARE (VALFRITT)",
+    hint: "Vems inkomst är det här? Insättningar du kopplar hit bär namnet, så budgeten vet vems pengar som kom in.",
+    unassigned: "Ej tilldelad",
+    deleted: "👤 (borttagen person)",
+  },
+  /** Recurring income: paychecks per month (option labels reuse budget.cards.paycheck.frequency). */
+  payFrequency: {
+    label: "LÖNEUTBETALNINGAR",
+    hint: "Hur ofta lönen kommer. Beloppet ovan är uppskattningen för en hel månad; varje insättning som kopplas hit räknas som en lön, så efter den första av två räknas den andra halvan av uppskattningen fortfarande.",
   },
   recurring: {
     label: "Återkommande",

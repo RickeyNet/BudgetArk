@@ -18,7 +18,8 @@
  * sets its own paydays.
  */
 
-import type { BudgetEntry, Debt, Payment } from "../types";
+import type { BudgetEntry, Debt, PayFrequency, Payment } from "../types";
+import { PAY_FREQUENCIES } from "../types";
 import { getDayOfMonth, upcomingBillsWithin } from "./billCalendar";
 import {
   overdueDebtDuesThisMonth,
@@ -29,14 +30,11 @@ import { entriesForMonth } from "./billFulfillment";
 import { getMonthKey } from "./budgetMonths";
 import { roundToCents } from "./money";
 
-export type PayFrequency = "weekly" | "biweekly" | "semimonthly" | "monthly";
-
-export const PAY_FREQUENCIES: readonly PayFrequency[] = [
-  "weekly",
-  "biweekly",
-  "semimonthly",
-  "monthly",
-];
+// The frequency type lives in src/types (recurring income entries carry it
+// too - BudgetEntry.payFrequency); re-exported so existing importers of
+// this module keep working.
+export type { PayFrequency };
+export { PAY_FREQUENCIES };
 
 /** Day-of-month value meaning "the last day of the month". */
 export const LAST_DAY = 31;
