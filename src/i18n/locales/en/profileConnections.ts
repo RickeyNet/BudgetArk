@@ -16,10 +16,8 @@ export const profileConnections = {
     importPrompt: "Import transactions from your bank",
     connectedCount_one: "{{count}} connected",
     connectedCount_other: "{{count}} connected",
-    reviewInbox: "Review Inbox",
     waiting_one: "{{count}} transaction waiting",
     waiting_other: "{{count}} transactions waiting",
-    nothingToReview: "Nothing to review",
     disclosure: {
       notNow: "Not now",
       continue: "Continue",
@@ -37,9 +35,16 @@ export const profileConnections = {
     pair: "Pair with Partner",
     pairSubtext: "Sync budgets over WiFi - no account needed",
     autoSyncStatus: "Auto-sync {{state}} · \"{{ssid}}\"",
-    setHomeWifi: "Tap to set home WiFi for auto-sync",
-    disable: "Disable",
-    enable: "Enable",
+    /** Sync Now row subtext: partner name + the sync status / last-synced line. */
+    statusWithPartner: "{{partner}} · {{status}}",
+    /** Overflow (⋯) button + its sheet: home Wi-Fi and unpair. */
+    options: "Sync options",
+    homeWifi: "Home Wi-Fi",
+    homeWifiUnset: "Not set · tap to use the network you're on",
+    /** Auto-sync pill on the Sync Now row (shown once a home Wi-Fi is set). */
+    autoOn: "Auto on",
+    autoOff: "Auto off",
+    autoA11y: "Auto-sync on home Wi-Fi",
     syncNow: "Sync Now",
     discovering: "Looking for partner...",
     connecting: "Connecting...",
@@ -57,7 +62,6 @@ export const profileConnections = {
     },
   },
   people: {
-    sectionTitle: "PEOPLE",
     manageA11y: "Manage people",
     people: "People 👤",
     peopleSubtext: "Household members, who spent what, and money owed to you",

@@ -2,11 +2,15 @@
  * BudgetArk - Bank Connections Section
  * File: src/screens/profile/ConnectionsSection.tsx
  *
- * The CONNECTIONS card (Bank Connections + Review Inbox rows), the first-use
- * off-device disclosure, the connections manager modal, and the add/resume
- * wizard. Owns all of that state; exposes openConnections() through a ref so
+ * The CONNECTIONS card (one Bank Connections row), the first-use off-device
+ * disclosure, the connections manager modal, and the add/resume wizard.
+ * Owns all of that state; exposes openConnections() through a ref so
  * ProfileScreen's openSection deep link can route through the same
- * disclosure-gated path a row tap uses.
+ * disclosure-gated path a row tap uses. The Review Inbox used to have a
+ * row here too, but it only navigated to the Budget tab, which already
+ * shows the inbox in its header, on the Debts tab and in the attention
+ * banner - so the pending count rides the Bank Connections subtext
+ * instead ("2 connected · 5 waiting").
  */
 
 import React, {
@@ -23,10 +27,8 @@ import {
   TouchableOpacity,
   Modal,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
-import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import type { AssetAccount, RootTabParamList } from "../../types";
+import type { AssetAccount } from "../../types";
 import {
   connectionsDisclosureTitle,
   connectionsDisclosureIntro,
@@ -66,7 +68,6 @@ const ConnectionsSection = forwardRef<
   const { colors } = useTheme();
   const { tokens } = useDensity();
   const styles = useProfileStyles(tokens, colors);
-  const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
 
   /** Bank Connections (BYO API): modals + first-use disclosure. */
   const {
@@ -230,6 +231,28 @@ const ConnectionsSection = forwardRef<
   /** The wizard sheet finished sliding out - safe to run the queued work. */
   const handleWizardDismissed = runAfterWizardDismissed;
 
+  /**
+   * Row subtext: "N connected · M waiting" (either half alone when the other
+   * is zero - a bank CSV import can fill the inbox with no connection), the
+   * import prompt when there is nothing to say, and "Needs attention" over
+   * everything when a connection wants a re-login.
+   */
+  const subtext = (() => {
+    if (needsAttention) return t("profile.connections.banks.needsAttention");
+    const parts: string[] = [];
+    if (connections.length > 0) {
+      parts.push(
+        t("profile.connections.banks.connectedCount", { count: connections.length }),
+      );
+    }
+    if (pendingCount > 0) {
+      parts.push(t("profile.connections.banks.waiting", { count: pendingCount }));
+    }
+    return parts.length > 0
+      ? parts.join(" · ")
+      : t("profile.connections.banks.importPrompt");
+  })();
+
   return (
     <>
       {/* ── Bank Connections (BYO API) ── */}
@@ -268,13 +291,7 @@ const ConnectionsSection = forwardRef<
                   },
                 ]}
               >
-                {needsAttention
-                  ? t("profile.connections.banks.needsAttention")
-                  : connections.length === 0
-                    ? t("profile.connections.banks.importPrompt")
-                    : t("profile.connections.banks.connectedCount", {
-                        count: connections.length,
-                      })}
+                {subtext}
               </Text>
             </View>
             <Text
@@ -284,34 +301,6 @@ const ConnectionsSection = forwardRef<
               ]}
             >
               {needsAttention ? "!" : "→"}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => navigation.navigate("Budget", { openInbox: true })}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.connections.banks.reviewInbox")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {pendingCount > 0
-                  ? t("profile.connections.banks.waiting", { count: pendingCount })
-                  : t("profile.connections.banks.nothingToReview")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
             </Text>
           </TouchableOpacity>
         </View>

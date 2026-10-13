@@ -31,7 +31,6 @@ export const profileMain: LocalizedPlural<typeof en> = {
     a11yCollapsed: "Місія, згорнуто",
   },
   progress: {
-    sectionTitle: "ПРОГРЕС",
     shipsLog: "Судновий журнал",
     shipsLogA11y: "Відкрити досягнення в Судновому журналі",
     earned: "Досягнень здобуто: {{unlocked}}/{{total}}",

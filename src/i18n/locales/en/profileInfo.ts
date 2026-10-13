@@ -2,7 +2,7 @@
  * BudgetArk - English strings: Profile (info)
  * File: src/i18n/locales/en/profileInfo.ts
  *
- * Covers: AboutSection, HelpSection, SupportSection, BusinessSection, CategoriesSection.
+ * Covers: AboutSection, HelpSection (incl. feedback + tip jar), OrganizeSection, BusinessSection, CategoriesSection.
  */
 
 export const profileInfo = {
@@ -27,8 +27,7 @@ export const profileInfo = {
       description: "Searchable guide to every feature, the tab-by-tab tour, what's new, and redo onboarding",
       a11yLabel: "Open the feature guide",
     },
-  },
-  support: {
+    /** Formerly the SUPPORT card - feedback and the tip jar are help-adjacent. */
     feedback: {
       label: "Send Feedback",
       description: "Bug reports & feature requests",
@@ -38,8 +37,11 @@ export const profileInfo = {
       description: "Optional support - nothing to unlock",
     },
   },
+  /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
+  organize: {
+    sectionTitle: "ORGANIZE",
+  },
   business: {
-    sectionTitle: "BUSINESS EXPENSES",
     businesses: {
       label: "Businesses 💼",
       description: "Tag expenses to a company or side gig, and the tax-time report",
@@ -47,7 +49,6 @@ export const profileInfo = {
     },
   },
   categories: {
-    sectionTitle: "CATEGORIES",
     custom: {
       label: "Custom Categories",
       a11yLabel: "Manage custom categories",

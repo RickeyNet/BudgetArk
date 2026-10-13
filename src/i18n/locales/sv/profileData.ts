@@ -14,18 +14,17 @@ export const profileData: Localized<typeof en> = {
   sectionTitle: "DATA",
   rows: {
     export: {
-      title: "Exportera",
-      subtitle: "Krypterad säkerhetskopia eller kalkylblad",
+      title: "Export & säkerhetskopior",
+      subtitle: "Krypterad säkerhetskopia, kalkylblad eller automatiska säkerhetskopior",
     },
     import: {
       title: "Importera",
       subtitle: "Säkerhetskopia, kalkylblad eller kontoutdrag",
     },
-    autoBackup: { title: "Automatiska säkerhetskopior" },
     reset: { title: "Nollställ all data" },
   },
   exportMenu: {
-    title: "Exportera",
+    title: "Export & säkerhetskopior",
     backup: {
       title: "Krypterad säkerhetskopia",
       subtitle: "Allt, som en lösenordsskyddad fil",
@@ -33,6 +32,11 @@ export const profileData: Localized<typeof en> = {
     spreadsheet: {
       title: "Kalkylblad",
       subtitle: "CSV eller Excel för Google Sheets / Excel",
+    },
+    /** Third option: the weekly/monthly on-device backup settings sheet. */
+    autoBackup: {
+      title: "Automatiska säkerhetskopior",
+      subtitle: "Sparas i appen · {{status}}",
     },
   },
   importMenu: {

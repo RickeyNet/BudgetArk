@@ -31,7 +31,6 @@ export const profileMain: Localized<typeof en> = {
     a11yCollapsed: "Leitbild, eingeklappt",
   },
   progress: {
-    sectionTitle: "FORTSCHRITT",
     shipsLog: "Logbuch",
     shipsLogA11y: "Logbuch mit Erfolgen öffnen",
     earned: "{{unlocked}}/{{total}} Erfolge freigeschaltet",

@@ -27,7 +27,6 @@ export const profileMain = {
     a11yCollapsed: "Mission statement, collapsed",
   },
   progress: {
-    sectionTitle: "PROGRESS",
     shipsLog: "Ship's Log",
     shipsLogA11y: "Open Ship's Log achievements",
     earned: "{{unlocked}}/{{total}} achievements earned",

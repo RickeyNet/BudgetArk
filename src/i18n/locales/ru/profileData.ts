@@ -15,18 +15,17 @@ export const profileData: LocalizedPlural<typeof en> = {
   sectionTitle: "ДАННЫЕ",
   rows: {
     export: {
-      title: "Экспорт",
-      subtitle: "Зашифрованная копия или таблица",
+      title: "Экспорт и копии",
+      subtitle: "Зашифрованная копия, таблица или автоматические копии",
     },
     import: {
       title: "Импорт",
       subtitle: "Копия, таблица или банковская выписка",
     },
-    autoBackup: { title: "Автоматические копии" },
     reset: { title: "Сбросить все данные" },
   },
   exportMenu: {
-    title: "Экспорт",
+    title: "Экспорт и копии",
     backup: {
       title: "Зашифрованная копия",
       subtitle: "Всё, в файле с паролем",
@@ -34,6 +33,11 @@ export const profileData: LocalizedPlural<typeof en> = {
     spreadsheet: {
       title: "Таблица",
       subtitle: "CSV или Excel для Google Таблиц / Excel",
+    },
+    /** Third option: the weekly/monthly on-device backup settings sheet. */
+    autoBackup: {
+      title: "Автоматические копии",
+      subtitle: "Хранится в приложении · {{status}}",
     },
   },
   importMenu: {

@@ -19,12 +19,10 @@ export const profileConnections: LocalizedPlural<typeof en> = {
     connectedCount_few: "{{count}} подключения",
     connectedCount_many: "{{count}} подключений",
     connectedCount_other: "{{count}} подключений",
-    reviewInbox: "Входящие на проверку",
     waiting_one: "{{count}} операция ждёт",
     waiting_few: "{{count}} операции ждут",
     waiting_many: "{{count}} операций ждут",
     waiting_other: "{{count}} операций ждут",
-    nothingToReview: "Проверять нечего",
     disclosure: {
       notNow: "Не сейчас",
       continue: "Продолжить",
@@ -42,9 +40,16 @@ export const profileConnections: LocalizedPlural<typeof en> = {
     pair: "Связать с партнёром",
     pairSubtext: "Синхронизация бюджетов по Wi-Fi - без аккаунта",
     autoSyncStatus: "Автосинхронизация {{state}} · «{{ssid}}»",
-    setHomeWifi: "Нажми, чтобы задать домашний Wi-Fi для автосинхронизации",
-    disable: "Отключить",
-    enable: "Включить",
+    /** Sync Now row subtext: partner name + the sync status / last-synced line. */
+    statusWithPartner: "{{partner}} · {{status}}",
+    /** Overflow (⋯) button + its sheet: home Wi-Fi and unpair. */
+    options: "Параметры синхронизации",
+    homeWifi: "Домашний Wi-Fi",
+    homeWifiUnset: "Не задан · нажми, чтобы выбрать текущую сеть",
+    /** Auto-sync pill on the Sync Now row (shown once a home Wi-Fi is set). */
+    autoOn: "Авто вкл.",
+    autoOff: "Авто выкл.",
+    autoA11y: "Автосинхронизация в домашнем Wi-Fi",
     syncNow: "Синхронизировать",
     discovering: "Поиск партнёра...",
     connecting: "Подключение...",
@@ -62,7 +67,6 @@ export const profileConnections: LocalizedPlural<typeof en> = {
     },
   },
   people: {
-    sectionTitle: "ЛЮДИ",
     manageA11y: "Управление людьми",
     people: "Люди 👤",
     peopleSubtext: "Члены семьи, кто сколько потратил и кто тебе должен",

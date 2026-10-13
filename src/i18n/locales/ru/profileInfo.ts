@@ -30,8 +30,7 @@ export const profileInfo: LocalizedPlural<typeof en> = {
       description: "Справочник с поиском по всем функциям, обзор по вкладкам, что нового и повтор знакомства",
       a11yLabel: "Открыть справочник функций",
     },
-  },
-  support: {
+    /** Formerly the SUPPORT card - feedback and the tip jar are help-adjacent. */
     feedback: {
       label: "Отправить отзыв",
       description: "Сообщения об ошибках и идеи функций",
@@ -41,8 +40,11 @@ export const profileInfo: LocalizedPlural<typeof en> = {
       description: "Поддержка по желанию - ничего не открывает",
     },
   },
+  /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
+  organize: {
+    sectionTitle: "ОРГАНИЗАЦИЯ",
+  },
   business: {
-    sectionTitle: "ДЕЛОВЫЕ РАСХОДЫ",
     businesses: {
       label: "Бизнесы 💼",
       description: "Отмечай расходы компании или подработки, плюс отчёт для налоговой",
@@ -50,7 +52,6 @@ export const profileInfo: LocalizedPlural<typeof en> = {
     },
   },
   categories: {
-    sectionTitle: "КАТЕГОРИИ",
     custom: {
       label: "Свои категории",
       a11yLabel: "Управление своими категориями",

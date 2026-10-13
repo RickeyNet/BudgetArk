@@ -17,10 +17,8 @@ export const profileConnections: Localized<typeof en> = {
     importPrompt: "Importera transaktioner från din bank",
     connectedCount_one: "{{count}} kopplad",
     connectedCount_other: "{{count}} kopplade",
-    reviewInbox: "Granskningsinkorg",
     waiting_one: "{{count}} transaktion väntar",
     waiting_other: "{{count}} transaktioner väntar",
-    nothingToReview: "Inget att granska",
     disclosure: {
       notNow: "Inte nu",
       continue: "Fortsätt",
@@ -38,9 +36,16 @@ export const profileConnections: Localized<typeof en> = {
     pair: "Koppla ihop med partner",
     pairSubtext: "Synka budgetar över wifi - inget konto krävs",
     autoSyncStatus: "Autosynk {{state}} · ”{{ssid}}”",
-    setHomeWifi: "Tryck för att välja hemma-wifi för autosynk",
-    disable: "Inaktivera",
-    enable: "Aktivera",
+    /** Sync Now row subtext: partner name + the sync status / last-synced line. */
+    statusWithPartner: "{{partner}} · {{status}}",
+    /** Overflow (⋯) button + its sheet: home Wi-Fi and unpair. */
+    options: "Synkalternativ",
+    homeWifi: "Hemma-wifi",
+    homeWifiUnset: "Inte valt · tryck för att använda nätverket du är på",
+    /** Auto-sync pill on the Sync Now row (shown once a home Wi-Fi is set). */
+    autoOn: "Auto på",
+    autoOff: "Auto av",
+    autoA11y: "Autosynk på hemma-wifi",
     syncNow: "Synka nu",
     discovering: "Letar efter partner...",
     connecting: "Ansluter...",
@@ -58,7 +63,6 @@ export const profileConnections: Localized<typeof en> = {
     },
   },
   people: {
-    sectionTitle: "PERSONER",
     manageA11y: "Hantera personer",
     people: "Personer 👤",
     peopleSubtext: "Hushållets medlemmar, vem som spenderat vad och pengar du ska få tillbaka",

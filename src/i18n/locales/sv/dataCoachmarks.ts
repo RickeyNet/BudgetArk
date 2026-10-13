@@ -109,7 +109,7 @@ export const dataCoachmarks: Localized<typeof en> = {
         title: "Kvitton och företagsutgifter",
         body: "Bifoga upp till tre kvittofoton till vilken post som helst - de krypteras och lämnar aldrig den här telefonen. Märk en utgift med ett företag (företag sätter du upp i Profil) så får den ett 💼-märke; en rapport inför deklarationen med CSV- och kvittoexport finns under Profil → Företagsutgifter.",
         detail: "Fota eller välj upp till tre kvittofoton i formulären för att lägga till och redigera poster - fotona förminskas, krypteras med samma nyckel som skyddar allt annat och lagras bara på den här telefonen (en ihopkopplad partner ser en platshållare, säkerhetskopior hoppar över dem och ingenting laddas någonsin upp). Skapa företag under Profil → Företagsutgifter och märk sedan vilken utgift som helst med ett; märkta poster räknas ändå i din vanliga budget - uppdelningen sker inför deklarationen, när företagsutgiftsrapporten ger summor per företag och kategori, en CSV redo för revisorn och en valfri zip med årets kvittofoton namngivna så att de matchar CSV-raderna. Exporter sker bara när du uttryckligen bekräftar dem.",
-        location: "Fliken Budget → + / redigera en post · Profil → Företagsutgifter",
+        location: "Fliken Budget → + / redigera en post · Profil → Företag",
         keywords: "kvitto, foto, kamera, bilaga, företag, skatt, deklaration, rapport, csv, export, revisor, zip",
       },
     },

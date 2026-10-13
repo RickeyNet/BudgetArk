@@ -17,10 +17,8 @@ export const profileConnections: Localized<typeof en> = {
     importPrompt: "Umsätze von deiner Bank importieren",
     connectedCount_one: "{{count}} verbunden",
     connectedCount_other: "{{count}} verbunden",
-    reviewInbox: "Prüfposteingang",
     waiting_one: "{{count}} Umsatz wartet",
     waiting_other: "{{count}} Umsätze warten",
-    nothingToReview: "Nichts zu prüfen",
     disclosure: {
       notNow: "Jetzt nicht",
       continue: "Fortfahren",
@@ -38,9 +36,16 @@ export const profileConnections: Localized<typeof en> = {
     pair: "Mit Partner koppeln",
     pairSubtext: "Budgets über WLAN synchronisieren - kein Konto nötig",
     autoSyncStatus: "Auto-Sync {{state}} · \"{{ssid}}\"",
-    setHomeWifi: "Tippen, um das Heim-WLAN für Auto-Sync festzulegen",
-    disable: "Deaktivieren",
-    enable: "Aktivieren",
+    /** Sync Now row subtext: partner name + the sync status / last-synced line. */
+    statusWithPartner: "{{partner}} · {{status}}",
+    /** Overflow (⋯) button + its sheet: home Wi-Fi and unpair. */
+    options: "Sync-Optionen",
+    homeWifi: "Heim-WLAN",
+    homeWifiUnset: "Nicht festgelegt · tippen, um das aktuelle Netzwerk zu nehmen",
+    /** Auto-sync pill on the Sync Now row (shown once a home Wi-Fi is set). */
+    autoOn: "Auto ein",
+    autoOff: "Auto aus",
+    autoA11y: "Auto-Sync im Heim-WLAN",
     syncNow: "Jetzt synchronisieren",
     discovering: "Suche Partner...",
     connecting: "Verbinde...",
@@ -58,7 +63,6 @@ export const profileConnections: Localized<typeof en> = {
     },
   },
   people: {
-    sectionTitle: "PERSONEN",
     manageA11y: "Personen verwalten",
     people: "Personen 👤",
     peopleSubtext: "Haushaltsmitglieder, wer was ausgegeben hat und was dir geschuldet wird",

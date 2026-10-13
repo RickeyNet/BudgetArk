@@ -109,7 +109,7 @@ export const dataCoachmarks: Localized<typeof en> = {
         title: "Belege und Geschäftsausgaben",
         body: "Hänge bis zu drei Belegfotos an jede Buchung - sie sind verschlüsselt und verlassen dieses Handy nie. Ordne eine Ausgabe einem Unternehmen zu (Unternehmen legst du im Profil an), und sie bekommt ein 💼-Abzeichen; ein Bericht zur Steuerzeit mit CSV- und Belegexport wartet unter Profil → Geschäftsausgaben.",
         detail: "Knipse oder wähle bis zu drei Belegfotos im Formular zum Anlegen und Bearbeiten - Fotos werden verkleinert, mit demselben Schlüssel wie alles andere verschlüsselt und nur auf diesem Handy gespeichert (ein gekoppelter Partner sieht einen Platzhalter, Sicherungen lassen sie aus, und nichts wird je hochgeladen). Lege unter Profil → Geschäftsausgaben Unternehmen an und ordne ihnen Ausgaben zu; zugeordnete Buchungen zählen weiter in deinem normalen Budget - getrennt wird erst zur Steuerzeit, wenn der Geschäftsausgaben-Bericht Summen je Unternehmen nach Kategorie liefert, eine CSV für die Steuerberatung und optional ein Zip mit den Belegfotos des Jahres, benannt passend zu den CSV-Zeilen. Exporte passieren nur, wenn du sie ausdrücklich bestätigst.",
-        location: "Budget-Tab → + / Buchung bearbeiten · Profil → Geschäftsausgaben",
+        location: "Budget-Tab → + / Buchung bearbeiten · Profil → Unternehmen",
         keywords: "beleg, quittung, foto, kamera, anhang, unternehmen, geschäftlich, steuer, bericht, csv, export, steuerberater, zip",
       },
     },

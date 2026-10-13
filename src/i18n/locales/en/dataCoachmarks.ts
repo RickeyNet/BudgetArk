@@ -105,7 +105,7 @@ export const dataCoachmarks = {
         title: "Receipts and business expenses",
         body: "Attach up to three receipt photos to any entry - they're encrypted and never leave this phone. Tag an expense to a business (set businesses up in Profile) and it gets a 💼 badge; a tax-time report with CSV and receipt export lives in Profile → Business Expenses.",
         detail: "Snap or pick up to three receipt photos in the Add and Edit entry forms - photos are shrunk, encrypted with the same key that protects everything else, and stored only on this phone (a paired partner sees a placeholder, backups skip them, and nothing is ever uploaded). Create businesses under Profile → Business Expenses, then tag any expense to one; tagged entries still count in your normal budget - the separation happens at tax time, when the Business Expense Report gives per-business totals by category, an accountant-ready CSV, and an optional zip of the year's receipt photos named to match the CSV rows. Exports only happen when you explicitly confirm them.",
-        location: "Budget tab → + / edit an entry · Profile → Business Expenses",
+        location: "Budget tab → + / edit an entry · Profile → Businesses",
         keywords: "receipt, photo, camera, attachment, business, tax, report, csv, export, accountant, zip",
       },
     },

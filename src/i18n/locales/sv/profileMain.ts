@@ -31,7 +31,6 @@ export const profileMain: Localized<typeof en> = {
     a11yCollapsed: "Uppdragsbeskrivning, infälld",
   },
   progress: {
-    sectionTitle: "FRAMSTEG",
     shipsLog: "Loggbok",
     shipsLogA11y: "Öppna loggboken med utmärkelser",
     earned: "{{unlocked}}/{{total}} utmärkelser intjänade",

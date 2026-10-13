@@ -30,8 +30,7 @@ export const profileInfo: Localized<typeof en> = {
       description: "Durchsuchbare Anleitung zu jeder Funktion, der Rundgang pro Tab, Neuigkeiten und Einführung wiederholen",
       a11yLabel: "Funktionsübersicht öffnen",
     },
-  },
-  support: {
+    /** Formerly the SUPPORT card - feedback and the tip jar are help-adjacent. */
     feedback: {
       label: "Feedback senden",
       description: "Fehlermeldungen & Funktionswünsche",
@@ -41,8 +40,11 @@ export const profileInfo: Localized<typeof en> = {
       description: "Freiwillige Unterstützung - nichts freizuschalten",
     },
   },
+  /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
+  organize: {
+    sectionTitle: "ORDNEN",
+  },
   business: {
-    sectionTitle: "GESCHÄFTSAUSGABEN",
     businesses: {
       label: "Unternehmen 💼",
       description: "Ausgaben einer Firma oder einem Nebenjob zuordnen, plus der Bericht fürs Finanzamt",
@@ -50,7 +52,6 @@ export const profileInfo: Localized<typeof en> = {
     },
   },
   categories: {
-    sectionTitle: "KATEGORIEN",
     custom: {
       label: "Eigene Kategorien",
       a11yLabel: "Eigene Kategorien verwalten",

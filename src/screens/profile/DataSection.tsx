@@ -2,11 +2,14 @@
  * BudgetArk - Data Section
  * File: src/screens/profile/DataSection.tsx
  *
- * The DATA card (Export, Import, Automatic Backups, Reset) and every modal
- * in those flows. Export and Import are single rows that open a hub sheet
- * listing the concrete options (encrypted backup / spreadsheet; backup file /
- * pasted backup / spreadsheet / bank statement) - six rows collapsed to two,
- * so the card reads as four actions instead of a wall of import variants.
+ * The DATA card (Export & Backups, Import, Reset) and every modal in those
+ * flows. Export and Import are single rows that open a hub sheet listing
+ * the concrete options (encrypted backup / spreadsheet / automatic backups;
+ * backup file / pasted backup / spreadsheet / bank statement) - seven rows
+ * collapsed to two, so the card reads as three actions instead of a wall
+ * of import variants. Automatic Backups used to be its own row; it is a
+ * backup like the export is, so it sits in that hub with its live
+ * "Weekly · last ..." summary as the subtitle.
  * Beyond the hubs: export confirmation + blocking spinner, import
  * mode/password, spreadsheet format/mode/schema, paste import, and the reset
  * confirmation. Owns all flow-local state (passwords, paste text, in-flight
@@ -92,6 +95,12 @@ const HUB_OPTIONS = {
       id: "spreadsheet",
       title: "profile.data.exportMenu.spreadsheet.title",
       subtitle: "profile.data.exportMenu.spreadsheet.subtitle",
+    },
+    {
+      id: "autoBackup",
+      title: "profile.data.exportMenu.autoBackup.title",
+      // Interpolates {{status}} - the live auto-backup summary.
+      subtitle: "profile.data.exportMenu.autoBackup.subtitle",
     },
   ],
   import: [
@@ -758,6 +767,9 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                 : handleImportSpreadsheet,
             );
             return;
+          case "autoBackup":
+            openFromHub(() => setShowAutoBackupModal(true));
+            return;
           case "backupFile":
             openFromHub(() => setShowImportModeModal(true));
             return;
@@ -823,7 +835,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
 
     return (
       <>
-        {/* ── Data (Export, Import, Reset) ── */}
+        {/* ── Data (Export & Backups, Import, Reset) ── */}
         <View style={styles.settingsSection}>
           <Text
             style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
@@ -881,34 +893,6 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.settingsRowSubtext, { color: colors.textDim }]}
                 >
                   {t("profile.data.rows.import.subtitle")}
-                </Text>
-              </View>
-              <Text
-                style={[styles.settingsRowArrow, { color: colors.textDim }]}
-              >
-                →
-              </Text>
-            </TouchableOpacity>
-
-            <View
-              style={[
-                styles.groupedDivider,
-                { backgroundColor: colors.cardBorder },
-              ]}
-            />
-
-            <TouchableOpacity
-              style={styles.groupedRow}
-              onPress={() => setShowAutoBackupModal(true)}
-            >
-              <View>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.data.rows.autoBackup.title")}
-                </Text>
-                <Text
-                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-                >
-                  {autoBackupSummary}
                 </Text>
               </View>
               <Text
@@ -1292,7 +1276,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                           { color: colors.textDim },
                         ]}
                       >
-                        {t(option.subtitle)}
+                        {t(option.subtitle, { status: autoBackupSummary })}
                       </Text>
                     </View>
                     <Text

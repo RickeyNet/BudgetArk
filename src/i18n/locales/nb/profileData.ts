@@ -14,18 +14,17 @@ export const profileData: Localized<typeof en> = {
   sectionTitle: "DATA",
   rows: {
     export: {
-      title: "Eksporter",
-      subtitle: "Kryptert sikkerhetskopi eller regneark",
+      title: "Eksport & sikkerhetskopier",
+      subtitle: "Kryptert sikkerhetskopi, regneark eller automatiske sikkerhetskopier",
     },
     import: {
       title: "Importer",
       subtitle: "Sikkerhetskopi, regneark eller kontoutskrift",
     },
-    autoBackup: { title: "Automatiske sikkerhetskopier" },
     reset: { title: "Nullstill alle data" },
   },
   exportMenu: {
-    title: "Eksporter",
+    title: "Eksport & sikkerhetskopier",
     backup: {
       title: "Kryptert sikkerhetskopi",
       subtitle: "Alt, som en passordbeskyttet fil",
@@ -33,6 +32,11 @@ export const profileData: Localized<typeof en> = {
     spreadsheet: {
       title: "Regneark",
       subtitle: "CSV eller Excel for Google Sheets / Excel",
+    },
+    /** Third option: the weekly/monthly on-device backup settings sheet. */
+    autoBackup: {
+      title: "Automatiske sikkerhetskopier",
+      subtitle: "Lagres i appen · {{status}}",
     },
   },
   importMenu: {

@@ -1,9 +1,12 @@
 /**
- * BudgetArk - Categories Section
+ * BudgetArk - Categories Row
  * File: src/screens/profile/CategoriesSection.tsx
  *
- * The Custom Categories row and its manage modal. Reads the category list
- * from the CustomCategories provider and owns the modal's visibility.
+ * The Custom Categories row and its manage modal, rendered inside the
+ * ORGANIZE card (OrganizeSection) alongside People and Businesses - the
+ * three rows all answer "how do I tag entries?", so they share one card
+ * instead of owning a section header each. Reads the category list from
+ * the CustomCategories provider and owns the modal's visibility.
  */
 
 import React, { useState } from "react";
@@ -28,49 +31,31 @@ const CategoriesSection: React.FC = () => {
 
   return (
     <>
-      {/* ── Categories ── */}
-      <View style={styles.settingsSection}>
-        <Text
-          style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
-        >
-          {t("profile.info.categories.sectionTitle")}
-        </Text>
-
-        <View
-          style={[
-            styles.groupedCard,
-            { backgroundColor: colors.card, borderColor: colors.cardBorder },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => {
-              triggerHaptic("selection");
-              setShowManageCategories(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t("profile.info.categories.custom.a11yLabel")}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.info.categories.custom.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {customCategories.length === 0
-                  ? t("profile.info.categories.custom.empty")
-                  : t("profile.info.categories.custom.count", {
-                      count: customCategories.length,
-                    })}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.groupedRow}
+        onPress={() => {
+          triggerHaptic("selection");
+          setShowManageCategories(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t("profile.info.categories.custom.a11yLabel")}
+      >
+        <View style={styles.rowTextWrap}>
+          <Text style={[styles.settingsRowText, { color: colors.text }]}>
+            {t("profile.info.categories.custom.label")}
+          </Text>
+          <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+            {customCategories.length === 0
+              ? t("profile.info.categories.custom.empty")
+              : t("profile.info.categories.custom.count", {
+                  count: customCategories.length,
+                })}
+          </Text>
         </View>
-      </View>
+        <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+          →
+        </Text>
+      </TouchableOpacity>
 
       <ManageCategoriesModal
         visible={showManageCategories}

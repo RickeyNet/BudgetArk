@@ -157,6 +157,15 @@ export const makeProfileStyles = (tokens: DensityTokens, colors: ThemeColors) =>
       alignItems: "center",
       gap: 8,
     },
+    /** Ship's Log line under the name - a grouped row minus the side padding, with a top rule. */
+    profileFooterRow: {
+      marginTop: 14,
+      paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
     nameInput: {
       borderWidth: 1,
       borderRadius: 10,

@@ -1,14 +1,15 @@
 /**
- * BudgetArk - Business Expenses Section
+ * BudgetArk - Businesses Row
  * File: src/screens/profile/BusinessSection.tsx
  *
- * One "Businesses" row and the two sheets behind it: the manage sheet and
- * the Business Expense Report, which used to be its own Profile row and is
- * now a shortcut row at the top of the manage sheet. The manage sheet's
- * visibility stays in ProfileScreen because the feature spotlight deep
- * link (openSection: "businesses") opens it from there; the report sheet
- * is local. The shortcut closes the manage sheet first and opens the
- * report after the dismiss animation (never two Modals at once - the iOS
+ * One "Businesses" row (inside the ORGANIZE card, see OrganizeSection) and
+ * the two sheets behind it: the manage sheet and the Business Expense
+ * Report, which used to be its own Profile row and is now a shortcut row
+ * at the top of the manage sheet. The manage sheet's visibility stays in
+ * ProfileScreen because the feature spotlight deep link
+ * (openSection: "businesses") opens it from there; the report sheet is
+ * local. The shortcut closes the manage sheet first and opens the report
+ * after the dismiss animation (never two Modals at once - the iOS
  * silent-present rule).
  */
 
@@ -55,49 +56,31 @@ const BusinessSection: React.FC<BusinessSectionProps> = ({
 
   return (
     <>
-      {/* ── Business expenses ── */}
-      <View style={styles.settingsSection}>
-        <Text
-          style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
-        >
-          {t("profile.info.business.sectionTitle")}
-        </Text>
-
-        <View
-          style={[
-            styles.groupedCard,
-            { backgroundColor: colors.card, borderColor: colors.cardBorder },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => {
-              triggerHaptic("selection");
-              onDismissNewBadge("business-expenses");
-              onOpenManageBusinesses();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t("profile.info.business.businesses.a11yLabel")}
-          >
-            <View style={styles.rowTextWrap}>
-              <View style={styles.rowTitleWithBadge}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.info.business.businesses.label")}
-                </Text>
-                {newFeatureIds.has("business-expenses") && <NewFeatureBadge />}
-              </View>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {t("profile.info.business.businesses.description")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
+      <TouchableOpacity
+        style={styles.groupedRow}
+        onPress={() => {
+          triggerHaptic("selection");
+          onDismissNewBadge("business-expenses");
+          onOpenManageBusinesses();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t("profile.info.business.businesses.a11yLabel")}
+      >
+        <View style={styles.rowTextWrap}>
+          <View style={styles.rowTitleWithBadge}>
+            <Text style={[styles.settingsRowText, { color: colors.text }]}>
+              {t("profile.info.business.businesses.label")}
             </Text>
-          </TouchableOpacity>
+            {newFeatureIds.has("business-expenses") && <NewFeatureBadge />}
+          </View>
+          <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+            {t("profile.info.business.businesses.description")}
+          </Text>
         </View>
-      </View>
+        <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+          →
+        </Text>
+      </TouchableOpacity>
 
       <ManageBusinessesModal
         visible={showManageBusinesses}

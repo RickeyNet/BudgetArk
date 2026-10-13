@@ -10,16 +10,18 @@
 export const profileData = {
   sectionTitle: "DATA",
   rows: {
-    export: { title: "Export", subtitle: "Encrypted backup or spreadsheet" },
+    export: {
+      title: "Export & Backups",
+      subtitle: "Encrypted backup, spreadsheet or automatic backups",
+    },
     import: {
       title: "Import",
       subtitle: "Backup, spreadsheet or bank statement",
     },
-    autoBackup: { title: "Automatic Backups" },
     reset: { title: "Reset All Data" },
   },
   exportMenu: {
-    title: "Export",
+    title: "Export & Backups",
     backup: {
       title: "Encrypted Backup",
       subtitle: "Everything, as a password-protected file",
@@ -27,6 +29,11 @@ export const profileData = {
     spreadsheet: {
       title: "Spreadsheet",
       subtitle: "CSV or Excel for Google Sheets / Excel",
+    },
+    /** Third option: the weekly/monthly on-device backup settings sheet. */
+    autoBackup: {
+      title: "Automatic Backups",
+      subtitle: "Kept inside the app · {{status}}",
     },
   },
   importMenu: {

@@ -30,8 +30,7 @@ export const profileInfo: Localized<typeof en> = {
       description: "Sökbar guide till varje funktion, rundturen per flik, vad som är nytt och gör om introduktionen",
       a11yLabel: "Öppna funktionsguiden",
     },
-  },
-  support: {
+    /** Formerly the SUPPORT card - feedback and the tip jar are help-adjacent. */
     feedback: {
       label: "Skicka feedback",
       description: "Felrapporter & funktionsönskemål",
@@ -41,8 +40,11 @@ export const profileInfo: Localized<typeof en> = {
       description: "Frivilligt stöd - inget att låsa upp",
     },
   },
+  /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
+  organize: {
+    sectionTitle: "ORDNA",
+  },
   business: {
-    sectionTitle: "FÖRETAGSUTGIFTER",
     businesses: {
       label: "Företag 💼",
       description: "Märk utgifter med ett företag eller sidoprojekt, plus rapporten inför deklarationen",
@@ -50,7 +52,6 @@ export const profileInfo: Localized<typeof en> = {
     },
   },
   categories: {
-    sectionTitle: "KATEGORIER",
     custom: {
       label: "Egna kategorier",
       a11yLabel: "Hantera egna kategorier",

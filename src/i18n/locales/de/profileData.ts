@@ -14,18 +14,17 @@ export const profileData: Localized<typeof en> = {
   sectionTitle: "DATEN",
   rows: {
     export: {
-      title: "Exportieren",
-      subtitle: "Verschlüsselte Sicherung oder Tabelle",
+      title: "Export & Sicherungen",
+      subtitle: "Verschlüsselte Sicherung, Tabelle oder automatische Sicherungen",
     },
     import: {
       title: "Importieren",
       subtitle: "Sicherung, Tabelle oder Kontoauszug",
     },
-    autoBackup: { title: "Automatische Sicherungen" },
     reset: { title: "Alle Daten zurücksetzen" },
   },
   exportMenu: {
-    title: "Exportieren",
+    title: "Export & Sicherungen",
     backup: {
       title: "Verschlüsselte Sicherung",
       subtitle: "Alles, als passwortgeschützte Datei",
@@ -33,6 +32,11 @@ export const profileData: Localized<typeof en> = {
     spreadsheet: {
       title: "Tabelle",
       subtitle: "CSV oder Excel für Google Sheets / Excel",
+    },
+    /** Third option: the weekly/monthly on-device backup settings sheet. */
+    autoBackup: {
+      title: "Automatische Sicherungen",
+      subtitle: "In der App gespeichert · {{status}}",
     },
   },
   importMenu: {

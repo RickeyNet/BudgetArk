@@ -97,13 +97,10 @@ import { useProfileStyles } from "./profile/profileStyles";
 import BackupReminderBanner from "./profile/BackupReminderBanner";
 import MissionCard from "./profile/MissionCard";
 import ProfileCard from "./profile/ProfileCard";
-import SupportSection from "./profile/SupportSection";
 import AppearanceSection from "./profile/AppearanceSection";
 import PartnerSyncSection from "./profile/PartnerSyncSection";
-import ProgressSection from "./profile/ProgressSection";
-import CategoriesSection from "./profile/CategoriesSection";
-import BusinessSection from "./profile/BusinessSection";
-import PeopleSection, { type PeopleSectionHandle } from "./profile/PeopleSection";
+import OrganizeSection from "./profile/OrganizeSection";
+import type { PeopleSectionHandle } from "./profile/PeopleSection";
 import DataSection, { type DataSectionHandle } from "./profile/DataSection";
 import ConnectionsSection, {
   type ConnectionsSectionHandle,
@@ -690,18 +687,8 @@ const ProfileScreen: React.FC = () => {
         {/* ── Mission Statement ── */}
         <MissionCard />
 
-        {/* ── Profile Card ── */}
+        {/* ── Profile Card (name + Ship's Log) ── */}
         <ProfileCard user={user} onUserUpdated={setUser} />
-
-        {/* ── Send Feedback + Tip Jar ── */}
-        <SupportSection
-          newFeatureIds={newFeatureIds}
-          onDismissNewBadge={dismissNewBadge}
-          showTipJar={showTipJar}
-          onOpenTipJar={() => setShowTipJar(true)}
-          onCloseTipJar={() => setShowTipJar(false)}
-          showInfo={setInfoModal}
-        />
 
         {/* ── Appearance (Theme + Currency) ── */}
         <AppearanceSection
@@ -725,32 +712,20 @@ const ProfileScreen: React.FC = () => {
           onUnpair={handleUnpair}
         />
 
-        {/* ── Progress (Ship's Log achievements) ── */}
-        <ProgressSection />
-
-        {/* ── Categories ── */}
-        <CategoriesSection />
-
-        {/* ── Business expenses ── */}
-        <BusinessSection
+        {/* ── Organize (categories, people, businesses) ── */}
+        <OrganizeSection
           newFeatureIds={newFeatureIds}
           onDismissNewBadge={dismissNewBadge}
+          peopleRef={peopleSectionRef}
+          showManagePeople={showManagePeople}
+          onOpenManagePeople={() => setShowManagePeople(true)}
+          onCloseManagePeople={() => setShowManagePeople(false)}
           showManageBusinesses={showManageBusinesses}
           onOpenManageBusinesses={() => setShowManageBusinesses(true)}
           onCloseManageBusinesses={() => setShowManageBusinesses(false)}
         />
 
-        {/* ── People ── */}
-        <PeopleSection
-          ref={peopleSectionRef}
-          newFeatureIds={newFeatureIds}
-          onDismissNewBadge={dismissNewBadge}
-          showManagePeople={showManagePeople}
-          onOpenManagePeople={() => setShowManagePeople(true)}
-          onCloseManagePeople={() => setShowManagePeople(false)}
-        />
-
-        {/* ── Data (Export, Import, Reset) ── */}
+        {/* ── Data (Export & Backups, Import, Reset) ── */}
         <DataSection
           ref={dataSectionRef}
           showInfo={setInfoModal}
@@ -779,12 +754,16 @@ const ProfileScreen: React.FC = () => {
           onCloseTrackingReminders={closeTrackingReminders}
         />
 
-        {/* ── Help (feature guide: tour, update spotlight, redo onboarding) ── */}
+        {/* ── Help (feature guide, feedback, tip jar) ── */}
         <HelpSection
           ref={helpSectionRef}
           scrollRef={scrollRef}
           newFeatureIds={newFeatureIds}
           onFeatureOpened={dismissNewBadge}
+          showTipJar={showTipJar}
+          onOpenTipJar={() => setShowTipJar(true)}
+          onCloseTipJar={() => setShowTipJar(false)}
+          showInfo={setInfoModal}
         />
 
         {/* ── About (release notes, github) ── */}

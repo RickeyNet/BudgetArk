@@ -109,7 +109,7 @@ export const dataCoachmarks: Localized<typeof en> = {
         title: "Kvitteringer og bedriftsutgifter",
         body: "Legg ved opptil tre kvitteringsbilder på enhver post - de krypteres og forlater aldri denne telefonen. Merk en utgift med en bedrift (bedrifter setter du opp i Profil), så får den et 💼-merke; en rapport til skattemeldingen med CSV- og kvitteringseksport finnes under Profil → Bedriftsutgifter.",
         detail: "Ta eller velg opptil tre kvitteringsbilder i skjemaene for å legge til og redigere poster - bildene forminskes, krypteres med samme nøkkel som beskytter alt annet og lagres bare på denne telefonen (en sammenkoblet partner ser en plassholder, sikkerhetskopier hopper over dem, og ingenting lastes noen gang opp). Opprett bedrifter under Profil → Bedriftsutgifter og merk deretter enhver utgift med én; merkede poster telles fortsatt i det vanlige budsjettet - skillet skjer ved skattetid, når bedriftsutgiftsrapporten gir summer per bedrift etter kategori, en CSV klar for regnskapsføreren og en valgfri zip med årets kvitteringsbilder navngitt så de matcher CSV-radene. Eksport skjer bare når du uttrykkelig bekrefter den.",
-        location: "Budsjett-fanen → + / rediger en post · Profil → Bedriftsutgifter",
+        location: "Budsjett-fanen → + / rediger en post · Profil → Bedrifter",
         keywords: "kvittering, bilde, foto, kamera, vedlegg, bedrift, skatt, skattemelding, rapport, csv, eksport, regnskapsfører, zip",
       },
     },

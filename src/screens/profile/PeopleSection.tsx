@@ -1,14 +1,15 @@
 /**
- * BudgetArk - People Section
+ * BudgetArk - People Row
  * File: src/screens/profile/PeopleSection.tsx
  *
- * One "People" row and the three sheets behind it - the manage sheet where
- * the user maintains the household members spending can be assigned to
- * (BudgetEntry.personId), the person spending report, and Owed to You
- * (BudgetEntry.lentTo). The report and loans used to be their own Profile
- * rows; they are now shortcut rows at the top of the manage sheet, so the
- * Profile tab shows one row per subject. The manage sheet's visibility
- * stays in ProfileScreen because the feature spotlight deep link
+ * One "People" row (inside the ORGANIZE card, see OrganizeSection) and the
+ * three sheets behind it - the manage sheet where the user maintains the
+ * household members spending can be assigned to (BudgetEntry.personId),
+ * the person spending report, and Owed to You (BudgetEntry.lentTo). The
+ * report and loans used to be their own Profile rows; they are now
+ * shortcut rows at the top of the manage sheet, so the Profile tab shows
+ * one row per subject. The manage sheet's visibility stays in
+ * ProfileScreen because the feature spotlight deep link
  * (openSection: "people") opens it from there - same pattern as
  * BusinessSection; the report and loans sheets are local.
  *
@@ -77,49 +78,31 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
 
   return (
     <>
-      {/* ── People ── */}
-      <View style={styles.settingsSection}>
-        <Text
-          style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
-        >
-          {t("profile.connections.people.sectionTitle")}
-        </Text>
-
-        <View
-          style={[
-            styles.groupedCard,
-            { backgroundColor: colors.card, borderColor: colors.cardBorder },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => {
-              triggerHaptic("selection");
-              onDismissNewBadge("people-assignment");
-              onOpenManagePeople();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t("profile.connections.people.manageA11y")}
-          >
-            <View style={styles.rowTextWrap}>
-              <View style={styles.rowTitleWithBadge}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.connections.people.people")}
-                </Text>
-                {isNew && <NewFeatureBadge />}
-              </View>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {t("profile.connections.people.peopleSubtext")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
+      <TouchableOpacity
+        style={styles.groupedRow}
+        onPress={() => {
+          triggerHaptic("selection");
+          onDismissNewBadge("people-assignment");
+          onOpenManagePeople();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t("profile.connections.people.manageA11y")}
+      >
+        <View style={styles.rowTextWrap}>
+          <View style={styles.rowTitleWithBadge}>
+            <Text style={[styles.settingsRowText, { color: colors.text }]}>
+              {t("profile.connections.people.people")}
             </Text>
-          </TouchableOpacity>
+            {isNew && <NewFeatureBadge />}
+          </View>
+          <Text style={[styles.settingsRowSubtext, { color: colors.textDim }]}>
+            {t("profile.connections.people.peopleSubtext")}
+          </Text>
         </View>
-      </View>
+        <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+          →
+        </Text>
+      </TouchableOpacity>
 
       <ManagePeopleModal
         visible={showManagePeople}
