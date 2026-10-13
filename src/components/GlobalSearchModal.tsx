@@ -8,7 +8,7 @@
  * a result tap does (edit in place, or hop to the owning tab), so this
  * component stays navigation-free.
  *
- * Rendered as a slide-up sheet (OnboardingGuideModal skeleton): the search
+ * Rendered as a slide-up sheet (FeatureGuideModal skeleton): the search
  * field needs the keyboard, and a centered card + keyboard don't share a
  * small screen well. All matching lives in utils/searchFilter (pure,
  * unit-tested); this file is only the shell.

@@ -25,18 +25,9 @@ export const profileInfo: Localized<typeof en> = {
   },
   help: {
     sectionTitle: "HJELP",
-    onboarding: {
-      label: "Introduksjon",
-      description: "Søkbar guide til alt, eller gjør førstegangsoppsettet på nytt",
-    },
-    updateSpotlight: {
-      label: "Oppdateringsnyheter",
-      description: "Se hva som er nytt i denne versjonen av BudgetArk igjen",
-      a11yLabel: "Spill av oppdateringsnyhetene igjen",
-    },
     featureGuide: {
       label: "Funksjonsguide",
-      description: "Hver funksjon per fane - hvor den ligger og hvordan du bruker den",
+      description: "Søkbar guide til hver funksjon, omvisningen per fane, hva som er nytt og ta introduksjonen på nytt",
       a11yLabel: "Åpne funksjonsguiden",
     },
   },
@@ -54,13 +45,8 @@ export const profileInfo: Localized<typeof en> = {
     sectionTitle: "BEDRIFTSUTGIFTER",
     businesses: {
       label: "Bedrifter 💼",
-      description: "Merk utgifter med et firma eller en sidegeskjeft",
+      description: "Merk utgifter med et firma eller en sidegeskjeft, pluss rapporten til skattemeldingen",
       a11yLabel: "Administrer bedrifter",
-    },
-    report: {
-      label: "Rapport over bedriftsutgifter",
-      description: "Summer per bedrift og år, med CSV-eksport",
-      a11yLabel: "Åpne rapporten over bedriftsutgifter",
     },
   },
   categories: {

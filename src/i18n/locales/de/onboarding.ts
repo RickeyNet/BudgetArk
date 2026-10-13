@@ -99,7 +99,7 @@ export const onboarding: Localized<typeof en> = {
     finishBuildArk: "Fertig + Arche bauen",
     skipForNow: "Vorerst überspringen",
     tourHint:
-      "Als Nächstes führt dich die Einrichtung durch jeden Tab - jeder Tipp hat ein „Mehr erfahren“ mit allen Details, und du kannst jederzeit einen Schritt zurück oder überspringen. Später kannst du alles unter Profil → Hilfe → Einführung nachlesen und durchsuchen.",
+      "Als Nächstes führt dich die Einrichtung durch jeden Tab - jeder Tipp hat ein „Mehr erfahren“ mit allen Details, und du kannst jederzeit einen Schritt zurück oder überspringen. Später kannst du alles unter Profil → Hilfe → Funktionsübersicht nachlesen und durchsuchen.",
   },
   alerts: {
     notificationsOff: {

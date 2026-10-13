@@ -2,13 +2,19 @@
  * BudgetArk - People Section
  * File: src/screens/profile/PeopleSection.tsx
  *
- * The People, Person Spending Report and Owed to You rows and their modals
- * - where the user maintains the list of household members spending can be
- * assigned to (BudgetEntry.personId), views who spent what, and tracks
- * money lent out (BudgetEntry.lentTo). The manage modal's
- * visibility stays in ProfileScreen because the feature spotlight deep
- * link (openSection: "people") opens it from there - same pattern as
- * BusinessSection; the report modal is purely local.
+ * One "People" row and the three sheets behind it - the manage sheet where
+ * the user maintains the household members spending can be assigned to
+ * (BudgetEntry.personId), the person spending report, and Owed to You
+ * (BudgetEntry.lentTo). The report and loans used to be their own Profile
+ * rows; they are now shortcut rows at the top of the manage sheet, so the
+ * Profile tab shows one row per subject. The manage sheet's visibility
+ * stays in ProfileScreen because the feature spotlight deep link
+ * (openSection: "people") opens it from there - same pattern as
+ * BusinessSection; the report and loans sheets are local.
+ *
+ * A shortcut closes the manage sheet first and opens its target after the
+ * dismiss animation - presenting a second Modal over a still-visible one is
+ * the iOS silent-present failure family this codebase avoids.
  */
 
 import React, { forwardRef, useCallback, useImperativeHandle, useState } from "react";
@@ -22,6 +28,9 @@ import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
+
+/** Sheet dismiss animation allowance before presenting the next Modal. */
+const SHEET_DISMISS_MS = 350;
 
 type PeopleSectionProps = {
   newFeatureIds: ReadonlySet<string>;
@@ -52,6 +61,19 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
   // effect, so presenting here is already deferred past the tab switch.
   const openOwedToYou = useCallback(() => setShowLoans(true), []);
   useImperativeHandle(ref, () => ({ openOwedToYou }), [openOwedToYou]);
+
+  const openReportFromSheet = useCallback(() => {
+    onCloseManagePeople();
+    setTimeout(() => setShowPersonReport(true), SHEET_DISMISS_MS);
+  }, [onCloseManagePeople]);
+
+  const openOwedFromSheet = useCallback(() => {
+    onDismissNewBadge("owed-to-you");
+    onCloseManagePeople();
+    setTimeout(() => setShowLoans(true), SHEET_DISMISS_MS);
+  }, [onCloseManagePeople, onDismissNewBadge]);
+
+  const isNew = newFeatureIds.has("people-assignment") || newFeatureIds.has("owed-to-you");
 
   return (
     <>
@@ -84,70 +106,12 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
                 <Text style={[styles.settingsRowText, { color: colors.text }]}>
                   {t("profile.connections.people.people")}
                 </Text>
-                {newFeatureIds.has("people-assignment") && <NewFeatureBadge />}
+                {isNew && <NewFeatureBadge />}
               </View>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
               >
                 {t("profile.connections.people.peopleSubtext")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => {
-              triggerHaptic("selection");
-              setShowPersonReport(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t("profile.connections.people.reportA11y")}
-          >
-            <View style={styles.rowTextWrap}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.connections.people.report")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {t("profile.connections.people.reportSubtext")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => {
-              triggerHaptic("selection");
-              onDismissNewBadge("owed-to-you");
-              setShowLoans(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t("profile.connections.people.owedA11y")}
-          >
-            <View style={styles.rowTextWrap}>
-              <View style={styles.rowTitleWithBadge}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.connections.people.owed")}
-                </Text>
-                {newFeatureIds.has("owed-to-you") && <NewFeatureBadge />}
-              </View>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {t("profile.connections.people.owedSubtext")}
               </Text>
             </View>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
@@ -160,6 +124,8 @@ const PeopleSection = forwardRef<PeopleSectionHandle, PeopleSectionProps>(functi
       <ManagePeopleModal
         visible={showManagePeople}
         onClose={onCloseManagePeople}
+        onOpenReport={openReportFromSheet}
+        onOpenOwed={openOwedFromSheet}
       />
       <PersonReportModal
         visible={showPersonReport}

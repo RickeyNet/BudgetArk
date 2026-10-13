@@ -99,12 +99,13 @@ export const profileSettings: Localized<typeof en> = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
+    label: "Oppdateringer",
     checkLabel: "Se etter oppdateringer",
     lastChecked: "Sist sjekket {{when}}",
     neverChecked: "Aldri sjekket",
     autoLabel: "Automatiske oppdateringer",
-    autoOff: "Av - bare manuelle sjekker",
-    autoOn: "På - sjekker automatisk",
+    autoOff: "Auto av",
+    autoOn: "Auto på",
     unavailableTitle: "Oppdateringer utilgjengelige",
     unavailableMessage:
       "Oppdateringssjekker er ikke tilgjengelige i utviklingsbygg. Installer et EAS-forhåndsvisnings- eller produksjonsbygg for å bruke funksjonen.",
@@ -119,8 +120,7 @@ export const profileSettings: Localized<typeof en> = {
     failedGeneric: "Kunne ikke se etter oppdateringer nå. Prøv igjen om litt.",
     failedDetails: "{{friendly}}\n\nDetaljer: {{details}}",
     modeSavedTitle: "Oppdateringsmodus lagret",
-    modeManualMessage:
-      "Manuell modus er på. Appen ser bare etter oppdateringer når du trykker på «Se etter oppdateringer».",
+    modeManualMessage: "Manuell modus er på. Appen ser bare etter oppdateringer når du trykker på «Oppdateringer».",
     modeAutoMessage: "Automatiske oppdateringssjekker er på.",
     readyTitle: "Oppdatering klar",
     readyMessage: "En ny oppdatering er klar til å installeres.",

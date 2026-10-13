@@ -100,12 +100,13 @@ export const profileSettings: LocalizedPlural<typeof en> = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
+    label: "Обновления",
     checkLabel: "Проверить обновления",
     lastChecked: "Последняя проверка {{when}}",
     neverChecked: "Ещё не проверялось",
     autoLabel: "Автообновления",
-    autoOff: "Выкл. - только вручную",
-    autoOn: "Вкл. - проверяются автоматически",
+    autoOff: "Авто выкл.",
+    autoOn: "Авто вкл.",
     unavailableTitle: "Обновления недоступны",
     unavailableMessage:
       "Проверка обновлений недоступна в сборках для разработки. Установи preview- или production-сборку EAS, чтобы пользоваться этой функцией.",
@@ -119,8 +120,7 @@ export const profileSettings: LocalizedPlural<typeof en> = {
     failedGeneric: "Сейчас не удаётся проверить обновления. Попробуй чуть позже.",
     failedDetails: "{{friendly}}\n\nПодробности: {{details}}",
     modeSavedTitle: "Режим обновлений сохранён",
-    modeManualMessage:
-      "Включён ручной режим. Приложение будет проверять обновления, только когда ты нажмёшь «Проверить обновления».",
+    modeManualMessage: "Включён ручной режим. Приложение будет проверять обновления, только когда ты нажмёшь «Обновления».",
     modeAutoMessage: "Автоматическая проверка обновлений включена.",
     readyTitle: "Обновление готово",
     readyMessage: "Новое обновление готово к установке.",

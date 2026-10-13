@@ -871,14 +871,17 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             ]}
           />
 
+          {/* One Updates row: tapping it checks now; the pill flips auto/manual. */}
           <TouchableOpacity
             style={[styles.groupedRow, isCheckingUpdates && { opacity: 0.7 }]}
             onPress={() => checkForUpdates("manual")}
             disabled={isCheckingUpdates}
+            accessibilityRole="button"
+            accessibilityLabel={t("profile.settings.updates.checkLabel")}
           >
-            <View>
+            <View style={styles.rowTextWrap}>
               <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.updates.checkLabel")}
+                {t("profile.settings.updates.label")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}
@@ -890,36 +893,27 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
                   : t("profile.settings.updates.neverChecked")}
               </Text>
             </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {isCheckingUpdates ? "..." : "→"}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={toggleManualMode}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.updates.autoLabel")}
-              </Text>
+            <TouchableOpacity
+              style={styles.rowPill}
+              onPress={toggleManualMode}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: !updatePrefs.manualUpdateMode }}
+              accessibilityLabel={t("profile.settings.updates.autoLabel")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                style={[
+                  styles.rowPillText,
+                  { color: updatePrefs.manualUpdateMode ? colors.textDim : colors.accent },
+                ]}
               >
                 {updatePrefs.manualUpdateMode
                   ? t("profile.settings.updates.autoOff")
                   : t("profile.settings.updates.autoOn")}
               </Text>
-            </View>
+            </TouchableOpacity>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {updatePrefs.manualUpdateMode ? t("common.off") : t("common.on")}
+              {isCheckingUpdates ? "..." : "→"}
             </Text>
           </TouchableOpacity>
         </View>

@@ -61,12 +61,6 @@ export const profileConnections: Localized<typeof en> = {
     sectionTitle: "PERSONEN",
     manageA11y: "Personen verwalten",
     people: "Personen 👤",
-    peopleSubtext: "Ausgaben Haushaltsmitgliedern zuordnen",
-    reportA11y: "Ausgabenbericht pro Person öffnen",
-    report: "Ausgabenbericht pro Person",
-    reportSubtext: "Summen pro Person und Jahr, mit CSV-Export",
-    owedA11y: "Ausstehende Rückzahlungen öffnen",
-    owed: "Dir geschuldet 🤝",
-    owedSubtext: "Verliehenes Geld und was schon zurückgezahlt wurde",
+    peopleSubtext: "Haushaltsmitglieder, wer was ausgegeben hat und was dir geschuldet wird",
   },
 };

@@ -22,18 +22,9 @@ export const profileInfo = {
   },
   help: {
     sectionTitle: "HELP",
-    onboarding: {
-      label: "Onboarding",
-      description: "Searchable guide to everything, or redo the first-launch setup",
-    },
-    updateSpotlight: {
-      label: "Update spotlight",
-      description: "Rewatch what's new in this version of BudgetArk",
-      a11yLabel: "Replay the update spotlight",
-    },
     featureGuide: {
       label: "Feature guide",
-      description: "Every feature by tab - where it lives and how to use it",
+      description: "Searchable guide to every feature, the tab-by-tab tour, what's new, and redo onboarding",
       a11yLabel: "Open the feature guide",
     },
   },
@@ -51,13 +42,8 @@ export const profileInfo = {
     sectionTitle: "BUSINESS EXPENSES",
     businesses: {
       label: "Businesses 💼",
-      description: "Tag expenses to a company or side gig",
+      description: "Tag expenses to a company or side gig, and the tax-time report",
       a11yLabel: "Manage businesses",
-    },
-    report: {
-      label: "Business Expense Report",
-      description: "Per-business totals by year, with CSV export",
-      a11yLabel: "Open business expense report",
     },
   },
   categories: {

@@ -99,6 +99,14 @@ export const modalsEngage: Localized<typeof en> = {
   /** Feature guide sheet (FeatureGuideModal): the browsable, searchable directory of every feature. */
   featureGuide: {
     title: "Funktionsübersicht",
+    /** Link row above the search: replays this version's debut carousel. */
+    replaySpotlight: "Update-Spotlight",
+    replaySpotlightHint: "Die Neuigkeiten dieser BudgetArk-Version noch einmal ansehen",
+    replaySpotlightA11y: "Update-Spotlight erneut abspielen",
+    /** Group title for the coachmark tour steps listed under the features. */
+    toursTitle: "Rundgang pro Tab",
+    /** Footer button: rerun the first-launch flow. */
+    redoOnboarding: "Einführung wiederholen",
     intro:
       "Alles, was BudgetArk kann, nach Tab. Tipp auf eine Funktion, um zu sehen, wo sie liegt und wie du sie nutzt.",
     searchPlaceholder: 'Suchen - z. B. "Beleg" oder "Zahltag"',
@@ -118,18 +126,6 @@ export const modalsEngage: Localized<typeof en> = {
       charts: "Karten",
       profile: "Profil",
     },
-  },
-  guide: {
-    title: "Einführung",
-    intro:
-      "Alles in BudgetArk - nach Tab stöbern oder suchen, was du tun möchtest.",
-    searchPlaceholder: 'Suchen - z. B. "Beleg" oder "Kreditkarte"',
-    clearSearchA11y: "Suche löschen",
-    noMatches: {
-      title: "Keine Treffer",
-      body: 'Versuch ein anderes Wort - z. B. "Sicherung", "Benachrichtigung", "wiederkehrend" oder den Namen eines Tabs.',
-    },
-    redoOnboarding: "Einführung wiederholen",
   },
   unlock: {
     kicker: "ABZEICHEN FREIGESCHALTET",

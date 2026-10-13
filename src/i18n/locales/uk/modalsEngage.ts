@@ -97,6 +97,14 @@ export const modalsEngage: LocalizedPlural<typeof en> = {
   /** Feature guide sheet (FeatureGuideModal): the browsable, searchable directory of every feature. */
   featureGuide: {
     title: "Довідник функцій",
+    /** Link row above the search: replays this version's debut carousel. */
+    replaySpotlight: "Огляд оновлення",
+    replaySpotlightHint: "Переглянути ще раз, що нового в цій версії BudgetArk",
+    replaySpotlightA11y: "Повторити огляд оновлення",
+    /** Group title for the coachmark tour steps listed under the features. */
+    toursTitle: "Огляд за вкладками",
+    /** Footer button: rerun the first-launch flow. */
+    redoOnboarding: "Пройти знайомство знову",
     intro:
       "Усе, що вміє BudgetArk, за вкладками. Натисни функцію, щоб побачити, де вона є і як нею користуватися.",
     searchPlaceholder: "Пошук - спробуй «чек» або «зарплата»",
@@ -116,18 +124,6 @@ export const modalsEngage: LocalizedPlural<typeof en> = {
       charts: "Карти",
       profile: "Профіль",
     },
-  },
-  guide: {
-    title: "Знайомство із застосунком",
-    intro:
-      "Усе, що є в BudgetArk - переглядай за вкладками або шукай те, що хочеш зробити.",
-    searchPlaceholder: "Пошук - спробуй «чек» або «кредитна картка»",
-    clearSearchA11y: "Очистити пошук",
-    noMatches: {
-      title: "Нічого не знайдено",
-      body: "Спробуй інше слово - наприклад «копія», «сповіщення», «регулярний» або назву вкладки.",
-    },
-    redoOnboarding: "Пройти знайомство знову",
   },
   unlock: {
     kicker: "ЗНАЧОК ОТРИМАНО",

@@ -3,7 +3,7 @@
  *
  * Every step here renders on TWO surfaces: the spotlight cards of the
  * guided onboarding tour (Spotlight.tsx via useTabCoachmark) and the
- * searchable Onboarding guide sheet (OnboardingGuideModal). The field
+ * searchable tab-by-tab tour inside the Feature guide (FeatureGuideModal). The field
  * split is deliberate:
  *   - `body`   - concise (~40-55 words), what the spotlight card shows at
  *                a glance. Keep it short: it renders inside a tooltip.

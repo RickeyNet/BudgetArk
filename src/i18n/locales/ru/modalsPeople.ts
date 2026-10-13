@@ -155,6 +155,15 @@ export const modalsPeople: LocalizedPlural<typeof en> = {
   },
   people: {
     title: "Люди",
+    /** Shortcut rows at the top of the sheet - the report and loans live behind this one Profile row. */
+    shortcuts: {
+      report: "Отчёт по тратам людей",
+      reportSubtext: "Итоги по каждому человеку за год, с экспортом в CSV",
+      reportA11y: "Открыть отчёт по тратам людей",
+      owed: "Тебе должны 🤝",
+      owedSubtext: "Деньги, которые ты одолжил, и что уже вернули",
+      owedA11y: "Открыть «Тебе должны»",
+    },
     subtitle:
       "Добавь людей из своей семьи (или всех, чьи расходы ты отслеживаешь). Назначай им расходы при добавлении записей или подтверждении импортированных операций - будет ясно, кто что потратил.",
     renameLabel: "ПЕРЕИМЕНОВАТЬ ЧЕЛОВЕКА",
@@ -186,6 +195,12 @@ export const modalsPeople: LocalizedPlural<typeof en> = {
   },
   businesses: {
     title: "Бизнесы",
+    /** Shortcut row at the top of the sheet - the report lives behind this one Profile row. */
+    shortcuts: {
+      report: "Отчёт по деловым расходам",
+      reportSubtext: "Итоги по каждому бизнесу за год, с экспортом в CSV",
+      reportA11y: "Открыть отчёт по деловым расходам",
+    },
     subtitle:
       "Добавь бизнесы, на которые тратишь (компания, подработка или клиент на фрилансе). Отмечай ими расходы при добавлении записей, а в налоговый сезон выгружай отчёт по каждому бизнесу.",
     renameLabel: "ПЕРЕИМЕНОВАТЬ БИЗНЕС",

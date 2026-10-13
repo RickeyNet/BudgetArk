@@ -138,6 +138,15 @@ export const modalsPeople: Localized<typeof en> = {
   },
   people: {
     title: "Personen",
+    /** Shortcut rows at the top of the sheet - the report and loans live behind this one Profile row. */
+    shortcuts: {
+      report: "Ausgabenbericht pro Person",
+      reportSubtext: "Summen pro Person und Jahr, mit CSV-Export",
+      reportA11y: "Ausgabenbericht pro Person öffnen",
+      owed: "Dir geschuldet 🤝",
+      owedSubtext: "Verliehenes Geld und was schon zurückgezahlt wurde",
+      owedA11y: "Ausstehende Rückzahlungen öffnen",
+    },
     subtitle:
       "Füge die Personen in deinem Haushalt hinzu (oder alle, für die du Ausgaben verfolgst). Ordne ihnen Ausgaben beim Erfassen oder beim Freigeben importierter Umsätze zu – so ist klar, wer was ausgegeben hat.",
     renameLabel: "PERSON UMBENENNEN",
@@ -163,6 +172,12 @@ export const modalsPeople: Localized<typeof en> = {
   },
   businesses: {
     title: "Geschäfte",
+    /** Shortcut row at the top of the sheet - the report lives behind this one Profile row. */
+    shortcuts: {
+      report: "Geschäftsausgaben-Bericht",
+      reportSubtext: "Summen je Unternehmen und Jahr, mit CSV-Export",
+      reportA11y: "Geschäftsausgaben-Bericht öffnen",
+    },
     subtitle:
       "Füge die Geschäfte hinzu, für die du Geld ausgibst (eine Firma, ein Nebenjob oder ein Freelance-Kunde). Ordne ihnen Ausgaben beim Erfassen zu und zieh dir zur Steuerzeit einen Bericht pro Geschäft.",
     renameLabel: "GESCHÄFT UMBENENNEN",

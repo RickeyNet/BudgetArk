@@ -60,12 +60,6 @@ export const profileConnections = {
     sectionTitle: "PEOPLE",
     manageA11y: "Manage people",
     people: "People 👤",
-    peopleSubtext: "Assign spending to household members",
-    reportA11y: "Open person spending report",
-    report: "Person Spending Report",
-    reportSubtext: "Per-person totals by year, with CSV export",
-    owedA11y: "Open owed to you",
-    owed: "Owed to You 🤝",
-    owedSubtext: "Money you've lent out, and what's been paid back",
+    peopleSubtext: "Household members, who spent what, and money owed to you",
   },
 } as const;

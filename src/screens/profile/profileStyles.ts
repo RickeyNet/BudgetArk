@@ -215,6 +215,19 @@ export const makeProfileStyles = (tokens: DensityTokens, colors: ThemeColors) =>
     settingsRowArrow: {
       fontSize: 16,
     },
+    /** Small tappable state pill on the right of a row (e.g. "Auto on"), nested inside the row. */
+    rowPill: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radiusPill,
+      paddingVertical: 4,
+      paddingHorizontal: tokens.padSm,
+      marginLeft: tokens.gapSm,
+    },
+    rowPillText: {
+      fontSize: scale(12),
+      fontWeight: "600",
+    },
     dangerRow: {
       borderColor: "#ff525220",
     },

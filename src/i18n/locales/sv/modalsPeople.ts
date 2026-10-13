@@ -138,6 +138,15 @@ export const modalsPeople: Localized<typeof en> = {
   },
   people: {
     title: "Personer",
+    /** Shortcut rows at the top of the sheet - the report and loans live behind this one Profile row. */
+    shortcuts: {
+      report: "Utgiftsrapport per person",
+      reportSubtext: "Summor per person och år, med CSV-export",
+      reportA11y: "Öppna rapporten över utgifter per person",
+      owed: "Att få tillbaka 🤝",
+      owedSubtext: "Pengar du lånat ut och vad som betalats tillbaka",
+      owedA11y: "Öppna Att få tillbaka",
+    },
     subtitle:
       "Lägg till personerna i ditt hushåll (eller vem som helst du följer utgifter för). Tilldela dem utgifter när du lägger till poster eller godkänner importerade transaktioner, så att det är tydligt vem som spenderat vad.",
     renameLabel: "BYT NAMN PÅ PERSON",
@@ -163,6 +172,12 @@ export const modalsPeople: Localized<typeof en> = {
   },
   businesses: {
     title: "Företag",
+    /** Shortcut row at the top of the sheet - the report lives behind this one Profile row. */
+    shortcuts: {
+      report: "Rapport över företagsutgifter",
+      reportSubtext: "Summor per företag och år, med CSV-export",
+      reportA11y: "Öppna rapporten över företagsutgifter",
+    },
     subtitle:
       "Lägg till företagen du har utgifter för (ett bolag, en sidoverksamhet eller en frilanskund). Tagga utgifter till dem när du lägger till poster och ta sedan fram en rapport per företag när det är dags att deklarera.",
     renameLabel: "BYT NAMN PÅ FÖRETAG",

@@ -61,12 +61,6 @@ export const profileConnections: Localized<typeof en> = {
     sectionTitle: "PERSONER",
     manageA11y: "Hantera personer",
     people: "Personer 👤",
-    peopleSubtext: "Tilldela utgifter till hushållets medlemmar",
-    reportA11y: "Öppna rapporten över utgifter per person",
-    report: "Utgiftsrapport per person",
-    reportSubtext: "Summor per person och år, med CSV-export",
-    owedA11y: "Öppna Att få tillbaka",
-    owed: "Att få tillbaka 🤝",
-    owedSubtext: "Pengar du lånat ut och vad som betalats tillbaka",
+    peopleSubtext: "Hushållets medlemmar, vem som spenderat vad och pengar du ska få tillbaka",
   },
 };

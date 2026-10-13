@@ -9,10 +9,19 @@
  * "something new arrived" moment; this is the random-access reference a
  * user reaches for later (Profile → Help → Feature guide).
  *
+ * Since the Help card shrank to this one row, the sheet is also home to
+ * everything else Help used to list: an "Update spotlight" link row that
+ * replays the carousel, the tab-by-tab coachmark tour (COACHMARKS, the
+ * same content the guided onboarding shows) as an accordion group under
+ * the features, and a Redo onboarding footer button. One search box
+ * covers both the features and the tour steps.
+ *
  * Expanding in place rather than opening a detail sheet keeps this a
  * single Modal: a second one stacked on top is the iOS silent-present
- * failure family this codebase avoids. Rendered as a slide-up sheet
- * (SheetModal) because the search field needs the keyboard.
+ * failure family this codebase avoids - which is also why the replay and
+ * redo actions are handed to the parent, who dismisses this sheet first.
+ * Rendered as a slide-up sheet (SheetModal) because the search field
+ * needs the keyboard.
  */
 
 import React, { useMemo, useState } from "react";
@@ -39,7 +48,13 @@ import {
   type FeatureArea,
   type FeatureSpotlight,
 } from "../data/featureSpotlights";
+import {
+  COACHMARK_TAB_IDS,
+  COACHMARKS,
+  type CoachmarkStep,
+} from "../data/coachmarkContent";
 import { searchFeatureGuide } from "../utils/featureGuideSearch";
+import { searchGuide } from "../utils/guideSearch";
 import { sanitizeTextInput } from "../utils/sanitize";
 import { triggerHaptic } from "../utils/haptics";
 
@@ -51,6 +66,10 @@ interface FeatureGuideModalProps {
    * a navigation that may present another Modal).
    */
   onTryFeature: (spotlight: FeatureSpotlight) => void;
+  /** "Update spotlight" link row - the parent closes this sheet, then replays the carousel. */
+  onReplaySpotlight: () => void;
+  /** Footer "Redo onboarding" - the parent closes this sheet, then resets + restarts the flow. */
+  onRedoOnboarding: () => void;
   /** Ids still wearing a NEW badge; expanding one acks it via onFeatureOpened. */
   newFeatureIds?: ReadonlySet<string>;
   onFeatureOpened?: (featureId: string) => void;
@@ -138,9 +157,31 @@ const FeatureRow: React.FC<{
   );
 };
 
+/** One coachmark tour step, as the tab-by-tab tour group and its search results render it. */
+const TourStep: React.FC<{
+  step: CoachmarkStep;
+  styles: ReturnType<typeof makeStyles>;
+  colors: ThemeColors;
+  titlePrefix?: string;
+}> = ({ step, styles, colors, titlePrefix }) => (
+  <View style={styles.stepBlock}>
+    <Text style={styles.tourStepTitle}>
+      {titlePrefix ? `${titlePrefix} ` : ""}
+      {step.emoji ? `${step.emoji} ` : ""}
+      {step.title}
+    </Text>
+    {step.location ? (
+      <Text style={[styles.where, { color: colors.accent }]}>📍 {step.location}</Text>
+    ) : null}
+    <Text style={styles.blurb}>{step.detail ?? step.body}</Text>
+  </View>
+);
+
 const FeatureGuideModal: React.FC<FeatureGuideModalProps> = ({
   onClose,
   onTryFeature,
+  onReplaySpotlight,
+  onRedoOnboarding,
   newFeatureIds,
   onFeatureOpened,
 }) => {
@@ -152,6 +193,8 @@ const FeatureGuideModal: React.FC<FeatureGuideModalProps> = ({
 
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** Which tab's tour is open in the tab-by-tab group (one at a time). */
+  const [expandedTab, setExpandedTab] = useState<string | null>(null);
 
   // Only features this store build can run - "Try it" must never land on a
   // surface that is not there yet.
@@ -167,6 +210,8 @@ const FeatureGuideModal: React.FC<FeatureGuideModalProps> = ({
   const trimmed = query.trim();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t: spotlight copy is translated; re-run the search after a language switch
   const results = useMemo(() => searchFeatureGuide(trimmed, available), [trimmed, available, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t: tour copy is translated; re-run the search after a language switch
+  const tourResults = useMemo(() => searchGuide(trimmed), [trimmed, t]);
 
   const areaLabel = (area: FeatureArea) =>
     `${AREA_EMOJI[area]} ${t(`modals.engage.featureGuide.areas.${area}`)}`;
@@ -201,13 +246,46 @@ const FeatureGuideModal: React.FC<FeatureGuideModalProps> = ({
       onRequestClose={onClose}
       keyboardAvoiding
       footer={
-        <TouchableOpacity style={sheet.doneButton} onPress={onClose}>
-          <Text style={sheet.doneText}>{t("common.done")}</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={sheet.closeButton}
+            onPress={() => {
+              triggerHaptic("selection");
+              onRedoOnboarding();
+            }}
+          >
+            <Text style={sheet.closeText}>{t("modals.engage.featureGuide.redoOnboarding")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={sheet.doneButton} onPress={onClose}>
+            <Text style={sheet.doneText}>{t("common.done")}</Text>
+          </TouchableOpacity>
+        </>
       }
     >
       <Text style={sheet.title}>{t("modals.engage.featureGuide.title")}</Text>
       <Text style={sheet.subtitle}>{t("modals.engage.featureGuide.intro")}</Text>
+
+      {/* ── Update spotlight replay ── */}
+      <TouchableOpacity
+        style={styles.linkRow}
+        onPress={() => {
+          triggerHaptic("selection");
+          onReplaySpotlight();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t("modals.engage.featureGuide.replaySpotlightA11y")}
+      >
+        <Text style={styles.rowIcon}>✨</Text>
+        <View style={styles.linkTextWrap}>
+          <Text style={styles.accordionTitle}>
+            {t("modals.engage.featureGuide.replaySpotlight")}
+          </Text>
+          <Text style={styles.linkSub}>
+            {t("modals.engage.featureGuide.replaySpotlightHint")}
+          </Text>
+        </View>
+        <Text style={styles.accordionArrow}>→</Text>
+      </TouchableOpacity>
 
       {/* ── Search ── */}
       <View style={styles.searchRow}>
@@ -234,13 +312,34 @@ const FeatureGuideModal: React.FC<FeatureGuideModalProps> = ({
       </View>
 
       {trimmed.length > 0 ? (
-        /* ── Search results ── */
-        results.length > 0 ? (
-          <View style={styles.resultList}>
-            {results.map((spotlight) =>
-              renderRow(spotlight, areaLabel(spotlightArea(spotlight)).toUpperCase())
-            )}
-          </View>
+        /* ── Search results: features first, then matching tour steps ── */
+        results.length > 0 || tourResults.length > 0 ? (
+          <>
+            {results.length > 0 ? (
+              <View style={[styles.resultList, styles.group]}>
+                {results.map((spotlight) =>
+                  renderRow(spotlight, areaLabel(spotlightArea(spotlight)).toUpperCase())
+                )}
+              </View>
+            ) : null}
+            {tourResults.length > 0 ? (
+              <View style={styles.group}>
+                <Text style={styles.groupTitle}>
+                  {t("modals.engage.featureGuide.toursTitle")}
+                </Text>
+                <View style={styles.resultList}>
+                  {tourResults.map(({ tabId, tabLabel, step }) => (
+                    <View key={`${tabId}-${step.id}`} style={styles.resultItem}>
+                      <Text style={[styles.resultTab, { color: colors.accent }]}>
+                        {COACHMARKS[tabId].emoji} {tabLabel.toUpperCase()}
+                      </Text>
+                      <TourStep step={step} styles={styles} colors={colors} />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </>
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>
@@ -252,15 +351,58 @@ const FeatureGuideModal: React.FC<FeatureGuideModalProps> = ({
           </View>
         )
       ) : (
-        /* ── Browse by tab ── */
-        groups.map((group) => (
-          <View key={group.area} style={styles.group}>
-            <Text style={styles.groupTitle}>{areaLabel(group.area)}</Text>
+        <>
+          {/* ── Browse by tab ── */}
+          {groups.map((group) => (
+            <View key={group.area} style={styles.group}>
+              <Text style={styles.groupTitle}>{areaLabel(group.area)}</Text>
+              <View style={styles.resultList}>
+                {group.spotlights.map((spotlight) => renderRow(spotlight))}
+              </View>
+            </View>
+          ))}
+
+          {/* ── Tab-by-tab tour (the onboarding coachmarks, as a reference) ── */}
+          <View style={styles.group}>
+            <Text style={styles.groupTitle}>{t("modals.engage.featureGuide.toursTitle")}</Text>
             <View style={styles.resultList}>
-              {group.spotlights.map((spotlight) => renderRow(spotlight))}
+              {COACHMARK_TAB_IDS.map((tabId) => {
+                const tour = COACHMARKS[tabId];
+                const expanded = expandedTab === tabId;
+                return (
+                  <View key={tabId} style={styles.resultItem}>
+                    <TouchableOpacity
+                      style={styles.accordionHeader}
+                      onPress={() => {
+                        triggerHaptic("selection");
+                        setExpandedTab(expanded ? null : tabId);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded }}
+                    >
+                      <Text style={styles.rowIcon}>{tour.emoji}</Text>
+                      <Text style={styles.accordionTitle} numberOfLines={expanded ? undefined : 2}>
+                        {tour.intro}
+                      </Text>
+                      <Text style={styles.accordionArrow}>{expanded ? "▾" : "▸"}</Text>
+                    </TouchableOpacity>
+                    {expanded
+                      ? tour.steps.map((step, idx) => (
+                          <TourStep
+                            key={step.id}
+                            step={step}
+                            styles={styles}
+                            colors={colors}
+                            titlePrefix={`${idx + 1}.`}
+                          />
+                        ))
+                      : null}
+                  </View>
+                );
+              })}
             </View>
           </View>
-        ))
+        </>
       )}
     </SheetModal>
   );
@@ -295,6 +437,39 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       fontSize: scale(14),
       color: colors.textMuted,
       fontWeight: "600",
+    },
+
+    /* Update spotlight link row */
+    linkRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.gapSm,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      padding: tokens.pad,
+      backgroundColor: colors.bg,
+      marginBottom: tokens.gap,
+      minHeight: tokens.rowHeight,
+    },
+    linkTextWrap: {
+      flex: 1,
+    },
+    linkSub: {
+      fontSize: scale(12),
+      color: colors.textDim,
+      marginTop: 2,
+    },
+
+    /* Tour steps (inside the tab-by-tab group and its search results) */
+    stepBlock: {
+      marginTop: tokens.gap,
+      gap: 4,
+    },
+    tourStepTitle: {
+      fontSize: scale(13),
+      fontWeight: "700",
+      color: colors.text,
     },
 
     /* Groups */

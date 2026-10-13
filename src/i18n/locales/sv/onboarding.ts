@@ -100,7 +100,7 @@ export const onboarding: Localized<typeof en> = {
     finishBuildArk: "Slutför + Bygg din ark",
     skipForNow: "Hoppa över tills vidare",
     tourHint:
-      "Härnäst fortsätter introduktionen med en guidad titt på varje flik - varje tips har en ”Läs mer” med alla detaljer, och du kan gå tillbaka ett steg eller hoppa över när som helst. Läs och sök i allt senare under Profil → Hjälp → Introduktion.",
+      "Härnäst fortsätter introduktionen med en guidad titt på varje flik - varje tips har en ”Läs mer” med alla detaljer, och du kan gå tillbaka ett steg eller hoppa över när som helst. Läs och sök i allt senare under Profil → Hjälp → Funktionsguide.",
   },
   alerts: {
     notificationsOff: {

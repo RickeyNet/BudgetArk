@@ -99,12 +99,13 @@ export const profileSettings: Localized<typeof en> = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
+    label: "Updates",
     checkLabel: "Nach Updates suchen",
     lastChecked: "Zuletzt geprüft {{when}}",
     neverChecked: "Noch nie geprüft",
     autoLabel: "Automatische Updates",
-    autoOff: "Aus - nur manuelle Prüfung",
-    autoOn: "Ein - prüft automatisch",
+    autoOff: "Auto aus",
+    autoOn: "Auto ein",
     unavailableTitle: "Updates nicht verfügbar",
     unavailableMessage:
       "In Entwicklungs-Builds ist die Update-Prüfung nicht verfügbar. Installiere einen EAS-Preview- oder Produktions-Build, um diese Funktion zu nutzen.",
@@ -119,8 +120,7 @@ export const profileSettings: Localized<typeof en> = {
     failedGeneric: "Updates können gerade nicht geprüft werden. Bitte versuche es in Kürze erneut.",
     failedDetails: "{{friendly}}\n\nDetails: {{details}}",
     modeSavedTitle: "Update-Modus gespeichert",
-    modeManualMessage:
-      "Manueller Modus ist ein. Die App sucht nur nach Updates, wenn du auf „Nach Updates suchen“ tippst.",
+    modeManualMessage: "Manueller Modus ist ein. Die App sucht nur nach Updates, wenn du auf „Updates“ tippst.",
     modeAutoMessage: "Automatische Update-Prüfung ist aktiviert.",
     readyTitle: "Update bereit",
     readyMessage: "Ein neues Update ist bereit zur Installation.",

@@ -99,12 +99,13 @@ export const profileSettings: Localized<typeof en> = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
+    label: "Uppdateringar",
     checkLabel: "Sök efter uppdateringar",
     lastChecked: "Senast kontrollerat {{when}}",
     neverChecked: "Aldrig kontrollerat",
     autoLabel: "Automatiska uppdateringar",
-    autoOff: "Av - bara manuella kontroller",
-    autoOn: "På - kontrollerar automatiskt",
+    autoOff: "Auto av",
+    autoOn: "Auto på",
     unavailableTitle: "Uppdateringar inte tillgängliga",
     unavailableMessage:
       "Uppdateringskontroller är inte tillgängliga i utvecklingsbyggen. Installera ett EAS-förhandsgransknings- eller produktionsbygge för att använda funktionen.",
@@ -119,8 +120,7 @@ export const profileSettings: Localized<typeof en> = {
     failedGeneric: "Det gick inte att söka efter uppdateringar just nu. Försök igen om en stund.",
     failedDetails: "{{friendly}}\n\nDetaljer: {{details}}",
     modeSavedTitle: "Uppdateringsläge sparat",
-    modeManualMessage:
-      "Manuellt läge är på. Appen söker bara efter uppdateringar när du trycker på ”Sök efter uppdateringar”.",
+    modeManualMessage: "Manuellt läge är på. Appen söker bara efter uppdateringar när du trycker på ”Uppdateringar”.",
     modeAutoMessage: "Automatiska uppdateringskontroller är på.",
     readyTitle: "Uppdatering redo",
     readyMessage: "En ny uppdatering är redo att installeras.",

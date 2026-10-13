@@ -138,6 +138,15 @@ export const modalsPeople = {
   },
   people: {
     title: "People",
+    /** Shortcut rows at the top of the sheet - the report and loans live behind this one Profile row. */
+    shortcuts: {
+      report: "Person Spending Report",
+      reportSubtext: "Per-person totals by year, with CSV export",
+      reportA11y: "Open person spending report",
+      owed: "Owed to You 🤝",
+      owedSubtext: "Money you've lent out, and what's been paid back",
+      owedA11y: "Open owed to you",
+    },
     subtitle:
       "Add the people in your household (or anyone you track spending for). Assign expenses to them when adding entries or approving imported transactions, so it's clear who spent what.",
     renameLabel: "RENAME PERSON",
@@ -163,6 +172,12 @@ export const modalsPeople = {
   },
   businesses: {
     title: "Businesses",
+    /** Shortcut row at the top of the sheet - the report lives behind this one Profile row. */
+    shortcuts: {
+      report: "Business Expense Report",
+      reportSubtext: "Per-business totals by year, with CSV export",
+      reportA11y: "Open business expense report",
+    },
     subtitle:
       "Add the businesses you spend for (a company, side gig, or freelance client). Tag expenses to them when adding entries, then pull a per-business report at tax time.",
     renameLabel: "RENAME BUSINESS",

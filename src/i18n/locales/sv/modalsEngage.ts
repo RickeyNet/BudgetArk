@@ -99,6 +99,14 @@ export const modalsEngage: Localized<typeof en> = {
   /** Funktionsguiden (FeatureGuideModal): den bläddrings- och sökbara katalogen över alla funktioner. */
   featureGuide: {
     title: "Funktionsguide",
+    /** Link row above the search: replays this version's debut carousel. */
+    replaySpotlight: "Uppdateringsnyheter",
+    replaySpotlightHint: "Se vad som är nytt i den här versionen av BudgetArk igen",
+    replaySpotlightA11y: "Spela upp uppdateringsnyheterna igen",
+    /** Group title for the coachmark tour steps listed under the features. */
+    toursTitle: "Rundtur per flik",
+    /** Footer button: rerun the first-launch flow. */
+    redoOnboarding: "Gör om introduktionen",
     intro:
       "Allt BudgetArk kan göra, per flik. Tryck på en funktion för att se var den finns och hur du använder den.",
     searchPlaceholder: "Sök - prova ”kvitto” eller ”lön”",
@@ -118,18 +126,6 @@ export const modalsEngage: Localized<typeof en> = {
       charts: "Sjökort",
       profile: "Profil",
     },
-  },
-  guide: {
-    title: "Introduktion",
-    intro:
-      "Allt i BudgetArk - bläddra per flik eller sök efter det du vill göra.",
-    searchPlaceholder: "Sök - prova ”kvitto” eller ”kreditkort”",
-    clearSearchA11y: "Rensa sökningen",
-    noMatches: {
-      title: "Inga träffar",
-      body: "Prova ett annat ord - t.ex. ”säkerhetskopia”, ”avisering”, ”återkommande” eller namnet på en flik.",
-    },
-    redoOnboarding: "Gör om introduktionen",
   },
   unlock: {
     kicker: "MÄRKE UPPLÅST",

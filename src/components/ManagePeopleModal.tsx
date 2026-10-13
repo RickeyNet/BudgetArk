@@ -11,6 +11,11 @@
  * Deletes are soft (tombstones) so they propagate through P2P sync; entries
  * assigned to a deleted person keep the assignment and surface as
  * "(deleted person)" on badges and pickers.
+ *
+ * Also the front door to the person spending report and Owed to You: the
+ * optional onOpenReport / onOpenOwed shortcut rows at the top let the
+ * Profile tab show a single People row. The parent closes this sheet
+ * before presenting the target (one Modal at a time).
  */
 
 import { entryPersonIds } from "../utils/entryPeople";
@@ -38,11 +43,17 @@ import { getBudgetEntries } from "../storage/budgetStorage";
 interface ManagePeopleModalProps {
   visible: boolean;
   onClose: () => void;
+  /** Shortcut to the person spending report; the row is hidden when absent. */
+  onOpenReport?: () => void;
+  /** Shortcut to Owed to You (loans); the row is hidden when absent. */
+  onOpenOwed?: () => void;
 }
 
 const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
   visible,
   onClose,
+  onOpenReport,
+  onOpenOwed,
 }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -173,6 +184,50 @@ const ManagePeopleModal: React.FC<ManagePeopleModalProps> = ({
             <Text style={sheet.title}>{t("modals.people.people.title")}</Text>
             <Text style={sheet.subtitle}>{t("modals.people.people.subtitle")}</Text>
 
+            {/* ── Shortcuts (report, loans) ── */}
+            {onOpenReport || onOpenOwed ? (
+              <View style={styles.shortcuts}>
+                {onOpenReport ? (
+                  <TouchableOpacity
+                    style={styles.shortcutRow}
+                    onPress={onOpenReport}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("modals.people.people.shortcuts.reportA11y")}
+                  >
+                    <Text style={styles.shortcutIcon}>📊</Text>
+                    <View style={styles.rowTextWrap}>
+                      <Text style={styles.shortcutTitle}>
+                        {t("modals.people.people.shortcuts.report")}
+                      </Text>
+                      <Text style={styles.shortcutSub}>
+                        {t("modals.people.people.shortcuts.reportSubtext")}
+                      </Text>
+                    </View>
+                    <Text style={styles.shortcutArrow}>→</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {onOpenOwed ? (
+                  <TouchableOpacity
+                    style={styles.shortcutRow}
+                    onPress={onOpenOwed}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("modals.people.people.shortcuts.owedA11y")}
+                  >
+                    <Text style={styles.shortcutIcon}>🤝</Text>
+                    <View style={styles.rowTextWrap}>
+                      <Text style={styles.shortcutTitle}>
+                        {t("modals.people.people.shortcuts.owed")}
+                      </Text>
+                      <Text style={styles.shortcutSub}>
+                        {t("modals.people.people.shortcuts.owedSubtext")}
+                      </Text>
+                    </View>
+                    <Text style={styles.shortcutArrow}>→</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
+
             {/* ── Add / rename form ── */}
             <View style={styles.field}>
               <Text style={styles.label}>
@@ -267,6 +322,35 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
     sheetContent: { gap: tokens.gap },
+    shortcuts: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      backgroundColor: colors.bg,
+    },
+    shortcutRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.gap,
+      paddingVertical: tokens.padSm,
+      paddingHorizontal: tokens.pad,
+      minHeight: tokens.rowHeight,
+    },
+    shortcutIcon: { fontSize: scale(18) },
+    shortcutTitle: {
+      color: colors.text,
+      fontSize: scale(15),
+      fontWeight: "600",
+    },
+    shortcutSub: {
+      color: colors.textDim,
+      fontSize: scale(12),
+      marginTop: 2,
+    },
+    shortcutArrow: {
+      color: colors.textDim,
+      fontSize: scale(16),
+    },
     field: { gap: tokens.gapSm },
     label: {
       fontSize: scale(11),

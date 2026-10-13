@@ -25,18 +25,9 @@ export const profileInfo: LocalizedPlural<typeof en> = {
   },
   help: {
     sectionTitle: "ДОПОМОГА",
-    onboarding: {
-      label: "Знайомство",
-      description: "Посібник із пошуком по всьому або повтор першого налаштування",
-    },
-    updateSpotlight: {
-      label: "Огляд оновлення",
-      description: "Переглянути ще раз, що нового в цій версії BudgetArk",
-      a11yLabel: "Повторити огляд оновлення",
-    },
     featureGuide: {
       label: "Довідник функцій",
-      description: "Кожна функція за вкладками - де вона є і як нею користуватися",
+      description: "Довідник із пошуком за всіма функціями, огляд за вкладками, що нового та повтор знайомства",
       a11yLabel: "Відкрити довідник функцій",
     },
   },
@@ -54,13 +45,8 @@ export const profileInfo: LocalizedPlural<typeof en> = {
     sectionTitle: "БІЗНЕС-ВИТРАТИ",
     businesses: {
       label: "Бізнеси 💼",
-      description: "Позначай витрати компанії або підробітку",
+      description: "Позначай витрати компанії або підробітку, плюс звіт для податкової",
       a11yLabel: "Керування бізнесами",
-    },
-    report: {
-      label: "Звіт про бізнес-витрати",
-      description: "Підсумки за кожним бізнесом за рік, з експортом у CSV",
-      a11yLabel: "Відкрити звіт про бізнес-витрати",
     },
   },
   categories: {

@@ -25,18 +25,9 @@ export const profileInfo: Localized<typeof en> = {
   },
   help: {
     sectionTitle: "HILFE",
-    onboarding: {
-      label: "Einführung",
-      description: "Durchsuchbare Anleitung zu allem, oder die Ersteinrichtung wiederholen",
-    },
-    updateSpotlight: {
-      label: "Update-Spotlight",
-      description: "Die Neuigkeiten dieser BudgetArk-Version noch einmal ansehen",
-      a11yLabel: "Update-Spotlight erneut abspielen",
-    },
     featureGuide: {
       label: "Funktionsübersicht",
-      description: "Jede Funktion nach Tab - wo sie liegt und wie du sie nutzt",
+      description: "Durchsuchbare Anleitung zu jeder Funktion, der Rundgang pro Tab, Neuigkeiten und Einführung wiederholen",
       a11yLabel: "Funktionsübersicht öffnen",
     },
   },
@@ -54,13 +45,8 @@ export const profileInfo: Localized<typeof en> = {
     sectionTitle: "GESCHÄFTSAUSGABEN",
     businesses: {
       label: "Unternehmen 💼",
-      description: "Ausgaben einer Firma oder einem Nebenjob zuordnen",
+      description: "Ausgaben einer Firma oder einem Nebenjob zuordnen, plus der Bericht fürs Finanzamt",
       a11yLabel: "Unternehmen verwalten",
-    },
-    report: {
-      label: "Geschäftsausgaben-Bericht",
-      description: "Summen je Unternehmen und Jahr, mit CSV-Export",
-      a11yLabel: "Geschäftsausgaben-Bericht öffnen",
     },
   },
   categories: {

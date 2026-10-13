@@ -100,7 +100,7 @@ export const onboarding: Localized<typeof en> = {
     finishBuildArk: "Fullfør + Bygg arken din",
     skipForNow: "Hopp over for nå",
     tourHint:
-      "Videre fortsetter introduksjonen med en guidet titt på hver fane - hvert tips har en «Les mer» med alle detaljene, og du kan gå et steg tilbake eller hoppe over når som helst. Les og søk i alt sammen senere under Profil → Hjelp → Introduksjon.",
+      "Videre fortsetter introduksjonen med en guidet titt på hver fane - hvert tips har en «Les mer» med alle detaljene, og du kan gå et steg tilbake eller hoppe over når som helst. Les og søk i alt sammen senere under Profil → Hjelp → Funksjonsguide.",
   },
   alerts: {
     notificationsOff: {

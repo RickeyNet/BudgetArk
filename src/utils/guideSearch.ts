@@ -1,7 +1,7 @@
 /**
  * BudgetArk - onboarding guide keyword search (pure).
  *
- * Powers the search bar in the Onboarding guide (OnboardingGuideModal):
+ * Powers the tab-by-tab tour search in the Feature guide (FeatureGuideModal):
  * type "receipt" or "credit card" and land on how the feature works and
  * where to find it. Pure string matching over the COACHMARKS content -
  * no React Native imports, fully unit-testable in Node.

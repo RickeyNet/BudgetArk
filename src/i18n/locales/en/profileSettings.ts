@@ -110,12 +110,13 @@ export const profileSettings = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
+    label: "Updates",
     checkLabel: "Check for Updates",
     lastChecked: "Last checked {{when}}",
     neverChecked: "Never checked",
     autoLabel: "Auto Updates",
-    autoOff: "Off - manual checks only",
-    autoOn: "On - checks automatically",
+    autoOff: "Auto off",
+    autoOn: "Auto on",
     unavailableTitle: "Updates Unavailable",
     unavailableMessage:
       "Update checks are unavailable in development builds. Install an EAS preview/production build to use this feature.",
@@ -129,8 +130,7 @@ export const profileSettings = {
     failedGeneric: "Unable to check for updates right now. Please try again shortly.",
     failedDetails: "{{friendly}}\n\nDetails: {{details}}",
     modeSavedTitle: "Update Mode Saved",
-    modeManualMessage:
-      "Manual mode is on. The app will only check for updates when you tap Check for Updates.",
+    modeManualMessage: "Manual mode is on. The app will only check for updates when you tap Updates.",
     modeAutoMessage: "Automatic update checks are enabled.",
     readyTitle: "Update Ready",
     readyMessage: "A new update is ready to install.",

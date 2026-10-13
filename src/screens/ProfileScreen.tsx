@@ -779,7 +779,7 @@ const ProfileScreen: React.FC = () => {
           onCloseTrackingReminders={closeTrackingReminders}
         />
 
-        {/* ── Help (how-to + replay onboarding) ── */}
+        {/* ── Help (feature guide: tour, update spotlight, redo onboarding) ── */}
         <HelpSection
           ref={helpSectionRef}
           scrollRef={scrollRef}

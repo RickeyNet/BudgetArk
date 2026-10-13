@@ -65,12 +65,6 @@ export const profileConnections: LocalizedPlural<typeof en> = {
     sectionTitle: "ЛЮДИ",
     manageA11y: "Керування людьми",
     people: "Люди 👤",
-    peopleSubtext: "Розподіляй витрати між членами родини",
-    reportA11y: "Відкрити звіт про витрати людей",
-    report: "Звіт про витрати людей",
-    reportSubtext: "Підсумки за кожною людиною за рік, з експортом у CSV",
-    owedA11y: "Відкрити «Тобі винні»",
-    owed: "Тобі винні 🤝",
-    owedSubtext: "Гроші, які ти позичив, і що вже повернули",
+    peopleSubtext: "Члени родини, хто скільки витратив і хто тобі винен",
   },
 };

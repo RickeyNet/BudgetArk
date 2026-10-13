@@ -101,6 +101,14 @@ export const modalsEngage = {
   /** Feature guide sheet (FeatureGuideModal): the browsable, searchable directory of every feature. */
   featureGuide: {
     title: "Feature guide",
+    /** Link row above the search: replays this version's debut carousel. */
+    replaySpotlight: "Update spotlight",
+    replaySpotlightHint: "Rewatch what's new in this version of BudgetArk",
+    replaySpotlightA11y: "Replay the update spotlight",
+    /** Group title for the coachmark tour steps listed under the features. */
+    toursTitle: "Tab-by-tab tour",
+    /** Footer button: rerun the first-launch flow. */
+    redoOnboarding: "Redo onboarding",
     intro:
       "Everything BudgetArk can do, by tab. Tap a feature for where it lives and how to use it.",
     searchPlaceholder: 'Search - try "receipt" or "payday"',
@@ -120,18 +128,6 @@ export const modalsEngage = {
       charts: "Charts",
       profile: "Profile",
     },
-  },
-  guide: {
-    title: "Onboarding",
-    intro:
-      "Everything in BudgetArk - browse by tab, or search for what you want to do.",
-    searchPlaceholder: 'Search - try "receipt" or "credit card"',
-    clearSearchA11y: "Clear search",
-    noMatches: {
-      title: "No matches",
-      body: 'Try a different word - like "backup", "notification", "recurring", or the name of a tab.',
-    },
-    redoOnboarding: "Redo onboarding",
   },
   unlock: {
     kicker: "BADGE UNLOCKED",

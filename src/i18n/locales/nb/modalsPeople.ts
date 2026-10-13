@@ -138,6 +138,15 @@ export const modalsPeople: Localized<typeof en> = {
   },
   people: {
     title: "Personer",
+    /** Shortcut rows at the top of the sheet - the report and loans live behind this one Profile row. */
+    shortcuts: {
+      report: "Forbruksrapport per person",
+      reportSubtext: "Summer per person og år, med CSV-eksport",
+      reportA11y: "Åpne rapporten over forbruk per person",
+      owed: "Til gode 🤝",
+      owedSubtext: "Penger du har lånt ut, og hva som er betalt tilbake",
+      owedA11y: "Åpne Til gode",
+    },
     subtitle:
       "Legg til personene i husholdningen din (eller hvem som helst du følger forbruket for). Tilordne utgifter til dem når du legger til poster eller godkjenner importerte transaksjoner, så det er tydelig hvem som brukte hva.",
     renameLabel: "GI PERSONEN NYTT NAVN",
@@ -163,6 +172,12 @@ export const modalsPeople: Localized<typeof en> = {
   },
   businesses: {
     title: "Bedrifter",
+    /** Shortcut row at the top of the sheet - the report lives behind this one Profile row. */
+    shortcuts: {
+      report: "Rapport over bedriftsutgifter",
+      reportSubtext: "Summer per bedrift og år, med CSV-eksport",
+      reportA11y: "Åpne rapporten over bedriftsutgifter",
+    },
     subtitle:
       "Legg til bedriftene du har utgifter for (et selskap, en sidegeskjeft eller en frilanskunde). Merk utgifter med dem når du legger til poster, og hent så ut en rapport per bedrift når skatten skal leveres.",
     renameLabel: "GI BEDRIFTEN NYTT NAVN",

@@ -99,6 +99,14 @@ export const modalsEngage: Localized<typeof en> = {
   /** Funksjonsguide-panelet (FeatureGuideModal): den søkbare katalogen over alle funksjoner. */
   featureGuide: {
     title: "Funksjonsguide",
+    /** Link row above the search: replays this version's debut carousel. */
+    replaySpotlight: "Oppdateringsnyheter",
+    replaySpotlightHint: "Se hva som er nytt i denne versjonen av BudgetArk igjen",
+    replaySpotlightA11y: "Spill av oppdateringsnyhetene igjen",
+    /** Group title for the coachmark tour steps listed under the features. */
+    toursTitle: "Omvisning per fane",
+    /** Footer button: rerun the first-launch flow. */
+    redoOnboarding: "Ta introduksjonen på nytt",
     intro:
       "Alt BudgetArk kan gjøre, per fane. Trykk på en funksjon for å se hvor den ligger og hvordan du bruker den.",
     searchPlaceholder: "Søk - prøv «kvittering» eller «lønning»",
@@ -118,18 +126,6 @@ export const modalsEngage: Localized<typeof en> = {
       charts: "Sjøkart",
       profile: "Profil",
     },
-  },
-  guide: {
-    title: "Introduksjon",
-    intro:
-      "Alt i BudgetArk - bla per fane, eller søk etter det du vil gjøre.",
-    searchPlaceholder: "Søk - prøv «kvittering» eller «kredittkort»",
-    clearSearchA11y: "Tøm søket",
-    noMatches: {
-      title: "Ingen treff",
-      body: "Prøv et annet ord - f.eks. «sikkerhetskopi», «varsel», «gjentakende» eller navnet på en fane.",
-    },
-    redoOnboarding: "Ta introduksjonen på nytt",
   },
   unlock: {
     kicker: "MERKE LÅST OPP",

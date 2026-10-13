@@ -11,6 +11,11 @@
  * Deletes are soft (tombstones) so they propagate through P2P sync;
  * entries tagged with a deleted business keep their tag and surface as
  * "(deleted business)" in the report and edit modal.
+ *
+ * Also the front door to the Business Expense Report: the optional
+ * onOpenReport shortcut row at the top lets the Profile tab show a single
+ * Businesses row. The parent closes this sheet before presenting the
+ * report (one Modal at a time).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -37,11 +42,14 @@ import { getBudgetEntries } from "../storage/budgetStorage";
 interface ManageBusinessesModalProps {
   visible: boolean;
   onClose: () => void;
+  /** Shortcut to the Business Expense Report; the row is hidden when absent. */
+  onOpenReport?: () => void;
 }
 
 const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
   visible,
   onClose,
+  onOpenReport,
 }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -172,6 +180,27 @@ const ManageBusinessesModal: React.FC<ManageBusinessesModalProps> = ({
             <Text style={sheet.title}>{t("modals.people.businesses.title")}</Text>
             <Text style={sheet.subtitle}>{t("modals.people.businesses.subtitle")}</Text>
 
+            {/* ── Shortcut (report) ── */}
+            {onOpenReport ? (
+              <TouchableOpacity
+                style={styles.shortcutRow}
+                onPress={onOpenReport}
+                accessibilityRole="button"
+                accessibilityLabel={t("modals.people.businesses.shortcuts.reportA11y")}
+              >
+                <Text style={styles.shortcutIcon}>📊</Text>
+                <View style={styles.rowTextWrap}>
+                  <Text style={styles.shortcutTitle}>
+                    {t("modals.people.businesses.shortcuts.report")}
+                  </Text>
+                  <Text style={styles.shortcutSub}>
+                    {t("modals.people.businesses.shortcuts.reportSubtext")}
+                  </Text>
+                </View>
+                <Text style={styles.shortcutArrow}>→</Text>
+              </TouchableOpacity>
+            ) : null}
+
             {/* ── Add / rename form ── */}
             <View style={styles.field}>
               <Text style={styles.label}>
@@ -266,6 +295,33 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
   const scale = (n: number) => Math.round(n * tokens.fontScale);
   return StyleSheet.create({
     sheetContent: { gap: tokens.gap },
+    shortcutRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.gap,
+      paddingVertical: tokens.padSm,
+      paddingHorizontal: tokens.pad,
+      minHeight: tokens.rowHeight,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: tokens.radius,
+      backgroundColor: colors.bg,
+    },
+    shortcutIcon: { fontSize: scale(18) },
+    shortcutTitle: {
+      color: colors.text,
+      fontSize: scale(15),
+      fontWeight: "600",
+    },
+    shortcutSub: {
+      color: colors.textDim,
+      fontSize: scale(12),
+      marginTop: 2,
+    },
+    shortcutArrow: {
+      color: colors.textDim,
+      fontSize: scale(16),
+    },
     field: { gap: tokens.gapSm },
     label: {
       fontSize: scale(11),

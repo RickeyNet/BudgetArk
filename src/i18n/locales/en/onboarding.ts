@@ -97,7 +97,7 @@ export const onboarding = {
     finishBuildArk: "Finish + Build Your Ark",
     skipForNow: "Skip for Now",
     tourHint:
-      "Next, onboarding continues with a guided look at each tab - each tip has a Learn more with the full detail, and you can go back a step or skip at any point. Reread and search all of it later in Profile → Help → Onboarding.",
+      "Next, onboarding continues with a guided look at each tab - each tip has a Learn more with the full detail, and you can go back a step or skip at any point. Reread and search all of it later in Profile → Help → Feature guide.",
   },
   alerts: {
     notificationsOff: {
