@@ -30,15 +30,16 @@ export const profileInfo: Localized<typeof en> = {
       description: "Durchsuchbare Anleitung zu jeder Funktion, der Rundgang pro Tab, Neuigkeiten und Einführung wiederholen",
       a11yLabel: "Funktionsübersicht öffnen",
     },
-    /** Formerly the SUPPORT card - feedback and the tip jar are help-adjacent. */
+    /** Formerly in the SUPPORT card - feedback is help-adjacent; the Tip Jar stays near the top (profile.info.tipJar). */
     feedback: {
       label: "Feedback senden",
       description: "Fehlermeldungen & Funktionswünsche",
     },
-    tipJar: {
-      label: "Trinkgeldkasse 💛",
-      description: "Freiwillige Unterstützung - nichts freizuschalten",
-    },
+  },
+  /** One-row card right under the name card - the Tip Jar deliberately stays at the top of the tab (user request). */
+  tipJar: {
+    label: "Trinkgeldkasse 💛",
+    description: "Freiwillige Unterstützung - nichts freizuschalten",
   },
   /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
   organize: {
