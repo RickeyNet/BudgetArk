@@ -12,6 +12,12 @@ import type { profileSettings as en } from "../en/profileSettings";
 
 export const profileSettings: LocalizedPlural<typeof en> = {
   sectionTitle: "НАЛАШТУВАННЯ",
+  /** The SETTINGS header toggles the card; it is collapsed by default and only Check for Updates stays visible. */
+  collapse: {
+    a11yExpanded: "Налаштування, розгорнуто",
+    a11yCollapsed: "Налаштування, згорнуто",
+    a11yHint: "Показує або приховує решту налаштувань",
+  },
   language: {
     label: "Мова",
     pickerTitle: "Мова",

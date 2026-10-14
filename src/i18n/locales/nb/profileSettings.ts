@@ -11,6 +11,12 @@ import type { profileSettings as en } from "../en/profileSettings";
 
 export const profileSettings: Localized<typeof en> = {
   sectionTitle: "INNSTILLINGER",
+  /** The SETTINGS header toggles the card; it is collapsed by default and only Check for Updates stays visible. */
+  collapse: {
+    a11yExpanded: "Innstillinger, utvidet",
+    a11yCollapsed: "Innstillinger, sammenfoldet",
+    a11yHint: "Viser eller skjuler resten av innstillingene",
+  },
   language: {
     label: "Språk",
     pickerTitle: "Språk",

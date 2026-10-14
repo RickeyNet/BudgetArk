@@ -5,7 +5,9 @@
  * The SETTINGS card: currency & locale (with the convert-or-relabel prompt),
  * privacy mode, Live Holdings opt-in (with its off-device disclosure),
  * haptics, tracking reminders, and OTA update checks (with the update-ready
- * dialog). Owns all of that state and loads its own persisted prefs.
+ * dialog). The card is collapsed by default - only the Check for Updates
+ * row is always visible, and tapping the SETTINGS header unfolds the rest
+ * (user request). Owns all of that state and loads its own persisted prefs.
  * Pairing state and the reminder settings stay in ProfileScreen - the
  * currency prompt behaves differently while paired, and the reset flow
  * clears reminders - so those arrive as props. Exposes openAppLock()
@@ -251,9 +253,24 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
   const [appLockEnabled, setAppLockEnabled] = useState(false);
   const [showAppLockSetup, setShowAppLockSetup] = useState(false);
 
+  /**
+   * Whether the rest of the card is shown. Collapsed by default - user
+   * request: only Check for Updates should be visible until asked for.
+   * Session-local on purpose; it is a reading aid, not a setting.
+   */
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
+
   useImperativeHandle(ref, () => ({
-    openAppLock: () => setShowAppLockSetup(true),
-    openLanguage: () => setShowLanguageModal(true),
+    // Deep links open the modal directly, and also unfold the card so the
+    // row is on screen when the modal closes.
+    openAppLock: () => {
+      setSettingsExpanded(true);
+      setShowAppLockSetup(true);
+    },
+    openLanguage: () => {
+      setSettingsExpanded(true);
+      setShowLanguageModal(true);
+    },
   }), []);
 
   /** Haptic feedback toggle */
@@ -660,11 +677,34 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     <>
       {/* ── Settings (privacy, updates) ── */}
       <View style={styles.settingsSection}>
-        <Text
-          style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
+        {/* The header is the collapse toggle (MissionCard's chevron pattern). */}
+        <TouchableOpacity
+          style={styles.settingsSectionHeader}
+          onPress={() => setSettingsExpanded((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: settingsExpanded }}
+          accessibilityLabel={
+            settingsExpanded
+              ? t("profile.settings.collapse.a11yExpanded")
+              : t("profile.settings.collapse.a11yCollapsed")
+          }
+          accessibilityHint={t("profile.settings.collapse.a11yHint")}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          {t("profile.settings.sectionTitle")}
-        </Text>
+          <Text
+            style={[
+              styles.settingsSectionTitle,
+              { color: colors.textMuted, marginBottom: 0 },
+            ]}
+          >
+            {t("profile.settings.sectionTitle")}
+          </Text>
+          <Text
+            style={[styles.settingsSectionChevron, { color: colors.textMuted }]}
+          >
+            {settingsExpanded ? "▴" : "▾"}
+          </Text>
+        </TouchableOpacity>
 
         <View
           style={[
@@ -672,209 +712,12 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             { backgroundColor: colors.card, borderColor: colors.cardBorder },
           ]}
         >
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => setShowCurrencyModal(true)}
-          >
-            <View>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.currency.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {preference.label}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => {
-              onDismissNewBadge("languages");
-              setShowLanguageModal(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t("profile.settings.language.a11yLabel", { current: languageName })}
-            accessibilityHint={t("profile.settings.language.a11yHint")}
-          >
-            <View>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.settings.language.label")}
-                </Text>
-                {newFeatureIds.has("languages") && <NewFeatureBadge />}
-              </View>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {languageName}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={togglePrivacyMode}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.privacy.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {privacyMode
-                  ? t("profile.settings.privacy.enabled")
-                  : t("profile.settings.privacy.disabled")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {privacyMode ? t("common.on") : t("common.off")}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => setShowAppLockSetup(true)}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.appLock.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {appLockEnabled
-                  ? t("profile.settings.appLock.enabled")
-                  : t("profile.settings.appLock.disabled")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {appLockEnabled ? t("common.on") : t("common.off")}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity style={styles.groupedRow} onPress={toggleHoldings}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.holdings.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {holdingsSettings.enabled
-                  ? t("profile.settings.holdings.enabled")
-                  : t("profile.settings.holdings.disabled")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {holdingsSettings.enabled ? t("common.on") : t("common.off")}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity style={styles.groupedRow} onPress={toggleHaptics}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.haptics.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {hapticsEnabled
-                  ? t("profile.settings.haptics.enabled")
-                  : t("profile.settings.haptics.disabled")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {hapticsEnabled ? t("common.on") : t("common.off")}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => {
-              onDismissNewBadge("tracking-reminders");
-              onOpenTrackingReminders();
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <View style={styles.rowTitleWithBadge}>
-                <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                  {t("profile.settings.reminders.label")}
-                </Text>
-                {newFeatureIds.has("tracking-reminders") && <NewFeatureBadge />}
-              </View>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {reminderRowSubtext(t, reminderSettings)}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              {reminderSettings?.enabled ? t("common.on") : t("common.off")}
-            </Text>
-          </TouchableOpacity>
-
-          <View
-            style={[
-              styles.groupedDivider,
-              { backgroundColor: colors.cardBorder },
-            ]}
-          />
-
-          {/* One Updates row: tapping it checks now; the pill flips auto/manual.
-              The title is the action itself ("Check for Updates") in the
-              accent colour, like Partner Sync's "Sync Now" - a plain
-              "Updates" title read like a settings page, not a button. */}
+          {/* One Updates row, first in the card and always rendered - even
+              while the card is collapsed (user request). Tapping it checks
+              now; the pill flips auto/manual. The title is the action itself
+              ("Check for Updates") in the accent colour, like Partner Sync's
+              "Sync Now" - a plain "Updates" title read like a settings page,
+              not a button. */}
           <TouchableOpacity
             style={[styles.groupedRow, isCheckingUpdates && { opacity: 0.7 }]}
             onPress={() => checkForUpdates("manual")}
@@ -919,6 +762,210 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
               {isCheckingUpdates ? "..." : "→"}
             </Text>
           </TouchableOpacity>
+
+          {/* The rest of the card, only while expanded. */}
+          {settingsExpanded ? (
+            <>
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+
+              <TouchableOpacity
+                style={styles.groupedRow}
+                onPress={() => setShowCurrencyModal(true)}
+              >
+                <View>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    {t("profile.settings.currency.label")}
+                  </Text>
+                  <Text
+                    style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                  >
+                    {preference.label}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                  →
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+
+              <TouchableOpacity
+                style={styles.groupedRow}
+                onPress={() => {
+                  onDismissNewBadge("languages");
+                  setShowLanguageModal(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t("profile.settings.language.a11yLabel", { current: languageName })}
+                accessibilityHint={t("profile.settings.language.a11yHint")}
+              >
+                <View>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                      {t("profile.settings.language.label")}
+                    </Text>
+                    {newFeatureIds.has("languages") && <NewFeatureBadge />}
+                  </View>
+                  <Text
+                    style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                  >
+                    {languageName}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                  →
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+
+              <TouchableOpacity
+                style={styles.groupedRow}
+                onPress={togglePrivacyMode}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    {t("profile.settings.privacy.label")}
+                  </Text>
+                  <Text
+                    style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                  >
+                    {privacyMode
+                      ? t("profile.settings.privacy.enabled")
+                      : t("profile.settings.privacy.disabled")}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                  {privacyMode ? t("common.on") : t("common.off")}
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+
+              <TouchableOpacity
+                style={styles.groupedRow}
+                onPress={() => setShowAppLockSetup(true)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    {t("profile.settings.appLock.label")}
+                  </Text>
+                  <Text
+                    style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                  >
+                    {appLockEnabled
+                      ? t("profile.settings.appLock.enabled")
+                      : t("profile.settings.appLock.disabled")}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                  {appLockEnabled ? t("common.on") : t("common.off")}
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+
+              <TouchableOpacity style={styles.groupedRow} onPress={toggleHoldings}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    {t("profile.settings.holdings.label")}
+                  </Text>
+                  <Text
+                    style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                  >
+                    {holdingsSettings.enabled
+                      ? t("profile.settings.holdings.enabled")
+                      : t("profile.settings.holdings.disabled")}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                  {holdingsSettings.enabled ? t("common.on") : t("common.off")}
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+
+              <TouchableOpacity style={styles.groupedRow} onPress={toggleHaptics}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                    {t("profile.settings.haptics.label")}
+                  </Text>
+                  <Text
+                    style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                  >
+                    {hapticsEnabled
+                      ? t("profile.settings.haptics.enabled")
+                      : t("profile.settings.haptics.disabled")}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                  {hapticsEnabled ? t("common.on") : t("common.off")}
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.groupedDivider,
+                  { backgroundColor: colors.cardBorder },
+                ]}
+              />
+
+              <TouchableOpacity
+                style={styles.groupedRow}
+                onPress={() => {
+                  onDismissNewBadge("tracking-reminders");
+                  onOpenTrackingReminders();
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <View style={styles.rowTitleWithBadge}>
+                    <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                      {t("profile.settings.reminders.label")}
+                    </Text>
+                    {newFeatureIds.has("tracking-reminders") && <NewFeatureBadge />}
+                  </View>
+                  <Text
+                    style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                  >
+                    {reminderRowSubtext(t, reminderSettings)}
+                  </Text>
+                </View>
+                <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+                  {reminderSettings?.enabled ? t("common.on") : t("common.off")}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
         </View>
       </View>
 

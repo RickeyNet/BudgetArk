@@ -11,6 +11,12 @@
 
 export const profileSettings = {
   sectionTitle: "SETTINGS",
+  /** The SETTINGS header toggles the card; it is collapsed by default and only Check for Updates stays visible. */
+  collapse: {
+    a11yExpanded: "Settings, expanded",
+    a11yCollapsed: "Settings, collapsed",
+    a11yHint: "Shows or hides the rest of the settings",
+  },
   language: {
     label: "Language",
     pickerTitle: "Language",

@@ -194,6 +194,16 @@ export const makeProfileStyles = (tokens: DensityTokens, colors: ThemeColors) =>
       letterSpacing: 1.5,
       marginBottom: 10,
     },
+    /** Tappable SETTINGS header: title left, collapse chevron right. */
+    settingsSectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 10,
+    },
+    settingsSectionChevron: {
+      fontSize: 12,
+    },
     settingsRow: {
       borderWidth: 1,
       borderRadius: tokens.radiusSm,
