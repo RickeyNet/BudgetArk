@@ -110,7 +110,7 @@ export const profileSettings = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
-    label: "Updates",
+    /** The row title is the action itself - see SettingsSection. */
     checkLabel: "Check for Updates",
     lastChecked: "Last checked {{when}}",
     neverChecked: "Never checked",

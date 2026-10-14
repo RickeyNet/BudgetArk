@@ -100,7 +100,7 @@ export const profileSettings: LocalizedPlural<typeof en> = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
-    label: "Оновлення",
+    /** The row title is the action itself - see SettingsSection. */
     checkLabel: "Перевірити оновлення",
     lastChecked: "Остання перевірка {{when}}",
     neverChecked: "Ще не перевірялося",

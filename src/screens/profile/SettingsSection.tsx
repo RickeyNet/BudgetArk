@@ -871,7 +871,10 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             ]}
           />
 
-          {/* One Updates row: tapping it checks now; the pill flips auto/manual. */}
+          {/* One Updates row: tapping it checks now; the pill flips auto/manual.
+              The title is the action itself ("Check for Updates") in the
+              accent colour, like Partner Sync's "Sync Now" - a plain
+              "Updates" title read like a settings page, not a button. */}
           <TouchableOpacity
             style={[styles.groupedRow, isCheckingUpdates && { opacity: 0.7 }]}
             onPress={() => checkForUpdates("manual")}
@@ -880,8 +883,8 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             accessibilityLabel={t("profile.settings.updates.checkLabel")}
           >
             <View style={styles.rowTextWrap}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.settings.updates.label")}
+              <Text style={[styles.settingsRowText, { color: colors.accent }]}>
+                {t("profile.settings.updates.checkLabel")}
               </Text>
               <Text
                 style={[styles.settingsRowSubtext, { color: colors.textDim }]}

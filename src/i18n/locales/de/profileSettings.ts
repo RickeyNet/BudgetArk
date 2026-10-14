@@ -99,7 +99,7 @@ export const profileSettings: Localized<typeof en> = {
     summary: "{{what}} · {{when}}",
   },
   updates: {
-    label: "Updates",
+    /** The row title is the action itself - see SettingsSection. */
     checkLabel: "Nach Updates suchen",
     lastChecked: "Zuletzt geprüft {{when}}",
     neverChecked: "Noch nie geprüft",
