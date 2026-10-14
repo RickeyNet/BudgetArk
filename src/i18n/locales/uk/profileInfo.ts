@@ -30,16 +30,17 @@ export const profileInfo: LocalizedPlural<typeof en> = {
       description: "Довідник із пошуком за всіма функціями, огляд за вкладками, що нового та повтор знайомства",
       a11yLabel: "Відкрити довідник функцій",
     },
-    /** Formerly in the SUPPORT card - feedback is help-adjacent; the Tip Jar stays near the top (profile.info.tipJar). */
+  },
+  /** Header-less card right under the name card. Briefly folded into HELP; the user wants it at the top - keep it here. */
+  support: {
     feedback: {
       label: "Надіслати відгук",
       description: "Повідомлення про помилки та ідеї функцій",
     },
-  },
-  /** One-row card right under the name card - the Tip Jar deliberately stays at the top of the tab (user request). */
-  tipJar: {
-    label: "Скарбничка 💛",
-    description: "Підтримка за бажанням - нічого не відкриває",
+    tipJar: {
+      label: "Скарбничка 💛",
+      description: "Підтримка за бажанням - нічого не відкриває",
+    },
   },
   /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
   organize: {

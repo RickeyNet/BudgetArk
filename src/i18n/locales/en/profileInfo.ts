@@ -2,7 +2,7 @@
  * BudgetArk - English strings: Profile (info)
  * File: src/i18n/locales/en/profileInfo.ts
  *
- * Covers: AboutSection, TipJarSection, HelpSection (incl. feedback), OrganizeSection, BusinessSection, CategoriesSection.
+ * Covers: AboutSection, HelpSection, SupportSection, OrganizeSection, BusinessSection, CategoriesSection.
  */
 
 export const profileInfo = {
@@ -27,16 +27,17 @@ export const profileInfo = {
       description: "Searchable guide to every feature, the tab-by-tab tour, what's new, and redo onboarding",
       a11yLabel: "Open the feature guide",
     },
-    /** Formerly in the SUPPORT card - feedback is help-adjacent; the Tip Jar stays near the top (profile.info.tipJar). */
+  },
+  /** Header-less card right under the name card. Briefly folded into HELP; the user wants it at the top - keep it here. */
+  support: {
     feedback: {
       label: "Send Feedback",
       description: "Bug reports & feature requests",
     },
-  },
-  /** One-row card right under the name card - the Tip Jar deliberately stays at the top of the tab (user request). */
-  tipJar: {
-    label: "Tip Jar 💛",
-    description: "Optional support - nothing to unlock",
+    tipJar: {
+      label: "Tip Jar 💛",
+      description: "Optional support - nothing to unlock",
+    },
   },
   /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
   organize: {

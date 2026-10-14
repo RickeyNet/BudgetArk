@@ -46,7 +46,7 @@ export const profileSettings = {
      * language so it matches what the user actually sees.
      */
     translationNote:
-      "The German, Russian, Ukrainian, Swedish and Norwegian translations were produced with machine assistance and haven't been verified by a native speaker yet. Spotted a mistake? Send the correction in-app via Profile → Help → Send Feedback.",
+      "The German, Russian, Ukrainian, Swedish and Norwegian translations were produced with machine assistance and haven't been verified by a native speaker yet. Spotted a mistake? Send the correction in-app via Profile → Send Feedback.",
   },
   notNow: "Not now",
   currency: {

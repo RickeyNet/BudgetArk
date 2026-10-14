@@ -97,7 +97,7 @@ import { useProfileStyles } from "./profile/profileStyles";
 import BackupReminderBanner from "./profile/BackupReminderBanner";
 import MissionCard from "./profile/MissionCard";
 import ProfileCard from "./profile/ProfileCard";
-import TipJarSection from "./profile/TipJarSection";
+import SupportSection from "./profile/SupportSection";
 import AppearanceSection from "./profile/AppearanceSection";
 import PartnerSyncSection from "./profile/PartnerSyncSection";
 import OrganizeSection from "./profile/OrganizeSection";
@@ -691,13 +691,14 @@ const ProfileScreen: React.FC = () => {
         {/* ── Profile Card (name + Ship's Log) ── */}
         <ProfileCard user={user} onUserUpdated={setUser} />
 
-        {/* ── Tip Jar (stays at the top of the tab - user request) ── */}
-        <TipJarSection
+        {/* ── Support (feedback + Tip Jar; stays at the top - user request) ── */}
+        <SupportSection
           newFeatureIds={newFeatureIds}
           onDismissNewBadge={dismissNewBadge}
           showTipJar={showTipJar}
           onOpenTipJar={() => setShowTipJar(true)}
           onCloseTipJar={() => setShowTipJar(false)}
+          showInfo={setInfoModal}
         />
 
         {/* ── Appearance (Theme + Currency) ── */}
@@ -764,13 +765,12 @@ const ProfileScreen: React.FC = () => {
           onCloseTrackingReminders={closeTrackingReminders}
         />
 
-        {/* ── Help (feature guide, feedback) ── */}
+        {/* ── Help (feature guide) ── */}
         <HelpSection
           ref={helpSectionRef}
           scrollRef={scrollRef}
           newFeatureIds={newFeatureIds}
           onFeatureOpened={dismissNewBadge}
-          showInfo={setInfoModal}
         />
 
         {/* ── About (release notes, github) ── */}

@@ -30,16 +30,17 @@ export const profileInfo: Localized<typeof en> = {
       description: "Søkbar guide til hver funksjon, omvisningen per fane, hva som er nytt og ta introduksjonen på nytt",
       a11yLabel: "Åpne funksjonsguiden",
     },
-    /** Formerly in the SUPPORT card - feedback is help-adjacent; the Tip Jar stays near the top (profile.info.tipJar). */
+  },
+  /** Header-less card right under the name card. Briefly folded into HELP; the user wants it at the top - keep it here. */
+  support: {
     feedback: {
       label: "Send tilbakemelding",
       description: "Feilrapporter & funksjonsønsker",
     },
-  },
-  /** One-row card right under the name card - the Tip Jar deliberately stays at the top of the tab (user request). */
-  tipJar: {
-    label: "Tipsboks 💛",
-    description: "Frivillig støtte - ingenting å låse opp",
+    tipJar: {
+      label: "Tipsboks 💛",
+      description: "Frivillig støtte - ingenting å låse opp",
+    },
   },
   /** One card for the three "how do I tag entries?" rows: categories, people, businesses. */
   organize: {

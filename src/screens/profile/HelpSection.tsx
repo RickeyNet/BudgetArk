@@ -2,23 +2,21 @@
  * BudgetArk - Help Section
  * File: src/screens/profile/HelpSection.tsx
  *
- * The HELP card: "Feature guide" and "Send Feedback". The guide row opens
- * the searchable directory of every feature (FeatureGuideModal), which also
- * hosts the tab-by-tab coachmark tour, the "Update spotlight" replay link
- * and the Redo onboarding button - three rows (Onboarding, Update
- * spotlight, Feature guide) used to split that one subject. Feedback used
- * to share a SUPPORT card with the Tip Jar near the top of the tab; it is
- * help-adjacent, and the in-app language note already told users to look
- * under Help → Send Feedback, so it lives here now. The Tip Jar stays at
- * the top of the tab as its own card (TipJarSection) - user request.
+ * The HELP card: one "Feature guide" row that opens the searchable
+ * directory of every feature (FeatureGuideModal), which also hosts the
+ * tab-by-tab coachmark tour, the "Update spotlight" replay link and the
+ * Redo onboarding button - three rows (Onboarding, Update spotlight,
+ * Feature guide) used to split that one subject. Send Feedback and the Tip
+ * Jar briefly joined this card during the Profile-tab merges; the user
+ * wants them back at the top of the tab, so they live in SupportSection
+ * again - deliberately not here.
  *
  * This section owns the sequences that must wait for the guide sheet to
  * dismiss first - replaying the carousel (another Modal) and redoing
  * onboarding (reset the onboarding flag + coachmark state, then flip the
- * app gate) - and registers the help-card coachmark anchor. Feedback modal
- * state is local. The imperative handle lets the `openSection:
- * "featureGuide"` deep link open the guide from ProfileScreen's deferred
- * effect.
+ * app gate) - and registers the help-card coachmark anchor. The imperative
+ * handle lets the `openSection: "featureGuide"` deep link open the guide
+ * from ProfileScreen's deferred effect.
  */
 
 import React, {
@@ -35,7 +33,6 @@ import { useOnboardingGate } from "../../onboarding/OnboardingGateContext";
 import { useFeatureTour } from "../../components/FeatureTourContext";
 import { resetOnboardingStatus } from "../../storage/userStorage";
 import FeatureGuideModal from "../../components/FeatureGuideModal";
-import FeedbackModal from "../../components/FeedbackModal";
 import type { FeatureSpotlight } from "../../data/featureSpotlights";
 import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -56,14 +53,12 @@ type HelpSectionProps = {
   newFeatureIds: ReadonlySet<string>;
   /** Opening a feature in the guide counts as seeing it - clears its badge. */
   onFeatureOpened: (featureId: string) => void;
-  showInfo: (info: { title: string; message: string }) => void;
 };
 
 const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
   scrollRef,
   newFeatureIds,
   onFeatureOpened,
-  showInfo,
 }, ref) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -75,7 +70,6 @@ const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
   const anchorHelp = useCoachmarkAnchor("profile-help-card", { scrollRef });
 
   const [showFeatureGuide, setShowFeatureGuide] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   useImperativeHandle(
     ref,
@@ -128,15 +122,9 @@ const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
     }, SHEET_DISMISS_MS);
   }, [replayCoachmarks, restartOnboarding]);
 
-  const divider = (
-    <View
-      style={[styles.groupedDivider, { backgroundColor: colors.cardBorder }]}
-    />
-  );
-
   return (
     <>
-      {/* ── Help (feature guide, feedback) ── */}
+      {/* ── Help (feature guide) ── */}
       <View style={styles.settingsSection}>
         <Text
           style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
@@ -175,29 +163,6 @@ const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
               →
             </Text>
           </TouchableOpacity>
-
-          {divider}
-
-          <TouchableOpacity
-            style={styles.groupedRow}
-            onPress={() => setShowFeedbackModal(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t("profile.info.help.feedback.label")}
-          >
-            <View style={styles.rowTextWrap}>
-              <Text style={[styles.settingsRowText, { color: colors.text }]}>
-                {t("profile.info.help.feedback.label")}
-              </Text>
-              <Text
-                style={[styles.settingsRowSubtext, { color: colors.textDim }]}
-              >
-                {t("profile.info.help.feedback.description")}
-              </Text>
-            </View>
-            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
-              →
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -211,16 +176,6 @@ const HelpSection = forwardRef<HelpSectionHandle, HelpSectionProps>(({
           onFeatureOpened={onFeatureOpened}
         />
       ) : null}
-
-      {/* ── Feedback Modal ── */}
-      <FeedbackModal
-        visible={showFeedbackModal}
-        onClose={() => setShowFeedbackModal(false)}
-        onResult={(result) => {
-          setShowFeedbackModal(false);
-          showInfo(result);
-        }}
-      />
     </>
   );
 });
