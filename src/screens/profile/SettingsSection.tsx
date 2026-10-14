@@ -6,8 +6,9 @@
  * privacy mode, Live Holdings opt-in (with its off-device disclosure),
  * haptics, tracking reminders, and OTA update checks (with the update-ready
  * dialog). The card is collapsed by default - only the Check for Updates
- * row is always visible, and tapping the SETTINGS header unfolds the rest
- * (user request). Owns all of that state and loads its own persisted prefs.
+ * row and a "More settings" row under it are visible, and that row drops
+ * the rest down (user request; a header toggle was tried first and went
+ * unnoticed). Owns all of that state and loads its own persisted prefs.
  * Pairing state and the reminder settings stay in ProfileScreen - the
  * currency prompt behaves differently while paired, and the reset flow
  * clears reminders - so those arrive as props. Exposes openAppLock()
@@ -677,34 +678,11 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     <>
       {/* ── Settings (privacy, updates) ── */}
       <View style={styles.settingsSection}>
-        {/* The header is the collapse toggle (MissionCard's chevron pattern). */}
-        <TouchableOpacity
-          style={styles.settingsSectionHeader}
-          onPress={() => setSettingsExpanded((v) => !v)}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: settingsExpanded }}
-          accessibilityLabel={
-            settingsExpanded
-              ? t("profile.settings.collapse.a11yExpanded")
-              : t("profile.settings.collapse.a11yCollapsed")
-          }
-          accessibilityHint={t("profile.settings.collapse.a11yHint")}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        <Text
+          style={[styles.settingsSectionTitle, { color: colors.textMuted }]}
         >
-          <Text
-            style={[
-              styles.settingsSectionTitle,
-              { color: colors.textMuted, marginBottom: 0 },
-            ]}
-          >
-            {t("profile.settings.sectionTitle")}
-          </Text>
-          <Text
-            style={[styles.settingsSectionChevron, { color: colors.textMuted }]}
-          >
-            {settingsExpanded ? "▴" : "▾"}
-          </Text>
-        </TouchableOpacity>
+          {t("profile.settings.sectionTitle")}
+        </Text>
 
         <View
           style={[
@@ -760,6 +738,45 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
             </TouchableOpacity>
             <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
               {isCheckingUpdates ? "..." : "→"}
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.groupedDivider,
+              { backgroundColor: colors.cardBorder },
+            ]}
+          />
+
+          {/* The drop-down toggle: a visible row under Check for Updates
+              (a tap on the small SETTINGS header went unnoticed). */}
+          <TouchableOpacity
+            style={styles.groupedRow}
+            onPress={() => setSettingsExpanded((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: settingsExpanded }}
+            accessibilityLabel={
+              settingsExpanded
+                ? t("profile.settings.collapse.hide")
+                : t("profile.settings.collapse.more")
+            }
+          >
+            <View style={styles.rowTextWrap}>
+              <Text style={[styles.settingsRowText, { color: colors.text }]}>
+                {settingsExpanded
+                  ? t("profile.settings.collapse.hide")
+                  : t("profile.settings.collapse.more")}
+              </Text>
+              {settingsExpanded ? null : (
+                <Text
+                  style={[styles.settingsRowSubtext, { color: colors.textDim }]}
+                >
+                  {t("profile.settings.collapse.description")}
+                </Text>
+              )}
+            </View>
+            <Text style={[styles.settingsRowArrow, { color: colors.textDim }]}>
+              {settingsExpanded ? "▴" : "▾"}
             </Text>
           </TouchableOpacity>
 

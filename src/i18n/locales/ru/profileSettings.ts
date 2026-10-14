@@ -12,11 +12,11 @@ import type { profileSettings as en } from "../en/profileSettings";
 
 export const profileSettings: LocalizedPlural<typeof en> = {
   sectionTitle: "НАСТРОЙКИ",
-  /** The SETTINGS header toggles the card; it is collapsed by default and only Check for Updates stays visible. */
+  /** The card starts collapsed: Check for Updates, then this drop-down row; the other rows hide under it. The description lists them in row order. */
   collapse: {
-    a11yExpanded: "Настройки, развёрнуто",
-    a11yCollapsed: "Настройки, свёрнуто",
-    a11yHint: "Показывает или скрывает остальные настройки",
+    more: "Другие настройки",
+    hide: "Скрыть настройки",
+    description: "Валюта, язык, режим приватности, блокировка приложения, живые котировки, тактильный отклик, напоминания об учёте",
   },
   language: {
     label: "Язык",

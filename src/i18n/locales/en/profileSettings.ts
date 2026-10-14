@@ -11,11 +11,11 @@
 
 export const profileSettings = {
   sectionTitle: "SETTINGS",
-  /** The SETTINGS header toggles the card; it is collapsed by default and only Check for Updates stays visible. */
+  /** The card starts collapsed: Check for Updates, then this drop-down row; the other rows hide under it. The description lists them in row order. */
   collapse: {
-    a11yExpanded: "Settings, expanded",
-    a11yCollapsed: "Settings, collapsed",
-    a11yHint: "Shows or hides the rest of the settings",
+    more: "More settings",
+    hide: "Hide settings",
+    description: "Currency, Language, Privacy Mode, App Lock, Live Holdings, Haptic Feedback, Tracking Reminders",
   },
   language: {
     label: "Language",
