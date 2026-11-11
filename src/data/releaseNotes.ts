@@ -18,7 +18,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "The 'Open the calculator' buttons in lessons open the calculator. In the four lessons that point to a Charts tool, the button only closed the lesson. It now takes you to the Charts tab with the right calculator opened and scrolled into view.",
       "The debt due prompt's mute button says what it does. 'Not yet this month' sounded like 'I still need to pay' but actually silenced the reminder for the month; it now reads 'Don't remind me this month'. It works exactly as before.",
       "A fresh install no longer opens What's New over the welcome tour. New users saw the release notes pop up on top of the Bridge tour right after onboarding; they now start with the tour alone.",
-      "Save, Add, Done and Connect buttons are readable in every theme. Their white labels were hard to read on the accent color in eight of the fifteen themes - Forest Gold and Lighthouse worst of all - and now use each theme's own button text color.",
+      "Buttons and checkmarks on the accent color are readable in every theme. White text on the accent color was hard to read in eight of the fifteen themes - Forest Gold and Lighthouse worst of all - starting with the Next button on the very first onboarding screen. Every button, chip, badge and checkmark that sits on the accent color now uses each theme's own button text color.",
     ],
   },
   {
