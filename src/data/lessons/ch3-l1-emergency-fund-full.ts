@@ -61,7 +61,7 @@ const lesson: Lesson = {
     "Three to six months of essential expenses, in cash, before you chase returns anywhere else.",
   action: {
     label: "Open the Emergency Fund Calculator",
-    route: "charts",
+    route: "charts/tools/emergency-fund",
   },
 };
 

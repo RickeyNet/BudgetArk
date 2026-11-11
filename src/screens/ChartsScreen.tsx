@@ -11,8 +11,9 @@
  * composition changed.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  InteractionManager,
   KeyboardAvoidingView,
   LayoutAnimation,
   Platform,
@@ -102,6 +103,8 @@ import LessonScreen from "../lessons/LessonScreen";
 
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useValueChanged } from "../hooks/useValueChanged";
+import { parseChartsToolRoute } from "../utils/lessonRoutes";
+import type { ChartsToolKey } from "../utils/lessonRoutes";
 import { useAndroidKeyboardInputScroll } from "../hooks/useAndroidKeyboardInputScroll";
 import { useSliderValueEditor } from "../hooks/useSliderValueEditor";
 
@@ -410,6 +413,15 @@ const ChartsScreen: React.FC = () => {
   /* Topics chip filter. Non-null = the Captain's Course list shows only
    * chapters/lessons tagged with this topic. */
   const [topicFilter, setTopicFilter] = useState<LessonTopic | null>(null);
+  /* Lesson CTA → calculator jump. Each tool header reports its y inside the
+   * ScrollView content (they are direct children, so layout.y is the scroll
+   * offset); `toolJump` is the pending "open + scroll to" request. `seq`
+   * makes a repeat jump to the same tool a fresh request. */
+  const toolHeaderY = useRef<Partial<Record<ChartsToolKey, number>>>({});
+  const [toolJump, setToolJump] = useState<{
+    tool: ChartsToolKey;
+    seq: number;
+  } | null>(null);
   const navigation =
     useNavigation<BottomTabNavigationProp<RootTabParamList>>();
 
@@ -488,15 +500,18 @@ const ChartsScreen: React.FC = () => {
 
   /**
    * Resolves a lesson action / tool route to a navigation effect. Routes
-   * starting with "charts/tools" close the modal and stay on this tab;
-   * the user can scroll to the matching calculator. Inter-tab routes
-   * (debts/.., budget/.., bridge/..) jump to the target tab. Unknown
-   * routes are inert (with a __DEV__ warning) so missing wiring never
-   * crashes a lesson.
+   * of the form "charts/tools/<key>" close the modal, expand the matching
+   * calculator and scroll it into view (see the toolJump effect below).
+   * Inter-tab routes (debts/.., budget/.., bridge/..) jump to the target
+   * tab. Unknown routes are inert (with a __DEV__ warning) so missing
+   * wiring never crashes a lesson.
    */
   const handleLessonRoute = useCallback(
     (route: string) => {
       setOpenLessonStub(null);
+      /* Same re-read as handleCloseLesson: a charts route stays on this tab,
+       * so no focus event will refresh the course progress for us. */
+      void refreshLearningProgress();
       const [head] = route.split("/");
       switch (head) {
         case "debts":
@@ -511,15 +526,51 @@ const ChartsScreen: React.FC = () => {
         case "profile":
           navigation.navigate("Profile");
           return;
-        case "charts":
-          /* Already on this tab. Future work: scroll the Charts content to
-           * the matching calculator card. */
+        case "charts": {
+          const toolKey = parseChartsToolRoute(route);
+          if (!toolKey) {
+            if (__DEV__) console.warn("[Charts] unknown tool route", route);
+            return;
+          }
+          /* No LayoutAnimation: the lesson modal is still covering the
+           * list, and animating the expand would fight the scroll. The
+           * loan card owns its open state and opens off `openRequest`. */
+          if (toolKey === "compound") setCalcOpen(true);
+          else if (toolKey === "refinance") setRefiOpen(true);
+          else if (toolKey === "emergency-fund") setEfOpen(true);
+          setToolJump((prev) => ({ tool: toolKey, seq: (prev?.seq ?? 0) + 1 }));
           return;
+        }
         default:
           if (__DEV__) console.warn("[Charts] unknown lesson route", route);
       }
     },
-    [navigation]
+    [navigation, refreshLearningProgress]
+  );
+
+  /* Scroll the requested calculator's header to the top once the lesson
+   * modal's dismissal has settled (scrolling mid-dismiss gets dropped on
+   * iOS). The header's y is already known - opening a tool only adds
+   * content below its own header. */
+  const jumpTopMargin = insets.top + 12;
+  useEffect(() => {
+    if (!toolJump) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      const y = toolHeaderY.current[toolJump.tool];
+      if (y === undefined) return;
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, y - jumpTopMargin),
+        animated: true,
+      });
+    });
+    return () => task.cancel();
+  }, [toolJump, jumpTopMargin]);
+
+  const handleToolHeaderLayout = useCallback(
+    (toolKey: ChartsToolKey, y: number) => {
+      toolHeaderY.current[toolKey] = y;
+    },
+    []
   );
 
   // Memoized so the `?? {}` fallback doesn't mint a fresh object every
@@ -1074,7 +1125,13 @@ const ChartsScreen: React.FC = () => {
         </View>
 
         {/* ── Compound Interest Calculator Tool ── */}
-        <TouchableOpacity ref={anchorUtilitiesTool} style={tool.toolHeader} onPress={toggleCalc} activeOpacity={0.7}>
+        <TouchableOpacity
+          ref={anchorUtilitiesTool}
+          style={tool.toolHeader}
+          onPress={toggleCalc}
+          onLayout={(e) => handleToolHeaderLayout("compound", e.nativeEvent.layout.y)}
+          activeOpacity={0.7}
+        >
           <View>
             <Text style={tool.toolTitle}>{t("charts.screen.compound.title")}</Text>
             <Text style={tool.toolHint}>{t("charts.screen.compound.hint")}</Text>
@@ -1275,10 +1332,18 @@ const ChartsScreen: React.FC = () => {
         )}
 
         {/* ── Loan / Mortgage Calculator Tool ── */}
-        <LoanCalculatorCard />
+        <LoanCalculatorCard
+          openRequest={toolJump?.tool === "loan" ? toolJump.seq : 0}
+          onHeaderLayout={(y) => handleToolHeaderLayout("loan", y)}
+        />
 
         {/* ── Refinance Break-Even Calculator Tool ── */}
-        <TouchableOpacity style={tool.toolHeader} onPress={toggleRefi} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={tool.toolHeader}
+          onPress={toggleRefi}
+          onLayout={(e) => handleToolHeaderLayout("refinance", e.nativeEvent.layout.y)}
+          activeOpacity={0.7}
+        >
           <View>
             <Text style={tool.toolTitle}>{t("charts.screen.refi.title")}</Text>
             <Text style={tool.toolHint}>{t("charts.screen.refi.hint")}</Text>
@@ -1551,7 +1616,12 @@ const ChartsScreen: React.FC = () => {
         )}
 
         {/* ── Emergency Fund Calculator Tool ── */}
-        <TouchableOpacity style={tool.toolHeader} onPress={toggleEf} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={tool.toolHeader}
+          onPress={toggleEf}
+          onLayout={(e) => handleToolHeaderLayout("emergency-fund", e.nativeEvent.layout.y)}
+          activeOpacity={0.7}
+        >
           <View>
             <Text style={tool.toolTitle}>{t("charts.screen.ef.title")}</Text>
             <Text style={tool.toolHint}>{t("charts.screen.ef.hint")}</Text>

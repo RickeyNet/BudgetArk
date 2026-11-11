@@ -43,6 +43,7 @@ Tests live next to the code under `__tests__/` folders: `src/utils/`,
 | --- | --- | --- |
 | `calculations.test.ts` | `calculations.ts` | Debt payoff timelines, total interest, investment growth, goal-date payments, currency formatting, avalanche vs snowball simulation (targeting + total-interest comparison), non-zero-interest amortization |
 | `chartCalculators.test.ts` | `chartCalculators.ts` | Charts-tab tool math: loan/mortgage schedules, refinance break-even, emergency-fund timeline |
+| `lessonRoutes.test.ts` | `lessonRoutes.ts` | Lesson CTA → Charts calculator routes: fail-closed parsing, and every authored lesson's Charts route names a real calculator (no dead "Open the calculator" button) |
 | `debtTrackerMath.test.ts` | `debtTrackerMath.ts` | Debts tab derivations: summary totals (0-original guard), Build-Your-Ark milestone progress (mortgage-only `hull` guard), payoff ordering with tier promotion |
 | `debtPaymentPlan.test.ts` | `debtPaymentPlan.ts` | Per-month debt payment plan: minimum floors in the current month, logged payments in past months, payment month bucketing |
 | `debtPaymentDedupe.test.ts` | `debtPaymentDedupe.ts` | Deterministic minimum-due payment ids and the double-count repair |

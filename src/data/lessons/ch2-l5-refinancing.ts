@@ -55,7 +55,7 @@ const lesson: Lesson = {
     "Refinance when lower interest and fees beat your break-even timeline, not when a ad promises \"easy money.\"",
   action: {
     label: "Open refinance calculator",
-    route: "charts",
+    route: "charts/tools/refinance",
   },
 };
 

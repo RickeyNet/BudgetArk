@@ -51,7 +51,7 @@ const lesson: Lesson = {
     "Start as early as possible, even small. Years invested matter more than dollars invested.",
   action: {
     label: "Open the Compound Interest Calculator",
-    route: "charts",
+    route: "charts/tools/compound",
   },
 };
 

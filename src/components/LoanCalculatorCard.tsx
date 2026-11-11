@@ -62,7 +62,21 @@ const LOAN_TERM_PRESETS = [15, 20, 30] as const;
 const LOAN_SCHEDULE_PAGE_SIZE = 12;
 
 
-const LoanCalculatorCard: React.FC = () => {
+interface LoanCalculatorCardProps {
+  /**
+   * Bump to a new non-zero value to expand the card from outside (a lesson's
+   * "Run the mortgage numbers" CTA). The card still owns its open state -
+   * this only ever opens it, so the user's own collapse is never fought.
+   */
+  openRequest?: number;
+  /** Header y within the parent ScrollView content, for scroll-to-tool. */
+  onHeaderLayout?: (y: number) => void;
+}
+
+const LoanCalculatorCard: React.FC<LoanCalculatorCardProps> = ({
+  openRequest = 0,
+  onHeaderLayout,
+}) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { tokens } = useDensity();
@@ -72,6 +86,9 @@ const LoanCalculatorCard: React.FC = () => {
 
   /* Loan calculator state */
   const [loanOpen, setLoanOpen] = useState(false);
+  // Render-time adjustment (see useValueChanged) rather than an effect, so
+  // the card is already expanded in the frame the parent scrolls to it.
+  if (useValueChanged(openRequest) && openRequest !== 0) setLoanOpen(true);
   const [loanAmount, setLoanAmount] = useState(300000);
   const [loanRate, setLoanRate] = useState(6.5);
   const [loanTerm, setLoanTerm] = useState(30);
@@ -221,7 +238,12 @@ const LoanCalculatorCard: React.FC = () => {
   return (
     <>
         {/* ── Loan / Mortgage Calculator Tool ── */}
-        <TouchableOpacity style={tool.toolHeader} onPress={toggleLoan} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={tool.toolHeader}
+          onPress={toggleLoan}
+          onLayout={(e) => onHeaderLayout?.(e.nativeEvent.layout.y)}
+          activeOpacity={0.7}
+        >
           <View>
             <Text style={tool.toolTitle}>{t("charts.planning.loan.title")}</Text>
             <Text style={tool.toolHint}>{t("charts.planning.loan.hint")}</Text>

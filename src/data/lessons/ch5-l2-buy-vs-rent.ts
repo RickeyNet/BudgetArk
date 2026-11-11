@@ -56,7 +56,7 @@ const lesson: Lesson = {
     "Buy when you'll stay five-plus years and the payment leaves your plan intact. Otherwise rent, and invest the difference on purpose.",
   action: {
     label: "Run the mortgage numbers",
-    route: "charts",
+    route: "charts/tools/loan",
   },
 };
 
