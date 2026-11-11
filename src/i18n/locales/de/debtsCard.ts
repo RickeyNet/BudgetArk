@@ -61,6 +61,8 @@ export const debtsCard: Localized<typeof en> = {
     deleteA11y: "{{name}} löschen",
     confirmPaymentA11y: "Zahlung bestätigen",
     paymentPlaceholder: "Zahlungsbetrag",
+    paymentFailed:
+      "Diese Zahlung konnte nicht gespeichert werden. Prüfe den Saldo, bevor du es erneut versuchst.",
   },
   history: {
     title: "Zahlungsverlauf",

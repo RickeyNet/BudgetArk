@@ -76,6 +76,7 @@ import {
   requestLocationPermission,
 } from "../sync/autoSyncManager";
 import type { PairingState, SyncResult, SyncStatus } from "../sync/types";
+import { describeError } from "../utils/errorMessage";
 import { triggerHaptic } from "../utils/haptics";
 import { getTrackingReminderSettings } from "../storage/trackingReminderSettingsStorage";
 import { cancelAllTrackingReminders } from "../notifications/trackingReminders";
@@ -434,10 +435,16 @@ const ProfileScreen: React.FC = () => {
           message: result.error || t("profile.main.sync.failedFallback"),
         });
       }
-    } catch {
-      setSyncStatus("error");
+    } catch (error) {
+      // A thrown sync used to set "error" and be reset to "idle" on the very
+      // next line, so nothing ever rendered. Report it like a failed result.
+      setInfoModal({
+        title: t("profile.main.sync.failedTitle"),
+        message: describeError(error, t("profile.main.sync.failedFallback")),
+      });
+    } finally {
+      setSyncStatus("idle");
     }
-    setSyncStatus("idle");
   }, [syncStatus, t]);
 
   const handleUnpair = useCallback(async () => {

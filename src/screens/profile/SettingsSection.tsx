@@ -438,6 +438,8 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
   const handleCurrencyConvert = useCallback(async () => {
     if (!currencyPrompt || pairing || !currencyRates) return;
     setCurrencyConverting(true);
+    const { fromLabel, toLabel } = currencyPrompt;
+    let failed = false;
     try {
       const toCode = getCurrencyPreferenceOption(
         currencyPrompt.id,
@@ -450,11 +452,26 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
       await setPreferenceId(currencyPrompt.id);
       onCurrencyApplied(currencyPrompt.id);
     } catch (error) {
+      failed = true;
       if (__DEV__) console.error("Currency conversion failed:", error);
     } finally {
       setCurrencyConverting(false);
       setCurrencyPrompt(null);
       setShowCurrencyModal(false);
+    }
+    if (failed) {
+      // The conversion writes one collection at a time, so a failure can
+      // leave some amounts converted - the user has to be told, not left
+      // looking at a dialog that closed as if it worked. Wait out the
+      // prompt's dismissal first: stacked modals silently fail on iOS.
+      await waitForIosModalTeardown(350);
+      showInfo({
+        title: t("profile.settings.currencyChange.convertFailedTitle"),
+        message: t("profile.settings.currencyChange.convertFailedMessage", {
+          from: fromLabel,
+          to: toLabel,
+        }),
+      });
     }
   }, [
     currencyPrompt,
@@ -463,6 +480,8 @@ const SettingsSection = forwardRef<SettingsSectionHandle, SettingsSectionProps>(
     pairing,
     preference.currencyCode,
     setPreferenceId,
+    showInfo,
+    t,
   ]);
 
   const extractUpdateMetadata = useCallback(

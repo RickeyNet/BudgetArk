@@ -143,5 +143,6 @@ export const budgetInbox: Localized<typeof en> = {
     createBill: "Kunne ikke opprette den gjentakende regningen.",
     categorizeVendor: "Kunne ikke kategorisere transaksjonene til denne forhandleren.",
     bulkApprove: "Kunne ikke godkjenne alle de foreslåtte transaksjonene.",
+    sync: "Kunne ikke synkronisere kontoene dine.",
   },
 };

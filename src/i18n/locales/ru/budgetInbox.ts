@@ -159,5 +159,6 @@ export const budgetInbox: LocalizedPlural<typeof en> = {
     createBill: "Не удалось создать регулярный счёт.",
     categorizeVendor: "Не удалось задать категорию операциям этого продавца.",
     bulkApprove: "Не удалось подтвердить все предложенные операции.",
+    sync: "Не удалось синхронизировать ваши счета.",
   },
 };

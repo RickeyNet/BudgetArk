@@ -67,6 +67,8 @@ export const debtsCard: LocalizedPlural<typeof en> = {
     deleteA11y: "Видалити {{name}}",
     confirmPaymentA11y: "Підтвердити платіж",
     paymentPlaceholder: "Сума платежу",
+    paymentFailed:
+      "Не вдалося зберегти цей платіж. Перевірте залишок, перш ніж пробувати знову.",
   },
   history: {
     title: "Історія платежів",

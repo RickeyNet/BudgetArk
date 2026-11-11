@@ -143,5 +143,6 @@ export const budgetInbox: Localized<typeof en> = {
     createBill: "Kunde inte skapa den återkommande räkningen.",
     categorizeVendor: "Kunde inte kategorisera den här handlarens transaktioner.",
     bulkApprove: "Kunde inte godkänna alla föreslagna transaktioner.",
+    sync: "Kunde inte synkronisera dina konton.",
   },
 };

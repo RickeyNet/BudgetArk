@@ -61,6 +61,9 @@ export const profileSettings: Localized<typeof en> = {
     convertButton: "Räkna om mina belopp",
     symbolOnlyPaired: "Byt bara symbol",
     symbolOnly: "Byt bara symbolen",
+    convertFailedTitle: "Kunde inte räkna om dina belopp",
+    convertFailedMessage:
+      "Omräkningen från {{from}} till {{to}} avbröts innan den blev klar, och din valutainställning ändrades inte. Vissa belopp kan redan vara omräknade - kontrollera dina siffror innan du försöker igen. Att återställa en säkerhetskopia ångrar en ofullständig omräkning.",
   },
   privacy: {
     label: "Sekretessläge",

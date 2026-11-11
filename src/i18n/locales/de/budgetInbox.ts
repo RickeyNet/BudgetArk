@@ -143,5 +143,6 @@ export const budgetInbox: Localized<typeof en> = {
     createBill: "Die wiederkehrende Rechnung konnte nicht erstellt werden.",
     categorizeVendor: "Die Umsätze dieses Händlers konnten nicht kategorisiert werden.",
     bulkApprove: "Nicht alle vorgeschlagenen Umsätze konnten freigegeben werden.",
+    sync: "Deine Konten konnten nicht synchronisiert werden.",
   },
 };

@@ -47,7 +47,11 @@ interface DebtCardProps {
   debt: Debt;
 
   /** Callback when user submits a payment - receives (debtId, amount) */
-  onPayment: (debtId: string, amount: number) => void;
+  /**
+   * May return a promise: the card waits for it and keeps the typed amount
+   * on screen (with an error line) if the write rejects.
+   */
+  onPayment: (debtId: string, amount: number) => void | Promise<unknown>;
 
   /** Callback when user deletes this debt - receives debtId */
   onDelete: (debtId: string) => void;
@@ -96,6 +100,8 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
   const [expanded, setExpanded] = useState(isFocusDebt);
   const [showPayInput, setShowPayInput] = useState(false);
   const [payAmount, setPayAmount] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState(false);
 
   // Keep expanded state in sync with focus changes - when the avalanche/snowball
   // strategy switches the focus debt, the previously-focused card should
@@ -248,17 +254,29 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
    * Handles payment submission.
    * Validates the amount is positive and doesn't exceed the balance.
    * Uses useCallback to prevent child re-renders.
+   *
+   * The input is cleared only AFTER the write resolves: clearing first made
+   * a failed save look exactly like a recorded payment.
    */
-  const handlePayment = useCallback(() => {
+  const handlePayment = useCallback(async () => {
+    if (paying) return;
     const raw = parseMoneyInput(payAmount) ?? NaN;
     if (!Number.isFinite(raw) || raw <= 0 || debt.balance <= 0) return;
     // Clamp to balance so display-rounding ($0.09 shown for a 0.0899... balance)
     // and small overpayments still zero the debt instead of silently failing.
     const amount = Math.min(raw, debt.balance);
-    onPayment(debt.id, amount);
-    setPayAmount("");
-    setShowPayInput(false);
-  }, [payAmount, debt.id, debt.balance, onPayment]);
+    setPaying(true);
+    setPayError(false);
+    try {
+      await onPayment(debt.id, amount);
+      setPayAmount("");
+      setShowPayInput(false);
+    } catch {
+      setPayError(true);
+    } finally {
+      setPaying(false);
+    }
+  }, [paying, payAmount, debt.id, debt.balance, onPayment]);
 
   /* ── Collapsed compact view ── */
   if (!expanded) {
@@ -495,12 +513,20 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
             value={payAmount}
-            onChangeText={setPayAmount}
+            onChangeText={(text) => {
+              setPayAmount(text);
+              setPayError(false);
+            }}
+            editable={!paying}
             onFocus={() => onPayInputFocus?.(debt.id)}
           />
           <TouchableOpacity
-            style={[styles.confirmPayButton, { backgroundColor: colors.success }]}
-            onPress={handlePayment}
+            style={[
+              styles.confirmPayButton,
+              { backgroundColor: colors.success, opacity: paying ? 0.5 : 1 },
+            ]}
+            onPress={() => void handlePayment()}
+            disabled={paying}
             accessibilityRole="button"
             accessibilityLabel={t("debts.card.card.confirmPaymentA11y")}
           >
@@ -509,6 +535,11 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayment, onDelete, onEdit, 
             </Text>
           </TouchableOpacity>
         </View>
+      )}
+      {showPayInput && payError && (
+        <Text style={styles.payErrorText} accessibilityRole="alert">
+          {t("debts.card.card.paymentFailed")}
+        </Text>
       )}
     </TouchableOpacity>
   );
@@ -796,6 +827,11 @@ const makeStyles = (colors: ThemeColors) =>
     confirmPayText: {
       fontWeight: "700",
       fontSize: 14,
+    },
+    payErrorText: {
+      marginTop: 8,
+      fontSize: 13,
+      color: colors.danger,
     },
   });
 

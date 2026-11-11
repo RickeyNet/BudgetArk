@@ -634,7 +634,9 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
    * besides adding rows - rows it skipped (now under Recently skipped) and
    * rows its rules auto-approved - instead of letting the list shrink
    * silently. The host screen reloads its entries afterwards because the
-   * sweep can have written real entries.
+   * sweep can have written real entries. A failed pass says so too: both a
+   * thrown sync and a connection that came back with an errorMessage land
+   * in the error line rather than leaving the list looking merely unchanged.
    */
   const handleSync = useCallback(async () => {
     setActionError(null);
@@ -649,8 +651,21 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
         parts.push(t("budget.inbox.notices.syncAutoApproved", { count: autoApproved }));
       }
       setActionNotice(parts.length > 0 ? parts.join(" ") : null);
+      const failed = results.find((r) => r.errorMessage);
+      if (failed?.errorMessage) {
+        triggerHaptic("error");
+        setActionError(failed.errorMessage);
+      }
+    } catch (error) {
+      triggerHaptic("error");
+      setActionError(describeError(error, t("budget.inbox.errors.sync")));
     } finally {
-      await onChanged();
+      // The host reload must not mask (or replace) the sync's own outcome.
+      try {
+        await onChanged();
+      } catch (error) {
+        if (__DEV__) console.warn("Inbox host reload failed:", error);
+      }
     }
   }, [onChanged, syncNow, t]);
 

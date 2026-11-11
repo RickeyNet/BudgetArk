@@ -61,6 +61,9 @@ export const profileSettings: Localized<typeof en> = {
     convertButton: "Regn om beløpene mine",
     symbolOnlyPaired: "Bytt bare symbol",
     symbolOnly: "Bytt bare symbolet",
+    convertFailedTitle: "Kunne ikke regne om beløpene dine",
+    convertFailedMessage:
+      "Omregningen fra {{from}} til {{to}} stoppet før den ble ferdig, og valutainnstillingen din ble ikke endret. Noen beløp kan allerede være omregnet - sjekk tallene dine før du prøver igjen. Å gjenopprette en sikkerhetskopi angrer en ufullstendig omregning.",
   },
   privacy: {
     label: "Personvernmodus",

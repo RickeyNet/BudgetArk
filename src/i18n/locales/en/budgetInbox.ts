@@ -142,5 +142,6 @@ export const budgetInbox = {
     createBill: "Couldn't create the recurring bill.",
     categorizeVendor: "Couldn't categorize this vendor's transactions.",
     bulkApprove: "Couldn't approve all of the suggested transactions.",
+    sync: "Couldn't sync your accounts.",
   },
 } as const;

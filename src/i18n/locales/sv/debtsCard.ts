@@ -62,6 +62,8 @@ export const debtsCard: Localized<typeof en> = {
     deleteA11y: "Ta bort {{name}}",
     confirmPaymentA11y: "Bekräfta betalning",
     paymentPlaceholder: "Betalningsbelopp",
+    paymentFailed:
+      "Kunde inte spara den här betalningen. Kontrollera saldot innan du försöker igen.",
   },
   history: {
     title: "Betalningshistorik",

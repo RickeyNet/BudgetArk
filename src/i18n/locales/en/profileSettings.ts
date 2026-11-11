@@ -73,6 +73,9 @@ export const profileSettings = {
     convertButton: "Convert my amounts",
     symbolOnlyPaired: "Change symbol only",
     symbolOnly: "Just change the symbol",
+    convertFailedTitle: "Couldn't convert your amounts",
+    convertFailedMessage:
+      "The conversion from {{from}} to {{to}} stopped before it finished, and your currency setting was not changed. Some amounts may already be converted - check your numbers before trying again. Restoring a backup undoes a partial conversion.",
   },
   privacy: {
     label: "Privacy Mode",

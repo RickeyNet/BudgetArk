@@ -61,6 +61,9 @@ export const profileSettings: Localized<typeof en> = {
     convertButton: "Meine Beträge umrechnen",
     symbolOnlyPaired: "Nur Symbol ändern",
     symbolOnly: "Nur das Symbol ändern",
+    convertFailedTitle: "Beträge konnten nicht umgerechnet werden",
+    convertFailedMessage:
+      "Die Umrechnung von {{from}} in {{to}} wurde vorzeitig abgebrochen, und deine Währungseinstellung wurde nicht geändert. Einige Beträge sind möglicherweise bereits umgerechnet - prüfe deine Zahlen, bevor du es erneut versuchst. Das Wiederherstellen eines Backups macht eine unvollständige Umrechnung rückgängig.",
   },
   privacy: {
     label: "Privatsphäre-Modus",

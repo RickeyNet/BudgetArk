@@ -59,6 +59,8 @@ export const debtsCard = {
     deleteA11y: "Delete {{name}}",
     confirmPaymentA11y: "Confirm payment",
     paymentPlaceholder: "Payment amount",
+    paymentFailed:
+      "Couldn't save this payment. Check the balance before trying again.",
   },
   history: {
     title: "Payment History",
