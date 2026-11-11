@@ -201,6 +201,15 @@ const AppContent: React.FC = () => {
     } catch (error) {
       if (__DEV__) console.error("Failed to seed feature debuts:", error);
     }
+    try {
+      // Same reasoning as the debut seed: a fresh install has nothing "new" to
+      // be told about. Await it - the release-notes check effect fires as soon
+      // as the flag below flips, and the prompt would stack over the Bridge
+      // tour. Own try/catch so one failed seed doesn't skip the other.
+      await setLastSeenReleaseNotesVersion(CURRENT_APP_VERSION);
+    } catch (error) {
+      if (__DEV__) console.error("Failed to seed release notes version:", error);
+    }
     // Onboarding flows straight into the guided walkthrough: the initial tab
     // (Bridge) fires its own tour on focus, and this queue chains the rest so
     // each tab auto-navigates after its last "Got it". Skipped when the user
