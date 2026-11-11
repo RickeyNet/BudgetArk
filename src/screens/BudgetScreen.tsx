@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import LoadErrorBanner from "../components/LoadErrorBanner";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -243,6 +244,8 @@ const BudgetScreen: React.FC = () => {
   /** True when the open balance modal came from the once-per-month nudge. */
   const [balanceModalIsPrompt, setBalanceModalIsPrompt] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  /** A storage read failed on the last load - see LoadErrorBanner. */
+  const [loadError, setLoadError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   /** Category preselected by the Quick Entry widget's deep link, if any. */
   const [quickAddCategory, setQuickAddCategory] = useState<CategoryName | undefined>(undefined);
@@ -378,6 +381,7 @@ const BudgetScreen: React.FC = () => {
         setBucketOverrides(storedBucketOverrides);
         await refreshNetWorthSnapshots();
         if (cancelled) return;
+        setLoadError(false);
         setIsLoaded(true);
       };
 
@@ -385,10 +389,13 @@ const BudgetScreen: React.FC = () => {
       // failure) must not leave isLoaded false forever - that's a blank tab
       // with no retry. Keep whatever state we have (empty defaults on a
       // cold load, the previous load's data otherwise), settle the loader,
-      // and let the next focus try again. Mirrors DebtTracker/Bridge.
+      // and say so: LoadErrorBanner tells the user the read failed (empty
+      // defaults alone read as "your budget is gone") and offers a retry.
+      // Mirrors DebtTracker/Bridge.
       loadBudgetData().catch((error: unknown) => {
         if (cancelled) return;
         if (__DEV__) console.error("Failed to load budget:", error);
+        setLoadError(true);
         setIsLoaded(true);
       });
       return () => {
@@ -1564,6 +1571,12 @@ const BudgetScreen: React.FC = () => {
         showAmbientBackground && styles.screenTransparent,
       ]}
     >
+      {loadError ? (
+        <LoadErrorBanner
+          topInset={insets.top}
+          onRetry={() => setReloadTick((tick) => tick + 1)}
+        />
+      ) : null}
       {isLoaded && (
         <FlatList
           ref={listRef}

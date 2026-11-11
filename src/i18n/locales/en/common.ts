@@ -35,6 +35,12 @@ export const common = {
   /** Undo toast button (UndoProvider) - shouted like the debts card. */
   undo: "UNDO",
   undoLastAction: "Undo last action",
+  /** components/LoadErrorBanner - a tab whose storage read failed. */
+  loadError: {
+    message:
+      "Couldn't read your data from this phone. Nothing has been deleted, but what's shown here may be missing or out of date.",
+    retry: "Try again",
+  },
   /** Sunday-first short weekday names for every calendar grid (MonthDayCalendar). */
   weekdays: {
     sun: "Sun",

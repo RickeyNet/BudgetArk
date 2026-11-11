@@ -146,6 +146,20 @@ export const bridgeScreen: LocalizedPlural<typeof en> = {
     addTicker: "+ Додати тікер",
     addFund: "+ Додати фонд 401k",
     deleteLink: "Видалити цей рахунок",
+    /** Shown when Save is refused or fails - one message per field that is wrong. */
+    errors: {
+      summary: "Виправте зазначені вище помилки та збережіть. Щоб прибрати позицію, натисніть її ✕.",
+      saveFailed: "Не вдалося зберегти рахунок. Перевірте дані та спробуйте знову.",
+      name: "Вкажіть назву рахунку.",
+      balance: "Введіть баланс не менше 0.",
+      apy: "Введіть ставку у відсотках або залиште поле порожнім.",
+      symbol: "Введіть тикер, наприклад AAPL або BTC/USD.",
+      shares: "Введіть кількість акцій (більше 0).",
+      costBasis: "Вартість має бути числом або залишатися порожньою.",
+      fundName: "Вкажіть назву фонду.",
+      fundValue: "Введіть поточну вартість фонду.",
+      proxy: "Індекс має бути тикером, наприклад VOO, або залишатися порожнім.",
+    },
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Видалити рахунок?",

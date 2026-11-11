@@ -25,6 +25,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Setup no longer runs straight into the guided tour. The last setup step now asks whether you want the tab-by-tab tour and says how many tips it holds, and Skip Setup skips the tour too. Every tip is still in Profile → Help → Feature guide.",
       "Replacing your data now keeps a way back. Before a Replace import or a backup restore overwrites what is on the phone, BudgetArk saves a safety copy in Automatic Backups, and stops without changing anything if that copy can't be saved.",
       "Quick actions can be taken back. A payment typed on a debt card and a savings change in the milestones sheet now offer Undo, and the Review Inbox asks before approving or skipping a whole batch.",
+      "The account editor tells you what's wrong. Saving an account with a missing name, a bad balance or an incomplete holding used to do nothing, and a holding with a field cleared could be removed without warning. Save now points at each field that needs fixing and changes nothing until they are right.",
+      "A tab that can't read your data says so. If the Debts, Budget or Bridge tab fails to load, it now shows a notice with Try again instead of looking empty. Nothing is deleted when this happens.",
     ],
   },
   {

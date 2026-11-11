@@ -34,6 +34,12 @@ export const common: LocalizedPlural<typeof en> = {
   unknown: "Неизвестно",
   undo: "ОТМЕНИТЬ",
   undoLastAction: "Отменить последнее действие",
+  /** components/LoadErrorBanner - a tab whose storage read failed. */
+  loadError: {
+    message:
+      "Не удалось прочитать данные с этого телефона. Ничего не удалено, но показанное здесь может быть неполным или устаревшим.",
+    retry: "Повторить",
+  },
   weekdays: {
     sun: "Вс",
     mon: "Пн",

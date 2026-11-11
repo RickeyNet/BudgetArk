@@ -132,6 +132,20 @@ export const bridgeScreen = {
     addTicker: "+ Add ticker",
     addFund: "+ Add 401k fund",
     deleteLink: "Delete this account",
+    /** Shown when Save is refused or fails - one message per field that is wrong. */
+    errors: {
+      summary: "Fix the problems noted above, then save. To remove a holding, use its ✕.",
+      saveFailed: "Couldn't save this account. Check it and try again.",
+      name: "Give the account a name.",
+      balance: "Enter a balance of 0 or more.",
+      apy: "Enter the APY as a percentage, or leave it blank.",
+      symbol: "Enter a ticker such as AAPL or BTC/USD.",
+      shares: "Enter the number of shares (more than 0).",
+      costBasis: "Cost must be a number, or left blank.",
+      fundName: "Give the fund a name.",
+      fundValue: "Enter the fund's current value.",
+      proxy: "The index must be a ticker such as VOO, or left blank.",
+    },
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Delete account?",

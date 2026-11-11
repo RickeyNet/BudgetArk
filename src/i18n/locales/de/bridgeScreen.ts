@@ -131,6 +131,20 @@ export const bridgeScreen: Localized<typeof en> = {
     addTicker: "+ Ticker hinzufügen",
     addFund: "+ Fonds hinzufügen",
     deleteLink: "Dieses Konto löschen",
+    /** Shown when Save is refused or fails - one message per field that is wrong. */
+    errors: {
+      summary: "Behebe die oben genannten Probleme und speichere dann. Um eine Position zu entfernen, nutze ihr ✕.",
+      saveFailed: "Dieses Konto konnte nicht gespeichert werden. Prüfe es und versuche es erneut.",
+      name: "Gib dem Konto einen Namen.",
+      balance: "Gib einen Kontostand von 0 oder mehr ein.",
+      apy: "Gib den Zinssatz in Prozent ein oder lass das Feld leer.",
+      symbol: "Gib ein Kürzel wie AAPL oder BTC/USD ein.",
+      shares: "Gib die Anzahl der Anteile ein (mehr als 0).",
+      costBasis: "Der Einstandswert muss eine Zahl sein oder leer bleiben.",
+      fundName: "Gib dem Fonds einen Namen.",
+      fundValue: "Gib den aktuellen Wert des Fonds ein.",
+      proxy: "Der Index muss ein Kürzel wie VOO sein oder leer bleiben.",
+    },
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Konto löschen?",

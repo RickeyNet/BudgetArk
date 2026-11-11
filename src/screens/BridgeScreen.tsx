@@ -26,6 +26,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { TAB_BAR_BASE_HEIGHT } from "../navigation/tabBarLayout";
 import { parseMoneyInput } from "../utils/parseMoneyInput";
+import {
+  type AccountFieldIssue,
+  type AccountRowIssue,
+  validateAccountEditor,
+} from "../utils/accountEditorValidation";
+import LoadErrorBanner from "../components/LoadErrorBanner";
 import { generateUUID } from "../utils/uuid";
 import { describeApy, describeApyGap, parseApyInput } from "../utils/savingsInterest";
 import NetWorthHistoryCard from "../components/NetWorthHistoryCard";
@@ -169,6 +175,25 @@ const DEFAULT_BROKER_NAME = "My Holdings";
  *     proxy it becomes a proxy-tracked holding (value drifts with the index);
  *     without one it's a manual fixed value.
  */
+/**
+ * Message key per validation issue. Spelled out as literals (not built from
+ * the issue name) so the typed key tree checks every one.
+ */
+const ACCOUNT_FIELD_ERROR_KEYS = {
+  name: "bridge.screen.assetModal.errors.name",
+  balance: "bridge.screen.assetModal.errors.balance",
+  apy: "bridge.screen.assetModal.errors.apy",
+} as const satisfies Record<AccountFieldIssue, string>;
+
+const ACCOUNT_ROW_ERROR_KEYS = {
+  symbol: "bridge.screen.assetModal.errors.symbol",
+  shares: "bridge.screen.assetModal.errors.shares",
+  costBasis: "bridge.screen.assetModal.errors.costBasis",
+  fundName: "bridge.screen.assetModal.errors.fundName",
+  fundValue: "bridge.screen.assetModal.errors.fundValue",
+  proxy: "bridge.screen.assetModal.errors.proxy",
+} as const satisfies Record<AccountRowIssue, string>;
+
 type TickerDraft = {
   key: string;
   id?: string;
@@ -244,6 +269,14 @@ const BridgeScreen: React.FC = () => {
   // Editable ticker rows shown in the modal when the account is an Investment
   // (broker). Holds the broker's holdings while editing; reconciled on save.
   const [brokerTickers, setBrokerTickers] = useState<TickerDraft[]>([]);
+  // Account editor feedback. Errors stay hidden until the first refused
+  // Save (no red fields while the user is still typing), then track the
+  // form live so each one clears as it is fixed.
+  const [assetSubmitAttempted, setAssetSubmitAttempted] = useState(false);
+  const [assetSaveFailed, setAssetSaveFailed] = useState(false);
+  const [assetSaving, setAssetSaving] = useState(false);
+  /** A storage read failed on the last load - see LoadErrorBanner. */
+  const [loadError, setLoadError] = useState(false);
   const [collapsedAccountCategories, setCollapsedAccountCategories] = useState<
     Set<AssetAccountCategory>
   >(() => new Set(ASSET_ACCOUNT_CATEGORIES));
@@ -422,18 +455,15 @@ const BridgeScreen: React.FC = () => {
           // pulls fresh prices explicitly via the "Update prices" button.
           await loadHoldingsState();
           if (cancelled) return;
+          setLoadError(false);
         } catch (error) {
           if (cancelled) return;
           if (__DEV__) console.error("Failed to load bridge:", error);
-          setEntries([]);
-          setDebts([]);
-          setSavingsGoals([]);
-          setAssetAccounts([]);
-          setHoldings([]);
-          setQuotes({});
-          setNetWorthSnapshots([]);
-          setAccountValueHistory({});
-          setKeelTarget(0);
+          // Deliberately no reset to empty state here: a failed read is not
+          // "no data". Whatever the last good load showed stays on screen
+          // (nothing, on a cold start) under a banner that says the read
+          // failed and offers a retry.
+          setLoadError(true);
         }
         if (!cancelled) setIsLoaded(true);
       };
@@ -745,6 +775,8 @@ const BridgeScreen: React.FC = () => {
     setAssetCategory("savings");
     setAssetIsEmergencyFund(false);
     setBrokerTickers([]);
+    setAssetSubmitAttempted(false);
+    setAssetSaveFailed(false);
   }, []);
 
   const addTickerRow = useCallback(() => {
@@ -799,207 +831,249 @@ const BridgeScreen: React.FC = () => {
    * and tombstone any the user removed. Never fetches prices - that stays
    * manual so adding several tickers doesn't burn the daily window.
    */
+  const assetValidation = useMemo(
+    () =>
+      validateAccountEditor({
+        name: assetName,
+        balance: assetBalance,
+        apy: assetApy,
+        isPureHoldings: categoryIsPureHoldings(assetCategory),
+        hasHoldings: categorySupportsHoldings(assetCategory),
+        rows: brokerTickers,
+      }),
+    [assetApy, assetBalance, assetCategory, assetName, brokerTickers]
+  );
+
   const saveAsset = useCallback(async () => {
-    const name = assetName.trim();
-    if (!name) return;
+    if (assetSaving) return;
+    // Validate the WHOLE form before the first write. Save used to return
+    // without a word on a bad name/balance, and a holding row that didn't
+    // parse was dropped - which tombstoned the holding if it already
+    // existed. Now nothing is written until every field is good, and the
+    // sheet says which ones aren't (utils/accountEditorValidation).
+    if (!assetValidation.valid) {
+      setAssetSubmitAttempted(true);
+      setAssetSaveFailed(false);
+      triggerHaptic("error");
+      return;
+    }
+    setAssetSaving(true);
+    setAssetSaveFailed(false);
+    try {
+      const name = assetName.trim();
+      const blankRowKeys = new Set(assetValidation.blankRowKeys);
 
-    const isPureHoldings = categoryIsPureHoldings(assetCategory);
-    const hasHoldings = categorySupportsHoldings(assetCategory);
-    const parsedBalance = parseMoneyInput(assetBalance) ?? NaN;
-    if (!isPureHoldings && (Number.isNaN(parsedBalance) || parsedBalance < 0)) return;
-    // Pure-holdings accounts (Investment/Retirement) have no cash-balance field;
-    // new ones start at 0, but preserve any existing balance (e.g. a legacy 401k
-    // tracked as a plain balance) rather than silently zeroing it. HSA edits its
-    // cash balance directly.
-    const balance = isPureHoldings
-      ? editingAsset?.balance ?? 0
-      : parsedBalance;
+      const isPureHoldings = categoryIsPureHoldings(assetCategory);
+      const hasHoldings = categorySupportsHoldings(assetCategory);
+      const parsedBalance = parseMoneyInput(assetBalance) ?? NaN;
+      // Pure-holdings accounts (Investment/Retirement) have no cash-balance field;
+      // new ones start at 0, but preserve any existing balance (e.g. a legacy 401k
+      // tracked as a plain balance) rather than silently zeroing it. HSA edits its
+      // cash balance directly.
+      const balance = isPureHoldings
+        ? editingAsset?.balance ?? 0
+        : parsedBalance;
 
-    const now = new Date().toISOString();
-    const accountId = editingAsset ? editingAsset.id : generateUUID();
+      const now = new Date().toISOString();
+      const accountId = editingAsset ? editingAsset.id : generateUUID();
 
-    // The emergency-fund designation only exists on savings accounts;
-    // `undefined` (not `false`) clears it so re-categorized accounts don't
-    // carry a stale flag through sync/export.
-    const isEmergencyFund =
-      assetCategory === "savings" && assetIsEmergencyFund ? true : undefined;
-    // APY only makes sense where there's a cash balance; `undefined` clears
-    // it (a blank field or a pure-holdings account), never `0`.
-    const apy = isPureHoldings ? undefined : parseApyInput(assetApy);
+      // The emergency-fund designation only exists on savings accounts;
+      // `undefined` (not `false`) clears it so re-categorized accounts don't
+      // carry a stale flag through sync/export.
+      const isEmergencyFund =
+        assetCategory === "savings" && assetIsEmergencyFund ? true : undefined;
+      // APY only makes sense where there's a cash balance; `undefined` clears
+      // it (a blank field or a pure-holdings account), never `0`.
+      const apy = isPureHoldings ? undefined : parseApyInput(assetApy);
 
-    // Storage-level upsert (never `saveAssetAccounts(stateArray)`): a
-    // partner sync landing while this tab is mounted adds accounts this
-    // screen's state doesn't know about, and persisting the snapshot over
-    // them hard-deleted those accounts with no tombstone.
-    const nextAccounts: AssetAccount[] = editingAsset
-      ? await updateAssetAccount(editingAsset.id, {
-          name,
-          balance,
-          category: assetCategory,
-          isEmergencyFund,
-          apy,
-        })
-      : await addAssetAccount({
-          id: accountId,
-          name,
-          balance,
-          category: assetCategory,
-          isEmergencyFund,
-          apy,
-          createdAt: now,
-          updatedAt: now,
-        });
-    setAssetAccounts(nextAccounts);
+      // Storage-level upsert (never `saveAssetAccounts(stateArray)`): a
+      // partner sync landing while this tab is mounted adds accounts this
+      // screen's state doesn't know about, and persisting the snapshot over
+      // them hard-deleted those accounts with no tombstone.
+      const nextAccounts: AssetAccount[] = editingAsset
+        ? await updateAssetAccount(editingAsset.id, {
+            name,
+            balance,
+            category: assetCategory,
+            isEmergencyFund,
+            apy,
+          })
+        : await addAssetAccount({
+            id: accountId,
+            name,
+            balance,
+            category: assetCategory,
+            isEmergencyFund,
+            apy,
+            createdAt: now,
+            updatedAt: now,
+          });
+      setAssetAccounts(nextAccounts);
 
-    if (hasHoldings) {
-      const parseCost = (raw: string): number | undefined => {
-        const t = raw.trim();
-        const n = parseMoneyInput(t) ?? NaN;
-        return Number.isFinite(n) && n >= 0 ? n : undefined;
-      };
+      if (hasHoldings) {
+        const parseCost = (raw: string): number | undefined => {
+          const t = raw.trim();
+          const n = parseMoneyInput(t) ?? NaN;
+          return Number.isFinite(n) && n >= 0 ? n : undefined;
+        };
 
-      // Resolve each editor row into the holding shape for its kind. Invalid
-      // rows (missing required inputs) drop out. A "fund" row becomes a
-      // proxy-tracked holding when it carries a valid proxy ticker, else a
-      // manual fixed-value holding.
-      type ResolvedRow = {
-        id?: string;
-        kind: "ticker" | "proxy" | "manual";
-        symbol: string;
-        shares: number;
-        costBasis?: number;
-        name?: string;
-        value: number;
-      };
+        // Resolve each editor row into the holding shape for its kind. Only
+        // never-filled new rows are skipped; validation above has already
+        // refused the save for any other row that doesn't parse, so the null
+        // returns below are unreachable belts-and-braces. A "fund" row becomes a
+        // proxy-tracked holding when it carries a valid proxy ticker, else a
+        // manual fixed-value holding.
+        type ResolvedRow = {
+          id?: string;
+          kind: "ticker" | "proxy" | "manual";
+          symbol: string;
+          shares: number;
+          costBasis?: number;
+          name?: string;
+          value: number;
+        };
 
-      const rows: ResolvedRow[] = brokerTickers
-        .map((row): ResolvedRow | null => {
-          const costBasis = parseCost(row.costBasis);
-          if (row.kind === "fund") {
-            const fundName = row.name.trim();
-            const value = parseMoneyInput(row.value) ?? NaN;
-            if (!fundName || !Number.isFinite(value) || value < 0) return null;
-            const proxy = normalizeSymbol(row.symbol);
-            const hasProxy = proxy !== "" && isValidSymbol(proxy);
+        const rows: ResolvedRow[] = brokerTickers
+          .filter((row) => !blankRowKeys.has(row.key))
+          .map((row): ResolvedRow | null => {
+            const costBasis = parseCost(row.costBasis);
+            if (row.kind === "fund") {
+              const fundName = row.name.trim();
+              const value = parseMoneyInput(row.value) ?? NaN;
+              if (!fundName || !Number.isFinite(value) || value < 0) return null;
+              const proxy = normalizeSymbol(row.symbol);
+              const hasProxy = proxy !== "" && isValidSymbol(proxy);
+              return {
+                id: row.id,
+                kind: hasProxy ? "proxy" : "manual",
+                symbol: hasProxy ? proxy : "",
+                shares: 0,
+                costBasis,
+                name: fundName,
+                value,
+              };
+            }
+            const symbol = normalizeSymbol(row.symbol);
+            const shares = parseMoneyInput(row.shares) ?? NaN;
+            if (!isValidSymbol(symbol) || !Number.isFinite(shares) || shares <= 0) {
+              return null;
+            }
+            return { id: row.id, kind: "ticker", symbol, shares, costBasis, value: 0 };
+          })
+          .filter((r): r is ResolvedRow => r !== null);
+
+        // Build the mutable holding fields for a resolved row. For a proxy row we
+        // capture the proxy's current price as the anchor, but only re-anchor
+        // when the value or proxy actually changed - an incidental save must not
+        // reset accrued drift.
+        type HoldingFields = {
+          symbol: string;
+          shares: number;
+          name?: string;
+          costBasis?: number;
+          manualValue?: number;
+          anchorValue?: number;
+          anchorPrice?: number;
+        };
+        const fieldsFor = (r: ResolvedRow, existing?: Holding): HoldingFields => {
+          if (r.kind === "manual") {
             return {
-              id: row.id,
-              kind: hasProxy ? "proxy" : "manual",
-              symbol: hasProxy ? proxy : "",
+              symbol: "",
               shares: 0,
-              costBasis,
-              name: fundName,
-              value,
+              name: r.name,
+              costBasis: r.costBasis,
+              manualValue: r.value,
+              anchorValue: undefined,
+              anchorPrice: undefined,
             };
           }
-          const symbol = normalizeSymbol(row.symbol);
-          const shares = parseMoneyInput(row.shares) ?? NaN;
-          if (!isValidSymbol(symbol) || !Number.isFinite(shares) || shares <= 0) {
-            return null;
-          }
-          return { id: row.id, kind: "ticker", symbol, shares, costBasis, value: 0 };
-        })
-        .filter((r): r is ResolvedRow => r !== null);
-
-      // Build the mutable holding fields for a resolved row. For a proxy row we
-      // capture the proxy's current price as the anchor, but only re-anchor
-      // when the value or proxy actually changed - an incidental save must not
-      // reset accrued drift.
-      type HoldingFields = {
-        symbol: string;
-        shares: number;
-        name?: string;
-        costBasis?: number;
-        manualValue?: number;
-        anchorValue?: number;
-        anchorPrice?: number;
-      };
-      const fieldsFor = (r: ResolvedRow, existing?: Holding): HoldingFields => {
-        if (r.kind === "manual") {
-          return {
-            symbol: "",
-            shares: 0,
-            name: r.name,
-            costBasis: r.costBasis,
-            manualValue: r.value,
-            anchorValue: undefined,
-            anchorPrice: undefined,
-          };
-        }
-        if (r.kind === "proxy") {
-          const unchanged =
-            existing != null &&
-            holdingKind(existing) === "proxy" &&
-            normalizeSymbol(existing.symbol) === r.symbol &&
-            existing.anchorValue === r.value;
-          let anchorPrice = existing && unchanged ? existing.anchorPrice : undefined;
-          if (!unchanged) {
-            const px = quotes[r.symbol]?.price;
-            anchorPrice =
-              typeof px === "number" && Number.isFinite(px) && px > 0 ? px : undefined;
+          if (r.kind === "proxy") {
+            const unchanged =
+              existing != null &&
+              holdingKind(existing) === "proxy" &&
+              normalizeSymbol(existing.symbol) === r.symbol &&
+              existing.anchorValue === r.value;
+            let anchorPrice = existing && unchanged ? existing.anchorPrice : undefined;
+            if (!unchanged) {
+              const px = quotes[r.symbol]?.price;
+              anchorPrice =
+                typeof px === "number" && Number.isFinite(px) && px > 0 ? px : undefined;
+            }
+            return {
+              symbol: r.symbol,
+              shares: 0,
+              name: r.name,
+              costBasis: r.costBasis,
+              manualValue: undefined,
+              anchorValue: r.value,
+              anchorPrice,
+            };
           }
           return {
             symbol: r.symbol,
-            shares: 0,
-            name: r.name,
+            shares: r.shares,
+            name: undefined,
             costBasis: r.costBasis,
             manualValue: undefined,
-            anchorValue: r.value,
-            anchorPrice,
+            anchorValue: undefined,
+            anchorPrice: undefined,
           };
-        }
-        return {
-          symbol: r.symbol,
-          shares: r.shares,
-          name: undefined,
-          costBasis: r.costBasis,
-          manualValue: undefined,
-          anchorValue: undefined,
-          anchorPrice: undefined,
         };
-      };
 
-      const keptIds = new Set(
-        rows.map((r) => r.id).filter((id): id is string => !!id)
-      );
+        const keptIds = new Set(
+          rows.map((r) => r.id).filter((id): id is string => !!id)
+        );
 
-      // Tombstone holdings removed from this broker (soft-delete so the
-      // deletion propagates on the next sync).
-      for (const h of holdings) {
-        if (h.accountId === accountId && !keptIds.has(h.id)) {
-          await deleteHoldingRecord(h.id);
+        // Tombstone holdings removed from this broker (soft-delete so the
+        // deletion propagates on the next sync).
+        for (const h of holdings) {
+          if (h.accountId === accountId && !keptIds.has(h.id)) {
+            await deleteHoldingRecord(h.id);
+          }
         }
+
+        // Update kept rows; drop removed from the live array (tombstones above
+        // are merged back by saveHoldings); leave other brokers untouched.
+        const updated = holdings
+          .map((h) => {
+            if (h.accountId !== accountId) return h;
+            const row = rows.find((r) => r.id === h.id);
+            return row ? { ...h, ...fieldsFor(row, h), updatedAt: now } : h;
+          })
+          .filter((h) => !(h.accountId === accountId && !keptIds.has(h.id)));
+
+        const created: Holding[] = rows
+          .filter((r) => !r.id)
+          .map((r): Holding => ({
+            id: generateUUID(),
+            accountId,
+            createdAt: now,
+            updatedAt: now,
+            ...fieldsFor(r),
+          }));
+
+        const nextLive = [...updated, ...created];
+        setHoldings(nextLive);
+        await saveHoldings(nextLive);
       }
 
-      // Update kept rows; drop removed from the live array (tombstones above
-      // are merged back by saveHoldings); leave other brokers untouched.
-      const updated = holdings
-        .map((h) => {
-          if (h.accountId !== accountId) return h;
-          const row = rows.find((r) => r.id === h.id);
-          return row ? { ...h, ...fieldsFor(row, h), updatedAt: now } : h;
-        })
-        .filter((h) => !(h.accountId === accountId && !keptIds.has(h.id)));
-
-      const created: Holding[] = rows
-        .filter((r) => !r.id)
-        .map((r): Holding => ({
-          id: generateUUID(),
-          accountId,
-          createdAt: now,
-          updatedAt: now,
-          ...fieldsFor(r),
-        }));
-
-      const nextLive = [...updated, ...created];
-      setHoldings(nextLive);
-      await saveHoldings(nextLive);
+      await refreshNetWorthSnapshots();
+      closeAssetModal();
+      await loadHoldingsState();
+      void refreshAchievements();
+    } catch (error) {
+      // A storage write rejected. Keep the sheet open with everything the
+      // user typed and say so - closing (or doing nothing) would look like
+      // a successful save.
+      if (__DEV__) console.error("Failed to save account:", error);
+      setAssetSaveFailed(true);
+      triggerHaptic("error");
+    } finally {
+      setAssetSaving(false);
     }
-
-    await refreshNetWorthSnapshots();
-    closeAssetModal();
-    await loadHoldingsState();
-    void refreshAchievements();
   }, [
+    assetSaving,
+    assetValidation,
     assetApy,
     assetBalance,
     assetCategory,
@@ -1801,6 +1875,20 @@ const BridgeScreen: React.FC = () => {
     </View>
   );
 
+  /** Error line under an account field / holding row, once Save was refused. */
+  const assetFieldError = (field: AccountFieldIssue) =>
+    assetSubmitAttempted && assetValidation.fieldIssues.includes(field) ? (
+      <Text style={styles.modalErrorText}>{t(ACCOUNT_FIELD_ERROR_KEYS[field])}</Text>
+    ) : null;
+  const assetRowError = (rowKey: string) => {
+    const issues = assetSubmitAttempted ? assetValidation.rowIssues[rowKey] : undefined;
+    return issues ? (
+      <Text style={styles.modalErrorText}>
+        {issues.map((issue) => t(ACCOUNT_ROW_ERROR_KEYS[issue])).join(" ")}
+      </Text>
+    ) : null;
+  };
+
   return (
     <View
       style={[
@@ -1808,6 +1896,12 @@ const BridgeScreen: React.FC = () => {
         showAmbientBackground && styles.screenTransparent,
       ]}
     >
+      {loadError ? (
+        <LoadErrorBanner
+          topInset={insets.top}
+          onRetry={() => setReloadTick((tick) => tick + 1)}
+        />
+      ) : null}
       {isLoaded ? (
         <FlatList
           ref={listRef}
@@ -1854,6 +1948,7 @@ const BridgeScreen: React.FC = () => {
               value={assetName}
               onChangeText={setAssetName}
             />
+            {assetFieldError("name")}
 
             {!categoryIsPureHoldings(assetCategory) ? (
               <>
@@ -1869,6 +1964,7 @@ const BridgeScreen: React.FC = () => {
                   value={assetBalance}
                   onChangeText={setAssetBalance}
                 />
+                {assetFieldError("balance")}
                 <TextInput
                   style={styles.modalInput}
                   placeholder={t("bridge.screen.assetModal.apyPlaceholder")}
@@ -1878,6 +1974,7 @@ const BridgeScreen: React.FC = () => {
                   onChangeText={setAssetApy}
                   accessibilityLabel={t("bridge.screen.assetModal.apyA11y")}
                 />
+                {assetFieldError("apy")}
               </>
             ) : null}
 
@@ -1993,43 +2090,47 @@ const BridgeScreen: React.FC = () => {
                               ? t("bridge.screen.assetModal.fundHintProxy", { symbol: proxy })
                               : t("bridge.screen.assetModal.fundHintManual")}
                           </Text>
+                          {assetRowError(row.key)}
                         </View>
                       );
                     }
                     return (
-                      <View key={row.key} style={styles.tickerRow}>
-                        <TextInput
-                          style={[styles.modalInput, styles.tickerSymbolInput]}
-                          placeholder={t("bridge.screen.assetModal.tickerPlaceholder")}
-                          placeholderTextColor={colors.textMuted}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          value={row.symbol}
-                          onChangeText={(t) => updateTickerRow(row.key, "symbol", t)}
-                        />
-                        <TextInput
-                          style={[styles.modalInput, styles.tickerNumInput]}
-                          placeholder={t("bridge.screen.assetModal.sharesPlaceholder")}
-                          placeholderTextColor={colors.textMuted}
-                          keyboardType="decimal-pad"
-                          value={row.shares}
-                          onChangeText={(t) => updateTickerRow(row.key, "shares", t)}
-                        />
-                        <TextInput
-                          style={[styles.modalInput, styles.tickerNumInput]}
-                          placeholder={t("bridge.screen.assetModal.costPlaceholder")}
-                          placeholderTextColor={colors.textMuted}
-                          keyboardType="decimal-pad"
-                          value={row.costBasis}
-                          onChangeText={(t) => updateTickerRow(row.key, "costBasis", t)}
-                        />
-                        <TouchableOpacity
-                          onPress={() => removeTickerRow(row.key)}
-                          accessibilityRole="button"
-                          accessibilityLabel={t("bridge.screen.assetModal.removeTicker")}
-                        >
-                          <Text style={[styles.tickerRemove, { color: colors.danger }]}>✕</Text>
-                        </TouchableOpacity>
+                      <View key={row.key}>
+                        <View style={styles.tickerRow}>
+                          <TextInput
+                            style={[styles.modalInput, styles.tickerSymbolInput]}
+                            placeholder={t("bridge.screen.assetModal.tickerPlaceholder")}
+                            placeholderTextColor={colors.textMuted}
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                            value={row.symbol}
+                            onChangeText={(t) => updateTickerRow(row.key, "symbol", t)}
+                          />
+                          <TextInput
+                            style={[styles.modalInput, styles.tickerNumInput]}
+                            placeholder={t("bridge.screen.assetModal.sharesPlaceholder")}
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="decimal-pad"
+                            value={row.shares}
+                            onChangeText={(t) => updateTickerRow(row.key, "shares", t)}
+                          />
+                          <TextInput
+                            style={[styles.modalInput, styles.tickerNumInput]}
+                            placeholder={t("bridge.screen.assetModal.costPlaceholder")}
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="decimal-pad"
+                            value={row.costBasis}
+                            onChangeText={(t) => updateTickerRow(row.key, "costBasis", t)}
+                          />
+                          <TouchableOpacity
+                            onPress={() => removeTickerRow(row.key)}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("bridge.screen.assetModal.removeTicker")}
+                          >
+                            <Text style={[styles.tickerRemove, { color: colors.danger }]}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                        {assetRowError(row.key)}
                       </View>
                     );
                   })}
@@ -2045,11 +2146,24 @@ const BridgeScreen: React.FC = () => {
               </View>
             ) : null}
 
+            {assetSaveFailed ? (
+              <Text style={styles.modalErrorText} accessibilityRole="alert">
+                {t("bridge.screen.assetModal.errors.saveFailed")}
+              </Text>
+            ) : assetSubmitAttempted && !assetValidation.valid ? (
+              <Text style={styles.modalErrorText} accessibilityRole="alert">
+                {t("bridge.screen.assetModal.errors.summary")}
+              </Text>
+            ) : null}
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={closeAssetModal}>
                 <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveAsset}>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, assetSaving && styles.modalSaveBtnBusy]}
+                onPress={() => void saveAsset()}
+                disabled={assetSaving}
+              >
                 <Text style={styles.modalSaveText}>{t("common.save")}</Text>
               </TouchableOpacity>
             </View>
@@ -2546,6 +2660,14 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     modalHint: {
       fontSize: scale(12),
       color: colors.textMuted,
+    },
+    modalErrorText: {
+      fontSize: scale(12),
+      color: colors.danger,
+      marginBottom: 8,
+    },
+    modalSaveBtnBusy: {
+      opacity: 0.5,
     },
     modalActions: {
       flexDirection: "row",

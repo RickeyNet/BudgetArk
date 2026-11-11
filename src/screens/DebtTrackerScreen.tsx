@@ -90,6 +90,7 @@ import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getEmergencyFundSource, sumSavingsReserve } from "../utils/emergencyFund";
 import { getBudgetEntries, addBudgetEntry, deleteBudgetEntries } from "../storage/budgetStorage";
+import LoadErrorBanner from "../components/LoadErrorBanner";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
   getDebtMilestonePlan,
@@ -246,6 +247,8 @@ const DebtTrackerScreen: React.FC = () => {
     sail: "",
   });
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  /** A storage read failed on the last load - see LoadErrorBanner. */
+  const [loadError, setLoadError] = useState(false);
   const [savingsDraft, setSavingsDraft] = useState("");
   /**
    * Inline undo for the milestone savings editor. The Set button and the
@@ -469,10 +472,15 @@ const DebtTrackerScreen: React.FC = () => {
                 essentialMonths.length
               : 3000;
           setMonthlyEssentialsEstimate(essentialsAverage);
+          setLoadError(false);
         } catch (error) {
           if (cancelled) return;
           if (__DEV__) console.error("Failed to load debts:", error);
-          setDebts([]);
+          // Deliberately no setDebts([]) here: a failed read is not "no
+          // debts". The last good load stays on screen (nothing, on a cold
+          // start) under a banner that says the read failed and offers a
+          // retry - an empty list alone reads as every debt being gone.
+          setLoadError(true);
         }
       };
       loadDebts();
@@ -1517,6 +1525,12 @@ const DebtTrackerScreen: React.FC = () => {
           KAV to shrink the list above the keyboard, then an explicit
           scrollToIndex. keyboardShouldPersistTaps lets the ✓ confirm button
           work in one tap while the keyboard is up. */}
+      {loadError ? (
+        <LoadErrorBanner
+          topInset={insets.top}
+          onRetry={() => setReloadTick((tick) => tick + 1)}
+        />
+      ) : null}
       <KeyboardAvoidingView
         behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.keyboardAvoider}

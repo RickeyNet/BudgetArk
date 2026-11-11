@@ -35,6 +35,12 @@ export const common: Localized<typeof en> = {
   unknown: "Okänd",
   undo: "ÅNGRA",
   undoLastAction: "Ångra senaste åtgärden",
+  /** components/LoadErrorBanner - a tab whose storage read failed. */
+  loadError: {
+    message:
+      "Det gick inte att läsa dina data från den här telefonen. Ingenting har tagits bort, men det som visas här kan vara ofullständigt eller inaktuellt.",
+    retry: "Försök igen",
+  },
   weekdays: {
     sun: "Sön",
     mon: "Mån",

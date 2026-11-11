@@ -134,6 +134,20 @@ export const bridgeScreen: Localized<typeof en> = {
     addTicker: "+ Legg til ticker",
     addFund: "+ Legg til pensjonsfond",
     deleteLink: "Slett denne kontoen",
+    /** Shown when Save is refused or fails - one message per field that is wrong. */
+    errors: {
+      summary: "Rett problemene som er nevnt over, og lagre deretter. Bruk ✕ for å fjerne en beholdning.",
+      saveFailed: "Kunne ikke lagre denne kontoen. Sjekk den og prøv igjen.",
+      name: "Gi kontoen et navn.",
+      balance: "Angi en saldo på 0 eller mer.",
+      apy: "Angi renten i prosent, eller la feltet stå tomt.",
+      symbol: "Angi en ticker som AAPL eller BTC/USD.",
+      shares: "Angi antall andeler (mer enn 0).",
+      costBasis: "Kostpris må være et tall, eller stå tomt.",
+      fundName: "Gi fondet et navn.",
+      fundValue: "Angi fondets nåværende verdi.",
+      proxy: "Indeksen må være en ticker som VOO, eller stå tom.",
+    },
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Slette kontoen?",

@@ -35,6 +35,12 @@ export const common: Localized<typeof en> = {
   unknown: "Unbekannt",
   undo: "RÜCKGÄNGIG",
   undoLastAction: "Letzte Aktion rückgängig machen",
+  /** components/LoadErrorBanner - a tab whose storage read failed. */
+  loadError: {
+    message:
+      "Deine Daten konnten auf diesem Gerät nicht gelesen werden. Es wurde nichts gelöscht, aber die Anzeige hier kann unvollständig oder veraltet sein.",
+    retry: "Erneut versuchen",
+  },
   weekdays: {
     sun: "So",
     mon: "Mo",
