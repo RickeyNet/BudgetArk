@@ -135,10 +135,20 @@ export const bridgeScreen = {
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Delete account?",
-      message: "\"{{name}}\" will be removed from your net worth. This can't be undone.",
+      message: "\"{{name}}\" will be removed from your net worth.",
       holdingsNote_one: "Its {{count}} holding will be deleted too.",
       holdingsNote_other: "Its {{count}} holdings will be deleted too.",
       syncNote: "If you sync with a partner, it will be removed on their device as well.",
+    },
+    /** Undo snackbar shown after an account delete. */
+    undoDeleted: "Deleted \"{{name}}\"",
+    deleteFailed: {
+      title: "Couldn't delete account",
+      message: "Something went wrong while saving. Please try again.",
+    },
+    restoreFailed: {
+      title: "Couldn't restore account",
+      message: "Something went wrong while saving. Please try again, or add the account again.",
     },
   },
   efModal: {

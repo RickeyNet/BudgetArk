@@ -137,10 +137,20 @@ export const bridgeScreen: Localized<typeof en> = {
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Ta bort konto?",
-      message: "”{{name}}” tas bort från din nettoförmögenhet. Det går inte att ångra.",
+      message: "”{{name}}” tas bort från din nettoförmögenhet.",
       holdingsNote_one: "Kontots {{count}} innehav tas också bort.",
       holdingsNote_other: "Kontots {{count}} innehav tas också bort.",
       syncNote: "Om du synkar med en partner tas det bort även på partnerns enhet.",
+    },
+    /** Undo snackbar shown after an account delete. */
+    undoDeleted: "Tog bort ”{{name}}”",
+    deleteFailed: {
+      title: "Det gick inte att ta bort kontot",
+      message: "Något gick fel när ändringen skulle sparas. Försök igen.",
+    },
+    restoreFailed: {
+      title: "Det gick inte att återställa kontot",
+      message: "Något gick fel när ändringen skulle sparas. Försök igen eller lägg till kontot på nytt.",
     },
   },
   efModal: {

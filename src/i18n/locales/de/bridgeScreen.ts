@@ -134,10 +134,20 @@ export const bridgeScreen: Localized<typeof en> = {
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Konto löschen?",
-      message: "„{{name}}“ wird aus deinem Nettovermögen entfernt. Das lässt sich nicht rückgängig machen.",
+      message: "„{{name}}“ wird aus deinem Nettovermögen entfernt.",
       holdingsNote_one: "Die {{count}} zugehörige Position wird ebenfalls gelöscht.",
       holdingsNote_other: "Die {{count}} zugehörigen Positionen werden ebenfalls gelöscht.",
       syncNote: "Wenn du mit einem Partner synchronisierst, wird es auch auf dessen Gerät entfernt.",
+    },
+    /** Undo snackbar shown after an account delete. */
+    undoDeleted: "„{{name}}“ gelöscht",
+    deleteFailed: {
+      title: "Konto konnte nicht gelöscht werden",
+      message: "Beim Speichern ist ein Fehler aufgetreten. Bitte versuche es erneut.",
+    },
+    restoreFailed: {
+      title: "Konto konnte nicht wiederhergestellt werden",
+      message: "Beim Speichern ist ein Fehler aufgetreten. Bitte versuche es erneut oder lege das Konto neu an.",
     },
   },
   efModal: {

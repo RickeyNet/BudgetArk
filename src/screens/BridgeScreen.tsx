@@ -73,12 +73,14 @@ import {
   addAssetAccount,
   updateAssetAccount,
   deleteAssetAccount,
+  restoreAssetAccount,
 } from "../storage/assetAccountStorage";
 import { subscribeDataChanged } from "../storage/dataChangeNotifier";
 import {
   getHoldings,
   saveHoldings,
   deleteHolding as deleteHoldingRecord,
+  restoreHolding,
 } from "../storage/holdingsStorage";
 import { getQuoteCache } from "../storage/quoteCacheStorage";
 import {
@@ -117,6 +119,8 @@ import {
   hasAnyAccountChange,
 } from "../utils/bridgeMath";
 import { useTheme } from "../theme/ThemeProvider";
+import { useUndo } from "../undo/UndoProvider";
+import { triggerHaptic } from "../utils/haptics";
 import { useDensity } from "../theme/DensityProvider";
 import type { DensityTokens } from "../theme/density";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -258,6 +262,7 @@ const BridgeScreen: React.FC = () => {
     totalCount: totalAchievements,
     runCheck: refreshAchievements,
   } = useAchievements();
+  const { pushUndo } = useUndo();
 
   const refreshNetWorthSnapshots = useCallback(async () => {
     const nextSnapshots = await syncNetWorthSnapshot();
@@ -1011,30 +1016,97 @@ const BridgeScreen: React.FC = () => {
     refreshNetWorthSnapshots,
   ]);
 
+  /**
+   * Inverse of deleteAsset: un-tombstones the account and exactly the holdings
+   * that delete removed, then reloads everything derived from them. Shared by
+   * the Undo snackbar and by the rollback after a half-finished delete.
+   */
+  const restoreDeletedAsset = useCallback(
+    async (accountId: string, holdingIds: string[]) => {
+      const restoredAccounts = await restoreAssetAccount(accountId);
+      for (const id of holdingIds) await restoreHolding(id);
+      setAssetAccounts(restoredAccounts);
+      if (holdingIds.length > 0) await loadHoldingsState();
+      await refreshNetWorthSnapshots();
+    },
+    [loadHoldingsState, refreshNetWorthSnapshots]
+  );
+
   const deleteAsset = useCallback(
     async (account: AssetAccount) => {
-      // Soft-delete so the partner's next sync removes this account locally.
-      const nextAccounts = await deleteAssetAccount(account.id);
-      setAssetAccounts(nextAccounts);
-      // Deleting a holdings account also tombstones its holdings - they have no
-      // home without it.
-      if (categorySupportsHoldings(account.category)) {
-        for (const h of holdings) {
-          if (h.accountId === account.id) await deleteHoldingRecord(h.id);
+      const removedHoldingIds: string[] = [];
+      let accountRemoved = false;
+      try {
+        // Soft-delete so the partner's next sync removes this account locally.
+        const nextAccounts = await deleteAssetAccount(account.id);
+        accountRemoved = true;
+        // Deleting a holdings account also tombstones its holdings - they have
+        // no home without it. Track each one so Undo restores exactly these.
+        if (categorySupportsHoldings(account.category)) {
+          for (const h of holdings) {
+            if (h.accountId !== account.id) continue;
+            await deleteHoldingRecord(h.id);
+            removedHoldingIds.push(h.id);
+          }
         }
-        await loadHoldingsState();
+        setAssetAccounts(nextAccounts);
+        if (categorySupportsHoldings(account.category)) await loadHoldingsState();
+        await refreshNetWorthSnapshots();
+      } catch (error) {
+        if (__DEV__) console.error("Failed to delete account:", error);
+        // A storage error can land between the account and its holdings.
+        // Put back whatever was removed (best effort) so the account isn't
+        // left half-deleted, then say so - the editor stays open for a retry.
+        if (accountRemoved) {
+          try {
+            await restoreDeletedAsset(account.id, removedHoldingIds);
+          } catch (rollbackError) {
+            if (__DEV__) console.error("Failed to roll back account delete:", rollbackError);
+          }
+        }
+        Alert.alert(
+          t("bridge.screen.assetModal.deleteFailed.title"),
+          t("bridge.screen.assetModal.deleteFailed.message")
+        );
+        return;
       }
-      await refreshNetWorthSnapshots();
+
       closeAssetModal();
+      triggerHaptic("warning");
       void refreshAchievements();
+      pushUndo({
+        message: t("bridge.screen.assetModal.undoDeleted", { name: account.name }),
+        onUndo: async () => {
+          try {
+            await restoreDeletedAsset(account.id, removedHoldingIds);
+            void refreshAchievements();
+          } catch (error) {
+            if (__DEV__) console.error("Failed to restore account:", error);
+            Alert.alert(
+              t("bridge.screen.assetModal.restoreFailed.title"),
+              t("bridge.screen.assetModal.restoreFailed.message")
+            );
+          }
+        },
+      });
     },
-    [closeAssetModal, holdings, loadHoldingsState, refreshAchievements, refreshNetWorthSnapshots]
+    [
+      closeAssetModal,
+      holdings,
+      loadHoldingsState,
+      pushUndo,
+      refreshAchievements,
+      refreshNetWorthSnapshots,
+      restoreDeletedAsset,
+      t,
+    ]
   );
 
   /**
-   * Deleting an account is irreversible, cascades to its holdings, and
-   * propagates to a paired partner - so it deliberately goes through a
-   * destructive confirm that spells out all three before anything is removed.
+   * Deleting an account cascades to its holdings and propagates to a paired
+   * partner - so it deliberately goes through a destructive confirm that
+   * spells out both before anything is removed. The Undo snackbar afterwards
+   * is a short safety net, not a replacement for this confirm.
    */
   const confirmDeleteAsset = useCallback(
     (account: AssetAccount) => {

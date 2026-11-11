@@ -137,10 +137,20 @@ export const bridgeScreen: Localized<typeof en> = {
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Slette kontoen?",
-      message: "«{{name}}» fjernes fra nettoformuen din. Dette kan ikke angres.",
+      message: "«{{name}}» fjernes fra nettoformuen din.",
       holdingsNote_one: "Den {{count}} beholdningen i kontoen slettes også.",
       holdingsNote_other: "De {{count}} beholdningene i kontoen slettes også.",
       syncNote: "Hvis du synkroniserer med en partner, fjernes den også på partnerens enhet.",
+    },
+    /** Undo snackbar shown after an account delete. */
+    undoDeleted: "Slettet «{{name}}»",
+    deleteFailed: {
+      title: "Kunne ikke slette kontoen",
+      message: "Noe gikk galt under lagring. Prøv igjen.",
+    },
+    restoreFailed: {
+      title: "Kunne ikke gjenopprette kontoen",
+      message: "Noe gikk galt under lagring. Prøv igjen, eller legg til kontoen på nytt.",
     },
   },
   efModal: {

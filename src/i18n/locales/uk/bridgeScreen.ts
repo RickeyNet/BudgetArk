@@ -149,12 +149,22 @@ export const bridgeScreen: LocalizedPlural<typeof en> = {
     /** Confirm shown before an account delete - it also drops holdings and syncs. */
     deleteConfirm: {
       title: "Видалити рахунок?",
-      message: "«{{name}}» буде вилучено з вашого капіталу. Цю дію не можна скасувати.",
+      message: "«{{name}}» буде вилучено з вашого капіталу.",
       holdingsNote_one: "Також буде видалено {{count}} позицію цього рахунку.",
       holdingsNote_few: "Також буде видалено {{count}} позиції цього рахунку.",
       holdingsNote_many: "Також буде видалено {{count}} позицій цього рахунку.",
       holdingsNote_other: "Також буде видалено {{count}} позиції цього рахунку.",
       syncNote: "Якщо ви синхронізуєтеся з партнером, рахунок буде видалено і на його пристрої.",
+    },
+    /** Undo snackbar shown after an account delete. */
+    undoDeleted: "Видалено «{{name}}»",
+    deleteFailed: {
+      title: "Не вдалося видалити рахунок",
+      message: "Під час збереження сталася помилка. Спробуйте ще раз.",
+    },
+    restoreFailed: {
+      title: "Не вдалося відновити рахунок",
+      message: "Під час збереження сталася помилка. Спробуйте ще раз або додайте рахунок знову.",
     },
   },
   efModal: {

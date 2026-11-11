@@ -109,6 +109,16 @@ EAS build by the user - say so explicitly instead of claiming a UI flow works.
   - `RELEASE_NOTES.md` - the human-facing/store-listing changelog.
   If they drift, users see stale or missing notes in-app while the store
   says otherwise. Keep `app.json` `version` in step with both.
+- **Update the release notes as part of every user-visible change - don't
+  wait to be asked.** After a fix, feature, or behavior/copy change, add or
+  amend the note in both files in the same piece of work, before handing
+  back: plain-language highlight in `releaseNotes.ts`, technical bullet in
+  `RELEASE_NOTES.md`. If the top entry is still unreleased (no git tag for
+  that version), amend it - extend an existing bullet when the change
+  continues one - rather than opening a new version; if it is already
+  tagged, ask the user which version the change belongs to. Skip only for
+  changes users can't see (refactors, tests, CI, docs) and say that you
+  skipped.
 - **Native module added/changed → bump `app.json` `runtimeVersion`** → store
   build required. Same runtime → OTA-eligible.
 - Publish OTA updates with the stamped message so older bundles can preview

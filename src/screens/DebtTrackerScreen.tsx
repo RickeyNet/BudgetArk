@@ -779,15 +779,30 @@ const DebtTrackerScreen: React.FC = () => {
       date: paymentNow,
       updatedAt: paymentNow,
     });
+    // The payment is on disk from here on. Nothing below may reject: the
+    // card treats a rejection as "payment not saved" and invites a retry,
+    // which would record it twice. Each follow-up step is deliberately
+    // caught on its own - they only refresh derived state, which the next
+    // load rebuilds anyway.
     const paidOffDebt = getNewlyPaidOffDebt(debts, result.debts);
     setDebts(result.debts);
-    const freshPayments = await getPayments();
+    let freshPayments = result.payments;
+    try {
+      freshPayments = await getPayments();
+    } catch (error) {
+      if (__DEV__) console.error("Failed to reload payments after a payment:", error);
+    }
     setPayments(freshPayments);
     // Every payment counts as a win; only the occasional one (utils/
     // tipJarNudge cadence) comes back with Tip Jar copy to show.
-    const nudge = await noteWin(
-      paidOffDebt ? { kind: "debt-payoff", label: paidOffDebt.name } : { kind: "debt-payment" }
-    );
+    let nudge: Awaited<ReturnType<typeof noteWin>> = null;
+    try {
+      nudge = await noteWin(
+        paidOffDebt ? { kind: "debt-payoff", label: paidOffDebt.name } : { kind: "debt-payment" }
+      );
+    } catch (error) {
+      if (__DEV__) console.error("Failed to note the payment win:", error);
+    }
     if (paidOffDebt) {
       // Callers with their own Modal open (the due prompt) suppress this
       // and present the celebration themselves after their dismiss
@@ -803,7 +818,11 @@ const DebtTrackerScreen: React.FC = () => {
       // up above the tab bar; a suppressed caller shows it in its own sheet.
       if (nudge && !opts?.suppressCelebration) showNudgeToast(nudge);
     }
-    await syncNetWorthSnapshot(paymentNow);
+    try {
+      await syncNetWorthSnapshot(paymentNow);
+    } catch (error) {
+      if (__DEV__) console.error("Failed to sync net worth after a payment:", error);
+    }
     void notifyAchievementCheck();
     return { debts: result.debts, payments: freshPayments, paidOffDebt, nudge };
   }, [debts, noteWin, notifyAchievementCheck, showNudgeToast]);
