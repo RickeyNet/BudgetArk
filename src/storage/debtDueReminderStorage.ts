@@ -22,7 +22,7 @@ export const getDebtDueDismissals = async (): Promise<DebtDueDismissals> => {
   return parseDismissals(raw);
 };
 
-/** User chose "not yet" for this debt's due date in the given month. */
+/** User chose "don't remind me this month" for this debt's due date. */
 export const dismissDebtDueForMonth = async (
   debtId: string,
   monthKey: string = getMonthKey()

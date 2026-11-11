@@ -3,8 +3,11 @@
  * File: src/components/DebtDuePaymentPromptModal.tsx
  *
  * In-app prompt on a debt's due day: "did you pay this?" with a one-tap
- * log of the minimum payment, or "Later" (muted for the month via
- * debtDueReminderStorage). Presented by DebtDueReminderHost; this is the
+ * log of the minimum payment, "Don't remind me this month" (muted via
+ * debtDueReminderStorage), or "Remind me later" (just closes; re-prompts on
+ * the next foreground). The mute button's label must say it mutes - it was
+ * once "Not yet this month", which users meaning "I still need to pay"
+ * tapped and lost the reminder. Presented by DebtDueReminderHost; this is the
  * in-app substitute for the push bill reminders the app deliberately
  * doesn't send.
  */
@@ -92,7 +95,7 @@ const DebtDuePaymentPromptModal: React.FC<DebtDuePaymentPromptModalProps> = ({
             onPress={() => onDismissForMonth(debt.id)}
             activeOpacity={0.85}
           >
-            <Text style={styles.secondaryBtnText}>{t("debts.moments.duePrompt.notYet")}</Text>
+            <Text style={styles.secondaryBtnText}>{t("debts.moments.duePrompt.muteMonth")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.textBtn} onPress={onClose} activeOpacity={0.7}>

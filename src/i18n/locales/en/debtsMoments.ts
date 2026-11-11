@@ -62,7 +62,7 @@ export const debtsMoments = {
     body: "Did you make this month's minimum payment of {{amount}}? (Due on day {{day}} of each month.)",
     hint: "Logging here updates your debt balance and counts toward Budget under Debt Payments.",
     confirm: "Yes, I paid {{amount}}",
-    notYet: "Not yet this month",
+    muteMonth: "Don't remind me this month",
     later: "Remind me later",
   },
   keepAlive: {

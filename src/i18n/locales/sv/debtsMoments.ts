@@ -63,7 +63,7 @@ export const debtsMoments: Localized<typeof en> = {
     body: "Gjorde du månadens minimibetalning på {{amount}}? (Förfaller dag {{day}} varje månad.)",
     hint: "Loggar du här uppdateras skuldens saldo och det räknas i Budget under Skuldbetalningar.",
     confirm: "Ja, jag betalade {{amount}}",
-    notYet: "Inte än den här månaden",
+    muteMonth: "Påminn mig inte den här månaden",
     later: "Påminn mig senare",
   },
   keepAlive: {

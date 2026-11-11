@@ -63,7 +63,7 @@ export const debtsMoments: Localized<typeof en> = {
     body: "Hast du die Mindestrate von {{amount}} für diesen Monat gezahlt? (Fällig am {{day}}. jedes Monats.)",
     hint: "Eine Buchung hier aktualisiert deinen Saldo und zählt im Budget unter Schuldentilgung.",
     confirm: "Ja, {{amount}} gezahlt",
-    notYet: "Diesen Monat noch nicht",
+    muteMonth: "Diesen Monat nicht mehr erinnern",
     later: "Später erinnern",
   },
   keepAlive: {
