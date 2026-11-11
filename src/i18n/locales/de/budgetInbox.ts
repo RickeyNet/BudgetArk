@@ -34,6 +34,13 @@ export const budgetInbox: Localized<typeof en> = {
     alwaysFileVendor: "Diesen Händler immer hier einordnen",
     working: "Bitte warten...",
     approveGroupAs: "{{count}} als {{category}} freigeben",
+    confirmApproveTitle: "{{count}} mit vorgeschlagenen Kategorien freigeben?",
+    confirmApproveMessage:
+      "Jede Buchung wird mit ihrer vorgeschlagenen Kategorie in dein Budget übernommen. Du kannst sie danach im Budget-Tab weiterhin bearbeiten oder löschen.",
+    confirmApprove: "Freigeben",
+    confirmSkipTitle: "Alle {{count}} überspringen?",
+    confirmSkipMessage:
+      "Sie wandern nach „Kürzlich übersprungen“ und lassen sich dort einzeln wieder in den Eingang holen.",
   },
   empty: "Posteingang leer. Neue Umsätze landen hier nach einem Sync.",
   row: {

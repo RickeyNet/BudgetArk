@@ -27,6 +27,20 @@ export const createAutoBackupNow = async (): Promise<AutoBackupFileInfo> => {
   return writeAutoBackup(exportJson);
 };
 
+/**
+ * The copy taken immediately before a Replace import or a backup restore
+ * writes anything: without it those are the only actions in the app that
+ * erase everything with no way back. Deliberately NOT wrapped in a catch -
+ * the import pipeline treats a failed safety copy as "do not overwrite"
+ * (fail closed), so the error has to reach it.
+ *
+ * @throws AutoBackupEncryptionUnavailableError when the vault is down.
+ */
+export const createSafetySnapshot = async (): Promise<AutoBackupFileInfo> => {
+  const exportJson = await buildExportMessage();
+  return writeAutoBackup(exportJson, "safety");
+};
+
 export const runAutoBackupIfDue = async (): Promise<void> => {
   try {
     const settings = await getAutoBackupSettings();

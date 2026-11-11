@@ -59,6 +59,7 @@ import {
   deleteDebt,
   restoreDebt,
   recordPayment,
+  deletePayment,
   updateDebt,
   getPayoffStrategyPreference,
   savePayoffStrategyPreference,
@@ -88,7 +89,7 @@ import { rescheduleCardKeepAliveReminders } from "../notifications/cardKeepAlive
 import { getSavingsGoals } from "../storage/savingsGoalStorage";
 import { getAssetAccounts } from "../storage/assetAccountStorage";
 import { getEmergencyFundSource, sumSavingsReserve } from "../utils/emergencyFund";
-import { getBudgetEntries, addBudgetEntry } from "../storage/budgetStorage";
+import { getBudgetEntries, addBudgetEntry, deleteBudgetEntries } from "../storage/budgetStorage";
 import { syncNetWorthSnapshot } from "../storage/netWorthSnapshotStorage";
 import {
   getDebtMilestonePlan,
@@ -246,6 +247,18 @@ const DebtTrackerScreen: React.FC = () => {
   });
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [savingsDraft, setSavingsDraft] = useState("");
+  /**
+   * Inline undo for the milestone savings editor. The Set button and the
+   * +/- chips write a Savings budget entry on a single tap, inside a
+   * full-screen Modal where the global undo snackbar can't be seen - so the
+   * way back sits right under the chips. Consecutive taps accumulate: one
+   * Undo returns to the amount from before the first of them.
+   */
+  const [savingsUndo, setSavingsUndo] = useState<{
+    entryIds: string[];
+    from: number;
+    to: number;
+  } | null>(null);
   const [celebrationDebt, setCelebrationDebt] = useState<Debt | null>(null);
   // The occasional Tip Jar note riding the payoff celebration (null = none).
   const [celebrationNudge, setCelebrationNudge] = useState<TipNudgeCopy | null>(null);
@@ -826,6 +839,35 @@ const DebtTrackerScreen: React.FC = () => {
     return { debts: result.debts, payments: freshPayments, paidOffDebt, nudge };
   }, [debts, noteWin, notifyAchievementCheck, showNudgeToast]);
 
+  /**
+   * The debt card's inline pay field commits on one tap with no review
+   * step, so it gets an undo: the payment is logged under an id minted
+   * here, and Undo deletes exactly that payment (deletePayment puts the
+   * balance back). Other callers of handlePayment - the due prompt - have
+   * their own confirm step and keep their deterministic ids.
+   */
+  const handleInlinePayment = useCallback(
+    async (debtId: string, amount: number) => {
+      const paymentId = generateUUID();
+      const name = debts.find((d) => d.id === debtId)?.name ?? "";
+      const result = await handlePayment(debtId, amount, { paymentId });
+      pushUndo({
+        message: t("debts.screen.undo.payment", { amount: formatCurrency(amount), name }),
+        // Longer than the default: this one moves a balance.
+        durationMs: 8000,
+        onUndo: async () => {
+          const reverted = await deletePayment(paymentId);
+          setDebts(reverted.debts);
+          setPayments(reverted.payments);
+          await syncNetWorthSnapshot();
+          void notifyAchievementCheck();
+        },
+      });
+      return result;
+    },
+    [debts, formatCurrency, handlePayment, notifyAchievementCheck, pushUndo, t]
+  );
+
   const duePromptSubmittingRef = useRef(false);
   const handleDuePromptLogPayment = useCallback(
     async (debtId: string, amount: number) => {
@@ -1102,10 +1144,40 @@ const DebtTrackerScreen: React.FC = () => {
       await syncNetWorthSnapshot();
       setSavingsReserve(targetAmount);
       setSavingsDraft("");
+      setSavingsUndo((prev) => ({
+        entryIds: [...(prev?.entryIds ?? []), entry.id],
+        from: prev?.from ?? savingsReserve,
+        to: targetAmount,
+      }));
       void notifyAchievementCheck();
     },
     [efSource.linked, notifyAchievementCheck, savingsReserve, t]
   );
+
+  /** Take back every savings change made since the undo line appeared. */
+  const handleUndoSavingsChange = useCallback(async () => {
+    if (!savingsUndo) return;
+    const { entryIds, from } = savingsUndo;
+    setSavingsUndo(null);
+    try {
+      await deleteBudgetEntries(entryIds);
+      setSavingsReserve(from);
+      await syncNetWorthSnapshot();
+      triggerHaptic("success");
+      void notifyAchievementCheck();
+    } catch (error) {
+      if (__DEV__) console.error("Failed to undo the savings change:", error);
+      // Nothing was removed: put the undo line back so it can be retried.
+      setSavingsUndo(savingsUndo);
+      triggerHaptic("error");
+    }
+  }, [notifyAchievementCheck, savingsUndo]);
+
+  /** Closing the sheet ends the undo window for the savings editor. */
+  const closeMilestonesModal = useCallback(() => {
+    setShowMilestonesModal(false);
+    setSavingsUndo(null);
+  }, []);
 
   /** Sort debts based on payoff strategy.
    *
@@ -1227,7 +1299,7 @@ const DebtTrackerScreen: React.FC = () => {
       <DebtCard
         debt={item}
         bankLink={bankLinkByDebt.get(item.id) ?? null}
-        onPayment={handlePayment}
+        onPayment={handleInlinePayment}
         onDelete={handleDelete}
         onEdit={handleEdit}
         onKeepAliveUse={handleKeepAliveUse}
@@ -1235,7 +1307,7 @@ const DebtTrackerScreen: React.FC = () => {
         isFocusDebt={item.id === focusDebtId}
       />
     ),
-    [handlePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankLinkByDebt, focusDebtId]
+    [handleInlinePayment, handleDelete, handleEdit, handleKeepAliveUse, handlePayInputFocus, bankLinkByDebt, focusDebtId]
   );
 
   /** Summary + section header rendered above the debt list */
@@ -1598,7 +1670,7 @@ const DebtTrackerScreen: React.FC = () => {
         visible={showMilestonesModal}
         animationType="slide"
         transparent={false}
-        onRequestClose={() => setShowMilestonesModal(false)}
+        onRequestClose={closeMilestonesModal}
       >
         {/* Keyboard strategy per SheetKeyboardAvoider: Android KAV lifts the
             sheet, iOS relies on automaticallyAdjustKeyboardInsets below -
@@ -1876,6 +1948,26 @@ const DebtTrackerScreen: React.FC = () => {
                             </TouchableOpacity>
                           ))}
                         </View>
+                        {savingsUndo ? (
+                          <View style={styles.msSavingsUndoRow}>
+                            <Text style={styles.msSavingsUndoText}>
+                              {t("debts.screen.milestones.savingsChanged", {
+                                from: formatCurrency(savingsUndo.from),
+                                to: formatCurrency(savingsUndo.to),
+                              })}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.msSavingsUndoBtn}
+                              onPress={() => void handleUndoSavingsChange()}
+                              accessibilityRole="button"
+                              accessibilityLabel={t("common.undoLastAction")}
+                            >
+                              <Text style={[styles.msSavingsUndoBtnText, { color: colors.accent }]}>
+                                {t("common.undo")}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
                       </View>
                     ) : null}
                     <Text style={styles.msNextAction}>{step.nextAction}</Text>
@@ -1926,7 +2018,7 @@ const DebtTrackerScreen: React.FC = () => {
             </ScrollView>
             <TouchableOpacity
               style={styles.msFullDoneBtn}
-              onPress={() => setShowMilestonesModal(false)}
+              onPress={closeMilestonesModal}
             >
               <Text style={styles.msFullDoneText}>{t("common.done")}</Text>
             </TouchableOpacity>
@@ -2410,6 +2502,26 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     marginTop: 12,
     marginBottom: 8,
     gap: 8,
+  },
+  msSavingsUndoRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+  },
+  msSavingsUndoText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textDim,
+  },
+  msSavingsUndoBtn: {
+    minHeight: 44,
+    paddingHorizontal: 8,
+    justifyContent: "center" as const,
+  },
+  msSavingsUndoBtnText: {
+    fontSize: 13,
+    fontWeight: "800" as const,
+    letterSpacing: 0.5,
   },
   msSavingsLogLabel: {
     fontSize: 14,

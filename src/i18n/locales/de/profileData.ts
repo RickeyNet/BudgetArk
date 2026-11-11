@@ -140,6 +140,8 @@ export const profileData: Localized<typeof en> = {
       milestonePlan: "Meilensteinplan",
       payoffStrategy: "Tilgungsstrategie",
     },
+    safetyCopyNote:
+      "\n\nDeine bisherigen Daten wurden vorher als Sicherheitskopie gespeichert. Um zurückzukehren, stelle sie unter „Automatische Sicherungen“ wieder her.",
     alsoRestored: "\nEbenfalls wiederhergestellt: {{extras}}.",
     staleNote:
       "\n\nHinweis: Dieser Export ist {{days}} Tage alt. Einige Daten sind womöglich veraltet.",

@@ -36,6 +36,13 @@ export const budgetInbox: LocalizedPlural<typeof en> = {
     alwaysFileVendor: "Завжди відносити цього продавця сюди",
     working: "Обробка...",
     approveGroupAs: "Підтвердити {{count}} як {{category}}",
+    confirmApproveTitle: "Підтвердити {{count}} із запропонованими категоріями?",
+    confirmApproveMessage:
+      "Кожна операція потрапить до бюджету із запропонованою категорією. Будь-яку з них потім можна змінити або видалити на вкладці «Бюджет».",
+    confirmApprove: "Підтвердити",
+    confirmSkipTitle: "Пропустити всі ({{count}})?",
+    confirmSkipMessage:
+      "Вони перейдуть до «Нещодавно пропущені», звідки кожну можна повернути до вхідних.",
   },
   empty: "Усе перевірено. Нові операції з'являться тут після синхронізації.",
   row: {

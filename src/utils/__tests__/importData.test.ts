@@ -907,3 +907,55 @@ describe("importFromString - replace mode", () => {
     expect(ids).toEqual(["new1"]);
   });
 });
+
+describe("importFromString - safety copy hook (beforeWrite)", () => {
+  const existing = JSON.stringify([validDebt({ id: "old", name: "Old card" })]);
+
+  it("runs before the first write and flags the result", async () => {
+    storageMock.__store.set(KEYS.DEBTS, existing);
+    let debtsWhenHookRan: string | undefined;
+    const beforeWrite = jest.fn(async () => {
+      // The copy must see the data as it was - nothing written yet, not
+      // even a temp key.
+      debtsWhenHookRan = storageMock.__store.get(KEYS.DEBTS);
+      expect(Array.from(storageMock.__store.keys())).toEqual([KEYS.DEBTS]);
+    });
+
+    const result = await importFromString(
+      JSON.stringify({ debts: [validDebt()] }),
+      "replace",
+      undefined,
+      { beforeWrite }
+    );
+
+    expect(beforeWrite).toHaveBeenCalledTimes(1);
+    expect(debtsWhenHookRan).toBe(existing);
+    expect(result.safetyCopy).toBe(true);
+    expect(readStore(KEYS.DEBTS).map((d: { id: string }) => d.id)).toEqual(["d1"]);
+  });
+
+  it("writes nothing when the safety copy fails (fail closed)", async () => {
+    storageMock.__store.set(KEYS.DEBTS, existing);
+    await expect(
+      importFromString(JSON.stringify({ debts: [validDebt()] }), "replace", undefined, {
+        beforeWrite: async () => {
+          throw new Error("vault down");
+        },
+      })
+    ).rejects.toThrow(/safety copy/i);
+    expect(Array.from(storageMock.__store.entries())).toEqual([[KEYS.DEBTS, existing]]);
+  });
+
+  it("is not run for a payload that fails validation", async () => {
+    const beforeWrite = jest.fn(async () => undefined);
+    await expect(
+      importFromString('{"hello":"world"}', "replace", undefined, { beforeWrite })
+    ).rejects.toThrow();
+    expect(beforeWrite).not.toHaveBeenCalled();
+  });
+
+  it("leaves safetyCopy unset when no hook is passed", async () => {
+    const result = await importFromString(JSON.stringify({ debts: [validDebt()] }), "replace");
+    expect(result.safetyCopy).toBeUndefined();
+  });
+});

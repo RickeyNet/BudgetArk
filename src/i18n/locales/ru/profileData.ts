@@ -164,6 +164,8 @@ export const profileData: LocalizedPlural<typeof en> = {
       milestonePlan: "план этапов",
       payoffStrategy: "стратегия погашения",
     },
+    safetyCopyNote:
+      "\n\nПрежние данные сначала сохранены как страховочная копия. Чтобы вернуться, восстановите её в разделе «Автоматические копии».",
     alsoRestored: "\nТакже восстановлено: {{extras}}.",
     staleNote: "\n\nПримечание: этому экспорту {{days}} дн. Часть данных может быть устаревшей.",
     password: {

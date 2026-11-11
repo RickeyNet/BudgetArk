@@ -98,6 +98,7 @@ export const debtsScreen: Localized<typeof en> = {
       "🛡️ Hämtas från dina {{count}} utsedda buffertsparkonton ({{amount}}). Uppdatera saldona på Bryggan - banksynk håller dem aktuella automatiskt.",
     setSavings: "Ange sparande",
     currentAmount: "Nu: {{amount}}",
+    savingsChanged: "Sparandet ändrat från {{from}} till {{to}}.",
     set: "Ange",
     collapse: "Fäll ihop",
     markInProgress: "Markera som pågående",
@@ -134,6 +135,7 @@ export const debtsScreen: Localized<typeof en> = {
   undo: {
     edited: "Redigerade ”{{name}}”",
     deleted: "Tog bort ”{{name}}”",
+    payment: "Registrerade {{amount}} på ”{{name}}”",
   },
   deleteDialog: {
     title: "Ta bort skuld",

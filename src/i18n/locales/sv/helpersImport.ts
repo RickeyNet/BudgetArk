@@ -116,6 +116,8 @@ export const helpersImport: Localized<typeof en> = {
     notJson: "Texten är inte giltig JSON. Klistra in en BudgetArk-export.",
     notExport:
       "Datan ser inte ut som en BudgetArk-export. Förväntade skulder, betalningar eller budgetdata.",
+    safetyCopyFailed:
+      "Det gick inte att spara en säkerhetskopia av dina nuvarande data, så ingenting ändrades. Frigör lite lagringsutrymme och försök igen.",
     rollbackFailed:
       "Importen misslyckades under skrivningen och återställningen kunde inte återskapa all data (misslyckade nycklar: {{failed}}). Vissa poster kan vara inkonsekventa - installera om appen och importera din senaste säkerhetskopia innan du lägger till ny data.",
     writeFailed: "Importen misslyckades under skrivningen. Din befintliga data har återställts.",

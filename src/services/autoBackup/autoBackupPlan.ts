@@ -35,6 +35,19 @@ export const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
 /** How many backups to keep; older ones are pruned after each write. */
 export const AUTO_BACKUP_KEEP = 3;
 
+/**
+ * A "safety" backup is the copy taken right before a Replace import or a
+ * backup restore overwrites what is on the phone - the only way back from
+ * one of those. It is kept apart from the scheduled ones on purpose: its
+ * own file prefix and its own (smaller) keep count, so a run of imports can
+ * never push the weekly backups out of the folder, and a safety copy never
+ * counts as "the scheduled backup already ran".
+ */
+export type AutoBackupKind = "scheduled" | "safety";
+
+/** How many safety copies to keep (the last two overwrites stay undoable). */
+export const SAFETY_SNAPSHOT_KEEP = 2;
+
 export const cadenceMs = (cadence: AutoBackupCadence): number =>
   cadence === "weekly" ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
 
@@ -42,17 +55,30 @@ export const cadenceMs = (cadence: AutoBackupCadence): number =>
 
 const FILE_PREFIX = "auto-backup-";
 const FILE_SUFFIX = ".enc";
+const SAFETY_PREFIX = "pre-import-";
 const NAME_PATTERN = /^auto-backup-(\d{10,16})\.enc$/;
+const SAFETY_NAME_PATTERN = /^pre-import-(\d{10,16})\.enc$/;
 
-export const autoBackupFileName = (timestampMs: number): string =>
-  `${FILE_PREFIX}${timestampMs}${FILE_SUFFIX}`;
+export const autoBackupFileName = (
+  timestampMs: number,
+  kind: AutoBackupKind = "scheduled"
+): string =>
+  `${kind === "safety" ? SAFETY_PREFIX : FILE_PREFIX}${timestampMs}${FILE_SUFFIX}`;
+
+/** Which kind of backup a file name is, or null when it isn't one of ours. */
+export const backupKindFromName = (name: string): AutoBackupKind | null => {
+  if (NAME_PATTERN.test(name)) return "scheduled";
+  if (SAFETY_NAME_PATTERN.test(name)) return "safety";
+  return null;
+};
 
 /**
- * Epoch ms encoded in a backup file name, or null for anything that isn't
- * one of ours (fail-closed - unknown files are never listed or pruned).
+ * Epoch ms encoded in a backup file name (scheduled or safety), or null for
+ * anything that isn't one of ours (fail-closed - unknown files are never
+ * listed or pruned).
  */
 export const parseAutoBackupFileName = (name: string): number | null => {
-  const match = NAME_PATTERN.exec(name);
+  const match = NAME_PATTERN.exec(name) ?? SAFETY_NAME_PATTERN.exec(name);
   if (!match) return null;
   const timestampMs = Number(match[1]);
   return Number.isSafeInteger(timestampMs) && timestampMs > 0
@@ -78,15 +104,19 @@ export const sortNewestFirst = (
  * newest is at least a full cadence old. A newest file stamped in the
  * future (clock rollback) reads as "not due" - it ages back into range
  * when the clock catches up, and the manual Back Up Now button is always
- * available.
+ * available. Safety copies are ignored: one taken before an import must not
+ * postpone the scheduled backup.
  */
 export const isBackupDue = (
   files: readonly AutoBackupFileInfo[],
   nowMs: number,
   intervalMs: number
 ): boolean => {
-  if (files.length === 0) return true;
-  const newest = Math.max(...files.map((file) => file.timestampMs));
+  const scheduled = files.filter(
+    (file) => backupKindFromName(file.name) !== "safety"
+  );
+  if (scheduled.length === 0) return true;
+  const newest = Math.max(...scheduled.map((file) => file.timestampMs));
   return nowMs - newest >= intervalMs;
 };
 
@@ -101,6 +131,25 @@ export const planPrune = (
   sortNewestFirst(files)
     .slice(Math.max(0, keep))
     .map((file) => file.name);
+
+/**
+ * Prune plan for the whole folder: each kind is trimmed to its own keep
+ * count, so safety copies and scheduled backups never evict each other.
+ */
+export const planPruneByKind = (
+  files: readonly AutoBackupFileInfo[]
+): string[] => {
+  const safety = files.filter(
+    (file) => backupKindFromName(file.name) === "safety"
+  );
+  const scheduled = files.filter(
+    (file) => backupKindFromName(file.name) !== "safety"
+  );
+  return [
+    ...planPrune(scheduled, AUTO_BACKUP_KEEP),
+    ...planPrune(safety, SAFETY_SNAPSHOT_KEEP),
+  ];
+};
 
 /* ── Settings parsing (fail-closed to defaults) ── */
 

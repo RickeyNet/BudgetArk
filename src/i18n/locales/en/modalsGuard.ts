@@ -69,6 +69,7 @@ export const modalsGuard = {
     },
     mostRecent: "Most recent",
     olderBackup: "Older backup",
+    safetyCopy: "Safety copy (before an import or restore)",
     restore: "Restore",
     restoreHint:
       "Merge adds anything missing and keeps newer edits. Replace erases what's on the phone now and restores exactly this backup.",
@@ -77,6 +78,8 @@ export const modalsGuard = {
     restored: {
       title: "Backup Restored",
       summary: "Restored {{parts}}.",
+      safetyCopyNote:
+        "\n\nYour previous data was saved first as a safety copy. To go back, restore it from Automatic Backups.",
     },
     errors: {
       loadSettings: "Couldn't load backup settings. Close and reopen to try again.",

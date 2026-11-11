@@ -140,6 +140,8 @@ export const profileData: Localized<typeof en> = {
       milestonePlan: "milstolpsplan",
       payoffStrategy: "återbetalningsstrategi",
     },
+    safetyCopyNote:
+      "\n\nDina tidigare data sparades först som en säkerhetskopia. Återställ den från Automatiska säkerhetskopior om du vill gå tillbaka.",
     alsoRestored: "\nÅterställde även: {{extras}}.",
     staleNote:
       "\n\nObs: Den här exporten är {{days}} dagar gammal. Vissa data kan vara inaktuella.",

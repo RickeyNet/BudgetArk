@@ -216,6 +216,12 @@ export interface ImportResult {
   people: number;
   /** Number of days since the export was created, or undefined if no exportedAt timestamp */
   staleDays?: number;
+  /**
+   * True when a safety copy of the previous data was written before this
+   * import (ImportOptions.beforeWrite ran) - the result dialog then says
+   * where to find it.
+   */
+  safetyCopy?: boolean;
 }
 
 /**
@@ -678,10 +684,23 @@ export const isImportDecryptError = (error: unknown): boolean =>
   error instanceof ImportDecryptError ||
   (error instanceof Error && error.name === "ImportDecryptError");
 
+/**
+ * `beforeWrite` runs once the payload has decrypted and validated, right
+ * before the first storage write. The UI passes the safety-snapshot writer
+ * here for Replace imports and backup restores. If it rejects, the import
+ * stops with nothing written: overwriting the phone without the copy that
+ * could undo it is the one outcome this hook exists to prevent. Injected
+ * (not imported) so this module stays free of the filesystem.
+ */
+export type ImportOptions = {
+  beforeWrite?: () => Promise<unknown>;
+};
+
 export const importFromString = async (
   raw: string,
   mode: "merge" | "replace" = "merge",
-  password?: string
+  password?: string,
+  options?: ImportOptions
 ): Promise<ImportResult> => {
   if (raw.length > LIMITS.MAX_RAW_CHARS) {
     throw new Error(t("helpers.import.backup.fileTooLarge"));
@@ -1777,6 +1796,18 @@ export const importFromString = async (
   }
   if (sanitized.user && mode === "replace") {
     tempWrites.push([KEYS.USER + TEMP_SUFFIX, JSON.stringify(sanitized.user)]);
+  }
+
+  if (options?.beforeWrite) {
+    try {
+      await options.beforeWrite();
+    } catch (error) {
+      if (typeof __DEV__ !== "undefined" && __DEV__) {
+        console.error("Safety copy before import failed:", error);
+      }
+      throw new Error(t("helpers.import.backup.safetyCopyFailed"));
+    }
+    counts.safetyCopy = true;
   }
 
   // Write all temp keys. This loop sits before the promote-phase try/rollback,

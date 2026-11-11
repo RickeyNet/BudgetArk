@@ -95,6 +95,7 @@ export const debtsScreen = {
       "🛡️ Tracked from your {{count}} designated emergency-fund savings accounts ({{amount}}). Update those balances on the Bridge - bank syncing keeps them current automatically.",
     setSavings: "Set Savings",
     currentAmount: "Current: {{amount}}",
+    savingsChanged: "Savings changed from {{from}} to {{to}}.",
     set: "Set",
     collapse: "Collapse",
     markInProgress: "Mark In Progress",
@@ -132,6 +133,7 @@ export const debtsScreen = {
   undo: {
     edited: "Edited \"{{name}}\"",
     deleted: "Deleted \"{{name}}\"",
+    payment: "Logged {{amount}} on \"{{name}}\"",
   },
   deleteDialog: {
     title: "Delete Debt",

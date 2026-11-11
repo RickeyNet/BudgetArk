@@ -113,6 +113,8 @@ export const helpersImport = {
     notJson: "The text is not valid JSON. Please paste a BudgetArk export.",
     notExport:
       "The data does not appear to be a BudgetArk export. Expected debts, payments, or budget data.",
+    safetyCopyFailed:
+      "Couldn't save a safety copy of your current data, so nothing was changed. Free up some storage and try again.",
     rollbackFailed:
       "Import failed during write and rollback could not restore all data (failed keys: {{failed}}). Some records may be in an inconsistent state - please reinstall the app and re-import your most recent backup before adding new data.",
     writeFailed: "Import failed during write. Your existing data has been restored.",

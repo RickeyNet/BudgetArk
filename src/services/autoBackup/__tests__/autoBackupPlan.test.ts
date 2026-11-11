@@ -9,7 +9,10 @@
 
 import {
   AUTO_BACKUP_KEEP,
+  SAFETY_SNAPSHOT_KEEP,
   type AutoBackupFileInfo,
+  backupKindFromName,
+  planPruneByKind,
   DEFAULT_AUTO_BACKUP_SETTINGS,
   autoBackupFileName,
   cadenceMs,
@@ -147,5 +150,51 @@ describe("formatBackupSize", () => {
     expect(formatBackupSize(500)).toBe("1 KB");
     expect(formatBackupSize(340 * 1024)).toBe("340 KB");
     expect(formatBackupSize(1.2 * 1024 * 1024)).toBe("1.2 MB");
+  });
+});
+
+describe("safety copies (taken before a Replace import / restore)", () => {
+  const safety = (timestampMs: number): AutoBackupFileInfo => ({
+    name: autoBackupFileName(timestampMs, "safety"),
+    timestampMs,
+    sizeBytes: null,
+  });
+
+  it("round-trips its own file name and kind, fail-closed for strangers", () => {
+    const name = autoBackupFileName(NOW, "safety");
+    expect(name).not.toBe(autoBackupFileName(NOW));
+    expect(parseAutoBackupFileName(name)).toBe(NOW);
+    expect(backupKindFromName(name)).toBe("safety");
+    expect(backupKindFromName(autoBackupFileName(NOW))).toBe("scheduled");
+    expect(backupKindFromName("pre-import-abc.enc")).toBeNull();
+    expect(backupKindFromName("notes.txt")).toBeNull();
+  });
+
+  it("never counts as the scheduled backup having run", () => {
+    expect(isBackupDue([safety(NOW - DAY)], NOW, cadenceMs("weekly"))).toBe(true);
+    expect(
+      isBackupDue([safety(NOW - DAY), file(NOW - 8 * DAY)], NOW, cadenceMs("weekly"))
+    ).toBe(true);
+    expect(
+      isBackupDue([safety(NOW - 30 * DAY), file(NOW - DAY)], NOW, cadenceMs("weekly"))
+    ).toBe(false);
+  });
+
+  it("prunes each kind to its own keep count, never one for the other", () => {
+    const scheduled = Array.from({ length: AUTO_BACKUP_KEEP + 1 }, (_, i) =>
+      file(NOW - (i + 10) * DAY)
+    );
+    // Newer than every scheduled backup - recency must not let them evict any.
+    const copies = Array.from({ length: SAFETY_SNAPSHOT_KEEP + 2 }, (_, i) =>
+      safety(NOW - i * DAY)
+    );
+    const doomed = planPruneByKind([...scheduled, ...copies]);
+    expect(doomed.sort()).toEqual(
+      [
+        scheduled[AUTO_BACKUP_KEEP].name,
+        copies[SAFETY_SNAPSHOT_KEEP].name,
+        copies[SAFETY_SNAPSHOT_KEEP + 1].name,
+      ].sort()
+    );
   });
 });

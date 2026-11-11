@@ -164,6 +164,8 @@ export const profileData: LocalizedPlural<typeof en> = {
       milestonePlan: "план етапів",
       payoffStrategy: "стратегія погашення",
     },
+    safetyCopyNote:
+      "\n\nПопередні дані спершу збережено як страхувальну копію. Щоб повернутися, відновіть її в розділі «Автоматичні копії».",
     alsoRestored: "\nТакож відновлено: {{extras}}.",
     staleNote: "\n\nПримітка: цьому експорту {{days}} дн. Частина даних може бути застарілою.",
     password: {

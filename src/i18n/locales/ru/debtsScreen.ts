@@ -101,6 +101,7 @@ export const debtsScreen: LocalizedPlural<typeof en> = {
       "🛡️ Считается по {{count}} назначенным сберегательным счетам резервного фонда ({{amount}}). Обновляй их балансы на Мостике - синхронизация с банком делает это автоматически.",
     setSavings: "Указать накопления",
     currentAmount: "Сейчас: {{amount}}",
+    savingsChanged: "Накопления изменены с {{from}} на {{to}}.",
     set: "Указать",
     collapse: "Свернуть",
     markInProgress: "Отметить как текущий",
@@ -137,6 +138,7 @@ export const debtsScreen: LocalizedPlural<typeof en> = {
   undo: {
     edited: "Изменено «{{name}}»",
     deleted: "Удалено «{{name}}»",
+    payment: "Записано {{amount}} по «{{name}}»",
   },
   deleteDialog: {
     title: "Удалить долг",

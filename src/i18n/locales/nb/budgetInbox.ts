@@ -34,6 +34,13 @@ export const budgetInbox: Localized<typeof en> = {
     alwaysFileVendor: "Legg alltid denne forhandleren her",
     working: "Jobber...",
     approveGroupAs: "Godkjenn {{count}} som {{category}}",
+    confirmApproveTitle: "Godkjenn {{count}} med foreslåtte kategorier?",
+    confirmApproveMessage:
+      "Hver av dem legges i budsjettet med den foreslåtte kategorien. Du kan fortsatt redigere eller slette dem i Budsjett-fanen.",
+    confirmApprove: "Godkjenn",
+    confirmSkipTitle: "Hopp over alle {{count}}?",
+    confirmSkipMessage:
+      "De flyttes til «Nylig hoppet over», der hver av dem kan gjenopprettes til innboksen.",
   },
   empty: "Innboksen er tom. Nye transaksjoner lander her etter en synk.",
   row: {

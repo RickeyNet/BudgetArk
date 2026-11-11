@@ -72,6 +72,7 @@ export const modalsGuard: Localized<typeof en> = {
     },
     mostRecent: "Nyeste",
     olderBackup: "Eldre sikkerhetskopi",
+    safetyCopy: "Sikkerhetskopi (før import eller gjenoppretting)",
     restore: "Gjenopprett",
     restoreHint:
       "Slå sammen legger til det som mangler og beholder nyere endringer. Erstatt sletter det som er på telefonen nå og gjenoppretter nøyaktig denne sikkerhetskopien.",
@@ -80,6 +81,8 @@ export const modalsGuard: Localized<typeof en> = {
     restored: {
       title: "Sikkerhetskopi gjenopprettet",
       summary: "Gjenopprettet {{parts}}.",
+      safetyCopyNote:
+        "\n\nDe tidligere dataene dine ble først lagret som en sikkerhetskopi. Gjenopprett den fra Automatiske sikkerhetskopier hvis du vil gå tilbake.",
     },
     errors: {
       loadSettings:

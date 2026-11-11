@@ -96,6 +96,7 @@ export const debtsScreen: Localized<typeof en> = {
       "🛡️ Übernommen aus deinen {{count}} Notgroschen-Sparkonten ({{amount}}). Aktualisiere die Kontostände auf der Brücke - mit Bank-Sync bleiben sie automatisch aktuell.",
     setSavings: "Ersparnisse festlegen",
     currentAmount: "Aktuell: {{amount}}",
+    savingsChanged: "Ersparnisse von {{from}} auf {{to}} geändert.",
     set: "Setzen",
     collapse: "Einklappen",
     markInProgress: "Als offen markieren",
@@ -132,6 +133,7 @@ export const debtsScreen: Localized<typeof en> = {
   undo: {
     edited: "„{{name}}“ bearbeitet",
     deleted: "„{{name}}“ gelöscht",
+    payment: "{{amount}} auf „{{name}}“ gebucht",
   },
   deleteDialog: {
     title: "Schuld löschen",

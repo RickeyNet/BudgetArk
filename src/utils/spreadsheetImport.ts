@@ -31,6 +31,7 @@ import { File as ExpoFile } from "expo-file-system";
 import * as XLSX from "xlsx";
 import {
   importFromString,
+  type ImportOptions,
   openDocumentPicker,
   type ImportResult,
 } from "./importData";
@@ -1126,7 +1127,8 @@ export interface SpreadsheetImportResult extends ImportResult {
  * write semantics as JSON imports.
  */
 export const importSpreadsheet = async (
-  mode: "merge" | "replace" = "merge"
+  mode: "merge" | "replace" = "merge",
+  options?: ImportOptions
 ): Promise<SpreadsheetImportResult | null> => {
   const picked = await openDocumentPicker({
     type: [
@@ -1311,7 +1313,12 @@ export const importSpreadsheet = async (
     people,
   };
 
-  const result = await importFromString(JSON.stringify(payload), mode);
+  const result = await importFromString(
+    JSON.stringify(payload),
+    mode,
+    undefined,
+    options
+  );
 
   return {
     ...result,

@@ -39,10 +39,12 @@ import {
   type AutoBackupCadence,
   type AutoBackupFileInfo,
   type AutoBackupSettings,
+  backupKindFromName,
   formatBackupSize,
 } from "../services/autoBackup/autoBackupPlan";
 import {
   createAutoBackupNow,
+  createSafetySnapshot,
   runAutoBackupIfDue,
 } from "../services/autoBackup/autoBackupRunner";
 import { listAutoBackups, readAutoBackupJson } from "../services/autoBackup/autoBackupStore";
@@ -189,6 +191,12 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
     }
   }, [busy, refresh, t]);
 
+  /** "Most recent" belongs to the newest scheduled backup, not a safety copy. */
+  const newestScheduledName = useMemo(
+    () => files.find((file) => backupKindFromName(file.name) !== "safety")?.name ?? null,
+    [files]
+  );
+
   const handleRestore = useCallback(
     async (name: string, mode: "merge" | "replace") => {
       if (busy) return;
@@ -199,14 +207,21 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
         if (json === null) {
           throw new Error(t("modals.guard.backup.errors.unreadable"));
         }
-        const result = await importFromString(json, mode);
+        // Both modes rewrite what is on the phone, so both first save a
+        // safety copy; importFromString stops, with nothing written, if
+        // that copy can't be saved.
+        const result = await importFromString(json, mode, undefined, {
+          beforeWrite: createSafetySnapshot,
+        });
         void refreshCustomCategories();
         triggerHaptic("success");
         onClose();
         await waitForIosModalTeardown(350);
         showInfo({
           title: t("modals.guard.backup.restored.title"),
-          message: summarizeRestore(t, result),
+          message:
+            summarizeRestore(t, result) +
+            (result.safetyCopy ? t("modals.guard.backup.restored.safetyCopyNote") : ""),
         });
         // Deferred like DataSection's export flow: the unlock celebration
         // is a Modal and must not present mid-teardown.
@@ -401,7 +416,11 @@ const AutoBackupModal: React.FC<AutoBackupModalProps> = ({
                         <Text
                           style={[styles.rowSubtext, { color: colors.textDim }]}
                         >
-                          {index === 0 ? t("modals.guard.backup.mostRecent") : t("modals.guard.backup.olderBackup")}
+                          {backupKindFromName(file.name) === "safety"
+                            ? t("modals.guard.backup.safetyCopy")
+                            : file.name === newestScheduledName
+                              ? t("modals.guard.backup.mostRecent")
+                              : t("modals.guard.backup.olderBackup")}
                           {size ? ` · ${size}` : ""}
                         </Text>
                       </View>

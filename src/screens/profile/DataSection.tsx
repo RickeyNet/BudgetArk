@@ -70,6 +70,7 @@ import {
 } from "../../storage/statementImportMappingsStorage";
 import BankStatementImportModal from "../../components/BankStatementImportModal";
 import { listAutoBackups } from "../../services/autoBackup/autoBackupStore";
+import { createSafetySnapshot } from "../../services/autoBackup/autoBackupRunner";
 import { getAutoBackupSettings } from "../../storage/autoBackupSettingsStorage";
 import AutoBackupModal from "../../components/AutoBackupModal";
 import { KeyboardAwareModalOverlay } from "../../components/KeyboardAwareModalOverlay";
@@ -80,6 +81,15 @@ import { triggerHaptic } from "../../utils/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useDensity } from "../../theme/DensityProvider";
 import { useProfileStyles } from "./profileStyles";
+
+/**
+ * Replace erases what is on the phone, so every Replace import (file,
+ * paste, spreadsheet) first writes a safety copy into Automatic Backups;
+ * the import pipeline refuses to overwrite if that copy can't be written.
+ * Merge keeps existing data and takes none.
+ */
+const safetyCopyFor = (mode: "merge" | "replace") =>
+  mode === "replace" ? { beforeWrite: createSafetySnapshot } : undefined;
 
 /**
  * Rows of the Export / Import hub sheets, in display order. Translation
@@ -480,6 +490,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           if (result.staleDays !== undefined && result.staleDays > 30) {
             message += t("profile.data.import.staleNote", { days: result.staleDays });
           }
+          if (result.safetyCopy) message += t("profile.data.import.safetyCopyNote");
           void refreshCustomCategories();
           triggerHaptic("success");
           showInfo({
@@ -582,7 +593,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           if (raw === null) return;
           const text = raw;
           await executeImport(
-            (password) => importFromString(text, mode, password),
+            (password) => importFromString(text, mode, password, safetyCopyFor(mode)),
             label,
           );
         } finally {
@@ -728,7 +739,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             ? t("profile.data.import.labelMerged")
             : t("profile.data.import.labelImported");
         try {
-          const result = await importSpreadsheet(mode);
+          const result = await importSpreadsheet(mode, safetyCopyFor(mode));
           if (!result) return;
           const sep = t("profile.data.import.listSeparator");
           const parts: string[] = [
@@ -781,6 +792,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           if (result.staleDays !== undefined && result.staleDays > 30) {
             message += t("profile.data.spreadsheet.import.staleNote", { days: result.staleDays });
           }
+          if (result.safetyCopy) message += t("profile.data.import.safetyCopyNote");
           triggerHaptic("success");
           showInfo({
             title: t("profile.data.import.complete.title"),
@@ -930,7 +942,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             ? t("profile.data.import.labelMerged")
             : t("profile.data.import.labelImported");
         executeImport(
-          (password) => importFromString(text, mode, password),
+          (password) => importFromString(text, mode, password, safetyCopyFor(mode)),
           label,
         );
       },

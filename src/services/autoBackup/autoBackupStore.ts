@@ -20,11 +20,11 @@ import {
   decryptStringWithMasterKey,
 } from "../../storage/encryptedStorage";
 import {
-  AUTO_BACKUP_KEEP,
   type AutoBackupFileInfo,
+  type AutoBackupKind,
   autoBackupFileName,
   parseAutoBackupFileName,
-  planPrune,
+  planPruneByKind,
   sortNewestFirst,
 } from "./autoBackupPlan";
 
@@ -79,20 +79,22 @@ export const listAutoBackups = async (): Promise<AutoBackupFileInfo[]> => {
 };
 
 /**
- * Encrypts and writes a new backup, then prunes to the newest
- * AUTO_BACKUP_KEEP. Returns the new file's info.
+ * Encrypts and writes a new backup, then prunes each kind to its own keep
+ * count (planPruneByKind). Returns the new file's info. `kind` "safety" is
+ * the copy taken before a Replace import / restore overwrites the phone.
  *
  * @throws AutoBackupEncryptionUnavailableError when the vault is down.
  */
 export const writeAutoBackup = async (
-  exportJson: string
+  exportJson: string,
+  kind: AutoBackupKind = "scheduled"
 ): Promise<AutoBackupFileInfo> => {
   const blob = await encryptStringWithMasterKey(exportJson);
   if (blob === null) {
     throw new AutoBackupEncryptionUnavailableError();
   }
   const timestampMs = Date.now();
-  const name = autoBackupFileName(timestampMs);
+  const name = autoBackupFileName(timestampMs, kind);
   const file = new ExpoFile(ensureDir(), name);
   file.create({ overwrite: true });
   file.write(blob, { encoding: "utf8" });
@@ -100,7 +102,7 @@ export const writeAutoBackup = async (
   // Prune AFTER the new write succeeds - never delete the old backups to
   // make room for one that might fail.
   const files = await listAutoBackups();
-  for (const doomed of planPrune(files, AUTO_BACKUP_KEEP)) {
+  for (const doomed of planPruneByKind(files)) {
     try {
       const old = new ExpoFile(backupsDir(), doomed);
       if (old.exists) old.delete();

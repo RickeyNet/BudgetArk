@@ -136,6 +136,8 @@ export const profileData = {
       milestonePlan: "milestone plan",
       payoffStrategy: "payoff strategy",
     },
+    safetyCopyNote:
+      "\n\nYour previous data was saved first as a safety copy. To go back, restore it from Automatic Backups.",
     alsoRestored: "\nAlso restored: {{extras}}.",
     staleNote: "\n\nNote: This export is {{days}} days old. Some data may be outdated.",
     password: {

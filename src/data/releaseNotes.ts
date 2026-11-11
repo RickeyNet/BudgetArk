@@ -23,6 +23,8 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "Small grey text is easier to read in every theme. Captions, hints and placeholder text were too faint to read comfortably in almost every theme; they are now noticeably stronger on cards and on the background, while still sitting quieter than the main text. Lighthouse and Classic already met the bar and look the same.",
       "Entries inside a spending category are easier to tap. Each entry in an expanded category was only as tall as its text, so it was easy to hit the one above or below. The rows are now full-height tap targets with room around them, and a selected row is highlighted with some breathing space.",
       "Setup no longer runs straight into the guided tour. The last setup step now asks whether you want the tab-by-tab tour and says how many tips it holds, and Skip Setup skips the tour too. Every tip is still in Profile → Help → Feature guide.",
+      "Replacing your data now keeps a way back. Before a Replace import or a backup restore overwrites what is on the phone, BudgetArk saves a safety copy in Automatic Backups, and stops without changing anything if that copy can't be saved.",
+      "Quick actions can be taken back. A payment typed on a debt card and a savings change in the milestones sheet now offer Undo, and the Review Inbox asks before approving or skipping a whole batch.",
     ],
   },
   {

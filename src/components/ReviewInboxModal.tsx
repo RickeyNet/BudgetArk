@@ -30,6 +30,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -802,6 +803,42 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
     }
   }, [onChanged, pendingTransactions, refresh, t]);
 
+  /**
+   * One tap on "Approve N" writes N budget entries and one on "Skip all"
+   * clears a whole section, so both ask first with the count spelled out.
+   * A native alert (not another Modal) so nothing stacks over this sheet.
+   */
+  const confirmBulkApprove = useCallback(() => {
+    if (suggestedReadyCount === 0) return;
+    Alert.alert(
+      t("budget.inbox.bulk.confirmApproveTitle", { count: suggestedReadyCount }),
+      t("budget.inbox.bulk.confirmApproveMessage"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("budget.inbox.bulk.confirmApprove"), onPress: () => void handleBulkApprove() },
+      ],
+    );
+  }, [handleBulkApprove, suggestedReadyCount, t]);
+
+  const confirmSkipSection = useCallback(
+    (items: PendingTransaction[]) => {
+      if (items.length === 0) return;
+      Alert.alert(
+        t("budget.inbox.bulk.confirmSkipTitle", { count: items.length }),
+        t("budget.inbox.bulk.confirmSkipMessage"),
+        [
+          { text: t("common.cancel"), style: "cancel" },
+          {
+            text: t("budget.inbox.bulk.skipAll"),
+            style: "destructive",
+            onPress: () => void handleSkipSection(items),
+          },
+        ],
+      );
+    },
+    [handleSkipSection, t],
+  );
+
   const renderItem = ({ item }: { item: PendingTransaction }) => {
     const expanded = expandedId === item.id;
     const busy = busyId === item.id;
@@ -1359,7 +1396,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
           {!showSkipped && suggestedReadyCount > 0 ? (
             <TouchableOpacity
               style={[styles.bulkBar, bulkBusy && styles.buttonDisabled]}
-              onPress={() => void handleBulkApprove()}
+              onPress={confirmBulkApprove}
               disabled={bulkBusy}
             >
               <Text style={styles.bulkBarText}>
@@ -1487,7 +1524,7 @@ const ReviewInboxModal: React.FC<ReviewInboxModalProps> = ({
                       <Text style={styles.sectionHeader}>{section.title}</Text>
                       {section.bulkSkippable ? (
                         <TouchableOpacity
-                          onPress={() => void handleSkipSection(section.data)}
+                          onPress={() => confirmSkipSection(section.data)}
                           disabled={bulkBusy}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >

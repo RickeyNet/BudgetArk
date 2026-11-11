@@ -72,6 +72,7 @@ export const modalsGuard: Localized<typeof en> = {
     },
     mostRecent: "Neueste",
     olderBackup: "Ältere Sicherung",
+    safetyCopy: "Sicherheitskopie (vor Import oder Wiederherstellung)",
     restore: "Wiederherstellen",
     restoreHint:
       "Zusammenführen ergänzt Fehlendes und behält neuere Änderungen. Ersetzen löscht, was jetzt auf dem Telefon ist, und stellt genau diese Sicherung wieder her.",
@@ -80,6 +81,8 @@ export const modalsGuard: Localized<typeof en> = {
     restored: {
       title: "Sicherung wiederhergestellt",
       summary: "Wiederhergestellt: {{parts}}.",
+      safetyCopyNote:
+        "\n\nDeine bisherigen Daten wurden vorher als Sicherheitskopie gespeichert. Um zurückzukehren, stelle sie unter „Automatische Sicherungen“ wieder her.",
     },
     errors: {
       loadSettings:

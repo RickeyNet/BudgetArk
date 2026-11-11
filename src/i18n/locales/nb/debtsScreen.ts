@@ -98,6 +98,7 @@ export const debtsScreen: Localized<typeof en> = {
       "🛡️ Hentes fra de {{count}} utpekte buffersparekontoene dine ({{amount}}). Oppdater saldoene på Broen - banksynk holder dem oppdatert automatisk.",
     setSavings: "Angi sparing",
     currentAmount: "Nå: {{amount}}",
+    savingsChanged: "Sparing endret fra {{from}} til {{to}}.",
     set: "Angi",
     collapse: "Fold sammen",
     markInProgress: "Merk som pågående",
@@ -134,6 +135,7 @@ export const debtsScreen: Localized<typeof en> = {
   undo: {
     edited: "Redigerte «{{name}}»",
     deleted: "Slettet «{{name}}»",
+    payment: "Registrerte {{amount}} på «{{name}}»",
   },
   deleteDialog: {
     title: "Slett gjeldspost",

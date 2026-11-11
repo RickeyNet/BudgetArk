@@ -116,6 +116,8 @@ export const helpersImport: Localized<typeof en> = {
     notJson: "Der Text ist kein gültiges JSON. Füge einen BudgetArk-Export ein.",
     notExport:
       "Die Daten sehen nicht nach einem BudgetArk-Export aus. Erwartet werden Schulden, Zahlungen oder Budgetdaten.",
+    safetyCopyFailed:
+      "Es konnte keine Sicherheitskopie deiner aktuellen Daten gespeichert werden, daher wurde nichts geändert. Gib etwas Speicherplatz frei und versuche es erneut.",
     rollbackFailed:
       "Der Import ist beim Schreiben fehlgeschlagen und die Wiederherstellung konnte nicht alle Daten zurückholen (fehlgeschlagene Schlüssel: {{failed}}). Einige Einträge sind womöglich inkonsistent - installiere die App bitte neu und importiere deine letzte Sicherung, bevor du neue Daten hinzufügst.",
     writeFailed: "Der Import ist beim Schreiben fehlgeschlagen. Deine bisherigen Daten wurden wiederhergestellt.",

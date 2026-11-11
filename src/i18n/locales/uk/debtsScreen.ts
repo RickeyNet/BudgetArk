@@ -101,6 +101,7 @@ export const debtsScreen: LocalizedPlural<typeof en> = {
       "🛡️ Рахується за {{count}} призначеними ощадними рахунками резервного фонду ({{amount}}). Оновлюй їхні баланси на Містку - синхронізація з банком робить це автоматично.",
     setSavings: "Вказати заощадження",
     currentAmount: "Зараз: {{amount}}",
+    savingsChanged: "Заощадження змінено з {{from}} на {{to}}.",
     set: "Вказати",
     collapse: "Згорнути",
     markInProgress: "Позначити як поточний",
@@ -137,6 +138,7 @@ export const debtsScreen: LocalizedPlural<typeof en> = {
   undo: {
     edited: "Змінено «{{name}}»",
     deleted: "Видалено «{{name}}»",
+    payment: "Записано {{amount}} за «{{name}}»",
   },
   deleteDialog: {
     title: "Видалити борг",

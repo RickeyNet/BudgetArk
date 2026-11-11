@@ -32,6 +32,13 @@ export const budgetInbox = {
     alwaysFileVendor: "Always file this vendor here",
     working: "Working...",
     approveGroupAs: "Approve {{count}} as {{category}}",
+    confirmApproveTitle: "Approve {{count}} with suggested categories?",
+    confirmApproveMessage:
+      "Each one is added to your budget under its suggested category. You can still edit or delete any of them in the Budget tab.",
+    confirmApprove: "Approve",
+    confirmSkipTitle: "Skip all {{count}}?",
+    confirmSkipMessage:
+      "They move to Recently skipped, where each one can be restored to the inbox.",
   },
   empty: "Inbox zero. New transactions land here after a sync.",
   row: {

@@ -239,6 +239,31 @@ describe("writeAutoBackup", () => {
   });
 });
 
+describe("writeAutoBackup - safety copies", () => {
+  it("writes under its own name and leaves every scheduled backup in place", async () => {
+    for (let i = 0; i < AUTO_BACKUP_KEEP; i++) {
+      jest.spyOn(Date, "now").mockReturnValue(BASE_MS + i);
+      await writeAutoBackup(`scheduled-${i}`);
+    }
+    // More safety copies than the folder keeps: the scheduled ones must
+    // all survive, and only the newest safety copies remain.
+    const written: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      jest.spyOn(Date, "now").mockReturnValue(BASE_MS + 100 + i);
+      written.push((await writeAutoBackup(`safety-${i}`, "safety")).name);
+    }
+    expect(written[0]).toBe(autoBackupFileName(BASE_MS + 100, "safety"));
+
+    const names = (await listAutoBackups()).map((f) => f.name);
+    for (let i = 0; i < AUTO_BACKUP_KEEP; i++) {
+      expect(names).toContain(autoBackupFileName(BASE_MS + i));
+    }
+    expect(names).toContain(written[3]);
+    expect(names).not.toContain(written[0]);
+    expect(await readAutoBackupJson(written[3])).toBe("safety-3");
+  });
+});
+
 describe("readAutoBackupJson", () => {
   it("decrypts a valid backup back to the original JSON", async () => {
     jest.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
