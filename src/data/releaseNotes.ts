@@ -7,6 +7,21 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: "1.11.2",
+    title: "Nothing Fails Quietly",
+    releasedAt: "2026-11-10",
+    highlights: [
+      "Nothing fails quietly anymore. If a debt payment can't be saved, the amount you typed stays in the box with a note instead of vanishing as if it had been recorded. A bank sync started from the Review Inbox now tells you when it failed or when a bank needs attention. A currency conversion that stops partway says so, and warns you that some amounts may already be converted. And a partner sync that breaks shows Sync Failed instead of simply going back to idle.",
+      "Encrypted backups are harder to get wrong. Exporting one now asks for the password twice and lets you show what you typed, so a typo can no longer lock you out of your own backup. Importing one asks for the file once: a wrong password shows right in the prompt and you can try again, instead of starting over from the file picker.",
+      "Reset All Data tells you everything it removes. The warning now names receipt photos and the automatic backups stored on this device alongside your debts, payments and accounts, notes that receipt photos aren't part of a backup, and offers an Export a Backup First button before you commit.",
+      "Deleting a Bridge account takes two steps. Delete used to sit beside Cancel and Save and acted on a single tap. It is now a quiet link below them, and it asks first - naming the account, how many holdings go with it, and that the deletion reaches a paired partner.",
+      "The 'Open the calculator' buttons in lessons open the calculator. In the four lessons that point to a Charts tool, the button only closed the lesson. It now takes you to the Charts tab with the right calculator opened and scrolled into view.",
+      "The debt due prompt's mute button says what it does. 'Not yet this month' sounded like 'I still need to pay' but actually silenced the reminder for the month; it now reads 'Don't remind me this month'. It works exactly as before.",
+      "A fresh install no longer opens What's New over the welcome tour. New users saw the release notes pop up on top of the Bridge tour right after onboarding; they now start with the tour alone.",
+      "Save, Add, Done and Connect buttons are readable in every theme. Their white labels were hard to read on the accent color in eight of the fifteen themes - Forest Gold and Lighthouse worst of all - and now use each theme's own button text color.",
+    ],
+  },
+  {
     version: "1.11.1",
     title: "Cards, Connected",
     releasedAt: "2026-10-09",
