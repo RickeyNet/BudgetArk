@@ -133,6 +133,15 @@ export const bridgeScreen: Localized<typeof en> = {
     removeTicker: "Ta bort ticker",
     addTicker: "+ Lägg till ticker",
     addFund: "+ Lägg till pensionsfond",
+    deleteLink: "Ta bort det här kontot",
+    /** Confirm shown before an account delete - it also drops holdings and syncs. */
+    deleteConfirm: {
+      title: "Ta bort konto?",
+      message: "”{{name}}” tas bort från din nettoförmögenhet. Det går inte att ångra.",
+      holdingsNote_one: "Kontots {{count}} innehav tas också bort.",
+      holdingsNote_other: "Kontots {{count}} innehav tas också bort.",
+      syncNote: "Om du synkar med en partner tas det bort även på partnerns enhet.",
+    },
   },
   efModal: {
     title: "Buffert",

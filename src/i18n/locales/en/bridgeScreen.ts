@@ -131,6 +131,15 @@ export const bridgeScreen = {
     removeTicker: "Remove ticker",
     addTicker: "+ Add ticker",
     addFund: "+ Add 401k fund",
+    deleteLink: "Delete this account",
+    /** Confirm shown before an account delete - it also drops holdings and syncs. */
+    deleteConfirm: {
+      title: "Delete account?",
+      message: "\"{{name}}\" will be removed from your net worth. This can't be undone.",
+      holdingsNote_one: "Its {{count}} holding will be deleted too.",
+      holdingsNote_other: "Its {{count}} holdings will be deleted too.",
+      syncNote: "If you sync with a partner, it will be removed on their device as well.",
+    },
   },
   efModal: {
     title: "Emergency Fund",

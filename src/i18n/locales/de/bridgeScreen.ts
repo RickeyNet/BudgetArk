@@ -130,6 +130,15 @@ export const bridgeScreen: Localized<typeof en> = {
     removeTicker: "Ticker entfernen",
     addTicker: "+ Ticker hinzufügen",
     addFund: "+ Fonds hinzufügen",
+    deleteLink: "Dieses Konto löschen",
+    /** Confirm shown before an account delete - it also drops holdings and syncs. */
+    deleteConfirm: {
+      title: "Konto löschen?",
+      message: "„{{name}}“ wird aus deinem Nettovermögen entfernt. Das lässt sich nicht rückgängig machen.",
+      holdingsNote_one: "Die {{count}} zugehörige Position wird ebenfalls gelöscht.",
+      holdingsNote_other: "Die {{count}} zugehörigen Positionen werden ebenfalls gelöscht.",
+      syncNote: "Wenn du mit einem Partner synchronisierst, wird es auch auf dessen Gerät entfernt.",
+    },
   },
   efModal: {
     title: "Notgroschen",

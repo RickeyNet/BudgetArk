@@ -10,6 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   ScrollView,
@@ -1030,6 +1031,37 @@ const BridgeScreen: React.FC = () => {
     [closeAssetModal, holdings, loadHoldingsState, refreshAchievements, refreshNetWorthSnapshots]
   );
 
+  /**
+   * Deleting an account is irreversible, cascades to its holdings, and
+   * propagates to a paired partner - so it deliberately goes through a
+   * destructive confirm that spells out all three before anything is removed.
+   */
+  const confirmDeleteAsset = useCallback(
+    (account: AssetAccount) => {
+      const holdingCount = categorySupportsHoldings(account.category)
+        ? holdings.filter((h) => h.accountId === account.id).length
+        : 0;
+      const parts = [
+        t("bridge.screen.assetModal.deleteConfirm.message", { name: account.name }),
+        holdingCount > 0
+          ? t("bridge.screen.assetModal.deleteConfirm.holdingsNote", { count: holdingCount })
+          : null,
+        t("bridge.screen.assetModal.deleteConfirm.syncNote"),
+      ].filter(Boolean);
+      Alert.alert(t("bridge.screen.assetModal.deleteConfirm.title"), parts.join("\n\n"), [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("common.delete"),
+          style: "destructive",
+          onPress: () => {
+            void deleteAsset(account);
+          },
+        },
+      ]);
+    },
+    [deleteAsset, holdings, t]
+  );
+
   const toggleBrokerExpand = useCallback((accountId: string) => {
     setExpandedBrokers((prev) => {
       const next = new Set(prev);
@@ -1944,11 +1976,6 @@ const BridgeScreen: React.FC = () => {
             ) : null}
 
             <View style={styles.modalActions}>
-              {editingAsset ? (
-                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => deleteAsset(editingAsset)}>
-                  <Text style={[styles.modalCancelText, { color: colors.danger }]}>{t("common.delete")}</Text>
-                </TouchableOpacity>
-              ) : null}
               <TouchableOpacity style={styles.modalCancelBtn} onPress={closeAssetModal}>
                 <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
               </TouchableOpacity>
@@ -1956,6 +1983,19 @@ const BridgeScreen: React.FC = () => {
                 <Text style={styles.modalSaveText}>{t("common.save")}</Text>
               </TouchableOpacity>
             </View>
+            {/* Delete deliberately sits apart from Cancel/Save as a quiet text
+                link, so it can't be hit by a mis-aimed tap on either. */}
+            {editingAsset ? (
+              <TouchableOpacity
+                style={styles.modalDeleteLink}
+                onPress={() => confirmDeleteAsset(editingAsset)}
+                accessibilityRole="button"
+              >
+                <Text style={styles.modalDeleteLinkText}>
+                  {t("bridge.screen.assetModal.deleteLink")}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </KeyboardAwareModalOverlay>
       </Modal>
@@ -2461,6 +2501,17 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: tokens.radiusSm + 2,
       paddingVertical: tokens.padSm,
       alignItems: "center",
+    },
+    modalDeleteLink: {
+      alignSelf: "center",
+      marginTop: tokens.gap,
+      paddingVertical: tokens.padSm,
+      paddingHorizontal: tokens.pad,
+    },
+    modalDeleteLinkText: {
+      color: colors.danger,
+      fontSize: scale(13),
+      fontWeight: "600",
     },
     modalSaveText: {
       color: colors.white,

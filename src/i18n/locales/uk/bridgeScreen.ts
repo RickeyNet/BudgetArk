@@ -145,6 +145,17 @@ export const bridgeScreen: LocalizedPlural<typeof en> = {
     removeTicker: "Видалити тікер",
     addTicker: "+ Додати тікер",
     addFund: "+ Додати фонд 401k",
+    deleteLink: "Видалити цей рахунок",
+    /** Confirm shown before an account delete - it also drops holdings and syncs. */
+    deleteConfirm: {
+      title: "Видалити рахунок?",
+      message: "«{{name}}» буде вилучено з вашого капіталу. Цю дію не можна скасувати.",
+      holdingsNote_one: "Також буде видалено {{count}} позицію цього рахунку.",
+      holdingsNote_few: "Також буде видалено {{count}} позиції цього рахунку.",
+      holdingsNote_many: "Також буде видалено {{count}} позицій цього рахунку.",
+      holdingsNote_other: "Також буде видалено {{count}} позиції цього рахунку.",
+      syncNote: "Якщо ви синхронізуєтеся з партнером, рахунок буде видалено і на його пристрої.",
+    },
   },
   efModal: {
     title: "Резервний фонд",

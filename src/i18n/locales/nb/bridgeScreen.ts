@@ -133,6 +133,15 @@ export const bridgeScreen: Localized<typeof en> = {
     removeTicker: "Fjern ticker",
     addTicker: "+ Legg til ticker",
     addFund: "+ Legg til pensjonsfond",
+    deleteLink: "Slett denne kontoen",
+    /** Confirm shown before an account delete - it also drops holdings and syncs. */
+    deleteConfirm: {
+      title: "Slette kontoen?",
+      message: "«{{name}}» fjernes fra nettoformuen din. Dette kan ikke angres.",
+      holdingsNote_one: "Den {{count}} beholdningen i kontoen slettes også.",
+      holdingsNote_other: "De {{count}} beholdningene i kontoen slettes også.",
+      syncNote: "Hvis du synkroniserer med en partner, fjernes den også på partnerens enhet.",
+    },
   },
   efModal: {
     title: "Buffer",
