@@ -25,7 +25,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  StatusBar,
   StyleSheet,
   InteractionManager,
   Modal,
@@ -1441,7 +1440,6 @@ const DebtTrackerScreen: React.FC = () => {
         showAmbientBackground && { backgroundColor: "transparent" },
       ]}
     >
-      <StatusBar barStyle="light-content" />
       {/* Keyboard strategy for the inline pay input (see handlePayInputFocus):
           iOS scrolls via automaticallyAdjustKeyboardInsets; Android needs the
           KAV to shrink the list above the keyboard, then an explicit

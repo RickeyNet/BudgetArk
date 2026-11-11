@@ -16,7 +16,6 @@ import {
   InteractionManager,
   Modal,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -1565,7 +1564,6 @@ const BudgetScreen: React.FC = () => {
         showAmbientBackground && styles.screenTransparent,
       ]}
     >
-      <StatusBar barStyle="light-content" />
       {isLoaded && (
         <FlatList
           ref={listRef}

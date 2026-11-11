@@ -91,7 +91,7 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
   onOpenTool,
 }) => {
   const { t, i18n } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, statusBarStyle } = useTheme();
   const { tokens } = useDensity();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -244,7 +244,9 @@ const LessonScreen: React.FC<LessonScreenProps> = ({
       transparent={false}
       animationType="slide"
     >
-      <StatusBar barStyle="light-content" />
+      {/* Repeated inside the Modal (the app-wide one lives in ThemeProvider):
+          an Android Modal is its own window, so it needs its own entry. */}
+      <StatusBar barStyle={statusBarStyle} />
       <View
         style={[
           styles.screen,

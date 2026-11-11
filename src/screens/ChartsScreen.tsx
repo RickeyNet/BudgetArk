@@ -18,7 +18,6 @@ import {
   LayoutAnimation,
   Platform,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -915,7 +914,6 @@ const ChartsScreen: React.FC = () => {
         showAmbientBackground && { backgroundColor: "transparent" },
       ]}
     >
-      <StatusBar barStyle="light-content" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "android" ? "padding" : undefined}
         style={styles.keyboardAvoider}

@@ -14,7 +14,6 @@ import {
   FlatList,
   Modal,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -1809,7 +1808,6 @@ const BridgeScreen: React.FC = () => {
         showAmbientBackground && styles.screenTransparent,
       ]}
     >
-      <StatusBar barStyle="light-content" />
       {isLoaded ? (
         <FlatList
           ref={listRef}
