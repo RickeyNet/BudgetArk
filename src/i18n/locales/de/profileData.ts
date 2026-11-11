@@ -73,6 +73,11 @@ export const profileData: Localized<typeof en> = {
       message:
         "Bitte gib ein Passwort mit mindestens 4 Zeichen ein oder schalte die Verschlüsselung aus.",
     },
+    passwordMismatch: {
+      title: "Passwörter stimmen nicht überein",
+      message:
+        "Die beiden Passwörter sind unterschiedlich. Gib sie erneut ein, sodass sie übereinstimmen – ohne das exakte Passwort lässt sich ein Backup nicht wiederherstellen.",
+    },
     failed: {
       title: "Export fehlgeschlagen",
       message: "Beim Exportieren deiner Daten ist etwas schiefgelaufen.",
@@ -88,6 +93,9 @@ export const profileData: Localized<typeof en> = {
         "Deine Daten werden als unverschlüsseltes JSON exportiert. Jeder mit Zugriff auf die Datei kann deine Finanzdaten lesen.",
       encryptToggle: "Mit Passwort verschlüsseln",
       passwordPlaceholder: "Export-Passwort eingeben",
+      confirmPasswordPlaceholder: "Passwort bestätigen",
+      showPassword: "Passwort anzeigen",
+      hidePassword: "Passwort verbergen",
       encryptAndShare: "Verschlüsseln & teilen",
       sharePlaintext: "Unverschlüsselt teilen",
     },

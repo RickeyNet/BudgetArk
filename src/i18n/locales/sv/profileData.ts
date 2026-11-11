@@ -73,6 +73,11 @@ export const profileData: Localized<typeof en> = {
       message:
         "Ange ett lösenord med minst 4 tecken eller stäng av krypteringen.",
     },
+    passwordMismatch: {
+      title: "Lösenorden matchar inte",
+      message:
+        "De två lösenorden är olika. Ange dem igen så att de matchar – en säkerhetskopia kan inte återställas utan exakt rätt lösenord.",
+    },
     failed: {
       title: "Exporten misslyckades",
       message: "Något gick fel när dina data exporterades.",
@@ -88,6 +93,9 @@ export const profileData: Localized<typeof en> = {
         "Dina data exporteras som okrypterad JSON. Alla som har tillgång till filen kan läsa dina ekonomiska uppgifter.",
       encryptToggle: "Kryptera med lösenord",
       passwordPlaceholder: "Ange exportlösenord",
+      confirmPasswordPlaceholder: "Bekräfta lösenord",
+      showPassword: "Visa lösenord",
+      hidePassword: "Dölj lösenord",
       encryptAndShare: "Kryptera & dela",
       sharePlaintext: "Dela okrypterat",
     },

@@ -69,6 +69,11 @@ export const profileData = {
       title: "Password Too Short",
       message: "Please enter a password with at least 4 characters, or turn off encryption.",
     },
+    passwordMismatch: {
+      title: "Passwords Don't Match",
+      message:
+        "The two passwords are different. Re-enter them so they match — a backup can't be restored without its exact password.",
+    },
     failed: {
       title: "Export Failed",
       message: "Something went wrong while exporting your data.",
@@ -84,6 +89,9 @@ export const profileData = {
         "Your data will be exported as plaintext JSON. Anyone with access to the file can read your financial data.",
       encryptToggle: "Encrypt with password",
       passwordPlaceholder: "Enter export password",
+      confirmPasswordPlaceholder: "Confirm password",
+      showPassword: "Show password",
+      hidePassword: "Hide password",
       encryptAndShare: "Encrypt & Share",
       sharePlaintext: "Share Plaintext",
     },

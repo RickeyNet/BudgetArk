@@ -73,6 +73,11 @@ export const profileData: Localized<typeof en> = {
       message:
         "Skriv inn et passord med minst 4 tegn, eller slå av krypteringen.",
     },
+    passwordMismatch: {
+      title: "Passordene er ikke like",
+      message:
+        "De to passordene er forskjellige. Skriv dem inn på nytt slik at de er like – en sikkerhetskopi kan ikke gjenopprettes uten nøyaktig riktig passord.",
+    },
     failed: {
       title: "Eksporten mislyktes",
       message: "Noe gikk galt under eksporten av dataene dine.",
@@ -88,6 +93,9 @@ export const profileData: Localized<typeof en> = {
         "Dataene dine eksporteres som ukryptert JSON. Alle med tilgang til filen kan lese de økonomiske opplysningene dine.",
       encryptToggle: "Krypter med passord",
       passwordPlaceholder: "Skriv inn eksportpassord",
+      confirmPasswordPlaceholder: "Bekreft passord",
+      showPassword: "Vis passord",
+      hidePassword: "Skjul passord",
       encryptAndShare: "Krypter & del",
       sharePlaintext: "Del ukryptert",
     },

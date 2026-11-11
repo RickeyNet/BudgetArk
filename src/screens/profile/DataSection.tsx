@@ -39,6 +39,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { buildExportMessage, shareExportMessage } from "../../utils/exportData";
+import { checkExportPassword } from "../../utils/exportPassword";
 import { recordExport } from "../../storage/achievementStatsStorage";
 import { useAchievements } from "../../achievements/AchievementsProvider";
 import { useCustomCategories } from "../../categories/CustomCategoriesProvider";
@@ -175,6 +176,21 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     const [exportEncrypt, setExportEncrypt] = useState(true);
     const [exportPassword, setExportPassword] = useState("");
     /**
+     * Second, independently typed copy of the export password. There is no
+     * server and no reset: a typo in a single masked field would produce a
+     * backup that can never be restored, so the two must match before we
+     * encrypt (see checkExportPassword).
+     */
+    const [exportPasswordConfirm, setExportPasswordConfirm] = useState("");
+    /** Show-password toggle for both export fields; re-masked on every open. */
+    const [exportPasswordVisible, setExportPasswordVisible] = useState(false);
+    /** Wipe every password-entry field of the export dialog in one place. */
+    const clearExportPassword = useCallback(() => {
+      setExportPassword("");
+      setExportPasswordConfirm("");
+      setExportPasswordVisible(false);
+    }, []);
+    /**
      * True while an export is generating/sharing. Drives a blocking spinner
      * overlay. Encrypted export runs 250k PBKDF2 rounds in pure JS on the JS
      * thread, freezing the UI for several seconds on real devices; without
@@ -281,17 +297,30 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
 
     const handleExportData = useCallback(() => {
       setExportEncrypt(true);
-      setExportPassword("");
+      clearExportPassword();
       setShowExportModal(true);
-    }, []);
+    }, [clearExportPassword]);
 
     const confirmExport = useCallback(async () => {
-      if (exportEncrypt && exportPassword.length < 4) {
-        showInfo({
-          title: t("profile.data.export.passwordTooShort.title"),
-          message: t("profile.data.export.passwordTooShort.message"),
-        });
-        return;
+      if (exportEncrypt) {
+        const check = checkExportPassword(exportPassword, exportPasswordConfirm);
+        if (check === "tooShort") {
+          showInfo({
+            title: t("profile.data.export.passwordTooShort.title"),
+            message: t("profile.data.export.passwordTooShort.message"),
+          });
+          return;
+        }
+        if (check === "mismatch") {
+          // Keep the dialog open with both fields intact so the user can
+          // reveal them and see which one has the typo.
+          triggerHaptic("error");
+          showInfo({
+            title: t("profile.data.export.passwordMismatch.title"),
+            message: t("profile.data.export.passwordMismatch.message"),
+          });
+          return;
+        }
       }
       setShowExportModal(false);
       let exported = false;
@@ -334,7 +363,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       } finally {
         setIsExporting(false);
       }
-      setExportPassword("");
+      clearExportPassword();
       if (exported) {
         // Defer the achievement check until the spinner overlay AND the OS
         // share sheet have fully dismissed. The unlock celebration is a RN
@@ -348,6 +377,8 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     }, [
       exportEncrypt,
       exportPassword,
+      exportPasswordConfirm,
+      clearExportPassword,
       onRefreshBackupState,
       refreshAchievements,
       showInfo,
@@ -983,7 +1014,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           visible={showExportModal}
           animationType="fade"
           transparent
-          onRequestClose={() => setShowExportModal(false)}
+          onRequestClose={() => {
+            setShowExportModal(false);
+            clearExportPassword();
+          }}
         >
           <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
             <View
@@ -1010,7 +1044,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                 }}
                 onPress={() => {
                   setExportEncrypt((v) => !v);
-                  if (exportEncrypt) setExportPassword("");
+                  if (exportEncrypt) clearExportPassword();
                 }}
               >
                 <View
@@ -1048,9 +1082,14 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
               </TouchableOpacity>
 
               {exportEncrypt ? (
-                <TextInput
-                  style={[
-                    {
+                <>
+                  {/* autoCapitalize/autoCorrect/spellCheck stay off on both
+                      fields: once the mask is lifted the keyboard would
+                      otherwise capitalize or "correct" the password - and
+                      learn it. Android's visible-password type keeps it out
+                      of the suggestion dictionary while it is shown. */}
+                  <TextInput
+                    style={{
                       borderWidth: 1,
                       borderColor: colors.cardBorder,
                       borderRadius: 10,
@@ -1058,17 +1097,76 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                       fontSize: 15,
                       color: colors.text,
                       backgroundColor: colors.bg,
-                      marginBottom: 16,
-                    },
-                  ]}
-                  placeholder={t("profile.data.export.dialog.passwordPlaceholder")}
-                  placeholderTextColor={colors.textMuted}
-                  secureTextEntry
-                  value={exportPassword}
-                  onChangeText={setExportPassword}
-                  maxLength={64}
-                  autoFocus
-                />
+                      marginBottom: 10,
+                    }}
+                    placeholder={t("profile.data.export.dialog.passwordPlaceholder")}
+                    placeholderTextColor={colors.textMuted}
+                    secureTextEntry={!exportPasswordVisible}
+                    keyboardType={
+                      exportPasswordVisible && Platform.OS === "android"
+                        ? "visible-password"
+                        : "default"
+                    }
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    value={exportPassword}
+                    onChangeText={setExportPassword}
+                    maxLength={64}
+                    autoFocus
+                  />
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.cardBorder,
+                      borderRadius: 10,
+                      padding: 12,
+                      fontSize: 15,
+                      color: colors.text,
+                      backgroundColor: colors.bg,
+                      marginBottom: 6,
+                    }}
+                    placeholder={t(
+                      "profile.data.export.dialog.confirmPasswordPlaceholder",
+                    )}
+                    placeholderTextColor={colors.textMuted}
+                    secureTextEntry={!exportPasswordVisible}
+                    keyboardType={
+                      exportPasswordVisible && Platform.OS === "android"
+                        ? "visible-password"
+                        : "default"
+                    }
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    value={exportPasswordConfirm}
+                    onChangeText={setExportPasswordConfirm}
+                    maxLength={64}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      alignSelf: "flex-end",
+                      paddingVertical: 8,
+                      paddingHorizontal: 4,
+                      marginBottom: 8,
+                    }}
+                    onPress={() => setExportPasswordVisible((v) => !v)}
+                    accessibilityRole="button"
+                    hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}
+                  >
+                    <Text
+                      style={{
+                        color: colors.accent,
+                        fontSize: 14,
+                        fontWeight: "600",
+                      }}
+                    >
+                      {exportPasswordVisible
+                        ? t("profile.data.export.dialog.hidePassword")
+                        : t("profile.data.export.dialog.showPassword")}
+                    </Text>
+                  </TouchableOpacity>
+                </>
               ) : null}
 
               <View style={styles.dialogActions}>
@@ -1076,7 +1174,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                   style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
                   onPress={() => {
                     setShowExportModal(false);
-                    setExportPassword("");
+                    clearExportPassword();
                   }}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>

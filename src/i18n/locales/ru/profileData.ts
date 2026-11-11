@@ -73,6 +73,11 @@ export const profileData: LocalizedPlural<typeof en> = {
       title: "Слишком короткий пароль",
       message: "Введи пароль минимум из 4 символов или отключи шифрование.",
     },
+    passwordMismatch: {
+      title: "Пароли не совпадают",
+      message:
+        "Два пароля отличаются. Введи их заново, чтобы они совпали — без точного пароля резервную копию не восстановить.",
+    },
     failed: {
       title: "Ошибка экспорта",
       message: "При экспорте данных что-то пошло не так.",
@@ -88,6 +93,9 @@ export const profileData: LocalizedPlural<typeof en> = {
         "Данные будут экспортированы как незашифрованный JSON. Любой, у кого есть доступ к файлу, сможет прочитать твои финансовые данные.",
       encryptToggle: "Зашифровать паролем",
       passwordPlaceholder: "Введи пароль экспорта",
+      confirmPasswordPlaceholder: "Подтверди пароль",
+      showPassword: "Показать пароль",
+      hidePassword: "Скрыть пароль",
       encryptAndShare: "Зашифровать и поделиться",
       sharePlaintext: "Поделиться без шифрования",
     },
