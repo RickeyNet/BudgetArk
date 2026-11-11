@@ -541,7 +541,7 @@ const makeStyles = (colors: ThemeColors) =>
       opacity: 0.4,
     },
     connectButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

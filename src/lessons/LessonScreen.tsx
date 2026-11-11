@@ -617,7 +617,7 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
     },
     completeBtnText: {
       fontSize: scale(15),
-      color: "#fff",
+      color: colors.accentButtonText,
       fontWeight: "700",
       letterSpacing: 0.5,
     },

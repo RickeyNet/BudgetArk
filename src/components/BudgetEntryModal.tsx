@@ -2038,7 +2038,7 @@ const makeStyles = (colors: ThemeColors) =>
       opacity: 0.4,
     },
     submitButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

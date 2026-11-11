@@ -1196,7 +1196,7 @@ const makeStyles = (colors: ThemeColors) =>
       opacity: 0.4,
     },
     addButtonText: {
-      color: colors.white,
+      color: colors.accentButtonText,
       fontSize: 15,
       fontWeight: "700",
     },

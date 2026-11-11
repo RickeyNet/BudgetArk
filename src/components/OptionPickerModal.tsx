@@ -142,7 +142,7 @@ function OptionPickerModal<T>({
             accessibilityRole="button"
             accessibilityLabel={t("common.done")}
           >
-            <Text style={[styles.closeBtnText, { color: colors.white }]}>
+            <Text style={[styles.closeBtnText, { color: colors.accentButtonText }]}>
               {t("common.done")}
             </Text>
           </TouchableOpacity>
