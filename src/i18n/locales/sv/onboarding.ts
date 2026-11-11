@@ -99,6 +99,11 @@ export const onboarding: Localized<typeof en> = {
     arkText: "Du kan sätta milstolpemål nu, eller hoppa över det och göra det senare från Skulder-fliken.",
     finishBuildArk: "Slutför + Bygg din ark",
     skipForNow: "Hoppa över tills vidare",
+    tourTitle: "Guidad rundtur - {{total}} tips",
+    tourOn: "Visa mig runt",
+    tourOff: "Utforska på egen hand",
+    tourHintOff:
+      "Ingen rundtur. Läs och sök bland alla tips senare under Profil → Hjälp → Funktionsguide.",
     tourHint:
       "Härnäst fortsätter introduktionen med en guidad titt på varje flik - varje tips har en ”Läs mer” med alla detaljer, och du kan gå tillbaka ett steg eller hoppa över när som helst. Läs och sök i allt senare under Profil → Hjälp → Funktionsguide.",
   },

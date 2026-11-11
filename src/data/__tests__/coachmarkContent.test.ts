@@ -1,6 +1,7 @@
 import {
   COACHMARK_TAB_IDS,
   COACHMARKS,
+  totalCoachmarkSteps,
 } from "../coachmarkContent";
 
 /**
@@ -20,6 +21,12 @@ describe("coachmark guide content", () => {
       expect(COACHMARKS[tabId].tabId).toBe(tabId);
       expect(COACHMARKS[tabId].intro.trim().length).toBeGreaterThan(0);
     }
+  });
+
+  it("counts every step of every tab for the onboarding tour offer", () => {
+    const counted = Object.values(COACHMARKS).reduce((n, tour) => n + tour.steps.length, 0);
+    expect(totalCoachmarkSteps()).toBe(counted);
+    expect(totalCoachmarkSteps()).toBeGreaterThan(COACHMARK_TAB_IDS.length);
   });
 
   it("gives every step a non-empty title and body", () => {

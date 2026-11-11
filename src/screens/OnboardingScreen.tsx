@@ -38,6 +38,7 @@ import { useAndroidKeyboardInputScroll } from "../hooks/useAndroidKeyboardInputS
 import { ThemePreset } from "../theme/themes";
 import type { DensityTokens } from "../theme/density";
 import { completeOnboarding } from "../storage/userStorage";
+import { totalCoachmarkSteps } from "../data/coachmarkContent";
 
 /**
  * Main onboarding screen component
@@ -75,7 +76,16 @@ type OnboardingStep = "mission" | "theme" | "welcome" | "template" | "reminders"
 
 interface OnboardingScreenProps {
   /** Callback when onboarding is complete */
-  onComplete: (options?: { openArkSetup?: boolean }) => void;
+  onComplete: (options?: OnboardingCompleteOptions) => void;
+}
+
+export interface OnboardingCompleteOptions {
+  openArkSetup?: boolean;
+  /**
+   * false = the user declined the guided tour (or tapped Skip Setup), so
+   * the host must not start it. Absent/true keeps the tour.
+   */
+  guidedTour?: boolean;
 }
 
 /**
@@ -167,6 +177,13 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const [templateId, setTemplateId] = useState<QuickStartTemplateId | null>(null);
   const [incomeInput, setIncomeInput] = useState("");
   const [housingInput, setHousingInput] = useState("");
+  /**
+   * Whether setup hands over to the guided tab tour. Asked on the last
+   * step rather than assumed: the tour is several times longer than setup
+   * itself, so it is offered with its size stated instead of just starting.
+   */
+  const [wantsTour, setWantsTour] = useState(true);
+  const tourTipCount = useMemo(() => totalCoachmarkSteps(), []);
 
   /** Memoized styles based on current theme */
   const styles = useMemo(() => makeStyles(colors, tokens), [colors, tokens]);
@@ -312,7 +329,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    * device, with the repeat-onboarding consequence stated up front.
    */
   const finishOnboarding = useCallback(
-    async (name?: string, options?: { openArkSetup?: boolean }) => {
+    async (name?: string, options?: OnboardingCompleteOptions) => {
       const attempt = async (): Promise<void> => {
         try {
           await completeOnboarding(name);
@@ -353,14 +370,20 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
    */
   const handleComplete = useCallback(
     (openArkSetup?: boolean) =>
-      finishOnboarding(displayName, { openArkSetup: !!openArkSetup }),
-    [displayName, finishOnboarding]
+      finishOnboarding(displayName, { openArkSetup: !!openArkSetup, guidedTour: wantsTour }),
+    [displayName, finishOnboarding, wantsTour]
   );
 
   /**
-   * Skip to the end (keeps current theme, default name)
+   * Skip to the end (keeps current theme, default name). Skipping setup
+   * also declines the guided tour: someone who would not sit through six
+   * setup steps did not ask for a tab-by-tab walkthrough either. The tips
+   * stay in Profile > Help > Feature guide.
    */
-  const handleSkip = useCallback(() => finishOnboarding(), [finishOnboarding]);
+  const handleSkip = useCallback(
+    () => finishOnboarding(undefined, { guidedTour: false }),
+    [finishOnboarding]
+  );
 
   /** Render the mission step - why BudgetArk exists, before any setup. */
   const renderMissionStep = () => (
@@ -752,6 +775,44 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         <Text style={styles.arkText}>{t("onboarding.name.arkText")}</Text>
       </View>
 
+      <View style={[styles.tourCard, { backgroundColor: colors.card }]}>
+        <Text style={styles.arkTitle}>
+          {t("onboarding.name.tourTitle", { total: tourTipCount })}
+        </Text>
+        <View style={styles.tourChoiceRow} accessibilityRole="radiogroup">
+          {[true, false].map((choice) => {
+            const selected = wantsTour === choice;
+            return (
+              <TouchableOpacity
+                key={choice ? "on" : "off"}
+                style={[
+                  styles.tourChoice,
+                  {
+                    borderColor: selected ? colors.accent : colors.cardBorder,
+                    backgroundColor: selected ? `${colors.accent}22` : "transparent",
+                  },
+                ]}
+                onPress={() => setWantsTour(choice)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+              >
+                <Text
+                  style={[
+                    styles.tourChoiceText,
+                    { color: selected ? colors.text : colors.textDim },
+                  ]}
+                >
+                  {t(choice ? "onboarding.name.tourOn" : "onboarding.name.tourOff")}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.tourHint}>
+          {t(wantsTour ? "onboarding.name.tourHint" : "onboarding.name.tourHintOff")}
+        </Text>
+      </View>
+
       <TouchableOpacity
         style={[
           styles.completeBtn,
@@ -779,8 +840,6 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
       <TouchableOpacity style={styles.backBtnFull} onPress={handleBack}>
         <Text style={styles.skipBtnText}>{t("onboarding.back")}</Text>
       </TouchableOpacity>
-
-      <Text style={styles.tourHint}>{t("onboarding.name.tourHint")}</Text>
     </View>
   );
 
@@ -1111,11 +1170,37 @@ const makeStyles = (colors: ThemePreset["colors"], tokens: DensityTokens) => {
       alignItems: "center",
       marginTop: 10,
     },
+    tourCard: {
+      borderRadius: tokens.radiusSm,
+      padding: tokens.pad + 2,
+      marginBottom: 20,
+      width: "100%",
+    },
+    tourChoiceRow: {
+      flexDirection: "row",
+      gap: tokens.gap,
+      marginTop: 4,
+    },
+    tourChoice: {
+      flex: 1,
+      minHeight: 44,
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+      borderRadius: tokens.radiusSm,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tourChoiceText: {
+      fontSize: scale(14),
+      fontWeight: "600",
+      textAlign: "center",
+    },
     tourHint: {
       fontSize: 13,
       color: colors.textMuted,
-      textAlign: "center",
-      marginTop: 14,
+      lineHeight: 18,
+      marginTop: 10,
     },
     nextBtn: {
       flex: 1,

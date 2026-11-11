@@ -98,6 +98,11 @@ export const onboarding: Localized<typeof en> = {
     arkText: "Du kannst jetzt Meilensteinziele setzen oder das später im Schulden-Tab nachholen.",
     finishBuildArk: "Fertig + Arche bauen",
     skipForNow: "Vorerst überspringen",
+    tourTitle: "Geführte Tour - {{total}} Tipps",
+    tourOn: "Zeig mir alles",
+    tourOff: "Selbst erkunden",
+    tourHintOff:
+      "Keine Tour. Alle Tipps kannst du später unter Profil → Hilfe → Funktionsübersicht nachlesen und durchsuchen.",
     tourHint:
       "Als Nächstes führt dich die Einrichtung durch jeden Tab - jeder Tipp hat ein „Mehr erfahren“ mit allen Details, und du kannst jederzeit einen Schritt zurück oder überspringen. Später kannst du alles unter Profil → Hilfe → Funktionsübersicht nachlesen und durchsuchen.",
   },

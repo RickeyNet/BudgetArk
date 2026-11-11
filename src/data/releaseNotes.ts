@@ -22,6 +22,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       "The clock, signal and battery icons at the top of the screen are visible in the light themes. They stayed white on Ark Parchment, Rose, Chart Room, Harbor Dawn and Ledger, where they all but disappeared; they now turn dark on light themes and stay light on dark ones, switching as soon as you change theme.",
       "Small grey text is easier to read in every theme. Captions, hints and placeholder text were too faint to read comfortably in almost every theme; they are now noticeably stronger on cards and on the background, while still sitting quieter than the main text. Lighthouse and Classic already met the bar and look the same.",
       "Entries inside a spending category are easier to tap. Each entry in an expanded category was only as tall as its text, so it was easy to hit the one above or below. The rows are now full-height tap targets with room around them, and a selected row is highlighted with some breathing space.",
+      "Setup no longer runs straight into the guided tour. The last setup step now asks whether you want the tab-by-tab tour and says how many tips it holds, and Skip Setup skips the tour too. Every tip is still in Profile → Help → Feature guide.",
     ],
   },
   {

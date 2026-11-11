@@ -28,7 +28,7 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 import AppNavigator from "./src/navigation/AppNavigator";
-import OnboardingScreen from "./src/screens/OnboardingScreen";
+import OnboardingScreen, { type OnboardingCompleteOptions } from "./src/screens/OnboardingScreen";
 import AppLockGate from "./src/components/AppLockGate";
 import DebtDueReminderHost from "./src/components/DebtDueReminderHost";
 import TrackingReminderHost from "./src/components/TrackingReminderHost";
@@ -111,7 +111,7 @@ type UpdatePrompt = {
 const AppContent: React.FC = () => {
   const { colors, themeId, backgroundEffectsEnabled } = useTheme();
   const { t } = useTranslation();
-  const { startGuidedTour } = useCoachmarks();
+  const { startGuidedTour, skipAll: skipAllCoachmarks } = useCoachmarks();
   const navigationRef = useMemo(() => createNavigationContainerRef<RootTabParamList>(), []);
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdatePrompt | null>(null);
@@ -185,7 +185,7 @@ const AppContent: React.FC = () => {
   );
 
   /** Handle onboarding completion */
-  const handleOnboardingComplete = useCallback(async (options?: { openArkSetup?: boolean }) => {
+  const handleOnboardingComplete = useCallback(async (options?: OnboardingCompleteOptions) => {
     try {
       if (options?.openArkSetup) {
         await requestArkSetupPrompt();
@@ -216,11 +216,23 @@ const AppContent: React.FC = () => {
     // chose Build Your Ark - the milestones modal owns the Debts tab's first
     // visit, and a spotlight presented over it would stack (the iOS
     // silent-present failure). Per-tab tips still fire as they explore.
-    if (!options?.openArkSetup) {
+    if (options?.guidedTour === false) {
+      // Tour declined on the last step, or setup skipped outright. Clearing
+      // the queue is not enough - every tab fires its own tips on first
+      // focus - so mark the whole tour skipped. Awaited before the flag
+      // flips so Bridge never mounts eligible; skipAll sets its in-memory
+      // state before persisting, so a failed write still spares this
+      // session. Profile > Help brings the tips back.
+      try {
+        await skipAllCoachmarks();
+      } catch (error) {
+        if (__DEV__) console.error("Failed to save tour opt-out:", error);
+      }
+    } else if (!options?.openArkSetup) {
       startGuidedTour(["DebtTracker", "Budget", "Utilities", "Profile"]);
     }
     setIsOnboardingComplete(true);
-  }, [startGuidedTour]);
+  }, [skipAllCoachmarks, startGuidedTour]);
 
   const extractUpdatePrompt = useCallback(
     (manifest: unknown): UpdatePrompt => resolveUpdateInfo(manifest, CURRENT_APP_VERSION),

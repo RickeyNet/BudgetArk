@@ -96,6 +96,11 @@ export const onboarding = {
     arkText: "You can set milestone targets now, or skip for now and do it later from the Debt screen.",
     finishBuildArk: "Finish + Build Your Ark",
     skipForNow: "Skip for Now",
+    tourTitle: "Guided tour - {{total}} tips",
+    tourOn: "Show me around",
+    tourOff: "Explore on my own",
+    tourHintOff:
+      "No tour. Every tip stays available to read and search in Profile → Help → Feature guide.",
     tourHint:
       "Next, onboarding continues with a guided look at each tab - each tip has a Learn more with the full detail, and you can go back a step or skip at any point. Reread and search all of it later in Profile → Help → Feature guide.",
   },

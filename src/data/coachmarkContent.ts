@@ -633,3 +633,12 @@ export const COACHMARKS: Record<CoachmarkTabId, CoachmarkTour> = {
     ],
   },
 };
+
+/**
+ * How many tips the whole guided tour holds, across every tab. Onboarding
+ * states this number before asking whether to take the tour, so the user
+ * knows what they are agreeing to; derived, so it can never drift from the
+ * content above.
+ */
+export const totalCoachmarkSteps = (): number =>
+  COACHMARK_TAB_IDS.reduce((sum, tabId) => sum + COACHMARKS[tabId].steps.length, 0);
