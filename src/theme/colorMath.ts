@@ -58,6 +58,19 @@ export const relativeLuminance = ({ r, g, b }: Rgb): number =>
   0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
 
 /**
+ * WCAG 2.x contrast ratio between two colors, 1 (identical) to 21
+ * (black on white). Null when either color can't be parsed.
+ */
+export const contrastRatio = (a: string, b: string): number | null => {
+  const rgbA = parseColorToRgb(a);
+  const rgbB = parseColorToRgb(b);
+  if (!rgbA || !rgbB) return null;
+  const la = relativeLuminance(rgbA);
+  const lb = relativeLuminance(rgbB);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+
+/**
  * Picks the status bar icon style that contrasts best with the screen
  * background: dark icons when black out-contrasts white on it, light icons
  * otherwise. Ties and unparseable colors fall back to "light-content", the
