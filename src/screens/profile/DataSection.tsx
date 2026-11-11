@@ -44,9 +44,10 @@ import { recordExport } from "../../storage/achievementStatsStorage";
 import { useAchievements } from "../../achievements/AchievementsProvider";
 import { useCustomCategories } from "../../categories/CustomCategoriesProvider";
 import {
-  importData,
   importFromString,
+  isImportDecryptError,
   isPasswordRequiredError,
+  pickImportFile,
   type ImportResult,
 } from "../../utils/importData";
 import {
@@ -204,6 +205,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     const [showImportPasswordModal, setShowImportPasswordModal] =
       useState(false);
     const [importPassword, setImportPassword] = useState("");
+    /** Inline "wrong password" message; the prompt stays open for a retry. */
+    const [importPasswordError, setImportPasswordError] = useState<
+      string | null
+    >(null);
+    /** True while a password attempt is decrypting - blocks double-submits. */
+    const [importPasswordBusy, setImportPasswordBusy] = useState(false);
     // Stored as plain data (not a retry closure) so `executeImport` doesn't
     // have to reference itself inside its own useCallback - a self-capture the
     // React Compiler can't order and therefore refuses to optimize.
@@ -418,9 +425,26 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
         label: string,
         password?: string,
       ) => {
+        // A password attempt runs with the password prompt still open, so a
+        // wrong password can be retried in place. Once the attempt is over
+        // (imported, or failed for another reason) the prompt is dismissed
+        // and the result dialog waits for the teardown - presenting one
+        // Modal while another is still dismissing fails silently on iOS.
+        const closePasswordPrompt = async () => {
+          if (password === undefined) return;
+          setShowImportPasswordModal(false);
+          setPendingImport(null);
+          setImportPassword("");
+          setImportPasswordError(null);
+          await waitForIosModalTeardown(350);
+        };
         try {
           const result = await importFn(password);
-          if (!result) return;
+          if (!result) {
+            await closePasswordPrompt();
+            return;
+          }
+          await closePasswordPrompt();
           const sep = t("profile.data.import.listSeparator");
           const parts: string[] = [
             t("profile.data.import.counts.debts", { count: result.debts }),
@@ -468,8 +492,18 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             // confirmImportPassword re-runs it with the entered password.
             setPendingImport({ importFn, label });
             setImportPassword("");
+            setImportPasswordError(null);
             setShowImportPasswordModal(true);
+          } else if (password !== undefined && isImportDecryptError(error)) {
+            // Wrong password: keep the prompt (and the stashed request) so
+            // the user can try again without re-picking the file.
+            triggerHaptic("error");
+            setImportPassword("");
+            setImportPasswordError(
+              error?.message || t("profile.data.import.failed.message"),
+            );
           } else {
+            await closePasswordPrompt();
             triggerHaptic("error");
             showInfo({
               title: t("profile.data.import.failed.title"),
@@ -481,17 +515,34 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       [refreshCustomCategories, showInfo, t],
     );
 
-    const confirmImportPassword = useCallback(() => {
-      if (!pendingImport) return;
+    /**
+     * Runs the stashed import with the entered password. The prompt stays
+     * open while it decrypts: executeImport closes it when the attempt ends,
+     * or leaves it up with an inline error when the password was wrong.
+     */
+    const confirmImportPassword = useCallback(async () => {
+      if (!pendingImport || !importPassword || importPasswordBusy) return;
+      setImportPasswordBusy(true);
+      setImportPasswordError(null);
+      try {
+        await executeImport(
+          pendingImport.importFn,
+          pendingImport.label,
+          importPassword,
+        );
+      } finally {
+        setImportPasswordBusy(false);
+      }
+    }, [pendingImport, importPassword, importPasswordBusy, executeImport]);
+
+    /** Cancel the password prompt - ignored mid-attempt, which can't be undone. */
+    const cancelImportPassword = useCallback(() => {
+      if (importPasswordBusy) return;
       setShowImportPasswordModal(false);
-      void executeImport(
-        pendingImport.importFn,
-        pendingImport.label,
-        importPassword,
-      );
-      setImportPassword("");
       setPendingImport(null);
-    }, [pendingImport, importPassword, executeImport]);
+      setImportPassword("");
+      setImportPasswordError(null);
+    }, [importPasswordBusy]);
 
     /**
      * File-picker: run the document picker with the chosen mode.
@@ -511,12 +562,31 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
             ? t("profile.data.import.labelMerged")
             : t("profile.data.import.labelImported");
         try {
-          await executeImport((password) => importData(mode, password), label);
+          // Pick the file ONCE and hold its text: an encrypted backup re-runs
+          // the import per password attempt, and going through importData
+          // again would send the user back to the picker each time.
+          let raw: string | null;
+          try {
+            raw = await pickImportFile();
+          } catch (error: any) {
+            triggerHaptic("error");
+            showInfo({
+              title: t("profile.data.import.failed.title"),
+              message: error?.message || t("profile.data.import.failed.message"),
+            });
+            return;
+          }
+          if (raw === null) return;
+          const text = raw;
+          await executeImport(
+            (password) => importFromString(text, mode, password),
+            label,
+          );
         } finally {
           importPickerInFlightRef.current = false;
         }
       },
-      [executeImport, t],
+      [executeImport, showInfo, t],
     );
 
     /**
@@ -1201,11 +1271,7 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
           visible={showImportPasswordModal}
           animationType="fade"
           transparent
-          onRequestClose={() => {
-            setShowImportPasswordModal(false);
-            setPendingImport(null);
-            setImportPassword("");
-          }}
+          onRequestClose={cancelImportPassword}
         >
           <KeyboardAwareModalOverlay style={styles.dialogOverlay}>
             <View
@@ -1230,37 +1296,64 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                     fontSize: 15,
                     color: colors.text,
                     backgroundColor: colors.bg,
-                    marginBottom: 16,
+                    marginBottom: importPasswordError ? 8 : 16,
                   },
                 ]}
                 placeholder={t("profile.data.import.password.placeholder")}
                 placeholderTextColor={colors.textMuted}
                 secureTextEntry
                 value={importPassword}
-                onChangeText={setImportPassword}
+                onChangeText={(text) => {
+                  setImportPassword(text);
+                  if (importPasswordError) setImportPasswordError(null);
+                }}
+                editable={!importPasswordBusy}
+                onSubmitEditing={() => void confirmImportPassword()}
                 maxLength={64}
                 autoFocus
               />
+              {importPasswordError ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={{
+                    color: colors.danger,
+                    fontSize: 13,
+                    marginBottom: 16,
+                  }}
+                >
+                  {importPasswordError}
+                </Text>
+              ) : null}
               <View style={styles.dialogActions}>
                 <TouchableOpacity
-                  style={[styles.dialogBtn, { backgroundColor: colors.bg }]}
-                  onPress={() => {
-                    setShowImportPasswordModal(false);
-                    setPendingImport(null);
-                    setImportPassword("");
-                  }}
+                  style={[
+                    styles.dialogBtn,
+                    { backgroundColor: colors.bg },
+                    importPasswordBusy && { opacity: 0.5 },
+                  ]}
+                  disabled={importPasswordBusy}
+                  onPress={cancelImportPassword}
                 >
                   <Text style={[styles.dialogBtnText, { color: colors.text }]}>
                     {t("common.cancel")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.dialogBtn, { backgroundColor: colors.accent }]}
-                  onPress={confirmImportPassword}
+                  style={[
+                    styles.dialogBtn,
+                    { backgroundColor: colors.accent },
+                    (!importPassword || importPasswordBusy) && { opacity: 0.5 },
+                  ]}
+                  disabled={!importPassword || importPasswordBusy}
+                  onPress={() => void confirmImportPassword()}
                 >
-                  <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
-                    {t("profile.data.import.password.confirm")}
-                  </Text>
+                  {importPasswordBusy ? (
+                    <ActivityIndicator color={colors.accentButtonText} />
+                  ) : (
+                    <Text style={[styles.dialogBtnText, { color: colors.accentButtonText }]}>
+                      {t("profile.data.import.password.confirm")}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>

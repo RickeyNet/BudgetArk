@@ -11,7 +11,12 @@
  *   - ./uuid -> deterministic ids
  */
 
-import { importFromString, isEncryptedExport } from "../importData";
+import {
+  importFromString,
+  isEncryptedExport,
+  isImportDecryptError,
+  isPasswordRequiredError,
+} from "../importData";
 
 const ENC_V1 = "__BUDGETARK_ENC__:";
 const ENC_V2 = "__BUDGETARK_ENC2__:";
@@ -629,6 +634,36 @@ describe("importFromString - golden encrypted fixtures (cross-version compat)", 
       expectGoldenPayloadStored();
     },
     30_000
+  );
+
+  // The UI keeps the password prompt open for a retry only when the failure
+  // is typed as a decrypt error, so every envelope version must throw one.
+  it(
+    "types a wrong password as a retryable ImportDecryptError (v1/v2/v3)",
+    async () => {
+      for (const backup of [GOLDEN_V1, GOLDEN_V2, GOLDEN_V3]) {
+        const error = await importFromString(
+          backup,
+          "merge",
+          "wrong-password"
+        ).catch((e: unknown) => e);
+        expect(isImportDecryptError(error)).toBe(true);
+        expect(isPasswordRequiredError(error)).toBe(false);
+      }
+      // A missing password is a different condition, not a failed attempt.
+      const missing = await importFromString(GOLDEN_V3, "merge").catch(
+        (e: unknown) => e
+      );
+      expect(isPasswordRequiredError(missing)).toBe(true);
+      expect(isImportDecryptError(missing)).toBe(false);
+      // Non-decrypt failures must not be mistaken for a wrong password.
+      const garbage = await importFromString("not json", "merge").catch(
+        (e: unknown) => e
+      );
+      expect(isImportDecryptError(garbage)).toBe(false);
+      expect(storageMock.__store.size).toBe(0);
+    },
+    60_000
   );
 
   it("rejects the v1 backup with a wrong password", async () => {

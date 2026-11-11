@@ -660,6 +660,24 @@ export const isPasswordRequiredError = (error: unknown): boolean =>
   error instanceof PasswordRequiredError ||
   (error instanceof Error && error.name === "PasswordRequiredError");
 
+/**
+ * Thrown when a password WAS supplied but the backup would not decrypt with
+ * it (wrong password, or for v3 a file altered after export - the two are
+ * indistinguishable). Typed so the UI can keep the password prompt open and
+ * let the user try again instead of ending the import; detected by
+ * isImportDecryptError, never by message text (messages are localized).
+ */
+export class ImportDecryptError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImportDecryptError";
+  }
+}
+
+export const isImportDecryptError = (error: unknown): boolean =>
+  error instanceof ImportDecryptError ||
+  (error instanceof Error && error.name === "ImportDecryptError");
+
 export const importFromString = async (
   raw: string,
   mode: "merge" | "replace" = "merge",
@@ -681,11 +699,20 @@ export const importFromString = async (
       throw new PasswordRequiredError();
     }
     // Throws its own precise message (wrong password / altered file) - the
-    // MAC check makes those the only failure modes, so don't re-wrap it.
-    jsonString = await decryptExportEnvelopeV3(
-      trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V3.length),
-      password
-    );
+    // MAC check makes those the only failure modes, so keep that message
+    // verbatim and only re-type it so callers can offer a retry.
+    try {
+      jsonString = await decryptExportEnvelopeV3(
+        trimmed.slice(ENCRYPTED_EXPORT_PREFIX_V3.length),
+        password
+      );
+    } catch (error) {
+      throw new ImportDecryptError(
+        error instanceof Error
+          ? error.message
+          : t("helpers.import.backup.wrongPassword")
+      );
+    }
   } else if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX_V2)) {
     if (!password) {
       throw new PasswordRequiredError();
@@ -694,10 +721,10 @@ export const importFromString = async (
     try {
       jsonString = await decryptV2Envelope(envelope, password);
     } catch {
-      throw new Error(t("helpers.import.backup.wrongPassword"));
+      throw new ImportDecryptError(t("helpers.import.backup.wrongPassword"));
     }
     if (!jsonString) {
-      throw new Error(t("helpers.import.backup.wrongPassword"));
+      throw new ImportDecryptError(t("helpers.import.backup.wrongPassword"));
     }
   } else if (trimmed.startsWith(ENCRYPTED_EXPORT_PREFIX)) {
     if (!password) {
@@ -710,10 +737,10 @@ export const importFromString = async (
     try {
       jsonString = decryptLegacyCryptoJsBlob(ciphertext, password);
     } catch {
-      throw new Error(t("helpers.import.backup.wrongPassword"));
+      throw new ImportDecryptError(t("helpers.import.backup.wrongPassword"));
     }
     if (!jsonString) {
-      throw new Error(t("helpers.import.backup.wrongPassword"));
+      throw new ImportDecryptError(t("helpers.import.backup.wrongPassword"));
     }
   }
 
@@ -1928,16 +1955,15 @@ export const openDocumentPicker = async (
 };
 
 /**
- * Opens the document picker, reads the selected JSON file, and delegates
- * to importFromString for validation and storage.
+ * Opens the document picker and reads the selected backup file's text.
  *
- * @param mode - "merge" or "replace"
- * @returns ImportResult with counts, or null if the user cancelled the picker.
+ * Split from the import itself so an encrypted backup is picked ONCE: the
+ * caller holds the text and re-runs importFromString for each password
+ * attempt, instead of sending the user back through the picker.
+ *
+ * @returns the raw file text, or null if the user cancelled the picker.
  */
-export const importData = async (
-  mode: "merge" | "replace" = "merge",
-  password?: string
-): Promise<ImportResult | null> => {
+export const pickImportFile = async (): Promise<string | null> => {
   const result = await openDocumentPicker({
     type: ["application/json", "text/plain"],
   });
@@ -1947,6 +1973,24 @@ export const importData = async (
   const file = result.assets[0];
   if (!file?.uri) throw new Error(t("helpers.import.file.noFileSelected"));
 
-  const raw = await new ExpoFile(file.uri).text();
+  return new ExpoFile(file.uri).text();
+};
+
+/**
+ * Opens the document picker, reads the selected JSON file, and delegates
+ * to importFromString for validation and storage.
+ *
+ * Note: calling this again re-opens the picker. UI that may need to retry
+ * with a password should use pickImportFile + importFromString instead.
+ *
+ * @param mode - "merge" or "replace"
+ * @returns ImportResult with counts, or null if the user cancelled the picker.
+ */
+export const importData = async (
+  mode: "merge" | "replace" = "merge",
+  password?: string
+): Promise<ImportResult | null> => {
+  const raw = await pickImportFile();
+  if (raw === null) return null;
   return importFromString(raw, mode, password);
 };
