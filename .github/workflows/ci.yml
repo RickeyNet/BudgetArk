@@ -101,8 +101,11 @@ jobs:
     name: Expo Doctor (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Dependency-health check; informative, not a merge blocker.
-    continue-on-error: true
+    # Dependency-health check; informative, not a merge blocker. The step
+    # (not the job) swallows the failure: job-level continue-on-error still
+    # reports the check as failed, which put a red X on every PR whenever
+    # Expo published a patch release. Findings surface as a warning
+    # annotation and in the job log instead.
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -117,4 +120,7 @@ jobs:
         run: npm ci
 
       - name: Run expo-doctor
-        run: npx --yes expo-doctor
+        run: |
+          if ! npx --yes expo-doctor; then
+            echo "::warning title=Expo Doctor::expo-doctor reported issues (advisory) - see this job's log."
+          fi
