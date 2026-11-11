@@ -185,11 +185,20 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     const [exportPasswordConfirm, setExportPasswordConfirm] = useState("");
     /** Show-password toggle for both export fields; re-masked on every open. */
     const [exportPasswordVisible, setExportPasswordVisible] = useState(false);
+    /**
+     * Inline "too short" / "don't match" line under the confirm field. Shown
+     * in the dialog itself rather than through showInfo, which would stack a
+     * second modal over the open export modal.
+     */
+    const [exportPasswordError, setExportPasswordError] = useState<
+      "tooShort" | "mismatch" | null
+    >(null);
     /** Wipe every password-entry field of the export dialog in one place. */
     const clearExportPassword = useCallback(() => {
       setExportPassword("");
       setExportPasswordConfirm("");
       setExportPasswordVisible(false);
+      setExportPasswordError(null);
     }, []);
     /**
      * True while an export is generating/sharing. Drives a blocking spinner
@@ -311,21 +320,12 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
     const confirmExport = useCallback(async () => {
       if (exportEncrypt) {
         const check = checkExportPassword(exportPassword, exportPasswordConfirm);
-        if (check === "tooShort") {
-          showInfo({
-            title: t("profile.data.export.passwordTooShort.title"),
-            message: t("profile.data.export.passwordTooShort.message"),
-          });
-          return;
-        }
-        if (check === "mismatch") {
+        if (check !== "ok") {
           // Keep the dialog open with both fields intact so the user can
-          // reveal them and see which one has the typo.
+          // reveal them and see which one has the typo. The reason shows
+          // inline under the confirm field, like the import prompt's.
           triggerHaptic("error");
-          showInfo({
-            title: t("profile.data.export.passwordMismatch.title"),
-            message: t("profile.data.export.passwordMismatch.message"),
-          });
+          setExportPasswordError(check);
           return;
         }
       }
@@ -525,6 +525,9 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
       setImportPasswordBusy(true);
       setImportPasswordError(null);
       try {
+        // The key derivation blocks the JS thread; yield so the button's
+        // spinner actually mounts before the freeze (same as the export path).
+        await new Promise((resolve) => setTimeout(resolve, 60));
         await executeImport(
           pendingImport.importFn,
           pendingImport.label,
@@ -1181,7 +1184,10 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                     autoCorrect={false}
                     spellCheck={false}
                     value={exportPassword}
-                    onChangeText={setExportPassword}
+                    onChangeText={(text) => {
+                      setExportPassword(text);
+                      if (exportPasswordError) setExportPasswordError(null);
+                    }}
                     maxLength={64}
                     autoFocus
                   />
@@ -1210,9 +1216,27 @@ const DataSection = forwardRef<DataSectionHandle, DataSectionProps>(
                     autoCorrect={false}
                     spellCheck={false}
                     value={exportPasswordConfirm}
-                    onChangeText={setExportPasswordConfirm}
+                    onChangeText={(text) => {
+                      setExportPasswordConfirm(text);
+                      if (exportPasswordError) setExportPasswordError(null);
+                    }}
                     maxLength={64}
                   />
+                  {exportPasswordError ? (
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      style={{
+                        color: colors.danger,
+                        fontSize: 13,
+                        marginTop: 2,
+                        marginBottom: 2,
+                      }}
+                    >
+                      {exportPasswordError === "tooShort"
+                        ? t("profile.data.export.passwordTooShort.message")
+                        : t("profile.data.export.passwordMismatch.message")}
+                    </Text>
+                  ) : null}
                   <TouchableOpacity
                     style={{
                       alignSelf: "flex-end",
