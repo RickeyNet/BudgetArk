@@ -407,7 +407,6 @@ const SpendingCard: React.FC<SpendingCardProps> = ({
                         styles.expandedEntryRow,
                         isSelected && {
                           backgroundColor: `${colors.accent}22`,
-                          borderRadius: 8,
                         },
                       ]}
                       onPress={() => {
@@ -759,18 +758,30 @@ const makeStyles = (colors: ThemeColors, tokens: DensityTokens) => {
       borderRadius: 10,
       padding: 12,
       marginBottom: 8,
-      gap: 8,
+      // Rows carry their own vertical padding (see expandedEntryRow), so the
+      // gap only has to separate the tap targets, not space the text.
+      gap: 4,
     },
     expandedHeader: {
       fontSize: 11,
       color: colors.textMuted,
       marginBottom: 2,
     },
+    // Each row is a tap (edit) + long-press (select) target, so it gets the
+    // 44pt platform minimum instead of being as tall as its 13px text. The
+    // horizontal padding is cancelled by a matching negative margin: text
+    // stays aligned with the header above while the selected-row highlight
+    // gets room around it instead of sitting flush against the amount.
     expandedEntryRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
       gap: 8,
+      minHeight: 44,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      marginHorizontal: -8,
+      borderRadius: 8,
     },
     expandedEntryLeft: {
       flex: 1,
